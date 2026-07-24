@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { circleVsAABB, circleVsCircle } from './collision';
+import { circleVsAABB, circleVsCircle, raySegmentVsAABB } from './collision';
 import type { AABB } from './types';
 import { vdist } from './types';
 
@@ -63,5 +63,50 @@ describe('circleVsCircle', () => {
     expect(Number.isNaN(hit.push.y)).toBe(false);
     // default separation is along +x with magnitude ra+rb
     expect(vdist({ x: 0, y: 0 }, hit.push)).toBeCloseTo(1.0, 9);
+  });
+});
+
+describe('raySegmentVsAABB', () => {
+  const box: AABB = { minX: 1, minY: -1, maxX: 2, maxY: 1 };
+
+  it('hits the left face with the correct t and -x normal', () => {
+    const hit = raySegmentVsAABB({ x: 0, y: 0 }, { x: 3, y: 0 }, box);
+    expect(hit).not.toBeNull();
+    expect(hit!.t).toBeCloseTo(1 / 3, 9);
+    expect(hit!.point.x).toBeCloseTo(1, 9);
+    expect(hit!.point.y).toBeCloseTo(0, 9);
+    expect(hit!.normal).toEqual({ x: -1, y: 0 });
+  });
+
+  it('returns a defined hit exactly at a corner', () => {
+    const cornerBox: AABB = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    const hit = raySegmentVsAABB({ x: -1, y: -1 }, { x: 1, y: 1 }, cornerBox);
+    expect(hit).not.toBeNull();
+    expect(hit!.point.x).toBeCloseTo(0, 9);
+    expect(hit!.point.y).toBeCloseTo(0, 9);
+    expect(hit!.t).toBeCloseTo(0.5, 9);
+  });
+
+  it('returns null when the segment ends before the box', () => {
+    const hit = raySegmentVsAABB({ x: 0, y: 0 }, { x: 0.5, y: 0 }, box);
+    expect(hit).toBeNull();
+  });
+
+  it('returns null when the segment misses entirely', () => {
+    const hit = raySegmentVsAABB({ x: 0, y: 5 }, { x: 3, y: 5 }, box);
+    expect(hit).toBeNull();
+  });
+
+  it('handles a segment starting inside deterministically (t=0)', () => {
+    const hit = raySegmentVsAABB({ x: 1.5, y: 0 }, { x: 3, y: 0 }, box);
+    expect(hit).not.toBeNull();
+    expect(hit!.t).toBe(0);
+    expect(hit!.point).toEqual({ x: 1.5, y: 0 });
+  });
+
+  it('does not divide-by-zero on a parallel/grazing segment', () => {
+    // vertical segment whose x sits outside the box: dx===0 branch, no NaN
+    const hit = raySegmentVsAABB({ x: 5, y: -5 }, { x: 5, y: 5 }, box);
+    expect(hit).toBeNull();
   });
 });

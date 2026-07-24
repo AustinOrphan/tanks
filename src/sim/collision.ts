@@ -51,3 +51,67 @@ export function circleVsCircle(a: Vec2, ra: number, b: Vec2, rb: number): Hit {
   const overlap = r - dist;
   return { hit: true, push: { x: (dx / dist) * overlap, y: (dy / dist) * overlap } };
 }
+
+export interface RayHit {
+  t: number;
+  point: Vec2;
+  normal: Vec2;
+}
+
+export function raySegmentVsAABB(from: Vec2, to: Vec2, box: AABB): RayHit | null {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  let tmin = 0;
+  let tmax = 1;
+  let normal: Vec2 = { x: 0, y: 0 };
+
+  // X slab
+  if (dx === 0) {
+    if (from.x < box.minX || from.x > box.maxX) return null;
+  } else {
+    const inv = 1 / dx;
+    let t1 = (box.minX - from.x) * inv;
+    let t2 = (box.maxX - from.x) * inv;
+    let nx = -1; // entering through minX face (moving +x)
+    if (t1 > t2) {
+      const tmp = t1;
+      t1 = t2;
+      t2 = tmp;
+      nx = 1; // entering through maxX face (moving -x)
+    }
+    if (t1 > tmin) {
+      tmin = t1;
+      normal = { x: nx, y: 0 };
+    }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+
+  // Y slab
+  if (dy === 0) {
+    if (from.y < box.minY || from.y > box.maxY) return null;
+  } else {
+    const inv = 1 / dy;
+    let t1 = (box.minY - from.y) * inv;
+    let t2 = (box.maxY - from.y) * inv;
+    let ny = -1;
+    if (t1 > t2) {
+      const tmp = t1;
+      t1 = t2;
+      t2 = tmp;
+      ny = 1;
+    }
+    if (t1 > tmin) {
+      tmin = t1;
+      normal = { x: 0, y: ny };
+    }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+
+  return {
+    t: tmin,
+    point: { x: from.x + dx * tmin, y: from.y + dy * tmin },
+    normal,
+  };
+}
