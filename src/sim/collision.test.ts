@@ -85,6 +85,11 @@ describe('raySegmentVsAABB', () => {
     expect(hit!.point.x).toBeCloseTo(0, 9);
     expect(hit!.point.y).toBeCloseTo(0, 9);
     expect(hit!.t).toBeCloseTo(0.5, 9);
+    // Documents current tie-break behavior: X slab is evaluated first and sets
+    // tmin/normal; the Y slab's t1 ties tmin exactly, and `t1 > tmin` is false
+    // on equality, so the Y slab never overwrites normal. Pinning this so the
+    // tie-break isn't an unasserted accident of evaluation order.
+    expect(hit!.normal).toEqual({ x: -1, y: 0 });
   });
 
   it('returns null when the segment ends before the box', () => {
@@ -102,11 +107,43 @@ describe('raySegmentVsAABB', () => {
     expect(hit).not.toBeNull();
     expect(hit!.t).toBe(0);
     expect(hit!.point).toEqual({ x: 1.5, y: 0 });
+    // Documents current degenerate-default behavior: since t=0 already
+    // satisfies both slabs, neither the X nor Y slab's `t1 > tmin` check ever
+    // fires, so `normal` never leaves its {0,0} initializer.
+    expect(hit!.normal).toEqual({ x: 0, y: 0 });
   });
 
   it('does not divide-by-zero on a parallel/grazing segment', () => {
     // vertical segment whose x sits outside the box: dx===0 branch, no NaN
     const hit = raySegmentVsAABB({ x: 5, y: -5 }, { x: 5, y: 5 }, box);
+    expect(hit).toBeNull();
+  });
+
+  it('hits the right (maxX) face when moving in -x (X-slab swap branch)', () => {
+    const hit = raySegmentVsAABB({ x: 3, y: 0 }, { x: 0, y: 0 }, box);
+    expect(hit).not.toBeNull();
+    expect(hit!.t).toBeCloseTo(1 / 3, 9);
+    expect(hit!.point.x).toBeCloseTo(2, 9);
+    expect(hit!.point.y).toBeCloseTo(0, 9);
+    expect(hit!.normal).toEqual({ x: 1, y: 0 });
+  });
+
+  it('hits the top (maxY) face when moving in -y (Y-slab swap branch)', () => {
+    const hit = raySegmentVsAABB({ x: 1.5, y: 3 }, { x: 1.5, y: 0 }, box);
+    expect(hit).not.toBeNull();
+    // dy = -3; t1 = (maxY - from.y) / dy = (1 - 3) / -3 = 2/3 after the swap
+    expect(hit!.t).toBeCloseTo(2 / 3, 9);
+    expect(hit!.point.x).toBeCloseTo(1.5, 9);
+    expect(hit!.point.y).toBeCloseTo(1, 9);
+    expect(hit!.normal).toEqual({ x: 0, y: 1 });
+  });
+
+  it('returns null for a horizontal segment whose y is outside the box (dy===0 parallel-reject branch)', () => {
+    // Purely horizontal ray directly under the box (x in [1,2] matches the box's
+    // x-extent) at y=-5, clearly outside [minY,maxY]=[-1,1]. The X slab does not
+    // reject, so this exercises the Y slab's dy===0 reject arm specifically,
+    // distinct from the existing "misses entirely" test above.
+    const hit = raySegmentVsAABB({ x: 1, y: -5 }, { x: 2, y: -5 }, box);
     expect(hit).toBeNull();
   });
 });
