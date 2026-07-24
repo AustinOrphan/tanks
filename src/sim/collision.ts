@@ -1,4 +1,5 @@
 import type { Vec2, AABB } from './types';
+import { vadd, vsub, vnorm, vdot } from './types';
 
 export interface Hit {
   hit: boolean;
@@ -113,5 +114,109 @@ export function raySegmentVsAABB(from: Vec2, to: Vec2, box: AABB): RayHit | null
     t: tmin,
     point: { x: from.x + dx * tmin, y: from.y + dy * tmin },
     normal,
+  };
+}
+
+export interface SweepHit {
+  point: Vec2;
+  normal: Vec2;
+  wallIndex: number;
+}
+
+export interface SweepResult {
+  end: Vec2;
+  dir: Vec2;
+  bouncesLeft: number;
+  hits: SweepHit[];
+  expired: boolean;
+}
+
+const SWEEP_EPS = 1e-7;
+
+function reflectVec(v: Vec2, n: Vec2): Vec2 {
+  const d = vdot(v, n);
+  return { x: v.x - 2 * d * n.x, y: v.y - 2 * d * n.y };
+}
+
+export function reflectSweep(
+  from: Vec2,
+  to: Vec2,
+  walls: AABB[],
+  bounces: number,
+): SweepResult {
+  let start: Vec2 = { x: from.x, y: from.y };
+  let target: Vec2 = { x: to.x, y: to.y };
+  let bouncesLeft = bounces;
+  const hits: SweepHit[] = [];
+
+  // Bounded loop: guards against pathological infinite reflection.
+  for (let iter = 0; iter < 16; iter++) {
+    let best: RayHit | null = null;
+    let bestWall = -1;
+    for (let i = 0; i < walls.length; i++) {
+      const h = raySegmentVsAABB(start, target, walls[i]);
+      // Skip t<=EPS so we don't immediately re-hit the wall we just left.
+      if (h !== null && h.t > SWEEP_EPS && (best === null || h.t < best.t)) {
+        best = h;
+        bestWall = i;
+      }
+    }
+
+    if (best === null) {
+      return {
+        end: target,
+        dir: vnorm(vsub(target, start)),
+        bouncesLeft,
+        hits,
+        expired: false,
+      };
+    }
+
+    const box = walls[bestWall];
+    const pt = best.point;
+
+    if (bouncesLeft <= 0) {
+      // Out of bounces: stop dead at the wall; caller kills the bullet.
+      return {
+        end: pt,
+        dir: vnorm(vsub(target, start)),
+        bouncesLeft,
+        hits,
+        expired: true,
+      };
+    }
+
+    const onX =
+      Math.abs(pt.x - box.minX) < SWEEP_EPS || Math.abs(pt.x - box.maxX) < SWEEP_EPS;
+    const onY =
+      Math.abs(pt.y - box.minY) < SWEEP_EPS || Math.abs(pt.y - box.maxY) < SWEEP_EPS;
+    const corner = onX && onY;
+
+    const remaining = vsub(target, pt);
+    let reflected: Vec2;
+
+    if (corner) {
+      // Exact corner: reflect both axes -> retroreflection, two hit records.
+      const nx = Math.abs(pt.x - box.minX) < SWEEP_EPS ? -1 : 1;
+      const ny = Math.abs(pt.y - box.minY) < SWEEP_EPS ? -1 : 1;
+      hits.push({ point: pt, normal: { x: nx, y: 0 }, wallIndex: bestWall });
+      hits.push({ point: pt, normal: { x: 0, y: ny }, wallIndex: bestWall });
+      reflected = { x: -remaining.x, y: -remaining.y };
+    } else {
+      hits.push({ point: pt, normal: best.normal, wallIndex: bestWall });
+      reflected = reflectVec(remaining, best.normal);
+    }
+
+    bouncesLeft -= 1;
+    start = pt;
+    target = vadd(pt, reflected);
+  }
+
+  return {
+    end: target,
+    dir: vnorm(vsub(target, start)),
+    bouncesLeft,
+    hits,
+    expired: false,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { circleVsAABB, circleVsCircle, raySegmentVsAABB } from './collision';
+import { circleVsAABB, circleVsCircle, raySegmentVsAABB, reflectSweep } from './collision';
 import type { AABB } from './types';
 import { vdist } from './types';
 
@@ -145,5 +145,73 @@ describe('raySegmentVsAABB', () => {
     // distinct from the existing "misses entirely" test above.
     const hit = raySegmentVsAABB({ x: 1, y: -5 }, { x: 2, y: -5 }, box);
     expect(hit).toBeNull();
+  });
+});
+
+describe('reflectSweep', () => {
+  it('passes straight through open space with no hits', () => {
+    const res = reflectSweep({ x: 0, y: 0 }, { x: 1, y: 0 }, [], 1);
+    expect(res.end.x).toBeCloseTo(1, 9);
+    expect(res.end.y).toBeCloseTo(0, 9);
+    expect(res.hits).toHaveLength(0);
+    expect(res.expired).toBe(false);
+    expect(res.dir.x).toBeCloseTo(1, 9);
+  });
+
+  it('reflects off a vertical wall, flipping the x component only', () => {
+    const wall: AABB = { minX: 1, minY: -1, maxX: 2, maxY: 1 };
+    const res = reflectSweep({ x: 0, y: 0 }, { x: 2, y: 0 }, [wall], 1);
+    expect(res.hits).toHaveLength(1);
+    expect(res.hits[0].normal).toEqual({ x: -1, y: 0 });
+    expect(res.hits[0].point.x).toBeCloseTo(1, 9);
+    expect(res.dir.x).toBeLessThan(0); // heading reversed in x
+    expect(res.dir.y).toBeCloseTo(0, 9);
+    expect(res.bouncesLeft).toBe(0);
+    expect(res.expired).toBe(false);
+  });
+
+  it('EXACT corner hit produces TWO SweepHits at the same point (both axes reflect)', () => {
+    const wall: AABB = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    const res = reflectSweep({ x: -1, y: -1 }, { x: 1, y: 1 }, [wall], 3);
+    expect(res.hits).toHaveLength(2);
+    expect(res.hits[0].point.x).toBeCloseTo(0, 9);
+    expect(res.hits[0].point.y).toBeCloseTo(0, 9);
+    expect(res.hits[1].point.x).toBeCloseTo(0, 9);
+    expect(res.hits[1].point.y).toBeCloseTo(0, 9);
+    // one hit per axis
+    const normals = res.hits.map((h) => `${h.normal.x},${h.normal.y}`).sort();
+    expect(normals).toEqual(['-1,0', '0,-1']);
+    // both components of travel reversed -> retroreflection back toward origin
+    expect(res.dir.x).toBeLessThan(0);
+    expect(res.dir.y).toBeLessThan(0);
+  });
+
+  it('with bounces:0, stops at the wall and marks expired', () => {
+    const wall: AABB = { minX: 1, minY: -1, maxX: 2, maxY: 1 };
+    const res = reflectSweep({ x: 0, y: 0 }, { x: 3, y: 0 }, [wall], 0);
+    expect(res.expired).toBe(true);
+    expect(res.end.x).toBeCloseTo(1, 9);
+    expect(res.end.y).toBeCloseTo(0, 9);
+    expect(res.hits).toHaveLength(0);
+  });
+
+  it('reflects many times without tunneling through a wall', () => {
+    const wallRight: AABB = { minX: 5, minY: -10, maxX: 6, maxY: 10 };
+    const wallLeft: AABB = { minX: -6, minY: -10, maxX: -5, maxY: 10 };
+    const res = reflectSweep(
+      { x: 0, y: 0 },
+      { x: 53, y: 0 },
+      [wallRight, wallLeft],
+      10,
+    );
+    expect(res.hits).toHaveLength(5);
+    expect(res.expired).toBe(false);
+    // total path folds into the [-5,5] corridor; never escapes
+    expect(res.end.x).toBeCloseTo(-3, 6);
+    expect(res.end.y).toBeCloseTo(0, 9);
+    for (const h of res.hits) {
+      expect(Math.abs(h.point.x)).toBeLessThanOrEqual(5 + 1e-6);
+      expect(Number.isNaN(h.point.x)).toBe(false);
+    }
   });
 });
