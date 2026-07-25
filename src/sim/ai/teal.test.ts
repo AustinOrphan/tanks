@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { tealDecision } from './teal';
+import { aimJitter, aimLead, bankShot } from './targeting';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
-import { BANK_PREFER_TICKS } from '../constants';
+import { BANK_PREFER_TICKS, AI_AIM_SPREAD, bulletConfig, RICOCHET_BOUNCES } from '../constants';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -31,12 +32,14 @@ describe('tealDecision', () => {
   it('takes a direct ricochet shot when line-of-sight is clear', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 });
-    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    const w = world({ tanks: [teal, player] });
+    const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
     expect(d.fireType).toBe('ricochet');
     // B: player is stationary (desiredMove {0,0}) -> driveVelocity is (0,0) -> aimLead
-    // reduces to direct aim -> turretAngle toward (5,0) from (0,0) is exactly 0.
-    expect(d.turretAngle).toBeCloseTo(0, 6);
+    // reduces to direct aim -> turretAngle toward (5,0) from (0,0) is exactly 0, plus
+    // this tank/tick's seeded aim jitter.
+    expect(d.turretAngle).toBeCloseTo(aimJitter(w, teal, AI_AIM_SPREAD), 6);
     expect(d.nextState).toBe('fire');
     // F: nextTimer on the direct-shot (not-dodging) path. Teal now lays mines too
     // (mirrors Grey): not dodging, cooldown ready, under cap -> mine is true.
@@ -48,18 +51,42 @@ describe('tealDecision', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)]; // blocker + top bounce wall
-    const d = tealDecision(world({ tanks: [teal, player], walls }), teal);
+    const w = world({ tanks: [teal, player], walls });
+    const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
     expect(d.fireType).toBe('ricochet');
-    // C: the bounce point is (2,2), so the firing angle from (0,0) is exactly pi/4.
+    // C: the bounce point is (2,2), so the firing angle from (0,0) is exactly pi/4 (plus
+    // this tank/tick's seeded aim jitter).
     // If the direct path to (4,0) had been taken instead, the angle would be 0 (pi/4 != 0),
     // so this also proves lineOfSight(teal, player) was genuinely blocked by the wall(1) blocker
     // and the direct-shot branch was skipped in favour of the bank-shot branch.
-    expect(d.turretAngle).toBeCloseTo(Math.PI / 4, 6); // bounce point (2,2)
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w, teal, AI_AIM_SPREAD), 6); // bounce point (2,2)
     // F: nextTimer on the bank-shot (not-dodging) path. Not dodging, cooldown ready,
     // under cap -> mine is true.
     expect(d.mine).toBe(true);
     expect(d.nextTimer).toBe(0);
+  });
+
+  it('applies aim jitter to a direct shot: the final turret angle differs from the un-jittered aimLead result', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const w = world({ tanks: [teal, player] });
+    const d = tealDecision(w, teal);
+    const unjittered = aimLead(teal.pos, player.pos, { x: 0, y: 0 }, bulletConfig.ricochet.speed);
+    expect(d.turretAngle).not.toBe(unjittered);
+    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
+  });
+
+  it('applies aim jitter to a bank shot: the final turret angle differs from the un-jittered bankShot result', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)];
+    const w = world({ tanks: [teal, player], walls });
+    const d = tealDecision(w, teal);
+    const unjittered = bankShot(teal.pos, player.pos, walls, RICOCHET_BOUNCES);
+    expect(unjittered).not.toBeNull();
+    expect(d.turretAngle).not.toBe(unjittered);
+    expect(Math.abs(d.turretAngle - (unjittered as number))).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
   });
 
   it('repositions (no fire) when neither a direct nor a bank shot exists', () => {
@@ -204,30 +231,36 @@ describe('tealDecision', () => {
     // -- this is what makes the test discriminate real alternation from coincidence.
     const walls = [wall(2, -5, 2, 10, 3)];
     const teal0 = tank(1, 'teal', { x: 0, y: 0 });
-    const d0 = tealDecision(world({ tanks: [teal0, player], walls, tick: 0 }), teal0); // preferBank: floor(0/120)=0, even
+    const w0 = world({ tanks: [teal0, player], walls, tick: 0 }); // preferBank: floor(0/120)=0, even
+    const d0 = tealDecision(w0, teal0);
     const teal120 = tank(1, 'teal', { x: 0, y: 0 });
-    const d120 = tealDecision(world({ tanks: [teal120, player], walls, tick: BANK_PREFER_TICKS }), teal120); // floor(120/120)=1, odd -> direct-preferred
+    const w120 = world({ tanks: [teal120, player], walls, tick: BANK_PREFER_TICKS }); // floor(120/120)=1, odd -> direct-preferred
+    const d120 = tealDecision(w120, teal120);
     expect(d0.fire).toBe(true);
     expect(d120.fire).toBe(true);
-    expect(d0.turretAngle).toBeCloseTo(Math.PI / 4, 6); // tick 0: bank-preferred -> bank path taken
-    expect(d120.turretAngle).toBeCloseTo(0, 6); // tick 120: direct-preferred -> direct shot taken
+    // tick 0: bank-preferred -> bank path taken, plus this tick's seeded aim jitter
+    expect(d0.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w0, teal0, AI_AIM_SPREAD), 6);
+    // tick 120: direct-preferred -> direct shot taken, plus this tick's seeded aim jitter
+    expect(d120.turretAngle).toBeCloseTo(aimJitter(w120, teal120, AI_AIM_SPREAD), 6);
   });
 
   it('fallthrough: bank-preferred tick still takes the direct shot when no bank path exists', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 });
-    const d = tealDecision(world({ tanks: [teal, player], tick: 0 }), teal); // preferBank true, no walls -> bank impossible
+    const w = world({ tanks: [teal, player], tick: 0 }); // preferBank true, no walls -> bank impossible
+    const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
-    expect(d.turretAngle).toBeCloseTo(0, 6);
+    expect(d.turretAngle).toBeCloseTo(aimJitter(w, teal, AI_AIM_SPREAD), 6);
   });
 
   it('fallthrough: direct-preferred tick still takes the bank shot when line-of-sight is blocked', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)]; // blocker + bounce wall
-    const d = tealDecision(world({ tanks: [teal, player], walls, tick: BANK_PREFER_TICKS }), teal); // direct-preferred, LOS blocked
+    const w = world({ tanks: [teal, player], walls, tick: BANK_PREFER_TICKS }); // direct-preferred, LOS blocked
+    const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
-    expect(d.turretAngle).toBeCloseTo(Math.PI / 4, 6);
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w, teal, AI_AIM_SPREAD), 6);
   });
 
   // ---- Important 4: pin the driveVelocity fix with a diagonal-move fixture, so this
@@ -239,9 +272,10 @@ describe('tealDecision', () => {
     // unit length before scaling by TANK_SPEED, so driveVelocity is (3/sqrt2, 3/sqrt2), NOT
     // vscale({1,1}, 3) = (3,3). See report for the full hand-derived intercept arithmetic.
     const player = tank(2, 'player', { x: 5, y: 0 }, { desiredMove: { x: 1, y: 1 } });
-    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    const w = world({ tanks: [teal, player] });
+    const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
-    expect(d.turretAngle).toBeCloseTo(0.36136712390670783, 6);
+    expect(d.turretAngle).toBeCloseTo(0.36136712390670783 + aimJitter(w, teal, AI_AIM_SPREAD), 6);
   });
 
   // ---- Teal now lays mines too (mirrors Grey's rule, spec §7 "avoids its own mines").

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
-import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS } from '../constants';
+import { aimJitter } from './targeting';
+import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_AIM_SPREAD } from '../constants';
 import type { Tank, Vec2 } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
@@ -259,8 +260,10 @@ describe('stepAi', () => {
       expect(w.tanks[0].desiredMove).toEqual({ x: 0, y: 0 });
       expect(w.bullets.length).toBe(0);
       expect(w.mines.length).toBe(0);
-      // Turret still tracks the target during countdown (orientation is the point of it).
-      expect(w.tanks[0].turretAngle).toBeCloseTo(Math.PI / 2, 6);
+      // Turret still tracks the target during countdown (orientation is the point of it),
+      // plus this tank/tick's seeded aim jitter (jitter is applied to every live firing
+      // solution, including one computed but not yet allowed to fire).
+      expect(w.tanks[0].turretAngle).toBeCloseTo(Math.PI / 2 + aimJitter(w, grey, AI_AIM_SPREAD), 6);
     });
 
     it('grace: AI tanks move, but still cannot fire or lay mines', () => {

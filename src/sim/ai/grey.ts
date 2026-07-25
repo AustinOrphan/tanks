@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, dangerAvoidMove, wanderMove } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, wanderMove } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS } from '../constants';
+import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
 
 export function greyDecision(world: World, tank: Tank): AiDecision {
@@ -35,7 +35,10 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   if (player) {
     if (lineOfSight(tank.pos, player.pos, world.walls)) {
       const targetVel = driveVelocity(player);
-      turretAngle = aimLead(tank.pos, player.pos, targetVel, bulletConfig.normal.speed);
+      // Jitter only the live firing solution (see brown.ts's comment for why the
+      // held/passthrough angle below must stay untouched).
+      turretAngle = aimLead(tank.pos, player.pos, targetVel, bulletConfig.normal.speed)
+        + aimJitter(world, tank, AI_AIM_SPREAD);
       fire = true;
       nextState = 'fire';
     } else {

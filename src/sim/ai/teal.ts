@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, bankShot, dangerAvoidMove, wanderMove } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, RICOCHET_BOUNCES, BANK_PREFER_TICKS, MINE_CAP } from '../constants';
+import { bulletConfig, RICOCHET_BOUNCES, BANK_PREFER_TICKS, MINE_CAP, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
 
 export function tealDecision(world: World, tank: Tank): AiDecision {
@@ -27,17 +27,21 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
 
   const speed = bulletConfig.ricochet.speed;
 
+  // Jitter is applied to BOTH the direct and bank solutions, right where each is
+  // computed, so it's present regardless of which path preferBank ends up taking (and
+  // never touches the reposition fallback's held/passthrough angle below).
   function tryDirect(): number | null {
     if (!lineOfSight(tank.pos, player!.pos, world.walls)) return null;
     const targetVel = driveVelocity(player!);
-    return aimLead(tank.pos, player!.pos, targetVel, speed);
+    return aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD);
   }
   // bankShot is O(walls^2): each surviving wall face runs two full losIgnoring scans.
   // Measured fine at ARENA_01's wall count (~480 ray tests/tick/Teal, microseconds); a
   // much denser arena would want throttling. Evaluated lazily below so the non-preferred
   // option only pays this cost when the preferred option actually fails.
   function tryBank(): number | null {
-    return bankShot(tank.pos, player!.pos, world.walls, RICOCHET_BOUNCES);
+    const angle = bankShot(tank.pos, player!.pos, world.walls, RICOCHET_BOUNCES);
+    return angle === null ? null : angle + aimJitter(world, tank, AI_AIM_SPREAD);
   }
 
   // Alternate which shot type Teal prefers on a deterministic ~2s cycle (user decision:

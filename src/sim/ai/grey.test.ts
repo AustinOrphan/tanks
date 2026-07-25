@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { greyDecision } from './grey';
+import { aimJitter, aimLead } from './targeting';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
-import { DODGE_PATIENCE_TICKS } from '../constants';
+import { DODGE_PATIENCE_TICKS, AI_AIM_SPREAD, bulletConfig } from '../constants';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -58,6 +59,16 @@ describe('greyDecision', () => {
 
     const blocked = greyDecision(world({ tanks: [grey, player], walls: [wall(9, 2, -1, 3, 1)] }), grey);
     expect(blocked.fire).toBe(false);
+  });
+
+  it('applies aim jitter: the final turret angle differs from the un-jittered aimLead result', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const w = world({ tanks: [grey, player] });
+    const d = greyDecision(w, grey);
+    const unjittered = aimLead(grey.pos, player.pos, { x: 0, y: 0 }, bulletConfig.normal.speed);
+    expect(d.turretAngle).not.toBe(unjittered);
+    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
   });
 
   it("steers away from its own armed mine's blast radius", () => {
@@ -204,9 +215,11 @@ describe('greyDecision', () => {
     const grey = tank(1, 'grey', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS });
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS, no walls, stationary
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // still an active threat
-    const d = greyDecision(world({ tanks: [grey, player], bullets: [b] }), grey);
+    const w = world({ tanks: [grey, player], bullets: [b] });
+    const d = greyDecision(w, grey);
     expect(d.fire).toBe(true);
-    expect(d.turretAngle).toBeCloseTo(0, 6); // direct shot, player stationary
+    // direct shot, player stationary, plus this tank/tick's seeded aim jitter
+    expect(d.turretAngle).toBeCloseTo(aimJitter(w, grey, AI_AIM_SPREAD), 6);
     // Still dodging: desiredMove is the dodge vector (signed +y), not the wander heading.
     expect(d.desiredMove.x).toBeCloseTo(0, 6);
     expect(d.desiredMove.y).toBeCloseTo(1, 6);

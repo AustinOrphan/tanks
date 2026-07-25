@@ -70,6 +70,17 @@ export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bull
 // ---- AI wander (wanderMove) ----
 export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
 
+// ---- AI aim jitter (aimJitter) ----
+// A perfect-intercept-solution AI (aimLead) is unmissable; this adds a small, seeded
+// error to every AI firing solution so enemies are threatening but survivable.
+// THIS IS THE PRIMARY DIFFICULTY KNOB for this slice -- the value most likely to need
+// retuning after playtest. Radians; ~4.6 degrees at the current value.
+export const AI_AIM_SPREAD = 0.08;
+// How often (in ticks) the jitter offset is re-rolled. ~0.33s at 60Hz. A constant offset
+// per tank would just be a fixed miss the AI could never correct for; re-rolling this
+// often makes shots scatter around the target instead of consistently missing to one side.
+export const AI_JITTER_TICKS = 20;
+
 // ---- Grey AI (greyDecision) ----
 // How many consecutive dodging ticks Grey will hold fire before shooting back regardless.
 // 45 ticks = 0.75s at 60Hz, deliberately longer than the player's FIRE_COOLDOWN (0.4s) so

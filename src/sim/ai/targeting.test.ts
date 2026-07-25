@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove } from './targeting';
+import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter } from './targeting';
+import { AI_AIM_SPREAD, AI_JITTER_TICKS } from '../constants';
 import type { Tank, Wall } from '../types';
 import type { World } from '../world';
 
@@ -203,5 +204,71 @@ describe('wanderMove', () => {
     const v = wanderMove(wanderWorld(7, 0), wanderTank(1));
     expect(v.x).toBeCloseTo(0.689323826282066, 9);
     expect(v.y).toBeCloseTo(-0.7244533542746918, 9);
+  });
+});
+
+describe('aimJitter', () => {
+  it('is pure: same (seed, id, tick bucket) yields the identical offset', () => {
+    const t = wanderTank(1);
+    const a = aimJitter(wanderWorld(7, 0), t, AI_AIM_SPREAD);
+    const b = aimJitter(wanderWorld(7, 0), t, AI_AIM_SPREAD);
+    expect(a).toBe(b);
+  });
+
+  it('is bounded by ±spread', () => {
+    // Sample many (seed, tick) combinations; every offset must stay in range.
+    for (let seed = 0; seed < 20; seed++) {
+      for (let tick = 0; tick < 20; tick++) {
+        const offset = aimJitter(wanderWorld(seed, tick * AI_JITTER_TICKS), wanderTank(1), AI_AIM_SPREAD);
+        expect(Math.abs(offset)).toBeLessThanOrEqual(AI_AIM_SPREAD);
+      }
+    }
+  });
+
+  it('differs across tanks at the same tick (not a shared/global offset)', () => {
+    const w = wanderWorld(7, 0);
+    const a = aimJitter(w, wanderTank(1), AI_AIM_SPREAD);
+    const b = aimJitter(w, wanderTank(2), AI_AIM_SPREAD);
+    expect(a).not.toBe(b);
+  });
+
+  it('differs across tick buckets for the same tank (re-rolls, not a fixed miss)', () => {
+    const t = wanderTank(1);
+    const atBucket0 = aimJitter(wanderWorld(7, 0), t, AI_AIM_SPREAD);
+    const atBucket1 = aimJitter(wanderWorld(7, AI_JITTER_TICKS), t, AI_AIM_SPREAD);
+    expect(atBucket0).not.toBe(atBucket1);
+  });
+
+  it('holds within a bucket (ticks 0 and AI_JITTER_TICKS-1) and changes at the boundary', () => {
+    const t = wanderTank(1);
+    const atTick0 = aimJitter(wanderWorld(7, 0), t, AI_AIM_SPREAD);
+    const atTickLast = aimJitter(wanderWorld(7, AI_JITTER_TICKS - 1), t, AI_AIM_SPREAD);
+    const atTickNext = aimJitter(wanderWorld(7, AI_JITTER_TICKS), t, AI_AIM_SPREAD);
+    expect(atTickLast).toBe(atTick0);
+    expect(atTickNext).not.toBe(atTick0);
+  });
+
+  it('is NOT correlated with that tank\'s wanderMove heading (distinct multiplier from wanderMove\'s tank.id*1000)', () => {
+    // If aimJitter used the same multiplier as wanderMove, its sign/magnitude would move
+    // in lockstep with the wander heading's angle for every tank id at a fixed tick. Probe
+    // several ids and confirm the two signals are not simply reproductions of each other.
+    const w = wanderWorld(7, 0);
+    let anyDifferentRelationship = false;
+    let prevRatioSign: number | null = null;
+    for (let id = 1; id <= 8; id++) {
+      const t = wanderTank(id);
+      const jitter = aimJitter(w, t, AI_AIM_SPREAD);
+      const wander = wanderMove(w, t);
+      const wanderAngle = Math.atan2(wander.y, wander.x);
+      const sign = Math.sign(jitter) * Math.sign(wanderAngle);
+      if (prevRatioSign !== null && sign !== prevRatioSign) anyDifferentRelationship = true;
+      prevRatioSign = sign;
+    }
+    expect(anyDifferentRelationship).toBe(true);
+  });
+
+  it('scales with the spread parameter (zero spread yields zero offset)', () => {
+    const t = wanderTank(1);
+    expect(aimJitter(wanderWorld(7, 0), t, 0)).toBeCloseTo(0, 12);
   });
 });

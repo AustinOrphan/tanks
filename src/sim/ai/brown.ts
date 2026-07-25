@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead } from './targeting';
+import { lineOfSight, aimLead, aimJitter } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig } from '../constants';
+import { bulletConfig, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
 
 export function brownDecision(world: World, tank: Tank): AiDecision {
@@ -14,7 +14,12 @@ export function brownDecision(world: World, tank: Tank): AiDecision {
   const speed = bulletConfig.normal.speed;
   const los = lineOfSight(tank.pos, player.pos, world.walls);
   const targetVel = driveVelocity(player);
-  const turretAngle = los ? aimLead(tank.pos, player.pos, targetVel, speed) : tank.turretAngle;
+  // Jitter is applied ONLY to a genuine firing solution, never to the held/passthrough
+  // angle: jittering a held angle would make it visibly drift every tick with nothing to
+  // aim at, which is a bug, not difficulty.
+  const turretAngle = los
+    ? aimLead(tank.pos, player.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD)
+    : tank.turretAngle;
 
   let fire = false;
   let nextState = tank.aiState;

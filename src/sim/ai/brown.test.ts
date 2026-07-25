@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { brownDecision } from './brown';
+import { aimJitter, aimLead } from './targeting';
+import { AI_AIM_SPREAD, bulletConfig } from '../constants';
 import type { Tank, Vec2, Wall } from '../types';
 import type { World } from '../world';
 
@@ -37,17 +39,19 @@ describe('brownDecision', () => {
   it('leads a moving player (turret angle offset from the direct angle)', () => {
     const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
     const player = tank(2, 'player', { x: 5, y: 0 }, { desiredMove: { x: 0, y: 1 } });
-    const d = brownDecision(world([brown, player]), brown);
+    const w = world([brown, player]);
+    const d = brownDecision(w, brown);
     // Brown at (0,0), player at (5,0) moving +y with TANK_SPEED=3 gives targetVel=(0,3)
     // With normal-shell speed 6, the intercept is at (5, 2.88675)
-    // atan2(2.88675, 5) = π/6 exactly
-    expect(d.turretAngle).toBeCloseTo(Math.PI / 6, 6);
+    // atan2(2.88675, 5) = π/6 exactly, plus this tank/tick's seeded aim jitter.
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 6 + aimJitter(w, brown, AI_AIM_SPREAD), 6);
   });
 
   it('leads a diagonal-moving player (clamped velocity)', () => {
     const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
     const player = tank(2, 'player', { x: 5, y: 0 }, { desiredMove: { x: 1, y: 1 } });
-    const d = brownDecision(world([brown, player]), brown);
+    const w = world([brown, player]);
+    const d = brownDecision(w, brown);
     // desiredMove = (1,1) has length sqrt(2) ≈ 1.4142, so clamped direction = (1/√2, 1/√2)
     // targetVel = clamped * TANK_SPEED(3) = (3/√2, 3/√2) ≈ (2.1213, 2.1213), magnitude 3.0
     // aimLead quadratic: a = 9-36 = -27, b = 30/√2 = 15√2, c = 25
@@ -56,8 +60,19 @@ describe('brownDecision', () => {
     const sqrt2 = Math.sqrt(2);
     const velocityMagnitude = Math.sqrt((3 / sqrt2) ** 2 + (3 / sqrt2) ** 2); // should be 3.0
     expect(velocityMagnitude).toBeCloseTo(3.0, 6);
-    // The exact angle computed from aimLead with clamped velocity (3/√2, 3/√2)
-    expect(d.turretAngle).toBeCloseTo(0.36137, 5);
+    // The exact angle computed from aimLead with clamped velocity (3/√2, 3/√2), plus this
+    // tank/tick's seeded aim jitter.
+    expect(d.turretAngle).toBeCloseTo(0.36137 + aimJitter(w, brown, AI_AIM_SPREAD), 5);
+  });
+
+  it('applies aim jitter: the final turret angle differs from the un-jittered aimLead result', () => {
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const w = world([brown, player]);
+    const d = brownDecision(w, brown);
+    const unjittered = aimLead(brown.pos, player.pos, { x: 0, y: 0 }, bulletConfig.normal.speed);
+    expect(d.turretAngle).not.toBe(unjittered);
+    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
   });
 
   it('fires only with clear line-of-sight, and advances Aim -> Fire', () => {

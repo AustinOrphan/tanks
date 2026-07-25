@@ -1,7 +1,7 @@
 import type { Vec2, Wall, AABB, Bullet, Tank } from '../types';
 import { vsub, angleOf, vdot, vdist, vnorm, fromAngle, nextRng } from '../types';
 import { raySegmentVsAABB } from '../collision';
-import { AIM_EPS, TANK_RADIUS, MINE_PROXIMITY_RADIUS, THREAT_HORIZON, DANGER_CORRIDOR, VEC_EPS, WANDER_TICKS } from '../constants';
+import { AIM_EPS, TANK_RADIUS, MINE_PROXIMITY_RADIUS, THREAT_HORIZON, DANGER_CORRIDOR, VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS } from '../constants';
 import type { World } from '../world';
 
 export function lineOfSight(from: Vec2, to: Vec2, walls: Wall[]): boolean {
@@ -148,6 +148,28 @@ export function wanderMove(world: World, tank: Tank): Vec2 {
   const bucket = Math.floor(world.tick / WANDER_TICKS);
   const rng = nextRng(world.seed + tank.id * 1000 + bucket);
   return fromAngle(rng.value * Math.PI * 2);
+}
+
+/**
+ * Returns a small, deterministic aiming error in radians, bounded to ±`spread`, for
+ * `tank` to add to its computed firing angle (see brown.ts/grey.ts/teal.ts). Re-rolled
+ * every `AI_JITTER_TICKS` ticks (~0.33s at 60Hz) rather than held for the tank's whole
+ * lifetime, so a tank's shots scatter around the target instead of consistently missing
+ * to a fixed side -- and rather than threaded PRNG state, so this stays replay-safe (any
+ * caller, any order, any tick, gets the same answer for the same inputs), same rationale
+ * as wanderMove.
+ *
+ * Uses a DIFFERENT multiplier on tank.id (`* 7919`, a prime, vs wanderMove's `* 1000`) so
+ * a tank's wander heading and its aim error are never correlated: a tank that always
+ * missed in the direction it happened to be walking would look like a bug, not a feature.
+ *
+ * NO Math.random() -- this is a pure hash of (world.seed, tank.id, tick bucket), exactly
+ * like wanderMove, per sim/'s determinism and purity requirements.
+ */
+export function aimJitter(world: World, tank: Tank, spread: number): number {
+  const bucket = Math.floor(world.tick / AI_JITTER_TICKS);
+  const rng = nextRng(world.seed + tank.id * 7919 + bucket);
+  return (rng.value * 2 - 1) * spread;
 }
 
 /**
