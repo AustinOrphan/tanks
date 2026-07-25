@@ -3,7 +3,8 @@ import { createWorld, applyPlayerInput, resolveStatus, step } from './world';
 import type { World } from './world';
 import type { Tank, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
-import { FIRE_COOLDOWN } from './constants';
+import { FIRE_COOLDOWN, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
+import { stepAi } from './ai';
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
   return {
@@ -29,7 +30,13 @@ function makeWorld(): World {
     { kind: 'player', pos: { x: 5, y: 5 }, angle: 0 },
     { kind: 'brown', pos: { x: 5, y: 15 }, angle: 0 },
   ];
-  return createWorld({ walls: [], tanks: [player, brown], spawns, lives: 3 });
+  const world = createWorld({ walls: [], tanks: [player, brown], spawns, lives: 3 });
+  // This file's tests (all written before round phases existed) are about pipeline/
+  // cooldown/status mechanics, not round phases -- push roundStartTick far into the
+  // past so world.tick=0 already reads as 'live'. The round-phase-specific tests below
+  // set roundStartTick explicitly instead of relying on this helper.
+  world.roundStartTick = -(COUNTDOWN_TICKS + GRACE_TICKS) - 1;
+  return world;
 }
 
 const fireInput: InputState = {
@@ -158,5 +165,91 @@ describe('step() composition (full pipeline)', () => {
     const after = step(won, fireInput);
     expect(after.world.bullets.length).toBe(0);
     expect(after.world.status).toBe('win');
+  });
+});
+
+describe('round phases (player path via applyPlayerInput)', () => {
+  // Fresh worlds here (NOT makeWorld(), which deliberately bypasses round phases) so
+  // roundStartTick is the real createWorld default of 0.
+  function freshWorld(): World {
+    const player = makeTank('player', 1, 5, 5);
+    const brown = makeTank('brown', 2, 5, 15);
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 5, y: 5 }, angle: 0 },
+      { kind: 'brown', pos: { x: 5, y: 15 }, angle: 0 },
+    ];
+    return createWorld({ walls: [], tanks: [player, brown], spawns, lives: 3 });
+  }
+
+  it('countdown: commanded movement is blocked and fire spawns no bullet, but the turret still tracks the aim point', () => {
+    const w = freshWorld();
+    const player = w.tanks[0];
+    player.turretAngle = Math.PI; // starts facing away from the aim point
+    const events: SimEvent[] = [];
+    applyPlayerInput(w, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: true, mine: false }, events);
+    expect(player.desiredMove).toEqual({ x: 0, y: 0 });
+    expect(w.bullets.length).toBe(0);
+    expect(events.some((e) => e.type === 'fire')).toBe(false);
+    // Turret DOES update during countdown: aiming is the whole point of the phase.
+    expect(player.turretAngle).toBeCloseTo(0, 10);
+  });
+
+  it('grace: movement is allowed, but fire and mines are still suppressed', () => {
+    const w = freshWorld();
+    w.tick = COUNTDOWN_TICKS; // first grace tick
+    const player = w.tanks[0];
+    applyPlayerInput(w, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: true, mine: true }, []);
+    expect(player.desiredMove).toEqual({ x: 1, y: 0 });
+    expect(w.bullets.length).toBe(0);
+    expect(w.mines.length).toBe(0);
+  });
+
+  it('boundary: the last grace tick still suppresses fire; the first live tick fires normally', () => {
+    const lastGrace = freshWorld();
+    lastGrace.tick = COUNTDOWN_TICKS + GRACE_TICKS - 1;
+    applyPlayerInput(lastGrace, fireInput, []);
+    expect(lastGrace.bullets.length).toBe(0);
+
+    const firstLive = freshWorld();
+    firstLive.tick = COUNTDOWN_TICKS + GRACE_TICKS;
+    applyPlayerInput(firstLive, fireInput, []);
+    expect(firstLive.bullets.length).toBe(1);
+  });
+
+  it('boundary: the last countdown tick still blocks movement; the first grace tick allows it', () => {
+    const lastCountdown = freshWorld();
+    lastCountdown.tick = COUNTDOWN_TICKS - 1;
+    applyPlayerInput(lastCountdown, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: false, mine: false }, []);
+    expect(lastCountdown.tanks[0].desiredMove).toEqual({ x: 0, y: 0 });
+
+    const firstGrace = freshWorld();
+    firstGrace.tick = COUNTDOWN_TICKS;
+    applyPlayerInput(firstGrace, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: false, mine: false }, []);
+    expect(firstGrace.tanks[0].desiredMove).toEqual({ x: 1, y: 0 });
+  });
+
+  it('RESPAWN: after resetArena runs (death with lives remaining), the round phases restart -- no tank can fire immediately after, even though world.tick is large', () => {
+    const w = freshWorld();
+    w.tick = 500000; // large absolute tick, deep into a long game
+    const player = w.tanks[0];
+    const brown = w.tanks[1]; // clear LOS to the player, no walls in this fixture
+    player.alive = false; // this life just ended, lives remain (default lives=3)
+    resolveStatus(w, []); // -> resetArena(w): revives both tanks AND resets roundStartTick
+
+    expect(w.lives).toBe(2);
+    expect(player.alive).toBe(true);
+    expect(w.roundStartTick).toBe(500000); // restarted at the CURRENT tick, not 0
+
+    // Player: fire input on the very next evaluation still spawns nothing.
+    applyPlayerInput(w, fireInput, []);
+    expect(w.bullets.some((b) => b.ownerId === player.id)).toBe(false);
+
+    // AI: Brown has a clear shot (no walls, revived at its spawn) but must not fire either.
+    // Two calls so Brown's own idle->aim->fire state machine has a chance to reach 'fire'
+    // (world.tick is untouched by stepAi, so the round phase is identical both times --
+    // still countdown -- making this a real test of the gate, not just of Brown's own delay).
+    stepAi(w, []);
+    stepAi(w, []);
+    expect(w.bullets.some((b) => b.ownerId === brown.id)).toBe(false);
   });
 });

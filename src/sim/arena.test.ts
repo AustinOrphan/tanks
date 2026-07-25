@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ARENA_01, loadArena, createArenaWorld } from './arena';
 import { raySegmentVsAABB } from './collision';
 import { bankShot } from './ai/targeting';
-import { RICOCHET_BOUNCES, LIVES } from './constants';
+import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
 import { step } from './world';
 import type { InputState } from './types';
 
@@ -232,7 +232,9 @@ describe('createArenaWorld', () => {
     let world = createArenaWorld();
     const startTick = world.tick;
     const noInput: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
-    const stepCount = 30;
+    // Must clear the round's countdown + grace phases (nobody can fire until then) with
+    // margin to spare, so Teal gets a real chance to fire once normal play begins.
+    const stepCount = COUNTDOWN_TICKS + GRACE_TICKS + 10;
 
     let tealShotAppeared = false;
     const tealId = world.tanks.find((t) => t.kind === 'teal')?.id;
@@ -241,6 +243,11 @@ describe('createArenaWorld', () => {
     expect(() => {
       for (let i = 0; i < stepCount; i++) {
         world = step(world, noInput).world;
+        // Round-phase guard: nobody, not even the AI, may have fired yet while still in
+        // the countdown/grace window of the assembled arena's own real timing.
+        if (world.tick < COUNTDOWN_TICKS + GRACE_TICKS) {
+          expect(world.bullets.length).toBe(0);
+        }
         // Latch: check if Teal has fired a bullet (at least one bullet with Teal's id as owner).
         if (!tealShotAppeared && world.bullets.some((b) => b.ownerId === tealId)) {
           tealShotAppeared = true;

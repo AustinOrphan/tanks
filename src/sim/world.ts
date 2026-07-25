@@ -6,6 +6,7 @@ import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepMines } from './mines';
 import { stepAi } from './ai';
 import { DT, FIRE_COOLDOWN, MINE_COOLDOWN } from './constants';
+import { roundPhase } from './round';
 
 export interface World {
   tick: number;
@@ -18,6 +19,10 @@ export interface World {
   spawns: Spawn[];
   status: 'playing' | 'win' | 'lose';
   lives: number;
+  // Tick at which the current round (countdown + grace + live) began. Reset by
+  // resetArena on every respawn so the opening-phase protection applies after every
+  // life lost, not just at game start. See src/sim/round.ts's roundPhase().
+  roundStartTick: number;
 }
 
 export interface StepResult {
@@ -48,6 +53,7 @@ export function createWorld(init: {
     spawns: init.spawns,
     status: 'playing',
     lives: init.lives,
+    roundStartTick: 0,
   };
 }
 
@@ -67,6 +73,7 @@ export function cloneWorld(world: World): World {
     seed: world.seed,
     status: world.status,
     lives: world.lives,
+    roundStartTick: world.roundStartTick,
     tanks: world.tanks.map(cloneTank),
     bullets: world.bullets.map((b) => ({ ...b, pos: { ...b.pos }, vel: { ...b.vel } })),
     mines: world.mines.map((m) => ({ ...m, pos: { ...m.pos } })),
@@ -87,8 +94,16 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
   const player = world.tanks.find((t) => t.kind === 'player');
   if (!player || !player.alive) return;
 
-  player.desiredMove = { x: input.move.x, y: input.move.y };
+  // Round phases (see round.ts): countdown blocks movement entirely (pure orientation --
+  // aim only); grace allows movement but still blocks fire/mines; live is unrestricted.
+  // Cooldowns keep ticking through both phases regardless (simpler, and harmless since
+  // fire/mine are gated below anyway).
+  const phase = roundPhase(world);
 
+  player.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : { x: input.move.x, y: input.move.y };
+
+  // Turret angle ALWAYS updates, even during countdown: aiming is the whole point of
+  // that phase (spec: "you can see and aim, but can't shoot or move").
   const aimDir = vsub(input.aim, player.pos);
   if (aimDir.x !== 0 || aimDir.y !== 0) {
     player.turretAngle = angleOf(aimDir);
@@ -97,13 +112,15 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
   if (player.fireCooldown > 0) player.fireCooldown -= DT;
   if (player.mineCooldown > 0) player.mineCooldown -= DT;
 
-  if (input.fire && player.fireCooldown <= 0) {
+  const canAct = phase === 'live';
+
+  if (canAct && input.fire && player.fireCooldown <= 0) {
     if (spawnBullet(world, player.id, player.turretAngle, 'normal', events)) {
       player.fireCooldown = FIRE_COOLDOWN;
     }
   }
 
-  if (input.mine && player.mineCooldown <= 0) {
+  if (canAct && input.mine && player.mineCooldown <= 0) {
     if (dropMine(world, player.id, events)) {
       player.mineCooldown = MINE_COOLDOWN;
     }
@@ -116,6 +133,11 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
 // world.spawns[i] — tanks are never removed or reordered (dead tanks stay in place
 // with alive=false), so that index alignment holds for the whole game.
 function resetArena(world: World): void {
+  // Restart the round's opening phases too: without this, countdown/grace only ever
+  // apply once at game start, and a respawned player is exposed to full-strength AI
+  // fire the instant the new life begins -- the same sniping bug this feature exists
+  // to fix, just relocated to every respawn instead of only tick 0.
+  world.roundStartTick = world.tick;
   for (let i = 0; i < world.tanks.length; i++) {
     const t = world.tanks[i];
     const s = world.spawns[i];

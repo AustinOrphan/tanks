@@ -18,7 +18,7 @@ function wall(id: number, minX: number, minY: number, maxX: number, maxY: number
 function world(tanks: Tank[], walls: Wall[] = []): World {
   return {
     tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], walls,
-    spawns: [], status: 'playing', lives: 3,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0,
   };
 }
 

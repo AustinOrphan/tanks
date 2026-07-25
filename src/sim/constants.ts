@@ -39,6 +39,18 @@ export const MINE_BLAST_RADIUS = 2.0;
 // ---- Meta ----
 export const LIVES = 3;
 
+// ---- Round phases (roundPhase, applied uniformly to player + AI) ----
+// Two phases run before normal play, timed from `world.roundStartTick` (reset on every
+// resetArena, so every respawn gets the same protection as the very start of the game):
+//   countdown -- nobody can move or fire; turret aim still updates so the player can
+//     orient before combat starts.
+//   grace     -- everyone can move; nobody can fire or lay mines, giving both sides
+//     maneuvering room before the first shot.
+// COUNTDOWN_TICKS = 180 ticks = 3s at 60Hz (TICK_HZ).
+export const COUNTDOWN_TICKS = 180;
+// GRACE_TICKS = 120 ticks = 2s at 60Hz (TICK_HZ).
+export const GRACE_TICKS = 120;
+
 // ---- Collision sweep (reflectSweep) ----
 export const SWEEP_EPS = 1e-7;
 export const SWEEP_MAX_ITERATIONS = 16;

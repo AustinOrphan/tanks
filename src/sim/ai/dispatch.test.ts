@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
-import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS } from '../constants';
+import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS } from '../constants';
 import type { Tank, Vec2 } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
@@ -12,10 +12,16 @@ function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {
     aiState: 'idle', aiTimer: 0, ...over,
   };
 }
+// roundStartTick defaults far in the past so every pre-existing test in this file (all
+// written before round phases existed, and none of them about round phases) lands in
+// the unrestricted 'live' phase regardless of `tick`. Tests that DO exercise round
+// phases below override roundStartTick explicitly.
+const FAR_PAST = -100000;
+
 function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, ...over,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: FAR_PAST, ...over,
   };
 }
 
@@ -238,6 +244,52 @@ describe('stepAi', () => {
       expect(d.mine).toBe(false);
       expect(d.nextState).toBe('idle');
       expect(d.nextTimer).toBe(0);
+    });
+  });
+
+  // --- H: round phases (countdown / grace / live) gate the AI exactly like the player. ---
+  describe('round phases', () => {
+    it('countdown: no AI tank moves or fires, even with a clear kill shot', () => {
+      // Player at (0,5) -- NOT on grey's turretAngle:0 axis -- so a turret update away
+      // from the initial angle is visible proof that aiming still runs during countdown.
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const player = tank(2, 'player', { x: 0, y: 5 });
+      const w = world([grey, player], { tick: 0, roundStartTick: 0 }); // elapsed 0 -> countdown
+      stepAi(w, []);
+      expect(w.tanks[0].desiredMove).toEqual({ x: 0, y: 0 });
+      expect(w.bullets.length).toBe(0);
+      expect(w.mines.length).toBe(0);
+      // Turret still tracks the target during countdown (orientation is the point of it).
+      expect(w.tanks[0].turretAngle).toBeCloseTo(Math.PI / 2, 6);
+    });
+
+    it('grace: AI tanks move, but still cannot fire or lay mines', () => {
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS -> would fire and mine if live
+      const w = world([grey, player], { tick: COUNTDOWN_TICKS, roundStartTick: 0 }); // first grace tick
+      stepAi(w, []);
+      expect(Math.hypot(w.tanks[0].desiredMove.x, w.tanks[0].desiredMove.y)).toBeGreaterThan(0.9);
+      expect(w.bullets.length).toBe(0);
+      expect(w.mines.length).toBe(0);
+    });
+
+    it('the last grace tick still suppresses fire; the first live tick fires normally', () => {
+      const buildGrey = () => tank(1, 'grey', { x: 0, y: 0 });
+      const buildPlayer = () => tank(2, 'player', { x: 5, y: 0 });
+
+      const lastGrace = world([buildGrey(), buildPlayer()], {
+        tick: COUNTDOWN_TICKS + GRACE_TICKS - 1,
+        roundStartTick: 0,
+      });
+      stepAi(lastGrace, []);
+      expect(lastGrace.bullets.length).toBe(0);
+
+      const firstLive = world([buildGrey(), buildPlayer()], {
+        tick: COUNTDOWN_TICKS + GRACE_TICKS,
+        roundStartTick: 0,
+      });
+      stepAi(firstLive, []);
+      expect(firstLive.bullets.length).toBe(1);
     });
   });
 });

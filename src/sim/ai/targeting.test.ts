@@ -20,7 +20,7 @@ function wanderTank(id: number): Tank {
 function wanderWorld(seed: number, tick: number): World {
   return {
     tick, nextId: 100, seed, tanks: [], bullets: [], mines: [], walls: [],
-    spawns: [], status: 'playing', lives: 3,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0,
   };
 }
 
