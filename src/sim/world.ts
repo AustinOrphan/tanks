@@ -4,6 +4,7 @@ import type { SimEvent } from './events';
 import { moveTank, separateTanks } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepMines } from './mines';
+import { stepAi } from './ai';
 import { DT, FIRE_COOLDOWN, MINE_COOLDOWN } from './constants';
 
 export interface World {
@@ -161,7 +162,7 @@ export function step(world: World, input: InputState): StepResult {
 
   if (draft.status === 'playing') {
     applyPlayerInput(draft, input, events);
-    // stepAi(draft, events);  // wired in by task 22, right here (before movement)
+    stepAi(draft, events);
     stepMovement(draft, DT);
     stepBullets(draft, DT, events);
     resolveBulletHits(draft, events);

@@ -113,17 +113,32 @@ describe('resolveStatus', () => {
 });
 
 describe('step() composition (full pipeline)', () => {
+  const PLAYER_ID = 1;
+  const BROWN_ID = 2;
+  // Ownership-scoped, not index/count-scoped: since Task 22 wired stepAi into step(),
+  // Brown (clear LOS to the player at this fixture's positions, no walls) legitimately
+  // fires its own shell through this same pipeline by tick 2 (idle -> aim -> fire). A bare
+  // world.bullets.length/[0] no longer identifies "the player's shell" once more than one
+  // tank can be firing through the pipeline, so these helpers pick it out by ownerId
+  // instead of relying on "the AI happens not to shoot" (which relocating Brown would).
+  const playerShells = (wld: World) => wld.bullets.filter((b) => b.ownerId === PLAYER_ID);
+
   it('runs the whole pipeline in one tick: fires, threads the fire event, and advances the shell', () => {
     const w = makeWorld();
     const r1 = step(w, fireInput);
-    expect(r1.world.bullets.length).toBe(1);
+    expect(playerShells(r1.world)).toHaveLength(1);
     expect(r1.events.some((e) => e.type === 'fire')).toBe(true);
-    const bx1 = r1.world.bullets[0].pos.x; // spawned at x=5, advanced +x this same tick
+    const bx1 = playerShells(r1.world)[0].pos.x; // spawned at x=5, advanced +x this same tick
     expect(bx1).toBeGreaterThan(5);
-    // next tick (no new fire): the existing shell keeps advancing along +x
+    // next tick (no new fire): the player's existing shell keeps advancing along +x
     const r2 = step(r1.world, { ...fireInput, fire: false });
-    expect(r2.world.bullets.length).toBe(1);
-    expect(r2.world.bullets[0].pos.x).toBeGreaterThan(bx1);
+    expect(playerShells(r2.world)).toHaveLength(1);
+    expect(playerShells(r2.world)[0].pos.x).toBeGreaterThan(bx1);
+    // Deliberate coverage (not incidental): Brown has clear LOS to the player and, now
+    // that AI is live, reaches its 'fire' state and produces its own shell by tick 2 --
+    // this is the only place in the suite where the player's and an enemy's fire paths
+    // both run through one pipeline in the same ticks.
+    expect(r2.world.bullets.some((b) => b.ownerId === BROWN_ID)).toBe(true);
   });
 
   it('reports win through the pipeline when the last enemy is already dead', () => {

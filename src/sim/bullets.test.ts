@@ -61,6 +61,15 @@ describe('spawnBullet + ownerShellCount', () => {
     expect(world.bullets.length).toBe(beforeBulletCount) // no bullet appended
   })
 
+  it('rejects a dead owner (defence-in-depth: stepAi already skips dead tanks, but this is the chokepoint)', () => {
+    const brown = mkTank({ id: 3, kind: 'brown', pos: { x: 0, y: 0 }, alive: false })
+    const world = createWorld({ walls: [], tanks: [brown], spawns: [], lives: 3 })
+    const events: SimEvent[] = []
+    expect(spawnBullet(world, 3, 0, 'normal', events)).toBe(false)
+    expect(world.bullets.length).toBe(0)
+    expect(events.length).toBe(0)
+  })
+
   it('spawns a bullet with config speed/bounces and emits a fire event', () => {
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 2, y: 3 } })
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
