@@ -1,5 +1,7 @@
 import type { Tank, Bullet, Mine, Wall, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
+import { moveTank, separateTanks } from './collision';
+import { DT } from './constants';
 
 export interface World {
   tick: number;
@@ -69,11 +71,21 @@ export function cloneWorld(world: World): World {
   };
 }
 
+export function stepMovement(world: World, dt: number): void {
+  for (const tank of world.tanks) {
+    if (!tank.alive) continue;
+    moveTank(tank, world.walls, dt);
+  }
+  separateTanks(world.tanks);
+}
+
 // Skeleton. Update calls (movement, AI, bullets, mines, status) are inserted in a
 // fixed order by tasks 9-15 and 22. CONTRACT: input world is immutable; we clone a
 // draft, mutate the draft, and return it, so render can keep prev/curr distinct.
 export function step(world: World, _input: InputState): StepResult {
   const draft = cloneWorld(world);
   draft.tick += 1;
-  return { world: draft, events: [] };
+  const events: SimEvent[] = [];
+  stepMovement(draft, DT);
+  return { world: draft, events };
 }

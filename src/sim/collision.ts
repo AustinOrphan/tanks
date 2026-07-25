@@ -1,6 +1,6 @@
-import type { Vec2, AABB } from './types';
-import { vadd, vsub, vnorm, vdot } from './types';
-import { SWEEP_EPS, SWEEP_MAX_ITERATIONS } from './constants';
+import type { Vec2, AABB, Tank, Wall } from './types';
+import { vadd, vsub, vscale, vlen, vnorm, vdot, angleOf } from './types';
+import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS, TANK_SPEED } from './constants';
 
 export interface Hit {
   hit: boolean;
@@ -218,4 +218,37 @@ export function reflectSweep(
     hits,
     expired: false,
   };
+}
+
+export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
+  let move = tank.desiredMove;
+  const mlen = vlen(move);
+  // clamp the drive vector to unit length (diagonals aren't faster)
+  if (mlen > 1) move = vscale(move, 1 / mlen);
+
+  tank.pos = vadd(tank.pos, vscale(move, TANK_SPEED * dt));
+  if (mlen > 0) tank.bodyAngle = angleOf(move);
+
+  // slide: resolve penetration against every non-destroyed wall
+  for (const wall of walls) {
+    if (wall.destroyed) continue;
+    const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
+    if (hit.hit) tank.pos = vadd(tank.pos, hit.push);
+  }
+}
+
+export function separateTanks(tanks: Tank[]): void {
+  for (let i = 0; i < tanks.length; i++) {
+    for (let j = i + 1; j < tanks.length; j++) {
+      const a = tanks[i];
+      const b = tanks[j];
+      if (!a.alive || !b.alive) continue;
+      const hit = circleVsCircle(a.pos, TANK_RADIUS, b.pos, TANK_RADIUS);
+      if (hit.hit) {
+        // push apart symmetrically (push separates a from b)
+        a.pos = vadd(a.pos, vscale(hit.push, 0.5));
+        b.pos = vsub(b.pos, vscale(hit.push, 0.5));
+      }
+    }
+  }
 }
