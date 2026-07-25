@@ -1,5 +1,6 @@
 import type { Vec2, AABB } from './types';
 import { vadd, vsub, vnorm, vdot } from './types';
+import { SWEEP_EPS, SWEEP_MAX_ITERATIONS } from './constants';
 
 export interface Hit {
   hit: boolean;
@@ -131,8 +132,6 @@ export interface SweepResult {
   expired: boolean;
 }
 
-const SWEEP_EPS = 1e-7;
-
 function reflectVec(v: Vec2, n: Vec2): Vec2 {
   const d = vdot(v, n);
   return { x: v.x - 2 * d * n.x, y: v.y - 2 * d * n.y };
@@ -150,7 +149,7 @@ export function reflectSweep(
   const hits: SweepHit[] = [];
 
   // Bounded loop: guards against pathological infinite reflection.
-  for (let iter = 0; iter < 16; iter++) {
+  for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
     let best: RayHit | null = null;
     let bestWall = -1;
     for (let i = 0; i < walls.length; i++) {

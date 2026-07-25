@@ -35,6 +35,10 @@ export const MINE_BLAST_RADIUS = 2.0;
 // ---- Meta ----
 export const LIVES = 3;
 
+// ---- Collision sweep (reflectSweep) ----
+export const SWEEP_EPS = 1e-7;
+export const SWEEP_MAX_ITERATIONS = 16;
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },
