@@ -2,7 +2,7 @@ import type { World } from '../world';
 import type { Tank } from '../types';
 import { lineOfSight, aimLead, bankShot, dangerAvoidMove, wanderMove } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, RICOCHET_BOUNCES, DODGE_PATIENCE_TICKS, BANK_PREFER_TICKS } from '../constants';
+import { bulletConfig, RICOCHET_BOUNCES, BANK_PREFER_TICKS, MINE_CAP } from '../constants';
 import type { AiDecision } from './decision';
 
 export function tealDecision(world: World, tank: Tank): AiDecision {
@@ -13,20 +13,16 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // stationary turret while it has line-of-sight or a bank path.
   const move = avoid ?? wanderMove(world, tank);
 
-  // Dodge suppression has a patience limit: Teal holds fire while dodging, but only for
-  // DODGE_PATIENCE_TICKS consecutive ticks (tracked via aiTimer/nextTimer), so sustained
-  // player fire (THREAT_HORIZON 1.0s > FIRE_COOLDOWN 0.4s) or a parked mine can't suppress
-  // Teal's shooting forever. Movement and turret/fire are independent (same pattern as
-  // grey.ts): past the threshold Teal still dodges (move stays the dodge vector) but
-  // evaluates the shooting logic normally.
-  const dodgeTicks = avoid ? tank.aiTimer + 1 : 0;
-  if (avoid && dodgeTicks < DODGE_PATIENCE_TICKS) {
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
-  }
-
+  // Aggressive (swapped from Grey): the dodge above overrides only `move`. Unlike Grey,
+  // Teal does NOT hold fire while dodging and has no patience counter — it dodges and
+  // shoots in the same tick, same as Grey used to. Nothing below consumes tank.aiTimer,
+  // so nextTimer is always 0 on every path.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
-    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'idle', nextTimer: 0 };
+    // Idle with no target -- but a dodge still overrides the idle {0,0}, same as the
+    // firing paths below: Teal reacts to incoming fire regardless of whether it currently
+    // has anyone to shoot at.
+    return { desiredMove: avoid ? move : { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'idle', nextTimer: 0 };
   }
 
   const speed = bulletConfig.ricochet.speed;
@@ -52,10 +48,16 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   const preferBank = Math.floor(world.tick / BANK_PREFER_TICKS) % 2 === 0;
   const turretAngle = preferBank ? (tryBank() ?? tryDirect()) : (tryDirect() ?? tryBank());
 
+  // Teal now lays mines too (mirrors Grey's rule). Only while NOT dodging: a mine dropped
+  // mid-dodge is wasted and risks self-trapping. MINE_CAP is checked here as
+  // defence-in-depth: dropMine enforces this cap for every owner too, but checking it
+  // here avoids burning tank.mineCooldown on a request dropMine would refuse anyway.
+  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP;
+
   if (turretAngle !== null) {
-    return { desiredMove: move, turretAngle, fire: true, fireType: 'ricochet', mine: false, nextState: 'fire', nextTimer: 0 };
+    return { desiredMove: move, turretAngle, fire: true, fireType: 'ricochet', mine, nextState: 'fire', nextTimer: 0 };
   }
 
   // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
-  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
+  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine, nextState: 'reposition', nextTimer: 0 };
 }

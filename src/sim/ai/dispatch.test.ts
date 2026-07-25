@@ -68,24 +68,28 @@ describe('stepAi', () => {
 
   // --- A: REGRESSION for the missing `tank.aiTimer = decision.nextTimer` write-back. ---
   // This is THE most important test in this task. Without the write-back, tank.aiTimer
-  // never advances past 0, so Teal's dodgeTicks (= tank.aiTimer + 1 while dodging) is
-  // permanently 1 and never reaches DODGE_PATIENCE_TICKS (45) -> Teal holds fire forever
+  // never advances past 0, so Grey's dodgeTicks (= tank.aiTimer + 1 while dodging) is
+  // permanently 1 and never reaches DODGE_PATIENCE_TICKS (45) -> Grey holds fire forever
   // whenever any bullet sits in its danger corridor.
+  //
+  // NOTE: this test targets 'grey', not 'teal'. The cautious dodge-patience mechanic was
+  // swapped from Teal to Grey (personality swap: Grey is now cautious, Teal is now
+  // aggressive), so the write-back this test guards is the one greyDecision now reads.
   //
   // We call stepAi() DIRECTLY in a loop here (not the full step() pipeline) so the threat
   // bullet does NOT get advanced by stepBullets between calls -- stepAi never moves
   // bullets itself, only stepBullets (a separate phase) does. That keeps the same bullet
-  // sitting in Teal's danger corridor on every call without needing to re-supply it,
+  // sitting in Grey's danger corridor on every call without needing to re-supply it,
   // which is exactly what isolates "does stepAi's own per-tick state write-back work" from
   // "does the bullet-motion system also cooperate".
-  it('REGRESSION: aiTimer advances tick-over-tick under sustained threat, and Teal eventually fires', () => {
-    const teal = tank(1, 'teal', { x: 0, y: 0 });
+  it('REGRESSION: aiTimer advances tick-over-tick under sustained threat, and Grey eventually fires', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 20, y: 0 }); // far away, clear LOS -> a shot exists
-    // A bullet parked just behind Teal on its own axis, moving toward it: this sits inside
+    // A bullet parked just behind Grey on its own axis, moving toward it: this sits inside
     // both THREAT_HORIZON and DANGER_CORRIDOR (see targeting.ts's incomingThreats), so
     // dangerAvoidMove keeps returning non-null every single call as long as the bullet
     // is not moved (which it isn't, since we don't call stepBullets in this loop).
-    const w = world([teal, player], {
+    const w = world([grey, player], {
       bullets: [
         { id: 999, ownerId: 2, type: 'normal', pos: { x: -1, y: 0 }, vel: { x: 5, y: 0 }, bouncesLeft: 1, alive: true },
       ],
@@ -99,7 +103,7 @@ describe('stepAi', () => {
 
     // Strictly increasing 1,2,3,...,DODGE_PATIENCE_TICKS-1 while still dodging (not stuck
     // at 1, which is what the bug produces). The very last call is the one where patience
-    // runs out and Teal fires instead of dodging, which resets nextTimer to 0 -- that's
+    // runs out and Grey fires instead of dodging, which resets nextTimer to 0 -- that's
     // expected behaviour, not a bug, so it's checked separately below.
     const dodgingPortion = aiTimers.slice(0, -1);
     for (let i = 1; i < dodgingPortion.length; i++) {
@@ -108,7 +112,7 @@ describe('stepAi', () => {
     expect(dodgingPortion[0]).toBe(1);
     expect(dodgingPortion[dodgingPortion.length - 1]).toBe(DODGE_PATIENCE_TICKS - 1);
 
-    // After DODGE_PATIENCE_TICKS consecutive dodge ticks, Teal's patience runs out and it
+    // After DODGE_PATIENCE_TICKS consecutive dodge ticks, Grey's patience runs out and it
     // fires despite the ongoing threat; nextTimer resets to 0 on the firing tick.
     expect(aiTimers[aiTimers.length - 1]).toBe(0);
     expect(w.tanks[0].fireCooldown).toBeGreaterThan(0);

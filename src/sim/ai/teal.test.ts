@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { tealDecision } from './teal';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
-import { DODGE_PATIENCE_TICKS, BANK_PREFER_TICKS } from '../constants';
+import { BANK_PREFER_TICKS } from '../constants';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -38,8 +38,9 @@ describe('tealDecision', () => {
     // reduces to direct aim -> turretAngle toward (5,0) from (0,0) is exactly 0.
     expect(d.turretAngle).toBeCloseTo(0, 6);
     expect(d.nextState).toBe('fire');
-    // F: mine/nextTimer on the direct-shot (not-dodging) path.
-    expect(d.mine).toBe(false);
+    // F: nextTimer on the direct-shot (not-dodging) path. Teal now lays mines too
+    // (mirrors Grey): not dodging, cooldown ready, under cap -> mine is true.
+    expect(d.mine).toBe(true);
     expect(d.nextTimer).toBe(0);
   });
 
@@ -55,8 +56,9 @@ describe('tealDecision', () => {
     // so this also proves lineOfSight(teal, player) was genuinely blocked by the wall(1) blocker
     // and the direct-shot branch was skipped in favour of the bank-shot branch.
     expect(d.turretAngle).toBeCloseTo(Math.PI / 4, 6); // bounce point (2,2)
-    // F: mine/nextTimer on the bank-shot (not-dodging) path.
-    expect(d.mine).toBe(false);
+    // F: nextTimer on the bank-shot (not-dodging) path. Not dodging, cooldown ready,
+    // under cap -> mine is true.
+    expect(d.mine).toBe(true);
     expect(d.nextTimer).toBe(0);
   });
 
@@ -71,27 +73,27 @@ describe('tealDecision', () => {
     // firing path (Teal has no other bullet type to report).
     expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
     expect(d.fireType).toBe('ricochet');
-    // F: mine/nextTimer on the reposition (not-dodging) path.
-    expect(d.mine).toBe(false);
+    // F: nextTimer on the reposition (not-dodging) path. Not dodging, cooldown ready,
+    // under cap -> mine is true.
+    expect(d.mine).toBe(true);
     expect(d.nextTimer).toBe(0);
   });
 
-  it('dodges incoming fire instead of shooting, even though the shot is otherwise clear', () => {
+  it('dodges and fires simultaneously (aggressive, swapped from Grey): an incoming bullet overrides wander but does not suppress fire', () => {
     const teal = tank(1, 'teal', { x: 3, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear line-of-sight, no walls
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at teal
     const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
-    // E: dodging must beat shooting, even with a clear shot available (below patience threshold).
-    expect(d.fire).toBe(false);
+    // Teal is aggressive now: dodging does NOT hold fire, even with a threat present.
+    expect(d.fire).toBe(true);
     // A: pin the dodge SIDE, not just that x ~ 0.
     // teal at (3,0), bullet at (0,0) heading +x: rel = (3,0), dir = (1,0),
     // perpA = (0,1), perpB = (0,-1). vdot(rel, perpA) = 0 >= 0 -> perpA = (0,1).
     expect(d.desiredMove.x).toBeCloseTo(0, 6);
     expect(d.desiredMove.y).toBeCloseTo(1, 6);
-    expect(d.mine).toBe(false);
-    // Fix Round 1 / Important 1: teal.aiTimer defaults to 0, so dodgeTicks = 0 + 1 = 1,
-    // which is < DODGE_PATIENCE_TICKS -> holds fire, and nextTimer reports the running count.
-    expect(d.nextTimer).toBe(1);
+    expect(d.mine).toBe(false); // mid-dodge -> !avoid term suppresses the mine
+    // Nothing consumes tank.aiTimer for Teal anymore -> nextTimer is always 0.
+    expect(d.nextTimer).toBe(0);
   });
 
   // ---- No live player (D) ----
@@ -188,43 +190,6 @@ describe('tealDecision', () => {
     expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
   });
 
-  // ---- Important 1 (user decision): dodge suppression has a patience limit ----
-
-  it('dodging AT/above the patience threshold fires anyway while still dodging, and resets nextTimer', () => {
-    const teal = tank(1, 'teal', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS });
-    const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS, no walls, stationary
-    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // still an active threat
-    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
-    expect(d.fire).toBe(true);
-    expect(d.turretAngle).toBeCloseTo(0, 6); // direct shot, player stationary
-    // Still dodging: desiredMove is the dodge vector (signed +y), not the wander heading.
-    expect(d.desiredMove.x).toBeCloseTo(0, 6);
-    expect(d.desiredMove.y).toBeCloseTo(1, 6);
-    expect(d.mine).toBe(false);
-    expect(d.nextTimer).toBe(0); // firing while dodging resets the cautious window
-  });
-
-  it('dodge patience boundary is a strict "<", not "<=" (dodgeTicks == threshold fires, one less still holds)', () => {
-    const holding = tank(1, 'teal', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS - 2 }); // dodgeTicks = threshold - 1
-    const firing = tank(1, 'teal', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS - 1 }); // dodgeTicks = threshold
-    const player = tank(2, 'player', { x: 5, y: 0 });
-    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
-    const dHold = tealDecision(world({ tanks: [holding, player], bullets: [b] }), holding);
-    const dFire = tealDecision(world({ tanks: [firing, player], bullets: [b] }), firing);
-    expect(dHold.fire).toBe(false);
-    expect(dHold.nextTimer).toBe(DODGE_PATIENCE_TICKS - 1);
-    expect(dFire.fire).toBe(true);
-    expect(dFire.nextTimer).toBe(0);
-  });
-
-  it('nextTimer is 0 when not dodging, regardless of tank.aiTimer', () => {
-    const teal = tank(1, 'teal', { x: 0, y: 0 }, { aiTimer: 99 });
-    const player = tank(2, 'player', { x: 5, y: 0 });
-    const d = tealDecision(world({ tanks: [teal, player] }), teal); // no bullets -> not dodging
-    expect(d.fire).toBe(true);
-    expect(d.nextTimer).toBe(0);
-  });
-
   // ---- Important 2 (user decision): alternate between bank-preferred and
   // direct-preferred targeting on a deterministic tick-bucket cycle ----
 
@@ -277,5 +242,49 @@ describe('tealDecision', () => {
     const d = tealDecision(world({ tanks: [teal, player] }), teal);
     expect(d.fire).toBe(true);
     expect(d.turretAngle).toBeCloseTo(0.36136712390670783, 6);
+  });
+
+  // ---- Teal now lays mines too (mirrors Grey's rule, spec §7 "avoids its own mines").
+  // A player is included in every fixture below because tealDecision's no-player early
+  // return hardcodes mine:false before the real mine-eligibility check ever runs. ----
+
+  it('roaming, cooldown ready, no active mines -> mine is true', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 }); // not dodging
+    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    expect(d.mine).toBe(true);
+  });
+
+  it('mineCooldown > 0 -> mine is false', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, { mineCooldown: 0.3 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    expect(d.mine).toBe(false);
+  });
+
+  it('at MINE_CAP -> mine is false', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // length 2 == MINE_CAP
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    expect(d.mine).toBe(false);
+  });
+
+  it('while dodging an incoming bullet -> mine is false (pins the !avoid term)', () => {
+    const teal = tank(1, 'teal', { x: 3, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at teal -> dangerAvoidMove is non-null
+    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
+    expect(d.mine).toBe(false);
+    // Sanity check that this fixture really is a dodge, so this isn't a false-negative test.
+    expect(Math.abs(d.desiredMove.y)).toBeCloseTo(1, 6);
+  });
+
+  it('cap boundary is a strict "<", not "<=" (below MINE_CAP -> true, at MINE_CAP -> false)', () => {
+    const below = tank(1, 'teal', { x: 0, y: 0 }, { activeMineIds: [70] }); // 1 < MINE_CAP(2)
+    const at = tank(1, 'teal', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // 2 == MINE_CAP(2)
+    const playerBelow = tank(2, 'player', { x: 5, y: 0 });
+    const playerAt = tank(2, 'player', { x: 5, y: 0 });
+    expect(tealDecision(world({ tanks: [below, playerBelow] }), below).mine).toBe(true);
+    expect(tealDecision(world({ tanks: [at, playerAt] }), at).mine).toBe(false);
   });
 });

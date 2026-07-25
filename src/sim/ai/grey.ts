@@ -1,13 +1,11 @@
 import type { World } from '../world';
-import type { Tank, Vec2, AiState } from '../types';
+import type { Tank, AiState } from '../types';
 import { lineOfSight, aimLead, dangerAvoidMove, wanderMove } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, MINE_CAP } from '../constants';
+import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS } from '../constants';
 import type { AiDecision } from './decision';
 
 export function greyDecision(world: World, tank: Tank): AiDecision {
-  let move: Vec2 = wanderMove(world, tank);
-
   const avoid = dangerAvoidMove(world, tank);
   // dangerAvoidMove is wall-blind and arena-blind (see targeting.ts): because moveTank
   // pushes the tank back out of overlapping walls, a dodge aimed straight into a wall
@@ -15,7 +13,19 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // Known accepted limitation for this slice, to be validated in playtest — not fixed
   // here; a naive "use the opposite direction" fallback is wrong for the mine branch
   // (the opposite heads straight into the mine), so it needs real design thought.
-  if (avoid) move = avoid;
+  const move = avoid ?? wanderMove(world, tank);
+
+  // Cautious (swapped from Teal): Grey holds fire while dodging, but only for
+  // DODGE_PATIENCE_TICKS consecutive ticks (tracked via aiTimer/nextTimer). The cap is
+  // mandatory, not cosmetic: the player's FIRE_COOLDOWN (0.4s) is shorter than the
+  // THREAT_HORIZON (1.0s) that keeps dangerAvoidMove returning non-null, so a player who
+  // just keeps shooting would otherwise suppress Grey's fire forever. Movement and
+  // turret/fire are independent: past the threshold Grey still dodges (move stays the
+  // dodge vector) but evaluates the shooting logic normally.
+  const dodgeTicks = avoid ? tank.aiTimer + 1 : 0;
+  if (avoid && dodgeTicks < DODGE_PATIENCE_TICKS) {
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
+  }
 
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   let turretAngle = tank.turretAngle;
@@ -40,10 +50,11 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // checking it here avoids burning a cooldown on a request dropMine would refuse anyway.
   const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP;
 
-  // nextState/nextTimer are vestigial for Grey: unlike Brown, greyDecision never
-  // branches on tank.aiState (nextState here is just a passthrough/label, not a
-  // driver of behaviour), and nextTimer is always 0. Once Task 22 writes decisions
-  // back onto the tank, that 0 will zero tank.aiTimer every tick — don't mistake
-  // this for Grey having a dwell timer; it doesn't.
+  // nextState is still vestigial for Grey: unlike Brown, greyDecision never branches on
+  // tank.aiState (nextState here is just a passthrough/label, not a driver of behaviour).
+  // nextTimer, unlike before, is NOT always 0 here — the patience counter above writes
+  // dodgeTicks back via the early return while suppressed; this path (dodging has ended
+  // or never started) resets it to 0, which is what lets a fresh dodge start counting
+  // from 1 again next time.
   return { desiredMove: move, turretAngle, fire, fireType: 'normal', mine, nextState, nextTimer: 0 };
 }

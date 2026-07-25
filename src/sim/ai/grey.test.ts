@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { greyDecision } from './grey';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
+import { DODGE_PATIENCE_TICKS } from '../constants';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -177,5 +178,63 @@ describe('greyDecision', () => {
     const at = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // 2 == MINE_CAP(2)
     expect(greyDecision(world({ tanks: [below] }), below).mine).toBe(true);
     expect(greyDecision(world({ tanks: [at] }), at).mine).toBe(false);
+  });
+
+  // ---- Grey is now cautious (swapped from Teal): dodge suppression has a patience
+  // limit, moved verbatim in behaviour from tealDecision's old DODGE_PATIENCE_TICKS logic.
+  // The cap is mandatory: without it a player who just keeps shooting (FIRE_COOLDOWN 0.4s
+  // < THREAT_HORIZON 1.0s) would suppress Grey's fire forever. ----
+
+  it('dodges incoming fire instead of shooting while patience has not run out, even though the shot is otherwise clear', () => {
+    const grey = tank(1, 'grey', { x: 3, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS, no walls
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at grey
+    const d = greyDecision(world({ tanks: [grey, player], bullets: [b] }), grey);
+    expect(d.fire).toBe(false);
+    // Still the dodge vector (signed +y, same tie-break as the earlier dodge test).
+    expect(d.desiredMove.x).toBeCloseTo(0, 6);
+    expect(d.desiredMove.y).toBeCloseTo(1, 6);
+    expect(d.mine).toBe(false);
+    // aiTimer defaults to 0, so dodgeTicks = 0 + 1 = 1, which is < DODGE_PATIENCE_TICKS
+    // -> holds fire, and nextTimer reports the running count.
+    expect(d.nextTimer).toBe(1);
+  });
+
+  it('dodging AT/above the patience threshold fires anyway while still dodging, and resets nextTimer', () => {
+    const grey = tank(1, 'grey', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS });
+    const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS, no walls, stationary
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // still an active threat
+    const d = greyDecision(world({ tanks: [grey, player], bullets: [b] }), grey);
+    expect(d.fire).toBe(true);
+    expect(d.turretAngle).toBeCloseTo(0, 6); // direct shot, player stationary
+    // Still dodging: desiredMove is the dodge vector (signed +y), not the wander heading.
+    expect(d.desiredMove.x).toBeCloseTo(0, 6);
+    expect(d.desiredMove.y).toBeCloseTo(1, 6);
+    expect(d.mine).toBe(false);
+    expect(d.nextTimer).toBe(0); // firing while dodging resets the cautious window
+  });
+
+  it('dodge patience boundary is a strict "<", not "<=" (dodgeTicks == threshold fires, one less still holds)', () => {
+    const holding = tank(1, 'grey', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS - 2 }); // dodgeTicks = threshold - 1
+    const firing = tank(1, 'grey', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS - 1 }); // dodgeTicks = threshold
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
+    const dHold = greyDecision(world({ tanks: [holding, player], bullets: [b] }), holding);
+    const dFire = greyDecision(world({ tanks: [firing, player], bullets: [b] }), firing);
+    expect(dHold.fire).toBe(false);
+    expect(dHold.nextTimer).toBe(DODGE_PATIENCE_TICKS - 1);
+    expect(dFire.fire).toBe(true);
+    expect(dFire.nextTimer).toBe(0);
+    // Confirm the fire-while-dodging tick is genuinely still dodging, not a fallback to wander.
+    expect(dFire.desiredMove.x).toBeCloseTo(0, 6);
+    expect(dFire.desiredMove.y).toBeCloseTo(1, 6);
+  });
+
+  it('nextTimer is 0 when not dodging, regardless of tank.aiTimer', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { aiTimer: 99 });
+    const player = tank(2, 'player', { x: 5, y: 0 }); // no bullets -> not dodging
+    const d = greyDecision(world({ tanks: [grey, player] }), grey);
+    expect(d.fire).toBe(true);
+    expect(d.nextTimer).toBe(0);
   });
 });
