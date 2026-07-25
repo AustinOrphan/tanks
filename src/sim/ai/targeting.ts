@@ -1,7 +1,8 @@
-import type { Vec2, Wall, AABB } from '../types';
-import { vsub, angleOf } from '../types';
+import type { Vec2, Wall, AABB, Bullet, Tank } from '../types';
+import { vsub, angleOf, vdot, vdist, vnorm } from '../types';
 import { raySegmentVsAABB } from '../collision';
-import { AIM_EPS } from '../constants';
+import { AIM_EPS, TANK_RADIUS, MINE_PROXIMITY_RADIUS, THREAT_HORIZON, DANGER_CORRIDOR, VEC_EPS } from '../constants';
+import type { World } from '../world';
 
 export function lineOfSight(from: Vec2, to: Vec2, walls: Wall[]): boolean {
   for (const w of walls) {
@@ -99,6 +100,51 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
       if (!losIgnoring(muzzle, bounce, walls, w)) continue;
       if (!losIgnoring(bounce, target, walls, w)) continue;
       return angleOf(vsub(bounce, muzzle));
+    }
+  }
+  return null;
+}
+
+export function incomingThreats(world: World, tank: Tank): Bullet[] {
+  const out: Bullet[] = [];
+  for (const b of world.bullets) {
+    if (!b.alive || b.ownerId === tank.id) continue;
+    const speed = Math.hypot(b.vel.x, b.vel.y);
+    if (speed < VEC_EPS) continue;
+    const dir = vnorm(b.vel);
+    const rel = { x: tank.pos.x - b.pos.x, y: tank.pos.y - b.pos.y };
+    const along = vdot(rel, dir);
+    if (along < 0) continue;                     // bullet already past / moving away
+    if (along > speed * THREAT_HORIZON) continue; // too far ahead in time
+    const perp = { x: rel.x - dir.x * along, y: rel.y - dir.y * along };
+    if (Math.hypot(perp.x, perp.y) <= DANGER_CORRIDOR) out.push(b);
+  }
+  return out;
+}
+
+export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
+  const threats = incomingThreats(world, tank);
+  if (threats.length > 0) {
+    let nearest = threats[0];
+    let best = vdist(nearest.pos, tank.pos);
+    for (const b of threats) {
+      const d = vdist(b.pos, tank.pos);
+      if (d < best) { best = d; nearest = b; }
+    }
+    const dir = vnorm(nearest.vel);
+    const perpA = { x: -dir.y, y: dir.x };
+    const perpB = { x: dir.y, y: -dir.x };
+    // pick the perpendicular on the side the tank already sits, so it dodges outward
+    const rel = { x: tank.pos.x - nearest.pos.x, y: tank.pos.y - nearest.pos.y };
+    return vdot(rel, perpA) >= 0 ? perpA : perpB;
+  }
+
+  for (const m of world.mines) {
+    if (m.detonated || !m.armed) continue;
+    if (vdist(m.pos, tank.pos) < MINE_PROXIMITY_RADIUS + TANK_RADIUS) {
+      const away = { x: tank.pos.x - m.pos.x, y: tank.pos.y - m.pos.y };
+      if (Math.hypot(away.x, away.y) < VEC_EPS) return { x: 1, y: 0 };
+      return vnorm(away);
     }
   }
   return null;

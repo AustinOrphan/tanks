@@ -46,6 +46,11 @@ export const SWEEP_MAX_ITERATIONS = 16;
 // single physical unit of its own.
 export const AIM_EPS = 1e-9;
 
+// ---- AI danger avoidance (incomingThreats, dangerAvoidMove) ----
+export const VEC_EPS = 1e-6; // zero-length-vector degeneracy guard
+export const THREAT_HORIZON = 1.0; // seconds of lookahead for incoming bullets
+export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bullet may pass within
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },
