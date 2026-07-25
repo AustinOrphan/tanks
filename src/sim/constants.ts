@@ -58,11 +58,15 @@ export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bull
 // ---- AI wander (wanderMove) ----
 export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
 
-// ---- Teal AI (tealDecision) ----
-// How many consecutive dodging ticks Teal will hold fire before shooting back regardless.
+// ---- Grey AI (greyDecision) ----
+// How many consecutive dodging ticks Grey will hold fire before shooting back regardless.
 // 45 ticks = 0.75s at 60Hz, deliberately longer than the player's FIRE_COOLDOWN (0.4s) so
-// sustained player fire still suppresses Teal most of the time, but never forever.
+// sustained player fire still suppresses Grey most of the time, but never forever. This cap
+// is mandatory for any cautious personality: without it, the player's 0.4s reload against the
+// 1.0s THREAT_HORIZON locks the tank out of firing forever.
 export const DODGE_PATIENCE_TICKS = 45;
+
+// ---- Teal AI (tealDecision) ----
 // Alternation period (in ticks) between bank-preferred and direct-preferred targeting, so
 // Teal visibly performs both shot types instead of banking only when cover happens to block
 // the direct line. 120 ticks = 2s at 60Hz. A preference only: the non-preferred option is

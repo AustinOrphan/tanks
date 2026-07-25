@@ -65,6 +65,31 @@ function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, ang
 
 export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[] } {
   const { cols, rows, cellSize, grid, legend } = arena;
+
+  // Validate grid dimensions
+  if (grid.length !== rows) {
+    throw new Error(`Grid has ${grid.length} rows but Arena declares ${rows} rows`);
+  }
+
+  // Validate each row's column count
+  for (let r = 0; r < rows; r++) {
+    const row = grid[r];
+    if (row.length !== cols) {
+      throw new Error(`Row ${r} has length ${row.length} but Arena declares ${cols} columns`);
+    }
+  }
+
+  // Validate each character is recognized
+  for (let r = 0; r < rows; r++) {
+    const row = grid[r];
+    for (let c = 0; c < cols; c++) {
+      const ch = row[c];
+      if (ch !== '.' && !legend[ch] && !SPAWN_KINDS[ch]) {
+        throw new Error(`Unrecognized character '${ch}' at (row ${r}, col ${c})`);
+      }
+    }
+  }
+
   const walls: Wall[] = [];
   const tanks: Tank[] = [];
   const spawns: Spawn[] = [];

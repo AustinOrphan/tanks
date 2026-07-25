@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ARENA_01, loadArena, createArenaWorld } from './arena';
 import { raySegmentVsAABB } from './collision';
 import { bankShot } from './ai/targeting';
-import { RICOCHET_BOUNCES, LIVES, TANK_RADIUS } from './constants';
+import { RICOCHET_BOUNCES, LIVES } from './constants';
 import { step } from './world';
 import type { InputState } from './types';
 
@@ -79,6 +79,9 @@ describe('loadArena', () => {
     const { walls } = loadArena(ARENA_01);
     const W = ARENA_01.cols * ARENA_01.cellSize;
     const H = ARENA_01.rows * ARENA_01.cellSize;
+    const t = ARENA_01.cellSize;
+
+    // Find the 4 boundary walls (one per edge).
     const boundaries = walls.filter(
       (w) =>
         w.kind === 'solid' &&
@@ -87,40 +90,60 @@ describe('loadArena', () => {
     );
     expect(boundaries.length).toBe(4);
 
-    // No gap at any corner: every corner of the play rect must be covered by some
-    // boundary wall's AABB (with a little slack for TANK_RADIUS so a tank driven to
-    // the extreme edge cannot slip past).
-    const corners = [
+    // Assert exact AABB extent of each boundary: this proves each edge is fully covered.
+    // Play area is [0, W] × [0, H]. Boundaries wrap it with thickness t.
+    const top = boundaries.find((w) => w.aabb.maxY === 0);
+    expect(top).toBeDefined();
+    expect(top!.aabb).toEqual({ minX: -t, minY: -t, maxX: W + t, maxY: 0 });
+
+    const bottom = boundaries.find((w) => w.aabb.minY === H);
+    expect(bottom).toBeDefined();
+    expect(bottom!.aabb).toEqual({ minX: -t, minY: H, maxX: W + t, maxY: H + t });
+
+    const left = boundaries.find((w) => w.aabb.maxX === 0);
+    expect(left).toBeDefined();
+    expect(left!.aabb).toEqual({ minX: -t, minY: 0, maxX: 0, maxY: H });
+
+    const right = boundaries.find((w) => w.aabb.minX === W);
+    expect(right).toBeDefined();
+    expect(right!.aabb).toEqual({ minX: W, minY: 0, maxX: W + t, maxY: H });
+
+    // Verify coverage: sample points walked along the outside perimeter (including exact
+    // corners and edge midpoints) must each be contained by at least one boundary AABB.
+    // This proves there are no gaps where a projectile could escape.
+    const samplePointsOnOutside = [
+      // Top edge
+      { x: 0, y: -1 },
+      { x: W / 2, y: -1 },
+      { x: W, y: -1 },
+      // Bottom edge
+      { x: 0, y: H + 1 },
+      { x: W / 2, y: H + 1 },
+      { x: W, y: H + 1 },
+      // Left edge
+      { x: -1, y: 0 },
+      { x: -1, y: H / 2 },
+      { x: -1, y: H },
+      // Right edge
+      { x: W + 1, y: 0 },
+      { x: W + 1, y: H / 2 },
+      { x: W + 1, y: H },
+      // Exact corners
       { x: 0, y: 0 },
       { x: W, y: 0 },
       { x: 0, y: H },
       { x: W, y: H },
     ];
-    for (const corner of corners) {
+
+    for (const point of samplePointsOnOutside) {
       const covered = boundaries.some(
         (w) =>
-          corner.x >= w.aabb.minX - TANK_RADIUS &&
-          corner.x <= w.aabb.maxX + TANK_RADIUS &&
-          corner.y >= w.aabb.minY - TANK_RADIUS &&
-          corner.y <= w.aabb.maxY + TANK_RADIUS,
+          point.x >= w.aabb.minX &&
+          point.x <= w.aabb.maxX &&
+          point.y >= w.aabb.minY &&
+          point.y <= w.aabb.maxY,
       );
       expect(covered).toBe(true);
-    }
-
-    // A tank sitting exactly on the extreme edge of the play area must be inside
-    // (or touching) some boundary wall, so moveTank's penetration resolution keeps
-    // it on the map.
-    const edgePoints = [
-      { x: 0, y: H / 2 },
-      { x: W, y: H / 2 },
-      { x: W / 2, y: 0 },
-      { x: W / 2, y: H },
-    ];
-    for (const p of edgePoints) {
-      const inside = boundaries.some(
-        (w) => p.x >= w.aabb.minX && p.x <= w.aabb.maxX && p.y >= w.aabb.minY && p.y <= w.aabb.maxY,
-      );
-      expect(inside).toBe(true);
     }
   });
 
@@ -136,6 +159,49 @@ describe('loadArena', () => {
     const destructibleCells = countChar(ARENA_01.grid, 'x');
     expect(interior.filter((w) => w.kind === 'solid').length).toBe(solidCells);
     expect(interior.filter((w) => w.kind === 'destructible').length).toBe(destructibleCells);
+  });
+
+  it('validates that ARENA_01 passes grid dimension and character checks', () => {
+    expect(() => loadArena(ARENA_01)).not.toThrow();
+  });
+
+  it('throws when grid.length does not match arena.rows', () => {
+    const badArena = {
+      cols: 3,
+      rows: 2,
+      cellSize: 2,
+      legend: { '#': 'solid' as const },
+      grid: ['...', '...', '...'], // 3 rows instead of 2
+    };
+    expect(() => loadArena(badArena)).toThrow(
+      /Grid has 3 rows but Arena declares 2 rows/,
+    );
+  });
+
+  it('throws when a row.length does not match arena.cols', () => {
+    const badArena = {
+      cols: 5,
+      rows: 2,
+      cellSize: 2,
+      legend: { '#': 'solid' as const },
+      grid: ['.....', '........'], // row 1 has length 8 instead of 5
+    };
+    expect(() => loadArena(badArena)).toThrow(
+      /Row 1 has length 8 but Arena declares 5 columns/,
+    );
+  });
+
+  it('throws when grid contains an unrecognized character', () => {
+    const badArena = {
+      cols: 3,
+      rows: 2,
+      cellSize: 2,
+      legend: { '#': 'solid' as const },
+      grid: ['...', '.?#'],
+    };
+    expect(() => loadArena(badArena)).toThrow(
+      /Unrecognized character '\?' at \(row 1, col 1\)/,
+    );
   });
 });
 
@@ -164,12 +230,26 @@ describe('createArenaWorld', () => {
 
   it('steps without throwing and stays in playing status under no-op input', () => {
     let world = createArenaWorld();
+    const startTick = world.tick;
     const noInput: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
+    const stepCount = 30;
+
+    let tealShotAppeared = false;
+    const tealId = world.tanks.find((t) => t.kind === 'teal')?.id;
+    expect(tealId).toBeDefined();
+
     expect(() => {
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < stepCount; i++) {
         world = step(world, noInput).world;
+        // Latch: check if Teal has fired a bullet (at least one bullet with Teal's id as owner).
+        if (!tealShotAppeared && world.bullets.some((b) => b.ownerId === tealId)) {
+          tealShotAppeared = true;
+        }
       }
     }).not.toThrow();
+
     expect(world.status).toBe('playing');
+    expect(world.tick).toBe(startTick + stepCount);
+    expect(tealShotAppeared).toBe(true);
   });
 });
