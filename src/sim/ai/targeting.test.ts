@@ -1,10 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot } from './targeting';
-import type { Wall } from '../types';
+import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove } from './targeting';
+import type { Tank, Wall } from '../types';
+import type { World } from '../world';
 
 function wall(id: number, minX: number, minY: number, maxX: number, maxY: number,
              kind: 'solid' | 'destructible' = 'solid', destroyed = false): Wall {
   return { id, aabb: { minX, minY, maxX, maxY }, kind, destroyed };
+}
+
+// Minimal fixtures for wanderMove — targeting.test.ts has no shared tank/world
+// helpers (danger.test.ts and grey.test.ts each define their own).
+function wanderTank(id: number): Tank {
+  return {
+    id, kind: 'grey', pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+    aiState: 'idle', aiTimer: 0,
+  };
+}
+function wanderWorld(seed: number, tick: number): World {
+  return {
+    tick, nextId: 100, seed, tanks: [], bullets: [], mines: [], walls: [],
+    spawns: [], status: 'playing', lives: 3,
+  };
 }
 
 describe('lineOfSight', () => {
@@ -144,5 +161,47 @@ describe('bankShot', () => {
     const topWall = wall(2, -5, 2, 10, 3);
     const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, [blocker, topWall], 0);
     expect(angle).toBeNull();
+  });
+});
+
+describe('wanderMove', () => {
+  it('is pure: same (seed, id, bucket) yields the identical heading', () => {
+    const t = wanderTank(1);
+    const a = wanderMove(wanderWorld(7, 0), t);
+    const b = wanderMove(wanderWorld(7, 0), t);
+    expect(a).toEqual(b);
+  });
+
+  it('always returns a unit-length heading', () => {
+    const t = wanderTank(1);
+    const v = wanderMove(wanderWorld(7, 0), t);
+    expect(Math.hypot(v.x, v.y)).toBeCloseTo(1, 9);
+  });
+
+  it('different tank.id yields a different heading for the same (seed, tick)', () => {
+    const w = wanderWorld(7, 0);
+    const a = wanderMove(w, wanderTank(1));
+    const b = wanderMove(w, wanderTank(2));
+    expect(a).not.toEqual(b);
+  });
+
+  it('holds the heading across a bucket (ticks 0 and 29) and changes at the boundary (tick 30)', () => {
+    const t = wanderTank(1);
+    const atTick0 = wanderMove(wanderWorld(7, 0), t);
+    const atTick29 = wanderMove(wanderWorld(7, 29), t);
+    const atTick30 = wanderMove(wanderWorld(7, 30), t);
+    expect(atTick29).toEqual(atTick0);
+    expect(atTick30).not.toEqual(atTick0);
+  });
+
+  it('pins the exact heading for (seed=7, id=1, tick=0) to lock the PRNG contract', () => {
+    // Derived by evaluating the real nextRng/fromAngle path:
+    // rngSeed = world.seed + tank.id*1000 + bucket = 7 + 1*1000 + 0 = 1007
+    // nextRng(1007).value = 0.8710461324080825
+    // angle = value * 2*PI = 5.472944261022068
+    // fromAngle(angle) = (cos, sin) = (0.689323826282066, -0.7244533542746918)
+    const v = wanderMove(wanderWorld(7, 0), wanderTank(1));
+    expect(v.x).toBeCloseTo(0.689323826282066, 9);
+    expect(v.y).toBeCloseTo(-0.7244533542746918, 9);
   });
 });

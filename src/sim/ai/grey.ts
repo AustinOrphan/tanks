@@ -33,5 +33,10 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
     }
   }
 
+  // nextState/nextTimer are vestigial for Grey: unlike Brown, greyDecision never
+  // branches on tank.aiState (nextState here is just a passthrough/label, not a
+  // driver of behaviour), and nextTimer is always 0. Once Task 22 writes decisions
+  // back onto the tank, that 0 will zero tank.aiTimer every tick — don't mistake
+  // this for Grey having a dwell timer; it doesn't.
   return { desiredMove: move, turretAngle, fire, fireType: 'normal', mine: false, nextState, nextTimer: 0 };
 }

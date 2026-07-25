@@ -133,6 +133,24 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
 }
 
 /**
+ * Returns a deterministic unit wander heading for `tank`, held steady for
+ * `WANDER_TICKS` ticks (~0.5s at 60Hz) before repicking. Seeded from
+ * `world.seed + tank.id * 1000 + bucket` so different tanks and different
+ * time buckets diverge, while repeated calls within the same bucket for the
+ * same tank/world are reproducible (no Math.random, no Date.now).
+ *
+ * This is a pure hash of `(world.seed, tank.id, tick bucket)` — deliberately
+ * NOT threading PRNG state from one call to the next. That makes it replay-safe
+ * (any caller, any order, any tick, gets the same answer for the same inputs)
+ * and means it cannot desync any other RNG consumer in the sim.
+ */
+export function wanderMove(world: World, tank: Tank): Vec2 {
+  const bucket = Math.floor(world.tick / WANDER_TICKS);
+  const rng = nextRng(world.seed + tank.id * 1000 + bucket);
+  return fromAngle(rng.value * Math.PI * 2);
+}
+
+/**
  * Returns a unit dodge direction away from the nearest incoming threat, or null.
  *
  * Prioritizes dodging incoming bullets; if none, dodges away from nearby armed mines.
@@ -145,19 +163,6 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
  * than not dodging. Callers must not trust the direction blindly; the cheap mitigation is to
  * try the returned direction and fall back to its opposite (or no dodge) if blocked.
  */
-/**
- * Returns a deterministic unit wander heading for `tank`, held steady for
- * `WANDER_TICKS` ticks (~0.5s at 60Hz) before repicking. Seeded from
- * `world.seed + tank.id * 1000 + bucket` so different tanks and different
- * time buckets diverge, while repeated calls within the same bucket for the
- * same tank/world are reproducible (no Math.random, no Date.now).
- */
-export function wanderMove(world: World, tank: Tank): Vec2 {
-  const bucket = Math.floor(world.tick / WANDER_TICKS);
-  const rng = nextRng(world.seed + tank.id * 1000 + bucket);
-  return fromAngle(rng.value * Math.PI * 2);
-}
-
 export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
   const threats = incomingThreats(world, tank);
   if (threats.length > 0) {
