@@ -46,11 +46,12 @@ export function stepBullets(world: World, dt: number, events: SimEvent[]): void 
   for (const b of world.bullets) {
     if (!b.alive) continue
     const speed = vlen(b.vel)
+    const consumedBefore = bulletConfig[b.type].bounces - b.bouncesLeft
     const to = vadd(b.pos, vscale(b.vel, dt))
     const result = reflectSweep(b.pos, to, wallAABBs, b.bouncesLeft)
     for (let i = 0; i < result.hits.length; i++) {
       const p = result.hits[i].point
-      events.push({ type: 'ricochet', pos: { x: p.x, y: p.y }, bounceIndex: i })
+      events.push({ type: 'ricochet', pos: { x: p.x, y: p.y }, bounceIndex: consumedBefore + i })
     }
     b.pos = result.end
     b.vel = vscale(result.dir, speed)

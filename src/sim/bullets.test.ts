@@ -7,6 +7,8 @@ import {
   PLAYER_SHELL_CAP,
   NORMAL_SPEED,
   RICOCHET_SPEED,
+  FAST_SPEED,
+  RICOCHET_BOUNCES,
   DT,
   bulletConfig,
 } from './constants'
@@ -163,5 +165,108 @@ describe('stepBullets', () => {
       stepBullets(b, DT, [])
     }
     expect(a.bullets).toEqual(b.bullets)
+  })
+})
+
+describe('bullet types', () => {
+  it('increments bounceIndex across ticks so ricochet audio can pitch-shift per bounce', () => {
+    const walls: Wall[] = [mkWall(1, { minX: 2, minY: -5, maxX: 3, maxY: 5 })]
+    const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
+    const b: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'ricochet',
+      pos: { x: 1.95, y: 0 },
+      vel: { x: RICOCHET_SPEED, y: 0 },
+      bouncesLeft: bulletConfig.ricochet.bounces,
+      alive: true,
+    }
+    world.bullets.push(b)
+    const indices: number[] = []
+    for (let k = 0; k < 3; k++) {
+      // re-present the bullet at the wall each tick to force one bounce per tick
+      b.pos = { x: 1.95, y: 0 }
+      b.vel = { x: RICOCHET_SPEED, y: 0 }
+      const events: SimEvent[] = []
+      stepBullets(world, DT, events)
+      const ric = events.filter((e) => e.type === 'ricochet') as Extract<
+        SimEvent,
+        { type: 'ricochet' }
+      >[]
+      expect(ric.length).toBe(1)
+      indices.push(ric[0].bounceIndex)
+    }
+    expect(indices).toEqual([0, 1, 2])
+  })
+
+  it('a fast shell dies on the first wall hit with no bounce and emits no ricochet', () => {
+    const walls: Wall[] = [mkWall(1, { minX: 2, minY: -5, maxX: 3, maxY: 5 })]
+    const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
+    const b: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'fast',
+      pos: { x: 1.9, y: 0 },
+      vel: { x: FAST_SPEED, y: 0 },
+      bouncesLeft: bulletConfig.fast.bounces,
+      alive: true,
+    }
+    world.bullets.push(b)
+    const events: SimEvent[] = []
+    stepBullets(world, 0.05, events) // travel 0.6 -> crosses x=2
+    expect(bulletConfig.fast.bounces).toBe(0)
+    expect(b.alive).toBe(false)
+    expect(events.filter((e) => e.type === 'ricochet').length).toBe(0)
+  })
+
+  it('a fast shell travels farther per tick than a normal shell (no tunneling)', () => {
+    const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 })
+    const normal: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'normal',
+      pos: { x: 0, y: 0 },
+      vel: { x: NORMAL_SPEED, y: 0 },
+      bouncesLeft: bulletConfig.normal.bounces,
+      alive: true,
+    }
+    const fast: Bullet = {
+      id: 2,
+      ownerId: 1,
+      type: 'fast',
+      pos: { x: 0, y: 0 },
+      vel: { x: FAST_SPEED, y: 0 },
+      bouncesLeft: bulletConfig.fast.bounces,
+      alive: true,
+    }
+    world.bullets.push(normal, fast)
+    stepBullets(world, DT, [])
+    expect(fast.pos.x).toBeGreaterThan(normal.pos.x)
+  })
+
+  it('a ricochet shell survives exactly RICOCHET_BOUNCES wall hits then dies', () => {
+    const walls: Wall[] = [mkWall(1, { minX: 2, minY: -5, maxX: 3, maxY: 5 })]
+    const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
+    const b: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'ricochet',
+      pos: { x: 1.9, y: 0 },
+      vel: { x: RICOCHET_SPEED, y: 0 },
+      bouncesLeft: bulletConfig.ricochet.bounces,
+      alive: true,
+    }
+    world.bullets.push(b)
+    for (let k = 0; k < RICOCHET_BOUNCES; k++) {
+      b.pos = { x: 1.9, y: 0 }
+      b.vel = { x: RICOCHET_SPEED, y: 0 }
+      stepBullets(world, 0.05, [])
+      expect(b.alive).toBe(true)
+    }
+    expect(b.bouncesLeft).toBe(0)
+    b.pos = { x: 1.9, y: 0 }
+    b.vel = { x: RICOCHET_SPEED, y: 0 }
+    stepBullets(world, 0.05, [])
+    expect(b.alive).toBe(false)
   })
 })
