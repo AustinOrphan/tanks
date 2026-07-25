@@ -4,7 +4,7 @@ import { spawnBullet, ownerShellCount, stepBullets, resolveBulletHits } from './
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Bullet } from './types'
 import {
-  PLAYER_SHELL_CAP,
+  SHELL_CAP,
   NORMAL_SPEED,
   RICOCHET_SPEED,
   FAST_SPEED,
@@ -39,22 +39,26 @@ describe('spawnBullet + ownerShellCount', () => {
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
     const events: SimEvent[] = []
-    for (let i = 0; i < PLAYER_SHELL_CAP; i++) {
+    for (let i = 0; i < SHELL_CAP; i++) {
       expect(spawnBullet(world, 1, 0, 'normal', events)).toBe(true)
     }
-    expect(ownerShellCount(world, 1)).toBe(PLAYER_SHELL_CAP)
+    expect(ownerShellCount(world, 1)).toBe(SHELL_CAP)
     expect(spawnBullet(world, 1, 0, 'normal', events)).toBe(false)
-    expect(ownerShellCount(world, 1)).toBe(PLAYER_SHELL_CAP)
+    expect(ownerShellCount(world, 1)).toBe(SHELL_CAP)
   })
 
-  it('does not cap enemy shells', () => {
+  it('rejects a NON-player owner\'s shell at SHELL_CAP (cap applies to every owner)', () => {
     const brown = mkTank({ id: 2, kind: 'brown', pos: { x: 0, y: 0 } })
     const world = createWorld({ walls: [], tanks: [brown], spawns: [], lives: 3 })
     const events: SimEvent[] = []
-    for (let i = 0; i < PLAYER_SHELL_CAP + 3; i++) {
+    for (let i = 0; i < SHELL_CAP; i++) {
       expect(spawnBullet(world, 2, 0, 'normal', events)).toBe(true)
     }
-    expect(ownerShellCount(world, 2)).toBe(PLAYER_SHELL_CAP + 3)
+    expect(ownerShellCount(world, 2)).toBe(SHELL_CAP)
+    const beforeBulletCount = world.bullets.length
+    expect(spawnBullet(world, 2, 0, 'normal', events)).toBe(false)
+    expect(ownerShellCount(world, 2)).toBe(SHELL_CAP)
+    expect(world.bullets.length).toBe(beforeBulletCount) // no bullet appended
   })
 
   it('spawns a bullet with config speed/bounces and emits a fire event', () => {

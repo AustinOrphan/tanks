@@ -2,7 +2,7 @@ import type { World } from '../world';
 import type { Tank, Vec2, AiState } from '../types';
 import { lineOfSight, aimLead, dangerAvoidMove, wanderMove } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, AI_MINE_CAP } from '../constants';
+import { bulletConfig, MINE_CAP } from '../constants';
 import type { AiDecision } from './decision';
 
 export function greyDecision(world: World, tank: Tank): AiDecision {
@@ -36,8 +36,9 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // Grey lays mines while roaming (spec §7: "avoids its own mines").
   // Only while NOT dodging: a mine dropped mid-dodge is wasted and risks self-trapping.
   // Gated on mineCooldown (Task 22's dispatcher decrements it and re-arms on success) and
-  // on a self-imposed cap, because dropMine's cap only applies to player-kind owners.
-  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < AI_MINE_CAP;
+  // on MINE_CAP as defence-in-depth: dropMine enforces this cap for every owner too, but
+  // checking it here avoids burning a cooldown on a request dropMine would refuse anyway.
+  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP;
 
   // nextState/nextTimer are vestigial for Grey: unlike Brown, greyDecision never
   // branches on tank.aiState (nextState here is just a passthrough/label, not a

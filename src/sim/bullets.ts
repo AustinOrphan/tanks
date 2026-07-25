@@ -3,7 +3,7 @@ import { fromAngle, vscale, vadd, vlen, vsub, vdot } from './types'
 import { reflectSweep, circleVsCircle } from './collision'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, PLAYER_SHELL_CAP, BULLET_RADIUS, TANK_RADIUS } from './constants'
+import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS } from './constants'
 
 export function ownerShellCount(world: World, ownerId: number): number {
   let n = 0
@@ -22,7 +22,10 @@ export function spawnBullet(
 ): boolean {
   const owner = world.tanks.find((t) => t.id === ownerId)
   if (!owner) return false
-  if (owner.kind === 'player' && ownerShellCount(world, ownerId) >= PLAYER_SHELL_CAP) {
+  // Cap applies to every owner, not just the player: a cap each caller must opt into
+  // is a cap the next spawner (AI) silently escapes. This was gated on owner.kind ===
+  // 'player' when the player was the only shell-firer; that made it a no-op for AI owners.
+  if (ownerShellCount(world, ownerId) >= SHELL_CAP) {
     return false
   }
   const cfg = bulletConfig[type]

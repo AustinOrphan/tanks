@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  bulletConfig, DT, TICK_HZ, PLAYER_SHELL_CAP, PLAYER_MINE_CAP,
+  bulletConfig, DT, TICK_HZ, SHELL_CAP, MINE_CAP,
   NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES,
 } from './constants';
 import type { BulletType } from './types';
@@ -11,9 +11,9 @@ describe('constants', () => {
     expect(DT).toBeCloseTo(1 / 60, 12);
   });
 
-  it('carries the spec default caps and lives', () => {
-    expect(PLAYER_SHELL_CAP).toBe(5);
-    expect(PLAYER_MINE_CAP).toBe(2);
+  it('carries the spec default caps and lives (caps apply to every tank, player and AI)', () => {
+    expect(SHELL_CAP).toBe(5);
+    expect(MINE_CAP).toBe(2);
     expect(LIVES).toBe(3);
   });
 

@@ -154,8 +154,8 @@ describe('greyDecision', () => {
     expect(d.mine).toBe(false);
   });
 
-  it('H3: at the AI mine cap -> mine is false', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] }); // length 1 == AI_MINE_CAP
+  it('H3: at MINE_CAP -> mine is false', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // length 2 == MINE_CAP
     const w = world({ tanks: [grey] });
     const d = greyDecision(w, grey);
     expect(d.mine).toBe(false);
@@ -172,9 +172,9 @@ describe('greyDecision', () => {
     expect(Math.abs(d.desiredMove.y)).toBeCloseTo(1, 6);
   });
 
-  it('H5: cap boundary is a strict "<", not "<=" (empty -> true, length-1 -> false)', () => {
-    const below = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [] });
-    const at = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] });
+  it('H5: cap boundary is a strict "<", not "<=" (below MINE_CAP -> true, at MINE_CAP -> false)', () => {
+    const below = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] }); // 1 < MINE_CAP(2)
+    const at = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // 2 == MINE_CAP(2)
     expect(greyDecision(world({ tanks: [below] }), below).mine).toBe(true);
     expect(greyDecision(world({ tanks: [at] }), at).mine).toBe(false);
   });

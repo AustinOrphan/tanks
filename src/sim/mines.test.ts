@@ -4,7 +4,7 @@ import { dropMine, stepMines, detonateMine } from './mines'
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Mine } from './types'
 import {
-  PLAYER_MINE_CAP,
+  MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_RADIUS,
@@ -38,8 +38,21 @@ describe('dropMine', () => {
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
     expect(dropMine(world, 1, [])).toBe(true)
     expect(dropMine(world, 1, [])).toBe(true)
-    expect(player.activeMineIds.length).toBe(PLAYER_MINE_CAP)
+    expect(player.activeMineIds.length).toBe(MINE_CAP)
     expect(dropMine(world, 1, [])).toBe(false)
+  })
+
+  it('rejects a mine from a NON-player owner at MINE_CAP (cap applies to every owner)', () => {
+    const grey = mkTank({ id: 1, kind: 'grey', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [grey], spawns: [], lives: 3 })
+    expect(dropMine(world, 1, [])).toBe(true)
+    expect(dropMine(world, 1, [])).toBe(true)
+    expect(grey.activeMineIds.length).toBe(MINE_CAP)
+    const beforeMineCount = world.mines.length
+    const events: SimEvent[] = []
+    expect(dropMine(world, 1, events)).toBe(false)
+    expect(world.mines.length).toBe(beforeMineCount) // no mine appended
+    expect(events.find((e) => e.type === 'mine-dropped')).toBeUndefined() // no event emitted
   })
 
   it('drops a mine at the owner and emits mine-dropped', () => {

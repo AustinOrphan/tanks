@@ -3,7 +3,7 @@ import { vdist } from './types'
 import type { World } from './world'
 import type { SimEvent } from './events'
 import {
-  PLAYER_MINE_CAP,
+  MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_RADIUS,
@@ -20,7 +20,10 @@ function blastHitsAABB(center: Vec2, radius: number, box: AABB): boolean {
 export function dropMine(world: World, ownerId: number, events: SimEvent[]): boolean {
   const owner = world.tanks.find((t) => t.id === ownerId)
   if (!owner) return false
-  if (owner.kind === 'player' && owner.activeMineIds.length >= PLAYER_MINE_CAP) return false
+  // Cap applies to every owner, not just the player: a cap each caller must opt into
+  // is a cap the next spawner (AI) silently escapes. This was gated on owner.kind ===
+  // 'player' when the player was the only mine-dropper; that made it a no-op for AI owners.
+  if (owner.activeMineIds.length >= MINE_CAP) return false
   const mine: Mine = {
     id: world.nextId++,
     ownerId,
