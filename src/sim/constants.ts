@@ -39,6 +39,13 @@ export const LIVES = 3;
 export const SWEEP_EPS = 1e-7;
 export const SWEEP_MAX_ITERATIONS = 16;
 
+// ---- AI targeting (aimLead) ----
+// Pure non-degeneracy guard for the intercept quadratic, NOT a physical
+// tolerance: it is compared against several dimensionally distinct
+// quantities (a: speed^2, b: position*speed, t: seconds), so it has no
+// single physical unit of its own.
+export const AIM_EPS = 1e-9;
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },
