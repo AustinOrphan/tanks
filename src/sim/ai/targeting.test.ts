@@ -125,10 +125,24 @@ describe('bankShot', () => {
     // dir (1,1) becomes (1,-1); from (2,2) that reaches (4,0) = the target.
     const dir = { x: Math.cos(angle), y: Math.sin(angle) };
     const reflected = { x: dir.x, y: -dir.y };
-    // dir/reflected are UNIT vectors, so travel the true bounce->target distance:
-    // bounce (2,2) -> target (4,0) is displacement (2,-2), magnitude 2*sqrt(2).
-    const dist = 2 * Math.SQRT2;
-    expect(2 + reflected.x * dist).toBeCloseTo(4, 6);
-    expect(2 + reflected.y * dist).toBeCloseTo(0, 6);
+    // Physical claim: leaving the bounce point (2,2), the reflected direction
+    // points straight at the real target (4,0) — collinear AND same-facing.
+    const d = { x: 4 - 2, y: 0 - 2 };
+    expect(reflected.x * d.y - reflected.y * d.x).toBeCloseTo(0, 6); // cross == 0 -> collinear
+    expect(reflected.x * d.x + reflected.y * d.y).toBeGreaterThan(0); // dot > 0 -> toward, not away
+  });
+
+  it('returns null when the reflector wall is destroyed', () => {
+    const blocker = wall(1, 1.5, -1, 2.5, 1);
+    const destroyedReflector = wall(2, -5, 2, 10, 3, 'destructible', true);
+    const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, [blocker, destroyedReflector], 3);
+    expect(angle).toBeNull();
+  });
+
+  it('returns null when maxBounces < 1', () => {
+    const blocker = wall(1, 1.5, -1, 2.5, 1);
+    const topWall = wall(2, -5, 2, 10, 3);
+    const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, [blocker, topWall], 0);
+    expect(angle).toBeNull();
   });
 });

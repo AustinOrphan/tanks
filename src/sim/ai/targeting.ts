@@ -63,16 +63,35 @@ const FACE_NORMALS: Vec2[] = [
   { x: 0, y: 1 },  // 3 top
 ];
 
+/**
+ * Finds a single-bounce bank-shot path from muzzle to target off any reflector wall.
+ *
+ * Searches each wall's four faces in order and returns the firing angle of the first
+ * valid path (muzzle → bounce → target, where bounce lands exactly on the wall's surface
+ * and both line-of-sight legs are clear). This returns the FIRST valid path in wall/face
+ * iteration order, not the optimal or shortest path — deterministic given input, but
+ * callers must not assume optimality.
+ *
+ * @param maxBounces — Presently used ONLY as a precondition: must be >= 1 to proceed.
+ *   The search is single-bounce-only; multi-bounce is not implemented. Task 21+ must
+ *   not assume this parameter enables ricochet-shell multi-bounce budgets — it will
+ *   silently find only single-bounce paths regardless of maxBounces value.
+ *
+ * @returns Firing angle (from muzzle toward bounce point), or null if no path exists.
+ */
 export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: number): number | null {
   if (maxBounces < 1) return null;
   for (const w of walls) {
     if (w.destroyed) continue;
     const mirrors = mirrorAcrossAABB(target, w.aabb);
-    for (let face = 0; face < 4; face++) {
+    for (let face = 0; face < FACE_NORMALS.length; face++) {
       const mirror = mirrors[face];
       const hit = raySegmentVsAABB(muzzle, mirror, w.aabb);
       if (!hit) continue;
       // The ray must enter through the intended reflecting face (normals are exact ±1/0).
+      // raySegmentVsAABB guarantees exact normals: each component is ±1 or 0, never epsilon.
+      // A bounce landing at a wall corner (within 1e-7) is modelled here as a single-face
+      // reflection; reflectSweep retroreflects both axes there, but the difference is negligible.
       const n = FACE_NORMALS[face];
       if (hit.normal.x !== n.x || hit.normal.y !== n.y) continue;
       const bounce = hit.point;
