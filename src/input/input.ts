@@ -16,6 +16,11 @@ export function createInputController(
 
   const onKeyDown = (e: KeyboardEvent): void => {
     const k = e.key.toLowerCase();
+    // Prevent the browser's default scroll behavior for keys the game uses
+    // (Space would otherwise scroll the page; arrow keys too).
+    if (k === ' ' || k === 'spacebar' || k.startsWith('arrow')) {
+      e.preventDefault();
+    }
     keys.add(k);
     if (!e.repeat && (k === ' ' || k === 'spacebar')) minePressed = true;
   };
