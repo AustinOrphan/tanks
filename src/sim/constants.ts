@@ -58,6 +58,17 @@ export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bull
 // ---- AI wander (wanderMove) ----
 export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
 
+// ---- Teal AI (tealDecision) ----
+// How many consecutive dodging ticks Teal will hold fire before shooting back regardless.
+// 45 ticks = 0.75s at 60Hz, deliberately longer than the player's FIRE_COOLDOWN (0.4s) so
+// sustained player fire still suppresses Teal most of the time, but never forever.
+export const DODGE_PATIENCE_TICKS = 45;
+// Alternation period (in ticks) between bank-preferred and direct-preferred targeting, so
+// Teal visibly performs both shot types instead of banking only when cover happens to block
+// the direct line. 120 ticks = 2s at 60Hz. A preference only: the non-preferred option is
+// still tried as a fallback, so Teal never loses a shot it could have taken.
+export const BANK_PREFER_TICKS = 120;
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },

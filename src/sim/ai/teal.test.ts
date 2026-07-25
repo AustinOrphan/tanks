@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { tealDecision } from './teal';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
+import { DODGE_PATIENCE_TICKS, BANK_PREFER_TICKS } from '../constants';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -24,7 +25,8 @@ function world(over: Partial<World>): World {
 }
 
 describe('tealDecision', () => {
-  // ---- Brief tests (4, with corrections A/B/C/F applied) ----
+  // ---- Brief tests (4, with corrections A/B/C/F applied; updated for the Fix Round 1
+  // patience/alternation/mobile changes) ----
 
   it('takes a direct ricochet shot when line-of-sight is clear', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
@@ -36,7 +38,7 @@ describe('tealDecision', () => {
     // reduces to direct aim -> turretAngle toward (5,0) from (0,0) is exactly 0.
     expect(d.turretAngle).toBeCloseTo(0, 6);
     expect(d.nextState).toBe('fire');
-    // F: mine/nextTimer on the direct-shot path.
+    // F: mine/nextTimer on the direct-shot (not-dodging) path.
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
   });
@@ -53,7 +55,7 @@ describe('tealDecision', () => {
     // so this also proves lineOfSight(teal, player) was genuinely blocked by the wall(1) blocker
     // and the direct-shot branch was skipped in favour of the bank-shot branch.
     expect(d.turretAngle).toBeCloseTo(Math.PI / 4, 6); // bounce point (2,2)
-    // F: mine/nextTimer on the bank-shot path.
+    // F: mine/nextTimer on the bank-shot (not-dodging) path.
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
   });
@@ -69,7 +71,7 @@ describe('tealDecision', () => {
     // firing path (Teal has no other bullet type to report).
     expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
     expect(d.fireType).toBe('ricochet');
-    // F: mine/nextTimer on the reposition path.
+    // F: mine/nextTimer on the reposition (not-dodging) path.
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
   });
@@ -79,19 +81,20 @@ describe('tealDecision', () => {
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear line-of-sight, no walls
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at teal
     const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
-    // E: dodging must beat shooting, even with a clear shot available.
+    // E: dodging must beat shooting, even with a clear shot available (below patience threshold).
     expect(d.fire).toBe(false);
     // A: pin the dodge SIDE, not just that x ~ 0.
     // teal at (3,0), bullet at (0,0) heading +x: rel = (3,0), dir = (1,0),
     // perpA = (0,1), perpB = (0,-1). vdot(rel, perpA) = 0 >= 0 -> perpA = (0,1).
     expect(d.desiredMove.x).toBeCloseTo(0, 6);
     expect(d.desiredMove.y).toBeCloseTo(1, 6);
-    // F: mine/nextTimer on the dodge path.
     expect(d.mine).toBe(false);
-    expect(d.nextTimer).toBe(0);
+    // Fix Round 1 / Important 1: teal.aiTimer defaults to 0, so dodgeTicks = 0 + 1 = 1,
+    // which is < DODGE_PATIENCE_TICKS -> holds fire, and nextTimer reports the running count.
+    expect(d.nextTimer).toBe(1);
   });
 
-  // ---- Additional required tests (D) ----
+  // ---- No live player (D) ----
 
   it('D1: no player tank at all -> idle, no fire, zero move, turretAngle passes through', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { turretAngle: 1.234 });
@@ -114,5 +117,165 @@ describe('tealDecision', () => {
     expect(d.turretAngle).toBe(1.234);
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
+  });
+
+  // ---- Minor 5: off-axis dodge (pins the actual "dodge to the side you sit on" rule,
+  // not just the >= 0 tie-break at rel·perpA == 0) ----
+
+  it('off-axis dodge: teal above the bullet axis dodges to +y (the side it already sits on)', () => {
+    const teal = tank(1, 'teal', { x: 3, y: 0.3 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
+    const d = tealDecision(world({ tanks: [teal], bullets: [b] }), teal);
+    expect(d.fire).toBe(false);
+    expect(d.desiredMove.y).toBeCloseTo(1, 6);
+  });
+
+  it('off-axis dodge: teal below the bullet axis dodges to -y (the side it already sits on)', () => {
+    const teal = tank(1, 'teal', { x: 3, y: -0.3 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
+    const d = tealDecision(world({ tanks: [teal], bullets: [b] }), teal);
+    expect(d.fire).toBe(false);
+    expect(d.desiredMove.y).toBeCloseTo(-1, 6);
+  });
+
+  // ---- Minor 6: pin the reposition wander heading via bucket determinism, so the
+  // wanderMove call site is test-verified rather than just structurally present ----
+
+  it('reposition wander: same bucket (ticks 0 and 29) yields the same heading', () => {
+    const teal0 = tank(1, 'teal', { x: 0, y: 0 });
+    const teal29 = tank(1, 'teal', { x: 0, y: 0 });
+    const player0 = tank(2, 'player', { x: 4, y: 0 });
+    const player29 = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(1, 1.5, -1, 2.5, 1)]; // blocker only -> always reposition
+    const d0 = tealDecision(world({ tanks: [teal0, player0], walls, tick: 0 }), teal0);
+    const d29 = tealDecision(world({ tanks: [teal29, player29], walls, tick: 29 }), teal29);
+    expect(d0.nextState).toBe('reposition');
+    expect(d29.nextState).toBe('reposition');
+    expect(d29.desiredMove.x).toBeCloseTo(d0.desiredMove.x, 12);
+    expect(d29.desiredMove.y).toBeCloseTo(d0.desiredMove.y, 12);
+  });
+
+  it('reposition wander: different bucket (ticks 0 and 30) yields a different heading', () => {
+    const teal0 = tank(1, 'teal', { x: 0, y: 0 });
+    const teal30 = tank(1, 'teal', { x: 0, y: 0 });
+    const player0 = tank(2, 'player', { x: 4, y: 0 });
+    const player30 = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(1, 1.5, -1, 2.5, 1)];
+    const d0 = tealDecision(world({ tanks: [teal0, player0], walls, tick: 0 }), teal0);
+    const d30 = tealDecision(world({ tanks: [teal30, player30], walls, tick: 30 }), teal30);
+    const dx = Math.abs(d0.desiredMove.x - d30.desiredMove.x);
+    const dy = Math.abs(d0.desiredMove.y - d30.desiredMove.y);
+    expect(dx > 1e-6 || dy > 1e-6).toBe(true);
+  });
+
+  // ---- Important 3: Teal is mobile (spec §7) -- wander is the baseline move even while
+  // firing, not a hardcoded {0,0} ----
+
+  it('wanders while firing directly (mobile, not a stationary turret)', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    expect(d.fire).toBe(true);
+    expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
+  });
+
+  it('wanders while firing a bank shot (mobile, not a stationary turret)', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)];
+    const d = tealDecision(world({ tanks: [teal, player], walls }), teal);
+    expect(d.fire).toBe(true);
+    expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
+  });
+
+  // ---- Important 1 (user decision): dodge suppression has a patience limit ----
+
+  it('dodging AT/above the patience threshold fires anyway while still dodging, and resets nextTimer', () => {
+    const teal = tank(1, 'teal', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS });
+    const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS, no walls, stationary
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // still an active threat
+    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
+    expect(d.fire).toBe(true);
+    expect(d.turretAngle).toBeCloseTo(0, 6); // direct shot, player stationary
+    // Still dodging: desiredMove is the dodge vector (signed +y), not the wander heading.
+    expect(d.desiredMove.x).toBeCloseTo(0, 6);
+    expect(d.desiredMove.y).toBeCloseTo(1, 6);
+    expect(d.mine).toBe(false);
+    expect(d.nextTimer).toBe(0); // firing while dodging resets the cautious window
+  });
+
+  it('dodge patience boundary is a strict "<", not "<=" (dodgeTicks == threshold fires, one less still holds)', () => {
+    const holding = tank(1, 'teal', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS - 2 }); // dodgeTicks = threshold - 1
+    const firing = tank(1, 'teal', { x: 3, y: 0 }, { aiTimer: DODGE_PATIENCE_TICKS - 1 }); // dodgeTicks = threshold
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
+    const dHold = tealDecision(world({ tanks: [holding, player], bullets: [b] }), holding);
+    const dFire = tealDecision(world({ tanks: [firing, player], bullets: [b] }), firing);
+    expect(dHold.fire).toBe(false);
+    expect(dHold.nextTimer).toBe(DODGE_PATIENCE_TICKS - 1);
+    expect(dFire.fire).toBe(true);
+    expect(dFire.nextTimer).toBe(0);
+  });
+
+  it('nextTimer is 0 when not dodging, regardless of tank.aiTimer', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, { aiTimer: 99 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, player] }), teal); // no bullets -> not dodging
+    expect(d.fire).toBe(true);
+    expect(d.nextTimer).toBe(0);
+  });
+
+  // ---- Important 2 (user decision): alternate between bank-preferred and
+  // direct-preferred targeting on a deterministic tick-bucket cycle ----
+
+  it('alternates shot preference deterministically: bank-preferred vs direct-preferred pick different angles when both a direct shot and a bank shot exist', () => {
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    // Only the top bounce wall, no blocker: the direct line y=0 never enters the wall's
+    // y:[2,3] span, so lineOfSight is clear; the wall's bottom face also yields a valid
+    // single-bounce path (mirror of (4,0) across y=2 is (4,4); the muzzle->mirror ray
+    // crosses y=2 at x=2, inside the wall's x:[-5,10] span, entering through the bottom
+    // face, matching FACE_NORMALS[2] = (0,-1); both losIgnoring legs are trivially clear
+    // since this is the only wall in the fixture). So both options are genuinely available
+    // -- this is what makes the test discriminate real alternation from coincidence.
+    const walls = [wall(2, -5, 2, 10, 3)];
+    const teal0 = tank(1, 'teal', { x: 0, y: 0 });
+    const d0 = tealDecision(world({ tanks: [teal0, player], walls, tick: 0 }), teal0); // preferBank: floor(0/120)=0, even
+    const teal120 = tank(1, 'teal', { x: 0, y: 0 });
+    const d120 = tealDecision(world({ tanks: [teal120, player], walls, tick: BANK_PREFER_TICKS }), teal120); // floor(120/120)=1, odd -> direct-preferred
+    expect(d0.fire).toBe(true);
+    expect(d120.fire).toBe(true);
+    expect(d0.turretAngle).toBeCloseTo(Math.PI / 4, 6); // tick 0: bank-preferred -> bank path taken
+    expect(d120.turretAngle).toBeCloseTo(0, 6); // tick 120: direct-preferred -> direct shot taken
+  });
+
+  it('fallthrough: bank-preferred tick still takes the direct shot when no bank path exists', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, player], tick: 0 }), teal); // preferBank true, no walls -> bank impossible
+    expect(d.fire).toBe(true);
+    expect(d.turretAngle).toBeCloseTo(0, 6);
+  });
+
+  it('fallthrough: direct-preferred tick still takes the bank shot when line-of-sight is blocked', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)]; // blocker + bounce wall
+    const d = tealDecision(world({ tanks: [teal, player], walls, tick: BANK_PREFER_TICKS }), teal); // direct-preferred, LOS blocked
+    expect(d.fire).toBe(true);
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 4, 6);
+  });
+
+  // ---- Important 4: pin the driveVelocity fix with a diagonal-move fixture, so this
+  // test would fail against the reverted vscale(player.desiredMove, TANK_SPEED) bug ----
+
+  it('leads a diagonally-moving player using the CLAMPED drive velocity, not the raw desiredMove', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    // desiredMove {1,1} has raw length sqrt(2) (~1.41421356); driveDirection clamps this to
+    // unit length before scaling by TANK_SPEED, so driveVelocity is (3/sqrt2, 3/sqrt2), NOT
+    // vscale({1,1}, 3) = (3,3). See report for the full hand-derived intercept arithmetic.
+    const player = tank(2, 'player', { x: 5, y: 0 }, { desiredMove: { x: 1, y: 1 } });
+    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    expect(d.fire).toBe(true);
+    expect(d.turretAngle).toBeCloseTo(0.36136712390670783, 6);
   });
 });
