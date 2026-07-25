@@ -115,8 +115,10 @@ describe('greyDecision', () => {
     expect(d.nextState).toBe('reposition');
   });
 
-  it('F: nextTimer is 0 and mine is false on the fire path and the no-player path', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 });
+  it('F: nextTimer is always 0 on the fire path and the no-player path (mine held off via cooldown, tested separately)', () => {
+    // mineCooldown > 0 isolates this test to nextTimer/mine-gating-is-off, independent
+    // of the mine-drop eligibility logic itself, which has its own dedicated tests below.
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { mineCooldown: 1 });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const firing = greyDecision(world({ tanks: [grey, player] }), grey);
     expect(firing.nextTimer).toBe(0);
@@ -134,5 +136,46 @@ describe('greyDecision', () => {
       const d = greyDecision(w, grey);
       expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
     }
+  });
+
+  // ---- Grey mine-dropping (fix round 2: user decision, spec §7 "avoids its own mines") ----
+
+  it('H1: roaming, cooldown ready, no active mines -> mine is true', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const w = world({ tanks: [grey] }); // no bullets/mines/player -> not dodging
+    const d = greyDecision(w, grey);
+    expect(d.mine).toBe(true);
+  });
+
+  it('H2: mineCooldown > 0 -> mine is false', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { mineCooldown: 0.3 });
+    const w = world({ tanks: [grey] });
+    const d = greyDecision(w, grey);
+    expect(d.mine).toBe(false);
+  });
+
+  it('H3: at the AI mine cap -> mine is false', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] }); // length 1 == AI_MINE_CAP
+    const w = world({ tanks: [grey] });
+    const d = greyDecision(w, grey);
+    expect(d.mine).toBe(false);
+  });
+
+  it('H4: while dodging an incoming bullet -> mine is false (pins the !avoid term)', () => {
+    const grey = tank(1, 'grey', { x: 3, y: 0 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at grey -> dangerAvoidMove is non-null
+    const w = world({ tanks: [grey], bullets: [b] });
+    const d = greyDecision(w, grey);
+    expect(d.mine).toBe(false);
+    // Sanity check that this fixture really is a dodge (would be a false-negative
+    // test otherwise): if this fails, H4 above isn't exercising the !avoid branch.
+    expect(Math.abs(d.desiredMove.y)).toBeCloseTo(1, 6);
+  });
+
+  it('H5: cap boundary is a strict "<", not "<=" (empty -> true, length-1 -> false)', () => {
+    const below = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [] });
+    const at = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] });
+    expect(greyDecision(world({ tanks: [below] }), below).mine).toBe(true);
+    expect(greyDecision(world({ tanks: [at] }), at).mine).toBe(false);
   });
 });

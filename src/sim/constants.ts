@@ -23,6 +23,13 @@ export const RICOCHET_BOUNCES = 3;
 export const PLAYER_SHELL_CAP = 5;
 export const PLAYER_MINE_CAP = 2;
 
+// ---- AI resource caps ----
+// Enemies are capped lower than the player's PLAYER_MINE_CAP (2). dropMine (mines.ts)
+// only enforces PLAYER_MINE_CAP for owner.kind === 'player' — it does NOT cap non-player
+// owners at all — so AI decision functions (e.g. greyDecision) must self-enforce this cap
+// by checking tank.activeMineIds.length before requesting a mine drop.
+export const AI_MINE_CAP = 1;
+
 // ---- Cooldowns (seconds) ----
 export const FIRE_COOLDOWN = 0.4;
 export const MINE_COOLDOWN = 0.5;
