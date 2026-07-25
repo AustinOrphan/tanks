@@ -123,6 +123,20 @@ describe('createInputController — fire/mine edges', () => {
     // No keyup dispatched (key still held), but the edge was consumed:
     expect(controller.sample().mine).toBe(false);
   });
+
+  it('browser auto-repeat keydown events do not re-arm the mine edge', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+
+    // Initial physical press: repeat defaults to false.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    expect(controller.sample().mine).toBe(true);
+
+    // Browser auto-repeat fires further keydowns with repeat:true while the
+    // key stays held, with no keyup in between. These must NOT re-arm mine.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true }));
+    expect(controller.sample().mine).toBe(false);
+  });
 });
 
 describe('createInputController — dispose', () => {

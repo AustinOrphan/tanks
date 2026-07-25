@@ -17,7 +17,7 @@ export function createInputController(
   const onKeyDown = (e: KeyboardEvent): void => {
     const k = e.key.toLowerCase();
     keys.add(k);
-    if (k === ' ' || k === 'spacebar') minePressed = true;
+    if (!e.repeat && (k === ' ' || k === 'spacebar')) minePressed = true;
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     keys.delete(e.key.toLowerCase());
