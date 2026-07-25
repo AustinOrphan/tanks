@@ -105,6 +105,16 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
   return null;
 }
 
+/**
+ * Identifies bullets approaching the tank within a lookahead horizon and danger corridor.
+ *
+ * LIMITATIONS (Tasks 19-22 should note): models bullets as straight lines and ignores walls.
+ * A shell that will BANK off a wall into the tank is not flagged (same limitation as the
+ * bank-shot targeting itself). Conversely, a bullet that a wall will stop is still flagged.
+ * Also: the AI never dodges its own ricochets (bullets owned by the tank are skipped),
+ * even though resolveBulletHits makes ricochet shells lethal to their owner — a tank can
+ * shoot itself with a ricochet and not dodge.
+ */
 export function incomingThreats(world: World, tank: Tank): Bullet[] {
   const out: Bullet[] = [];
   for (const b of world.bullets) {
@@ -122,6 +132,19 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
   return out;
 }
 
+/**
+ * Returns a unit dodge direction away from the nearest incoming threat, or null.
+ *
+ * Prioritizes dodging incoming bullets; if none, dodges away from nearby armed mines.
+ * Returns the perpendicular direction on the side the tank already sits, so it dodges
+ * outward rather than across the threat.
+ *
+ * LIMITATION (Tasks 20-21 should note): the returned direction is wall-blind and arena-blind.
+ * Because moveTank pushes the tank back out of overlapping walls, a dodge aimed into a wall
+ * resolves to zero net displacement — the tank is pinned inside the danger corridor, worse
+ * than not dodging. Callers must not trust the direction blindly; the cheap mitigation is to
+ * try the returned direction and fall back to its opposite (or no dodge) if blocked.
+ */
 export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
   const threats = incomingThreats(world, tank);
   if (threats.length > 0) {
