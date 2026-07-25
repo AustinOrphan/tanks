@@ -1,7 +1,10 @@
 import type { Tank, Bullet, Mine, Wall, Spawn, InputState } from './types';
+import { angleOf, vsub } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks } from './collision';
-import { DT } from './constants';
+import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
+import { dropMine, stepMines } from './mines';
+import { DT, FIRE_COOLDOWN, MINE_COOLDOWN } from './constants';
 
 export interface World {
   tick: number;
@@ -79,13 +82,92 @@ export function stepMovement(world: World, dt: number): void {
   separateTanks(world.tanks);
 }
 
-// Skeleton. Update calls (movement, AI, bullets, mines, status) are inserted in a
-// fixed order by tasks 9-15 and 22. CONTRACT: input world is immutable; we clone a
-// draft, mutate the draft, and return it, so render can keep prev/curr distinct.
-export function step(world: World, _input: InputState): StepResult {
+export function applyPlayerInput(world: World, input: InputState, events: SimEvent[]): void {
+  const player = world.tanks.find((t) => t.kind === 'player');
+  if (!player || !player.alive) return;
+
+  player.desiredMove = { x: input.move.x, y: input.move.y };
+
+  const aimDir = vsub(input.aim, player.pos);
+  if (aimDir.x !== 0 || aimDir.y !== 0) {
+    player.turretAngle = angleOf(aimDir);
+  }
+
+  if (player.fireCooldown > 0) player.fireCooldown -= DT;
+  if (player.mineCooldown > 0) player.mineCooldown -= DT;
+
+  if (input.fire && player.fireCooldown <= 0) {
+    if (spawnBullet(world, player.id, player.turretAngle, 'normal', events)) {
+      player.fireCooldown = FIRE_COOLDOWN;
+    }
+  }
+
+  if (input.mine && player.mineCooldown <= 0) {
+    if (dropMine(world, player.id, events)) {
+      player.mineCooldown = MINE_COOLDOWN;
+    }
+  }
+}
+
+// A life loss restarts the WHOLE arena (spec §4: "restart arena on death"): every
+// tank returns to its spawn alive, destroyed walls come back, and all bullets/mines
+// clear. Relies on the loadArena invariant that world.tanks[i] was built from
+// world.spawns[i] — tanks are never removed or reordered (dead tanks stay in place
+// with alive=false), so that index alignment holds for the whole game.
+function resetArena(world: World): void {
+  for (let i = 0; i < world.tanks.length; i++) {
+    const t = world.tanks[i];
+    const s = world.spawns[i];
+    t.pos = { ...s.pos };
+    t.bodyAngle = s.angle;
+    t.turretAngle = s.angle;
+    t.alive = true;
+    t.desiredMove = { x: 0, y: 0 };
+    t.activeMineIds = [];
+    t.fireCooldown = 0;
+    t.mineCooldown = 0;
+    t.aiState = 'idle';
+    t.aiTimer = 0;
+  }
+  for (const w of world.walls) w.destroyed = false;
+  world.bullets = [];
+  world.mines = [];
+}
+
+export function resolveStatus(world: World, events: SimEvent[]): void {
+  const player = world.tanks.find((t) => t.kind === 'player');
+  if (player && !player.alive) {
+    world.lives -= 1;
+    if (world.lives > 0) {
+      resetArena(world);
+    } else {
+      world.status = 'lose';
+      events.push({ type: 'lose' });
+      return; // dying on the last life = lose, even if an enemy died the same tick
+    }
+  }
+
+  const enemies = world.tanks.filter((t) => t.kind !== 'player');
+  if (enemies.length > 0 && enemies.every((e) => !e.alive)) {
+    world.status = 'win';
+    events.push({ type: 'win' });
+  }
+}
+
+export function step(world: World, input: InputState): StepResult {
   const draft = cloneWorld(world);
   draft.tick += 1;
   const events: SimEvent[] = [];
-  stepMovement(draft, DT);
+
+  if (draft.status === 'playing') {
+    applyPlayerInput(draft, input, events);
+    // stepAi(draft, events);  // wired in by task 22, right here (before movement)
+    stepMovement(draft, DT);
+    stepBullets(draft, DT, events);
+    resolveBulletHits(draft, events);
+    stepMines(draft, DT, events);
+    resolveStatus(draft, events);
+  }
+
   return { world: draft, events };
 }
