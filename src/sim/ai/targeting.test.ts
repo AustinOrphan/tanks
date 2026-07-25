@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lineOfSight, aimLead } from './targeting';
+import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot } from './targeting';
 import type { Wall } from '../types';
 
 function wall(id: number, minX: number, minY: number, maxX: number, maxY: number,
@@ -86,5 +86,49 @@ describe('aimLead', () => {
     const angle = aimLead({ x: 2, y: -1 }, { x: 2, y: -1 }, { x: 0, y: 0 }, 6);
     expect(Number.isNaN(angle)).toBe(false);
     expect(angle).toBe(0);
+  });
+});
+
+describe('mirrorAcrossAABB', () => {
+  it('reflects a point across all four face planes (left,right,bottom,top)', () => {
+    const box = { minX: 1.5, minY: 2, maxX: 2.5, maxY: 3 };
+    const [left, right, bottom, top] = mirrorAcrossAABB({ x: 4, y: 0 }, box);
+    expect(left).toEqual({ x: 2 * 1.5 - 4, y: 0 });   // x = minX plane -> (-1, 0)
+    expect(right).toEqual({ x: 2 * 2.5 - 4, y: 0 });  // x = maxX plane -> (1, 0)
+    expect(bottom).toEqual({ x: 4, y: 2 * 2 - 0 });   // y = minY plane -> (4, 4)
+    expect(top).toEqual({ x: 4, y: 2 * 3 - 0 });      // y = maxY plane -> (4, 6)
+  });
+});
+
+describe('bankShot', () => {
+  it('finds a valid single-bounce path off a side wall around a blocker', () => {
+    const blocker = wall(1, 1.5, -1, 2.5, 1);            // blocks the direct line (0,0)->(4,0)
+    const topWall = wall(2, -5, 2, 10, 3);               // bounce surface: bottom face y=2
+    const walls = [blocker, topWall];
+    const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, walls, 3);
+    expect(angle).not.toBeNull();
+    // bounce point is (2,2) -> firing angle = atan2(2,2) = pi/4
+    expect(angle as number).toBeCloseTo(Math.PI / 4, 6);
+  });
+
+  it('returns null when the target has no valid bank path (only the blocker exists)', () => {
+    const blocker = wall(1, 1.5, -1, 2.5, 1);
+    const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, [blocker], 3);
+    expect(angle).toBeNull();
+  });
+
+  it('reflected direction across the chosen face points at the real target', () => {
+    const blocker = wall(1, 1.5, -1, 2.5, 1);
+    const topWall = wall(2, -5, 2, 10, 3);
+    const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, [blocker, topWall], 3) as number;
+    // The shot travels (0,0)->(2,2); reflecting velocity across the horizontal face flips y:
+    // dir (1,1) becomes (1,-1); from (2,2) that reaches (4,0) = the target.
+    const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+    const reflected = { x: dir.x, y: -dir.y };
+    // dir/reflected are UNIT vectors, so travel the true bounce->target distance:
+    // bounce (2,2) -> target (4,0) is displacement (2,-2), magnitude 2*sqrt(2).
+    const dist = 2 * Math.SQRT2;
+    expect(2 + reflected.x * dist).toBeCloseTo(4, 6);
+    expect(2 + reflected.y * dist).toBeCloseTo(0, 6);
   });
 });

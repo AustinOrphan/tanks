@@ -1,4 +1,4 @@
-import type { Vec2, Wall } from '../types';
+import type { Vec2, Wall, AABB } from '../types';
 import { vsub, angleOf } from '../types';
 import { raySegmentVsAABB } from '../collision';
 import { AIM_EPS } from '../constants';
@@ -36,4 +36,51 @@ export function aimLead(muzzle: Vec2, target: Vec2, targetVel: Vec2, bulletSpeed
   if (t <= AIM_EPS) return angleOf(rel); // no positive intercept: direct aim
   const intercept = { x: target.x + targetVel.x * t, y: target.y + targetVel.y * t };
   return angleOf(vsub(intercept, muzzle));
+}
+
+export function mirrorAcrossAABB(point: Vec2, box: AABB): Vec2[] {
+  return [
+    { x: 2 * box.minX - point.x, y: point.y }, // face 0: left  (x = minX, normal -x)
+    { x: 2 * box.maxX - point.x, y: point.y }, // face 1: right (x = maxX, normal +x)
+    { x: point.x, y: 2 * box.minY - point.y }, // face 2: bottom (y = minY, normal -y)
+    { x: point.x, y: 2 * box.maxY - point.y }, // face 3: top   (y = maxY, normal +y)
+  ];
+}
+
+// LOS that ignores one wall (the reflecting wall, since the bounce point sits on its surface).
+function losIgnoring(from: Vec2, to: Vec2, walls: Wall[], ignore: Wall): boolean {
+  for (const w of walls) {
+    if (w === ignore || w.destroyed) continue;
+    if (raySegmentVsAABB(from, to, w.aabb) !== null) return false;
+  }
+  return true;
+}
+
+const FACE_NORMALS: Vec2[] = [
+  { x: -1, y: 0 }, // 0 left
+  { x: 1, y: 0 },  // 1 right
+  { x: 0, y: -1 }, // 2 bottom
+  { x: 0, y: 1 },  // 3 top
+];
+
+export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: number): number | null {
+  if (maxBounces < 1) return null;
+  for (const w of walls) {
+    if (w.destroyed) continue;
+    const mirrors = mirrorAcrossAABB(target, w.aabb);
+    for (let face = 0; face < 4; face++) {
+      const mirror = mirrors[face];
+      const hit = raySegmentVsAABB(muzzle, mirror, w.aabb);
+      if (!hit) continue;
+      // The ray must enter through the intended reflecting face (normals are exact ±1/0).
+      const n = FACE_NORMALS[face];
+      if (hit.normal.x !== n.x || hit.normal.y !== n.y) continue;
+      const bounce = hit.point;
+      // Clear line to the wall, and clear line from the bounce point to the real target.
+      if (!losIgnoring(muzzle, bounce, walls, w)) continue;
+      if (!losIgnoring(bounce, target, walls, w)) continue;
+      return angleOf(vsub(bounce, muzzle));
+    }
+  }
+  return null;
 }
