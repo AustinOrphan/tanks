@@ -51,6 +51,9 @@ export const VEC_EPS = 1e-6; // zero-length-vector degeneracy guard
 export const THREAT_HORIZON = 1.0; // seconds of lookahead for incoming bullets
 export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bullet may pass within
 
+// ---- AI wander (wanderMove) ----
+export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },

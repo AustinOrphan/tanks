@@ -1,7 +1,7 @@
 import type { Vec2, Wall, AABB, Bullet, Tank } from '../types';
-import { vsub, angleOf, vdot, vdist, vnorm } from '../types';
+import { vsub, angleOf, vdot, vdist, vnorm, fromAngle, nextRng } from '../types';
 import { raySegmentVsAABB } from '../collision';
-import { AIM_EPS, TANK_RADIUS, MINE_PROXIMITY_RADIUS, THREAT_HORIZON, DANGER_CORRIDOR, VEC_EPS } from '../constants';
+import { AIM_EPS, TANK_RADIUS, MINE_PROXIMITY_RADIUS, THREAT_HORIZON, DANGER_CORRIDOR, VEC_EPS, WANDER_TICKS } from '../constants';
 import type { World } from '../world';
 
 export function lineOfSight(from: Vec2, to: Vec2, walls: Wall[]): boolean {
@@ -145,6 +145,19 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
  * than not dodging. Callers must not trust the direction blindly; the cheap mitigation is to
  * try the returned direction and fall back to its opposite (or no dodge) if blocked.
  */
+/**
+ * Returns a deterministic unit wander heading for `tank`, held steady for
+ * `WANDER_TICKS` ticks (~0.5s at 60Hz) before repicking. Seeded from
+ * `world.seed + tank.id * 1000 + bucket` so different tanks and different
+ * time buckets diverge, while repeated calls within the same bucket for the
+ * same tank/world are reproducible (no Math.random, no Date.now).
+ */
+export function wanderMove(world: World, tank: Tank): Vec2 {
+  const bucket = Math.floor(world.tick / WANDER_TICKS);
+  const rng = nextRng(world.seed + tank.id * 1000 + bucket);
+  return fromAngle(rng.value * Math.PI * 2);
+}
+
 export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
   const threats = incomingThreats(world, tank);
   if (threats.length > 0) {
