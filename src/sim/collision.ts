@@ -220,11 +220,21 @@ export function reflectSweep(
   };
 }
 
-export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
-  let move = tank.desiredMove;
+/** Clamp a raw drive-input vector to unit length (diagonals aren't faster). */
+export function driveDirection(move: Vec2): Vec2 {
   const mlen = vlen(move);
-  // clamp the drive vector to unit length (diagonals aren't faster)
-  if (mlen > 1) move = vscale(move, 1 / mlen);
+  return mlen > 1 ? vscale(move, 1 / mlen) : move;
+}
+
+/** A tank's actual world velocity in units/sec — exactly what moveTank will apply.
+ *  Shared by movement and AI aiming so the two definitions cannot drift. */
+export function driveVelocity(tank: Tank): Vec2 {
+  return vscale(driveDirection(tank.desiredMove), TANK_SPEED);
+}
+
+export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
+  const move = driveDirection(tank.desiredMove);
+  const mlen = vlen(tank.desiredMove);
 
   tank.pos = vadd(tank.pos, vscale(move, TANK_SPEED * dt));
   if (mlen > 0) tank.bodyAngle = angleOf(move);

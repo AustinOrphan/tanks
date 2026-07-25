@@ -30,6 +30,8 @@ describe('brownDecision', () => {
     const d = brownDecision(world([brown, player]), brown);
     expect(d.desiredMove).toEqual({ x: 0, y: 0 });
     expect(d.fireType).toBe('normal');
+    expect(d.mine).toBe(false);
+    expect(d.nextTimer).toBe(0);
   });
 
   it('leads a moving player (turret angle offset from the direct angle)', () => {
@@ -42,12 +44,30 @@ describe('brownDecision', () => {
     expect(d.turretAngle).toBeCloseTo(Math.PI / 6, 6);
   });
 
+  it('leads a diagonal-moving player (clamped velocity)', () => {
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const player = tank(2, 'player', { x: 5, y: 0 }, { desiredMove: { x: 1, y: 1 } });
+    const d = brownDecision(world([brown, player]), brown);
+    // desiredMove = (1,1) has length sqrt(2) ≈ 1.4142, so clamped direction = (1/√2, 1/√2)
+    // targetVel = clamped * TANK_SPEED(3) = (3/√2, 3/√2) ≈ (2.1213, 2.1213), magnitude 3.0
+    // aimLead quadratic: a = 9-36 = -27, b = 30/√2 = 15√2, c = 25
+    // disc = 450 + 2700 = 3150, sqrt(disc) ≈ 56.0656
+    // t ≈ 1.4311, intercept ≈ (8.0355, 3.0355), angle ≈ 0.3614 radians
+    const sqrt2 = Math.sqrt(2);
+    const velocityMagnitude = Math.sqrt((3 / sqrt2) ** 2 + (3 / sqrt2) ** 2); // should be 3.0
+    expect(velocityMagnitude).toBeCloseTo(3.0, 6);
+    // The exact angle computed from aimLead with clamped velocity (3/√2, 3/√2)
+    expect(d.turretAngle).toBeCloseTo(0.36137, 5);
+  });
+
   it('fires only with clear line-of-sight, and advances Aim -> Fire', () => {
     const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const d = brownDecision(world([brown, player]), brown);
     expect(d.fire).toBe(true);
     expect(d.nextState).toBe('fire');
+    expect(d.mine).toBe(false);
+    expect(d.nextTimer).toBe(0);
   });
 
   it('does not fire when a wall blocks line-of-sight', () => {
@@ -115,6 +135,9 @@ describe('brownDecision', () => {
     expect(d.fire).toBe(false);
     expect(d.nextState).toBe('idle');
     expect(d.turretAngle).toBe(1.234);
+    expect(d.mine).toBe(false);
+    expect(d.fireType).toBe('normal');
+    expect(d.nextTimer).toBe(0);
   });
 
   it('No live player - player exists but not alive', () => {
@@ -125,5 +148,7 @@ describe('brownDecision', () => {
     expect(d.fire).toBe(false);
     expect(d.nextState).toBe('idle');
     expect(d.turretAngle).toBe(1.234);
+    expect(d.mine).toBe(false);
+    expect(d.nextTimer).toBe(0);
   });
 });
