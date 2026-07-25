@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld } from './world'
-import { spawnBullet, ownerShellCount, stepBullets } from './bullets'
+import { spawnBullet, ownerShellCount, stepBullets, resolveBulletHits } from './bullets'
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Bullet } from './types'
 import {
@@ -268,5 +268,102 @@ describe('bullet types', () => {
     b.vel = { x: RICOCHET_SPEED, y: 0 }
     stepBullets(world, 0.05, [])
     expect(b.alive).toBe(false)
+  })
+})
+
+describe('resolveBulletHits', () => {
+  it('a bullet overlapping an enemy destroys it and emits tank-destroyed + explosion', () => {
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 5, y: 5 } })
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 0.5, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player, enemy], spawns: [], lives: 3 })
+    const b: Bullet = {
+      id: 10,
+      ownerId: 1,
+      type: 'normal',
+      pos: { x: 0.1, y: 0 },
+      vel: { x: NORMAL_SPEED, y: 0 },
+      bouncesLeft: 1,
+      alive: true,
+    }
+    world.bullets.push(b)
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(enemy.alive).toBe(false)
+    expect(b.alive).toBe(false)
+    expect(events.find((e) => e.type === 'tank-destroyed')).toMatchObject({
+      type: 'tank-destroyed',
+      tankId: 2,
+      kind: 'brown',
+    })
+    expect(events.some((e) => e.type === 'explosion')).toBe(true)
+  })
+
+  it('a bullet overlapping the player destroys the player (one-hit death applies to the player too)', () => {
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 9, y: 9 } })
+    const world = createWorld({ walls: [], tanks: [player, enemy], spawns: [], lives: 3 })
+    const b: Bullet = {
+      id: 10,
+      ownerId: 2,
+      type: 'normal',
+      pos: { x: 0.3, y: 0 },
+      vel: { x: -NORMAL_SPEED, y: 0 },
+      bouncesLeft: 1,
+      alive: true,
+    }
+    world.bullets.push(b)
+    resolveBulletHits(world, [])
+    expect(player.alive).toBe(false)
+  })
+
+  it('a bullet that misses leaves tanks alive', () => {
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [enemy], spawns: [], lives: 3 })
+    const b: Bullet = {
+      id: 10,
+      ownerId: 1,
+      type: 'normal',
+      pos: { x: 3, y: 3 },
+      vel: { x: NORMAL_SPEED, y: 0 },
+      bouncesLeft: 1,
+      alive: true,
+    }
+    world.bullets.push(b)
+    resolveBulletHits(world, [])
+    expect(enemy.alive).toBe(true)
+    expect(b.alive).toBe(true)
+  })
+
+  it('does not self-destruct in the muzzle but can self-hit on a ricochet return', () => {
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+    // freshly fired: bullet at the muzzle heading away -> no self hit
+    const outbound: Bullet = {
+      id: 10,
+      ownerId: 1,
+      type: 'normal',
+      pos: { x: 0, y: 0 },
+      vel: { x: NORMAL_SPEED, y: 0 },
+      bouncesLeft: 1,
+      alive: true,
+    }
+    world.bullets.push(outbound)
+    resolveBulletHits(world, [])
+    expect(player.alive).toBe(true)
+    expect(outbound.alive).toBe(true)
+    // a shell heading back into the owner (post-ricochet) does hit
+    const inbound: Bullet = {
+      id: 11,
+      ownerId: 1,
+      type: 'normal',
+      pos: { x: 0.4, y: 0 },
+      vel: { x: -NORMAL_SPEED, y: 0 },
+      bouncesLeft: 0,
+      alive: true,
+    }
+    world.bullets.push(inbound)
+    resolveBulletHits(world, [])
+    expect(player.alive).toBe(false)
+    expect(inbound.alive).toBe(false)
   })
 })
