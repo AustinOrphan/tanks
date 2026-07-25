@@ -1,17 +1,5 @@
+/// <reference types="vite/client" />
 import { describe, it, expect } from 'vitest';
-// This project has no @types/node dependency (the sim toolchain is kept
-// deliberately minimal/browser-oriented), so plain TS strict-mode cannot
-// resolve these Node built-ins by name. They are real modules at runtime
-// under vitest's "node" environment (see vite.config.ts test.environment);
-// @ts-ignore below suppresses the missing-declaration error only, not a
-// real type-safety gap, since this file is the sole consumer.
-// @ts-ignore -- 'fs' has no type declarations without @types/node
-import { readdirSync, readFileSync, statSync } from 'fs';
-// @ts-ignore -- 'path' has no type declarations without @types/node
-import { join, relative } from 'path';
-
-declare const __dirname: string;
-declare const process: { cwd(): string };
 
 // WHY THIS TEST EXISTS:
 //
@@ -29,8 +17,28 @@ declare const process: { cwd(): string };
 // fine and pass every other test while silently destroying headless
 // determinism. This test scans every `.ts` file under `src/sim/` and fails
 // loudly, naming the offending file and token, if that ever happens.
+//
+// File discovery uses Vite's `import.meta.glob` (native to vitest, typed
+// via the `vite/client` triple-slash reference above) instead of Node's
+// `fs`/`path`, so this project's lack of an `@types/node` dependency never
+// forces a `@ts-ignore` onto a guard whose whole point is catching things
+// that "compile fine".
 
-const SIM_ROOT = join(__dirname); // src/sim
+// Raw source of every .ts file under src/sim (recursive, eager -- this is a
+// small, one-off test-time scan, not a runtime hot path).
+const rawModules = import.meta.glob('./**/*.ts', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+// This guard's own filename: excluded from the scan below. Its source
+// necessarily contains the forbidden tokens as string literals/comments
+// (to describe and detect them) rather than as real imports or global
+// references, so scanning itself would be a guaranteed false positive.
+const SELF_PATH = './purity.test.ts';
+
+const files = Object.keys(rawModules).filter((path) => path !== SELF_PATH);
 
 const FORBIDDEN_IMPORT_PATTERNS: Array<{ token: string; re: RegExp }> = [
   { token: `from 'three'`, re: /from\s+['"]three['"]/ },
@@ -131,51 +139,51 @@ function stripComments(src: string): string {
   return out;
 }
 
-// This guard's own filename: excluded from the scan below. Its source
-// necessarily contains the forbidden tokens as string literals/comments
-// (to describe and detect them) rather than as real imports or global
-// references, so scanning itself would be a guaranteed false positive.
-const SELF_FILENAME = 'purity.test.ts';
-
-function listTsFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
-      out.push(...listTsFiles(full));
-    } else if (st.isFile() && entry.endsWith('.ts') && entry !== SELF_FILENAME) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
 describe('sim purity guard', () => {
-  const files = listTsFiles(SIM_ROOT);
+  // NON-VACUITY CHECK -- read this before touching file discovery above.
+  //
+  // The check below ("never imports three or howler...") loops over `files`
+  // asserting each one is clean. If the discovery step above ever breaks or
+  // silently narrows (wrong glob pattern, wrong root, a refactor that
+  // returns an empty/partial list), that loop body runs zero or too few
+  // times, NO assertion inside it ever fires, and the whole guard reports
+  // green while enforcing NOTHING -- a guard that silently stops guarding
+  // is worse than no guard, because it produces false confidence instead of
+  // an honest gap. This happened for real once already: a partial edit to
+  // this exact file made discovery stop collecting, and the suite dropped
+  // from 218 to 216 tests while still reporting all-green. These assertions
+  // pin a floor (there are 30+ .ts files under src/sim today, including
+  // ai/) and specific known files by path, so a broken or narrowed scan
+  // fails loudly here instead of passing vacuously.
+  it('discovered a plausible set of files under src/sim (non-vacuity check)', () => {
+    expect(files.length).toBeGreaterThanOrEqual(15);
 
-  it('found at least one .ts file under src/sim (sanity check)', () => {
-    expect(files.length).toBeGreaterThan(0);
+    const expectedSuffixes = ['world.ts', 'bullets.ts', 'arena.ts', 'ai/grey.ts'];
+    for (const suffix of expectedSuffixes) {
+      const found = files.some((path) => path.endsWith(suffix));
+      expect(found, `expected discovery to include a file ending in "${suffix}"; got: ${files.join(', ')}`).toBe(
+        true
+      );
+    }
   });
 
   it('never imports three or howler, and never references DOM-only globals', () => {
     const violations: string[] = [];
 
-    for (const file of files) {
-      const src = readFileSync(file, 'utf8');
-      const relPath = relative(process.cwd(), file);
+    for (const path of files) {
+      const src = rawModules[path];
       const codeOnly = stripComments(src);
 
       for (const { token, re } of FORBIDDEN_IMPORT_PATTERNS) {
         if (re.test(src)) {
-          violations.push(`${relPath}: forbidden import "${token}"`);
+          violations.push(`${path}: forbidden import "${token}"`);
         }
       }
 
       for (const globalName of FORBIDDEN_GLOBALS) {
         const wordBoundaryRe = new RegExp(`\\b${globalName}\\b`);
         if (wordBoundaryRe.test(codeOnly)) {
-          violations.push(`${relPath}: forbidden reference to "${globalName}"`);
+          violations.push(`${path}: forbidden reference to "${globalName}"`);
         }
       }
     }
