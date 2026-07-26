@@ -60,6 +60,14 @@ export function stepBullets(world: World, dt: number, events: SimEvent[]): void 
     b.vel = vscale(result.dir, speed)
     b.bouncesLeft = result.bouncesLeft
     if (result.expired) b.alive = false
+    // A degenerate reflection (the hit landing exactly at t=1 leaves a
+    // zero-length remainder, which vnorm maps to {0,0}) produced a motionless
+    // but still-alive shell. Nothing else retires one, so it sat in the arena
+    // forever holding a SHELL_CAP slot -- five of them locked its owner out of
+    // firing for the rest of the game.
+    if (!Number.isFinite(b.vel.x) || !Number.isFinite(b.vel.y) || vlen(b.vel) === 0) {
+      b.alive = false
+    }
   }
 }
 
@@ -83,4 +91,10 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
       }
     }
   }
+  // Retire the dead, exactly as stepMines does. Skipping this was the sim's one
+  // unbounded collection: shells were only ever flagged `alive = false`, never
+  // removed, so cloneWorld deep-copied every corpse of the round 60x a second.
+  // Measured at 100k ticks in a single round: 3,987 bullets, 3 alive, 10.8x
+  // per-tick slowdown, and a 639 KB world snapshot.
+  world.bullets = world.bullets.filter((b) => b.alive)
 }

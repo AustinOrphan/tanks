@@ -23,14 +23,20 @@ function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
   };
 }
 
+// TWO enemies, not one. With a single enemy `enemies.every(dead)` and
+// `enemies.some(dead)` are the same predicate, so a one-enemy fixture cannot
+// tell a correct win condition from one that fires on the first kill -- and the
+// shipped arena has three enemies.
 function makeWorld(): World {
   const player = makeTank('player', 1, 5, 5);
   const brown = makeTank('brown', 2, 5, 15);
+  const grey = makeTank('grey', 3, 15, 15);
   const spawns: Spawn[] = [
     { kind: 'player', pos: { x: 5, y: 5 }, angle: 0 },
     { kind: 'brown', pos: { x: 5, y: 15 }, angle: 0 },
+    { kind: 'grey', pos: { x: 15, y: 15 }, angle: 0 },
   ];
-  const world = createWorld({ walls: [], tanks: [player, brown], spawns, lives: 3 });
+  const world = createWorld({ walls: [], tanks: [player, brown, grey], spawns, lives: 3 });
   // This file's tests (all written before round phases existed) are about pipeline/
   // cooldown/status mechanics, not round phases -- push roundStartTick far into the
   // past so world.tick=0 already reads as 'live'. The round-phase-specific tests below
@@ -102,7 +108,7 @@ describe('resolveStatus', () => {
     const enemy = w.tanks[1]; // brown, spawn-aligned at index 1
     player.alive = false;
     player.pos = { x: 99, y: 99 };
-    enemy.alive = false; // was destroyed earlier this life
+    enemy.alive = false; // one of the two enemies was destroyed earlier this life
     // a destructible wall blown open earlier this life
     w.walls.push({ id: 99, aabb: { minX: 0, minY: 0, maxX: 1, maxY: 1 }, kind: 'destructible', destroyed: true });
     resolveStatus(w, []);
@@ -126,12 +132,44 @@ describe('resolveStatus', () => {
     expect(events).toContainEqual({ type: 'lose' });
   });
 
-  it('emits win when the last enemy is destroyed', () => {
+  it('emits win only when EVERY enemy is destroyed, not the first', () => {
     const w = makeWorld();
-    w.tanks[1].alive = false; // only enemy dead
+    w.tanks[1].alive = false; // one of two enemies down
+    let events: SimEvent[] = [];
+    resolveStatus(w, events);
+    expect(w.status).toBe('playing');
+    expect(events).toEqual([]);
+
+    w.tanks[2].alive = false; // now the last one
+    events = [];
+    resolveStatus(w, events);
+    expect(w.status).toBe('win');
+    expect(events).toContainEqual({ type: 'win' });
+  });
+
+  it('does not re-emit win when called again on an already-won world', () => {
+    const w = makeWorld();
+    w.tanks[1].alive = false;
+    w.tanks[2].alive = false;
+    resolveStatus(w, []);
+    const events: SimEvent[] = [];
+    resolveStatus(w, events);
+    resolveStatus(w, events);
+    expect(events).toEqual([]); // one win, one victory stinger
+  });
+
+  it('counts a mutual kill as a win rather than discarding it', () => {
+    // Trading your last kill for a life used to lose the win entirely:
+    // resetArena revived the enemies before the win check ran, so the player
+    // silently paid a life and the arena restarted.
+    const w = makeWorld();
+    w.tanks[0].alive = false;
+    w.tanks[1].alive = false;
+    w.tanks[2].alive = false;
     const events: SimEvent[] = [];
     resolveStatus(w, events);
     expect(w.status).toBe('win');
+    expect(w.lives).toBe(3); // no life deducted
     expect(events).toContainEqual({ type: 'win' });
   });
 
@@ -175,7 +213,8 @@ describe('step() composition (full pipeline)', () => {
 
   it('reports win through the pipeline when the last enemy is already dead', () => {
     const w = makeWorld();
-    w.tanks[1].alive = false; // only enemy dead going in
+    w.tanks[1].alive = false;
+    w.tanks[2].alive = false; // every enemy dead going in
     const r = step(w, { ...fireInput, fire: false });
     expect(r.world.status).toBe('win');
     expect(r.events).toContainEqual({ type: 'win' });
@@ -184,6 +223,7 @@ describe('step() composition (full pipeline)', () => {
   it('latches a finished game: once status is not playing, step() skips the pipeline', () => {
     const w = makeWorld();
     w.tanks[1].alive = false;
+    w.tanks[2].alive = false;
     const won = step(w, { ...fireInput, fire: false }).world;
     expect(won.status).toBe('win');
     // further input is ignored: firing produces no shell, status stays win
@@ -226,7 +266,9 @@ describe('round phases (player path via applyPlayerInput)', () => {
 
   it('grace: movement is allowed, but fire and mines are still suppressed', () => {
     const w = freshWorld();
-    w.tick = COUNTDOWN_TICKS; // first grace tick
+    // roundStartTick is 1 (the first tick step() will simulate), so the first
+    // grace tick is COUNTDOWN_TICKS + 1, not COUNTDOWN_TICKS.
+    w.tick = COUNTDOWN_TICKS + 1; // first grace tick
     const player = w.tanks[0];
     applyPlayerInput(w, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: true, mine: true }, []);
     expect(player.desiredMove).toEqual({ x: 1, y: 0 });
@@ -236,24 +278,24 @@ describe('round phases (player path via applyPlayerInput)', () => {
 
   it('boundary: the last grace tick still suppresses fire; the first live tick fires normally', () => {
     const lastGrace = freshWorld();
-    lastGrace.tick = COUNTDOWN_TICKS + GRACE_TICKS - 1;
+    lastGrace.tick = COUNTDOWN_TICKS + GRACE_TICKS; // elapsed = last grace tick
     applyPlayerInput(lastGrace, fireInput, []);
     expect(lastGrace.bullets.length).toBe(0);
 
     const firstLive = freshWorld();
-    firstLive.tick = COUNTDOWN_TICKS + GRACE_TICKS;
+    firstLive.tick = COUNTDOWN_TICKS + GRACE_TICKS + 1;
     applyPlayerInput(firstLive, fireInput, []);
     expect(firstLive.bullets.length).toBe(1);
   });
 
   it('boundary: the last countdown tick still blocks movement; the first grace tick allows it', () => {
     const lastCountdown = freshWorld();
-    lastCountdown.tick = COUNTDOWN_TICKS - 1;
+    lastCountdown.tick = COUNTDOWN_TICKS; // elapsed = COUNTDOWN_TICKS - 1
     applyPlayerInput(lastCountdown, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: false, mine: false }, []);
     expect(lastCountdown.tanks[0].desiredMove).toEqual({ x: 0, y: 0 });
 
     const firstGrace = freshWorld();
-    firstGrace.tick = COUNTDOWN_TICKS;
+    firstGrace.tick = COUNTDOWN_TICKS + 1;
     applyPlayerInput(firstGrace, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: false, mine: false }, []);
     expect(firstGrace.tanks[0].desiredMove).toEqual({ x: 1, y: 0 });
   });
@@ -268,7 +310,9 @@ describe('round phases (player path via applyPlayerInput)', () => {
 
     expect(w.lives).toBe(2);
     expect(player.alive).toBe(true);
-    expect(w.roundStartTick).toBe(500000); // restarted at the CURRENT tick, not 0
+    // The NEXT tick step() will simulate, not the tick the reset happened on --
+    // step() increments before evaluating the phase.
+    expect(w.roundStartTick).toBe(500001);
 
     // Player: fire input on the very next evaluation still spawns nothing.
     applyPlayerInput(w, fireInput, []);

@@ -33,7 +33,10 @@ export function circleVsAABB(center: Vec2, radius: number, box: AABB): Hit {
   const dx = center.x - cx;
   const dy = center.y - cy;
   const distSq = dx * dx + dy * dy;
-  if (distSq >= radius * radius) return { hit: false, push: { x: 0, y: 0 } };
+  // Negated rather than `>=`: every comparison against NaN is false, so a `>=`
+  // guard falls THROUGH to the hit branch and reports a NaN circle as touching
+  // every box in the world. Failing closed keeps a poisoned entity inert.
+  if (!(distSq < radius * radius)) return { hit: false, push: { x: 0, y: 0 } };
   const dist = Math.sqrt(distSq);
   const depth = radius - dist;
   return { hit: true, push: { x: (dx / dist) * depth, y: (dy / dist) * depth } };
@@ -44,7 +47,9 @@ export function circleVsCircle(a: Vec2, ra: number, b: Vec2, rb: number): Hit {
   const dy = a.y - b.y;
   const r = ra + rb;
   const distSq = dx * dx + dy * dy;
-  if (distSq >= r * r) return { hit: false, push: { x: 0, y: 0 } };
+  // See circleVsAABB: `>=` fails OPEN on NaN and would make a NaN bullet kill
+  // every tank in the arena, one per tick, at any distance.
+  if (!(distSq < r * r)) return { hit: false, push: { x: 0, y: 0 } };
   const dist = Math.sqrt(distSq);
   if (dist === 0) {
     // concentric: pick a deterministic default axis
@@ -232,6 +237,15 @@ export function driveVelocity(tank: Tank): Vec2 {
   return vscale(driveDirection(tank.desiredMove), TANK_SPEED);
 }
 
+/** Push a tank out of every non-destroyed wall it overlaps. */
+export function resolveWalls(tank: Tank, walls: Wall[]): void {
+  for (const wall of walls) {
+    if (wall.destroyed) continue;
+    const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
+    if (hit.hit) tank.pos = vadd(tank.pos, hit.push);
+  }
+}
+
 export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
   const move = driveDirection(tank.desiredMove);
   const mlen = vlen(tank.desiredMove);
@@ -239,12 +253,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
   tank.pos = vadd(tank.pos, vscale(move, TANK_SPEED * dt));
   if (mlen > 0) tank.bodyAngle = angleOf(move);
 
-  // slide: resolve penetration against every non-destroyed wall
-  for (const wall of walls) {
-    if (wall.destroyed) continue;
-    const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
-    if (hit.hit) tank.pos = vadd(tank.pos, hit.push);
-  }
+  resolveWalls(tank, walls); // slide along whatever it ran into
 }
 
 export function separateTanks(tanks: Tank[]): void {

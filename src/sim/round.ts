@@ -17,6 +17,12 @@ export type RoundPhase = 'countdown' | 'grace' | 'live';
  * runtime circularity.
  */
 export function roundPhase(world: World): RoundPhase {
+  // `roundStartTick` is the tick number the round's FIRST simulated tick will
+  // carry, not the tick the reset happened on. step() increments `tick` before
+  // running the pipeline, so anchoring on the pre-step value meant a simulated
+  // tick never observed elapsed === 0 and the countdown ran 179 ticks against a
+  // COUNTDOWN_TICKS of 180. See resetArena and createWorld, which both anchor
+  // to tick + 1.
   const elapsed = world.tick - world.roundStartTick;
   if (elapsed < COUNTDOWN_TICKS) return 'countdown';
   if (elapsed < COUNTDOWN_TICKS + GRACE_TICKS) return 'grace';

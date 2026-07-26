@@ -129,6 +129,12 @@ export function fromAngle(r: number): Vec2 {
 // resolved direction is arbitrary but deterministic and stable call-to-call.
 export function slewAngle(current: number, target: number, maxDelta: number): number {
   const TWO_PI = Math.PI * 2;
+  // NaN sink: without this, `Math.abs(NaN) <= maxDelta` is false and the fall-
+  // through returns `current + Math.sign(NaN) * maxDelta` -- NaN. Once the
+  // angle is NaN it stays NaN for the rest of the game, because every later
+  // (good) target is subtracted from a NaN `current`. Hold the last good angle.
+  if (!Number.isFinite(target)) return current;
+  if (!Number.isFinite(current)) return target;
   let delta = (target - current) % TWO_PI;
   if (delta > Math.PI) delta -= TWO_PI;
   if (delta < -Math.PI) delta += TWO_PI;

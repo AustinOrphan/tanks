@@ -11,6 +11,8 @@ import {
   RICOCHET_BOUNCES,
   DT,
   bulletConfig,
+  BULLET_RADIUS,
+  TANK_RADIUS,
 } from './constants'
 
 function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): Tank {
@@ -45,6 +47,14 @@ describe('spawnBullet + ownerShellCount', () => {
     expect(ownerShellCount(world, 1)).toBe(SHELL_CAP)
     expect(spawnBullet(world, 1, 0, 'normal', events)).toBe(false)
     expect(ownerShellCount(world, 1)).toBe(SHELL_CAP)
+    // A refused shot must also be SILENT. Asserting only the return value and
+    // the shell count leaves the event stream unchecked, so pushing a `fire`
+    // event before the capped `return false` passes every other assertion here
+    // -- and the audio director (src/audio/director.ts) plays a cannon report
+    // for every `fire` event it sees. The player would hear five reloads' worth
+    // of phantom shots while the tank sat empty. mines.test.ts already pins the
+    // equivalent for a capped mine drop; this mirrors it.
+    expect(events.filter((e) => e.type === 'fire')).toHaveLength(SHELL_CAP)
   })
 
   it('rejects a NON-player owner\'s shell at SHELL_CAP (cap applies to every owner)', () => {
@@ -59,6 +69,7 @@ describe('spawnBullet + ownerShellCount', () => {
     expect(spawnBullet(world, 2, 0, 'normal', events)).toBe(false)
     expect(ownerShellCount(world, 2)).toBe(SHELL_CAP)
     expect(world.bullets.length).toBe(beforeBulletCount) // no bullet appended
+    expect(events.filter((e) => e.type === 'fire')).toHaveLength(SHELL_CAP) // ...and no phantom report
   })
 
   it('rejects a dead owner (defence-in-depth: stepAi already skips dead tanks, but this is the chokepoint)', () => {
@@ -345,6 +356,75 @@ describe('resolveBulletHits', () => {
     resolveBulletHits(world, [])
     expect(enemy.alive).toBe(true)
     expect(b.alive).toBe(true)
+  })
+
+  it('resolves the hit/miss boundary at exactly TANK_RADIUS + BULLET_RADIUS', () => {
+    // THE DISCRIMINATING BAND. Every other hit test above places the bullet
+    // 0.1-0.4 from a 0.5-radius tank centre (deep inside the hull) and every
+    // miss test puts it at (3, 3) (four diameters away) -- nothing anywhere
+    // near the contact distance. Consequence: BULLET_RADIUS could be mutated
+    // 0.1 -> 1.0, a tenfold fattening that makes every shell a shotgun, and
+    // the whole suite stayed green.
+    //
+    // resolveBulletHits models the collision as circleVsCircle(bullet,
+    // BULLET_RADIUS, tank, TANK_RADIUS), i.e. contact at centre distance
+    // TANK_RADIUS + BULLET_RADIUS = 0.5 + 0.1 = 0.6.
+    //
+    // The probe distances below are LITERALS, deliberately, not expressions in
+    // those constants. Writing `TANK_RADIUS + BULLET_RADIUS + 0.05` would make
+    // this test float with BULLET_RADIUS exactly like the tests it is here to
+    // reinforce -- the band would obediently follow the constant to 1.0 and the
+    // mutation would survive a second time. Literals make the band an absolute
+    // claim about the game's geometry.
+    const CONTACT = 0.6
+    const MISS_AT = 0.65 // contact + 0.05
+    const HIT_AT = 0.55 // contact - 0.05
+
+    // If a deliberate retune ever moves contact out from under those literals,
+    // fail here with an explanation rather than silently probing the wrong band.
+    expect(TANK_RADIUS + BULLET_RADIUS).toBe(CONTACT)
+
+    // Just OUTSIDE contact: the shell passes by, harmlessly, and survives.
+    {
+      const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 0, y: 0 } })
+      const world = createWorld({ walls: [], tanks: [enemy], spawns: [], lives: 3 })
+      const b: Bullet = {
+        id: 10,
+        ownerId: 1, // not the enemy: the muzzle-immunity branch never applies
+        type: 'normal',
+        pos: { x: MISS_AT, y: 0 },
+        vel: { x: 0, y: NORMAL_SPEED },
+        bouncesLeft: 1,
+        alive: true,
+      }
+      world.bullets.push(b)
+      const events: SimEvent[] = []
+      resolveBulletHits(world, events)
+      expect(enemy.alive).toBe(true)
+      expect(b.alive).toBe(true)
+      expect(events).toEqual([])
+    }
+
+    // Just INSIDE contact: the same shell, 0.1 closer, is a kill.
+    {
+      const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 0, y: 0 } })
+      const world = createWorld({ walls: [], tanks: [enemy], spawns: [], lives: 3 })
+      const b: Bullet = {
+        id: 10,
+        ownerId: 1,
+        type: 'normal',
+        pos: { x: HIT_AT, y: 0 },
+        vel: { x: 0, y: NORMAL_SPEED },
+        bouncesLeft: 1,
+        alive: true,
+      }
+      world.bullets.push(b)
+      const events: SimEvent[] = []
+      resolveBulletHits(world, events)
+      expect(enemy.alive).toBe(false)
+      expect(b.alive).toBe(false)
+      expect(events.some((e) => e.type === 'tank-destroyed')).toBe(true)
+    }
   })
 
   it('does not self-destruct in the muzzle but can self-hit on a ricochet return', () => {

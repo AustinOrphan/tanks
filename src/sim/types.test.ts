@@ -56,8 +56,26 @@ describe('slewAngle', () => {
   it('returns the target exactly when within maxDelta (no overshoot)', () => {
     // remaining (0.05) < maxDelta (0.1) -> snaps to target exactly.
     expect(slewAngle(0, 0.05, 0.1)).toBe(0.05);
-    // remaining === maxDelta exactly (boundary uses <=) -> also returns target exactly.
-    expect(slewAngle(0, 0.1, 0.1)).toBe(0.1);
+  });
+
+  it('snaps to the target when the remaining arc is EXACTLY maxDelta (the <= boundary)', () => {
+    // This case used to be written `slewAngle(0, 0.1, 0.1)`, with a comment
+    // claiming it pinned the `<=`. It did not: from current = 0 both branches
+    // compute the same number (`return target` gives 0.1; the fall-through
+    // gives 0 + sign(0.1) * 0.1 = 0.1), so flipping `<=` to `<` changed
+    // nothing. The mutation survived the whole suite.
+    //
+    // Discriminating the two branches needs (a) |delta| === maxDelta exactly,
+    // so the comparison is genuinely AT the boundary, and (b) a non-zero
+    // `current`, so `current + maxDelta` is not bit-identical to `target`.
+    //   delta   = (0.3 - 0.03) % 2pi = 0.27 exactly (both are doubles that
+    //             happen to subtract cleanly), and maxDelta is the same double.
+    //   `<=`  -> returns `target`             = 0.3
+    //   `<`   -> returns 0.03 + 1 * 0.27      = 0.30000000000000004
+    // `toBe` (not toBeCloseTo) is the point: the whole contract of this branch
+    // is that the turret lands on the requested angle EXACTLY rather than one
+    // ulp past it, so a turret asked to hold still cannot drift.
+    expect(slewAngle(0.03, 0.3, 0.27)).toBe(0.3);
   });
 
   it('is a no-op when current === target', () => {
