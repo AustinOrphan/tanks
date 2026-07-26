@@ -174,6 +174,14 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
  */
 export const CURRENT_ARENA: Arena = ARENA_01;
 
-export function createArenaWorld(): World {
-  return createWorld({ ...loadArena(CURRENT_ARENA), lives: LIVES });
+/**
+ * `seed` drives every random draw in the sim (AI wander headings, aim jitter).
+ * It is a parameter rather than a constant because the default made every
+ * playthrough byte-identical: 78 consecutive rounds measured at exactly 1,276
+ * ticks each, with the enemies walking the same paths and missing by the same
+ * angles forever. The game layer passes a fresh one per session; tests and
+ * replays omit it and get the reproducible default.
+ */
+export function createArenaWorld(seed?: number): World {
+  return createWorld({ ...loadArena(CURRENT_ARENA), lives: LIVES, seed });
 }

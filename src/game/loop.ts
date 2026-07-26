@@ -22,7 +22,13 @@ export function startGame(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
 ): { dispose(): void } {
-  let curr: World = createArenaWorld();
+  // A fresh seed per world. Date.now() is illegal inside sim/ (it would break
+  // replay determinism) but correct here at the boundary: the sim stays a pure
+  // function of the seed it is handed, and only the game layer decides what
+  // that seed is.
+  const newSeed = (): number => (Date.now() ^ (Date.now() >>> 9)) >>> 0 || 1;
+
+  let curr: World = createArenaWorld(newSeed());
   let prev: World = curr;
 
   const { width, height } = arenaBounds(CURRENT_ARENA);
@@ -40,7 +46,7 @@ export function startGame(
   }
 
   function resetWorld(): void {
-    curr = createArenaWorld();
+    curr = createArenaWorld(newSeed());
     prev = curr;
     acc = 0;
     updateHudStats();
@@ -48,7 +54,7 @@ export function startGame(
 
   // --- HUD wiring -----------------------------------------------------------
   hud.onMuteToggle(() => {
-    audio.toggleMute();
+    hud.setMuted(audio.toggleMute());
   });
   hud.onVolumeChange((v) => {
     audio.setVolume(v);
@@ -77,7 +83,12 @@ export function startGame(
 
   // --- global mute hotkey (M) ----------------------------------------------
   const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'm' || e.key === 'M') audio.toggleMute();
+    // Auto-repeat guard, as in input.ts: holding M fires ~30 keydowns a second,
+    // so mute would toggle ~30 times and land on whichever state the repeat
+    // count's parity picked. Also ignore keys aimed at a focused control.
+    if (e.repeat) return;
+    if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) return;
+    if (e.key === 'm' || e.key === 'M') hud.setMuted(audio.toggleMute());
   };
   window.addEventListener('keydown', onKey);
 
