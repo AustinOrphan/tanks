@@ -10,6 +10,13 @@ export interface AudioEngine {
   isMuted(): boolean;
   setVolume(v: number): void;
   getVolume(): number;
+  /**
+   * Open the audio context from inside a user-gesture handler (the Start
+   * button). Safari/iOS will not start a context resumed from anywhere else,
+   * and the sim's sounds are emitted from the rAF loop, which is never a
+   * gesture. Safe to call repeatedly.
+   */
+  unlock(): void;
   dispose(): void;
 }
 
@@ -63,13 +70,36 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     music = null;
   }
 
-  function ensureCtx(): AudioContext | null {
+  // True while a resume() is in flight. Browsers suspend a context created
+  // before a user gesture and can re-suspend a running one (tab hidden, OS
+  // audio focus loss), so a suspended context must be retried -- but resume()
+  // is ASYNCHRONOUS and, on WebKit, a resume issued outside a user gesture is
+  // parked on [[pending promises]] and may never settle at all. Without this
+  // latch, `state` stays 'suspended' and every sound from the rAF loop starts
+  // another resume: one retained pending promise per shot fired, forever.
+  let resuming = false;
+
+  // `force` is for the user-gesture path (unlock). The latch above exists to
+  // throttle the rAF loop, but a WebKit resume that never settles leaves it
+  // stuck true forever -- which would make the latch swallow the one call that
+  // can actually succeed. A gesture is rare and user-initiated: always retry.
+  function tryResume(c: AudioContext, force = false): void {
+    if (c.state !== 'suspended') return;
+    if (resuming && !force) return;
+    resuming = true;
+    // .catch rather than `void`: resume() rejects with InvalidStateError on a
+    // closed context, and older WebKit rejected on gesture-policy failures.
+    // `void` would surface those as Uncaught (in promise) console noise.
+    c.resume()
+      .catch(() => {})
+      .finally(() => {
+        resuming = false;
+      });
+  }
+
+  function ensureCtx(force = false): AudioContext | null {
     if (ctx) {
-      // Browsers suspend an AudioContext created before a user gesture, and can
-      // re-suspend a running one (tab hidden, OS audio focus loss). A suspended
-      // context accepts every call below in silence, so re-check on every use
-      // rather than only at creation.
-      if (ctx.state === 'suspended') void ctx.resume();
+      tryResume(ctx, force);
       return ctx;
     }
     const AC =
@@ -79,7 +109,7 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
         : undefined;
     if (!AC) return null;
     ctx = new AC();
-    if (ctx.state === 'suspended') void ctx.resume();
+    tryResume(ctx, force);
     return ctx;
   }
 
@@ -137,6 +167,9 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     },
     getVolume() {
       return masterVolume;
+    },
+    unlock() {
+      ensureCtx(true);
     },
     dispose() {
       for (const k of Object.keys(sounds)) sounds[k]?.unload();

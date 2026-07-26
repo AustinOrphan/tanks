@@ -1,6 +1,6 @@
 import { DT } from '../sim/constants';
 import { step, type World } from '../sim/world';
-import { ARENA_01, arenaBounds, createArenaWorld } from '../sim/arena';
+import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { SimEvent } from '../sim/events';
 import { createInputController } from '../input/input';
 import { createRenderer } from '../render/renderer';
@@ -25,7 +25,7 @@ export function startGame(
   let curr: World = createArenaWorld();
   let prev: World = curr;
 
-  const { width, height } = arenaBounds(ARENA_01);
+  const { width, height } = arenaBounds(CURRENT_ARENA);
 
   const renderer = createRenderer(canvas, width, height);
   const input = createInputController(canvas, (x, y) => renderer.screenToGround(x, y));
@@ -54,6 +54,10 @@ export function startGame(
     audio.setVolume(v);
   });
   hud.onStartRestart(() => {
+    // This click is the only guaranteed user gesture in the game, and Safari
+    // will not open an AudioContext resumed from anywhere else. Sounds are
+    // emitted from the rAF loop below, which never qualifies.
+    audio.unlock();
     if (sm.state === 'title') {
       sm.startPlaying();
     } else {

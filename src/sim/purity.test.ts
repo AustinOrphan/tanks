@@ -45,16 +45,48 @@ const FORBIDDEN_IMPORT_PATTERNS: Array<{ token: string; re: RegExp }> = [
   { token: `from 'three/...'`, re: /from\s+['"]three\// },
   { token: `from 'howler'`, re: /from\s+['"]howler['"]/ },
   { token: `from 'howler/...'`, re: /from\s+['"]howler\// },
-  // Matching only the bare specifiers above left a hole big enough to drive the
-  // whole violation through: `import { createScene } from '../render/scene'`
-  // inside src/sim/ names neither 'three' nor 'howler', so it PASSED the guard
-  // while transitively pulling all of three into the sim's module graph.
-  // Impure layers are forbidden by PATH, not just by package name.
-  { token: `from '../render/...'`, re: /from\s+['"](?:\.\.\/)+render(?:\/|['"])/ },
-  { token: `from '../audio/...'`, re: /from\s+['"](?:\.\.\/)+audio(?:\/|['"])/ },
-  { token: `from '../game/...'`, re: /from\s+['"](?:\.\.\/)+game(?:\/|['"])/ },
-  { token: `from '../input/...'`, re: /from\s+['"](?:\.\.\/)+input(?:\/|['"])/ },
 ];
+
+// Every module specifier in a file, however it is written. Matching only
+// `from '...'` (as an earlier version did) missed two silent escapes:
+// side-effect imports (`import '../render/scene';`) and dynamic ones
+// (`await import('../render/scene')`), neither of which uses the `from`
+// keyword at all.
+const SPECIFIER_RES: RegExp[] = [
+  /\bfrom\s+['"]([^'"]+)['"]/g, // import x from '...' / export ... from '...'
+  /\bimport\s+['"]([^'"]+)['"]/g, // side-effect: import '...'
+  /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g, // dynamic: import('...')
+  /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+];
+
+/**
+ * Resolve a RELATIVE specifier against the importing file and report whether
+ * it escapes src/sim/.
+ *
+ * Deliberately resolution-based rather than shape-based. Matching the literal
+ * text `'../render'` would be both too strict and too loose: from
+ * `sim/ai/grey.ts`, `'../render'` resolves to `sim/render.ts` -- perfectly
+ * pure -- while from `sim/world.ts` the same text escapes the sim entirely.
+ * Only the resolved path knows the difference.
+ *
+ * `path` is an import.meta.glob key: './world.ts', './ai/grey.ts'.
+ */
+function escapesSim(path: string, specifier: string): boolean {
+  if (!specifier.startsWith('.')) return false; // bare package: handled above
+  const segments = path.replace(/^\.\//, '').split('/');
+  segments.pop(); // drop the filename, leaving the importing file's directory
+  for (const part of specifier.split('/')) {
+    if (part === '.' || part === '') continue;
+    if (part === '..') {
+      // Popping past the sim root is the escape.
+      if (segments.length === 0) return true;
+      segments.pop();
+    } else {
+      segments.push(part);
+    }
+  }
+  return false;
+}
 
 // Bare-identifier DOM-only globals. Word-boundary match so `windowSize` etc.
 // does not false-positive.
@@ -72,6 +104,16 @@ const FORBIDDEN_NONDETERMINISM: Array<{ token: string; re: RegExp }> = [
   { token: 'Date.now', re: /\bDate\s*\.\s*now\b/ },
   { token: 'new Date', re: /\bnew\s+Date\b/ },
   { token: 'performance', re: /\bperformance\b/ },
+  { token: 'crypto', re: /\bcrypto\b/ },
+  // Timers are the EASIEST way to break determinism, and were missing from the
+  // first version of this list. A `setTimeout(() => world.status = 'win', 500)`
+  // in the sim destroys replay determinism more completely than a Date.now()
+  // would, because the step count at which it lands depends on the host's
+  // scheduler. The sim advances only via step(); nothing in it may self-schedule.
+  { token: 'setTimeout', re: /\bsetTimeout\b/ },
+  { token: 'setInterval', re: /\bsetInterval\b/ },
+  { token: 'requestAnimationFrame', re: /\brequestAnimationFrame\b/ },
+  { token: 'queueMicrotask', re: /\bqueueMicrotask\b/ },
 ];
 
 // Comments ARE excluded from the global-identifier scan (e.g. a sim test
@@ -200,6 +242,15 @@ describe('sim purity guard', () => {
       for (const { token, re } of FORBIDDEN_IMPORT_PATTERNS) {
         if (re.test(src)) {
           violations.push(`${path}: forbidden import "${token}"`);
+        }
+      }
+
+      for (const re of SPECIFIER_RES) {
+        for (const m of src.matchAll(re)) {
+          const specifier = m[1];
+          if (escapesSim(path, specifier)) {
+            violations.push(`${path}: import "${specifier}" escapes src/sim/`);
+          }
         }
       }
 

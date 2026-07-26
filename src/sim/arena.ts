@@ -166,6 +166,14 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
   return { walls, tanks, spawns };
 }
 
+/**
+ * The arena the game currently ships. Both `createArenaWorld()` and the
+ * renderer's sizing read THIS, so pointing the game at a new arena is one
+ * edit. Referencing ARENA_01 directly from the game layer would let the
+ * simulated arena and the rendered arena drift apart silently.
+ */
+export const CURRENT_ARENA: Arena = ARENA_01;
+
 export function createArenaWorld(): World {
-  return createWorld({ ...loadArena(ARENA_01), lives: LIVES });
+  return createWorld({ ...loadArena(CURRENT_ARENA), lives: LIVES });
 }

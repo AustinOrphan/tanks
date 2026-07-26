@@ -30,6 +30,26 @@ describe('createHud volume control', () => {
     expect(Number(volumeSlider(root).value)).toBe(DEFAULT_VOLUME);
   });
 
+  it('keeps DEFAULT_VOLUME on the step grid the browser will snap to', () => {
+    // Real browsers sanitize <input type="range"> onto the `step` grid; jsdom
+    // does not. A DEFAULT_VOLUME of, say, 1/3 would leave the test above green
+    // while the real HUD displayed 0.33 and the engine ran at 0.3333... --
+    // the same lie, just below this test's resolution.
+    const { root } = mount();
+    const step = Number(volumeSlider(root).step);
+
+    // Tolerance, not equality: 0.6 / 0.01 is 59.999999999999993 in binary
+    // floating point, so an exact `toBe(Math.round(...))` would fail on a
+    // value that is perfectly on-grid.
+    const steps = DEFAULT_VOLUME / step;
+    expect(Math.abs(steps - Math.round(steps))).toBeLessThan(1e-9);
+  });
+
+  it('opts out of Firefox form-value restoration', () => {
+    const { root } = mount();
+    expect(volumeSlider(root).getAttribute('autocomplete')).toBe('off');
+  });
+
   it('reports slider movement to subscribers', () => {
     const { hud: h, root } = mount();
     const seen: number[] = [];

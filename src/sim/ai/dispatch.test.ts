@@ -234,7 +234,7 @@ describe('stepAi', () => {
       expect(d.fireType).toBe('ricochet');
     });
 
-    it('unknown/player kind hits the default branch: no-op decision with nextTimer 0', () => {
+    it('player kind returns an inert no-op decision with nextTimer 0', () => {
       const player = tank(1, 'player', { x: 0, y: 0 }, { turretAngle: 0.75 });
       const other = tank(2, 'player', { x: 5, y: 0 });
       const d = decideAi(world([player, other]), player);

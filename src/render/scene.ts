@@ -89,9 +89,11 @@ export function createScene(
   function dispose(): void {
     groundGeo.dispose();
     groundMat.dispose();
-    // The shadow map is a 2048x2048 depth texture allocated lazily by the
-    // renderer; three does not free it for us when the light is dropped.
-    sun.shadow.map?.dispose();
+    // Light.dispose() -> shadow.dispose() frees BOTH shadow render targets:
+    // `map` and `mapPass`, the latter allocated only by the VSM path. Calling
+    // shadow.map.dispose() directly would leak mapPass the moment anyone
+    // switches shadowMap.type to VSMShadowMap, one line up in this same file.
+    sun.dispose();
     renderer.dispose();
   }
 

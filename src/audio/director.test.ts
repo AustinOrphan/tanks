@@ -22,6 +22,7 @@ function makeSpyEngine(): { engine: AudioEngine; calls: PlayCall[] } {
     isMuted: () => false,
     setVolume: () => {},
     getVolume: () => DEFAULT_VOLUME,
+    unlock: () => {},
     dispose: () => {},
   };
   return { engine, calls };

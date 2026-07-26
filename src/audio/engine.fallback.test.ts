@@ -49,6 +49,12 @@ interface FakeNode {
 
 class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
+  /**
+   * Models WebKit's rule, not Chrome's: a resume() issued outside a user
+   * gesture never settles. Flip via grantGesture() to model a real click.
+   */
+  static gestureGranted = false;
+
   state: AudioContextState = 'suspended';
   currentTime = 0;
   destination = {};
@@ -58,10 +64,19 @@ class FakeAudioContext {
   constructor() {
     FakeAudioContext.instances.push(this);
   }
+  /**
+   * Real AudioContext.resume() is ASYNCHRONOUS: `state` stays 'suspended'
+   * until the promise settles, and per spec a resume that is not yet permitted
+   * is parked on [[pending promises]] and may never settle at all. An earlier
+   * version of this fake flipped `state` synchronously, which made the engine
+   * look like it de-duplicated resume calls when it did not.
+   */
   resume(): Promise<void> {
     this.resumeCalls += 1;
-    this.state = 'running';
-    return Promise.resolve();
+    if (!FakeAudioContext.gestureGranted) return new Promise<void>(() => {}); // never settles
+    return Promise.resolve().then(() => {
+      this.state = 'running';
+    });
   }
   createOscillator(): FakeNode & { frequency: { value: number }; type: string; start(): void; stop(_t: number): void } {
     const self = this;
@@ -82,6 +97,7 @@ class FakeAudioContext {
     };
   }
   close(): Promise<void> {
+    this.state = 'closed';
     return Promise.resolve();
   }
 }
@@ -91,6 +107,7 @@ const flushLoadErrors = (): Promise<void> => Promise.resolve();
 
 beforeEach(() => {
   FakeAudioContext.instances = [];
+  FakeAudioContext.gestureGranted = false;
   (window as unknown as { AudioContext: unknown }).AudioContext = FakeAudioContext;
 });
 
@@ -112,10 +129,13 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('resumes a suspended AudioContext, so the first sound is audible', async () => {
+    FakeAudioContext.gestureGranted = true;
     const engine = createAudioEngine(AUDIO_MANIFEST);
     await flushLoadErrors();
 
     engine.play('cannon');
+    await Promise.resolve();
+    await Promise.resolve();
 
     const ctx = FakeAudioContext.instances[0];
     expect(ctx.resumeCalls).toBe(1);
@@ -123,7 +143,11 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     engine.dispose();
   });
 
-  it('does not call resume() again once the context is already running', async () => {
+  it('does not pile up resume() calls while one is still in flight', async () => {
+    // The sim emits sounds from the rAF loop, several per second. On WebKit a
+    // resume() issued outside a gesture never settles, so `state` stays
+    // 'suspended' forever -- a naive `if (suspended) resume()` on every sound
+    // retains a pending promise per shot fired for the whole session.
     const engine = createAudioEngine(AUDIO_MANIFEST);
     await flushLoadErrors();
 
@@ -132,8 +156,45 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     engine.play('explosion');
 
     const ctx = FakeAudioContext.instances[0];
+    expect(ctx.state).toBe('suspended'); // no gesture yet: the fake models WebKit
     expect(ctx.resumeCalls).toBe(1);
-    expect(ctx.started).toEqual([180, 900, 90]);
+    expect(ctx.started).toEqual([180, 900, 90]); // still renders tones regardless
+    engine.dispose();
+  });
+
+  it('unlock() resumes the context from a real user gesture', async () => {
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    await flushLoadErrors();
+    FakeAudioContext.gestureGranted = true;
+
+    engine.unlock();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx).toBeDefined();
+    expect(ctx.state).toBe('running');
+    engine.dispose();
+  });
+
+  it('retries the resume on the next sound after a failed unlock', async () => {
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    await flushLoadErrors();
+
+    engine.play('cannon'); // gesture not granted -> resume never settles
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx.resumeCalls).toBe(1);
+
+    // The user finally interacts; the in-flight resume settles and the next
+    // sound must not be blocked by a stale "already resuming" latch.
+    FakeAudioContext.gestureGranted = true;
+    engine.unlock();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ctx.state).toBe('running');
+    engine.play('ping');
+    expect(ctx.started).toEqual([180, 900]);
     engine.dispose();
   });
 
@@ -145,6 +206,12 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     engine.play('cannon');
 
     expect(FakeAudioContext.instances).toHaveLength(0);
+
+    // Contrast: the same call unmuted DOES render a tone, so this test cannot
+    // pass merely because play() stopped working.
+    engine.setMuted(false);
+    engine.play('cannon');
+    expect(FakeAudioContext.instances[0]?.started).toEqual([180]);
     engine.dispose();
   });
 });
