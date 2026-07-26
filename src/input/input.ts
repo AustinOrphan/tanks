@@ -19,11 +19,46 @@ export function createInputController(
   // preventDefault on them -- makes the volume slider and mute button
   // keyboard-inoperable: Right Arrow would strafe instead of moving the slider,
   // Space would drop a mine instead of activating the button.
-  const isInteractive = (t: EventTarget | null): boolean =>
-    t instanceof HTMLElement && t.closest('input,button,select,textarea,[contenteditable]') !== null;
+  // Text entry claims EVERY key: a 'w' typed into a field is a 'w', never a throttle.
+  const TEXT_INPUT_TYPES = new Set([
+    'text', 'search', 'email', 'url', 'tel', 'password', 'number', 'date', 'time',
+  ]);
+  const isTextEntry = (el: HTMLElement): boolean => {
+    const field = el.closest('textarea,[contenteditable],input');
+    if (field === null) return false;
+    if (!(field instanceof HTMLInputElement)) return true; // textarea / contenteditable
+    return TEXT_INPUT_TYPES.has(field.type.toLowerCase());
+  };
+  // A widget like a button, slider or select claims only the keys it actually operates on.
+  const isWidget = (el: HTMLElement): boolean =>
+    el.closest('input,button,select,[contenteditable],textarea') !== null;
+  const WIDGET_KEYS = new Set([
+    ' ', 'spacebar', 'enter', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'home', 'end',
+  ]);
+
+  /**
+   * True if the focused element should swallow this key instead of the tank driving on it.
+   *
+   * The old rule rejected the key whenever ANY interactive element had focus, which is not
+   * the same question. e.target on a KeyboardEvent is the FOCUSED element, and clicking the
+   * mute button or dragging the volume slider leaves it focused -- so after touching either
+   * one, every keystroke was discarded and the tank was undriveable until the player
+   * happened to click the canvas again. Nothing on screen explained why.
+   *
+   * Split by what the focused element genuinely needs: text entry takes everything, while a
+   * button or slider only takes the keys that operate it (Space/Enter to activate, arrows to
+   * adjust). So WASD keeps driving with the slider focused, and the slider keeps responding
+   * to arrow keys for anyone navigating by keyboard. The HUD also drops focus after a
+   * pointer interaction, which returns the arrow keys to the tank for mouse players.
+   */
+  const swallowsKey = (t: EventTarget | null, key: string): boolean => {
+    if (!(t instanceof HTMLElement)) return false;
+    if (isTextEntry(t)) return true;
+    return isWidget(t) && WIDGET_KEYS.has(key);
+  };
 
   const onKeyDown = (e: KeyboardEvent): void => {
-    if (isInteractive(e.target)) return;
+    if (swallowsKey(e.target, e.key.toLowerCase())) return;
     const k = e.key.toLowerCase();
     // Prevent the browser's default scroll behavior for keys the game uses
     // (Space would otherwise scroll the page; arrow keys too).

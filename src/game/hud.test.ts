@@ -183,3 +183,36 @@ describe('createHud panel', () => {
     return root.querySelector('.hud-mute') as HTMLButtonElement;
   }
 });
+
+describe('createHud does not keep keyboard focus after a pointer interaction', () => {
+  it('drops focus from the mute button when it is clicked with the mouse', () => {
+    // A focused HUD control legitimately claims Space/Enter/arrows, so a mouse player who
+    // clicks Mute would silently lose arrow-key driving and the Space mine-drop until they
+    // clicked elsewhere. Keyboard activation reports detail 0 and must KEEP focus, so
+    // anyone tabbing through the HUD still has it work.
+    const { root } = mount();
+    const btn = root.querySelector('.hud-mute') as HTMLButtonElement;
+
+    btn.focus();
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    expect(document.activeElement).not.toBe(btn);
+  });
+
+  it('keeps focus when the mute button is activated from the keyboard', () => {
+    const { root } = mount();
+    const btn = root.querySelector('.hud-mute') as HTMLButtonElement;
+
+    btn.focus();
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    expect(document.activeElement).toBe(btn);
+  });
+
+  it('drops focus from the volume slider when the drag ends', () => {
+    const { root } = mount();
+    const slider = volumeSlider(root);
+
+    slider.focus();
+    slider.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    expect(document.activeElement).not.toBe(slider);
+  });
+});

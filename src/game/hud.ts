@@ -64,9 +64,25 @@ export function createHud(root: HTMLElement): Hud {
     for (const cb of startRestartCbs) cb();
   };
 
+  // A focused control legitimately claims Space, Enter and the arrow keys -- input.ts
+  // deliberately lets it have them. But a MOUSE player who clicks Mute never asked to hand
+  // over their keyboard, and the control stays focused after a click, so arrow-key driving
+  // and the Space mine-drop went dead with nothing on screen to explain it. Dropping focus
+  // on pointer interactions only hands those keys back. `detail > 0` marks a real pointer
+  // activation; keyboard activation reports 0 and keeps focus, so tabbing still works.
+  const blurIfPointer = (e: MouseEvent): void => {
+    if (e.detail > 0) (e.currentTarget as HTMLElement).blur();
+  };
+  const blurAfterDrag = (e: Event): void => {
+    (e.currentTarget as HTMLElement).blur();
+  };
+
   muteBtn.addEventListener('click', handleMute);
+  muteBtn.addEventListener('click', blurIfPointer);
   volumeEl.addEventListener('input', handleVolume);
+  volumeEl.addEventListener('mouseup', blurAfterDrag);
   actionBtn.addEventListener('click', handleAction);
+  actionBtn.addEventListener('click', blurIfPointer);
 
   function setState(s: GameState): void {
     if (s === 'playing') {
@@ -132,8 +148,11 @@ export function createHud(root: HTMLElement): Hud {
     },
     dispose(): void {
       muteBtn.removeEventListener('click', handleMute);
+      muteBtn.removeEventListener('click', blurIfPointer);
       volumeEl.removeEventListener('input', handleVolume);
+      volumeEl.removeEventListener('mouseup', blurAfterDrag);
       actionBtn.removeEventListener('click', handleAction);
+      actionBtn.removeEventListener('click', blurIfPointer);
       el.remove();
     },
   };

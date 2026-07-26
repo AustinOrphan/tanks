@@ -270,3 +270,42 @@ describe('createInputController — dispose', () => {
     expect(s.aim).toEqual({ x: 0, y: 0 });
   });
 });
+
+describe('createInputController — focus does not steal the tank', () => {
+  it('still drives after the player has used a HUD control', () => {
+    // e.target on a KeyboardEvent is the FOCUSED element, and the guard that stops
+    // WASD from typing into text fields rejected every interactive element. Clicking
+    // the mute button or dragging the volume slider leaves it focused, so every
+    // subsequent keypress was discarded and the tank became undriveable until the
+    // player happened to click the canvas again.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    document.body.appendChild(slider);
+    slider.focus();
+
+    // Keys arriving while the slider holds focus, exactly as the browser delivers them.
+    slider.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', bubbles: true }));
+    expect(controller.sample().move.y).not.toBe(0);
+
+    slider.remove();
+  });
+
+  it('still lets a text field have its keystrokes', () => {
+    // The guard exists for a real reason; typing "was" into a field must not drive.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+
+    const text = document.createElement('input');
+    text.type = 'text';
+    document.body.appendChild(text);
+    text.focus();
+
+    text.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', bubbles: true }));
+    expect(controller.sample().move.y).toBe(0);
+
+    text.remove();
+  });
+});
