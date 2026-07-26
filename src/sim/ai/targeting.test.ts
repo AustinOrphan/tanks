@@ -1,12 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter } from './targeting';
-import { AI_AIM_SPREAD, AI_JITTER_TICKS } from '../constants';
-import type { Tank, Wall } from '../types';
+import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter, shotHitsOwnSide, friendlyInMineBlast } from './targeting';
+import { AI_AIM_SPREAD, AI_JITTER_TICKS, TANK_RADIUS, BULLET_RADIUS, AI_HULL_CLEARANCE, AI_MINE_FLEE_RADIUS } from '../constants';
+import { raySegmentVsAABB } from '../collision';
+import type { Tank, Wall, Vec2 } from '../types';
+import { nextRng } from '../types';
 import type { World } from '../world';
 
 function wall(id: number, minX: number, minY: number, maxX: number, maxY: number,
              kind: 'solid' | 'destructible' = 'solid', destroyed = false): Wall {
   return { id, aabb: { minX, minY, maxX, maxY }, kind, destroyed };
+}
+
+// Hand-written geometry helpers for the bank-shot self-hit property test below. Written
+// out here rather than imported so the test derives its expectation independently of the
+// production code it is validating.
+function distPointSeg(p: Vec2, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const len2 = abx * abx + aby * aby;
+  let t = len2 === 0 ? 0 : ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+}
+function firstWallHit(from: Vec2, to: Vec2, walls: Wall[]) {
+  let best: { t: number; point: Vec2 } | null = null;
+  for (const w of walls) {
+    if (w.destroyed) continue;
+    const h = raySegmentVsAABB(from, to, w.aabb);
+    if (h !== null && (best === null || h.t < best.t)) best = h;
+  }
+  return best;
 }
 
 // Minimal fixtures for wanderMove — targeting.test.ts has no shared tank/world
@@ -163,6 +186,189 @@ describe('bankShot', () => {
     const angle = bankShot({ x: 0, y: 0 }, { x: 4, y: 0 }, [blocker, topWall], 0);
     expect(angle).toBeNull();
   });
+
+  // ---- Self-hit rejection. resolveBulletHits (bullets.ts) makes a shell lethal to its
+  // OWNER the moment vdot(vel, ownerPos - bulletPos) > 0, i.e. as soon as it heads back.
+  // A bank path whose reflected leg passes through the muzzle is therefore a self-kill,
+  // and both legs being wall-clear says nothing about that. ----
+
+  it('rejects a bank path whose reflected leg travels back through the shooter', () => {
+    // One wall directly BELOW the muzzle. Mirroring the target (4.4,9) across that wall's
+    // TOP face (y = -1) puts the mirror at (4.4,-11), so the "bank" fires almost straight
+    // down (~-1.5422 rad) into the floor at (4.267,-1) and the reflected leg climbs back
+    // up through x~4.2 at y=3 -- 0.214 units from the muzzle at (4,3), well inside
+    // TANK_RADIUS + BULLET_RADIUS (0.6). Both legs are wall-clear, so the old
+    // two-leg-LOS-only check happily returned it.
+    const walls = [wall(1, 0, -2, 8, -1)];
+    expect(bankShot({ x: 4, y: 3 }, { x: 4.4, y: 9 }, walls, 3)).toBeNull();
+  });
+
+  it('property: no returned bank path passes within a hull-width of its own muzzle', () => {
+    // Deterministic fuzz (nextRng chained, no Math.random) over random 3-wall arenas.
+    // For every non-null result, reconstruct the bounce point the same way a shell would
+    // reach it (nearest wall hit along the firing ray) and measure the muzzle against the
+    // reflected leg [bounce -> target] with the hand-written distPointSeg above.
+    let seed = 20240719;
+    const rnd = (lo: number, hi: number) => {
+      const r = nextRng(seed);
+      seed = r.seed;
+      return lo + r.value * (hi - lo);
+    };
+    let returned = 0;
+    let selfHits = 0;
+    for (let i = 0; i < 4000; i++) {
+      const walls: Wall[] = [];
+      for (let k = 0; k < 3; k++) {
+        const x = rnd(-8, 8);
+        const y = rnd(-8, 8);
+        walls.push(wall(k + 1, x, y, x + rnd(0.5, 5), y + rnd(0.5, 5)));
+      }
+      const muzzle = { x: rnd(-8, 8), y: rnd(-8, 8) };
+      const target = { x: rnd(-8, 8), y: rnd(-8, 8) };
+      const angle = bankShot(muzzle, target, walls, 3);
+      if (angle === null) continue;
+      returned++;
+      const far = { x: muzzle.x + Math.cos(angle) * 1000, y: muzzle.y + Math.sin(angle) * 1000 };
+      const hit = firstWallHit(muzzle, far, walls);
+      if (hit === null) continue; // shouldn't happen, but don't assert on a non-bank
+      if (distPointSeg(muzzle, hit.point, target) < TANK_RADIUS + BULLET_RADIUS) selfHits++;
+    }
+    expect(returned).toBeGreaterThan(200); // the fuzz must actually exercise the happy path
+    expect(selfHits).toBe(0);
+  });
+});
+
+describe('shotHitsOwnSide', () => {
+  function aiTank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
+    return {
+      id, kind, pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0, ...over,
+    };
+  }
+  function w(tanks: Tank[], walls: Wall[] = []): World {
+    return {
+      tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], walls,
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0,
+    };
+  }
+
+  it('reports a teammate sitting squarely on the firing line', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: 4, y: 0 });
+    expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(true);
+  });
+
+  it('reports a teammate grazing the line at exactly the clearance boundary', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    // Just inside the clearance -> blocked; just outside -> clear. Pins the threshold
+    // rather than only the obvious dead-centre case.
+    const inside = aiTank(2, 'brown', { x: 4, y: AI_HULL_CLEARANCE - 1e-6 });
+    const outside = aiTank(2, 'brown', { x: 4, y: AI_HULL_CLEARANCE + 1e-6 });
+    expect(shotHitsOwnSide(w([shooter, inside]), shooter, 0, 'normal')).toBe(true);
+    expect(shotHitsOwnSide(w([shooter, outside]), shooter, 0, 'normal')).toBe(false);
+  });
+
+  it('does not report the player (the AI is supposed to shoot at that one)', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const player = aiTank(2, 'player', { x: 4, y: 0 });
+    expect(shotHitsOwnSide(w([shooter, player]), shooter, 0, 'normal')).toBe(false);
+  });
+
+  it('does not report a dead teammate (a corpse blocks nothing)', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: 4, y: 0 }, { alive: false });
+    expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(false);
+  });
+
+  it('does not report the shooter itself (the muzzle is inside its own hull)', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    expect(shotHitsOwnSide(w([shooter]), shooter, 0, 'normal')).toBe(false);
+  });
+
+  it('does not report a teammate BEHIND the muzzle', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: -4, y: 0 }); // opposite the firing direction
+    expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(false);
+  });
+
+  it('does not report a teammate standing beyond a wall a bounce-less shell dies on', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: 6, y: 0 });
+    const walls = [wall(9, 2, -1, 3, 1)];
+    // 'fast' has FAST_BOUNCES = 0, so the shell stops dead at x=2 and never reaches x=6.
+    expect(shotHitsOwnSide(w([shooter, mate], walls), shooter, 0, 'fast')).toBe(false);
+  });
+
+  // ---- The whole ricochet polyline is checked, not just the opening leg. Checking only
+  // the opening leg missed every kill that happened after a bounce -- which is most of
+  // them, since resolveBulletHits turns a returning shell lethal to its own owner. ----
+
+  it('reports the SHOOTER when the shell bounces straight back off a wall in front of it', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const walls = [wall(9, 2, -1, 3, 1)]; // head-on: the shell reflects to -x, back through (0,0)
+    // NORMAL_BOUNCES is 1, so this shell really does come back and really does kill its
+    // owner. The opening leg (0,0)->(2,0) is completely clear, which is exactly why a
+    // first-leg-only check let this through.
+    expect(shotHitsOwnSide(w([shooter], walls), shooter, 0, 'normal')).toBe(true);
+  });
+
+  it('reports a teammate the shell only reaches AFTER a bounce', () => {
+    const shooter = aiTank(1, 'grey', { x: 0, y: 3 });
+    // Fire down-right at -45deg into the floor: the shell reaches y=0 at (3,0), reflects to
+    // up-right, and runs along y = x-3 -- straight through a teammate at (6,3). The opening
+    // leg (0,3)->(3,0) has nothing on it at all.
+    const mate = aiTank(2, 'brown', { x: 6, y: 3 });
+    const walls = [wall(9, -10, -1, 10, 0)];
+    expect(shotHitsOwnSide(w([shooter, mate], walls), shooter, -Math.PI / 4, 'normal')).toBe(true);
+  });
+});
+
+describe('friendlyInMineBlast', () => {
+  function aiTank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
+    return {
+      id, kind, pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0, ...over,
+    };
+  }
+  function w(tanks: Tank[]): World {
+    return {
+      tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], walls: [],
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0,
+    };
+  }
+
+  it('reports a teammate standing where the mine would go off', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: 1, y: 0 });
+    expect(friendlyInMineBlast(w([layer, mate]), layer)).toBe(true);
+  });
+
+  it('boundary: inside AI_MINE_FLEE_RADIUS blocks the drop, outside allows it', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const inside = aiTank(2, 'brown', { x: AI_MINE_FLEE_RADIUS - 1e-6, y: 0 });
+    const outside = aiTank(2, 'brown', { x: AI_MINE_FLEE_RADIUS + 1e-6, y: 0 });
+    expect(friendlyInMineBlast(w([layer, inside]), layer)).toBe(true);
+    expect(friendlyInMineBlast(w([layer, outside]), layer)).toBe(false);
+  });
+
+  it('does not report the player (mining the player is the entire point)', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const player = aiTank(2, 'player', { x: 1, y: 0 });
+    expect(friendlyInMineBlast(w([layer, player]), layer)).toBe(false);
+  });
+
+  it('does not report the layer itself (it is standing on the mine by construction)', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    expect(friendlyInMineBlast(w([layer]), layer)).toBe(false);
+  });
+
+  it('does not report a dead teammate', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const corpse = aiTank(2, 'brown', { x: 1, y: 0 }, { alive: false });
+    expect(friendlyInMineBlast(w([layer, corpse]), layer)).toBe(false);
+  });
 });
 
 describe('wanderMove', () => {
@@ -215,14 +421,50 @@ describe('aimJitter', () => {
     expect(a).toBe(b);
   });
 
-  it('is bounded by ±spread', () => {
+  it('is bounded by ±spread AND genuinely two-sided', () => {
     // Sample many (seed, tick) combinations; every offset must stay in range.
+    // |offset| <= spread ALONE is a one-sided bound that a never-negative jitter (i.e. a
+    // mutation dropping the `* 2 - 1` recentring) satisfies perfectly -- and a jitter that
+    // only ever misses to one side is a fixed aiming bias, not scatter. So assert both
+    // signs actually occur.
+    const offsets: number[] = [];
     for (let seed = 0; seed < 20; seed++) {
       for (let tick = 0; tick < 20; tick++) {
         const offset = aimJitter(wanderWorld(seed, tick * AI_JITTER_TICKS), wanderTank(1), AI_AIM_SPREAD);
         expect(Math.abs(offset)).toBeLessThanOrEqual(AI_AIM_SPREAD);
+        offsets.push(offset);
       }
     }
+    expect(offsets.some((o) => o < 0)).toBe(true);
+    expect(offsets.some((o) => o > 0)).toBe(true);
+  });
+
+  it('pins the exact offset for (seed=7, id=1, bucket=0) to lock the PRNG contract', () => {
+    // Hand-derived from the real nextRng path, NOT by calling aimJitter (the personality
+    // tests in brown/grey/teal.test.ts assert wiring by calling aimJitter, which cannot
+    // catch a wrong jitter; this is the independent anchor that can):
+    //   rngSeed = world.seed + tank.id * 7919 + floor(tick / AI_JITTER_TICKS)
+    //           = 7 + 1 * 7919 + 0 = 7926
+    //   nextRng(7926).value = 0.4734923338983208
+    //   offset = (value * 2 - 1) * AI_AIM_SPREAD
+    //          = -0.0530153322033584 * 0.08 = -0.0042412265762686725
+    // Note the NEGATIVE sign: a jitter that dropped the `* 2 - 1` recentring cannot
+    // produce this number at all.
+    const v = aimJitter(wanderWorld(7, 0), wanderTank(1), AI_AIM_SPREAD);
+    expect(v).toBeCloseTo(-0.0042412265762686725, 12);
+  });
+
+  it('pins the exact offset for the NEXT bucket and for a different tank id', () => {
+    // Same derivation, different rngSeed inputs -- these pin the two multipliers
+    // (bucket + 1, and tank.id * 7919) independently of each other.
+    //   id=1, bucket=1 -> 7 + 7919 + 1 = 7927; nextRng(7927).value = 0.5667016815859824
+    //     offset = 0.1334033631719648 * 0.08 = 0.010672269053757184
+    //   id=2, bucket=0 -> 7 + 15838 + 0 = 15845; nextRng(15845).value = 0.5161849558353424
+    //     offset = 0.0323699116706848 * 0.08 = 0.0025895929336547843
+    expect(aimJitter(wanderWorld(7, AI_JITTER_TICKS), wanderTank(1), AI_AIM_SPREAD))
+      .toBeCloseTo(0.010672269053757184, 12);
+    expect(aimJitter(wanderWorld(7, 0), wanderTank(2), AI_AIM_SPREAD))
+      .toBeCloseTo(0.0025895929336547843, 12);
   });
 
   it('differs across tanks at the same tick (not a shared/global offset)', () => {

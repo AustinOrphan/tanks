@@ -351,4 +351,56 @@ describe('stepAi', () => {
       expect(Math.abs(bulletAngle - (5 * Math.PI) / 6)).toBeGreaterThan(1);
     });
   });
+
+  // ---- Friendly fire is re-checked at the trigger, against the angle the barrel is
+  // ACTUALLY pointing. The decision functions vet their own solution, but the test
+  // directly above proves the shot leaves along the post-slew angle, which mid-swing can
+  // be ~150deg away from what the decision reasoned about -- so a decision-time-only gate
+  // sprays the arena on every turret swing. ----
+
+  describe('friendly-fire gate at the trigger', () => {
+    it('does not fire when a teammate sits on the POST-SLEW firing line', () => {
+      // Grey's barrel points +x and can only creep AI_TURRET_TURN_RATE*DT per tick, so the
+      // shot would leave along ~+x -- straight through Brown at (3,0) -- even though the
+      // decision function is aiming at the player behind Grey.
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { turretAngle: 0 });
+      const mate = tank(3, 'brown', { x: 3, y: 0 });
+      const player = tank(2, 'player', { x: -5, y: 0.5 });
+      const w = world([grey, mate, player]);
+      stepAi(w, []);
+      expect(w.bullets.length).toBe(0);
+      // A refused shot must not burn the cooldown either -- otherwise the tank pays for a
+      // shot it never took and stays silent for another FIRE_COOLDOWN.
+      expect(w.tanks[0].fireCooldown).toBe(0);
+    });
+
+    it('still fires when the post-slew line is clear of teammates', () => {
+      // Same fixture with the teammate off the +x line.
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { turretAngle: 0 });
+      const mate = tank(3, 'brown', { x: 3, y: 5 });
+      const player = tank(2, 'player', { x: -5, y: 0.5 });
+      const w = world([grey, mate, player]);
+      stepAi(w, []);
+      expect(w.bullets.length).toBe(1);
+    });
+
+    it('does not drop a mine that would sit inside a teammate\'s blast radius', () => {
+      // Brown never moves, so a mine laid at its feet by a roaming teammate is a
+      // guaranteed kill once it arms. Grey is otherwise fully mine-eligible here.
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const mate = tank(3, 'brown', { x: 1, y: 0 });
+      const w = world([grey, mate]);
+      stepAi(w, []);
+      expect(w.mines.length).toBe(0);
+      expect(w.tanks[0].mineCooldown).toBe(0);
+    });
+
+    it('still drops a mine when no teammate is within the blast', () => {
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const mate = tank(3, 'brown', { x: 12, y: 0 });
+      const w = world([grey, mate]);
+      stepAi(w, []);
+      expect(w.mines.length).toBe(1);
+    });
+  });
 });

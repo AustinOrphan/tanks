@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter } from './targeting';
+import { lineOfSight, aimLead, aimJitter, shotHitsOwnSide } from './targeting';
 import { driveVelocity } from '../collision';
 import { bulletConfig, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
@@ -21,6 +21,11 @@ export function brownDecision(world: World, tank: Tank): AiDecision {
     ? aimLead(tank.pos, player.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD)
     : tank.turretAngle;
 
+  // lineOfSight only tests WALLS. resolveBulletHits kills any non-owner tank the shell
+  // touches, so a clear wall-line with Grey or Teal standing on it is a teammate kill, not
+  // a shot. Evaluated against the jittered angle actually being aimed, not the ideal one.
+  const clearOfFriendlies = los && !shotHitsOwnSide(world, tank, turretAngle, 'normal');
+
   let fire = false;
   let nextState = tank.aiState;
   switch (tank.aiState) {
@@ -28,8 +33,11 @@ export function brownDecision(world: World, tank: Tank): AiDecision {
       nextState = los ? 'aim' : 'idle';
       break;
     case 'aim':
-      if (los) { fire = true; nextState = 'fire'; }
-      else nextState = 'idle';
+      // Hold in 'aim' (not 'idle') while a teammate is on the line: Brown never moves, so
+      // the block clears when the TEAMMATE walks off, and dropping back to 'idle' would
+      // cost an extra tick re-walking the state machine every time that happens.
+      if (clearOfFriendlies) { fire = true; nextState = 'fire'; }
+      else if (!los) nextState = 'idle';
       break;
     case 'fire':
       nextState = 'reposition';

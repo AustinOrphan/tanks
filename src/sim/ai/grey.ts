@@ -1,18 +1,15 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, wanderMove } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, wanderMove, shotHitsOwnSide } from './targeting';
 import { driveVelocity } from '../collision';
 import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
 
 export function greyDecision(world: World, tank: Tank): AiDecision {
   const avoid = dangerAvoidMove(world, tank);
-  // dangerAvoidMove is wall-blind and arena-blind (see targeting.ts): because moveTank
-  // pushes the tank back out of overlapping walls, a dodge aimed straight into a wall
-  // resolves to zero net displacement, pinning the tank inside the danger corridor.
-  // Known accepted limitation for this slice, to be validated in playtest — not fixed
-  // here; a naive "use the opposite direction" fallback is wrong for the mine branch
-  // (the opposite heads straight into the mine), so it needs real design thought.
+  // dangerAvoidMove now vets its own direction against walls and armed mines (see
+  // targeting.ts), so this can be trusted directly: a dodge into a wall used to net zero
+  // displacement and pin Grey inside the danger corridor while it held fire.
   const move = avoid ?? wanderMove(world, tank);
 
   // Cautious (swapped from Teal): Grey holds fire while dodging, but only for
@@ -39,8 +36,11 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
       // held/passthrough angle below must stay untouched).
       turretAngle = aimLead(tank.pos, player.pos, targetVel, bulletConfig.normal.speed)
         + aimJitter(world, tank, AI_AIM_SPREAD);
-      fire = true;
-      nextState = 'fire';
+      // lineOfSight only tests WALLS, but resolveBulletHits kills any non-owner tank the
+      // shell touches. Keep tracking the player with the turret either way -- only the
+      // trigger is held, so the shot goes off the moment the teammate clears the lane.
+      fire = !shotHitsOwnSide(world, tank, turretAngle, 'normal');
+      nextState = fire ? 'fire' : 'reposition';
     } else {
       nextState = 'reposition';
     }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { incomingThreats, dangerAvoidMove } from './targeting';
-import type { Tank, Bullet, Mine, Vec2 } from '../types';
+import { AI_MINE_FLEE_RADIUS } from '../constants';
+import type { Tank, Bullet, Mine, Vec2, Wall } from '../types';
 import type { World } from '../world';
 
 function tank(id: number, pos: Vec2): Tank {
@@ -9,6 +10,9 @@ function tank(id: number, pos: Vec2): Tank {
     desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
     aiState: 'idle', aiTimer: 0,
   };
+}
+function wall(id: number, minX: number, minY: number, maxX: number, maxY: number): Wall {
+  return { id, aabb: { minX, minY, maxX, maxY }, kind: 'solid', destroyed: false };
 }
 function bullet(id: number, ownerId: number, pos: Vec2, vel: Vec2): Bullet {
   return { id, ownerId, type: 'normal', pos, vel, bouncesLeft: 1, alive: true };
@@ -39,11 +43,35 @@ describe('incomingThreats', () => {
     expect(incomingThreats(w, t)).toHaveLength(0);
   });
 
-  it('ignores the tank\'s own bullets', () => {
+  it('ignores the tank\'s own bullets while they are travelling AWAY from it', () => {
     const t = tank(1, { x: 3, y: 0 });
-    const b = bullet(50, 1, { x: 0, y: 0 }, { x: 6, y: 0 }); // owner is the tank itself
+    const b = bullet(50, 1, { x: 0, y: 0 }, { x: -6, y: 0 }); // own shell, heading -x, away
     const w = world({ tanks: [t], bullets: [b] });
     expect(incomingThreats(w, t)).toHaveLength(0);
+  });
+
+  it('ignores the tank\'s own shell at the instant it leaves the muzzle (vel . rel == 0)', () => {
+    // A fresh shell spawns AT the owner's position, so rel is the zero vector and the
+    // dot product is exactly 0. resolveBulletHits treats that as NOT lethal (`<= 0`), so
+    // incomingThreats must too -- otherwise every AI dodges the moment it pulls the
+    // trigger, forever.
+    const t = tank(1, { x: 3, y: 0 });
+    const b = bullet(50, 1, { x: 3, y: 0 }, { x: 6, y: 0 });
+    const w = world({ tanks: [t], bullets: [b] });
+    expect(incomingThreats(w, t)).toHaveLength(0);
+  });
+
+  it('flags the tank\'s OWN shell once it is heading back at it (ricochet self-kill)', () => {
+    // resolveBulletHits (bullets.ts) makes a shell lethal to its owner as soon as
+    // vdot(b.vel, ownerPos - b.pos) > 0. NORMAL_BOUNCES is 1 and RICOCHET_BOUNCES is 3,
+    // so EVERY AI shell can come back. Skipping own bullets outright meant the AI stood
+    // still and let its own ricochet kill it.
+    const t = tank(1, { x: 0, y: 0 });
+    const b = bullet(50, 1, { x: -2, y: 0 }, { x: 6, y: 0 }); // own shell, now inbound
+    const w = world({ tanks: [t], bullets: [b] });
+    expect(incomingThreats(w, t).map((x) => x.id)).toContain(50);
+    // ...and the tank must actually react to it, not just know about it.
+    expect(dangerAvoidMove(w, t)).not.toBeNull();
   });
 
   it('ignores dead bullets', () => {
@@ -131,11 +159,17 @@ describe('dangerAvoidMove', () => {
     expect(move.y).toBeCloseTo(0, 6);
   });
 
-  it('ignores unarmed mines', () => {
+  it('flees an UNARMED mine too -- the fuse does not care whether it armed', () => {
+    // stepMines detonates on MINE_TIMER expiry regardless of `armed`, and that path
+    // "spares nobody, including an owner still standing on it". A tank that dropped a mine
+    // and then loitered inside 1.5 units (so it never armed) was blown up by its own fuse
+    // while dangerAvoidMove reported no danger at all. Armed-ness only gates the PROXIMITY
+    // trigger; the flee radius must not be gated on it.
     const t = tank(1, { x: 0, y: 0 });
-    const m = mine(70, 1, { x: 1, y: 0 }, false); // mine is not armed
-    const w = world({ tanks: [t], mines: [m] });
-    expect(dangerAvoidMove(w, t)).toBeNull();
+    const m = mine(70, 1, { x: 1, y: 0 }, false);
+    const move = dangerAvoidMove(world({ tanks: [t], mines: [m] }), t);
+    expect(move).not.toBeNull();
+    expect(move!.x).toBeCloseTo(-1, 6);
   });
 
   it('ignores detonated mines', () => {
@@ -146,9 +180,9 @@ describe('dangerAvoidMove', () => {
     expect(dangerAvoidMove(w, t)).toBeNull();
   });
 
-  it('ignores mines beyond proximity radius', () => {
+  it('ignores mines beyond the flee radius', () => {
     const t = tank(1, { x: 0, y: 0 });
-    const m = mine(70, 1, { x: 5, y: 0 }, true); // mine at distance 5 > 2.0 (MINE_PROXIMITY_RADIUS + TANK_RADIUS)
+    const m = mine(70, 1, { x: 5, y: 0 }, true); // distance 5 > AI_MINE_FLEE_RADIUS
     const w = world({ tanks: [t], mines: [m] });
     expect(dangerAvoidMove(w, t)).toBeNull();
   });
@@ -157,5 +191,74 @@ describe('dangerAvoidMove', () => {
     const t = tank(1, { x: 0, y: 0 });
     const w = world({ tanks: [t] });
     expect(dangerAvoidMove(w, t)).toBeNull();
+  });
+
+  // ---- Flee radius must cover the LETHAL radius, with a margin to escape it ----
+
+  it('flees a mine sitting at exactly the radius detonateMine kills at (MINE_BLAST_RADIUS + TANK_RADIUS)', () => {
+    // detonateMine kills every tank with vdist(t.pos, mine.pos) <= 2.0 + 0.5 = 2.5.
+    // Guarding on MINE_PROXIMITY_RADIUS + TANK_RADIUS (= 2.0) instead left a 0.5-unit
+    // shell of the lethal zone the AI stood in without reacting at all.
+    const t = tank(1, { x: 0, y: 0 });
+    const m = mine(70, 1, { x: 2.5, y: 0 }, true);
+    const move = dangerAvoidMove(world({ tanks: [t], mines: [m] }), t);
+    expect(move).not.toBeNull();
+    expect(move!.x).toBeCloseTo(-1, 6);
+  });
+
+  it('flee radius boundary is inclusive ("<="), and stops just outside it', () => {
+    const at = tank(1, { x: 0, y: 0 });
+    const outside = tank(1, { x: 0, y: 0 });
+    const mAt = mine(70, 1, { x: AI_MINE_FLEE_RADIUS, y: 0 }, true);
+    const mOut = mine(70, 1, { x: AI_MINE_FLEE_RADIUS + 1e-9, y: 0 }, true);
+    expect(dangerAvoidMove(world({ tanks: [at], mines: [mAt] }), at)).not.toBeNull();
+    expect(dangerAvoidMove(world({ tanks: [outside], mines: [mOut] }), outside)).toBeNull();
+  });
+
+  it('flees the NEAREST armed mine, not the first one in array order', () => {
+    const t = tank(1, { x: 0, y: 0 });
+    const far = mine(70, 1, { x: -1.8, y: 0 }, true); // first in array, distance 1.8
+    const near = mine(71, 1, { x: 1, y: 0 }, true);   // distance 1 -- the real danger
+    const move = dangerAvoidMove(world({ tanks: [t], mines: [far, near] }), t);
+    expect(move).not.toBeNull();
+    // Away from the NEAR mine at +x means -x. Returning the first in-range mine instead
+    // drives the tank at -x's mine, i.e. straight INTO the closer one.
+    expect(move!.x).toBeCloseTo(-1, 6);
+  });
+
+  // ---- The dodge direction must be wall-aware and mine-aware ----
+
+  it('dodges to the opposite perpendicular when the preferred side is blocked by a wall', () => {
+    // moveTank pushes a tank back out of any wall it overlaps, so a dodge aimed into a
+    // wall nets EXACTLY zero displacement: the tank sits pinned in the danger corridor
+    // and dies. Repro from the review: grey pinned against a wall for 24 ticks.
+    const t = tank(1, { x: 0, y: 0.5 });
+    const b = bullet(50, 99, { x: -3, y: 0.35 }, { x: 6, y: 0 });
+    // rel = (3, 0.15); dir = (1,0); perpA = (0,1) wins the >= 0 tie-break -- straight
+    // into this wall. perpB = (0,-1) is clear.
+    const walls = [wall(9, -5, 1, 5, 5)];
+    const move = dangerAvoidMove(world({ tanks: [t], bullets: [b], walls }), t);
+    expect(move).not.toBeNull();
+    expect(move!.x).toBeCloseTo(0, 6);
+    expect(move!.y).toBeCloseTo(-1, 6);
+  });
+
+  it('still uses the preferred side when no wall blocks it', () => {
+    // Same fixture minus the wall: the side-preference rule must survive the wall fix.
+    const t = tank(1, { x: 0, y: 0.5 });
+    const b = bullet(50, 99, { x: -3, y: 0.35 }, { x: 6, y: 0 });
+    const move = dangerAvoidMove(world({ tanks: [t], bullets: [b] }), t);
+    expect(move!.y).toBeCloseTo(1, 6);
+  });
+
+  it('picks the dodge side that does not step toward a nearby armed mine', () => {
+    // The bullet branch used to `return` unconditionally, so a tank standing next to an
+    // armed mine dodged a shell straight into the mine instead.
+    const t = tank(1, { x: 3, y: 0.1 });
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // preferred perpendicular is (0,+1)
+    const m = mine(70, 99, { x: 3, y: 2 }, true);             // ...and the mine is at +y
+    const move = dangerAvoidMove(world({ tanks: [t], bullets: [b], mines: [m] }), t);
+    expect(move).not.toBeNull();
+    expect(move!.y).toBeCloseTo(-1, 6);
   });
 });

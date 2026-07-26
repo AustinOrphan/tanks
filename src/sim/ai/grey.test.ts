@@ -243,6 +243,26 @@ describe('greyDecision', () => {
     expect(dFire.desiredMove.y).toBeCloseTo(1, 6);
   });
 
+  // ---- Friendly fire (see brown.test.ts for the same gate): lineOfSight only tests
+  // walls, but resolveBulletHits kills any non-owner tank the shell touches. ----
+
+  it('holds fire when a teammate is standing on the firing line', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const mate = tank(3, 'brown', { x: 2.5, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = greyDecision(world({ tanks: [grey, mate, player] }), grey);
+    expect(d.fire).toBe(false);
+    // The turret still tracks the player -- only the trigger is held.
+    expect(d.turretAngle).toBeCloseTo(aimJitter(world({ tanks: [grey, mate, player] }), grey, AI_AIM_SPREAD), 6);
+  });
+
+  it('fires when the teammate is well clear of the firing line', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const mate = tank(3, 'brown', { x: 2.5, y: 4 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    expect(greyDecision(world({ tanks: [grey, mate, player] }), grey).fire).toBe(true);
+  });
+
   it('nextTimer is 0 when not dodging, regardless of tank.aiTimer', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 }, { aiTimer: 99 });
     const player = tank(2, 'player', { x: 5, y: 0 }); // no bullets -> not dodging

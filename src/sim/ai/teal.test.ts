@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tealDecision } from './teal';
-import { aimJitter, aimLead, bankShot } from './targeting';
+import { aimJitter, aimLead, bankShot, wanderMove } from './targeting';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
 import { BANK_PREFER_TICKS, AI_AIM_SPREAD, bulletConfig, RICOCHET_BOUNCES } from '../constants';
@@ -125,46 +125,91 @@ describe('tealDecision', () => {
 
   // ---- No live player (D) ----
 
-  it('D1: no player tank at all -> idle, no fire, zero move, turretAngle passes through', () => {
+  it('D1: no player tank at all -> no fire, but Teal still WANDERS (mobile, spec §7)', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { turretAngle: 1.234 });
     const d = tealDecision(world({ tanks: [teal] }), teal);
     expect(d.fire).toBe(false);
-    expect(d.desiredMove).toEqual({ x: 0, y: 0 });
+    // Freezing solid at {0,0} made Teal a stationary target between rounds and while the
+    // player was respawning; Grey wanders in the same situation and so must Teal.
+    expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
     expect(d.nextState).toBe('idle');
     expect(d.turretAngle).toBe(1.234);
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
   });
 
-  it('D2: player exists but is not alive -> idle, no fire, zero move, turretAngle passes through', () => {
+  it('D2: player exists but is not alive -> no fire, but Teal still wanders', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { turretAngle: 1.234 });
     const deadPlayer = tank(2, 'player', { x: 5, y: 0 }, { alive: false });
     const d = tealDecision(world({ tanks: [teal, deadPlayer] }), teal);
     expect(d.fire).toBe(false);
-    expect(d.desiredMove).toEqual({ x: 0, y: 0 });
+    expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
     expect(d.nextState).toBe('idle');
     expect(d.turretAngle).toBe(1.234);
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
   });
 
-  // ---- Minor 5: off-axis dodge (pins the actual "dodge to the side you sit on" rule,
-  // not just the >= 0 tie-break at rel·perpA == 0) ----
+  it('D3: the no-player wander heading is the SAME one wanderMove gives (not a fresh roll)', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const w = world({ tanks: [teal], tick: 0 });
+    expect(tealDecision(w, teal).desiredMove).toEqual(wanderMove(w, teal));
+  });
 
-  it('off-axis dodge: teal above the bullet axis dodges to +y (the side it already sits on)', () => {
+  it('D4: a dodge still overrides the no-player wander', () => {
     const teal = tank(1, 'teal', { x: 3, y: 0.3 });
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
     const d = tealDecision(world({ tanks: [teal], bullets: [b] }), teal);
-    expect(d.fire).toBe(false);
+    expect(d.desiredMove.x).toBeCloseTo(0, 6);
+    expect(d.desiredMove.y).toBeCloseTo(1, 6);
+  });
+
+  // ---- Minor 5: off-axis dodge (pins the actual "dodge to the side you sit on" rule,
+  // not just the >= 0 tie-break at rel·perpA == 0).
+  // A LIVE PLAYER is mandatory in these fixtures: without one, tealDecision takes its
+  // no-player early return and every assertion below is satisfied vacuously by a code
+  // path that never reaches the targeting logic at all. ----
+
+  it('off-axis dodge: teal above the bullet axis dodges to +y (the side it already sits on)', () => {
+    const teal = tank(1, 'teal', { x: 3, y: 0.3 });
+    const player = tank(2, 'player', { x: 8, y: 0.3 }); // clear LOS -> the real firing path runs
+    const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
+    expect(d.fire).toBe(true); // Teal is aggressive: it dodges AND shoots in the same tick
     expect(d.desiredMove.y).toBeCloseTo(1, 6);
   });
 
   it('off-axis dodge: teal below the bullet axis dodges to -y (the side it already sits on)', () => {
     const teal = tank(1, 'teal', { x: 3, y: -0.3 });
+    const player = tank(2, 'player', { x: 8, y: -0.3 });
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 });
-    const d = tealDecision(world({ tanks: [teal], bullets: [b] }), teal);
-    expect(d.fire).toBe(false);
+    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
+    expect(d.fire).toBe(true);
     expect(d.desiredMove.y).toBeCloseTo(-1, 6);
+  });
+
+  // ---- Friendly fire (same gate as brown/grey): resolveBulletHits kills any non-owner
+  // tank the shell touches, and lineOfSight only ever tested walls. ----
+
+  it('does not take a direct shot with a teammate on the line, and banks instead', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const mate = tank(3, 'brown', { x: 2, y: 0 }); // on the direct line to the player
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(2, -5, 2, 10, 3)]; // bounce surface only; direct LOS is wall-clear
+    const w = world({ tanks: [teal, mate, player], walls, tick: BANK_PREFER_TICKS }); // direct-preferred
+    const d = tealDecision(w, teal);
+    expect(d.fire).toBe(true);
+    // Fell through to the bank path (bounce point (2,2) -> pi/4), not the direct angle 0.
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w, teal, AI_AIM_SPREAD), 6);
+  });
+
+  it('repositions when a teammate blocks the only shot it has', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const mate = tank(3, 'brown', { x: 2, y: 0 });
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const d = tealDecision(world({ tanks: [teal, mate, player] }), teal); // no walls -> no bank
+    expect(d.fire).toBe(false);
+    expect(d.nextState).toBe('reposition');
   });
 
   // ---- Minor 6: pin the reposition wander heading via bucket determinism, so the

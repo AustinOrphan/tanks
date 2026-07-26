@@ -67,6 +67,37 @@ export const VEC_EPS = 1e-6; // zero-length-vector degeneracy guard
 export const THREAT_HORIZON = 1.0; // seconds of lookahead for incoming bullets
 export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bullet may pass within
 
+// ---- AI mine avoidance (dangerAvoidMove) ----
+// The radius at which an AI starts running from an ARMED mine. It must be derived from
+// the radius detonateMine actually KILLS at (MINE_BLAST_RADIUS + TANK_RADIUS = 2.5),
+// never from MINE_PROXIMITY_RADIUS -- proximity is only the *trigger* radius, and
+// guarding on it left the AI standing calmly inside a 0.5-unit-thick shell of the lethal
+// zone. On top of the lethal radius sits a reaction margin: fleeing at exactly the kill
+// distance is fleeing from inside the blast with zero time to leave it, so the margin is
+// the distance a tank actually covers at TANK_SPEED in AI_MINE_FLEE_TICKS.
+export const AI_MINE_FLEE_TICKS = 15; // 0.25s at 60Hz
+export const AI_MINE_FLEE_MARGIN = TANK_SPEED * AI_MINE_FLEE_TICKS * DT; // 0.75 units
+export const AI_MINE_FLEE_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS + AI_MINE_FLEE_MARGIN; // 3.25
+
+// ---- AI shot vetting (friendlyBlocksShot, bankShot's return-leg check) ----
+// How close a shell may pass to a tank the AI did NOT aim at before the shot is refused:
+// a teammate standing on the firing line (friendlyBlocksShot) or the shooter's own hull
+// on a bank shot's returning leg (bankShot). Both matter because resolveBulletHits kills
+// ANY non-owner tank a shell touches -- teammates included -- and makes a shell lethal to
+// its OWNER as soon as it heads back; lineOfSight only ever tested walls, so neither case
+// was covered. TANK_RADIUS + BULLET_RADIUS is the exact grazing distance; the extra 0.15
+// covers the gap between the angle a decision reasons about and the angle the barrel
+// actually fires along after AI_TURRET_TURN_RATE slew, plus a tick of tank movement.
+export const AI_HULL_CLEARANCE = TANK_RADIUS + BULLET_RADIUS + 0.15;
+// How many seconds of shell flight (bounces included) shotHitsOwnSide simulates before
+// deciding a shot is safe. It is a horizon, not a guarantee: checking the shell's ENTIRE
+// life would refuse nearly every shot in a boxed arena, since a ricochet eventually
+// wanders back through the pack, and an AI that never shoots is its own kind of broken.
+// 1.5s covers roughly 9 units at NORMAL_SPEED/RICOCHET_SPEED -- about half the arena's
+// long axis, and comfortably past the first two bounces, which is where the self-kills
+// and teammate kills actually clustered.
+export const AI_SHOT_LOOKAHEAD = 1.5;
+
 // ---- AI wander (wanderMove) ----
 export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
 

@@ -1,15 +1,106 @@
-import type { Vec2, Wall, AABB, Bullet, Tank } from '../types';
+import type { Vec2, Wall, AABB, Bullet, Tank, Mine, BulletType } from '../types';
 import { vsub, angleOf, vdot, vdist, vnorm, fromAngle, nextRng } from '../types';
-import { raySegmentVsAABB } from '../collision';
-import { AIM_EPS, TANK_RADIUS, MINE_PROXIMITY_RADIUS, THREAT_HORIZON, DANGER_CORRIDOR, VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS } from '../constants';
+import { raySegmentVsAABB, circleVsAABB, reflectSweep } from '../collision';
+import {
+  AIM_EPS, TANK_RADIUS, TANK_SPEED, DT, THREAT_HORIZON, DANGER_CORRIDOR,
+  VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
+  AI_SHOT_LOOKAHEAD, bulletConfig,
+} from '../constants';
 import type { World } from '../world';
 
+/**
+ * Wall-only visibility test. Deliberately says NOTHING about tanks on the line -- see
+ * shotHitsOwnSide for that. The two are separate because "can the shell physically reach
+ * there" and "should we pull the trigger" are different questions: the bank-shot search
+ * below needs the wall-only meaning, the fire gate needs both.
+ */
 export function lineOfSight(from: Vec2, to: Vec2, walls: Wall[]): boolean {
   for (const w of walls) {
     if (w.destroyed) continue;
     if (raySegmentVsAABB(from, to, w.aabb) !== null) return false;
   }
   return true;
+}
+
+/** Distance from `p` to the segment [a,b] (clamped, so endpoints count as the closest
+ *  point when the projection falls outside the segment). */
+function pointSegmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const aby = b.y - a.y;
+  const len2 = abx * abx + aby * aby;
+  let t = len2 === 0 ? 0 : ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+}
+
+/**
+ * The polyline a shell of `type` fired from `from` along `angle` would actually trace,
+ * bounces included, for AI_SHOT_LOOKAHEAD seconds of flight.
+ *
+ * Built with the SAME reflectSweep the sim moves bullets with, so the AI reasons about
+ * the path the shell really takes rather than the straight line it starts on. Returns at
+ * least two points (start and end).
+ */
+function shotPath(from: Vec2, angle: number, type: BulletType, walls: Wall[]): Vec2[] {
+  const cfg = bulletConfig[type];
+  const dir = fromAngle(angle);
+  const range = cfg.speed * AI_SHOT_LOOKAHEAD;
+  const to = { x: from.x + dir.x * range, y: from.y + dir.y * range };
+  const boxes = walls.filter((w) => !w.destroyed).map((w) => w.aabb);
+  const result = reflectSweep(from, to, boxes, cfg.bounces);
+  return [from, ...result.hits.map((h) => h.point), result.end];
+}
+
+/**
+ * True if firing from `tank` along `angle` would put a shell through a tank on its OWN
+ * side — a teammate, or (after a bounce) the shooter itself.
+ *
+ * Both cases are real kills and neither was checked. resolveBulletHits kills any non-owner
+ * tank a shell touches, teammates included; lineOfSight only tests walls, so every enemy
+ * was free to shoot its own side, and Brown — which never moves — was a permanently parked
+ * target for the other two. resolveBulletHits ALSO kills the owner once the shell heads
+ * back at it, and with NORMAL_BOUNCES = 1 / RICOCHET_BOUNCES = 3 in a boxed arena that is
+ * a routine outcome, not an exotic one.
+ *
+ * The whole ricochet polyline is checked, not just the opening leg: the opening leg alone
+ * missed every kill that happened AFTER a bounce, which is most of them for Teal's
+ * 3-bounce ricochets. The shooter is exempt on leg 0 only — the muzzle is inside its own
+ * hull by construction, and a shell travelling away is harmless to its owner, exactly as
+ * resolveBulletHits has it.
+ */
+export function shotHitsOwnSide(world: World, tank: Tank, angle: number, type: BulletType): boolean {
+  const path = shotPath(tank.pos, angle, type, world.walls);
+  for (let leg = 0; leg + 1 < path.length; leg++) {
+    const a = path[leg];
+    const b = path[leg + 1];
+    for (const t of world.tanks) {
+      // The player is the target, not a friendly; a corpse blocks nothing.
+      if (!t.alive || t.kind === 'player') continue;
+      if (t.id === tank.id && leg === 0) continue; // outbound leg: harmless to its owner
+      if (pointSegmentDistance(t.pos, a, b) < AI_HULL_CLEARANCE) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True if dropping a mine at `tank.pos` right now would leave a live TEAMMATE inside the
+ * resulting blast.
+ *
+ * detonateMine spares nobody but the owner, and only while the mine is still unarmed, so a
+ * mine laid at a teammate's feet is a teammate kill on a 3-second fuse. Brown never moves,
+ * which made it the single most common victim in the arena: Grey and Teal wandered past,
+ * dropped a mine, walked far enough for it to arm, and it went off on a tank that had no
+ * way to leave. Measured against AI_MINE_FLEE_RADIUS rather than the bare kill radius so
+ * the teammate is not merely outside the blast but outside the zone it would have to run
+ * from at all.
+ */
+export function friendlyInMineBlast(world: World, tank: Tank): boolean {
+  for (const t of world.tanks) {
+    if (!t.alive || t.id === tank.id || t.kind === 'player') continue;
+    if (vdist(t.pos, tank.pos) <= AI_MINE_FLEE_RADIUS) return true;
+  }
+  return false;
 }
 
 export function aimLead(muzzle: Vec2, target: Vec2, targetVel: Vec2, bulletSpeed: number): number {
@@ -78,6 +169,12 @@ const FACE_NORMALS: Vec2[] = [
  *   not assume this parameter enables ricochet-shell multi-bounce budgets — it will
  *   silently find only single-bounce paths regardless of maxBounces value.
  *
+ * A candidate whose REFLECTED leg (bounce -> target) passes through the shooter's own
+ * hull is rejected: resolveBulletHits (bullets.ts) makes a shell lethal to its owner the
+ * instant its velocity points back at it, so such a path is a self-kill dressed up as a
+ * firing solution. Both legs being wall-clear says nothing about this, which is exactly
+ * how Teal used to shoot itself.
+ *
  * @returns Firing angle (from muzzle toward bounce point), or null if no path exists.
  */
 export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: number): number | null {
@@ -99,6 +196,13 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
       // Clear line to the wall, and clear line from the bounce point to the real target.
       if (!losIgnoring(muzzle, bounce, walls, w)) continue;
       if (!losIgnoring(bounce, target, walls, w)) continue;
+      // ...and the returning leg must MISS the shooter. A shell coming back at its owner
+      // is lethal to it (resolveBulletHits), so a bounce that sends the shell back up its
+      // own firing lane -- e.g. reflecting off a wall the muzzle is directly above -- is a
+      // suicide, not a bank shot. Measured against the same hull the shell would collide
+      // with: TANK_RADIUS + BULLET_RADIUS, widened by AI_HULL_CLEARANCE's margin so a
+      // near-graze at the edge of floating-point agreement is refused too.
+      if (pointSegmentDistance(muzzle, bounce, target) < AI_HULL_CLEARANCE) continue;
       return angleOf(vsub(bounce, muzzle));
     }
   }
@@ -108,21 +212,28 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
 /**
  * Identifies bullets approaching the tank within a lookahead horizon and danger corridor.
  *
- * LIMITATIONS (Tasks 19-22 should note): models bullets as straight lines and ignores walls.
- * A shell that will BANK off a wall into the tank is not flagged (same limitation as the
- * bank-shot targeting itself). Conversely, a bullet that a wall will stop is still flagged.
- * Also: the AI never dodges its own ricochets (bullets owned by the tank are skipped),
- * even though resolveBulletHits makes ricochet shells lethal to their owner — a tank can
- * shoot itself with a ricochet and not dodge.
+ * OWN shells count. resolveBulletHits (bullets.ts) makes a shell lethal to its owner the
+ * moment `vdot(b.vel, ownerPos - b.pos) > 0` — i.e. as soon as it heads back — and with
+ * NORMAL_BOUNCES = 1 / RICOCHET_BOUNCES = 3 every AI shell can come back. Skipping own
+ * bullets outright therefore meant a tank stood still while its own ricochet killed it.
+ * The predicate below is the SAME one resolveBulletHits uses, deliberately: anything
+ * looser makes a tank dodge the shell it just fired (at the muzzle rel is the zero vector,
+ * so the dot is exactly 0, which `<= 0` correctly treats as harmless).
+ *
+ * LIMITATION: models bullets as straight lines and ignores walls. A shell that will BANK
+ * off a wall into the tank is not flagged (same limitation as the bank-shot targeting
+ * itself). Conversely, a bullet that a wall will stop is still flagged.
  */
 export function incomingThreats(world: World, tank: Tank): Bullet[] {
   const out: Bullet[] = [];
   for (const b of world.bullets) {
-    if (!b.alive || b.ownerId === tank.id) continue;
+    if (!b.alive) continue;
     const speed = Math.hypot(b.vel.x, b.vel.y);
     if (speed < VEC_EPS) continue;
     const dir = vnorm(b.vel);
     const rel = { x: tank.pos.x - b.pos.x, y: tank.pos.y - b.pos.y };
+    // Own shells are only dangerous once they are heading back at the muzzle.
+    if (b.ownerId === tank.id && vdot(b.vel, rel) <= 0) continue;
     const along = vdot(rel, dir);
     if (along < 0) continue;                     // bullet already past / moving away
     if (along > speed * THREAT_HORIZON) continue; // too far ahead in time
@@ -173,20 +284,68 @@ export function aimJitter(world: World, tank: Tank, spread: number): number {
 }
 
 /**
+ * True if stepping one tick along `dir` would put the tank's hull inside a wall.
+ *
+ * moveTank resolves such an overlap by pushing the tank straight back out, so a dodge
+ * aimed into a wall nets EXACTLY zero displacement: the tank stays pinned in the danger
+ * corridor and dies there, worse off than if it had not dodged at all. Probing one
+ * TANK_SPEED*DT step is the same displacement moveTank is about to apply, so this asks
+ * precisely the question that matters.
+ */
+function wallBlocksStep(world: World, tank: Tank, dir: Vec2): boolean {
+  const probe = {
+    x: tank.pos.x + dir.x * TANK_SPEED * DT,
+    y: tank.pos.y + dir.y * TANK_SPEED * DT,
+  };
+  for (const w of world.walls) {
+    if (w.destroyed) continue;
+    if (circleVsAABB(probe, TANK_RADIUS, w.aabb).hit) return true;
+  }
+  return false;
+}
+
+/**
+ * The nearest undetonated mine within AI_MINE_FLEE_RADIUS, or null.
+ *
+ * Nearest, not first-in-array: mine insertion order is arbitrary, and fleeing a far mine
+ * that happens to be earlier in the list can drive the tank straight into a nearer one.
+ *
+ * UNARMED mines count. `armed` gates only the PROXIMITY trigger; stepMines detonates on
+ * MINE_TIMER expiry regardless, and that path "spares nobody, including an owner still
+ * standing on it". A tank that dropped a mine and then loitered inside MINE_PROXIMITY_
+ * RADIUS never armed it and never fled it, and the 3-second fuse killed it where it stood.
+ */
+function nearestDangerousMine(world: World, tank: Tank): Mine | null {
+  let nearest: Mine | null = null;
+  let best = Infinity;
+  for (const m of world.mines) {
+    if (m.detonated) continue;
+    const d = vdist(m.pos, tank.pos);
+    // `<=`, and measured against the radius detonateMine actually KILLS at plus an escape
+    // margin -- see AI_MINE_FLEE_RADIUS in constants.ts.
+    if (d <= AI_MINE_FLEE_RADIUS && d < best) { best = d; nearest = m; }
+  }
+  return nearest;
+}
+
+/**
  * Returns a unit dodge direction away from the nearest incoming threat, or null.
  *
- * Prioritizes dodging incoming bullets; if none, dodges away from nearby armed mines.
- * Returns the perpendicular direction on the side the tank already sits, so it dodges
- * outward rather than across the threat.
- *
- * LIMITATION (Tasks 20-21 should note): the returned direction is wall-blind and arena-blind.
- * Because moveTank pushes the tank back out of overlapping walls, a dodge aimed into a wall
- * resolves to zero net displacement — the tank is pinned inside the danger corridor, worse
- * than not dodging. Callers must not trust the direction blindly; the cheap mitigation is to
- * try the returned direction and fall back to its opposite (or no dodge) if blocked.
+ * Prioritizes dodging incoming bullets; if none, flees the nearest nearby armed mine.
+ * The bullet dodge is the perpendicular on the side the tank already sits, so it dodges
+ * outward rather than across the threat -- but that preference yields to two hard
+ * constraints, because a dodge that kills the tank is worse than no dodge:
+ *   1. it must not walk into a wall (moveTank would cancel the move entirely), and
+ *   2. it must not step toward an armed mine that is already in flee range. The two
+ *      perpendiculars are exact opposites, so at most one of them can point at the mine
+ *      and this never rejects both on mine grounds.
+ * If both sides fail every constraint the tank still dodges (some movement beats none),
+ * preferring a side that is at least not wall-pinned.
  */
 export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
+  const mine = nearestDangerousMine(world, tank);
   const threats = incomingThreats(world, tank);
+
   if (threats.length > 0) {
     let nearest = threats[0];
     let best = vdist(nearest.pos, tank.pos);
@@ -199,16 +358,35 @@ export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
     const perpB = { x: dir.y, y: -dir.x };
     // pick the perpendicular on the side the tank already sits, so it dodges outward
     const rel = { x: tank.pos.x - nearest.pos.x, y: tank.pos.y - nearest.pos.y };
-    return vdot(rel, perpA) >= 0 ? perpA : perpB;
+    const preferred = vdot(rel, perpA) >= 0 ? perpA : perpB;
+    const other = preferred === perpA ? perpB : perpA;
+
+    const toMine = mine ? vsub(mine.pos, tank.pos) : null;
+    for (const cand of [preferred, other]) {
+      if (wallBlocksStep(world, tank, cand)) continue;
+      if (toMine && vdot(cand, toMine) > 0) continue;
+      return cand;
+    }
+    // Both sides compromised: a wall-free dodge still moves the tank out of the corridor,
+    // whereas a wall-pinned one moves it nowhere at all, so that is the better tie-break.
+    for (const cand of [preferred, other]) {
+      if (!wallBlocksStep(world, tank, cand)) return cand;
+    }
+    return preferred;
   }
 
-  for (const m of world.mines) {
-    if (m.detonated || !m.armed) continue;
-    if (vdist(m.pos, tank.pos) < MINE_PROXIMITY_RADIUS + TANK_RADIUS) {
-      const away = { x: tank.pos.x - m.pos.x, y: tank.pos.y - m.pos.y };
-      if (Math.hypot(away.x, away.y) < VEC_EPS) return { x: 1, y: 0 };
-      return vnorm(away);
+  if (mine) {
+    const away = { x: tank.pos.x - mine.pos.x, y: tank.pos.y - mine.pos.y };
+    // Standing exactly on the mine: any direction is equally away, so pick one
+    // deterministically rather than returning the zero vector vnorm would give.
+    if (Math.hypot(away.x, away.y) < VEC_EPS) return { x: 1, y: 0 };
+    const dir = vnorm(away);
+    if (!wallBlocksStep(world, tank, dir)) return dir;
+    // Backed against a wall: slide along it (either tangent) rather than press into it.
+    for (const tangent of [{ x: -dir.y, y: dir.x }, { x: dir.y, y: -dir.x }]) {
+      if (!wallBlocksStep(world, tank, tangent)) return tangent;
     }
+    return dir;
   }
   return null;
 }

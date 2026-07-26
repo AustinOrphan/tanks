@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove, shotHitsOwnSide } from './targeting';
 import { driveVelocity } from '../collision';
 import { bulletConfig, RICOCHET_BOUNCES, BANK_PREFER_TICKS, MINE_CAP, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
@@ -19,10 +19,11 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // so nextTimer is always 0 on every path.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
-    // Idle with no target -- but a dodge still overrides the idle {0,0}, same as the
-    // firing paths below: Teal reacts to incoming fire regardless of whether it currently
-    // has anyone to shoot at.
-    return { desiredMove: avoid ? move : { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'idle', nextTimer: 0 };
+    // No target, but Teal is the MOBILE personality (spec §7): keep roaming, exactly as
+    // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary
+    // target for the whole of every countdown and every player respawn -- a hardcoded
+    // zero, not a decision. `move` already folds in the dodge when one is present.
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'idle', nextTimer: 0 };
   }
 
   const speed = bulletConfig.ricochet.speed;
@@ -30,18 +31,26 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // Jitter is applied to BOTH the direct and bank solutions, right where each is
   // computed, so it's present regardless of which path preferBank ends up taking (and
   // never touches the reposition fallback's held/passthrough angle below).
+  // Both solutions are additionally vetted with shotHitsOwnSide: lineOfSight/bankShot only
+  // test walls, but resolveBulletHits kills any non-owner tank the shell touches -- and,
+  // once a ricochet turns around, the shooter too. Returning null (rather than gating
+  // `fire` at the end) is what lets the OTHER shot type still be tried: Teal loses the
+  // blocked shot, not the whole tick.
   function tryDirect(): number | null {
     if (!lineOfSight(tank.pos, player!.pos, world.walls)) return null;
     const targetVel = driveVelocity(player!);
-    return aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD);
+    const angle = aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD);
+    return shotHitsOwnSide(world, tank, angle, 'ricochet') ? null : angle;
   }
   // bankShot is O(walls^2): each surviving wall face runs two full losIgnoring scans.
   // Measured fine at ARENA_01's wall count (~480 ray tests/tick/Teal, microseconds); a
   // much denser arena would want throttling. Evaluated lazily below so the non-preferred
   // option only pays this cost when the preferred option actually fails.
   function tryBank(): number | null {
-    const angle = bankShot(tank.pos, player!.pos, world.walls, RICOCHET_BOUNCES);
-    return angle === null ? null : angle + aimJitter(world, tank, AI_AIM_SPREAD);
+    const raw = bankShot(tank.pos, player!.pos, world.walls, RICOCHET_BOUNCES);
+    if (raw === null) return null;
+    const angle = raw + aimJitter(world, tank, AI_AIM_SPREAD);
+    return shotHitsOwnSide(world, tank, angle, 'ricochet') ? null : angle;
   }
 
   // Alternate which shot type Teal prefers on a deterministic ~2s cycle (user decision:

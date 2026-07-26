@@ -155,6 +155,37 @@ describe('brownDecision', () => {
     expect(d.nextTimer).toBe(0);
   });
 
+  // ---- Friendly fire. resolveBulletHits kills ANY non-owner tank the shell touches, and
+  // Brown never moves, so a parked Brown is a permanently available friendly-fire target.
+  // lineOfSight only tests walls, so nothing used to stop this. ----
+
+  it('holds fire when a teammate is standing on the firing line', () => {
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const mate = tank(3, 'grey', { x: 2.5, y: 0 }); // squarely between brown and the player
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = brownDecision(world([brown, mate, player]), brown);
+    expect(d.fire).toBe(false);
+    // Still tracking, still in 'aim': it must shoot the instant the teammate steps aside,
+    // not fall back to 'idle' and re-walk the whole state machine.
+    expect(d.nextState).toBe('aim');
+  });
+
+  it('fires when the teammate is well clear of the firing line', () => {
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const mate = tank(3, 'grey', { x: 2.5, y: 4 }); // same x, far off the y=0 line
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = brownDecision(world([brown, mate, player]), brown);
+    expect(d.fire).toBe(true);
+  });
+
+  it('fires past a DEAD teammate on the line (a corpse is not a friendly-fire risk)', () => {
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const corpse = tank(3, 'grey', { x: 2.5, y: 0 }, { alive: false });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const d = brownDecision(world([brown, corpse, player]), brown);
+    expect(d.fire).toBe(true);
+  });
+
   it('No live player - player exists but not alive', () => {
     const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim', turretAngle: 1.234 });
     const player = tank(2, 'player', { x: 5, y: 0 }, { alive: false });

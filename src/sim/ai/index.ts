@@ -8,6 +8,7 @@ import { greyDecision } from './grey';
 import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
+import { shotHitsOwnSide, friendlyInMineBlast } from './targeting';
 import { FIRE_COOLDOWN, MINE_COOLDOWN, DT, AI_TURRET_TURN_RATE } from '../constants';
 import { roundPhase } from '../round';
 
@@ -58,7 +59,13 @@ export function stepAi(world: World, events: SimEvent[]): void {
     tank.aiState = decision.nextState;
     tank.aiTimer = decision.nextTimer;
 
-    if (canAct && decision.fire && tank.fireCooldown <= 0) {
+    // Friendly fire is vetted TWICE, and it has to be. The decision functions check their
+    // own firing solution, but the shot below leaves along the post-slew turret angle,
+    // which mid-swing can be most of a half turn away from what the decision reasoned about
+    // (see the "fires with the ACTUAL (post-slew) turret angle" test in dispatch.test.ts).
+    // A decision-time-only gate therefore sprays teammates on every turret swing. This is
+    // the check against the angle the barrel is really pointing.
+    if (canAct && decision.fire && tank.fireCooldown <= 0 && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
       // Fire along the tank's ACTUAL (post-slew) turret angle, not the decision's desired
       // angle -- a shot taken mid-swing must go where the barrel currently points, not
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
@@ -67,7 +74,10 @@ export function stepAi(world: World, events: SimEvent[]): void {
         tank.fireCooldown = FIRE_COOLDOWN;
       }
     }
-    if (canAct && decision.mine && tank.mineCooldown <= 0) {
+    // Same idea for mines: the decision functions gate on cooldown/cap, but only here do
+    // we know the tank's final position for this tick, and a mine laid on top of a
+    // teammate kills it on a 3-second fuse (Brown, which never moves, cannot escape one).
+    if (canAct && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
       if (dropMine(world, tank.id, events)) {
         tank.mineCooldown = MINE_COOLDOWN;
       }
