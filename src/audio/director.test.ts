@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createAudioDirector } from './director';
 import type { AudioEngine } from './engine';
+import { DEFAULT_VOLUME } from './manifest';
 import type { SimEvent } from '../sim/events';
 
 interface PlayCall {
@@ -20,6 +21,7 @@ function makeSpyEngine(): { engine: AudioEngine; calls: PlayCall[] } {
     toggleMute: () => false,
     isMuted: () => false,
     setVolume: () => {},
+    getVolume: () => DEFAULT_VOLUME,
     dispose: () => {},
   };
   return { engine, calls };

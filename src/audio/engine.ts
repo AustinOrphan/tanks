@@ -1,5 +1,5 @@
 import { Howl, Howler } from 'howler';
-import type { AudioManifest } from './manifest';
+import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -9,6 +9,7 @@ export interface AudioEngine {
   toggleMute(): boolean;
   isMuted(): boolean;
   setVolume(v: number): void;
+  getVolume(): number;
   dispose(): void;
 }
 
@@ -31,8 +32,13 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   const sounds: Record<string, Howl | null> = {};
   let music: Howl | null = null;
   let muted = false;
-  let masterVolume = 1;
+  let masterVolume = DEFAULT_VOLUME;
   let ctx: AudioContext | null = null;
+
+  // Push the default through immediately. Howler's own default is 1.0, so
+  // deferring this until the first slider drag leaves the HUD showing
+  // DEFAULT_VOLUME while the game is actually playing at full volume.
+  Howler.volume(masterVolume);
 
   // Load each SFX with pooling for overlap. A missing/broken asset is marked
   // null on loaderror and served by the procedural fallback instead.
@@ -58,7 +64,14 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   }
 
   function ensureCtx(): AudioContext | null {
-    if (ctx) return ctx;
+    if (ctx) {
+      // Browsers suspend an AudioContext created before a user gesture, and can
+      // re-suspend a running one (tab hidden, OS audio focus loss). A suspended
+      // context accepts every call below in silence, so re-check on every use
+      // rather than only at creation.
+      if (ctx.state === 'suspended') void ctx.resume();
+      return ctx;
+    }
     const AC =
       typeof window !== 'undefined'
         ? window.AudioContext ||
@@ -66,6 +79,7 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
         : undefined;
     if (!AC) return null;
     ctx = new AC();
+    if (ctx.state === 'suspended') void ctx.resume();
     return ctx;
   }
 
@@ -120,6 +134,9 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     setVolume(v) {
       masterVolume = Math.max(0, Math.min(1, v));
       Howler.volume(masterVolume);
+    },
+    getVolume() {
+      return masterVolume;
     },
     dispose() {
       for (const k of Object.keys(sounds)) sounds[k]?.unload();

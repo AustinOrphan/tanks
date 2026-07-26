@@ -1,4 +1,5 @@
 import type { GameState } from './state';
+import { DEFAULT_VOLUME } from '../audio/manifest';
 import './hud.css';
 
 export interface Hud {
@@ -21,7 +22,7 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
-        <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="0.6" />
+        <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" />
       </div>
     </div>
     <div class="hud-panel hud-panel--hidden">

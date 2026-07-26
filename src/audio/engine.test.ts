@@ -34,7 +34,7 @@ vi.mock('howler', () => {
 });
 
 import { createAudioEngine } from './engine';
-import { AUDIO_MANIFEST } from './manifest';
+import { AUDIO_MANIFEST, DEFAULT_VOLUME } from './manifest';
 
 describe('createAudioEngine', () => {
   beforeEach(() => {
@@ -45,6 +45,25 @@ describe('createAudioEngine', () => {
   it('constructs without throwing and starts unmuted', () => {
     const engine = createAudioEngine(AUDIO_MANIFEST);
     expect(engine.isMuted()).toBe(false);
+    engine.dispose();
+  });
+
+  it('applies DEFAULT_VOLUME at construction, so the HUD slider is not lying', () => {
+    // The HUD renders its volume slider at DEFAULT_VOLUME before the user has
+    // touched anything. If the engine boots at some other level and waits for
+    // an 'input' event to call Howler.volume(), the displayed value is wrong
+    // until the first drag.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+
+    expect(globalVolume).toHaveBeenCalledWith(DEFAULT_VOLUME);
+    engine.dispose();
+  });
+
+  it('reports its current volume', () => {
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    expect(engine.getVolume()).toBe(DEFAULT_VOLUME);
+    engine.setVolume(0.25);
+    expect(engine.getVolume()).toBe(0.25);
     engine.dispose();
   });
 
