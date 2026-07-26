@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ARENA_01, loadArena, createArenaWorld } from './arena';
+import { ARENA_01, arenaBounds, loadArena, createArenaWorld } from './arena';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
@@ -9,6 +9,27 @@ import type { InputState } from './types';
 function countChar(grid: string[], ch: string): number {
   return grid.reduce((n, row) => n + [...row].filter((c) => c === ch).length, 0);
 }
+
+describe('arenaBounds', () => {
+  it('reports the playable area, not the extent of the oversized boundary walls', () => {
+    const bounds = arenaBounds(ARENA_01);
+
+    expect(bounds).toEqual({ width: 22, height: 18 });
+  });
+
+  it('is strictly smaller than the wall extent, because boundaries sit outside play', () => {
+    const { walls } = loadArena(ARENA_01);
+    const wallMaxX = Math.max(...walls.map((w) => w.aabb.maxX));
+    const wallMaxY = Math.max(...walls.map((w) => w.aabb.maxY));
+    const bounds = arenaBounds(ARENA_01);
+
+    // The renderer centres the ground plane at (width/2, height/2). Measuring
+    // that from wall extent puts the felt one cell off-centre in both axes and
+    // leaves the top/left boundary walls hanging over the clear colour.
+    expect(wallMaxX).toBe(bounds.width + ARENA_01.cellSize);
+    expect(wallMaxY).toBe(bounds.height + ARENA_01.cellSize);
+  });
+});
 
 describe('loadArena', () => {
   it('produces the interior walls plus exactly 4 solid boundary walls', () => {

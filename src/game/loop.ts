@@ -1,6 +1,6 @@
 import { DT } from '../sim/constants';
 import { step, type World } from '../sim/world';
-import { createArenaWorld } from '../sim/arena';
+import { ARENA_01, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { SimEvent } from '../sim/events';
 import { createInputController } from '../input/input';
 import { createRenderer } from '../render/renderer';
@@ -9,17 +9,6 @@ import { AUDIO_MANIFEST } from '../audio/manifest';
 import { createAudioDirector } from '../audio/director';
 import { createGameStateMachine } from './state';
 import { createHud } from './hud';
-
-/** Arena bounds come from the outermost boundary walls (loadArena origin is 0,0). */
-function computeBounds(world: World): { width: number; height: number } {
-  let width = 0;
-  let height = 0;
-  for (const w of world.walls) {
-    if (w.aabb.maxX > width) width = w.aabb.maxX;
-    if (w.aabb.maxY > height) height = w.aabb.maxY;
-  }
-  return { width, height };
-}
 
 function countEnemies(world: World): number {
   let n = 0;
@@ -36,7 +25,7 @@ export function startGame(
   let curr: World = createArenaWorld();
   let prev: World = curr;
 
-  const { width, height } = computeBounds(curr);
+  const { width, height } = arenaBounds(ARENA_01);
 
   const renderer = createRenderer(canvas, width, height);
   const input = createInputController(canvas, (x, y) => renderer.screenToGround(x, y));

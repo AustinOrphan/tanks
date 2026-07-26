@@ -51,6 +51,20 @@ export const ARENA_01: Arena = {
   ],
 };
 
+/**
+ * The playable area, in world units. Derived from the same `cols * cellSize`
+ * that `loadArena` lays the grid out with, so the two can never drift.
+ *
+ * Deliberately NOT measurable from the returned walls: `loadArena` rings the
+ * arena with boundary walls one cell THICK and OUTSIDE play (see below), so
+ * `max(wall.aabb.maxX)` overstates the arena by a cell in each axis. A renderer
+ * that sizes and centres the ground from that reading draws the board
+ * off-centre with its own boundary walls hanging over the void.
+ */
+export function arenaBounds(arena: Arena): { width: number; height: number } {
+  return { width: arena.cols * arena.cellSize, height: arena.rows * arena.cellSize };
+}
+
 const SPAWN_KINDS: Record<string, TankKind> = {
   P: 'player',
   B: 'brown',
