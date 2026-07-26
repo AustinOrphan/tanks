@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, wanderMove, shotHitsOwnSide } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
@@ -51,7 +51,11 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // Gated on mineCooldown (Task 22's dispatcher decrements it and re-arms on success) and
   // on MINE_CAP as defence-in-depth: dropMine enforces this cap for every owner too, but
   // checking it here avoids burning a cooldown on a request dropMine would refuse anyway.
-  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP;
+  // And gated on the player being close enough for the mine to threaten anything at all --
+  // dropping merely because the cooldown allowed it made own mines the largest single cause
+  // of AI deaths, with the tank littering ground nobody was contesting.
+  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP
+    && mineThreatensPlayer(world, tank);
 
   // nextState is still vestigial for Grey: unlike Brown, greyDecision never branches on
   // tank.aiState (nextState here is just a passthrough/label, not a driver of behaviour).

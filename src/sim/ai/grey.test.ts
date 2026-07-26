@@ -3,7 +3,7 @@ import { greyDecision } from './grey';
 import { aimJitter, aimLead } from './targeting';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
-import { DODGE_PATIENCE_TICKS, AI_AIM_SPREAD, bulletConfig } from '../constants';
+import { DODGE_PATIENCE_TICKS, AI_AIM_SPREAD, AI_MINE_TACTICAL_RADIUS, bulletConfig } from '../constants';
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -152,11 +152,46 @@ describe('greyDecision', () => {
 
   // ---- Grey mine-dropping (fix round 2: user decision, spec §7 "avoids its own mines") ----
 
-  it('H1: roaming, cooldown ready, no active mines -> mine is true', () => {
+  it('H1: roaming, cooldown ready, no active mines, player in range -> mine is true', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 });
-    const w = world({ tanks: [grey] }); // no bullets/mines/player -> not dodging
+    const player = tank(9, 'player', { x: 3, y: 0 }); // inside AI_MINE_TACTICAL_RADIUS
+    const w = world({ tanks: [grey, player] }); // no bullets/mines -> not dodging
     const d = greyDecision(w, grey);
     expect(d.mine).toBe(true);
+  });
+
+  it('H1b: does not lay a mine with the player far away, however ready the cooldown is', () => {
+    // Dropping "because the cooldown allows it" is what turned a roamer alone in a corner
+    // into a tank standing in its own minefield. A mine that far from the player cannot
+    // threaten anything before its 3-second fuse expires.
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const player = tank(9, 'player', { x: 12, y: 0 });
+    const d = greyDecision(world({ tanks: [grey, player] }), grey);
+    expect(d.mine).toBe(false);
+  });
+
+  it('H1c: the tactical radius is measured from the drop point, inclusive', () => {
+    const inside = tank(1, 'grey', { x: 0, y: 0 });
+    const outside = tank(1, 'grey', { x: 0, y: 0 });
+    const near = tank(9, 'player', { x: AI_MINE_TACTICAL_RADIUS - 1e-6, y: 0 });
+    const far = tank(9, 'player', { x: AI_MINE_TACTICAL_RADIUS + 1e-6, y: 0 });
+    expect(greyDecision(world({ tanks: [inside, near] }), inside).mine).toBe(true);
+    expect(greyDecision(world({ tanks: [outside, far] }), outside).mine).toBe(false);
+  });
+
+  it('H1d: a dead player is nobody to mine against', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const corpse = tank(9, 'player', { x: 3, y: 0 }, { alive: false });
+    expect(greyDecision(world({ tanks: [grey, corpse] }), grey).mine).toBe(false);
+  });
+
+  it('H1e: still allows a back-to-back burst while the player stays close', () => {
+    // The point of the gate is to stop aimless littering, not to forbid deliberately
+    // mining ground the player is contesting. With the player in range a tank may lay up
+    // to MINE_CAP mines in succession.
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] });
+    const player = tank(9, 'player', { x: 3, y: 0 });
+    expect(greyDecision(world({ tanks: [grey, player] }), grey).mine).toBe(true);
   });
 
   it('H2: mineCooldown > 0 -> mine is false', () => {
@@ -187,8 +222,9 @@ describe('greyDecision', () => {
   it('H5: cap boundary is a strict "<", not "<=" (below MINE_CAP -> true, at MINE_CAP -> false)', () => {
     const below = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70] }); // 1 < MINE_CAP(2)
     const at = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // 2 == MINE_CAP(2)
-    expect(greyDecision(world({ tanks: [below] }), below).mine).toBe(true);
-    expect(greyDecision(world({ tanks: [at] }), at).mine).toBe(false);
+    const player = () => tank(9, 'player', { x: 3, y: 0 }); // in range, so the cap is what decides
+    expect(greyDecision(world({ tanks: [below, player()] }), below).mine).toBe(true);
+    expect(greyDecision(world({ tanks: [at, player()] }), at).mine).toBe(false);
   });
 
   // ---- Grey is now cautious (swapped from Teal): dodge suppression has a patience

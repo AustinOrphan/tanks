@@ -398,7 +398,11 @@ describe('stepAi', () => {
     it('still drops a mine when no teammate is within the blast', () => {
       const grey = tank(1, 'grey', { x: 0, y: 0 });
       const mate = tank(3, 'brown', { x: 12, y: 0 });
-      const w = world([grey, mate]);
+      // A player in range: laying a mine is gated on it being worth doing (see
+      // mineThreatensPlayer), so without a nearby player this would prove nothing about
+      // the friendly-fire gate this test is actually about.
+      const player = tank(9, 'player', { x: 3, y: 0 });
+      const w = world([grey, mate, player]);
       stepAi(w, []);
       expect(w.mines.length).toBe(1);
     });

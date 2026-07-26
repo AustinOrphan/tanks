@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove, shotHitsOwnSide } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { bulletConfig, RICOCHET_BOUNCES, BANK_PREFER_TICKS, MINE_CAP, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
@@ -65,7 +65,10 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // mid-dodge is wasted and risks self-trapping. MINE_CAP is checked here as
   // defence-in-depth: dropMine enforces this cap for every owner too, but checking it
   // here avoids burning tank.mineCooldown on a request dropMine would refuse anyway.
-  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP;
+  // Also gated on the player being near enough for the mine to matter -- see
+  // mineThreatensPlayer. Availability is not a reason to lay ordnance.
+  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP
+    && mineThreatensPlayer(world, tank);
 
   if (turretAngle !== null) {
     return { desiredMove: move, turretAngle, fire: true, fireType: 'ricochet', mine, nextState: 'fire', nextTimer: 0 };

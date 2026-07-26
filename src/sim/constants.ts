@@ -78,6 +78,30 @@ export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bull
 export const AI_MINE_FLEE_TICKS = 15; // 0.25s at 60Hz
 export const AI_MINE_FLEE_MARGIN = TANK_SPEED * AI_MINE_FLEE_TICKS * DT; // 0.75 units
 export const AI_MINE_FLEE_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS + AI_MINE_FLEE_MARGIN; // 3.25
+// How near the player has to be for laying a mine to be worth doing at all.
+//
+// Grey and Teal used to drop a mine the instant the cooldown allowed it, with no reference
+// to where anyone was, so a roamer alone in a corner littered the floor with live ordnance
+// it then had to dodge. Mines are area denial: one goes down to threaten ground the player
+// is actually contesting, not to mark where a tank happened to be standing.
+//
+// Derived, not picked: the blast kills out to MINE_BLAST_RADIUS + TANK_RADIUS, and a player
+// within two seconds' travel of that edge can still be caught by, or forced to respect, a
+// 3-second fuse. Being a radius around the DROP POINT it also permits a deliberate burst --
+// while the player stays close a tank may still lay up to MINE_CAP mines back to back, which
+// is exactly the chokepoint denial worth keeping.
+//
+// The multiplier was chosen by measurement, not taste. Over the same 60 pacifist seeds
+// (see ai/pacifist.test.ts), sweeping it against the ungated behaviour it replaces:
+//   ungated   9.7 mines/round, 5 player kills, 31.7% of rounds lost to AI self-destruction
+//   1 second  1.4 mines/round, 4 player kills, 0%
+//   2 seconds 4.3 mines/round, 9 player kills, 0%   <- here
+//   3 seconds 8.2 mines/round, 8 player kills, 6.7%
+// Two seconds lays fewer than half the mines the old rule did and kills the player nearly
+// twice as often with them: what got deleted was ordnance that never threatened anyone but
+// the tank that laid it. Three seconds is where mines start killing their owners again.
+export const AI_MINE_TACTICAL_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS + TANK_SPEED * 2.0; // 8.5
+
 // How many evenly spaced headings the mine escape search tries. A tank can have MINE_CAP
 // mines in flee range at once, so the escape has to satisfy several repulsions together
 // rather than run from the nearest one; the search maximises the worst-case outward

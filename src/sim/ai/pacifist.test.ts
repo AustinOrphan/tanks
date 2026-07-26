@@ -19,10 +19,11 @@ import { step } from '../world';
  */
 const TICK_CAP = 60 * 60 * 5; // 5 simulated minutes at 60Hz
 const SEEDS = 60;
-// Measured 8.3% (5/60) when this was written, against 31.7% (19/60) before the fix. The
-// bar is set above the measured value so ordinary jitter in AI tuning does not fail the
-// build, and far enough below the old number to catch a real regression.
-const MAX_FREE_WIN_RATE = 0.15;
+// Measured 0/60 once mine-laying became tactical, against 19/60 (31.7%) before any of the
+// fixes. The bar allows a couple of rounds' worth of slack so ordinary AI tuning does not
+// fail the build, while staying far below the old number. Every seed is fixed, so this
+// number moves only when behaviour actually changes.
+const MAX_FREE_WIN_RATE = 0.05;
 
 // A wander independent of the sim's own PRNG, so driving the player cannot perturb the
 // sequence the AI draws from and change what is being measured.
@@ -41,16 +42,18 @@ function playPacifist(seed: number) {
   let heading = rnd() * Math.PI * 2;
   let ticks = 0;
   let fires = 0;
+  let mines = 0;
 
   while (w.status === 'playing' && ticks < TICK_CAP) {
     if (ticks % 45 === 0) heading += (rnd() - 0.5) * 2.4;
     const dir = { x: Math.cos(heading), y: Math.sin(heading) };
     const r = step(w, { move: dir, aim: dir, fire: false, mine: false });
     fires += r.events.filter((e) => e.type === 'fire').length;
+    mines += r.events.filter((e) => e.type === 'mine-dropped').length;
     ticks++;
     w = r.world;
   }
-  return { outcome: w.status === 'playing' ? 'timeout' : w.status, ticks, fires };
+  return { outcome: w.status === 'playing' ? 'timeout' : w.status, ticks, fires, mines };
 }
 
 describe('AI vs a player who never fires', () => {
@@ -70,6 +73,17 @@ describe('AI vs a player who never fires', () => {
     // AI that never pulls the trigger. Measured at ~30 shots per round.
     const shotsPerRound = rows.reduce((n, r) => n + r.fires, 0) / SEEDS;
     expect(shotsPerRound).toBeGreaterThan(15);
+  });
+
+  it('lays mines tactically rather than whenever the cooldown allows', () => {
+    // The old rule dropped a mine on cooldown regardless of where anyone was: 9.7 per
+    // round, of which the overwhelming majority only ever endangered the tank that laid
+    // them. Gating on the player being in range gives 4.3 per round. The upper bound is
+    // the real assertion; the lower bound guards the opposite regression, an AI that has
+    // quietly stopped using mines at all.
+    const perRound = rows.reduce((n, r) => n + r.mines, 0) / SEEDS;
+    expect(perRound).toBeGreaterThan(1);
+    expect(perRound).toBeLessThan(7);
   });
 
   it('still kills the player promptly in the rounds it wins', () => {

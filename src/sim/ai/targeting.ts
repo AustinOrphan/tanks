@@ -4,7 +4,7 @@ import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../
 import {
   AIM_EPS, TANK_RADIUS, TANK_SPEED, DT, THREAT_HORIZON, DANGER_CORRIDOR,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
-  AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, bulletConfig,
+  AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig,
 } from '../constants';
 import type { World } from '../world';
 
@@ -139,6 +139,26 @@ export function friendlyInMineBlast(world: World, tank: Tank): boolean {
   for (const t of world.tanks) {
     if (!t.alive || t.id === tank.id || t.kind === 'player') continue;
     if (vdist(t.pos, tank.pos) <= AI_MINE_FLEE_RADIUS) return true;
+  }
+  return false;
+}
+
+/**
+ * True if laying a mine at `tank.pos` right now would actually threaten the player.
+ *
+ * Grey and Teal previously dropped one whenever the cooldown was ready and they were under
+ * MINE_CAP — an availability test, not a tactical one. A roamer crossing an empty half of
+ * the arena littered live ordnance behind itself for no gain, then had to spend its time
+ * dodging it; own mines were the single largest cause of AI deaths measured.
+ *
+ * Being a plain radius around the drop point, this still permits a burst: while the player
+ * stays close a tank may lay up to MINE_CAP mines back to back, which is the chokepoint
+ * denial worth keeping. It only refuses the drops that could never have mattered.
+ */
+export function mineThreatensPlayer(world: World, tank: Tank): boolean {
+  for (const t of world.tanks) {
+    if (t.kind !== 'player' || !t.alive) continue;
+    if (vdist(t.pos, tank.pos) <= AI_MINE_TACTICAL_RADIUS) return true;
   }
   return false;
 }
