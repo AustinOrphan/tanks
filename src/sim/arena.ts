@@ -20,6 +20,18 @@ export interface Arena {
 // bank off that cell's west face at (16,11), and reach the player (11,15) through
 // the same gap at rows 6-7 without touching any other wall. See
 // arena.test.ts's "affords Teal a real single-bounce bank shot" test.
+//
+// Cover depth (col 5, row 5): Brown (9,5) and Grey (13,5) sit symmetrically about the
+// player's x=11, and the row-4 block alone (x:[10,12], y:[8,10]) put both of their direct
+// lines to the player spawn (11,15) exactly tangent to its corners -- (10,10) for Brown,
+// (12,10) for Grey -- a single-point knife edge where a 0.1-unit nudge in either x
+// direction gave ONE of them a fully clear 10-unit lane (see task-balance-report.md).
+// Stacking a second solid cell directly below it at (col 5, row 5) extends the block to
+// y:[8,12], turning that corner-graze into a real chord through the box for both lines
+// (verified by direct search over player-position perturbations, not by hand-argued
+// geometry -- see the coverOk check in the report). It does not touch column 6/7 at
+// row 4 or row 5, so Teal's bank-shot corridor (through the row-4 gap, off the (8,5)
+// reflector, back down through rows 6-7) is untouched.
 //        col: 0123456789A   (A = 10)
 export const ARENA_01: Arena = {
   cols: 11,
@@ -32,7 +44,7 @@ export const ARENA_01: Arena = {
     '..#.B.G.#..', // 2  Brown, Grey
     '.....T.....', // 3  Teal
     '..x..#..x..', // 4  center cover + flanking destructibles
-    '........#..', // 5  bank-shot reflector: Teal's only route around the center block
+    '.....#..#..', // 5  cover depth (col 5) + bank-shot reflector (col 8)
     '..#.....#..', // 6
     '..#..P..#..', // 7  Player
     '...........', // 8

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ARENA_01, loadArena, createArenaWorld } from './arena';
 import { raySegmentVsAABB } from './collision';
-import { bankShot } from './ai/targeting';
+import { bankShot, lineOfSight } from './ai/targeting';
 import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
 import { step } from './world';
 import type { InputState } from './types';
@@ -64,6 +64,25 @@ describe('loadArena', () => {
     // found. Do NOT ship the slice with this red — a bank-less Teal just repositions
     // forever and the signature behavior never appears.
     expect(bankShot(teal.pos, player.pos, walls, RICOCHET_BOUNCES)).not.toBeNull();
+  });
+
+  it('gives the player spawn REAL cover: neither Brown nor Grey has line-of-sight, even ' +
+    'perturbed by ±0.5 units in x and y (the original arena failed exactly this: the ' +
+    'center block put both lines exactly tangent to its corners, a knife edge where a ' +
+    '0.1-unit nudge gave one attacker a fully clear 10-unit lane)', () => {
+    const { tanks, walls } = loadArena(ARENA_01);
+    const brown = tanks.find((t) => t.kind === 'brown')!;
+    const grey = tanks.find((t) => t.kind === 'grey')!;
+    const player = tanks.find((t) => t.kind === 'player')!;
+
+    const deltas = [-0.5, 0, 0.5];
+    for (const dx of deltas) {
+      for (const dy of deltas) {
+        const p = { x: player.pos.x + dx, y: player.pos.y + dy };
+        expect(lineOfSight(brown.pos, p, walls), `brown LOS at dx=${dx}, dy=${dy}`).toBe(false);
+        expect(lineOfSight(grey.pos, p, walls), `grey LOS at dx=${dx}, dy=${dy}`).toBe(false);
+      }
+    }
   });
 
   it('keeps tanks and spawns in lockstep (index, kind, and position) for resetArena', () => {
