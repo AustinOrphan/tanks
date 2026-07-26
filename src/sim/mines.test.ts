@@ -8,6 +8,7 @@ import {
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_RADIUS,
+  TANK_RADIUS,
   DT,
 } from './constants'
 
@@ -127,6 +128,88 @@ describe('stepMines', () => {
     expect(player.alive).toBe(true)
   })
 
+  it('an unarmed mine is inert: dropping one beside an enemy kills nobody', () => {
+    // Not a free kill and not a self-kill. A mine spawns at the owner's feet
+    // and the blast reaches further than the trigger, so a fresh mine that
+    // could be triggered detonated at range zero -- killing the dropper along
+    // with the target, or, if the owner were exempted, handing out a riskless
+    // walk-up execution. Arming is the gate for both.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player, enemy], spawns: [], lives: 3 })
+    dropMine(world, 1, [])
+
+    const events: SimEvent[] = []
+    stepMines(world, DT, events)
+
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(false)
+    expect(enemy.alive).toBe(true)
+    expect(player.alive).toBe(true)
+  })
+
+  it('kills an enemy standing on the mine the moment the owner walks clear', () => {
+    // The flip side: arming is a real threat, not a permanent disarm.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player, enemy], spawns: [], lives: 3 })
+    dropMine(world, 1, [])
+
+    player.pos = { x: 10, y: 10 } // owner clears the area -> arms this tick
+    const events: SimEvent[] = []
+    stepMines(world, DT, events)
+
+    expect(events.some((e) => e.type === 'mine-armed')).toBe(true)
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
+    expect(enemy.alive).toBe(false)
+    expect(player.alive).toBe(true) // 10+ units away, well clear of the blast
+  })
+
+  it('kills an owner who camps on his own mine until the fuse runs out', () => {
+    // The counterweight to the exemption above: if the fuse spared the owner
+    // too, parking on your own mine would be a free riskless bomb.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+    dropMine(world, 1, [])
+
+    const events: SimEvent[] = []
+    for (let i = 0; i < Math.ceil(MINE_TIMER / DT) + 2; i++) stepMines(world, DT, events)
+
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
+    expect(player.alive).toBe(false)
+  })
+
+  it('kills the owner who walks back onto his own armed mine', () => {
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+    dropMine(world, 1, [])
+
+    player.pos = { x: 10, y: 10 } // walk away -> arms
+    stepMines(world, DT, [])
+    expect(world.mines[0].armed).toBe(true)
+
+    player.pos = { x: 0.2, y: 0 } // walk back onto it
+    const events: SimEvent[] = []
+    stepMines(world, DT, events)
+
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
+    expect(player.alive).toBe(false)
+  })
+
+  it('arms a mine whose owner was killed while standing on it', () => {
+    // Corpses stay in world.tanks, so a dead owner at distance 0 used to keep
+    // the mine unarmed forever -- no mine-armed cue before it went off.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+    dropMine(world, 1, [])
+    player.alive = false
+
+    const events: SimEvent[] = []
+    stepMines(world, DT, events)
+
+    expect(world.mines[0].armed).toBe(true)
+    expect(events.filter((e) => e.type === 'mine-armed')).toHaveLength(1)
+  })
+
   it('emits mine-armed the tick the owner leaves proximity (mine goes live)', () => {
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
@@ -150,10 +233,16 @@ describe('stepMines', () => {
 })
 
 describe('detonateMine', () => {
-  it('kills tanks inside the blast radius but not just outside it', () => {
+  it('kills tanks whose hull is inside the blast but not those clear of it', () => {
+    // The blast is measured against the tank's hull, matching resolveBulletHits'
+    // circleVsCircle: reach is MINE_BLAST_RADIUS + TANK_RADIUS from the centre.
     const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
     const inside = mkTank({ id: 2, kind: 'brown', pos: { x: MINE_BLAST_RADIUS - 0.5, y: 0 } })
-    const outside = mkTank({ id: 3, kind: 'grey', pos: { x: MINE_BLAST_RADIUS + 0.5, y: 0 } })
+    const outside = mkTank({
+      id: 3,
+      kind: 'grey',
+      pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS + 0.5, y: 0 },
+    })
     const world = createWorld({ walls: [], tanks: [owner, inside, outside], spawns: [], lives: 3 })
     const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
     world.mines.push(mine)
