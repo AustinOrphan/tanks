@@ -78,6 +78,13 @@ export const DANGER_CORRIDOR = TANK_RADIUS + 0.3; // lateral half-width the bull
 export const AI_MINE_FLEE_TICKS = 15; // 0.25s at 60Hz
 export const AI_MINE_FLEE_MARGIN = TANK_SPEED * AI_MINE_FLEE_TICKS * DT; // 0.75 units
 export const AI_MINE_FLEE_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS + AI_MINE_FLEE_MARGIN; // 3.25
+// How many evenly spaced headings the mine escape search tries. A tank can have MINE_CAP
+// mines in flee range at once, so the escape has to satisfy several repulsions together
+// rather than run from the nearest one; the search maximises the worst-case outward
+// component over a fixed wheel of directions. 16 is a 22.5-degree resolution, and being a
+// multiple of 4 it puts the exact axis directions on the wheel, so the single-mine case
+// still yields precisely "straight away".
+export const ESCAPE_SAMPLES = 16;
 
 // ---- AI shot vetting (friendlyBlocksShot, bankShot's return-leg check) ----
 // How close a shell may pass to a tank the AI did NOT aim at before the shot is refused:

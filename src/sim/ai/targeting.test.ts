@@ -269,6 +269,27 @@ describe('shotHitsOwnSide', () => {
     expect(shotHitsOwnSide(w([shooter, outside]), shooter, 0, 'normal')).toBe(false);
   });
 
+  it('reports a teammate who is off the line now but walks into the shell', () => {
+    // The check ran against where teammates STAND at the trigger pull, but Grey and Teal
+    // roam, and a shell is in flight for up to AI_SHOT_LOOKAHEAD seconds. The teammate
+    // below is 2.5 units clear of the firing line -- five times the hull clearance -- and
+    // drives straight through it, arriving exactly when the shell does.
+    // Shell: speed 6 along +x, so it reaches x=5 at t = 5/6 s.
+    // Mate: TANK_SPEED 3 along -y from y=2.5, so it reaches y=0 at t = 2.5/3 = 5/6 s.
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'teal', { x: 5, y: 2.5 }, { desiredMove: { x: 0, y: -1 } });
+    expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(true);
+  });
+
+  it('does not report a teammate whose motion carries it clear of the shell', () => {
+    // The mirror of the case above: prediction must not turn into blanket paranoia about
+    // any teammate near the line, or the AI stops shooting, which is its own bug.
+    // This mate starts 2.5 clear and drives AWAY, so it is never near the shell.
+    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'teal', { x: 5, y: 2.5 }, { desiredMove: { x: 0, y: 1 } });
+    expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(false);
+  });
+
   it('does not report the player (the AI is supposed to shoot at that one)', () => {
     const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
     const player = aiTank(2, 'player', { x: 4, y: 0 });

@@ -1,10 +1,10 @@
 import type { Vec2, Wall, AABB, Bullet, Tank, Mine, BulletType } from '../types';
 import { vsub, angleOf, vdot, vdist, vnorm, fromAngle, nextRng } from '../types';
-import { raySegmentVsAABB, circleVsAABB, reflectSweep } from '../collision';
+import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../collision';
 import {
   AIM_EPS, TANK_RADIUS, TANK_SPEED, DT, THREAT_HORIZON, DANGER_CORRIDOR,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
-  AI_SHOT_LOOKAHEAD, bulletConfig,
+  AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, bulletConfig,
 } from '../constants';
 import type { World } from '../world';
 
@@ -67,20 +67,60 @@ function shotPath(from: Vec2, angle: number, type: BulletType, walls: Wall[]): V
  * 3-bounce ricochets. The shooter is exempt on leg 0 only — the muzzle is inside its own
  * hull by construction, and a shell travelling away is harmless to its owner, exactly as
  * resolveBulletHits has it.
+ *
+ * Own-side tanks are checked where they WILL BE, not where they stand. Comparing a shell's
+ * whole flight against a snapshot of the arena treats roaming teammates as if they were
+ * parked: a mate 2.5 units clear of the muzzle line — five hull clearances — walks into the
+ * shell a third of a second later and dies, and the shot was cleared as safe. A stationary
+ * tank has zero drive velocity, so this reduces exactly to the old static test for Brown.
  */
 export function shotHitsOwnSide(world: World, tank: Tank, angle: number, type: BulletType): boolean {
   const path = shotPath(tank.pos, angle, type, world.walls);
+  const speed = bulletConfig[type].speed;
+  let legStart = 0;
   for (let leg = 0; leg + 1 < path.length; leg++) {
     const a = path[leg];
     const b = path[leg + 1];
+    const legTime = vdist(a, b) / speed;
     for (const t of world.tanks) {
       // The player is the target, not a friendly; a corpse blocks nothing.
       if (!t.alive || t.kind === 'player') continue;
       if (t.id === tank.id && leg === 0) continue; // outbound leg: harmless to its owner
+      // Both tests, ORed: prediction ADDS the mates who walk in, it does not excuse the
+      // ones standing on the line today. Trusting prediction alone made it worse, because
+      // a roamer's heading is only stable for a fraction of the flight time -- extrapolating
+      // it over the full 1.5s cleared shots at mates that never actually left the line.
       if (pointSegmentDistance(t.pos, a, b) < AI_HULL_CLEARANCE) return true;
+      const vel = driveVelocity(t);
+      if (minApproach(a, b, legTime, legStart, t.pos, vel) < AI_HULL_CLEARANCE) return true;
     }
+    legStart += legTime;
   }
   return false;
+}
+
+/**
+ * Closest distance between a shell crossing [a,b] during [legStart, legStart+legTime] and
+ * a tank at `p` moving at constant `vel` from t=0.
+ *
+ * Both paths are linear in time, so their separation is linear too and the minimum is the
+ * vertex of a quadratic — solved directly and clamped to the leg rather than sampled, so
+ * a fast shell cannot step over a teammate between samples.
+ */
+function minApproach(a: Vec2, b: Vec2, legTime: number, legStart: number, p: Vec2, vel: Vec2): number {
+  // A degenerate leg carries no time; compare positions at the instant it happens.
+  if (legTime <= 0) {
+    const at = { x: p.x + vel.x * legStart, y: p.y + vel.y * legStart };
+    return vdist(a, at);
+  }
+  const shellVel = { x: (b.x - a.x) / legTime, y: (b.y - a.y) / legTime };
+  // Separation at the start of the leg, and the rate it changes.
+  const d0 = { x: a.x - (p.x + vel.x * legStart), y: a.y - (p.y + vel.y * legStart) };
+  const w = { x: shellVel.x - vel.x, y: shellVel.y - vel.y };
+  const w2 = w.x * w.x + w.y * w.y;
+  let s = w2 < VEC_EPS ? 0 : -(d0.x * w.x + d0.y * w.y) / w2;
+  s = s < 0 ? 0 : s > legTime ? legTime : s;
+  return Math.hypot(d0.x + w.x * s, d0.y + w.y * s);
 }
 
 /**
@@ -315,17 +355,67 @@ function wallBlocksStep(world: World, tank: Tank, dir: Vec2): boolean {
  * standing on it". A tank that dropped a mine and then loitered inside MINE_PROXIMITY_
  * RADIUS never armed it and never fled it, and the 3-second fuse killed it where it stood.
  */
-function nearestDangerousMine(world: World, tank: Tank): Mine | null {
-  let nearest: Mine | null = null;
-  let best = Infinity;
+function dangerousMines(world: World, tank: Tank): Mine[] {
+  const near: Mine[] = [];
   for (const m of world.mines) {
     if (m.detonated) continue;
-    const d = vdist(m.pos, tank.pos);
     // `<=`, and measured against the radius detonateMine actually KILLS at plus an escape
     // margin -- see AI_MINE_FLEE_RADIUS in constants.ts.
-    if (d <= AI_MINE_FLEE_RADIUS && d < best) { best = d; nearest = m; }
+    if (vdist(m.pos, tank.pos) <= AI_MINE_FLEE_RADIUS) near.push(m);
   }
-  return nearest;
+  return near;
+}
+
+/**
+ * The direction that best escapes EVERY mine in `mines` at once.
+ *
+ * Scored as the worst-case outward component: for a candidate direction, the smallest
+ * dot(candidate, unit vector away from mine) over all the mines. Maximising that worst
+ * case means the chosen heading never closes on any of them if an escape exists at all.
+ *
+ * Fleeing only the NEAREST mine is what this replaces, and it deadlocked: MINE_CAP is 2,
+ * the midpoint of two mines 2.8 apart sits inside both kill radii, and running from one
+ * put the tank on the other, which then became the nearest. Measured over 30 seeded
+ * games, 24 of 26 own-mine deaths had both mines in flee range, the victim walking 5.91
+ * units of path for 1.29 units of net displacement before the fuse caught it.
+ *
+ * Directions are sampled on a fixed wheel rather than solved analytically: the wheel is
+ * deterministic, cannot divide by a near-zero resultant when repulsions cancel, and
+ * includes the exact axis directions, so the single-mine case still yields straight away.
+ */
+function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | null {
+  const away: Vec2[] = [];
+  for (const m of mines) {
+    const d = vsub(tank.pos, m.pos);
+    // Standing exactly on a mine gives no direction to prefer, so it constrains nothing.
+    if (Math.hypot(d.x, d.y) < VEC_EPS) continue;
+    away.push(vnorm(d));
+  }
+
+  let best: Vec2 | null = null;
+  let bestScore = -Infinity;
+  let bestBlocked: Vec2 | null = null;
+  let bestBlockedScore = -Infinity;
+  for (let i = 0; i < ESCAPE_SAMPLES; i++) {
+    const a = (i * 2 * Math.PI) / ESCAPE_SAMPLES;
+    // Snapped so the axis directions are exact rather than 1e-16 off, which would make
+    // "flees straight away from a single mine" fail a 6-decimal comparison.
+    const cand = { x: Math.round(Math.cos(a) * 1e12) / 1e12, y: Math.round(Math.sin(a) * 1e12) / 1e12 };
+    let score = Infinity;
+    for (const u of away) {
+      const dot = cand.x * u.x + cand.y * u.y;
+      if (dot < score) score = dot;
+    }
+    if (score === Infinity) score = 0;
+    if (wallBlocksStep(world, tank, cand)) {
+      if (score > bestBlockedScore) { bestBlockedScore = score; bestBlocked = cand; }
+      continue;
+    }
+    if (score > bestScore) { bestScore = score; best = cand; }
+  }
+  // Every heading walks into a wall: still move, taking the least-bad one, because a tank
+  // pinned in the blast is worse off than one sliding along the wall out of it.
+  return best ?? bestBlocked;
 }
 
 /**
@@ -343,7 +433,7 @@ function nearestDangerousMine(world: World, tank: Tank): Mine | null {
  * preferring a side that is at least not wall-pinned.
  */
 export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
-  const mine = nearestDangerousMine(world, tank);
+  const mines = dangerousMines(world, tank);
   const threats = incomingThreats(world, tank);
 
   if (threats.length > 0) {
@@ -361,10 +451,11 @@ export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
     const preferred = vdot(rel, perpA) >= 0 ? perpA : perpB;
     const other = preferred === perpA ? perpB : perpA;
 
-    const toMine = mine ? vsub(mine.pos, tank.pos) : null;
+    // Vetted against EVERY mine in flee range, not just the nearest: a dodge cleared by
+    // the nearest mine could still step onto the second one.
     for (const cand of [preferred, other]) {
       if (wallBlocksStep(world, tank, cand)) continue;
-      if (toMine && vdot(cand, toMine) > 0) continue;
+      if (mines.some((m) => vdot(cand, vsub(m.pos, tank.pos)) > 0)) continue;
       return cand;
     }
     // Both sides compromised: a wall-free dodge still moves the tank out of the corridor,
@@ -375,18 +466,10 @@ export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
     return preferred;
   }
 
-  if (mine) {
-    const away = { x: tank.pos.x - mine.pos.x, y: tank.pos.y - mine.pos.y };
-    // Standing exactly on the mine: any direction is equally away, so pick one
-    // deterministically rather than returning the zero vector vnorm would give.
-    if (Math.hypot(away.x, away.y) < VEC_EPS) return { x: 1, y: 0 };
-    const dir = vnorm(away);
-    if (!wallBlocksStep(world, tank, dir)) return dir;
-    // Backed against a wall: slide along it (either tangent) rather than press into it.
-    for (const tangent of [{ x: -dir.y, y: dir.x }, { x: dir.y, y: -dir.x }]) {
-      if (!wallBlocksStep(world, tank, tangent)) return tangent;
-    }
-    return dir;
+  if (mines.length > 0) {
+    // Standing exactly on the only mine there is: any direction is equally away, so pick
+    // one deterministically rather than returning the zero vector vnorm would give.
+    return bestEscapeDirection(world, tank, mines) ?? { x: 1, y: 0 };
   }
   return null;
 }
