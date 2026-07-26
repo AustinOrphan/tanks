@@ -27,7 +27,10 @@ export function createAudioDirector(
         engine.play('explosion');
         break;
       case 'tank-destroyed':
-        engine.play('explosion');
+        // No dedicated sound. Both kill sites (bullets.ts, mines.ts) push
+        // `explosion` at the same position on the very same tick, so playing
+        // one here too started two identical 90 Hz voices at the same
+        // currentTime -- +6 dB of the same waveform, not a bigger boom.
         break;
       case 'mine-dropped':
         engine.play('mine-drop'); // the drop thunk

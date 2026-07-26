@@ -73,4 +73,113 @@ describe('createHud stats', () => {
     expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
     expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
   });
+
+  it('does not rewrite the text node when the value is unchanged', () => {
+    // loop.ts calls these every frame. textContent's setter replaces the text
+    // node even for an identical string, invalidating layout at 60 Hz for
+    // values that change a handful of times per round.
+    const { hud: h, root } = mount();
+    h.setLives(3);
+    const node = (root.querySelector('.hud-lives') as HTMLElement).firstChild;
+
+    h.setLives(3);
+
+    expect((root.querySelector('.hud-lives') as HTMLElement).firstChild).toBe(node);
+  });
+});
+
+describe('createHud mute button', () => {
+  const muteBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-mute') as HTMLButtonElement;
+
+  it('starts unmuted and says so', () => {
+    const { root } = mount();
+    expect(muteBtn(root).getAttribute('aria-pressed')).toBe('false');
+    expect(muteBtn(root).textContent).toBe('Mute (M)');
+  });
+
+  it('reflects mute state, so a muted game is distinguishable from a broken one', () => {
+    const { hud: h, root } = mount();
+
+    h.setMuted(true);
+    expect(muteBtn(root).getAttribute('aria-pressed')).toBe('true');
+    expect(muteBtn(root).textContent).toBe('Muted (M)');
+
+    h.setMuted(false);
+    expect(muteBtn(root).getAttribute('aria-pressed')).toBe('false');
+    expect(muteBtn(root).textContent).toBe('Mute (M)');
+  });
+
+  it('notifies subscribers when clicked', () => {
+    const { hud: h, root } = mount();
+    let clicks = 0;
+    h.onMuteToggle(() => clicks++);
+
+    muteBtn(root).dispatchEvent(new MouseEvent('click'));
+
+    expect(clicks).toBe(1);
+  });
+});
+
+describe('createHud panel', () => {
+  const panel = (root: HTMLElement): HTMLElement => root.querySelector('.hud-panel') as HTMLElement;
+  const title = (root: HTMLElement): string =>
+    (root.querySelector('.hud-title') as HTMLElement).textContent ?? '';
+  const action = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-action') as HTMLButtonElement;
+
+  it('shows the title panel on mount', () => {
+    const { root } = mount();
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
+    expect(title(root)).toBe('TANKS!');
+    expect(action(root).textContent).toBe('Start');
+  });
+
+  it('hides the panel while playing and restores it on win and lose', () => {
+    const { hud: h, root } = mount();
+
+    h.setState('playing');
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
+
+    h.setState('win');
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
+    expect(title(root)).toBe('You Win!');
+    expect(action(root).textContent).toBe('Play Again');
+
+    h.setState('lose');
+    expect(title(root)).toBe('Game Over');
+    expect(action(root).textContent).toBe('Retry');
+  });
+
+  it('notifies start/restart subscribers — the only gesture that can unlock audio', () => {
+    const { hud: h, root } = mount();
+    let starts = 0;
+    h.onStartRestart(() => starts++);
+
+    action(root).dispatchEvent(new MouseEvent('click'));
+
+    expect(starts).toBe(1);
+  });
+
+  it('detaches listeners and removes itself on dispose', () => {
+    const { hud: h, root } = mount();
+    let events = 0;
+    h.onMuteToggle(() => events++);
+    h.onStartRestart(() => events++);
+    const btn = muteBtnOf(root);
+    const act = action(root);
+
+    h.dispose();
+    hud = null; // already disposed; stop afterEach double-disposing
+
+    btn.dispatchEvent(new MouseEvent('click'));
+    act.dispatchEvent(new MouseEvent('click'));
+
+    expect(events).toBe(0);
+    expect(root.querySelector('.hud')).toBeNull();
+  });
+
+  function muteBtnOf(root: HTMLElement): HTMLButtonElement {
+    return root.querySelector('.hud-mute') as HTMLButtonElement;
+  }
 });

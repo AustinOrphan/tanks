@@ -50,7 +50,7 @@ describe('createAudioDirector', () => {
     expect(calls.map((c) => c.key)).toEqual(['cannon', 'cannon-enemy']);
   });
 
-  it('varies ping rate by bounceIndex (higher index -> higher rate)', () => {
+  it('steps ping rate by exactly RICOCHET_RATE_STEP per bounce', () => {
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
     director.handle([
@@ -60,18 +60,35 @@ describe('createAudioDirector', () => {
     ]);
     expect(calls.every((c) => c.key === 'ping')).toBe(true);
     const rates = calls.map((c) => c.opts?.rate ?? 0);
-    expect(rates[0]).toBeLessThan(rates[1]);
-    expect(rates[1]).toBeLessThan(rates[2]);
+
+    // Pinned to exact values, not just `rates[0] < rates[1] < rates[2]`. That
+    // ordinal form is satisfied by ANY positive step, so RICOCHET_RATE_STEP
+    // could be retuned from 0.15 to 1.5 -- turning the third bounce of a
+    // ricochet shell into a 4x-speed chipmunk shriek -- with this test green.
+    // Playback rate is a musical quantity: the size of the step is the whole
+    // design, and the direction is the trivial part.
+    //
+    // Derived from src/audio/director.ts: `rate = 1 + bounceIndex *
+    // RICOCHET_RATE_STEP` with RICOCHET_RATE_STEP = 0.15, so bounces 0/1/2 give
+    // 1, 1.15 and 1.30 -- a little over a semitone (~2.4) per bounce, audible
+    // as a rising pitch without leaving the sample's usable range even at the
+    // ricochet shell's third and final bounce (RICOCHET_BOUNCES = 3).
+    // Both 1 + 0.15 and 1 + 2 * 0.15 are exact in IEEE-754 doubles, so `toEqual`
+    // is safe here and says more than a tolerance would.
+    expect(rates).toEqual([1, 1.15, 1.3]);
   });
 
-  it('maps explosion and tank-destroyed both to the explosion sound', () => {
+  it('plays one explosion per kill, not two', () => {
+    // A kill emits `tank-destroyed` AND `explosion` at the same pos on the same
+    // tick (bullets.ts:80-81, mines.ts:50-51). Sounding both doubles an
+    // identical waveform at identical currentTime: +6 dB, not a bigger boom.
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
     director.handle([
-      { type: 'explosion', pos: { x: 0, y: 0 } },
       { type: 'tank-destroyed', tankId: 3, kind: 'brown', pos: { x: 0, y: 0 } },
+      { type: 'explosion', pos: { x: 0, y: 0 } },
     ]);
-    expect(calls.map((c) => c.key)).toEqual(['explosion', 'explosion']);
+    expect(calls.map((c) => c.key)).toEqual(['explosion']);
   });
 
   it('maps mine-dropped to the drop thunk and mine-armed to the arming beep', () => {

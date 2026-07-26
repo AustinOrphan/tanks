@@ -14,7 +14,16 @@ export function createInputController(
   let firePressed = false;
   let minePressed = false;
 
+  // Keydown is bound at the window, so it also sees events bubbling out of the
+  // HUD's own controls. Driving the tank from those -- and worse, calling
+  // preventDefault on them -- makes the volume slider and mute button
+  // keyboard-inoperable: Right Arrow would strafe instead of moving the slider,
+  // Space would drop a mine instead of activating the button.
+  const isInteractive = (t: EventTarget | null): boolean =>
+    t instanceof HTMLElement && t.closest('input,button,select,textarea,[contenteditable]') !== null;
+
   const onKeyDown = (e: KeyboardEvent): void => {
+    if (isInteractive(e.target)) return;
     const k = e.key.toLowerCase();
     // Prevent the browser's default scroll behavior for keys the game uses
     // (Space would otherwise scroll the page; arrow keys too).
@@ -37,10 +46,26 @@ export function createInputController(
   const onContextMenu = (e: MouseEvent): void => {
     e.preventDefault();
   };
+  // Focus loss eats the keyup: alt-tab while holding W and the OS delivers that
+  // keyup to the other window, leaving 'w' held forever and the tank driving
+  // north until the player thinks to press and release W again.
+  const releaseAll = (): void => {
+    keys.clear();
+    firePressed = false;
+    minePressed = false;
+  };
+  const onVisibilityChange = (): void => {
+    if (document.visibilityState === 'hidden') releaseAll();
+  };
 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
-  target.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('blur', releaseAll);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  // Aim tracks at the window, not the canvas: the HUD overlay sets
+  // pointer-events:auto and would otherwise swallow mousemove, freezing the
+  // turret whenever the cursor crossed the audio controls.
+  window.addEventListener('mousemove', onMouseMove);
   target.addEventListener('mousedown', onMouseDown);
   target.addEventListener('contextmenu', onContextMenu);
 
@@ -69,7 +94,9 @@ export function createInputController(
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      target.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('mousemove', onMouseMove);
       target.removeEventListener('mousedown', onMouseDown);
       target.removeEventListener('contextmenu', onContextMenu);
     },

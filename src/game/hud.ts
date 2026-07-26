@@ -6,6 +6,8 @@ export interface Hud {
   setLives(n: number): void;
   setEnemiesRemaining(n: number): void;
   setState(s: GameState): void;
+  /** Reflect the engine's mute state in the button. */
+  setMuted(muted: boolean): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
   /** Extension: fired when the title/win/lose panel's start/restart button is clicked. */
@@ -89,14 +91,36 @@ export function createHud(root: HTMLElement): Hud {
 
   setState('title');
 
+  // The button is the only indication of mute state, and there is genuinely no
+  // music shipped, so "silent" is the normal condition -- without this a muted
+  // game and a broken game look identical.
+  function setMuted(muted: boolean): void {
+    muteBtn.setAttribute('aria-pressed', String(muted));
+    muteBtn.textContent = muted ? 'Muted (M)' : 'Mute (M)';
+    muteBtn.classList.toggle('hud-mute--active', muted);
+  }
+
+  setMuted(false);
+
+  // textContent's setter tears down and rebuilds the text node even when the
+  // string is identical. loop.ts calls these every frame for values that change
+  // a handful of times a round, so skip the write when nothing changed.
+  let lastLives: number | null = null;
+  let lastEnemies: number | null = null;
+
   return {
     setLives(n: number): void {
+      if (n === lastLives) return;
+      lastLives = n;
       livesEl.textContent = String(n);
     },
     setEnemiesRemaining(n: number): void {
+      if (n === lastEnemies) return;
+      lastEnemies = n;
       enemiesEl.textContent = String(n);
     },
     setState,
+    setMuted,
     onMuteToggle(cb: () => void): void {
       muteCbs.push(cb);
     },

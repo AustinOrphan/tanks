@@ -44,6 +44,13 @@
   color: #3a2c00;
 }
 
+/* Muted has to read as "off" at a glance, not just as different text -- with no
+   music shipped, silence is the game's normal state either way. */
+.hud-mute--active {
+  background: #4a4f59;
+  color: #c3c8d2;
+}
+
 .hud-volume {
   pointer-events: auto;
   cursor: pointer;

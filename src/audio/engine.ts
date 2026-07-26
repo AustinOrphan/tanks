@@ -22,6 +22,20 @@ export interface AudioEngine {
 
 const MUSIC_VOLUME = 0.25;
 
+// Cap on simultaneous procedural voices. A mine chain-reaction can emit a
+// dozen SFX on one tick; identical tones started at the same currentTime sum
+// constructively, so without a cap the game's most dramatic moment is the one
+// that clips into digital noise. Excess voices are dropped, not queued --
+// a late explosion is worse than a missing one.
+const MAX_VOICES = 8;
+// Per-voice gain. MAX_VOICES * VOICE_GAIN stays under 1.0 so a full chorus
+// cannot clip even before the compressor.
+const VOICE_GAIN = 0.12;
+// A WebKit resume() issued outside a user gesture is parked on
+// [[pending promises]] and may never settle, so `.finally()` may never run.
+// Time the latch out rather than letting it stick true for the session.
+const RESUME_LATCH_TIMEOUT_MS = 1000;
+
 // Base frequencies for the procedural fallback tone per SFX key (Hz).
 const FALLBACK_FREQ: Record<string, number> = {
   cannon: 180,
@@ -41,6 +55,9 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   let muted = false;
   let masterVolume = DEFAULT_VOLUME;
   let ctx: AudioContext | null = null;
+  let masterBus: AudioNode | null = null;
+  let activeVoices = 0;
+  let disposed = false;
 
   // Push the default through immediately. Howler's own default is 1.0, so
   // deferring this until the first slider drag leaves the HUD showing
@@ -95,9 +112,15 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       .finally(() => {
         resuming = false;
       });
+    // Belt and braces: if that promise never settles, release the latch anyway
+    // so a later gesture is not swallowed by a permanently-stuck `resuming`.
+    setTimeout(() => {
+      resuming = false;
+    }, RESUME_LATCH_TIMEOUT_MS);
   }
 
   function ensureCtx(force = false): AudioContext | null {
+    if (disposed) return null;
     if (ctx) {
       tryResume(ctx, force);
       return ctx;
@@ -113,10 +136,43 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     return ctx;
   }
 
+  /**
+   * Voices -> master gain -> [compressor] -> destination. The compressor is the
+   * safety net for the case the voice cap cannot cover: several voices of
+   * genuinely different pitch landing on one tick still sum, and a limiter is
+   * cheaper than reasoning about every combination.
+   */
+  function ensureBus(audio: AudioContext): AudioNode {
+    if (masterBus) return masterBus;
+    const gain = audio.createGain();
+    gain.gain.value = 1;
+    // Feature-detected: not every environment (or test fake) implements it.
+    if (typeof audio.createDynamicsCompressor === 'function') {
+      const comp = audio.createDynamicsCompressor();
+      gain.connect(comp).connect(audio.destination);
+    } else {
+      gain.connect(audio.destination);
+    }
+    masterBus = gain;
+    return gain;
+  }
+
+  // The engine's own last-resort unlock. The HUD start button is the intended
+  // gesture, but it is display:none during play (hud.css), so if that one
+  // resume is parked the round would run silent with nothing able to retry.
+  const onGesture = (): void => {
+    ensureCtx(true);
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('pointerdown', onGesture);
+    document.addEventListener('keydown', onGesture);
+  }
+
   // Procedural fallback: a short decaying tone so dev is never blocked on assets.
   // No-ops safely when there is no Web Audio (e.g. headless test/node env).
   function beep(key: string, opts?: { rate?: number; volume?: number }): void {
-    if (muted) return;
+    if (muted || disposed) return;
+    if (activeVoices >= MAX_VOICES) return;
     const audio = ensureCtx();
     if (!audio) return;
     const freq = (FALLBACK_FREQ[key] ?? 440) * (opts?.rate ?? 1);
@@ -124,10 +180,29 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     const gain = audio.createGain();
     osc.frequency.value = freq;
     osc.type = key === 'explosion' || key === 'mine-boom' ? 'square' : 'sine';
-    const vol = 0.2 * masterVolume * (opts?.volume ?? 1);
+    const vol = VOICE_GAIN * masterVolume * (opts?.volume ?? 1);
     gain.gain.setValueAtTime(vol, audio.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.18);
-    osc.connect(gain).connect(audio.destination);
+    osc.connect(gain).connect(ensureBus(audio));
+
+    activeVoices += 1;
+    // A finished OscillatorNode still holds its edge into the graph until the
+    // UA collects the whole subgraph, and UAs differ on how promptly they do.
+    // Release explicitly: this is the only path that makes sound today, so a
+    // leak here is a leak on every shot fired.
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      activeVoices -= 1;
+      try {
+        osc.disconnect();
+        gain.disconnect();
+      } catch {
+        // Already disconnected (e.g. context closed under us) -- nothing to do.
+      }
+    };
+    osc.onended = release;
     osc.start();
     osc.stop(audio.currentTime + 0.2);
   }
@@ -172,8 +247,18 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       ensureCtx(true);
     },
     dispose() {
+      // Latch first: without it, ensureCtx() happily builds a *new*
+      // AudioContext on the next play(), and browsers cap concurrent contexts
+      // (~6 in Chrome) -- so a few title->play->title cycles would exhaust them.
+      disposed = true;
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('pointerdown', onGesture);
+        document.removeEventListener('keydown', onGesture);
+      }
       for (const k of Object.keys(sounds)) sounds[k]?.unload();
       music?.unload();
+      masterBus = null;
+      activeVoices = 0;
       if (ctx) {
         void ctx.close();
         ctx = null;
