@@ -1,11 +1,11 @@
 import type { Tank, Bullet, Mine, Wall, Spawn, InputState } from './types';
-import { angleOf, vsub } from './types';
+import { angleOf, slewAngle, vsub } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepMines } from './mines';
 import { stepAi } from './ai';
-import { DT, FIRE_COOLDOWN, MINE_COOLDOWN } from './constants';
+import { DT, FIRE_COOLDOWN, MINE_COOLDOWN, PLAYER_TURRET_TURN_RATE } from './constants';
 import { roundPhase } from './round';
 
 export interface World {
@@ -103,10 +103,12 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
   player.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : { x: input.move.x, y: input.move.y };
 
   // Turret angle ALWAYS updates, even during countdown: aiming is the whole point of
-  // that phase (spec: "you can see and aim, but can't shoot or move").
+  // that phase (spec: "you can see and aim, but can't shoot or move"). It turns at a
+  // finite rate rather than snapping instantly (slewAngle, types.ts) -- see
+  // PLAYER_TURRET_TURN_RATE's comment in constants.ts.
   const aimDir = vsub(input.aim, player.pos);
   if (aimDir.x !== 0 || aimDir.y !== 0) {
-    player.turretAngle = angleOf(aimDir);
+    player.turretAngle = slewAngle(player.turretAngle, angleOf(aimDir), PLAYER_TURRET_TURN_RATE * DT);
   }
 
   if (player.fireCooldown > 0) player.fireCooldown -= DT;

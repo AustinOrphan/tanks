@@ -1,5 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
+import { slewAngle } from '../types';
 import type { SimEvent } from '../events';
 import type { AiDecision } from './decision';
 import { brownDecision } from './brown';
@@ -7,7 +8,7 @@ import { greyDecision } from './grey';
 import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
-import { FIRE_COOLDOWN, MINE_COOLDOWN, DT } from '../constants';
+import { FIRE_COOLDOWN, MINE_COOLDOWN, DT, AI_TURRET_TURN_RATE } from '../constants';
 import { roundPhase } from '../round';
 
 export function decideAi(world: World, tank: Tank): AiDecision {
@@ -37,12 +38,18 @@ export function stepAi(world: World, events: SimEvent[]): void {
 
     const decision = decideAi(world, tank);
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
-    tank.turretAngle = decision.turretAngle;
+    // Turret turns at a finite rate rather than snapping instantly (slewAngle, types.ts)
+    // -- see AI_TURRET_TURN_RATE's comment in constants.ts (a primary difficulty knob).
+    tank.turretAngle = slewAngle(tank.turretAngle, decision.turretAngle, AI_TURRET_TURN_RATE * DT);
     tank.aiState = decision.nextState;
     tank.aiTimer = decision.nextTimer;
 
     if (canAct && decision.fire && tank.fireCooldown <= 0) {
-      if (spawnBullet(world, tank.id, decision.turretAngle, decision.fireType, events)) {
+      // Fire along the tank's ACTUAL (post-slew) turret angle, not the decision's desired
+      // angle -- a shot taken mid-swing must go where the barrel currently points, not
+      // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
+      // fire with a perfect solution while the barrel visibly points elsewhere.
+      if (spawnBullet(world, tank.id, tank.turretAngle, decision.fireType, events)) {
         tank.fireCooldown = FIRE_COOLDOWN;
       }
     }

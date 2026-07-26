@@ -3,7 +3,7 @@ import { createWorld, applyPlayerInput, resolveStatus, step } from './world';
 import type { World } from './world';
 import type { Tank, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
-import { FIRE_COOLDOWN, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
+import { FIRE_COOLDOWN, COUNTDOWN_TICKS, GRACE_TICKS, PLAYER_TURRET_TURN_RATE, DT } from './constants';
 import { stepAi } from './ai';
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
@@ -67,6 +67,31 @@ describe('applyPlayerInput', () => {
     // Immediately press fire again: cooldown not yet elapsed -> no new shell.
     applyPlayerInput(w, fireInput, []);
     expect(w.bullets.length).toBe(1);
+  });
+
+  // Turrets now turn at a finite rate (slewAngle, types.ts) instead of snapping. A mouse
+  // jump straight behind the tank (a full 180-degree flip) is the extreme case: current=0,
+  // target=pi, which is the antipodal tie in slewAngle -- deterministic but arbitrary in
+  // direction (see slewAngle's doc comment). Empirically (and by the tie-break rule: a raw
+  // delta of exactly +pi is left unchanged by the wrap correction, so it resolves
+  // positive/CCW), this steps positive: tick 1 lands at +maxDelta, not at pi.
+  it('a mouse jump straight behind the tank does NOT snap the turret there in one tick; it slews at PLAYER_TURRET_TURN_RATE', () => {
+    const w = makeWorld();
+    const player = w.tanks[0]; // pos (5,5), turretAngle starts at 0 (makeTank default)
+    const maxDelta = PLAYER_TURRET_TURN_RATE * DT; // 8.0/60 = 0.13333... rad/tick
+    // Aim point behind the player along -x: aimDir = (0,5)-(5,5) = (-5,0) -> angle = pi.
+    const behindInput: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 5 }, fire: false, mine: false };
+
+    applyPlayerInput(w, behindInput, []); // tick 1
+    expect(player.turretAngle).toBeCloseTo(maxDelta, 12); // one tick's worth, not pi
+
+    // It takes ceil(pi / maxDelta) = ceil(23.5619...) = 24 ticks to arrive at the target.
+    // 22 more calls brings the total to tick 23 (23*maxDelta ~= 3.0667 < pi -> not arrived).
+    for (let i = 0; i < 22; i++) applyPlayerInput(w, behindInput, []);
+    expect(player.turretAngle).toBeCloseTo(23 * maxDelta, 10);
+    expect(player.turretAngle).toBeLessThan(Math.PI); // tick 23: not yet arrived
+    applyPlayerInput(w, behindInput, []); // tick 24: remaining (~0.0749) <= maxDelta -> snaps to target exactly
+    expect(player.turretAngle).toBeCloseTo(Math.PI, 12);
   });
 });
 
@@ -184,14 +209,19 @@ describe('round phases (player path via applyPlayerInput)', () => {
   it('countdown: commanded movement is blocked and fire spawns no bullet, but the turret still tracks the aim point', () => {
     const w = freshWorld();
     const player = w.tanks[0];
-    player.turretAngle = Math.PI; // starts facing away from the aim point
+    player.turretAngle = Math.PI; // starts facing away from the aim point (angle 0)
     const events: SimEvent[] = [];
     applyPlayerInput(w, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: true, mine: false }, events);
     expect(player.desiredMove).toEqual({ x: 0, y: 0 });
     expect(w.bullets.length).toBe(0);
     expect(events.some((e) => e.type === 'fire')).toBe(false);
-    // Turret DOES update during countdown: aiming is the whole point of the phase.
-    expect(player.turretAngle).toBeCloseTo(0, 10);
+    // Turret DOES update during countdown: aiming is the whole point of the phase. But it
+    // only SLEWS, one tick's worth toward the target -- current=pi, target=0 is the
+    // antipodal tie in slewAngle (see its doc comment); here the raw (target - current) =
+    // -pi is already in range and left unchanged by the wrap correction, so it resolves
+    // negative: current - maxDelta, not straight to the target.
+    const maxDelta = PLAYER_TURRET_TURN_RATE * DT;
+    expect(player.turretAngle).toBeCloseTo(Math.PI - maxDelta, 10);
   });
 
   it('grace: movement is allowed, but fire and mines are still suppressed', () => {

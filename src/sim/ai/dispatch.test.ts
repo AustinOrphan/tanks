@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
-import { aimJitter } from './targeting';
-import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_AIM_SPREAD } from '../constants';
+import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, DT } from '../constants';
 import type { Tank, Vec2 } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
@@ -261,9 +260,13 @@ describe('stepAi', () => {
       expect(w.bullets.length).toBe(0);
       expect(w.mines.length).toBe(0);
       // Turret still tracks the target during countdown (orientation is the point of it),
-      // plus this tank/tick's seeded aim jitter (jitter is applied to every live firing
-      // solution, including one computed but not yet allowed to fire).
-      expect(w.tanks[0].turretAngle).toBeCloseTo(Math.PI / 2 + aimJitter(w, grey, AI_AIM_SPREAD), 6);
+      // but it only SLEWS: the desired angle (pi/2 + jitter, jitter bounded by
+      // AI_AIM_SPREAD=0.08) is far more than one tick's turn budget away from the
+      // starting angle of 0, so after one stepAi call the turret has only advanced by
+      // AI_TURRET_TURN_RATE*DT -- the exact desired angle (and its jitter) is not yet
+      // visible in a single tick's result.
+      const maxDelta = AI_TURRET_TURN_RATE * DT;
+      expect(w.tanks[0].turretAngle).toBeCloseTo(maxDelta, 10);
     });
 
     it('grace: AI tanks move, but still cannot fire or lay mines', () => {
@@ -293,6 +296,59 @@ describe('stepAi', () => {
       });
       stepAi(firstLive, []);
       expect(firstLive.bullets.length).toBe(1);
+    });
+  });
+
+  // --- I: turret slew (finite turn rate instead of instantaneous snap). ---
+  describe('turret slew', () => {
+    // Bearing 150deg from the origin, at radius 11.5546...: tan(30deg) =
+    // 5.7735026918962575/10, and with dx<0, dy>0 the bearing is 180-30 = 150deg =
+    // 5*pi/6 ~= 2.61799 rad. Chosen so that even after AI_AIM_SPREAD's jitter (bounded
+    // +/-0.08 rad) is added, the desired angle stays safely inside (0, pi) -- nowhere
+    // near the 0 or +/-pi wrap boundaries -- so the FIRST tick's slew direction and
+    // magnitude are fully determined without needing to also compute the jitter by hand.
+    const BEHIND_PLAYER_POS = { x: -10, y: 5.7735026918962575 };
+
+    it('an AI cannot instantly face a target that appears behind it: the turret only advances by AI_TURRET_TURN_RATE*DT after one tick', () => {
+      const grey = tank(1, 'grey', { x: 0, y: 0 }); // turretAngle starts at 0 (facing +x)
+      const player = tank(2, 'player', BEHIND_PLAYER_POS); // stationary, bearing ~150deg
+      const w = world([grey, player]);
+      stepAi(w, []);
+      const maxDelta = AI_TURRET_TURN_RATE * DT; // 2.5/60 = 0.041666...
+      expect(w.tanks[0].turretAngle).toBeCloseTo(maxDelta, 10);
+      expect(w.tanks[0].turretAngle).toBeLessThan(Math.PI / 2); // nowhere near the ~150deg target yet
+    });
+
+    it('does not drift when holding the last angle (no line of sight): slewing toward a no-op target is a no-op', () => {
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { turretAngle: 1.75 });
+      const player = tank(2, 'player', { x: 5, y: 0 });
+      // A solid wall directly between them blocks LOS -> greyDecision holds tank.turretAngle
+      // unchanged as its desired angle (see grey.ts: `let turretAngle = tank.turretAngle`).
+      const wall = { id: 1, aabb: { minX: 2, minY: -1, maxX: 3, maxY: 1 }, kind: 'solid' as const, destroyed: false };
+      const w = world([grey, player], { walls: [wall] });
+      stepAi(w, []);
+      expect(w.tanks[0].turretAngle).toBe(1.75); // unchanged, not drifting toward anything
+    });
+
+    it("fires with the ACTUAL (post-slew) turret angle, not the decision function's desired angle", () => {
+      // Same geometry as the "cannot instantly face" test above: Grey starts facing +x
+      // (turretAngle 0) with a clear shot at a stationary player ~150deg away, a swing far
+      // too large to complete in one tick. If spawnBullet were (bug) called with
+      // decision.turretAngle instead of tank.turretAngle, the bullet would fire toward the
+      // player (~150deg) despite the barrel visibly still pointing near +x.
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const player = tank(2, 'player', BEHIND_PLAYER_POS);
+      const w = world([grey, player]);
+      stepAi(w, []);
+      expect(w.bullets.length).toBe(1);
+      const bullet = w.bullets[0];
+      const bulletAngle = Math.atan2(bullet.vel.y, bullet.vel.x);
+      const maxDelta = AI_TURRET_TURN_RATE * DT;
+      // The bullet's actual travel direction matches the tank's post-slew turret angle...
+      expect(bulletAngle).toBeCloseTo(w.tanks[0].turretAngle, 10);
+      expect(bulletAngle).toBeCloseTo(maxDelta, 10);
+      // ...NOT the ~150deg (2.618 rad) the decision function actually wanted.
+      expect(Math.abs(bulletAngle - (5 * Math.PI) / 6)).toBeGreaterThan(1);
     });
   });
 });

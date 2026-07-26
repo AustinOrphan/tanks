@@ -111,6 +111,31 @@ export function fromAngle(r: number): Vec2 {
   return { x: Math.cos(r), y: Math.sin(r) };
 }
 
+// Steps `current` toward `target` by at most `maxDelta` radians (`maxDelta` must be
+// >= 0), taking the shortest arc across the +/-pi wrap. Mirrors lerpAngle's wrap
+// correction in src/render/interpolate.ts, but advances by a fixed per-call budget
+// instead of interpolating by a fraction `t` -- this is what gives a turret a finite
+// turn rate instead of an instantaneous snap (see applyPlayerInput in world.ts and
+// stepAi in ai/index.ts, the two places this is applied).
+//
+// Returns `target` exactly (no overshoot, no jitter at rest) once the remaining
+// angular distance is <= maxDelta -- this is why a tank already facing its target
+// does not jitter every tick.
+//
+// The antipodal case (exactly pi apart) is a genuine tie between the two equal-length
+// arcs. As in lerpAngle, the wrap correction below only fires on strict inequality
+// (`> pi` / `< -pi`), so a raw delta of exactly +pi or -pi is left unchanged. Which
+// value that raw delta comes out to depends on the sign of (target - current), so the
+// resolved direction is arbitrary but deterministic and stable call-to-call.
+export function slewAngle(current: number, target: number, maxDelta: number): number {
+  const TWO_PI = Math.PI * 2;
+  let delta = (target - current) % TWO_PI;
+  if (delta > Math.PI) delta -= TWO_PI;
+  if (delta < -Math.PI) delta += TWO_PI;
+  if (Math.abs(delta) <= maxDelta) return target;
+  return current + Math.sign(delta) * maxDelta;
+}
+
 // ---- Deterministic PRNG (mulberry32) ----
 // The ONLY source of randomness in sim/. Never use Math.random.
 export function nextRng(seed: number): { value: number; seed: number } {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   bulletConfig, DT, TICK_HZ, SHELL_CAP, MINE_CAP,
   NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES,
+  PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE,
 } from './constants';
 import type { BulletType } from './types';
 
@@ -34,5 +35,11 @@ describe('constants', () => {
     expect(FAST_BOUNCES).toBe(0);
     expect(NORMAL_BOUNCES).toBe(1);
     expect(RICOCHET_BOUNCES).toBe(3);
+  });
+
+  it('turret turn rates: player is faster (more responsive) than AI (more telegraphed)', () => {
+    expect(PLAYER_TURRET_TURN_RATE).toBe(8.0);
+    expect(AI_TURRET_TURN_RATE).toBe(2.5);
+    expect(PLAYER_TURRET_TURN_RATE).toBeGreaterThan(AI_TURRET_TURN_RATE);
   });
 });

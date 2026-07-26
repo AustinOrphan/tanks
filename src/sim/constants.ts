@@ -96,6 +96,21 @@ export const DODGE_PATIENCE_TICKS = 45;
 // still tried as a fallback, so Teal never loses a shot it could have taken.
 export const BANK_PREFER_TICKS = 120;
 
+// ---- Turret slew (slewAngle, types.ts) ----
+// Turrets turn at a finite rate instead of snapping to their target angle in a single
+// tick. Applied at the two places a desired turret angle is written onto a tank:
+// applyPlayerInput (world.ts) and stepAi (ai/index.ts). Units: rad/s; the per-tick
+// turn budget is RATE * DT.
+// 8.0 rad/s ~= 458 deg/s at 60Hz -- responsive but not instant for the player; a full
+// 180-degree reversal takes ~0.39s (pi / 8.0).
+export const PLAYER_TURRET_TURN_RATE = 8.0;
+// 2.5 rad/s ~= 143 deg/s at 60Hz -- ~1.26s to swing a full 180 degrees (pi / 2.5).
+// THIS IS A PRIMARY DIFFICULTY KNOB alongside AI_AIM_SPREAD: unlike aim spread (which
+// affects accuracy), this affects how long an enemy visibly telegraphs its aim before
+// it can land a shot, giving the player a real window to break line of sight or dodge.
+// Lowering it makes enemies more readable/telegraphed.
+export const AI_TURRET_TURN_RATE = 2.5;
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },

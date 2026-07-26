@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  vadd, vsub, vscale, vlen, vnorm, vdot, vdist, angleOf, fromAngle, nextRng,
+  vadd, vsub, vscale, vlen, vnorm, vdot, vdist, angleOf, fromAngle, nextRng, slewAngle,
 } from './types';
 import type { Vec2 } from './types';
 
@@ -42,6 +42,57 @@ describe('vec math', () => {
     const v: Vec2 = fromAngle(r);
     expect(vlen(v)).toBeCloseTo(1, 10);
     expect(angleOf(v)).toBeCloseTo(r, 10);
+  });
+});
+
+describe('slewAngle', () => {
+  it('steps by exactly maxDelta when the target is far away', () => {
+    // current=0, target=90deg, maxDelta=0.1rad: remaining (~1.5708) >> maxDelta, so the
+    // result is just current + maxDelta, not the target.
+    const result = slewAngle(0, Math.PI / 2, 0.1);
+    expect(result).toBe(0.1);
+  });
+
+  it('returns the target exactly when within maxDelta (no overshoot)', () => {
+    // remaining (0.05) < maxDelta (0.1) -> snaps to target exactly.
+    expect(slewAngle(0, 0.05, 0.1)).toBe(0.05);
+    // remaining === maxDelta exactly (boundary uses <=) -> also returns target exactly.
+    expect(slewAngle(0, 0.1, 0.1)).toBe(0.1);
+  });
+
+  it('is a no-op when current === target', () => {
+    expect(slewAngle(1.2345, 1.2345, 0.1)).toBe(1.2345);
+  });
+
+  it('takes the short way across the +pi/-pi wrap: 170deg -> -170deg moves FORWARD through 180deg, not backward through 0', () => {
+    // Naive lerp of the raw numbers (170 -> -170) would sweep -340deg through 0deg. The
+    // shortest arc is only +20deg, forward through the +-180 seam.
+    const current = (170 * Math.PI) / 180;
+    const target = (-170 * Math.PI) / 180;
+    const maxDelta = (15 * Math.PI) / 180; // less than the 20deg remaining -> partial step
+    const result = slewAngle(current, target, maxDelta);
+    // Steps +15deg from 170deg (to 185deg, unnormalized) -- NOT -15deg (which would head
+    // the long way back toward 0).
+    expect(result).toBeCloseTo(current + maxDelta, 12);
+  });
+
+  it('takes the short way across the wrap in the mirrored direction: -170deg -> 170deg moves BACKWARD through -180deg', () => {
+    const current = (-170 * Math.PI) / 180;
+    const target = (170 * Math.PI) / 180;
+    const maxDelta = (15 * Math.PI) / 180;
+    const result = slewAngle(current, target, maxDelta);
+    expect(result).toBeCloseTo(current - maxDelta, 12);
+  });
+
+  it('resolves the antipodal case (exactly pi apart) deterministically', () => {
+    // current=0, target=pi: the two arcs are equal length, so the choice of direction is
+    // arbitrary -- but it must be STABLE (same answer every call). This implementation's
+    // wrap correction only fires on strict inequality (> pi / < -pi), so a raw delta of
+    // exactly +pi is left unchanged and resolves positive/CCW (same tie-break rationale
+    // as lerpAngle in src/render/interpolate.ts). Pinned here so a future refactor that
+    // silently flips the tie-break direction is caught.
+    const maxDelta = 0.5;
+    expect(slewAngle(0, Math.PI, maxDelta)).toBeCloseTo(maxDelta, 12);
   });
 });
 
