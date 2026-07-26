@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json declares engines.node >= 20; test both the floor and
+        # current LTS so a version-specific break can't hide behind one runner.
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs strictly from the
+      # lockfile and fails if the two have drifted, which is the same clean
+      # checkout a deploy would build from.
+      - run: npm ci
+
+      # The npm scripts prefix `tsc --noEmit` onto both `test` and `build`, so
+      # calling the tools directly runs the typecheck once instead of three
+      # times.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npx vitest run
+
+      - name: Build
+        run: npx vite build
+
+      # The base-path regression guard. A bundle built with the default base
+      # references /assets/... absolutely and is a blank page on any host that
+      # is not a domain root -- which a passing unit test cannot detect, since
+      # Vitest resolves BASE_URL to '/' regardless of the build config.
+      - name: Assert the build is subpath-portable
+        run: |
+          grep -q 'src="\./assets/' dist/index.html \
+            || { echo "dist/index.html does not reference assets relatively:"; \
+                 grep -o '<script[^>]*>' dist/index.html; exit 1; }
+          ! grep -qE '"/(audio|assets)/' dist/assets/*.js \
+            || { echo "bundle contains origin-absolute asset paths:"; \
+                 grep -oE '"/(audio|assets)/[^"]*"' dist/assets/*.js | sort -u; exit 1; }
+
+      # Dev-only advisories (vite/vitest dev-server CVEs) cannot reach a static
+      # bundle, so gating on them would be a permanent, non-actionable red.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

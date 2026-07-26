@@ -11,19 +11,29 @@ export interface AudioManifest {
  */
 export const DEFAULT_VOLUME = 0.6;
 
-// Paths resolve against Vite's public/ dir, which is served at the site root,
-// so public/audio/cannon.wav is reachable at /audio/cannon.wav.
+/**
+ * Base the audio URLs on Vite's configured base rather than the site root.
+ *
+ * These files live in public/, which Vite copies verbatim and never rewrites --
+ * a bare string like '/audio/cannon.wav' is opaque to the bundler, so setting
+ * `base` does NOT fix it. Served from a subpath the browser would ask for
+ * <origin>/audio/cannon.wav instead of <origin>/tanks/audio/cannon.wav and all
+ * ten files would 404. `import.meta.env.BASE_URL` is the value Vite actually
+ * built with, and already carries its trailing slash.
+ */
+const BASE = import.meta.env.BASE_URL;
+
 export const AUDIO_MANIFEST: AudioManifest = {
   sfx: {
-    cannon: '/audio/cannon.wav',
-    'cannon-enemy': '/audio/cannon-enemy.wav',
-    ping: '/audio/ping.wav',
-    explosion: '/audio/explosion.wav',
-    'mine-drop': '/audio/mine-drop.wav',
-    'mine-arm': '/audio/mine-arm.wav',
-    'mine-boom': '/audio/mine-boom.wav',
-    victory: '/audio/victory.wav',
-    defeat: '/audio/defeat.wav',
+    cannon: `${BASE}audio/cannon.wav`,
+    'cannon-enemy': `${BASE}audio/cannon-enemy.wav`,
+    ping: `${BASE}audio/ping.wav`,
+    explosion: `${BASE}audio/explosion.wav`,
+    'mine-drop': `${BASE}audio/mine-drop.wav`,
+    'mine-arm': `${BASE}audio/mine-arm.wav`,
+    'mine-boom': `${BASE}audio/mine-boom.wav`,
+    victory: `${BASE}audio/victory.wav`,
+    defeat: `${BASE}audio/defeat.wav`,
   },
-  music: '/audio/music-loop.wav',
+  music: `${BASE}audio/music-loop.wav`,
 };
