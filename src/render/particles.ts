@@ -28,7 +28,16 @@ export function createParticleSystem(scene: THREE.Scene): ParticleSystem {
     let p = pool.pop();
     if (!p) {
       if (active.length >= MAX_PARTICLES) return null;
-      const mat = new THREE.MeshBasicMaterial({ transparent: true });
+      // depthWrite:false is the important half. A fading transparent particle
+      // that writes depth punches an opaque-shaped hole in every particle
+      // behind it -- visible as square cutouts wherever two bursts overlap,
+      // which is exactly when a mine chains into an explosion. Additive
+      // blending is also the right look for sparks and muzzle flash.
+      const mat = new THREE.MeshBasicMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
       const mesh = new THREE.Mesh(geo, mat);
       scene.add(mesh);
       p = { mesh, vel: new THREE.Vector3(), life: 0, maxLife: 1, baseScale: 1 };
@@ -80,8 +89,12 @@ export function createParticleSystem(scene: THREE.Scene): ParticleSystem {
           burst(ev.pos.x, ev.pos.y, 6, 0xfff4c0, 5, 0.25, 0.5);
           break;
         case 'explosion':
-        case 'tank-destroyed':
           burst(ev.pos.x, ev.pos.y, 24, 0xff6a2b, 6, 0.6, 1.0);
+          break;
+        case 'tank-destroyed':
+          // No burst of its own: both kill sites push `explosion` at the same
+          // position on the same tick, so handling both doubled every kill into
+          // a 48-particle burst (and, in the audio director, a doubled sample).
           break;
         case 'wall-destroyed':
           burst(ev.pos.x, ev.pos.y, 16, 0xb08040, 4, 0.5, 0.9);

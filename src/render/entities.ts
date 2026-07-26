@@ -118,7 +118,7 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     return mesh;
   }
 
-  function syncTanks(prev: World, curr: World, alpha: number): void {
+  function syncTanks(prev: World, curr: World, alpha: number, snap: boolean): void {
     const prevMap = indexById(prev.tanks);
     const seen = new Set<number>();
     for (const t of curr.tanks) {
@@ -129,14 +129,24 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
         view = makeTank(t.kind);
         tankViews.set(t.id, view);
       }
-      const p = prevMap.get(t.id);
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
+      // `snap` covers the other discontinuity: resetArena teleports every tank
+      // back to its spawn within one tick while keeping its id and reviving it,
+      // so a plain lerp drew the tank streaking across the arena for a frame on
+      // every life lost. A tick can move a tank at most TANK_SPEED*DT, so any
+      // round-boundary jump is a teleport by definition, not motion.
+      const p = snap ? undefined : prevMap.get(t.id);
       const pos = p ? lerpVec2(p.pos, t.pos, alpha) : t.pos;
       const bodyA = p ? lerpAngle(p.bodyAngle, t.bodyAngle, alpha) : t.bodyAngle;
       const turretA = p ? lerpAngle(p.turretAngle, t.turretAngle, alpha) : t.turretAngle;
       view.group.position.set(pos.x, 0, pos.y);
       view.group.rotation.y = -bodyA;
-      view.turret.rotation.y = -turretA;
+      // The turret is a CHILD of group, so its world heading composes with the
+      // body's. turretAngle is an absolute world angle (angleOf(aim - pos)), so
+      // it has to be expressed relative to the parent -- writing it directly
+      // aimed the barrel at bodyAngle + turretAngle, i.e. anywhere but the
+      // crosshair the moment the tank was driving in any direction but +x.
+      view.turret.rotation.y = -(turretA - bodyA);
     }
     for (const [id, view] of tankViews) {
       if (!seen.has(id)) {
@@ -209,10 +219,19 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
   }
 
   function sync(prev: World, curr: World, alpha: number): void {
+    // Clamp at the boundary rather than trusting the caller. alpha is in [0,1)
+    // today only because loop.ts's accumulator drains below DT before
+    // computing it; any future change there (variable DT, a pause/resume path,
+    // a max-steps clamp) would silently turn interpolation into extrapolation,
+    // with entities overshooting and snapping back every tick.
+    const a = Math.min(1, Math.max(0, alpha));
+    // resetArena re-anchors roundStartTick, which is the one signal that
+    // distinguishes a round boundary (teleports) from ordinary motion.
+    const snap = prev.roundStartTick !== curr.roundStartTick;
     syncWalls(curr);
-    syncTanks(prev, curr, alpha);
-    syncBullets(prev, curr, alpha);
-    syncMines(prev, curr, alpha);
+    syncTanks(prev, curr, a, snap);
+    syncBullets(prev, curr, a);
+    syncMines(prev, curr, a);
   }
 
   function dispose(): void {

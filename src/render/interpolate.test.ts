@@ -97,6 +97,30 @@ describe('lerpAngle', () => {
     expect(lerpAngle(a, b, 0.5)).toBeCloseTo((30 * Math.PI) / 180, 6);
   });
 
+  it('reduces a multi-lap raw difference before choosing the short arc', () => {
+    // Nothing else in this file ever hands lerpAngle a raw `b - a` bigger than
+    // 2pi, so the leading `% TWO_PI` in the implementation could be DELETED
+    // with the whole suite still green. It is not dead code: turret angles
+    // accumulate unbounded by design -- slewAngle (src/sim/types.ts) returns
+    // `current + step` and never renormalizes, and lerpAngle's own contract
+    // says its output is not renormalized either, so a turret that keeps
+    // turning one way drifts several laps away from its rendered value and
+    // multi-lap deltas are reachable in a real round.
+    //
+    // Derivation for a = 0, b = 4pi + 0.1 (two full laps plus 0.1 rad):
+    //   with the modulo:  delta = (4pi + 0.1) % 2pi = 0.1   -> no correction
+    //                     needed (0.1 < pi) -> result = 0 + 0.1 * 0.5 = 0.05
+    //   without it:       delta = 4pi + 0.1 ~= 12.666, one `delta -= 2pi`
+    //                     correction fires (the ifs are not loops) leaving
+    //                     ~6.3835, still more than a full lap
+    //                     -> result ~= 3.1916, i.e. a 183-degree turret snap
+    //                     instead of a 3-degree nudge.
+    expect(lerpAngle(0, 4 * Math.PI + 0.1, 0.5)).toBeCloseTo(0.05, 9);
+
+    // Mirrored, so a sign error in the reduction cannot hide here either.
+    expect(lerpAngle(0, -(4 * Math.PI) - 0.1, 0.5)).toBeCloseTo(-0.05, 9);
+  });
+
   it('resolves the antipodal tie (exactly pi apart) deterministically', () => {
     // 0 -> pi: both the +pi/2 arc and the -pi/2 arc are equally short (each
     // exactly pi). This is a genuine tie with no "more correct" answer;
