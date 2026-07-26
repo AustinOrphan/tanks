@@ -215,3 +215,34 @@ describe('reflectSweep', () => {
     }
   });
 });
+
+describe('reflectSweep does not leak shells out of the arena', () => {
+  // The `t > SWEEP_EPS` filter exists to stop the sweep re-hitting the wall it just
+  // bounced off. It was applied to EVERY wall, so at the arena's inside corners -- where
+  // two boundary AABBs meet -- the bounce point lies exactly on the ABUTTING wall's face,
+  // that wall's entry comes back t=0, and it was discarded as if it were the wall just
+  // left. The sweep then returned an endpoint inside a solid wall with expired=false, and
+  // from inside an AABB every later entry is t=0 too, so the shell sailed out of the map
+  // and was never retired -- permanently holding one of its owner's 5 shell slots.
+  //
+  // Two abutting boxes meeting at the origin, exactly like the shipped arena's corners.
+  const left = { minX: -2, minY: 0, maxX: 0, maxY: 18 };
+  const top = { minX: -2, minY: -2, maxX: 22, maxY: 0 };
+
+  it('never returns an endpoint inside a solid wall', () => {
+    // Starting ON the shared corner is the reachable case: the shell's leg passes exactly
+    // through it, so `start` lands there after the first reflection.
+    const r = reflectSweep({ x: 0, y: 0 }, { x: -0.25, y: -0.25 }, [left, top], 3);
+    const inside = [left, top].some(
+      (w) => r.end.x > w.minX && r.end.x < w.maxX && r.end.y > w.minY && r.end.y < w.maxY,
+    );
+    expect(inside, `end ${JSON.stringify(r.end)} is embedded in a wall`).toBe(false);
+  });
+
+  it('does not pass a shell through the far side of a solid boundary wall', () => {
+    // Aimed straight at the corner from inside the playfield. Whatever it does -- bounce,
+    // stop, expire -- it must not come out at x < -2 on the other side of a 2-unit wall.
+    const r = reflectSweep({ x: 0, y: 0 }, { x: -0.5, y: -0.5 }, [left, top], 3);
+    expect(r.end.x).toBeGreaterThanOrEqual(-2);
+  });
+});

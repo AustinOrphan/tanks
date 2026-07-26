@@ -460,3 +460,41 @@ describe('resolveBulletHits', () => {
     expect(inbound.alive).toBe(false)
   })
 })
+
+describe('stepBullets retires a shell that is inside a wall', () => {
+  it('kills a shell found embedded in solid geometry', () => {
+    // Defence in depth behind reflectSweep's corner fix. A live shell inside a solid wall
+    // is never a legal state, and when one did occur it was unrecoverable: from inside an
+    // AABB raySegmentVsAABB reports t=0, so the shell never collided again, left the map,
+    // and held one of its owner's SHELL_CAP slots for the rest of the life. Retiring on the
+    // invariant means a future arena edit that introduces a new wall junction costs a shell
+    // rather than the player's ability to fire.
+    const world = {
+      tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
+      roundStartTick: 0, tanks: [], mines: [],
+      walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
+      bullets: [{
+        id: 50, ownerId: 1, type: 'normal' as const,
+        pos: { x: -1, y: 5 }, vel: { x: -6, y: 0 }, bouncesLeft: 1, alive: true,
+      }],
+    };
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets[0].alive).toBe(false);
+  });
+
+  it('leaves a shell resting exactly on a wall face alone', () => {
+    // A legitimate bounce puts the shell exactly ON the face; that must not be mistaken
+    // for being embedded, or every ricochet would die on contact.
+    const world = {
+      tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
+      roundStartTick: 0, tanks: [], mines: [],
+      walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
+      bullets: [{
+        id: 50, ownerId: 1, type: 'normal' as const,
+        pos: { x: 0, y: 5 }, vel: { x: 6, y: 0 }, bouncesLeft: 1, alive: true,
+      }],
+    };
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets[0].alive).toBe(true);
+  });
+});

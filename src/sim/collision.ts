@@ -137,6 +137,25 @@ export interface SweepResult {
   expired: boolean;
 }
 
+/**
+ * True if a segment leaving `start` toward `target` is travelling INTO `box`, as opposed to
+ * resting on one of its faces on the way out.
+ *
+ * Decided by probing a hair along the direction of travel rather than from the surface
+ * normal, because the normal is exactly what raySegmentVsAABB fails to supply for a
+ * boundary-start segment -- which is the whole reason this function exists.
+ */
+function headingInto(start: Vec2, target: Vec2, box: AABB): boolean {
+  const dx = target.x - start.x;
+  const dy = target.y - start.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return false;
+  const step = SWEEP_EPS / len;
+  const px = start.x + dx * step;
+  const py = start.y + dy * step;
+  return px > box.minX && px < box.maxX && py > box.minY && py < box.maxY;
+}
+
 function reflectVec(v: Vec2, n: Vec2): Vec2 {
   const d = vdot(v, n);
   return { x: v.x - 2 * d * n.x, y: v.y - 2 * d * n.y };
@@ -152,6 +171,16 @@ export function reflectSweep(
   let target: Vec2 = { x: to.x, y: to.y };
   let bouncesLeft = bounces;
   const hits: SweepHit[] = [];
+  // Which wall the previous iteration bounced off, so only THAT wall is allowed to be
+  // ignored at t~0. Applying the epsilon to every wall is what let shells escape the map:
+  // at the arena's inside corners two boundary boxes meet, so a bounce point sits exactly
+  // on the abutting wall's face, its entry comes back t=0, and it was discarded as though
+  // it were the wall just left. The sweep then ran on THROUGH a solid 2-unit wall with no
+  // hit recorded and expired=false, and since raySegmentVsAABB reports t=0 for a segment
+  // starting inside a box, every later tick was skipped too -- the shell left the arena and
+  // nothing ever retired it, holding one of its owner's SHELL_CAP slots for the rest of the
+  // life. Five of those and the player cannot fire at all.
+  let lastWall = -1;
 
   // Bounded loop: guards against pathological infinite reflection.
   for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
@@ -159,8 +188,17 @@ export function reflectSweep(
     let bestWall = -1;
     for (let i = 0; i < walls.length; i++) {
       const h = raySegmentVsAABB(start, target, walls[i]);
-      // Skip t<=EPS so we don't immediately re-hit the wall we just left.
-      if (h !== null && h.t > SWEEP_EPS && (best === null || h.t < best.t)) {
+      if (h === null) continue;
+      if (h.t <= SWEEP_EPS) {
+        // Only the wall just bounced off is ignored outright.
+        if (i === lastWall) continue;
+        // Otherwise a t~0 contact is only real if the shell is actually going INTO this
+        // box. Every ricochet comes to rest exactly ON a face, so treating all of them as
+        // hits kills a shell the instant it bounces; ignoring all of them is what let one
+        // cross an abutting wall at an arena corner. The direction decides which it is.
+        if (!headingInto(start, target, walls[i])) continue;
+      }
+      if (best === null || h.t < best.t) {
         best = h;
         bestWall = i;
       }
@@ -178,6 +216,22 @@ export function reflectSweep(
 
     const box = walls[bestWall];
     const pt = best.point;
+
+    // raySegmentVsAABB only fills in a normal when a slab entry strictly beats the running
+    // tmin, which starts at 0 -- so a segment beginning exactly on a face plane, or already
+    // inside the box, comes back with a zero normal and nothing to reflect about. Fail
+    // CLOSED: stop the shell at the wall exactly as running out of bounces does. Reflecting
+    // about a zero normal returns the direction unchanged, which walks the shell deeper into
+    // the wall and back out the far side.
+    if (Math.abs(best.normal.x) < SWEEP_EPS && Math.abs(best.normal.y) < SWEEP_EPS) {
+      return {
+        end: pt,
+        dir: vnorm(vsub(target, start)),
+        bouncesLeft,
+        hits,
+        expired: true,
+      };
+    }
 
     if (bouncesLeft <= 0) {
       // Out of bounces: stop dead at the wall; caller kills the bullet.
@@ -213,6 +267,7 @@ export function reflectSweep(
 
     bouncesLeft -= 1;
     start = pt;
+    lastWall = bestWall;
     target = vadd(pt, reflected);
   }
 
