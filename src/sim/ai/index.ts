@@ -11,13 +11,27 @@ import { dropMine } from '../mines';
 import { FIRE_COOLDOWN, MINE_COOLDOWN, DT, AI_TURRET_TURN_RATE } from '../constants';
 import { roundPhase } from '../round';
 
+/** An inert decision: hold position, hold aim, do nothing. */
+function idleDecision(tank: Tank): AiDecision {
+  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0 };
+}
+
 export function decideAi(world: World, tank: Tank): AiDecision {
   switch (tank.kind) {
     case 'brown': return brownDecision(world, tank);
     case 'grey': return greyDecision(world, tank);
     case 'teal': return tealDecision(world, tank);
-    default:
-      return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0 };
+    // stepAi already skips the player; handled explicitly so the exhaustiveness
+    // check below is reachable.
+    case 'player': return idleDecision(tank);
+    default: {
+      // A 5th TankKind must be a COMPILE error here, not a silently inert enemy
+      // that ships looking like a bug in its own decision function. Requires
+      // `tsc --noEmit` to run -- see the `test` script in package.json.
+      const unreachable: never = tank.kind;
+      void unreachable;
+      return idleDecision(tank);
+    }
   }
 }
 

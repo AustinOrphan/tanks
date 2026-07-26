@@ -55,6 +55,21 @@ describe('dropMine', () => {
     expect(events.find((e) => e.type === 'mine-dropped')).toBeUndefined() // no event emitted
   })
 
+  it('rejects a mine from a DEAD owner, matching spawnBullet', () => {
+    // A corpse must not keep laying mines. spawnBullet has carried
+    // `!owner || !owner.alive` since Task 12 as defence-in-depth; the mine
+    // chokepoint only ever checked `!owner`.
+    const grey = mkTank({ id: 1, kind: 'grey', pos: { x: 0, y: 0 } })
+    grey.alive = false
+    const world = createWorld({ walls: [], tanks: [grey], spawns: [], lives: 3 })
+    const events: SimEvent[] = []
+
+    expect(dropMine(world, 1, events)).toBe(false)
+    expect(world.mines.length).toBe(0)
+    expect(grey.activeMineIds).toEqual([])
+    expect(events).toEqual([])
+  })
+
   it('drops a mine at the owner and emits mine-dropped', () => {
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 2, y: -1 } })
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
@@ -176,7 +191,13 @@ describe('detonateMine', () => {
     dropMine(world, 1, [])
     expect(dropMine(world, 1, [])).toBe(false) // capped at 2
     const first = world.mines[0]
+    // Drive out of the blast before detonating. Mines spawn AT the owner, so
+    // leaving the player parked on top of its own mine killed it here -- and
+    // this test's final assertion then only passed because dropMine ignored
+    // owner.alive. The subject is slot accounting, not what a corpse may do.
+    player.pos = { x: MINE_BLAST_RADIUS * 3, y: 0 }
     detonateMine(world, first, [])
+    expect(player.alive).toBe(true)
     expect(player.activeMineIds.includes(first.id)).toBe(false)
     expect(dropMine(world, 1, [])).toBe(true) // slot freed
   })

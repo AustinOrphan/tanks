@@ -45,11 +45,34 @@ const FORBIDDEN_IMPORT_PATTERNS: Array<{ token: string; re: RegExp }> = [
   { token: `from 'three/...'`, re: /from\s+['"]three\// },
   { token: `from 'howler'`, re: /from\s+['"]howler['"]/ },
   { token: `from 'howler/...'`, re: /from\s+['"]howler\// },
+  // Matching only the bare specifiers above left a hole big enough to drive the
+  // whole violation through: `import { createScene } from '../render/scene'`
+  // inside src/sim/ names neither 'three' nor 'howler', so it PASSED the guard
+  // while transitively pulling all of three into the sim's module graph.
+  // Impure layers are forbidden by PATH, not just by package name.
+  { token: `from '../render/...'`, re: /from\s+['"](?:\.\.\/)+render(?:\/|['"])/ },
+  { token: `from '../audio/...'`, re: /from\s+['"](?:\.\.\/)+audio(?:\/|['"])/ },
+  { token: `from '../game/...'`, re: /from\s+['"](?:\.\.\/)+game(?:\/|['"])/ },
+  { token: `from '../input/...'`, re: /from\s+['"](?:\.\.\/)+input(?:\/|['"])/ },
 ];
 
 // Bare-identifier DOM-only globals. Word-boundary match so `windowSize` etc.
 // does not false-positive.
 const FORBIDDEN_GLOBALS = ['document', 'window', 'navigator', 'localStorage'];
+
+// Non-deterministic sources. DETERMINISM is the property this guard's own
+// docstring claims to protect, yet nothing here checked for it: a stray
+// `Math.random()` in the sim breaks replays and reproducible tests exactly as
+// thoroughly as an `import 'three'` breaks headlessness, and it is far easier
+// to write by accident. Seeded randomness must go through the PRNG in types.ts.
+// Scanned against comment-stripped source, since several sim files legitimately
+// mention these tokens in comments that FORBID them.
+const FORBIDDEN_NONDETERMINISM: Array<{ token: string; re: RegExp }> = [
+  { token: 'Math.random', re: /\bMath\s*\.\s*random\b/ },
+  { token: 'Date.now', re: /\bDate\s*\.\s*now\b/ },
+  { token: 'new Date', re: /\bnew\s+Date\b/ },
+  { token: 'performance', re: /\bperformance\b/ },
+];
 
 // Comments ARE excluded from the global-identifier scan (e.g. a sim test
 // legitimately talks about a "cautious window" of time in a comment). This
@@ -167,7 +190,7 @@ describe('sim purity guard', () => {
     }
   });
 
-  it('never imports three or howler, and never references DOM-only globals', () => {
+  it('never imports an impure layer, and never references DOM-only globals', () => {
     const violations: string[] = [];
 
     for (const path of files) {
@@ -184,6 +207,21 @@ describe('sim purity guard', () => {
         const wordBoundaryRe = new RegExp(`\\b${globalName}\\b`);
         if (wordBoundaryRe.test(codeOnly)) {
           violations.push(`${path}: forbidden reference to "${globalName}"`);
+        }
+      }
+    }
+
+    expect(violations, violations.join('\n')).toEqual([]);
+  });
+
+  it('never reaches for a non-deterministic clock or RNG', () => {
+    const violations: string[] = [];
+
+    for (const path of files) {
+      const codeOnly = stripComments(rawModules[path]);
+      for (const { token, re } of FORBIDDEN_NONDETERMINISM) {
+        if (re.test(codeOnly)) {
+          violations.push(`${path}: forbidden non-determinism "${token}"`);
         }
       }
     }

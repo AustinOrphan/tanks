@@ -89,6 +89,9 @@ export function createScene(
   function dispose(): void {
     groundGeo.dispose();
     groundMat.dispose();
+    // The shadow map is a 2048x2048 depth texture allocated lazily by the
+    // renderer; three does not free it for us when the light is dropped.
+    sun.shadow.map?.dispose();
     renderer.dispose();
   }
 
