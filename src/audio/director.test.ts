@@ -1,0 +1,134 @@
+import { describe, it, expect } from 'vitest';
+import { createAudioDirector } from './director';
+import type { AudioEngine } from './engine';
+import { DEFAULT_VOLUME } from './manifest';
+import type { SimEvent } from '../sim/events';
+
+interface PlayCall {
+  key: string;
+  opts?: { rate?: number; volume?: number };
+}
+
+function makeSpyEngine(): { engine: AudioEngine; calls: PlayCall[] } {
+  const calls: PlayCall[] = [];
+  const engine: AudioEngine = {
+    play: (key, opts) => {
+      calls.push({ key, opts });
+    },
+    startMusic: () => {},
+    stopMusic: () => {},
+    setMuted: () => {},
+    toggleMute: () => false,
+    isMuted: () => false,
+    setVolume: () => {},
+    getVolume: () => DEFAULT_VOLUME,
+    unlock: () => {},
+    dispose: () => {},
+  };
+  return { engine, calls };
+}
+
+describe('createAudioDirector', () => {
+  it('plays cannon for a player fire (ownerId 0) and cannon-enemy otherwise', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    const playerFire: SimEvent = {
+      type: 'fire',
+      ownerId: 0,
+      bulletType: 'normal',
+      pos: { x: 0, y: 0 },
+      angle: 0,
+    };
+    const enemyFire: SimEvent = {
+      type: 'fire',
+      ownerId: 1,
+      bulletType: 'normal',
+      pos: { x: 0, y: 0 },
+      angle: 0,
+    };
+    director.handle([playerFire, enemyFire]);
+    expect(calls.map((c) => c.key)).toEqual(['cannon', 'cannon-enemy']);
+  });
+
+  it('steps ping rate by exactly RICOCHET_RATE_STEP per bounce', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    director.handle([
+      { type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 0 },
+      { type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 1 },
+      { type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 2 },
+    ]);
+    expect(calls.every((c) => c.key === 'ping')).toBe(true);
+    const rates = calls.map((c) => c.opts?.rate ?? 0);
+
+    // Pinned to exact values, not just `rates[0] < rates[1] < rates[2]`. That
+    // ordinal form is satisfied by ANY positive step, so RICOCHET_RATE_STEP
+    // could be retuned from 0.15 to 1.5 -- turning the third bounce of a
+    // ricochet shell into a 4x-speed chipmunk shriek -- with this test green.
+    // Playback rate is a musical quantity: the size of the step is the whole
+    // design, and the direction is the trivial part.
+    //
+    // Derived from src/audio/director.ts: `rate = 1 + bounceIndex *
+    // RICOCHET_RATE_STEP` with RICOCHET_RATE_STEP = 0.15, so bounces 0/1/2 give
+    // 1, 1.15 and 1.30 -- a little over a semitone (~2.4) per bounce, audible
+    // as a rising pitch without leaving the sample's usable range even at the
+    // ricochet shell's third and final bounce (RICOCHET_BOUNCES = 3).
+    // Both 1 + 0.15 and 1 + 2 * 0.15 are exact in IEEE-754 doubles, so `toEqual`
+    // is safe here and says more than a tolerance would.
+    expect(rates).toEqual([1, 1.15, 1.3]);
+  });
+
+  it('plays one explosion per kill, not two', () => {
+    // A kill emits `tank-destroyed` AND `explosion` at the same pos on the same
+    // tick (bullets.ts:80-81, mines.ts:50-51). Sounding both doubles an
+    // identical waveform at identical currentTime: +6 dB, not a bigger boom.
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    director.handle([
+      { type: 'tank-destroyed', tankId: 3, kind: 'brown', pos: { x: 0, y: 0 } },
+      { type: 'explosion', pos: { x: 0, y: 0 } },
+    ]);
+    expect(calls.map((c) => c.key)).toEqual(['explosion']);
+  });
+
+  it('maps mine-dropped to the drop thunk and mine-armed to the arming beep', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    director.handle([
+      { type: 'mine-dropped', mineId: 7, pos: { x: 0, y: 0 } },
+      { type: 'mine-armed', mineId: 7, pos: { x: 0, y: 0 } },
+    ]);
+    expect(calls.map((c) => c.key)).toEqual(['mine-drop', 'mine-arm']);
+  });
+
+  it('maps mine-detonate to mine-boom', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    director.handle([{ type: 'mine-detonate', mineId: 7, pos: { x: 0, y: 0 } }]);
+    expect(calls.map((c) => c.key)).toEqual(['mine-boom']);
+  });
+
+  it('maps win to victory and lose to defeat', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    director.handle([{ type: 'win' }, { type: 'lose' }]);
+    expect(calls.map((c) => c.key)).toEqual(['victory', 'defeat']);
+  });
+
+  it('plays nothing for wall-destroyed (blast is already covered by explosion/mine-boom)', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine);
+    director.handle([{ type: 'wall-destroyed', wallId: 12, pos: { x: 0, y: 0 } }]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('respects a custom playerId', () => {
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine, 5);
+    director.handle([
+      { type: 'fire', ownerId: 5, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 },
+      { type: 'fire', ownerId: 0, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 },
+    ]);
+    expect(calls.map((c) => c.key)).toEqual(['cannon', 'cannon-enemy']);
+  });
+});

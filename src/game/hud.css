@@ -1,0 +1,106 @@
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #fff;
+  user-select: none;
+}
+
+.hud-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+}
+
+.hud-stat {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.hud-audio {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.hud-mute {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-weight: 700;
+  background: #ffcf3f;
+  color: #3a2c00;
+}
+
+/* Muted has to read as "off" at a glance, not just as different text -- with no
+   music shipped, silence is the game's normal state either way. */
+.hud-mute--active {
+  background: #4a4f59;
+  color: #c3c8d2;
+}
+
+.hud-volume {
+  pointer-events: auto;
+  cursor: pointer;
+  width: 120px;
+}
+
+.hud-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(20, 24, 30, 0.55);
+  pointer-events: auto;
+}
+
+.hud-panel--hidden {
+  display: none;
+}
+
+.hud-title {
+  margin: 0;
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+
+.hud-subtitle {
+  margin: 0;
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.hud-action {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 28px;
+  font-size: 20px;
+  font-weight: 800;
+  background: #4fd06a;
+  color: #06340f;
+  box-shadow: 0 6px 0 #2f8f45;
+}
+
+.hud-action:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 #2f8f45;
+}
