@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { framedBounds, fitCameraToArea, framedAreaFits, FRAME_MARGIN } from './framing';
-import { CURRENT_ARENA, arenaBounds } from '../sim/arena';
+import { CURRENT_ARENA, arenaBounds, loadArena } from '../sim/arena';
 
 const { width: W, height: H } = arenaBounds(CURRENT_ARENA);
 const BOUNDARY = CURRENT_ARENA.cellSize;
@@ -32,11 +32,27 @@ describe('framedBounds', () => {
   });
 
   it('matches the outer extent of the arena walls it has to cover', () => {
-    // Derived from the walls themselves rather than trusting the arithmetic above:
-    // loadArena's boundary AABBs span -cellSize .. W+cellSize.
+    // Derived from the walls THEMSELVES, by reading the AABBs loadArena actually
+    // builds. Restating `W + BOUNDARY * 2` here -- as this test used to -- only
+    // re-derives framedBounds' own body, so it could not fail; it left the ring
+    // thickness free to drift away from what the camera frames.
+    const { walls } = loadArena(CURRENT_ARENA);
+    const minX = Math.min(...walls.map((w) => w.aabb.minX));
+    const maxX = Math.max(...walls.map((w) => w.aabb.maxX));
+    const minY = Math.min(...walls.map((w) => w.aabb.minY));
+    const maxY = Math.max(...walls.map((w) => w.aabb.maxY));
+
     const { width, height } = framedBounds(W, H, BOUNDARY);
-    expect(width).toBe(W + BOUNDARY * 2);
-    expect(height).toBe(H + BOUNDARY * 2);
+    expect(width).toBe(maxX - minX);
+    expect(height).toBe(maxY - minY);
+  });
+
+  it('scales with the boundary it is given, not with the shipped arena', () => {
+    // The shipped cellSize is 2, so `W + BOUNDARY * 2` and a hardcoded `W + 4` are
+    // the same number: every other assertion in this file still passes if the body
+    // ignores its `boundary` argument outright. Only a different boundary sees that.
+    expect(framedBounds(10, 8, 3)).toEqual({ width: 16, height: 14 });
+    expect(framedBounds(10, 8, 0)).toEqual({ width: 10, height: 8 });
   });
 });
 

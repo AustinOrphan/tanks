@@ -78,8 +78,9 @@ export function framedAreaFits(
  *
  * Fitting DISTANCE rather than widening the fov is what keeps the arena large.
  * The previous code held distance fixed at a hand-picked multiple of the arena
- * span and widened the fov on narrow viewports; the multiple left ~26% of the
- * vertical frustum unused at 16:10, which is why the board looked small.
+ * span and widened the fov on narrow viewports; the multiple left ~35% of the
+ * vertical frustum unused at 16:10, which is why the board looked small. The fit
+ * brings that residual down to ~26% on the same rect.
  */
 export function fitCameraToArea(
   camera: THREE.PerspectiveCamera,
@@ -90,7 +91,10 @@ export function fitCameraToArea(
 ): void {
   const span = Math.max(width, height);
   let lo = span * 0.05; // certainly too close to contain it
-  let hi = span * 8; // certainly far enough
+  // Far enough for every viewport the game is played at, but NOT validated: below
+  // about aspect 0.147 (a ~300px-wide window on a portrait 4K panel) nothing in the
+  // bracket fits, and the fallback below returns a camera that crops the board.
+  let hi = span * 8;
 
   const place = (d: number): void => {
     camera.position.copy(target).addScaledVector(VIEW_DIR, d);
@@ -106,5 +110,7 @@ export function fitCameraToArea(
     if (framedAreaFits(camera, target, width, height, margin)) hi = mid;
     else lo = mid;
   }
-  place(hi); // hi is the last distance known to fit
+  // hi is the last distance known to fit -- unless no midpoint ever fit, in which
+  // case hi is still the untested initial bracket and this camera crops.
+  place(hi);
 }
