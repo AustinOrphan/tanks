@@ -238,18 +238,29 @@ describe('detonateMine', () => {
     // circleVsCircle: reach is MINE_BLAST_RADIUS + TANK_RADIUS from the centre.
     const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
     const inside = mkTank({ id: 2, kind: 'brown', pos: { x: MINE_BLAST_RADIUS - 0.5, y: 0 } })
-    const outside = mkTank({
-      id: 3,
-      kind: 'grey',
-      pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS + 0.5, y: 0 },
+    // THE DISCRIMINATING PAIR, straddling the exact reach rather than sitting near it.
+    // Without a tank in (MINE_BLAST_RADIUS, MINE_BLAST_RADIUS + TANK_RADIUS] the test
+    // cannot tell the documented reach from one missing its `+ TANK_RADIUS`: `inside` at
+    // 1.5 dies under both and a far tank at 3.0 survives under both, so dropping the term
+    // passed the whole suite. Straddling by 1e-9 (the idiom ai/danger.test.ts:207 already
+    // uses) also pins the exact boundary value and the `<=`, which a probe placed at the
+    // midpoint leaves free to slide.
+    const REACH = MINE_BLAST_RADIUS + TANK_RADIUS
+    const atReach = mkTank({ id: 4, kind: 'teal', pos: { x: REACH, y: 0 } })
+    const clear = mkTank({ id: 3, kind: 'grey', pos: { x: REACH + 1e-9, y: 0 } })
+    const world = createWorld({
+      walls: [],
+      tanks: [owner, inside, atReach, clear],
+      spawns: [],
+      lives: 3,
     })
-    const world = createWorld({ walls: [], tanks: [owner, inside, outside], spawns: [], lives: 3 })
     const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
     world.mines.push(mine)
     const events: SimEvent[] = []
     detonateMine(world, mine, events)
-    expect(inside.alive).toBe(false) // 1.5 <= 2.0
-    expect(outside.alive).toBe(true) // 2.5 > 2.0
+    expect(inside.alive).toBe(false) // centre 1.5, well inside the 2.5 reach
+    expect(atReach.alive).toBe(false) // centre exactly 2.5: hull grazing, still killed (<=)
+    expect(clear.alive).toBe(true) // centre 2.5 + 1e-9: the first distance that survives
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
   })
 
