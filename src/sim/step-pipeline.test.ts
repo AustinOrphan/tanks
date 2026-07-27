@@ -38,11 +38,24 @@ import {
  *   - stage deletions:             7 of 7 fail here   (population: all 7)
  *   - adjacent transpositions:     4 of 6 fail here   (population: all 6)
  *   - single-element moves:       32 of 36 fail here  (population: ALL 36 distinct)
+ *   - non-adjacent transpositions: 15 of 15 fail here (population: all 15; measured by review)
+ * Review also swept all 5040 orderings: the only suite-survivors are the two below and
+ * BADCEFG, which is just the two composed and is behaviourally identical to the first.
+ *
+ * CLASSES DELIBERATELY NOT SWEPT, so the counts above are not read as "everything":
+ *   - duplicated stage calls (49 distinct; review found 32 pass the suite, and some change
+ *     the game -- applyPlayerInput twice halves cooldowns);
+ *   - intermittent skips (a stage that runs most ticks but not all; 6 of 7 pass).
+ * Both are re-entrancy/cadence properties rather than composition, and neither is claimed.
+ *
  * Of the 36 moves, 34 fail somewhere in the suite and exactly TWO survive it entirely:
  *
  *   - BACDEFG, applyPlayerInput <-> stepAi. The AI reads the player's shell one tick late.
- *     A REAL divergence, not a harmless one: 10 of 12 seeded games differ, and review
- *     measured win/lose flips on ~10 of 300 seeds. UNPINNED, deliberately -- every
+ *     A REAL divergence, not a harmless one: seeded games diverge and review measured
+ *     win/lose flips across a 300-seed sweep. The RATE is not quoted here on purpose --
+ *     independent harnesses got 13%, 80% and 100% depending on how varied the input stream
+ *     was, so it is a property of the probe, not of the code. What is stable is the
+ *     contrast with the other survivor: non-zero here, 0 of 60 there. UNPINNED -- every
  *     observable found for it needs a whole-game outcome assertion, which is the fragile
  *     kind of test. This is a genuine residual, recorded rather than dressed up.
  *   - ABDCEFG, stepMovement <-> stepBullets. Safe. Not because the two stages touch
@@ -113,7 +126,9 @@ const idleInput: InputState = {
 
 const tankById = (w: World, id: number) => w.tanks.find((t) => t.id === id)!;
 
-// A shell is lethal to anyone but its owner at centre distance <= this.
+// A shell is lethal at centre distance strictly < this (circleVsCircle compares `<`).
+// No fixture here sits on the boundary, so the distinction is inert -- stated correctly
+// rather than approximately because the next person will read it as a spec.
 const LETHAL_DIST = TANK_RADIUS + BULLET_RADIUS;
 
 function putBullet(w: World, b: Partial<Bullet> & Pick<Bullet, 'pos' | 'vel'>): Bullet {
@@ -272,7 +287,9 @@ describe('step() stage ORDER', () => {
     // The gap closes only if BOTH move: shell alone leaves half a tank-step too much.
     const gap = LETHAL_DIST + shellStep + tankStep / 2;
     putBullet(w, {
-      ownerId: BROWN_ID, // not the player: an owner's own shell is spared at the muzzle
+      // An enemy's shell, matching how the player actually gets shot. (Not for muzzle-guard
+      // reasons -- this shell closes on the player, so it would be lethal to its owner too.)
+      ownerId: BROWN_ID,
       pos: { x: player.pos.x + gap, y: player.pos.y },
       vel: { x: -bulletConfig.normal.speed, y: 0 },
     });
@@ -302,10 +319,13 @@ describe('step() stage ORDER', () => {
     // the shell is spent. Run stepMines first and detonateMine clears the tank's `alive`
     // flag, so resolveBulletHits skips it (`if (!t.alive) continue`) and never retires the
     // shell -- which flies on, still lethal, holding one of its owner's SHELL_CAP slots.
-    // In the shipped arena that shell does eventually self-retire (NORMAL_BOUNCES is 1, so
-    // 71-218 ticks), which makes this a transient cap leak rather than the permanent
-    // lockout the escaped-shell bug caused -- but it is still a shell that kills something
-    // it should never have reached.
+    // In the shipped arena that shell does eventually self-retire, because NORMAL_BOUNCES
+    // is 1 -- so this is a transient cap leak rather than the permanent lockout the
+    // escaped-shell bug caused. It is still a shell that kills something it should never
+    // have reached. (An earlier draft put a "71-218 ticks" range here. Review traced it to
+    // one unstated population -- player spawn, 24 angles -- and measured ~4-438 across the
+    // real arena. It is deleted rather than restated: this fixture has no walls, so no
+    // shipped-arena figure belongs in it.)
     const w = makeWorld();
     const brown = tankById(w, BROWN_ID);
     const shell = putBullet(w, {
