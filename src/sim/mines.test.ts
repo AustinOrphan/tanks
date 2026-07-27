@@ -238,18 +238,33 @@ describe('detonateMine', () => {
     // circleVsCircle: reach is MINE_BLAST_RADIUS + TANK_RADIUS from the centre.
     const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
     const inside = mkTank({ id: 2, kind: 'brown', pos: { x: MINE_BLAST_RADIUS - 0.5, y: 0 } })
-    const outside = mkTank({
+    // THE DISCRIMINATING PROBE. Centre beyond MINE_BLAST_RADIUS but hull inside it, i.e.
+    // in (2.0, 2.5]. Without a tank in this band the test cannot tell the documented reach
+    // from one missing its `+ TANK_RADIUS`: `inside` at 1.5 dies under both and `clear` at
+    // 3.0 survives under both, so dropping the term used to pass the whole suite.
+    const hullClipped = mkTank({
+      id: 4,
+      kind: 'teal',
+      pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS / 2, y: 0 },
+    })
+    const clear = mkTank({
       id: 3,
       kind: 'grey',
       pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS + 0.5, y: 0 },
     })
-    const world = createWorld({ walls: [], tanks: [owner, inside, outside], spawns: [], lives: 3 })
+    const world = createWorld({
+      walls: [],
+      tanks: [owner, inside, hullClipped, clear],
+      spawns: [],
+      lives: 3,
+    })
     const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
     world.mines.push(mine)
     const events: SimEvent[] = []
     detonateMine(world, mine, events)
-    expect(inside.alive).toBe(false) // 1.5 <= 2.0
-    expect(outside.alive).toBe(true) // 2.5 > 2.0
+    expect(inside.alive).toBe(false) // centre 1.5, well inside the 2.5 reach
+    expect(hullClipped.alive).toBe(false) // centre 2.25: outside the blast, hull inside it
+    expect(clear.alive).toBe(true) // centre 3.0, beyond 2.5
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
   })
 
