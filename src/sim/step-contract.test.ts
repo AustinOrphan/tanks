@@ -17,9 +17,10 @@ import { COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
  *   - `if (canAct && input.mine && ...)` -> `if (false && ...)`  (mine key does nothing)
  *   - `draft.tick += 1` moved below the pipeline           (round phases off by one)
  *
- * The event assertions matter because render and audio consume that stream and nothing
- * else does: a dropped `fire` is a silent gun, a dropped `ricochet` is a silent bounce.
- * Both were invisible to every other test in the suite.
+ * The event assertions matter because that stream is how the rest of the game hears about
+ * anything: render and audio are the main consumers, and game/state.ts's onEvents reads
+ * win/lose to drive the game-over screen. A dropped `fire` is a silent gun, a dropped
+ * `ricochet` is a silent bounce. Both were invisible to every other test in the suite.
  *
  * SWEEP RECORD -- whole classes, with their populations, not a sample:
  *   - events discarded, one stage at a time:  6 of 6 now caught (population: all 6 stages
@@ -88,27 +89,49 @@ describe('step() latches a finished game', () => {
     const lost = step(w, idle).world;
     expect(lost.status).toBe('lose');
 
-    const greyBefore = { ...tankById(lost, GREY_ID).pos };
-    const after = step(lost, firing).world;
+    const r = step(lost, firing);
 
-    expect(after.status).toBe('lose');
-    expect(tankById(after, GREY_ID).pos).toEqual(greyBefore); // no AI, no movement
-    expect(after.bullets).toHaveLength(0); // and no firing
+    // Asserted as "the whole world is untouched except the tick", not as a list of
+    // individual things that did not happen. Review showed the narrower form was mostly
+    // decoration: only the grey-position check was load-bearing, and even that would be
+    // satisfied by an unrelated AI change ("enemies hold position when no lives remain")
+    // while the latch stayed broken. Deep equality cannot drift that way, and it also
+    // covers bullets, mines, walls and lives without a line each.
+    expect({ ...r.world, tick: lost.tick }).toEqual(lost);
+    expect(r.events).toEqual([]);
   });
 });
 
 describe('step() hands its events back to the caller', () => {
-  // Render and audio consume this stream and nothing else does. Each of these events is
-  // produced by a stage whose `events` argument could be replaced with a throwaway array
-  // with the whole suite still green.
+  // Render and audio are the main consumers; game/state.ts's onEvents also reads win/lose
+  // to drive the game-over screen. Each event below is produced by a stage whose `events`
+  // argument could be replaced with a throwaway array with the whole suite still green.
 
-  it("the player's own fire event reaches the caller", () => {
-    // Discriminated by ownerId: Brown has clear line of sight in this fixture and fires
-    // its own shell, so a bare `some(e => e.type === 'fire')` passes even when the
-    // player's event is dropped.
-    const r = step(liveWorld(), firing);
+  it("the player's own fire event reaches the caller, with its position", () => {
+    // Discriminated by ownerId because GREY (id 3) also fires on this tick in this
+    // fixture, so a bare `some(e => e.type === 'fire')` passes even when the player's
+    // event is dropped -- which is exactly what step-integration.test.ts does.
+    // `pos` and `angle` are asserted too: particles.ts spawns every burst at exactly
+    // ev.pos, so a wrong position is a visible defect that no presence-only assertion
+    // catches. spawnBullet reports the owner's centre here, not a muzzle offset.
+    const w = liveWorld();
+    // Turret pre-aimed at +y and the aim point placed on that same bearing, so slewAngle
+    // leaves it exactly at PI/2 this tick. A NON-ZERO angle on purpose: with the fixture's
+    // default of 0, `angle: 0` is satisfied by a mutation that hardcodes the field to 0 --
+    // which is exactly what happened on the first attempt at this assertion.
+    tankById(w, PLAYER_ID).turretAngle = Math.PI / 2;
+    const aimedUp: InputState = { ...firing, aim: { x: 5, y: 10 } };
+
+    const r = step(w, aimedUp);
+
     expect(r.events).toContainEqual(
-      expect.objectContaining({ type: 'fire', ownerId: PLAYER_ID, bulletType: 'normal' }),
+      expect.objectContaining({
+        type: 'fire',
+        ownerId: PLAYER_ID,
+        bulletType: 'normal',
+        pos: { x: 5, y: 5 },
+        angle: Math.PI / 2,
+      }),
     );
   });
 
@@ -147,7 +170,11 @@ describe('step() hands its events back to the caller', () => {
       world = r.world;
       events.push(...r.events);
     }
-    expect(events.some((e) => e.type === 'ricochet')).toBe(true);
+    // Position asserted, not just presence: the bounce point is where the spark burst is
+    // drawn. The shell travels along y=5 into the wall's minX face at x=6.
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'ricochet', pos: { x: 6, y: 5 } }),
+    );
   });
 });
 

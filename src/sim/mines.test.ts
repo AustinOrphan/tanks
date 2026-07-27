@@ -238,23 +238,19 @@ describe('detonateMine', () => {
     // circleVsCircle: reach is MINE_BLAST_RADIUS + TANK_RADIUS from the centre.
     const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
     const inside = mkTank({ id: 2, kind: 'brown', pos: { x: MINE_BLAST_RADIUS - 0.5, y: 0 } })
-    // THE DISCRIMINATING PROBE. Centre beyond MINE_BLAST_RADIUS but hull inside it, i.e.
-    // in (2.0, 2.5]. Without a tank in this band the test cannot tell the documented reach
-    // from one missing its `+ TANK_RADIUS`: `inside` at 1.5 dies under both and `clear` at
-    // 3.0 survives under both, so dropping the term used to pass the whole suite.
-    const hullClipped = mkTank({
-      id: 4,
-      kind: 'teal',
-      pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS / 2, y: 0 },
-    })
-    const clear = mkTank({
-      id: 3,
-      kind: 'grey',
-      pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS + 0.5, y: 0 },
-    })
+    // THE DISCRIMINATING PAIR, straddling the exact reach rather than sitting near it.
+    // Without a tank in (MINE_BLAST_RADIUS, MINE_BLAST_RADIUS + TANK_RADIUS] the test
+    // cannot tell the documented reach from one missing its `+ TANK_RADIUS`: `inside` at
+    // 1.5 dies under both and a far tank at 3.0 survives under both, so dropping the term
+    // passed the whole suite. Straddling by 1e-9 (the idiom ai/danger.test.ts:207 already
+    // uses) also pins the exact boundary value and the `<=`, which a probe placed at the
+    // midpoint leaves free to slide.
+    const REACH = MINE_BLAST_RADIUS + TANK_RADIUS
+    const atReach = mkTank({ id: 4, kind: 'teal', pos: { x: REACH, y: 0 } })
+    const clear = mkTank({ id: 3, kind: 'grey', pos: { x: REACH + 1e-9, y: 0 } })
     const world = createWorld({
       walls: [],
-      tanks: [owner, inside, hullClipped, clear],
+      tanks: [owner, inside, atReach, clear],
       spawns: [],
       lives: 3,
     })
@@ -263,8 +259,8 @@ describe('detonateMine', () => {
     const events: SimEvent[] = []
     detonateMine(world, mine, events)
     expect(inside.alive).toBe(false) // centre 1.5, well inside the 2.5 reach
-    expect(hullClipped.alive).toBe(false) // centre 2.25: outside the blast, hull inside it
-    expect(clear.alive).toBe(true) // centre 3.0, beyond 2.5
+    expect(atReach.alive).toBe(false) // centre exactly 2.5: hull grazing, still killed (<=)
+    expect(clear.alive).toBe(true) // centre 2.5 + 1e-9: the first distance that survives
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
   })
 
