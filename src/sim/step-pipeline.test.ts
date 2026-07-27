@@ -23,33 +23,39 @@ import {
  * keep passing when step() stops calling them. Measured against the merged tree at
  * c668fdc: deleting `stepMines(draft, DT, events)` from step() left all 472 tests
  * green -- mines silently stopped existing. Deleting `stepMovement` or
- * `resolveBulletHits` was caught only incidentally, by one statistical whole-game
- * AI test (ai/pacifist.test.ts) whose failure message is about mine-laying cadence
- * and says nothing about the pipeline. Every test below is written to fail loudly,
+ * `resolveBulletHits` was caught only incidentally, by the statistical whole-game AI
+ * tests in ai/pacifist.test.ts: `resolveBulletHits` by a single test about mine-laying
+ * cadence, `stepMovement` by two, the second about the AI still firing. Neither failure
+ * message names anything in the pipeline. Every test below is written to fail loudly,
  * and for the right reason, when its stage is removed or reordered.
  *
  * These assert through step() ONLY. Calling a stage directly here would defeat the
  * entire point of the file.
  *
- * MUTATION RECORD, measured against this file (harness controlled first: the identity
- * permutation survives, the full reversal GFEDCBA fails 7 tests here):
- *   - all 7 stage deletions fail here;
- *   - 4 of the 6 adjacent transpositions fail here;
- *   - 4 of 4 longer-range moves fail here.
+ * MUTATION RECORD -- exhaustive over the classes named, not sampled. Harness controlled
+ * first: the identity permutation survives 484/484, the full reversal GFEDCBA fails 9
+ * tests here.
+ *   - stage deletions:             7 of 7 fail here   (population: all 7)
+ *   - adjacent transpositions:     4 of 6 fail here   (population: all 6)
+ *   - single-element moves:       32 of 36 fail here  (population: ALL 36 distinct)
+ * Of the 36 moves, 34 fail somewhere in the suite and exactly TWO survive it entirely:
  *
- * TWO MUTANTS SURVIVE THE WHOLE SUITE, and neither is harmless:
- *   - applyPlayerInput <-> stepAi: the AI reads the player's shell one tick late. Diverges
- *     from the shipped ordering in 10 of 12 seeded games; a 300-seed sweep flips win/lose
- *     on ~10. UNPINNED - the divergence is real but I found no single-tick observable that
- *     pins it without asserting a whole-game outcome, which is the fragile kind of test.
- *   - stepMovement <-> stepBullets: this one IS safe, and provably so rather than
- *     hopefully. The two stages have disjoint read/write sets (tanks+walls vs
- *     bullets+walls), and 12 full games under the swap are byte-identical to the
- *     shipped ordering. Left unpinned deliberately.
+ *   - BACDEFG, applyPlayerInput <-> stepAi. The AI reads the player's shell one tick late.
+ *     A REAL divergence, not a harmless one: 10 of 12 seeded games differ, and review
+ *     measured win/lose flips on ~10 of 300 seeds. UNPINNED, deliberately -- every
+ *     observable found for it needs a whole-game outcome assertion, which is the fragile
+ *     kind of test. This is a genuine residual, recorded rather than dressed up.
+ *   - ABDCEFG, stepMovement <-> stepBullets. Safe. Not because the two stages touch
+ *     disjoint state -- they both read world.walls -- but because neither WRITES what the
+ *     other reads, so they commute. Verified rather than argued: 60 seeded games byte-
+ *     identical, including with mines forced to destroy walls inside the swap window.
  *
- * An earlier version of this comment claimed all seven deletions and four of six
- * reorderings were pinned, and that the survivors "changed no outcome". Adversarial
- * review disproved all three claims; the numbers above are the re-measured ones.
+ * This record is on its third measurement. The first claimed all 7 deletions and 4 of 6
+ * reorderings were pinned and that the survivors changed no outcome -- three false claims.
+ * The second fixed those but stated a 17-mutant SAMPLE as though it were a sweep, and
+ * missed ABDECFG (stepMovement after resolveBulletHits), which passed all 484 tests while
+ * changing most seeded games. Both were caught by adversarial review, not by me. Hence the
+ * denominators above: a count without its population is what hid the third survivor.
  */
 
 const PLAYER_ID = 1;
@@ -176,9 +182,11 @@ describe('step() calls stepMines', () => {
     const r = step(w, idleInput);
 
     expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, pos: { x: 40, y: 40 } });
-    // Scoped to THIS mine's id, not world.mines.length: Grey's AI can legitimately drop
-    // its own mine in these fixtures, and a bare length assertion would then fail for a
-    // reason that has nothing to do with the pipeline.
+    // Scoped to THIS mine's id rather than world.mines.length. Grey cannot actually reach
+    // a drop in this fixture (it spawns 35 units from the player, well outside
+    // AI_MINE_TACTICAL_RADIUS of 8.5), but a length assertion couples the test to that
+    // margin for no benefit -- tune the radius and it fails for a reason unrelated to the
+    // pipeline.
     expect(r.world.mines.find((m) => m.id === mine.id)).toBeUndefined();
   });
 
@@ -203,24 +211,11 @@ describe('step() calls stepMines', () => {
   });
 });
 
-describe('step() calls stepAi', () => {
-  it('enemies act on their own: an enemy fires without any player input', () => {
-    // Deleting stepAi leaves three inert enemies. The suite catches that elsewhere, but
-    // nothing in THIS file did, and a composition harness that silently omits one of the
-    // seven stages is a false record of its own coverage.
-    const w = makeWorld();
-    let world = w;
-    const events = [];
-    for (let i = 0; i < 30; i++) {
-      const r = step(world, idleInput);
-      world = r.world;
-      events.push(...r.events);
-    }
-    // Collected across ticks rather than asserting on end-state: a shell can be spawned
-    // and resolved within the 30-tick window, and the player may die and reset the arena.
-    expect(events.some((e) => e.type === 'fire' && e.ownerId !== PLAYER_ID)).toBe(true);
-  });
-});
+// stepAi's presence is pinned by the ordering test below ("a roamer acts on THIS tick's
+// decision"), which fails if stepAi is deleted as well as if it is reordered. An earlier
+// draft of this file also carried a separate 30-tick "an enemy fires" test; a mutation
+// sweep showed it caught nothing the ordering test did not, so it was removed rather than
+// left as coverage theatre.
 
 describe('step() stage ORDER', () => {
   it('resolveBulletHits runs AFTER stepBullets: a shell that only reaches its target mid-tick still kills', () => {
@@ -265,6 +260,30 @@ describe('step() stage ORDER', () => {
     expect(r.events).toContainEqual({ type: 'win' });
   });
 
+  it('stepMovement runs BEFORE resolveBulletHits: a tank that drives into an incoming shell is hit this tick', () => {
+    // Hits must be resolved against where tanks ARE after moving, not where they started.
+    // Move stepMovement after resolveBulletHits and a tank closing on a shell is tested at
+    // its stale position: it drives through the shell untouched. That mutant passed the
+    // whole suite until this test existed, and it changes most seeded games.
+    const w = makeWorld();
+    const player = tankById(w, PLAYER_ID);
+    const tankStep = TANK_SPEED * DT;
+    const shellStep = bulletConfig.normal.speed * DT;
+    // The gap closes only if BOTH move: shell alone leaves half a tank-step too much.
+    const gap = LETHAL_DIST + shellStep + tankStep / 2;
+    putBullet(w, {
+      ownerId: BROWN_ID, // not the player: an owner's own shell is spared at the muzzle
+      pos: { x: player.pos.x + gap, y: player.pos.y },
+      vel: { x: -bulletConfig.normal.speed, y: 0 },
+    });
+
+    const r = step(w, { ...idleInput, move: { x: 1, y: 0 } });
+
+    // On the event record, not r.world: the player dies, then resolveStatus spends a life
+    // and resetArena revives him before the tick ends.
+    expect(r.events.some((e) => e.type === 'tank-destroyed' && e.tankId === PLAYER_ID)).toBe(true);
+  });
+
   it('stepAi runs BEFORE stepMovement: a roamer acts on THIS tick\'s decision, not last tick\'s', () => {
     // Every tank starts with desiredMove {0,0}, so running stepMovement first means the
     // very first tick moves nobody and every later tick drives on stale intent. Measured
@@ -283,8 +302,10 @@ describe('step() stage ORDER', () => {
     // the shell is spent. Run stepMines first and detonateMine clears the tank's `alive`
     // flag, so resolveBulletHits skips it (`if (!t.alive) continue`) and never retires the
     // shell -- which flies on, still lethal, holding one of its owner's SHELL_CAP slots.
-    // Five leaked shells lock a tank out of firing for the rest of the round, which is the
-    // same failure mode as the escaped-shell bug this arena already shipped a fix for.
+    // In the shipped arena that shell does eventually self-retire (NORMAL_BOUNCES is 1, so
+    // 71-218 ticks), which makes this a transient cap leak rather than the permanent
+    // lockout the escaped-shell bug caused -- but it is still a shell that kills something
+    // it should never have reached.
     const w = makeWorld();
     const brown = tankById(w, BROWN_ID);
     const shell = putBullet(w, {
