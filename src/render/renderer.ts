@@ -17,8 +17,9 @@ export function createRenderer(
   canvas: HTMLCanvasElement,
   worldWidth: number,
   worldHeight: number,
+  boundary: number,
 ): Renderer3D {
-  const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight);
+  const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
   const entities: EntityViews = createEntityViews(ctx.scene);
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
 

@@ -33,7 +33,7 @@ export function startGame(
 
   const { width, height } = arenaBounds(CURRENT_ARENA);
 
-  const renderer = createRenderer(canvas, width, height);
+  const renderer = createRenderer(canvas, width, height, CURRENT_ARENA.cellSize);
   const input = createInputController(canvas, (x, y) => renderer.screenToGround(x, y));
   const audio = createAudioEngine(AUDIO_MANIFEST);
   const director = createAudioDirector(audio, curr.tanks.find((t) => t.kind === 'player')!.id);
