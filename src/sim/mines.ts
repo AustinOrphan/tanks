@@ -1,8 +1,10 @@
-import type { Mine, Vec2, AABB } from './types'
+import type { Mine, Vec2, AABB, Wall } from './types'
 import { vdist } from './types'
 import type { World } from './world'
+import { raySegmentVsAABB } from './collision'
 import type { SimEvent } from './events'
 import {
+  MINE_BLAST_THROUGH_DESTRUCTIBLE,
   MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
@@ -47,6 +49,32 @@ export function dropMine(world: World, ownerId: number, events: SimEvent[]): boo
  * be standing on it when the fuse runs out, or to walk back onto it once it is
  * live. Both are the player's own doing.
  */
+
+/**
+ * True when a blast at `from` can reach `to` without an intervening wall.
+ *
+ * Written here rather than reusing ai/targeting's lineOfSight for two reasons:
+ * that helper is blind to wall KIND, which is the whole point below, and the
+ * pure sim core must not depend on the AI layer.
+ *
+ * Evaluated against the walls as they stood when the mine went off. That falls
+ * out of the ordering in detonateMine -- tanks are resolved before walls are
+ * destroyed -- so a wall cannot shield a tank and be gone in the same breath.
+ */
+export function blastReaches(
+  walls: Wall[],
+  from: Vec2,
+  to: Vec2,
+  throughDestructible: boolean = MINE_BLAST_THROUGH_DESTRUCTIBLE,
+): boolean {
+  for (const w of walls) {
+    if (w.destroyed) continue
+    if (w.kind === 'destructible' && throughDestructible) continue
+    if (raySegmentVsAABB(from, to, w.aabb) !== null) return false
+  }
+  return true
+}
+
 export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void {
   if (mine.detonated) return
   mine.detonated = true
@@ -57,7 +85,10 @@ export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void
     // Testing the centre alone let a tank whose hull was well inside the blast
     // walk away untouched, and made the two damage systems disagree about
     // where a tank actually is.
-    if (vdist(t.pos, mine.pos) <= MINE_BLAST_RADIUS + TANK_RADIUS) {
+    if (
+      vdist(t.pos, mine.pos) <= MINE_BLAST_RADIUS + TANK_RADIUS &&
+      blastReaches(world.walls, mine.pos, t.pos)
+    ) {
       t.alive = false
       events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, pos: { x: t.pos.x, y: t.pos.y } })
       events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })

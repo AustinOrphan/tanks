@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld } from './world'
-import { dropMine, stepMines, detonateMine } from './mines'
+import { dropMine, stepMines, detonateMine, blastReaches } from './mines'
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Mine } from './types'
 import {
@@ -300,5 +300,70 @@ describe('detonateMine', () => {
     expect(player.alive).toBe(true)
     expect(player.activeMineIds.includes(first.id)).toBe(false)
     expect(dropMine(world, 1, [])).toBe(true) // slot freed
+  })
+})
+
+describe('mine blast occlusion', () => {
+  const between = (kind: WallKind): Wall =>
+    mkWall(1, { minX: -0.2, minY: -2, maxX: 0.2, maxY: 2 }, kind)
+  // Mine and tank 2.0 apart -- inside the 2.5 kill radius -- wall squarely between.
+  const victimAt = (): Tank => mkTank({ id: 2, kind: 'brown', pos: { x: 1, y: 0 } })
+  const mineAt = (): Mine =>
+    ({ id: 9, ownerId: 1, pos: { x: -1, y: 0 }, timer: 0, armed: true, detonated: false })
+
+  it('does not kill through an intact SOLID wall', () => {
+    // Dying through cover that is still standing is the defect: before this the
+    // kill test was pure distance, with no occlusion at all.
+    const victim = victimAt()
+    const mine = mineAt()
+    const world = createWorld({ walls: [between('solid')], tanks: [victim], spawns: [], lives: 3 })
+    world.mines.push(mine)
+    detonateMine(world, mine, [])
+    expect(victim.alive).toBe(true)
+    expect(world.walls[0].destroyed).toBe(false)
+  })
+
+  it('still kills a tank with a clear line', () => {
+    // Negative control: "blocked by everything" would also pass the test above.
+    const victim = victimAt()
+    const mine = mineAt()
+    const world = createWorld({ walls: [], tanks: [victim], spawns: [], lives: 3 })
+    world.mines.push(mine)
+    detonateMine(world, mine, [])
+    expect(victim.alive).toBe(false)
+  })
+
+  it('carries through a DESTRUCTIBLE wall, which it also destroys', () => {
+    // The shipped default: a blast strong enough to shatter a wall does not
+    // stop at it. MINE_BLAST_THROUGH_DESTRUCTIBLE flips this.
+    const victim = victimAt()
+    const mine = mineAt()
+    const world = createWorld({ walls: [between('destructible')], tanks: [victim], spawns: [], lives: 3 })
+    world.mines.push(mine)
+    detonateMine(world, mine, [])
+    expect(victim.alive).toBe(false)
+    expect(world.walls[0].destroyed).toBe(true)
+  })
+
+  it('blastReaches honours the flag both ways', () => {
+    // The constant is build-time, so the predicate takes it as a parameter and
+    // both branches stay reachable from a test.
+    const from = { x: -1, y: 0 }
+    const to = { x: 1, y: 0 }
+    expect(blastReaches([between('solid')], from, to, true)).toBe(false)
+    expect(blastReaches([between('solid')], from, to, false)).toBe(false)
+    expect(blastReaches([between('destructible')], from, to, true)).toBe(true)
+    expect(blastReaches([between('destructible')], from, to, false)).toBe(false)
+  })
+
+  it('ignores a wall that is already destroyed', () => {
+    const victim = victimAt()
+    const mine = mineAt()
+    const w = between('solid')
+    w.destroyed = true
+    const world = createWorld({ walls: [w], tanks: [victim], spawns: [], lives: 3 })
+    world.mines.push(mine)
+    detonateMine(world, mine, [])
+    expect(victim.alive).toBe(false)
   })
 })
