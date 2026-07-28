@@ -11,6 +11,7 @@
  * in the sim's xy-plane is a clockwise rotation about three's +y axis.
  */
 import * as THREE from 'three';
+import { framedBounds, fitCameraToArea } from './framing';
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -24,6 +25,8 @@ export function createScene(
   canvas: HTMLCanvasElement,
   worldWidth: number,
   worldHeight: number,
+  /** Thickness of the boundary wall ring loadArena puts OUTSIDE the playable area. */
+  boundary: number,
 ): SceneContext {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -41,15 +44,12 @@ export function createScene(
   const BASE_FOV = 50;
   const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1000);
   const span = Math.max(worldWidth, worldHeight);
-  camera.position.set(cx, span * 1.05, cz + span * 0.85);
-  camera.lookAt(cx, 0, cz);
 
-  // What the framing must actually contain: the playable area plus the ring of
-  // boundary walls one cell outside it.
-  const margin = Math.max(worldWidth, worldHeight) * 0.1;
-  const requiredW = worldWidth + margin * 2;
-  const requiredH = worldHeight + margin * 2;
-  const requiredAspect = requiredW / requiredH;
+  // What the framing must contain: the playable area plus the boundary ring.
+  // See framing.ts -- the fit itself lives there so it can be tested without a
+  // GL context, which is why this file previously had no test at all.
+  const framed = framedBounds(worldWidth, worldHeight, boundary);
+  const target = new THREE.Vector3(cx, 0, cz);
 
   // Directional 'sun' casting soft shadows across the whole arena.
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -74,11 +74,13 @@ export function createScene(
   const ambient = new THREE.AmbientLight(0xffffff, 0.45);
   scene.add(ambient);
 
-  // Matte 'felt' ground plane. Sized past the playable area because loadArena
-  // puts the boundary walls a cell OUTSIDE it -- at exactly worldWidth x
-  // worldHeight all four of them floated over the clear colour with nothing
-  // beneath them, and their shadows fell on nothing.
-  const groundGeo = new THREE.PlaneGeometry(worldWidth + margin * 2, worldHeight + margin * 2);
+  // Matte 'felt' ground plane, covering the arena and its boundary ring EXACTLY.
+  // It must reach past the playable area, because loadArena puts the walls a cell
+  // outside it and at exactly worldWidth x worldHeight all four floated over the
+  // clear colour. It must not reach further either: the shipped build used a 10%
+  // margin (2.2) against a 2.0-thick ring, and that 0.2 of overhang showed as a
+  // sliver of felt detached from the arena along the near edge.
+  const groundGeo = new THREE.PlaneGeometry(framed.width, framed.height);
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x2f6d4f,
     roughness: 1.0,
@@ -96,20 +98,16 @@ export function createScene(
     // Setting it once at construction left the drawing buffer stale.
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h, false);
-    const aspect = h === 0 ? 1 : w / h;
-    camera.aspect = aspect;
-
-    // Three's fov is VERTICAL, so horizontal coverage shrinks as the viewport
-    // narrows while the camera distance stays fixed. This is a fixed-camera
-    // game with no scrolling, so anything cropped is permanently unreachable
-    // and unaimable -- at 0.89 aspect 9% of the arena width was off-screen, and
-    // more than half of it in phone portrait. Widen the fov to compensate.
-    camera.fov =
-      aspect < requiredAspect
-        ? (2 * Math.atan(Math.tan((BASE_FOV * Math.PI) / 360) * (requiredAspect / aspect)) * 180) /
-          Math.PI
-        : BASE_FOV;
+    camera.aspect = h === 0 ? 1 : w / h;
+    camera.fov = BASE_FOV;
     camera.updateProjectionMatrix();
+
+    // Re-fit on every resize: the binding constraint swaps between the vertical
+    // and horizontal extent as the viewport changes shape. This replaces widening
+    // the fov on narrow viewports -- both keep the whole board on screen, but
+    // fitting the DISTANCE also removes the slack a fixed distance left behind,
+    // which is what made the arena small on a normal 16:10 window.
+    fitCameraToArea(camera, target, framed.width, framed.height);
   }
   resize(
     canvas.clientWidth || window.innerWidth,
