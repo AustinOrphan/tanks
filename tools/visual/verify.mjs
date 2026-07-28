@@ -347,6 +347,48 @@ function runChecks(results) {
   return failed;
 }
 
+
+/**
+ * Wait until the page is actually DRAWING, then report the GL state.
+ *
+ * Waits on a signal rather than a duration: a fixed delay was enough locally
+ * and on a warm runner and not enough on a cold one, where the first viewport
+ * screenshotted a blank page. A sized canvas and a live HUD are NOT sufficient
+ * evidence -- both survive a lost context -- so the context itself is checked.
+ */
+async function settle(page) {
+  try {
+    await page.waitForFunction(
+      () => {
+        const c = document.querySelector('canvas');
+        if (!c || !c.width || !c.height) return false;
+        if (!document.querySelector('.hud-topbar')) return false;
+        const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
+        return !!ctx && !ctx.isContextLost();
+      },
+      { timeout: 20000 },
+    );
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))),
+    );
+  } catch {
+    // Report whatever state the page is in; the caller decides whether to
+    // retry, and the checks decide whether it is a failure.
+  }
+  return page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    if (!c) return { canvas: false, hasContext: false, contextLost: null };
+    const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
+    return {
+      canvas: true,
+      bufferWidth: c.width,
+      bufferHeight: c.height,
+      hasContext: !!ctx,
+      contextLost: ctx ? ctx.isContextLost() : null,
+    };
+  });
+}
+
 async function main() {
   const [distArg, ...rest] = process.argv.slice(2);
   if (!distArg) {
@@ -373,42 +415,29 @@ async function main() {
   const results = [];
   try {
     for (const vp of VIEWPORTS) {
-      const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
-      const errors = [];
-      page.on('pageerror', (e) => errors.push(String(e)));
-      await page.goto(base, { waitUntil: 'load' });
-
-      // Wait for a SIGNAL, not a duration. A fixed 700ms wait was enough
-      // locally and on a warm runner, but on CI the very first viewport
-      // screenshotted a blank white page -- painted=1.7%, colours=185,
-      // bottom strip rgb(255,255,255) -- while the other three, taken on the
-      // now-warm browser, matched previous runs exactly. A timing-dependent
-      // check reports a defect that is not there, which is worse than no check.
-      await page.waitForFunction(
-        () => {
-          const c = document.querySelector('canvas');
-          return !!c && c.width > 0 && c.height > 0 && !!document.querySelector('.hud-topbar');
-        },
-        { timeout: 20000 },
-      );
-      // Then let the loop actually draw: two animation frames, so the first
-      // render has certainly been composited before the screenshot.
-      await page.evaluate(
-        () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))),
-      );
-
-      const gl = await page.evaluate(() => {
-        const c = document.querySelector('canvas');
-        if (!c) return { canvas: false };
-        const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
-        return {
-          canvas: true,
-          bufferWidth: c.width,
-          bufferHeight: c.height,
-          hasContext: !!ctx,
-          contextLost: ctx ? ctx.isContextLost() : null,
-        };
-      });
+      // A cold runner loses the GL context on the FIRST page often enough to
+      // matter. Measured on a docs-only PR: viewport 1 came back contextLost
+      // with a white frame, while the other three matched their expected
+      // numbers exactly. That is the runner, not the game -- a real context
+      // failure would not confine itself to whichever viewport went first. So
+      // open, and if the context is dead open once more; only a failure that
+      // survives a fresh page is reported. Forcing a PERMANENT loss still
+      // fails the check, which is the control that keeps this honest.
+      let page = null;
+      let errors = [];
+      let gl = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        if (page) await page.close();
+        page = await browser.newPage({ viewport: { width: vp.width, height: vp.height } });
+        errors = [];
+        page.on('pageerror', (e) => errors.push(String(e)));
+        await page.goto(base, { waitUntil: 'load' });
+        gl = await settle(page);
+        if (gl.hasContext && gl.contextLost === false) break;
+        if (attempt < 2) {
+          console.log(`  ${vp.name}: GL context lost on attempt ${attempt}, retrying once`);
+        }
+      }
 
       const shot = await page.screenshot({ type: 'png' });
       await writeFile(join(outDir, `${vp.name}.png`), shot);
