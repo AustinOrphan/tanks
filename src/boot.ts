@@ -15,7 +15,17 @@ import type { GameHandle } from './game/loop';
 
 /** Only what boot needs from `window`. */
 export interface BootHost {
-  addEventListener(type: 'pagehide', fn: () => void, opts: { once: boolean }): void;
+  addEventListener(type: 'pagehide', fn: (e: PageHideEvent) => void): void;
+  removeEventListener(type: 'pagehide', fn: (e: PageHideEvent) => void): void;
+}
+
+/**
+ * The one field of PageTransitionEvent that matters here. Declared rather than
+ * using the DOM type so this module stays callable from a node-environment
+ * test with a plain object.
+ */
+export interface PageHideEvent {
+  readonly persisted: boolean;
 }
 
 export interface BootDeps {
@@ -43,10 +53,25 @@ export function boot(deps: BootDeps): void {
     const game = deps.startGame(deps.bootCanvas(deps.root), deps.root);
     // startGame's teardown was once unreachable: nothing called it, so the
     // frame loop, the window listeners and the GL context outlived the page.
-    // `once` matters because a page can fire pagehide repeatedly when it goes
-    // into and out of the back/forward cache, and disposing twice would tear
-    // down a game that had already been torn down.
-    deps.host.addEventListener('pagehide', () => game.dispose(), { once: true });
+    //
+    // `persisted` is the whole point. A pagehide with persisted=true means the
+    // page is going into the back/forward cache -- FROZEN, not destroyed, and
+    // it will be restored intact, rAF and all. Disposing there is what left a
+    // permanently dead canvas behind the Back button: the page came back, the
+    // game did not. The previous `{ once: true }` did not help; it only stopped
+    // a SECOND dispose, having already run the damaging first one.
+    //
+    // Freezing is also exactly what we would want teardown to achieve, so there
+    // is nothing to do on the way in and nothing to rebuild on the way out.
+    const onPageHide = (e: PageHideEvent): void => {
+      if (e.persisted) return;
+      game.dispose();
+      // Only now is the listener spent. Self-removal replaces `{ once: true }`,
+      // which would have burned the registration on the first bfcache entry and
+      // left a real unload afterwards with no teardown at all.
+      deps.host.removeEventListener('pagehide', onPageHide);
+    };
+    deps.host.addEventListener('pagehide', onPageHide);
   } catch (err) {
     deps.root.innerHTML = '';
     const msg = document.createElement('div');

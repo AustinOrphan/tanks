@@ -9,14 +9,16 @@ function harness(
   deps: BootDeps;
   root: HTMLElement;
   disposals: number;
-  pagehide: Array<{ fn: () => void; opts: { once: boolean } }>;
+  pagehide: Array<(e: { persisted: boolean }) => void>;
+  removed: Array<(e: { persisted: boolean }) => void>;
   errors: unknown[];
   startArgs: Array<[HTMLCanvasElement, HTMLElement]>;
   canvasRoots: HTMLElement[];
-  firePagehide(): void;
+  firePagehide(persisted?: boolean): void;
 } {
   const root = document.createElement('div');
-  const pagehide: Array<{ fn: () => void; opts: { once: boolean } }> = [];
+  const pagehide: Array<(e: { persisted: boolean }) => void> = [];
+  const removed: Array<(e: { persisted: boolean }) => void> = [];
   const errors: unknown[] = [];
   const startArgs: Array<[HTMLCanvasElement, HTMLElement]> = [];
   const canvasRoots: HTMLElement[] = [];
@@ -38,8 +40,11 @@ function harness(
       };
     },
     host: {
-      addEventListener(_type, fn, o): void {
-        pagehide.push({ fn, opts: o });
+      addEventListener(_type, fn): void {
+        pagehide.push(fn);
+      },
+      removeEventListener(_type, fn): void {
+        removed.push(fn);
       },
     },
     reportError: (e) => errors.push(e),
@@ -52,11 +57,12 @@ function harness(
       return box.disposals;
     },
     pagehide,
+    removed,
     errors,
     startArgs,
     canvasRoots,
-    firePagehide(): void {
-      for (const p of pagehide) p.fn();
+    firePagehide(persisted = false): void {
+      for (const p of pagehide) p({ persisted });
     },
   };
 }
@@ -82,12 +88,45 @@ describe('boot: the happy path', () => {
     expect(h.disposals).toBe(1);
   });
 
-  it('registers that teardown as a ONE-SHOT', () => {
-    // A page can fire pagehide repeatedly going into and out of the bfcache.
-    // Without { once: true } the second one disposes an already-disposed game.
+  it('does NOT dispose when the page is only going into the bfcache', () => {
+    // persisted=true means FROZEN, not destroyed: the page comes back intact,
+    // rAF and all. Disposing here is what left a dead canvas behind the Back
+    // button. The old `{ once: true }` did not help -- it only stopped a second
+    // dispose, having already run the damaging first one.
     const h = harness();
     boot(h.deps);
-    expect(h.pagehide[0].opts).toEqual({ once: true });
+    h.firePagehide(true);
+    expect(h.disposals).toBe(0);
+  });
+
+  it('still disposes on a real unload', () => {
+    const h = harness();
+    boot(h.deps);
+    h.firePagehide(false);
+    expect(h.disposals).toBe(1);
+  });
+
+  it('survives a bfcache round trip and still tears down afterwards', () => {
+    // The sequence the bug actually produced: freeze, restore, then eventually
+    // leave for real. All three must behave.
+    const h = harness();
+    boot(h.deps);
+    h.firePagehide(true);   // into the cache
+    h.firePagehide(true);   // and again -- a page can bounce in and out
+    expect(h.disposals).toBe(0);
+    h.firePagehide(false);  // finally navigating away
+    expect(h.disposals).toBe(1);
+  });
+
+  it('unregisters itself once it has really torn down', () => {
+    // Self-removal replaces `{ once: true }`, which would have burned the
+    // registration on the first bfcache entry and left a real unload with no
+    // teardown at all.
+    const h = harness();
+    boot(h.deps);
+    expect(h.removed).toHaveLength(0);
+    h.firePagehide(false);
+    expect(h.removed).toEqual([h.pagehide[0]]);
   });
 
   it('does not render the error page when the game starts', () => {
