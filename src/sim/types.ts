@@ -38,7 +38,9 @@ export interface Tank {
   alive: boolean;
   desiredMove: Vec2;
   activeMineIds: number[];
+  /** Whole TICKS until ready, not seconds -- see FIRE_COOLDOWN_TICKS. */
   fireCooldown: number;
+  /** Whole TICKS until ready, not seconds. */
   mineCooldown: number;
   aiState: AiState;
   aiTimer: number;

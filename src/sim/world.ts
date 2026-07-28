@@ -5,7 +5,7 @@ import { moveTank, separateTanks, resolveWalls } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepMines } from './mines';
 import { stepAi } from './ai';
-import { DT, FIRE_COOLDOWN, MINE_COOLDOWN, PLAYER_TURRET_TURN_RATE } from './constants';
+import { DT, FIRE_COOLDOWN_TICKS, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE } from './constants';
 import { roundPhase } from './round';
 
 export interface World {
@@ -138,20 +138,20 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
     player.turretAngle = slewAngle(player.turretAngle, angleOf(aimDir), PLAYER_TURRET_TURN_RATE * DT);
   }
 
-  if (player.fireCooldown > 0) player.fireCooldown -= DT;
-  if (player.mineCooldown > 0) player.mineCooldown -= DT;
+  if (player.fireCooldown > 0) player.fireCooldown -= 1;
+  if (player.mineCooldown > 0) player.mineCooldown -= 1;
 
   const canAct = phase === 'live';
 
   if (canAct && input.fire && player.fireCooldown <= 0) {
     if (spawnBullet(world, player.id, player.turretAngle, 'normal', events)) {
-      player.fireCooldown = FIRE_COOLDOWN;
+      player.fireCooldown = FIRE_COOLDOWN_TICKS;
     }
   }
 
   if (canAct && input.mine && player.mineCooldown <= 0) {
     if (dropMine(world, player.id, events)) {
-      player.mineCooldown = MINE_COOLDOWN;
+      player.mineCooldown = MINE_COOLDOWN_TICKS;
     }
   }
 }
