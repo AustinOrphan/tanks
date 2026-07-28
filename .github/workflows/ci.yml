@@ -61,3 +61,51 @@ jobs:
       # bundle, so gating on them would be a permanent, non-actionable red.
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+
+  # The visual check runs as its own job, not as a step in `verify`.
+  #
+  # It needs a browser, which is a ~130MB download and roughly a minute the unit
+  # suite does not need, and it is the only thing here that can fail for reasons
+  # unrelated to the code -- a renderer difference between this runner and a
+  # developer's machine. Keeping it separate means a failure says which of the
+  # two kinds of thing broke, and the fast feedback from `verify` is not held up
+  # behind a browser install.
+  #
+  # Playwright is deliberately NOT a devDependency: the package downloads
+  # browsers on install, which would cost every developer and every `verify` job
+  # for a tool only this job runs. It is installed here with --no-save.
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright chromium
+        run: |
+          npm i --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npx vite build
+
+      # Measures the SCREENSHOT, never the WebGL canvas directly -- reading the
+      # canvas with drawImage returns all black without preserveDrawingBuffer,
+      # which is how an earlier harness reported a black screen for a game that
+      # was rendering fine. See tools/visual/README.md.
+      - name: Visual check
+        run: node tools/visual/verify.mjs dist --check --out visual-out
+
+      # The numbers alone do not tell you WHAT went wrong; the screenshots do.
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-output
+          path: visual-out/
+          retention-days: 14
