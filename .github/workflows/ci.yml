@@ -86,10 +86,30 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Playwright chromium
-        run: |
-          npm i --no-save playwright
-          npx playwright install --with-deps chromium
+      # Pin the version so the cache key below is meaningful, and so a
+      # playwright bump is a visible diff rather than a silent drift.
+      - name: Install Playwright
+        run: npm i --no-save playwright@1.62.0
+
+      # The browser is ~130MB and does not change between runs; only a version
+      # bump should re-download it.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.62.0-${{ runner.os }}
+
+      # NOT --with-deps. That shells out to apt-get, and on one run it took
+      # 9m55s against 49s for the same job on the two runs before it -- the
+      # variance is the package mirror, not anything this repo controls. The
+      # ubuntu-latest image already carries chromium's shared libraries, so the
+      # browser download alone is enough. If a future runner image drops them,
+      # this step fails loudly with a missing-library error, which is a better
+      # failure than a ten-minute wait.
+      - name: Install chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
 
       - name: Build
         run: npx vite build
