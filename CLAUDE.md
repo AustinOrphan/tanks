@@ -12,8 +12,10 @@ npm run dev   # vite
 ```
 
 CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a bundle-portability
-assertion on Node 20 and 22. `engines.node` says `>=20`, but the dependency tree actually
-needs `>=20.19.0`.
+assertion on Node 20.19.0 — the declared floor — and 22. `engines.node` is
+`^20.19.0 || ^22.13.0 || >=24.0.0`, which is the intersection of what the tree
+actually demands: a plain `>=20.19.0` would be wrong too, since it admits 22.0–22.12
+and eight packages reject those.
 
 ## Architecture invariants
 
