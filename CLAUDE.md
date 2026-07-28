@@ -86,7 +86,7 @@ No `Co-Authored-By` or tool-attribution trailers — the history carries none. `
 `while (false && acc >= DT)`, the shipped game never simulating a tick. Closing it needs
 the loop's dependencies (`now`, `raf`, renderer, audio, input) injected.
 
-Modules with no sibling test file, as of `c9a783d`: `game/loop.ts`, `main.ts`,
+Modules with no sibling test file, re-verified at `97e4242`: `game/loop.ts`, `main.ts`,
 `render/canvas.ts`, `render/particles.ts`, `render/renderer.ts`, `render/scene.ts`,
 `sim/ai/decision.ts`, `sim/ai/index.ts`. (`render/entities.ts` and `render/interpolate.ts`
 *are* tested — do not assume the whole render layer is bare.) Merged PR descriptions carry
