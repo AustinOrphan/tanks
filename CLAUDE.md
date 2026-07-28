@@ -100,12 +100,28 @@ stay getters, since a plain property snapshots at construction and `tsc` will no
 so cannot see whether `loop.ts` wires the real collaborators into them — the composition
 blindness above, one layer up. Do not delete it.
 
-Modules with no sibling test file, re-swept at `8bd30a5` plus this branch: `main.ts`,
+Modules with no sibling test file, re-swept at `4c6e493`: `main.ts`,
 `render/renderer.ts`, `render/scene.ts`, `sim/ai/decision.ts`, `sim/ai/index.ts`.
 **A missing sibling file is not the same as untested** — `sim/ai/` is exercised through
 `sim/step-integration.test.ts` and 15 files assert AI behaviour, and `render/entities.ts`,
 `render/interpolate.ts`, `render/framing.ts`, `render/particles.ts` and `render/canvas.ts`
 all have their own. What is genuinely bare is `scene.ts` and `renderer.ts` (they need a GL
 context) and `main.ts` (module scope, not importable). (`render/entities.ts` and `render/interpolate.ts`
-*are* tested — do not assume the whole render layer is bare.) Merged PR descriptions carry
-the detailed residual backlog.
+Merged PR descriptions carry the detailed residual backlog.
+
+**Retroreflecting wall seams: real, measure-zero, and do NOT apply the obvious fix.** Walls
+are one AABB per grid cell, so a flat multi-cell run shares internal faces. A ray arriving
+at *exactly* a cell-boundary coordinate can enter through one of those buried faces; its
+normal then points along the run and the shell reflects back the way it came instead of
+mirroring off the visible face. Measured: **1 of 121 sampled crossings** (45°, offsets
+−0.60..+0.60 in 0.01 steps against cellSize 2) — the one at exactly 0.00 — and **0 of 155
+ricochets** in 15 seeded games × 4000 ticks landed on an exact cell corner. So it is not the
+hazard on every flat face the PR #1 backlog describes.
+
+The obvious fix — reject a hit whose face is buried, by stepping a hair out along the normal
+and testing containment in another wall — **was tried and reverted**: it fails 4 tests in
+`collision.test.ts` and `escape.test.ts`. At the arena's concave inside corners the outward
+step from a *legitimate* face lands inside the abutting perpendicular wall, so real surfaces
+are misclassified as buried and shells pass straight through — reopening the escape bug that
+holds a `SHELL_CAP` slot for the rest of a life. Any real fix must distinguish a coplanar
+neighbour that continues the surface from a perpendicular one that merely touches it.
