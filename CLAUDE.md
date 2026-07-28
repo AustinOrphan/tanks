@@ -82,10 +82,11 @@ No `Co-Authored-By` or tool-attribution trailers — the history carries none. `
 
 ## Known holes
 
-`src/main.ts` has no test file. It runs at module scope against
-`document.getElementById('app')`, so it cannot be imported: its `try/catch` WebGL error
-page, its `pagehide` registration and that listener's `{ once: true }` are all unpinned.
-Closing it needs `main.ts` to take an injected root and a `startGame` reference.
+`src/main.ts` still has no test file and cannot have one: it runs at module scope against
+`document.getElementById('app')`, so importing it starts the game. It is now **wiring only** —
+everything it used to do (the WebGL error page, the teardown registration) lives in
+`src/boot.ts`, which takes its collaborators as arguments and is tested. Keep `main.ts` free
+of logic; anything added there is unpinned again, and that is the whole of its remaining risk.
 
 The game loop used to be the worst of these — `while (false && acc >= DT)`, the shipped
 game never simulating a tick, passed the full gate. It is now split across `game/frame.ts`
@@ -100,7 +101,7 @@ so cannot see whether `loop.ts` wires the real collaborators into them — the c
 blindness above, one layer up. Do not delete it.
 
 Modules with no sibling test file, re-verified at `97e4242` and updated here: `main.ts`,
-`render/canvas.ts`, `render/particles.ts`, `render/renderer.ts`, `render/scene.ts`,
+`render/particles.ts`, `render/renderer.ts`, `render/scene.ts`,
 `sim/ai/decision.ts`, `sim/ai/index.ts`. (`render/entities.ts` and `render/interpolate.ts`
 *are* tested — do not assume the whole render layer is bare.) Merged PR descriptions carry
 the detailed residual backlog.
