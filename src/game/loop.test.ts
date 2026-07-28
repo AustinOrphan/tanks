@@ -7,9 +7,10 @@ import { describe, it, expect } from 'vitest';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2 } from '../sim/types';
+import type { Vec2, Bullet } from '../sim/types';
 import type { GameState } from './state';
 import {
+  playerShellsInFlight,
   startGameWith,
   deriveSeed,
   isMuteHotkey,
@@ -18,7 +19,7 @@ import {
 } from './loop';
 
 interface Recorder {
-  rendererArgs: Array<[unknown, number, number, number]>;
+  rendererArgs: Array<[unknown, number, number, number, unknown]>;
   screenToGroundArgs: Array<[number, number]>;
   directorPlayerIds: number[];
   seeds: number[];
@@ -29,6 +30,7 @@ interface Recorder {
   enemies: number[];
   hudStates: GameState[];
   muted: boolean[];
+  shellCounts: Array<{ inFlight: number; cap: number } | null>;
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -40,7 +42,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: boolean; shellCount: boolean } } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -66,6 +68,7 @@ function makeDeps(opts: { world?: World; wallMs?: number } = {}): {
     enemies: [],
     hudStates: [],
     muted: [],
+    shellCounts: [],
     volumes: [],
     resizes: [],
     listeners: [],
@@ -100,8 +103,8 @@ function makeDeps(opts: { world?: World; wallMs?: number } = {}): {
   } as unknown as HostWindow;
 
   const deps: GameDeps = {
-    createRenderer: (canvas, w, h, boundary) => {
-      rec.rendererArgs.push([canvas, w, h, boundary]);
+    createRenderer: (canvas, w, h, boundary, options) => {
+      rec.rendererArgs.push([canvas, w, h, boundary, options]);
       return {
         render(prev, curr, alpha, events, dt): void {
           rec.renders.push({ prev, curr, alpha, events, dt });
@@ -190,6 +193,7 @@ function makeDeps(opts: { world?: World; wallMs?: number } = {}): {
         setEnemiesRemaining: (n) => rec.enemies.push(n),
         setState: (s) => rec.hudStates.push(s),
         setMuted: (m) => rec.muted.push(m),
+        setShellCount: (i) => rec.shellCounts.push(i),
         onMuteToggle: (cb) => {
           onMute = cb;
         },
@@ -216,6 +220,7 @@ function makeDeps(opts: { world?: World; wallMs?: number } = {}): {
       cancel(): void {},
     },
     host,
+    devFlags: opts.devFlags ?? { aimRay: false, shellCount: false },
   };
 
   return {
@@ -520,5 +525,52 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
     expect(h.rec.machineSaw.length).toBe(h.rec.directed.length);
     expect(h.rec.directed.flat().length).toBe(h.rec.machineSaw.flat().length);
     h.handle.dispose();
+  });
+});
+
+describe('playerShellsInFlight', () => {
+  const bullet = (id: number, ownerId: number, alive: boolean): Bullet =>
+    ({ id, ownerId, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive }) as Bullet;
+
+  it('counts only the player\'s LIVE shells', () => {
+    // SHELL_CAP is enforced per owner, so counting the arena's whole traffic
+    // would make the readout meaningless as a cap indicator.
+    const w = {
+      ...createArenaWorld(1),
+      bullets: [bullet(1, 7, true), bullet(2, 7, false), bullet(3, 99, true)],
+    };
+    expect(playerShellsInFlight(w, 7)).toBe(1);
+  });
+
+  it('is 0 when there is no player', () => {
+    expect(playerShellsInFlight(createArenaWorld(1), undefined)).toBe(0);
+  });
+});
+
+describe('startGameWith: dev flags stay off by default', () => {
+  it('never touches the shell readout with the flag off', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.shellCounts).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('drives the shell readout when the flag is on', () => {
+    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: true } }));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.shellCounts.length).toBeGreaterThan(0);
+    expect(h.rec.shellCounts[0]?.cap).toBe(5);
+    h.handle.dispose();
+  });
+
+  it('asks the renderer for an aim ray only when that flag is on', () => {
+    const off = boot();
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false });
+    off.handle.dispose();
+    const on = boot(makeDeps({ devFlags: { aimRay: true, shellCount: false } }));
+    expect(on.rec.rendererArgs[0][4]).toEqual({ aimRay: true });
+    on.handle.dispose();
   });
 });

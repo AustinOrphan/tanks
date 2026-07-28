@@ -8,6 +8,14 @@ export interface Hud {
   setState(s: GameState): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
+  /**
+   * Dev only: shells in flight against the cap. `null` hides it.
+   *
+   * The cap is meant to be FELT, not read -- running dry is part of the game.
+   * This exists so a developer can tell "the cap is working" from "the cannon
+   * is broken", which are indistinguishable from the player's seat.
+   */
+  setShellCount(info: { inFlight: number; cap: number } | null): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
   /** Extension: fired when the title/win/lose panel's start/restart button is clicked. */
@@ -22,6 +30,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-topbar">
       <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
+      <div class="hud-shells hud-shells--hidden"></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
         <!-- autocomplete="off": Firefox restores form-control values across a
@@ -40,6 +49,7 @@ export function createHud(root: HTMLElement): Hud {
   `;
   root.appendChild(el);
 
+  const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const muteBtn = el.querySelector('.hud-mute') as HTMLButtonElement;
@@ -137,6 +147,17 @@ export function createHud(root: HTMLElement): Hud {
     },
     setState,
     setMuted,
+    setShellCount(info): void {
+      if (!info) {
+        shellsEl.classList.add('hud-shells--hidden');
+        return;
+      }
+      shellsEl.textContent = `shells ${info.inFlight}/${info.cap}`;
+      // At the cap the cannon silently stops responding, which is exactly the
+      // state worth seeing while developing.
+      shellsEl.classList.toggle('hud-shells--full', info.inFlight >= info.cap);
+      shellsEl.classList.remove('hud-shells--hidden');
+    },
     onMuteToggle(cb: () => void): void {
       muteCbs.push(cb);
     },

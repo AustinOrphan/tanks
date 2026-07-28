@@ -104,3 +104,26 @@
   transform: translateY(3px);
   box-shadow: 0 3px 0 #2f8f45;
 }
+
+
+/* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
+
+.hud-shells {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(216, 221, 230, 0.12);
+  color: #d8dde6;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* At the cap the cannon stops responding with no other cue -- that is the
+   whole state this readout exists to make visible. */
+.hud-shells--full {
+  background: rgba(255, 106, 106, 0.22);
+  color: #ffb4b4;
+}
+
+.hud-shells--hidden {
+  display: none;
+}

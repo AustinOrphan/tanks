@@ -5,6 +5,7 @@ import type { SimEvent } from '../sim/events';
 import { createScene, type SceneContext } from './scene';
 import { createEntityViews, type EntityViews } from './entities';
 import { createParticleSystem, type ParticleSystem } from './particles';
+import { createAimRay, type AimRay } from './aimray';
 
 export interface Renderer3D {
   render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
@@ -13,15 +14,25 @@ export interface Renderer3D {
   dispose(): void;
 }
 
+export interface RendererOptions {
+  /**
+   * Dev only: draw a ray along the player's turret. See aimray.ts -- the barrel
+   * IS the aim indicator; this separates a bad mapping from a bad render.
+   */
+  readonly aimRay?: boolean;
+}
+
 export function createRenderer(
   canvas: HTMLCanvasElement,
   worldWidth: number,
   worldHeight: number,
   boundary: number,
+  options: RendererOptions = {},
 ): Renderer3D {
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
   const entities: EntityViews = createEntityViews(ctx.scene);
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
+  const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -36,6 +47,7 @@ export function createRenderer(
     dt: number,
   ): void {
     entities.sync(prev, curr, alpha);
+    aimRay?.sync(curr);
     particles.spawn(events);
     particles.update(dt);
     ctx.renderer.render(ctx.scene, ctx.camera);
@@ -57,6 +69,7 @@ export function createRenderer(
   }
 
   function dispose(): void {
+    aimRay?.dispose();
     entities.dispose();
     particles.dispose();
     ctx.dispose();
