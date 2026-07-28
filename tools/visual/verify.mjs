@@ -377,8 +377,25 @@ async function main() {
       const errors = [];
       page.on('pageerror', (e) => errors.push(String(e)));
       await page.goto(base, { waitUntil: 'load' });
-      // Let the first frames render; the title screen is a static pose.
-      await page.waitForTimeout(700);
+
+      // Wait for a SIGNAL, not a duration. A fixed 700ms wait was enough
+      // locally and on a warm runner, but on CI the very first viewport
+      // screenshotted a blank white page -- painted=1.7%, colours=185,
+      // bottom strip rgb(255,255,255) -- while the other three, taken on the
+      // now-warm browser, matched previous runs exactly. A timing-dependent
+      // check reports a defect that is not there, which is worse than no check.
+      await page.waitForFunction(
+        () => {
+          const c = document.querySelector('canvas');
+          return !!c && c.width > 0 && c.height > 0 && !!document.querySelector('.hud-topbar');
+        },
+        { timeout: 20000 },
+      );
+      // Then let the loop actually draw: two animation frames, so the first
+      // render has certainly been composited before the screenshot.
+      await page.evaluate(
+        () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))),
+      );
 
       const gl = await page.evaluate(() => {
         const c = document.querySelector('canvas');
