@@ -1,0 +1,524 @@
+// @vitest-environment jsdom
+//
+// jsdom, as hud.test.ts and input.test.ts already do: isMuteHotkey does an
+// `instanceof HTMLElement` check and the dispose path hands real elements
+// around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
+import { describe, it, expect } from 'vitest';
+import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
+import type { World } from '../sim/world';
+import type { SimEvent } from '../sim/events';
+import type { Vec2 } from '../sim/types';
+import type { GameState } from './state';
+import {
+  startGameWith,
+  deriveSeed,
+  isMuteHotkey,
+  type GameDeps,
+  type HostWindow,
+} from './loop';
+
+interface Recorder {
+  rendererArgs: Array<[unknown, number, number, number]>;
+  screenToGroundArgs: Array<[number, number]>;
+  directorPlayerIds: number[];
+  seeds: number[];
+  renders: Array<{ prev: World; curr: World; alpha: number; events: SimEvent[]; dt: number }>;
+  directed: SimEvent[][];
+  machineSaw: SimEvent[][];
+  lives: number[];
+  enemies: number[];
+  hudStates: GameState[];
+  muted: boolean[];
+  volumes: number[];
+  resizes: Array<[number, number]>;
+  listeners: Array<[string, (e: never) => void]>;
+  removed: Array<[string, (e: never) => void]>;
+  disposed: string[];
+  musicStarts: number;
+  unlocks: number;
+  samples: number;
+  hudRoots: HTMLElement[];
+}
+
+function makeDeps(opts: { world?: World; wallMs?: number } = {}): {
+  deps: GameDeps;
+  rec: Recorder;
+  fireFrame(now: number): void;
+  hasFrame(): boolean;
+  hud: {
+    mute(): void;
+    volume(v: number): void;
+    startRestart(): void;
+  };
+  setState(s: GameState): void;
+  keydown(e: Partial<KeyboardEvent>): void;
+  resize(): void;
+} {
+  const rec: Recorder = {
+    rendererArgs: [],
+    screenToGroundArgs: [],
+    directorPlayerIds: [],
+    seeds: [],
+    renders: [],
+    directed: [],
+    machineSaw: [],
+    lives: [],
+    enemies: [],
+    hudStates: [],
+    muted: [],
+    volumes: [],
+    resizes: [],
+    listeners: [],
+    removed: [],
+    disposed: [],
+    musicStarts: 0,
+    unlocks: 0,
+    samples: 0,
+    hudRoots: [],
+  };
+
+  let pending: ((now: number) => void) | null = null;
+  let state: GameState = 'title';
+  const changeCbs: Array<(s: GameState) => void> = [];
+  let onMute = (): void => {};
+  let onVolume = (_v: number): void => {};
+  let onStartRestart = (): void => {};
+
+  function emit(): void {
+    for (const cb of changeCbs) cb(state);
+  }
+
+  const host: HostWindow = {
+    innerWidth: 1024,
+    innerHeight: 768,
+    addEventListener(type: string, fn: (e: never) => void): void {
+      rec.listeners.push([type, fn]);
+    },
+    removeEventListener(type: string, fn: (e: never) => void): void {
+      rec.removed.push([type, fn]);
+    },
+  } as unknown as HostWindow;
+
+  const deps: GameDeps = {
+    createRenderer: (canvas, w, h, boundary) => {
+      rec.rendererArgs.push([canvas, w, h, boundary]);
+      return {
+        render(prev, curr, alpha, events, dt): void {
+          rec.renders.push({ prev, curr, alpha, events, dt });
+        },
+        screenToGround(x, y): Vec2 {
+          rec.screenToGroundArgs.push([x, y]);
+          return { x, y };
+        },
+        resize(w2, h2): void {
+          rec.resizes.push([w2, h2]);
+        },
+        dispose(): void {
+          rec.disposed.push('renderer');
+        },
+      };
+    },
+    createInput: (_target, screenToGround) => ({
+      sample() {
+        rec.samples += 1;
+        // Prove the wiring passes x and y through in that order, not swapped.
+        screenToGround(3, 7);
+        return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
+      },
+      dispose(): void {
+        rec.disposed.push('input');
+      },
+    }),
+    createAudio: () => ({
+      play: () => {},
+      startMusic: () => {
+        rec.musicStarts += 1;
+      },
+      stopMusic: () => {},
+      setMuted: () => {},
+      toggleMute: () => true,
+      isMuted: () => false,
+      setVolume: (v: number) => {
+        rec.volumes.push(v);
+      },
+      getVolume: () => 1,
+      unlock: () => {
+        rec.unlocks += 1;
+      },
+      dispose: () => {
+        rec.disposed.push('audio');
+      },
+    }),
+    createDirector: (_engine, playerId) => {
+      rec.directorPlayerIds.push(playerId);
+      return {
+        handle(events): void {
+          rec.directed.push(events);
+        },
+      };
+    },
+    createStateMachine: () => ({
+      get state(): GameState {
+        return state;
+      },
+      set state(s: GameState) {
+        state = s;
+      },
+      onEvents(events: SimEvent[]): void {
+        rec.machineSaw.push(events);
+      },
+      toTitle(): void {
+        state = 'title';
+        emit();
+      },
+      startPlaying(): void {
+        state = 'playing';
+        emit();
+      },
+      restart(): void {
+        state = 'playing';
+        emit();
+      },
+      onChange(cb): void {
+        changeCbs.push(cb);
+      },
+    }),
+    createHud: (root) => {
+      rec.hudRoots.push(root);
+      return {
+        setLives: (n) => rec.lives.push(n),
+        setEnemiesRemaining: (n) => rec.enemies.push(n),
+        setState: (s) => rec.hudStates.push(s),
+        setMuted: (m) => rec.muted.push(m),
+        onMuteToggle: (cb) => {
+          onMute = cb;
+        },
+        onVolumeChange: (cb) => {
+          onVolume = cb;
+        },
+        onStartRestart: (cb) => {
+          onStartRestart = cb;
+        },
+        dispose: () => rec.disposed.push('hud'),
+      };
+    },
+    createWorld: (seed) => {
+      rec.seeds.push(seed);
+      return opts.world ?? createArenaWorld(seed);
+    },
+    now: () => 0,
+    wallMs: () => opts.wallMs ?? 1234567,
+    raf: {
+      request(cb): number {
+        pending = cb;
+        return 1;
+      },
+      cancel(): void {},
+    },
+    host,
+  };
+
+  return {
+    deps,
+    rec,
+    fireFrame(now): void {
+      const cb = pending;
+      if (!cb) throw new Error('no frame queued');
+      pending = null;
+      cb(now);
+    },
+    hasFrame: () => pending !== null,
+    hud: {
+      mute: () => onMute(),
+      volume: (v) => onVolume(v),
+      startRestart: () => onStartRestart(),
+    },
+    setState: (s) => {
+      state = s;
+      emit();
+    },
+    keydown(e): void {
+      const entry = rec.listeners.find(([t]) => t === 'keydown');
+      if (!entry) throw new Error('no keydown listener');
+      (entry[1] as (ev: Partial<KeyboardEvent>) => void)(e);
+    },
+    resize(): void {
+      const entry = rec.listeners.find(([t]) => t === 'resize');
+      if (!entry) throw new Error('no resize listener');
+      (entry[1] as () => void)();
+    },
+  };
+}
+
+function boot(h = makeDeps()): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
+  const canvas = document.createElement('canvas');
+  const root = document.createElement('div');
+  const handle = startGameWith(canvas, root, h.deps);
+  return Object.assign(h, { handle });
+}
+
+describe('deriveSeed', () => {
+  it('never returns 0, which the PRNG treats as degenerate', () => {
+    expect(deriveSeed(0)).toBe(1);
+  });
+
+  it('varies with wall-clock time', () => {
+    expect(deriveSeed(1000)).not.toBe(deriveSeed(2000));
+  });
+});
+
+describe('isMuteHotkey', () => {
+  it('accepts a bare M', () => {
+    expect(isMuteHotkey({ key: 'm', repeat: false, target: null } as unknown as KeyboardEvent)).toBe(
+      true,
+    );
+  });
+
+  it('ignores auto-repeat, which would toggle ~30x a second', () => {
+    expect(isMuteHotkey({ key: 'm', repeat: true, target: null } as unknown as KeyboardEvent)).toBe(
+      false,
+    );
+  });
+
+  it('ignores keys aimed at a focused control', () => {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    expect(
+      isMuteHotkey({ key: 'm', repeat: false, target: input } as unknown as KeyboardEvent),
+    ).toBe(false);
+    input.remove();
+  });
+
+  it('ignores other keys', () => {
+    expect(isMuteHotkey({ key: 'n', repeat: false, target: null } as unknown as KeyboardEvent)).toBe(
+      false,
+    );
+  });
+});
+
+describe('startGameWith: construction', () => {
+  it('sizes the renderer to the arena and its boundary ring', () => {
+    const h = boot();
+    const { width, height } = arenaBounds(CURRENT_ARENA);
+    const [, w, ht, boundary] = h.rec.rendererArgs[0];
+    expect(w).toBe(width);
+    expect(ht).toBe(height);
+    expect(boundary).toBe(CURRENT_ARENA.cellSize);
+    h.handle.dispose();
+  });
+
+  it('gives the director the real player tank id, not the id-0 default', () => {
+    // createAudioDirector defaults playerId to 0 and no live tank is id 0, so
+    // the default silently mutes the player's own cannon.
+    const world = createArenaWorld(1);
+    const player = world.tanks.find((t) => t.kind === 'player');
+    const h = boot(makeDeps({ world }));
+    expect(h.rec.directorPlayerIds[0]).toBe(player?.id);
+    expect(h.rec.directorPlayerIds[0]).not.toBe(0);
+    h.handle.dispose();
+  });
+
+  it('seeds the world from wall-clock time, not a constant', () => {
+    const a = boot(makeDeps({ wallMs: 1000 }));
+    const b = boot(makeDeps({ wallMs: 999000 }));
+    expect(a.rec.seeds[0]).not.toBe(b.rec.seeds[0]);
+    expect(a.rec.seeds[0]).toBe(deriveSeed(1000));
+    a.handle.dispose();
+    b.handle.dispose();
+  });
+
+  it('builds exactly one world at boot, and hands that one to the loop', () => {
+    // Constructing a second world for the driver leaves the HUD, the director's
+    // player id and the simulated arena derived from different seeds.
+    const h = boot();
+    expect(h.rec.seeds).toHaveLength(1);
+    h.handle.dispose();
+  });
+
+  it('wires screenToGround through to the renderer with x and y in that order', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.screenToGroundArgs).toContainEqual([3, 7]);
+    h.handle.dispose();
+  });
+
+  it('builds the HUD in the ui root it was given', () => {
+    const canvas = document.createElement('canvas');
+    const root = document.createElement('div');
+    const h = makeDeps();
+    const handle = startGameWith(canvas, root, h.deps);
+    expect(h.rec.hudRoots[0]).toBe(root);
+    handle.dispose();
+  });
+});
+
+describe('startGameWith: HUD wiring', () => {
+  it('routes the mute button to the engine and back to the button', () => {
+    const h = boot();
+    h.hud.mute();
+    expect(h.rec.muted).toEqual([true]);
+    h.handle.dispose();
+  });
+
+  it('routes the volume slider to the engine', () => {
+    const h = boot();
+    h.hud.volume(0.42);
+    expect(h.rec.volumes).toEqual([0.42]);
+    h.handle.dispose();
+  });
+
+  it('starts playing from the title screen, and unlocks audio on that gesture', () => {
+    // The Start click is the only guaranteed user gesture; Safari will not open
+    // an AudioContext from anywhere else.
+    const h = boot();
+    h.hud.startRestart();
+    expect(h.rec.unlocks).toBe(1);
+    expect(h.rec.hudStates).toContain('playing');
+    h.handle.dispose();
+  });
+
+  it('rebuilds a fresh world when restarting from a finished game', () => {
+    const h = boot();
+    h.setState('win');
+    const seedsBefore = h.rec.seeds.length;
+    h.hud.startRestart();
+    expect(h.rec.seeds.length).toBe(seedsBefore + 1);
+    h.handle.dispose();
+  });
+
+  it('starts the music when, and only when, play begins', () => {
+    const h = boot();
+    expect(h.rec.musicStarts).toBe(0);
+    h.setState('playing');
+    expect(h.rec.musicStarts).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('shows the initial state and stats before any frame runs', () => {
+    const h = boot();
+    expect(h.rec.hudStates[0]).toBe('title');
+    expect(h.rec.lives.length).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: listeners and teardown', () => {
+  it('registers keydown and resize, and sizes the canvas once at boot', () => {
+    const h = boot();
+    expect(h.rec.listeners.map(([t]) => t).sort()).toEqual(['keydown', 'resize']);
+    expect(h.rec.resizes).toEqual([[1024, 768]]);
+    h.handle.dispose();
+  });
+
+  it('resizes the renderer to the host viewport on a resize event', () => {
+    const h = boot();
+    h.resize();
+    expect(h.rec.resizes[h.rec.resizes.length - 1]).toEqual([1024, 768]);
+    h.handle.dispose();
+  });
+
+  it('toggles mute on M through the registered listener', () => {
+    const h = boot();
+    h.keydown({ key: 'm', repeat: false, target: null });
+    expect(h.rec.muted).toEqual([true]);
+    h.handle.dispose();
+  });
+
+  it('does not toggle mute on auto-repeat', () => {
+    const h = boot();
+    h.keydown({ key: 'm', repeat: true, target: null });
+    expect(h.rec.muted).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('removes exactly the listeners it added, by identity', () => {
+    const h = boot();
+    h.handle.dispose();
+    expect(h.rec.removed).toHaveLength(2);
+    for (const [type, fn] of h.rec.removed) {
+      expect(h.rec.listeners).toContainEqual([type, fn]);
+    }
+  });
+
+  it('disposes every collaborator it constructed', () => {
+    const h = boot();
+    h.handle.dispose();
+    expect(h.rec.disposed.sort()).toEqual(['audio', 'hud', 'input', 'renderer']);
+  });
+
+  it('stops the frame loop, so a queued callback cannot advance the world', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(20);
+    const rendersBefore = h.rec.renders.length;
+    h.handle.dispose();
+    // The driver's own guard is what makes this safe; here we only prove the
+    // handle actually reaches it.
+    expect(h.hasFrame()).toBe(true);
+    h.fireFrame(40);
+    expect(h.rec.renders.length).toBe(rendersBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The seam the refactor CREATES. driver.test.ts injects fake hooks, so it can
+// prove the driver calls its hooks but NOT that loop.ts wires the real
+// collaborators into them. Every assertion below pumps a frame through the
+// REAL startGameWith. Without these, inverting the play gate, dropping audio
+// routing, emptying the render call or freezing the HUD all pass the gate.
+// ---------------------------------------------------------------------------
+describe('startGameWith: composition (a real frame, pumped)', () => {
+  it('simulates only while playing, and renders either way', () => {
+    const h = boot();
+    h.fireFrame(100); // still on the title screen
+    expect(h.rec.renders).toHaveLength(1);
+    expect(h.rec.renders[0].curr.tick).toBe(0);
+
+    h.setState('playing');
+    h.fireFrame(200);
+    expect(h.rec.renders).toHaveLength(2);
+    expect(h.rec.renders[1].curr.tick).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it('draws from the previous pose to the current one, in that order', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(20);
+    const r = h.rec.renders[h.rec.renders.length - 1];
+    expect(r.prev.tick).toBeLessThan(r.curr.tick);
+    h.handle.dispose();
+  });
+
+  it('samples the real input controller once per simulated tick', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks
+    expect(h.rec.samples).toBe(6);
+    h.handle.dispose();
+  });
+
+  it('refreshes the HUD stats from the live world as the game runs', () => {
+    const h = boot();
+    const before = h.rec.lives.length;
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.lives.length).toBeGreaterThan(before);
+    h.handle.dispose();
+  });
+
+  it('routes the events a real tick produced to BOTH the director and the machine', () => {
+    // Back-date the round so the player is past countdown+grace and can fire.
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    // Several frames: AI tanks act, so events appear without needing the player
+    // to fire through the fake input.
+    for (let i = 1; i <= 12; i++) h.fireFrame(i * 100);
+    expect(h.rec.directed.length).toBeGreaterThan(0);
+    expect(h.rec.machineSaw.length).toBe(h.rec.directed.length);
+    expect(h.rec.directed.flat().length).toBe(h.rec.machineSaw.flat().length);
+    h.handle.dispose();
+  });
+});

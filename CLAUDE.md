@@ -82,11 +82,24 @@ No `Co-Authored-By` or tool-attribution trailers — the history carries none. `
 
 ## Known holes
 
-`src/game/loop.ts` has no test file, and mutations to it pass the full CI gate — including
-`while (false && acc >= DT)`, the shipped game never simulating a tick. Closing it needs
-the loop's dependencies (`now`, `raf`, renderer, audio, input) injected.
+`src/main.ts` has no test file. It runs at module scope against
+`document.getElementById('app')`, so it cannot be imported: its `try/catch` WebGL error
+page, its `pagehide` registration and that listener's `{ once: true }` are all unpinned.
+Closing it needs `main.ts` to take an injected root and a `startGame` reference.
 
-Modules with no sibling test file, as of `c9a783d`: `game/loop.ts`, `main.ts`,
+The game loop used to be the worst of these — `while (false && acc >= DT)`, the shipped
+game never simulating a tick, passed the full gate. It is now split across `game/frame.ts`
+(pure timestep maths), `game/driver.ts` (the frame loop, clock and rAF injected) and
+`game/loop.ts` (construction and wiring, dependencies injected as factories), each with a
+sibling test file. **Two seams there are load-bearing and easy to lose in a tidy-up:**
+`driver.ts` reads `sm.state` twice per frame and the reads must not be hoisted into one
+const, because `onEvents` flips the state between them; and `Driver.world`/`prevWorld` must
+stay getters, since a plain property snapshots at construction and `tsc` will not warn.
+`loop.test.ts`'s last describe block exists because `driver.test.ts` injects fake hooks and
+so cannot see whether `loop.ts` wires the real collaborators into them — the composition
+blindness above, one layer up. Do not delete it.
+
+Modules with no sibling test file, re-verified at `97e4242` and updated here: `main.ts`,
 `render/canvas.ts`, `render/particles.ts`, `render/renderer.ts`, `render/scene.ts`,
 `sim/ai/decision.ts`, `sim/ai/index.ts`. (`render/entities.ts` and `render/interpolate.ts`
 *are* tested — do not assume the whole render layer is bare.) Merged PR descriptions carry
