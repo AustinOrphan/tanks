@@ -99,8 +99,12 @@ stay getters, since a plain property snapshots at construction and `tsc` will no
 so cannot see whether `loop.ts` wires the real collaborators into them — the composition
 blindness above, one layer up. Do not delete it.
 
-Modules with no sibling test file, re-verified at `97e4242` and updated here: `main.ts`,
-`render/canvas.ts`, `render/particles.ts`, `render/renderer.ts`, `render/scene.ts`,
-`sim/ai/decision.ts`, `sim/ai/index.ts`. (`render/entities.ts` and `render/interpolate.ts`
+Modules with no sibling test file, re-swept at `f207497`: `main.ts`, `render/canvas.ts`,
+`render/renderer.ts`, `render/scene.ts`, `sim/ai/decision.ts`, `sim/ai/index.ts`.
+**A missing sibling file is not the same as untested** — `sim/ai/` is exercised through
+`sim/step-integration.test.ts` and 15 files assert AI behaviour, and `render/entities.ts`,
+`render/interpolate.ts`, `render/framing.ts` and `render/particles.ts` all have their own.
+What is genuinely bare is `scene.ts`/`renderer.ts`/`canvas.ts` (they need a GL context) and
+`main.ts` (module scope, not importable). (`render/entities.ts` and `render/interpolate.ts`
 *are* tested — do not assume the whole render layer is bare.) Merged PR descriptions carry
 the detailed residual backlog.
