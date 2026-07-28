@@ -118,6 +118,13 @@ jobs:
       # canvas with drawImage returns all black without preserveDrawingBuffer,
       # which is how an earlier harness reported a black screen for a game that
       # was rendering fine. See tools/visual/README.md.
+      # scene.ts builds a WebGLRenderer, so vitest cannot construct it -- that
+      # single fact is why framing.ts was carved out of it, and why everything
+      # left behind stayed untested while BOTH shipped visual defects lived
+      # there. This job already has chromium, so those tests run here.
+      - name: GL tests (scene.ts)
+        run: node tools/gl/run.mjs
+
       - name: Visual check
         run: node tools/visual/verify.mjs dist --check --out visual-out
 
