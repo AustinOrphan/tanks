@@ -11,7 +11,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "tsc --noEmit && vitest run",
-    "visual": "node tools/visual/verify.mjs dist --check"
+    "visual": "node tools/visual/verify.mjs dist --check",
+    "test:gl": "node tools/gl/run.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",

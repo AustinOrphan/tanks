@@ -54,6 +54,20 @@ export const MINE_TIMER = 3.0;
 export const MINE_PROXIMITY_RADIUS = 1.5;
 export const MINE_BLAST_RADIUS = 2.0;
 
+/**
+ * Does a mine's blast continue past a DESTRUCTIBLE wall on its way to a tank?
+ *
+ * Solid walls always stop it -- being killed through intact cover is a defect,
+ * not a design. Destructible ones are a judgement call: the wall is destroyed by
+ * the same detonation either way, so the question is only whether it absorbs the
+ * blast on its way out. `true` says a blast strong enough to shatter a wall does
+ * not politely stop at it; `false` would make destructible walls one-use cover.
+ *
+ * A build-time constant, deliberately, NOT a runtime flag: src/sim/ is a pure
+ * deterministic core and a replay must stay an exact function of its inputs.
+ */
+export const MINE_BLAST_THROUGH_DESTRUCTIBLE = true;
+
 // ---- Meta ----
 export const LIVES = 3;
 
