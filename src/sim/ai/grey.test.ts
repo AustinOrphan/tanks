@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { greyDecision } from './grey';
 import { aimJitter, aimLead } from './targeting';
-import type { Tank, Vec2, Wall, Bullet } from '../types';
+import type { Tank, Vec2, Wall, Bullet, Mine } from '../types';
 import type { World } from '../world';
 import { DODGE_PATIENCE_TICKS, AI_AIM_SPREAD, AI_MINE_TACTICAL_RADIUS, bulletConfig } from '../constants';
 
@@ -17,6 +17,9 @@ function bullet(id: number, ownerId: number, pos: Vec2, vel: Vec2): Bullet {
 }
 function wall(id: number, minX: number, minY: number, maxX: number, maxY: number): Wall {
   return { id, aabb: { minX, minY, maxX, maxY }, kind: 'solid', destroyed: false };
+}
+function mine(id: number, ownerId: number, pos: Vec2, over: Partial<Mine> = {}): Mine {
+  return { id, ownerId, pos, timer: 0, armed: true, detonated: false, ...over };
 }
 function world(over: Partial<World>): World {
   return {
@@ -305,5 +308,53 @@ describe('greyDecision', () => {
     const d = greyDecision(world({ tanks: [grey, player] }), grey);
     expect(d.fire).toBe(true);
     expect(d.nextTimer).toBe(0);
+  });
+
+  // ---- Own-mine fire suppression (regression) ----
+
+  it('takes the shot while stepping away from its OWN mine', () => {
+    // Grey drops a mine only when the player is close enough to be threatened,
+    // which puts it inside its own AI_MINE_FLEE_RADIUS with a clear shot. Gating
+    // fire on `avoid` rather than on incoming fire gagged the trigger there for
+    // up to DODGE_PATIENCE_TICKS, for much of Grey's life.
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [50] });
+    const player = tank(2, 'player', { x: 8, y: 0 });
+    const w = world({
+      tanks: [grey, player],
+      mines: [mine(50, 1, { x: 0, y: 2 })], // 2.0 away, inside the 3.25 flee radius
+      bullets: [],
+    });
+    expect(greyDecision(w, grey).fire).toBe(true);
+  });
+
+  it('still walks away from that mine while it shoots', () => {
+    // The fix must not stop Grey fleeing: detonateMine kills every tank in the
+    // blast with no owner exemption, so its own mine really can kill it.
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [50] });
+    const player = tank(2, 'player', { x: 8, y: 0 });
+    const w = world({ tanks: [grey, player], mines: [mine(50, 1, { x: 0, y: 2 })] });
+    const d = greyDecision(w, grey);
+    // Moving away from a mine at +y means a non-positive y component.
+    expect(d.desiredMove.y).toBeLessThanOrEqual(0);
+    expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeGreaterThan(0);
+  });
+
+  it('still holds fire when the thing to dodge is an actual bullet', () => {
+    // The negative control for the change: suppression is now tied to incoming
+    // fire, so it must still fire (as in: not fire) exactly as before here.
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 8, y: 0 });
+    const incoming = bullet(9, 2, { x: 3, y: 0 }, { x: -bulletConfig.normal.speed, y: 0 });
+    const w = world({ tanks: [grey, player], bullets: [incoming] });
+    expect(greyDecision(w, grey).fire).toBe(false);
+  });
+
+  it("a mine near Grey does not start the bullet-patience counter", () => {
+    // nextTimer is the patience counter. A mine must leave it at 0, or a later
+    // real dodge would inherit a head start and give up early.
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [50], aiTimer: 0 });
+    const player = tank(2, 'player', { x: 8, y: 0 });
+    const w = world({ tanks: [grey, player], mines: [mine(50, 1, { x: 0, y: 2 })] });
+    expect(greyDecision(w, grey).nextTimer).toBe(0);
   });
 });

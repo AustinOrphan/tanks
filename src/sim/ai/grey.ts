@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS, AI_AIM_SPREAD } from '../constants';
 import type { AiDecision } from './decision';
@@ -19,8 +19,17 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // just keeps shooting would otherwise suppress Grey's fire forever. Movement and
   // turret/fire are independent: past the threshold Grey still dodges (move stays the
   // dodge vector) but evaluates the shooting logic normally.
-  const dodgeTicks = avoid ? tank.aiTimer + 1 : 0;
-  if (avoid && dodgeTicks < DODGE_PATIENCE_TICKS) {
+  //
+  // Gated on INCOMING FIRE, not on `avoid`. dangerAvoidMove also returns a direction for
+  // a nearby mine -- including Grey's OWN, which it must still walk away from, because
+  // detonateMine kills every tank in the blast with no owner exemption. But stepping away
+  // from a mine leaves the turret free, and suppressing fire for it gagged Grey's trigger
+  // for much of its life: it drops a mine only when the player is close enough to be
+  // threatened, then stands inside its own flee radius with a clear shot and holds fire.
+  // The patience mechanism is about bullets and nothing else.
+  const underFire = incomingThreats(world, tank).length > 0;
+  const dodgeTicks = underFire ? tank.aiTimer + 1 : 0;
+  if (underFire && dodgeTicks < DODGE_PATIENCE_TICKS) {
     return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
   }
 
