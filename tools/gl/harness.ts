@@ -12,6 +12,8 @@
  */
 import * as THREE from 'three';
 import { createScene } from '../../src/render/scene';
+import { createRenderer } from '../../src/render/renderer';
+import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { framedBounds } from '../../src/render/framing';
 
@@ -114,6 +116,126 @@ check('the renderer really has a live GL context', () => {
   const lost = gl.isContextLost();
   ctx.dispose();
   return lost ? 'context is lost' : null;
+});
+
+
+// ---------------------------------------------------------------------------
+// renderer.ts. screenToGround is a CLOSURE over a live GL context, so nothing
+// under vitest could ever call it: PR #6's review recorded that inverting its
+// Y or returning a constant both passed the whole suite, and that its
+// round-trip probes "cannot fail for the reasons that matter -- canvas rect,
+// CSS-vs-buffer size, devicePixelRatio". Those are precisely the cases below.
+// ---------------------------------------------------------------------------
+
+/** A canvas with a CSS size and page offset that differ from its buffer size. */
+function placedCanvas(cssW: number, cssH: number, left: number, top: number,
+                      bufW: number, bufH: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = bufW;
+  c.height = bufH;
+  c.style.position = 'absolute';
+  c.style.left = `${left}px`;
+  c.style.top = `${top}px`;
+  c.style.width = `${cssW}px`;
+  c.style.height = `${cssH}px`;
+  document.body.appendChild(c);
+  return c;
+}
+
+check('screenToGround maps the canvas centre to the arena centre', () => {
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY);
+  const p = r.screenToGround(400, 250);
+  r.dispose();
+  c.remove();
+  const dx = Math.abs(p.x - W / 2);
+  const dy = Math.abs(p.y - H / 2);
+  // The camera is tilted, so the centre pixel is not exactly the arena centre;
+  // it is within a cell. A constant return or a swapped axis is far outside.
+  if (dx > CURRENT_ARENA.cellSize || dy > CURRENT_ARENA.cellSize) {
+    return `centre pixel mapped to (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), arena centre (${W / 2}, ${H / 2})`;
+  }
+  return null;
+});
+
+check('screenToGround subtracts the canvas page offset', () => {
+  // The canvas is not at the page origin, so a handler that uses clientX
+  // directly instead of clientX - rect.left aims at the wrong place. Nothing
+  // under jsdom can see this: getBoundingClientRect there returns all zeros.
+  const a = placedCanvas(800, 500, 0, 0, 800, 500);
+  const ra = createRenderer(a, W, H, BOUNDARY);
+  const atOrigin = ra.screenToGround(400, 250);
+  ra.dispose();
+  a.remove();
+
+  const b = placedCanvas(800, 500, 120, 60, 800, 500);
+  const rb = createRenderer(b, W, H, BOUNDARY);
+  // Same point ON the canvas, so the same ground point, despite the offset.
+  const offset = rb.screenToGround(400 + 120, 250 + 60);
+  rb.dispose();
+  b.remove();
+
+  const dx = Math.abs(atOrigin.x - offset.x);
+  const dy = Math.abs(atOrigin.y - offset.y);
+  if (dx > 1e-6 || dy > 1e-6) {
+    return `offset canvas mapped to (${offset.x.toFixed(3)}, ${offset.y.toFixed(3)}), origin canvas (${atOrigin.x.toFixed(3)}, ${atOrigin.y.toFixed(3)})`;
+  }
+  return null;
+});
+
+// REMOVED: a check named "screenToGround uses the CSS rect, not the drawing
+// buffer". It could not fail for its stated reason. createScene calls
+// renderer.setSize(w, h, false), and three sets canvas.width/height itself, so
+// a drawing buffer that differs from the CSS size does not survive the first
+// resize -- the mutation it was written to catch (dividing by canvas.width
+// instead of rect.width) is EQUIVALENT here. It appeared to work only because
+// it also fired on the axis-swap mutation, which the check below already owns.
+// A devicePixelRatio mismatch would need the renderer to stop owning the buffer.
+
+check('screenToGround does not swap the ground axes', () => {
+  // three's (x, z) -> world (x, y). A swap is invisible on a square arena and
+  // on the centre pixel, so probe a deliberately off-centre point on a
+  // non-square arena (22 x 18).
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY);
+  const left = r.screenToGround(200, 250);
+  const right = r.screenToGround(600, 250);
+  r.dispose();
+  c.remove();
+  // Moving the cursor horizontally must move the ground point in x, not y.
+  if (Math.abs(right.x - left.x) < Math.abs(right.y - left.y)) {
+    return `horizontal cursor move changed y more than x: dx=${(right.x - left.x).toFixed(3)} dy=${(right.y - left.y).toFixed(3)}`;
+  }
+  return null;
+});
+
+check('render draws a frame without throwing', () => {
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY);
+  const world = createArenaWorld(1);
+  r.render(world, world, 0.5, [], 1 / 60);
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
+  const lost = !gl || gl.isContextLost();
+  r.dispose();
+  c.remove();
+  return lost ? 'context lost after render' : null;
+});
+
+check('resize forwards to the scene camera', () => {
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY);
+  r.resize(400, 1200);
+  // No direct camera handle here, so assert through the observable: aiming at
+  // the centre of the RESIZED viewport still lands near the arena centre.
+  c.style.width = '400px';
+  c.style.height = '1200px';
+  const p = r.screenToGround(200, 600);
+  r.dispose();
+  c.remove();
+  if (Math.abs(p.x - W / 2) > CURRENT_ARENA.cellSize * 2) {
+    return `after resize the centre mapped to x=${p.x.toFixed(2)}, expected near ${W / 2}`;
+  }
+  return null;
 });
 
 window.__glResults = results;
