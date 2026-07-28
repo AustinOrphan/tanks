@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
-import { FIRE_COOLDOWN, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, DT } from '../constants';
+import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, DT } from '../constants';
 import type { Tank, Vec2 } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
@@ -60,7 +60,7 @@ describe('stepAi', () => {
     const w = world([grey, player]);
     stepAi(w, []);
     expect(w.bullets.length).toBe(1);
-    expect(w.tanks[0].fireCooldown).toBeCloseTo(FIRE_COOLDOWN, 6);
+    expect(w.tanks[0].fireCooldown).toBe(FIRE_COOLDOWN_TICKS);
     stepAi(w, []); // cooldown still active
     expect(w.bullets.length).toBe(1);
   });
@@ -174,7 +174,7 @@ describe('stepAi', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const w = world([grey, player]);
-    // Long enough for many fire-cooldown cycles (FIRE_COOLDOWN=0.4s = 24 ticks) to elapse;
+    // Long enough for many fire-cooldown cycles (FIRE_COOLDOWN_TICKS=0.4s = 24 ticks) to elapse;
     // bullets are never advanced/removed here (no stepBullets call), so they only accumulate,
     // making this the strictest possible test of the cap.
     for (let i = 0; i < 400; i++) {
@@ -370,7 +370,7 @@ describe('stepAi', () => {
       stepAi(w, []);
       expect(w.bullets.length).toBe(0);
       // A refused shot must not burn the cooldown either -- otherwise the tank pays for a
-      // shot it never took and stays silent for another FIRE_COOLDOWN.
+      // shot it never took and stays silent for another FIRE_COOLDOWN_TICKS.
       expect(w.tanks[0].fireCooldown).toBe(0);
     });
 

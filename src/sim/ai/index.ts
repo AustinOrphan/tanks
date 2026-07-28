@@ -9,7 +9,7 @@ import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast } from './targeting';
-import { FIRE_COOLDOWN, MINE_COOLDOWN, DT, AI_TURRET_TURN_RATE } from '../constants';
+import { FIRE_COOLDOWN_TICKS, MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE } from '../constants';
 import { roundPhase } from '../round';
 
 /** An inert decision: hold position, hold aim, do nothing. */
@@ -48,8 +48,8 @@ export function stepAi(world: World, events: SimEvent[]): void {
     if (!tank.alive || tank.kind === 'player') continue;
 
     // Enemy cooldowns tick here (applyPlayerInput only handles the player).
-    if (tank.fireCooldown > 0) tank.fireCooldown -= DT;
-    if (tank.mineCooldown > 0) tank.mineCooldown -= DT;
+    if (tank.fireCooldown > 0) tank.fireCooldown -= 1;
+    if (tank.mineCooldown > 0) tank.mineCooldown -= 1;
 
     const decision = decideAi(world, tank);
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
@@ -71,7 +71,7 @@ export function stepAi(world: World, events: SimEvent[]): void {
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
       // fire with a perfect solution while the barrel visibly points elsewhere.
       if (spawnBullet(world, tank.id, tank.turretAngle, decision.fireType, events)) {
-        tank.fireCooldown = FIRE_COOLDOWN;
+        tank.fireCooldown = FIRE_COOLDOWN_TICKS;
       }
     }
     // Same idea for mines: the decision functions gate on cooldown/cap, but only here do
@@ -79,7 +79,7 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // teammate kills it on a 3-second fuse (Brown, which never moves, cannot escape one).
     if (canAct && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
       if (dropMine(world, tank.id, events)) {
-        tank.mineCooldown = MINE_COOLDOWN;
+        tank.mineCooldown = MINE_COOLDOWN_TICKS;
       }
     }
   }

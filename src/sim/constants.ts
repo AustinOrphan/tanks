@@ -31,6 +31,24 @@ export const MINE_CAP = 2;
 export const FIRE_COOLDOWN = 0.4;
 export const MINE_COOLDOWN = 0.5;
 
+/**
+ * The same two cooldowns as whole TICKS, which is what the sim actually counts.
+ *
+ * Storing seconds and subtracting DT once per tick does not land on zero:
+ * repeated subtraction accumulates rounding, so after the intended 24
+ * decrements FIRE_COOLDOWN sits a hair ABOVE zero and the `<= 0` gate needs one
+ * more tick. Measured: 0.4s delivered a 25-tick, 0.41667s cadence and 0.5s a
+ * 31-tick, 0.51667s one, and 23 of 40 plausible cooldown values (50ms..2000ms
+ * in 50ms steps) expired late the same way. (The one-shot form 0.4 - 24*DT IS
+ * exactly zero; only the iterated form drifts, which is why this is easy to
+ * miss by inspection.)
+ *
+ * Integers decremented by 1 cannot drift, so the cadence is now exactly what
+ * the seconds above say.
+ */
+export const FIRE_COOLDOWN_TICKS = Math.round(FIRE_COOLDOWN * TICK_HZ);
+export const MINE_COOLDOWN_TICKS = Math.round(MINE_COOLDOWN * TICK_HZ);
+
 // ---- Mines ----
 export const MINE_TIMER = 3.0;
 export const MINE_PROXIMITY_RADIUS = 1.5;

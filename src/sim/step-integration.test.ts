@@ -3,7 +3,7 @@ import { createWorld, applyPlayerInput, resolveStatus, step } from './world';
 import type { World } from './world';
 import type { Tank, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
-import { FIRE_COOLDOWN, COUNTDOWN_TICKS, GRACE_TICKS, PLAYER_TURRET_TURN_RATE, DT } from './constants';
+import { FIRE_COOLDOWN_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, PLAYER_TURRET_TURN_RATE, DT } from './constants';
 import { stepAi } from './ai';
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
@@ -68,7 +68,7 @@ describe('applyPlayerInput', () => {
     applyPlayerInput(w, fireInput, events);
     expect(w.bullets.length).toBe(1);
     expect(events.some((e) => e.type === 'fire')).toBe(true);
-    expect(w.tanks[0].fireCooldown).toBeCloseTo(FIRE_COOLDOWN, 10);
+    expect(w.tanks[0].fireCooldown).toBe(FIRE_COOLDOWN_TICKS);
 
     // Immediately press fire again: cooldown not yet elapsed -> no new shell.
     applyPlayerInput(w, fireInput, []);
@@ -325,5 +325,40 @@ describe('round phases (player path via applyPlayerInput)', () => {
     stepAi(w, []);
     stepAi(w, []);
     expect(w.bullets.some((b) => b.ownerId === brown.id)).toBe(false);
+  });
+});
+
+describe('cooldown cadence', () => {
+  // Nothing pinned the CADENCE before -- only that a cooldown was spent -- so a
+  // systematic off-by-one sat in every cooldown in the game unnoticed. Storing
+  // seconds and subtracting DT each tick accumulates rounding, landing a hair
+  // above zero after the intended count and costing one extra tick: 0.4s
+  // delivered 25 ticks (0.41667s) and 0.5s delivered 31 (0.51667s).
+
+  it('lets the player fire again after exactly FIRE_COOLDOWN, not a tick later', () => {
+    const w = makeWorld();
+    applyPlayerInput(w, fireInput, []);
+    expect(w.bullets.length).toBe(1);
+
+    // Tick it down without firing, then take the first shot it allows.
+    let ticks = 0;
+    for (let i = 0; i < 200; i++) {
+      ticks++;
+      applyPlayerInput(w, fireInput, []);
+      if (w.bullets.length > 1) break;
+    }
+    expect(ticks).toBe(FIRE_COOLDOWN_TICKS);
+    expect(ticks).toBe(24);
+  });
+
+  it('counts cooldowns in whole ticks, so repeated decrements cannot drift', () => {
+    // The integer invariant is the fix. A float cooldown re-introduces the bug
+    // the moment it is decremented more than a handful of times.
+    const w = makeWorld();
+    applyPlayerInput(w, fireInput, []);
+    for (let i = 0; i < 10; i++) {
+      applyPlayerInput(w, fireInput, []);
+      expect(Number.isInteger(w.tanks[0].fireCooldown)).toBe(true);
+    }
   });
 });
