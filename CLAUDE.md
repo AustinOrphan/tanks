@@ -82,10 +82,11 @@ No `Co-Authored-By` or tool-attribution trailers — the history carries none. `
 
 ## Known holes
 
-`src/main.ts` has no test file. It runs at module scope against
-`document.getElementById('app')`, so it cannot be imported: its `try/catch` WebGL error
-page, its `pagehide` registration and that listener's `{ once: true }` are all unpinned.
-Closing it needs `main.ts` to take an injected root and a `startGame` reference.
+`src/main.ts` still has no test file and cannot have one: it runs at module scope against
+`document.getElementById('app')`, so importing it starts the game. It is now **wiring only** —
+everything it used to do (the WebGL error page, the teardown registration) lives in
+`src/boot.ts`, which takes its collaborators as arguments and is tested. Keep `main.ts` free
+of logic; anything added there is unpinned again, and that is the whole of its remaining risk.
 
 The game loop used to be the worst of these — `while (false && acc >= DT)`, the shipped
 game never simulating a tick, passed the full gate. It is now split across `game/frame.ts`
@@ -99,12 +100,12 @@ stay getters, since a plain property snapshots at construction and `tsc` will no
 so cannot see whether `loop.ts` wires the real collaborators into them — the composition
 blindness above, one layer up. Do not delete it.
 
-Modules with no sibling test file, re-swept at `f207497`: `main.ts`, `render/canvas.ts`,
+Modules with no sibling test file, re-swept at `8bd30a5` plus this branch: `main.ts`,
 `render/renderer.ts`, `render/scene.ts`, `sim/ai/decision.ts`, `sim/ai/index.ts`.
 **A missing sibling file is not the same as untested** — `sim/ai/` is exercised through
 `sim/step-integration.test.ts` and 15 files assert AI behaviour, and `render/entities.ts`,
-`render/interpolate.ts`, `render/framing.ts` and `render/particles.ts` all have their own.
-What is genuinely bare is `scene.ts`/`renderer.ts`/`canvas.ts` (they need a GL context) and
-`main.ts` (module scope, not importable). (`render/entities.ts` and `render/interpolate.ts`
+`render/interpolate.ts`, `render/framing.ts`, `render/particles.ts` and `render/canvas.ts`
+all have their own. What is genuinely bare is `scene.ts` and `renderer.ts` (they need a GL
+context) and `main.ts` (module scope, not importable). (`render/entities.ts` and `render/interpolate.ts`
 *are* tested — do not assume the whole render layer is bare.) Merged PR descriptions carry
 the detailed residual backlog.
