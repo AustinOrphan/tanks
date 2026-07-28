@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "tsc --noEmit && vitest run"
+    "test": "tsc --noEmit && vitest run",
+    "visual": "node tools/visual/verify.mjs dist --check"
   },
   "dependencies": {
     "howler": "^2.2.4",
