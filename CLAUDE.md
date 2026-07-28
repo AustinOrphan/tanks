@@ -102,13 +102,22 @@ stay getters, since a plain property snapshots at construction and `tsc` will no
 so cannot see whether `loop.ts` wires the real collaborators into them — the composition
 blindness above, one layer up. Do not delete it.
 
-Modules with no sibling test file, re-swept at `4c6e493`: `main.ts`,
+Modules with no sibling test file, re-swept at `e47a4bc`: `main.ts`,
 `render/renderer.ts`, `render/scene.ts`, `sim/ai/decision.ts`, `sim/ai/index.ts`.
-**A missing sibling file is not the same as untested** — `sim/ai/` is exercised through
-`sim/step-integration.test.ts` and 15 files assert AI behaviour, and `render/entities.ts`,
-`render/interpolate.ts`, `render/framing.ts`, `render/particles.ts` and `render/canvas.ts`
-all have their own. What is genuinely bare is `scene.ts` and `renderer.ts` (they need a GL
-context) and `main.ts` (module scope, not importable). (`render/entities.ts` and `render/interpolate.ts`
+
+**A missing sibling file is not the same as untested, and for three of those five it is
+now actively misleading.** `sim/ai/` is exercised through `sim/step-integration.test.ts`,
+with 15 files asserting AI behaviour. `render/scene.ts` and `render/renderer.ts` **are
+tested** — in a real browser, by `tools/gl/harness.ts`, because they build a
+`WebGLRenderer` that vitest cannot construct. Run them with `npm run test:gl`; CI runs them
+in the `visual` job. That covers the ground plane's dimensions, the resize re-fit,
+`dispose`, and `screenToGround`'s canvas-rect handling — none of which `npm test` can see,
+so **a green `npm test` is not the whole gate for `src/render/`**.
+
+The one module genuinely without coverage is `main.ts`: it runs at module scope against
+`document.getElementById('app')`, so importing it starts the game and no test can reach it.
+Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anything else.
+
 Merged PR descriptions carry the detailed residual backlog.
 
 **Retroreflecting wall seams: real, measure-zero, and do NOT apply the obvious fix.** Walls
