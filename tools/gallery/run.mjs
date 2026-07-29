@@ -70,7 +70,21 @@ async function main() {
   vite = spawn(`${ROOT}node_modules/.bin/vite`, ['--port', String(PORT), '--strictPort'], {
     cwd: ROOT, stdio: 'ignore',
   });
-  await new Promise((r) => setTimeout(r, 3500));
+  // POLL, do not sleep. A fixed wait is a race that fails intermittently and reports it
+  // as a navigation timeout thirty seconds later, which reads like a bug in the page
+  // rather than a server that was not up yet.
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    if (vite.exitCode !== null) throw new Error(`vite exited with code ${vite.exitCode} before serving`);
+    try {
+      const res = await fetch(`http://localhost:${PORT}/`, { method: 'HEAD' });
+      if (res.ok || res.status === 404) break; // listening either way
+    } catch {
+      // not up yet
+    }
+    if (Date.now() > deadline) throw new Error(`vite did not start on port ${PORT} within 30s`);
+    await new Promise((r) => setTimeout(r, 200));
+  }
 
   const { chromium } = await import(PW);
   const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -98,7 +112,44 @@ async function run(browser) {
     return `http://localhost:${PORT}/tools/gallery/index.html?${p}`;
   };
 
+  /**
+   * Shoot the REAL game at its REAL camera: load it, leave the title screen, wait out
+   * the opening countdown, then capture. No pose stepping -- the game owns its clock.
+   */
+  async function captureGame(prefix) {
+    const qs = args.query ? `?${args.query}` : '';
+    // 'domcontentloaded', not 'load'. A --sweep patches source between shots, so vite is
+    // rebuilding when we navigate and may issue a full HMR reload mid-load -- the 'load'
+    // event then never fires for the navigation we are awaiting, and it times out after
+    // 30s looking like a broken page. Wait for the canvas the game actually creates.
+    //
+    // Retried once, because this degrades with SEQUENCE LENGTH: a two-variant sweep is
+    // reliable and a six-variant one is not. Each variant is a fresh full load of a
+    // WebGL game under software rendering, and the later ones are slower. A single
+    // retry is the difference between a usable tool and one that fails a long sweep
+    // after several minutes of work.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await page.goto(`http://localhost:${PORT}/${qs}`, { waitUntil: 'domcontentloaded' });
+        await page.locator('canvas').waitFor({ state: 'attached', timeout: 30000 });
+        break;
+      } catch (e) {
+        if (attempt >= 1) throw e;
+        console.log(`  (retrying ${prefix}: ${String(e).split('\n')[0]})`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    await page.waitForTimeout(1500);
+    const start = page.locator('button', { hasText: /start|play/i }).first();
+    if (await start.count()) await start.click();
+    else await page.keyboard.press('Enter');
+    await page.waitForTimeout(args.settle);
+    await page.locator('canvas').screenshot({ path: `${outDir}/${prefix}.png` });
+    return 1;
+  }
+
   async function capture(prefix) {
+    if (args.scene === 'game') return captureGame(prefix);
     await page.goto(q(), { waitUntil: 'load' });
     await page.waitForFunction(() => window.GALLERY_READY === true, { timeout: 20000 });
     const frames = await page.evaluate(() => window.GALLERY_FRAMES);
@@ -138,7 +189,7 @@ async function run(browser) {
           edited.set(t.path, before.replace(t.re, `$1${variant[i]}$3`));
         });
         for (const [path, text] of edited) writeFileSync(path, text);
-        await new Promise((r) => setTimeout(r, 700)); // let vite pick the edits up
+        await new Promise((r) => setTimeout(r, 1200)); // let vite finish rebuilding
         const prefix = `sweep-${shots.length}`;
         const n = await capture(prefix);
         const auto = args.sweep.map((name, i) => `${name} ${variant[i]}`).join('  ');
@@ -173,8 +224,15 @@ async function run(browser) {
   }
   if (!animated && shots.length > 1) {
     const cells = shots.map((s, i) => {
-      const src = `${outDir}/${s.prefix}.png`;
+      let src = `${outDir}/${s.prefix}.png`;
       const dst = `${outDir}/cell-${i}.png`;
+      if (args.crop) {
+        // Crop BEFORE labelling, or the label lands outside the kept region.
+        const [, cw, ch, cx, cy] = /^(\d+)x(\d+)\+(\d+)\+(\d+)$/.exec(args.crop);
+        const cropped = `${outDir}/crop-${i}.png`;
+        sh('ffmpeg', ['-y', '-i', src, '-vf', `crop=${cw}:${ch}:${cx}:${cy}`, cropped]);
+        src = cropped;
+      }
       if (args.label) {
         sh('ffmpeg', ['-y', '-i', src, '-vf',
           `drawtext=text='${safeLabel(s.label)}':x=10:y=8:fontsize=22:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=5`, dst]);
@@ -188,14 +246,25 @@ async function run(browser) {
       cells.push(`${outDir}/cell-${cells.length + i}.png`);
     }
     const inputs = cells.flatMap((c) => ['-i', c]);
+    // hstack/vstack REJECT inputs=1 -- "Numerical result out of range" -- so a single
+    // row or a single column has to skip that stage entirely rather than pass a 1. A
+    // two-variant sweep is 2x1 and hit this every time.
     let fc = '';
     for (let r = 0; r < rows; r++) {
       const row = Array.from({ length: cols }, (_, c) => `[${r * cols + c}:v]`).join('');
-      fc += `${row}hstack=inputs=${cols}[r${r}];`;
+      fc += cols === 1 ? `${row}null[r${r}];` : `${row}hstack=inputs=${cols}[r${r}];`;
     }
-    fc += Array.from({ length: rows }, (_, r) => `[r${r}]`).join('') + `vstack=inputs=${rows}`;
+    const stack = Array.from({ length: rows }, (_, r) => `[r${r}]`).join('');
+    fc += rows === 1 ? `${stack}null` : `${stack}vstack=inputs=${rows}`;
     const target = outFile ?? `${outDir}/grid.png`;
     sh('ffmpeg', ['-y', ...inputs, '-filter_complex', fc, target]);
+    console.log('wrote', target);
+    return;
+  }
+  if (args.crop && shots.length === 1) {
+    const [, cw, ch, cx, cy] = /^(\d+)x(\d+)\+(\d+)\+(\d+)$/.exec(args.crop);
+    const target = outFile ?? `${outDir}/frame-cropped.png`;
+    sh('ffmpeg', ['-y', '-i', `${outDir}/${shots[0].prefix}.png`, '-vf', `crop=${cw}:${ch}:${cx}:${cy}`, target]);
     console.log('wrote', target);
     return;
   }

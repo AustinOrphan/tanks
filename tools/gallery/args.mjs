@@ -4,6 +4,29 @@
  */
 export const DEFAULTS = {
   elements: 'mine',
+  /**
+   * 'gallery' poses elements against a bare ground plane and frames them to their own
+   * span. 'game' drives the REAL game and shoots its REAL camera.
+   *
+   * The second exists because the first has now disagreed with it three times running:
+   * a close-up flatters every option, and the decision is always made at play distance.
+   * It was hand-rolled five times before becoming a mode.
+   */
+  scene: 'gallery',
+  /** ms to wait after starting the game before shooting. Covers COUNTDOWN_TICKS. */
+  settle: 3800,
+  /** WxH+X+Y crop applied to each frame, in captured pixels. Omit to keep the frame. */
+  crop: null,
+  /**
+   * Query string appended in --scene game, e.g. 'dev=1&seed=42'.
+   *
+   * Pinning the seed is worth doing for a comparison: the game is LIVE while it is
+   * being shot, so without it the tanks are in different places and shells are in
+   * flight in some frames and not others -- differences that have nothing to do with
+   * what is being swept. It does not make the frames identical (frame pacing still
+   * varies), so treat it as reducing the noise, not removing it.
+   */
+  query: null,
   view: 'game',
   out: 'gallery-out',
   w: 640,
@@ -42,7 +65,7 @@ export function parseValues(raw) {
     .map((v) => v.split('|').map((x) => x.trim()).filter(Boolean))
     .filter((v) => v.length > 0);
 }
-const NUMERIC = ['w', 'h', 'fps', 'subdiv'];
+const NUMERIC = ['w', 'h', 'fps', 'subdiv', 'settle'];
 
 export function parseArgs(argv) {
   const out = { ...DEFAULTS, values: [] };
@@ -65,6 +88,18 @@ export function parseArgs(argv) {
       out[key] = n;
     } else if (key in DEFAULTS) out[key] = value;
     else throw new Error(`unknown flag --${key}`);
+  }
+  if (out.scene !== 'gallery' && out.scene !== 'game') {
+    throw new Error(`--scene must be 'gallery' or 'game', got '${out.scene}'`);
+  }
+  if (out.crop !== null && !/^\d+x\d+\+\d+\+\d+$/.test(out.crop)) {
+    throw new Error(`--crop must look like 640x480+100+50, got '${out.crop}'`);
+  }
+  if (out.scene === 'game' && out.anim) {
+    // The game runs its own clock; there is no age to step. Recording gameplay is a
+    // different job from stepping a pose, and pretending otherwise would silently
+    // produce N identical frames.
+    throw new Error('--anim is not supported with --scene game');
   }
   if (out.sweep && out.values.length === 0) throw new Error('--sweep needs --values');
   if (!out.sweep && out.values.length > 0) throw new Error('--values needs --sweep');
