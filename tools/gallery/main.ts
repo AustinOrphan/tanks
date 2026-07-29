@@ -10,7 +10,7 @@ canvas.style.height = `${H}px`;
 document.body.appendChild(canvas);
 
 const g = buildGallery(canvas, W, H, {
-  subject: params.get('subject') ?? 'mine',
+  elements: (params.get('elements') ?? 'mine').split(',').map((x) => x.trim()).filter(Boolean),
   view: params.get('view') ?? 'game',
   reach: params.has('reach'),
   timer: params.has('timer'),

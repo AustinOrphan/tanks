@@ -74,12 +74,24 @@ async function main() {
 
   const { chromium } = await import(PW);
   const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  // Every path out of here must close the browser. It did not, and an error inside the
+  // sweep loop left node alive on the open Chromium handle -- the run did not fail, it
+  // HUNG, which is far worse to diagnose.
+  try {
+    await run(browser);
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+async function run(browser) {
   const page = await browser.newPage({ viewport: { width: args.w + 40, height: args.h + 40 } });
+  page.setDefaultTimeout(30000);
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
 
   const q = (extra = {}) => {
-    const p = new URLSearchParams({ subject: args.subject, view: args.view, w: String(args.w), h: String(args.h), ...extra });
+    const p = new URLSearchParams({ elements: args.elements, view: args.view, w: String(args.w), h: String(args.h), ...extra });
     if (args.reach) p.set('reach', '1');
     if (args.timer) p.set('timer', '1');
     if (args.fill) p.set('fill', '1');
@@ -107,21 +119,36 @@ async function main() {
 
   const shots = [];
   if (args.sweep) {
-    const target = findConstant(args.sweep);
-    assertClean([target.rel]);
-    const original = readFileSync(target.path, 'utf8');
+    const targets = args.sweep.map(findConstant);
+    assertClean([...new Set(targets.map((t) => t.rel))]);
+    // Snapshot each distinct FILE once. Two constants in one file must be patched into
+    // the same buffer, or the second write reverts the first.
+    const files = new Map();
+    for (const t of targets) if (!files.has(t.path)) files.set(t.path, readFileSync(t.path, 'utf8'));
     try {
-      for (const v of args.values) {
-        writeFileSync(target.path, original.replace(target.re, `$1${v}$3`));
-        await new Promise((r) => setTimeout(r, 700)); // let vite pick the edit up
+      for (const variant of args.values) {
+        const edited = new Map(files);
+        targets.forEach((t, i) => {
+          const before = edited.get(t.path);
+          // Check the PATTERN matched, not that the text changed. A variant may set a
+          // constant to the value it already holds -- the first one usually does, since
+          // sweeps tend to start from the shipped value -- and treating that as a failed
+          // patch aborted the run before it rendered anything.
+          if (!t.re.test(before)) throw new Error(`could not find ${args.sweep[i]} to patch in ${t.rel}`);
+          edited.set(t.path, before.replace(t.re, `$1${variant[i]}$3`));
+        });
+        for (const [path, text] of edited) writeFileSync(path, text);
+        await new Promise((r) => setTimeout(r, 700)); // let vite pick the edits up
         const prefix = `sweep-${shots.length}`;
         const n = await capture(prefix);
-        shots.push({ prefix, n, label: `${args.sweep} ${v}` });
+        const auto = args.sweep.map((name, i) => `${name} ${variant[i]}`).join('  ');
+        shots.push({ prefix, n, label: args.labels ? args.labels[shots.length] : auto });
       }
     } finally {
-      writeFileSync(target.path, original);
-      const after = sh('git', ['status', '--porcelain', '--', target.rel]).trim();
-      console.log(after ? `WARNING: ${target.rel} left modified` : `restored ${target.rel}`);
+      for (const [path, text] of files) writeFileSync(path, text);
+      const rels = [...new Set(targets.map((t) => t.rel))];
+      const after = sh('git', ['status', '--porcelain', '--', ...rels]).trim();
+      console.log(after ? `WARNING: left modified\n${after}` : `restored ${rels.join(', ')}`);
     }
   } else {
     const n = await capture('frame');
@@ -129,7 +156,6 @@ async function main() {
   }
 
   console.log('pageerrors:', errors.length ? errors.slice(0, 3).join(' | ') : 'none');
-  await browser.close();
 
   if (!has('ffmpeg')) {
     console.log(`wrote PNG frames to ${outDir} (install ffmpeg for gif/grid assembly)`);
@@ -138,7 +164,7 @@ async function main() {
 
   const animated = args.anim && shots[0].n > 1;
   if (animated && shots.length === 1) {
-    const target = outFile ?? `${outDir}/${args.subject}.gif`;
+    const target = outFile ?? `${outDir}/gallery.gif`;
     sh('ffmpeg', ['-y', '-framerate', String(args.fps), '-i', `${outDir}/frame-%04d.png`,
       '-vf', 'split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
       '-loop', '0', target]);

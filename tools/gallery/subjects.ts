@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { createWorld } from '../../src/sim/world';
 import type { World } from '../../src/sim/world';
-import type { Tank } from '../../src/sim/types';
 import { createEntityViews } from '../../src/render/entities';
 import { createMineDebug } from '../../src/render/minedebug';
 import {
@@ -18,93 +17,126 @@ export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
  * mockup, and a mockup cannot catch the two defects screenshots have already caught here
  * (a shell whose nose was an open hemisphere, a blast whose growth curve was linear).
  */
-export type Subject = (age: number) => World;
 
-function tank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
-  return {
-    id, kind, pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
-    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
-    aiState: 'idle', aiTimer: 0,
-  };
-}
-const empty = (tanks: Tank[] = []): World =>
-  createWorld({ walls: [], spawns: [], lives: 3, tanks });
-
-export interface SubjectDef {
-  world: Subject;
+/**
+ * One thing the gallery can place in a scene.
+ *
+ * Scenes are COMPOSED from these -- `--elements mine,tank,shell` -- rather than picked
+ * from a fixed list, because the usual question is "how does this read next to that?"
+ * and every fixed scene is the wrong answer to some version of it.
+ */
+export interface ElementDef {
+  /** Put this element into the world, centred on x. `age` drives anything animated. */
+  place(w: World, x: number, age: number): void;
+  /** Roughly how much room it needs, for layout and camera distance. */
+  width: number;
+  /** How many animation frames it wants. 1 means static. */
   frames: number;
-  note: string;
-  /** Point the camera looks at, in world (three) coordinates. */
-  focus: [number, number, number];
-  /**
-   * Roughly how many world units across the subject is.
-   *
-   * The camera distance is derived from this, so every view frames every subject. Views
-   * used to be absolute positions tuned for one subject, which framed all the others
-   * wrong -- a four-cell sweep of the mine came back with the mine off-screen in all four.
-   */
-  span: number;
+  /** Height of its visual centre, so the camera looks at the right place. */
+  focusY: number;
 }
 
-export const SUBJECTS: Record<string, SubjectDef> = {
-  /** One shell per compass heading, so the yaw mapping is legible from overhead. */
+export const ELEMENTS: Record<string, ElementDef> = {
+  mine: {
+    width: 0.9, frames: 1, focusY: 0.06,
+    place: (w, x) => {
+      w.mines.push({ id: 10 + w.mines.length, ownerId: 99, pos: { x, y: 0 }, timer: MINE_TIMER, armed: false, detonated: false });
+    },
+  },
+  minearmed: {
+    width: 0.9, frames: 1, focusY: 0.06,
+    place: (w, x) => {
+      w.mines.push({ id: 10 + w.mines.length, ownerId: 99, pos: { x, y: 0 }, timer: 0.5, armed: true, detonated: false });
+    },
+  },
+  /** A mine burning its whole fuse, for watching the pulse rate climb. */
+  fuse: {
+    width: 0.9, frames: 90, focusY: 0.06,
+    place: (w, x, age) => {
+      w.mines.push({
+        id: 10 + w.mines.length, ownerId: 99, pos: { x, y: 0 },
+        timer: Math.max(0, MINE_TIMER * (1 - age / 90)), armed: true, detonated: false,
+      });
+    },
+  },
+  tank: {
+    width: 1.4, frames: 1, focusY: 0.3,
+    place: (w, x) => {
+      w.tanks.push({
+        id: 1 + w.tanks.length, kind: w.tanks.length % 2 ? 'brown' : 'player',
+        pos: { x, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+        desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+        aiState: 'idle', aiTimer: 0,
+      });
+    },
+  },
+  /** One shell broadside and one nose-on: a shell's read changes with angle. */
   shell: {
-    focus: [0, 0.35, 0],
-    span: 5,
-    frames: 1,
-    note: 'eight shells, one per heading',
-    world: () => {
-      const w = empty();
+    width: 1.0, frames: 1, focusY: 0.35,
+    place: (w, x) => {
+      w.bullets.push({
+        id: 100 + w.bullets.length, ownerId: 1, type: 'normal', bouncesLeft: 1, alive: true,
+        pos: { x, y: -0.35 }, vel: { x: NORMAL_SPEED, y: 0 },
+      });
+      w.bullets.push({
+        id: 100 + w.bullets.length, ownerId: 1, type: 'normal', bouncesLeft: 1, alive: true,
+        pos: { x, y: 0.55 }, vel: { x: 0, y: NORMAL_SPEED },
+      });
+    },
+  },
+  /** Every heading at once, for checking the yaw mapping from overhead. */
+  shellring: {
+    width: 2.6, frames: 1, focusY: 0.35,
+    place: (w, x) => {
       for (let i = 0; i < 8; i++) {
         const a = (i * 2 * Math.PI) / 8;
         w.bullets.push({
-          id: 100 + i, ownerId: 1, type: 'normal', bouncesLeft: 1, alive: true,
-          pos: { x: (i % 4) * 1.1 - 1.65, y: Math.floor(i / 4) * 1.1 - 0.55 },
+          id: 100 + w.bullets.length, ownerId: 1, type: 'normal', bouncesLeft: 1, alive: true,
+          pos: { x: x + Math.cos(a) * 0.9, y: Math.sin(a) * 0.9 },
           vel: { x: Math.cos(a) * NORMAL_SPEED, y: Math.sin(a) * NORMAL_SPEED },
         });
       }
-      return w;
     },
   },
-  /** Unarmed beside armed, with a tank for scale. */
-  mine: {
-    focus: [0, 0.1, 0],
-    span: 8,
-    frames: 1,
-    note: 'unarmed and armed, tank for scale',
-    world: () => {
-      const w = empty([tank(1, 'player', 2.6, 1.9)]);
-      w.mines.push({ id: 10, ownerId: 1, pos: { x: -1.6, y: 0 }, timer: MINE_TIMER, armed: false, detonated: false });
-      w.mines.push({ id: 11, ownerId: 1, pos: { x: 1.6, y: 0 }, timer: 0.5, armed: true, detonated: false });
-      return w;
-    },
-  },
-  /** One mine, fuse running, so the pulse can be watched at its real rate. */
-  fuse: {
-    focus: [0, 0.06, 0],
-    span: 1.6,
-    frames: 90,
-    note: 'a single mine burning its whole fuse',
-    world: (age) => {
-      const w = empty();
-      const timer = Math.max(0, MINE_TIMER * (1 - age / 90));
-      w.mines.push({ id: 10, ownerId: 1, pos: { x: 0, y: 0 }, timer, armed: true, detonated: false });
-      return w;
-    },
-  },
-  /** A detonation, one frame per tick of its life. */
   blast: {
-    focus: [0, 0.6, 0],
-    span: 9,
-    frames: BLAST_LIFE,
-    note: 'a detonation, one frame per tick',
-    world: (age) => {
-      const w = empty([tank(1, 'player', -2.6, 0.6), tank(2, 'brown', 2.7, -0.4)]);
-      if (age >= 0 && age < BLAST_LIFE) w.blasts.push({ id: 900, ownerId: 1, pos: { x: 0, y: 0 }, age });
-      return w;
+    width: 5.4, frames: BLAST_LIFE, focusY: 0.6,
+    place: (w, x, age) => {
+      if (age >= 0 && age < BLAST_LIFE) w.blasts.push({ id: 900 + w.blasts.length, ownerId: 1, pos: { x, y: 0 }, age });
     },
   },
 };
+
+export interface Composed {
+  world: World;
+  span: number;
+  frames: number;
+  focus: [number, number, number];
+}
+
+/**
+ * Lay the named elements out in a row and build the World that holds them.
+ *
+ * Spacing comes from the elements' own widths, so adding a wide one pushes the others
+ * apart and widens the camera rather than overlapping them.
+ */
+export function compose(names: string[], age: number): Composed {
+  const defs = names.map((n) => ELEMENTS[n]).filter(Boolean);
+  if (defs.length === 0) return compose(['mine'], age);
+  const GAP = 0.6;
+  const total = defs.reduce((a, d) => a + d.width, 0) + GAP * (defs.length - 1);
+  const w = createWorld({ walls: [], spawns: [], lives: 3, tanks: [] });
+  let cursor = -total / 2;
+  for (const d of defs) {
+    d.place(w, cursor + d.width / 2, age);
+    cursor += d.width + GAP;
+  }
+  return {
+    world: w,
+    span: Math.max(total * 1.15, 1.2),
+    frames: Math.max(...defs.map((d) => d.frames)),
+    focus: [0, Math.max(...defs.map((d) => d.focusY)), 0],
+  };
+}
 
 /**
  * Named camera DIRECTIONS, as unit-ish offsets from the subject's focus point.
@@ -123,7 +155,8 @@ export const VIEWS: Record<string, { dir: [number, number, number]; up?: [number
 };
 
 export interface GalleryOptions {
-  subject: string;
+  /** Names of elements to place, left to right. */
+  elements: string[];
   view: string;
   /** Draw the mine dev overlay. */
   reach: boolean;
@@ -156,7 +189,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
 
-  const subject = SUBJECTS[opts.subject] ?? SUBJECTS.mine;
+  const layout = compose(opts.elements, 0);
   const v = VIEWS[opts.view] ?? VIEWS.game;
   const FOV = 38;
   const cam = new THREE.PerspectiveCamera(FOV, w / h, 0.01, 200);
@@ -165,16 +198,16 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   // wide subject is not cropped by a tall viewport or vice versa.
   const vFov = (FOV * Math.PI) / 180;
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (w / h));
-  const dist = (subject.span / 2 / Math.tan(Math.min(vFov, hFov) / 2)) * 1.12;
-  const focus = new THREE.Vector3(...subject.focus);
+  const dist = (layout.span / 2 / Math.tan(Math.min(vFov, hFov) / 2)) * 1.12;
+  const focus = new THREE.Vector3(...layout.focus);
   const dir = new THREE.Vector3(...v.dir).normalize();
   cam.position.copy(focus).addScaledVector(dir, dist);
   cam.lookAt(focus);
   function draw(age: number, alpha: number): void {
     // prev/curr one tick apart, so interpolated quantities animate rather than step.
-    views.sync(subject.world(age - 1), subject.world(age), alpha);
-    debug.sync(subject.world(age));
+    views.sync(compose(opts.elements, age - 1).world, compose(opts.elements, age).world, alpha);
+    debug.sync(compose(opts.elements, age).world);
     renderer.render(scene, cam);
   }
-  return { draw, frames: subject.frames };
+  return { draw, frames: layout.frames };
 }
