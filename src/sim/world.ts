@@ -1,9 +1,9 @@
-import type { Tank, Bullet, Mine, Wall, Spawn, InputState, UnarmedTrigger } from './types';
+import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger } from './types';
 import { angleOf, slewAngle, vsub } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks, resolveWalls } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
-import { dropMine, stepMines } from './mines';
+import { dropMine, stepBlasts, stepMines } from './mines';
 import { stepAi } from './ai';
 import { DT, FIRE_COOLDOWN_TICKS, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE } from './constants';
 import { roundPhase } from './round';
@@ -17,6 +17,8 @@ export interface World {
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
+  /** Detonations in flight. Empty except in the ~10 ticks after a mine goes off. */
+  blasts: Blast[];
   walls: Wall[];
   spawns: Spawn[];
   status: 'playing' | 'win' | 'lose';
@@ -54,6 +56,7 @@ export function createWorld(init: {
     tanks: init.tanks,
     bullets: [],
     mines: [],
+    blasts: [],
     walls: init.walls,
     spawns: init.spawns,
     status: 'playing',
@@ -85,6 +88,7 @@ export function cloneWorld(world: World): World {
     tanks: world.tanks.map(cloneTank),
     bullets: world.bullets.map((b) => ({ ...b, pos: { ...b.pos }, vel: { ...b.vel } })),
     mines: world.mines.map((m) => ({ ...m, pos: { ...m.pos } })),
+    blasts: world.blasts.map((b) => ({ ...b, pos: { ...b.pos } })),
     walls: world.walls.map((w) => ({ ...w, aabb: { ...w.aabb } })),
     spawns: world.spawns.map((s) => ({ ...s, pos: { ...s.pos } })),
   };
@@ -190,6 +194,11 @@ function resetArena(world: World): void {
   for (const w of world.walls) w.destroyed = false;
   world.bullets = [];
   world.mines = [];
+  // A blast outlives the tick it started on, so unlike every other hazard here it can
+  // still be lethal when the next life begins. Leaving it behind respawned the player
+  // inside the explosion that had just killed him and burned every remaining life in
+  // the ~10 ticks before it faded.
+  world.blasts = [];
 }
 
 export function resolveStatus(world: World, events: SimEvent[]): void {
@@ -232,6 +241,7 @@ export function step(world: World, input: InputState): StepResult {
   if (draft.status === 'playing') {
     applyPlayerInput(draft, input, events);
     stepAi(draft, events);
+    stepBlasts(draft, events);
     stepMovement(draft, DT);
     stepBullets(draft, DT, events);
     resolveBulletHits(draft, events);

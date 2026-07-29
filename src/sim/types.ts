@@ -73,6 +73,19 @@ export interface Bullet {
   alive: boolean;
 }
 
+/**
+ * A detonation in progress. Lives for MINE_BLAST_EXPAND_TICKS +
+ * MINE_BLAST_HOLD_TICKS and kills whatever its edge reaches on the way out.
+ */
+export interface Blast {
+  id: number;
+  /** The mine that produced it, for attribution. */
+  ownerId: number;
+  pos: Vec2;
+  /** Ticks since detonation; 0 on the tick it was created. */
+  age: number;
+}
+
 export interface Mine {
   id: number;
   ownerId: number;

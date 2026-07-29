@@ -55,6 +55,18 @@ export const MINE_PROXIMITY_RADIUS = 1.5;
 export const MINE_BLAST_RADIUS = 2.0;
 
 /**
+ * A detonation is not instantaneous: the blast grows to MINE_BLAST_RADIUS,
+ * holds there, then is gone. Very fast, but not instant -- fast enough that you
+ * cannot outrun one you are standing in, slow enough that the edge sweeping
+ * outward is something you can see and, at the fringe, escape.
+ *
+ * 5 ticks each at 60Hz: about 83ms expanding, 83ms at full size, 167ms total.
+ * A tank dies on the tick the edge reaches IT, not the tick the mine went off.
+ */
+export const MINE_BLAST_EXPAND_TICKS = 5;
+export const MINE_BLAST_HOLD_TICKS = 5;
+
+/**
  * How close a shell must pass to set a mine off.
  *
  * The mine's own body, not its blast: a shell should have to HIT the thing, not
