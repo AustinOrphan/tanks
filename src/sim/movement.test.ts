@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { moveTank, separateTanks, circleVsAABB } from './collision';
 import { stepMovement } from './world';
 import { createWorld } from './world';
-import { TANK_RADIUS, TANK_SPEED, DT } from './constants';
+import { TANK_RADIUS, TANK_TURN_RATE, TANK_SPEED, DT } from './constants';
 import { vdist } from './types';
 import type { Tank, Wall, AABB, WallKind } from './types';
 
@@ -58,10 +58,35 @@ describe('moveTank', () => {
     expect(tank.bodyAngle).toBe(1.23);
   });
 
-  it('sets bodyAngle to the movement direction when moving', () => {
-    const tank = makeTank({ desiredMove: { x: 0, y: 1 } });
+  it('SLEWS bodyAngle toward the movement direction rather than snapping to it', () => {
+    // The hull used to be assigned the input direction outright, so a tank changed
+    // facing -- and therefore travel -- within a single tick. One tick may now cover at
+    // most TANK_TURN_RATE * DT radians.
+    const tank = makeTank({ desiredMove: { x: 0, y: 1 } }); // 90 degrees away from facing 0
     moveTank(tank, [], DT);
+    const step = TANK_TURN_RATE * DT;
+    expect(tank.bodyAngle).toBeCloseTo(step, 9);
+    expect(tank.bodyAngle).toBeLessThan(Math.PI / 2); // nowhere near arrived
+  });
+
+  it('arrives at the target angle and then stops there', () => {
+    // Slewing must converge, not orbit: enough ticks and the hull sits exactly on the
+    // requested heading, with no overshoot on the tick it lands.
+    const tank = makeTank({ desiredMove: { x: 0, y: 1 } });
+    const ticks = Math.ceil(Math.PI / 2 / (TANK_TURN_RATE * DT)) + 2;
+    for (let i = 0; i < ticks; i++) moveTank(tank, [], DT);
     expect(tank.bodyAngle).toBeCloseTo(Math.PI / 2, 9);
+  });
+
+  it('pivots in place when asked to reverse, instead of sliding backwards', () => {
+    // Speed scales with alignment, so a 180 covers no ground until the hull has come
+    // round. Without that the tank carves a wide arc through whatever it is fleeing.
+    const tank = makeTank({ desiredMove: { x: -1, y: 0 } }); // facing 0, asked for PI
+    const start = { ...tank.pos };
+    moveTank(tank, [], DT);
+    expect(tank.pos.x).toBeCloseTo(start.x, 9);
+    expect(tank.pos.y).toBeCloseTo(start.y, 9);
+    expect(tank.bodyAngle).not.toBe(0); // but it IS turning
   });
 
   it('drives straight THROUGH a destroyed wall, and is still blocked by the same wall intact', () => {

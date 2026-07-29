@@ -28,12 +28,15 @@ describe('createInputController — movement', () => {
     const target = makeTarget();
     controller = createInputController(target, echoGround);
 
+    // NORTH IS -Y. Render maps world y to three's z and the camera looks from +z, so
+    // increasing y moves down the screen. These assertions used to be the other way
+    // round, which is how w-drives-backwards passed the whole suite.
     key('keydown', 'w');
-    expect(controller.sample().move).toEqual({ x: 0, y: 1 });
+    expect(controller.sample().move).toEqual({ x: 0, y: -1 });
 
     key('keyup', 'w');
     key('keydown', 's');
-    expect(controller.sample().move).toEqual({ x: 0, y: -1 });
+    expect(controller.sample().move).toEqual({ x: 0, y: 1 });
 
     key('keyup', 's');
     key('keydown', 'a');
@@ -49,7 +52,7 @@ describe('createInputController — movement', () => {
     controller = createInputController(target, echoGround);
 
     key('keydown', 'ArrowUp');
-    expect(controller.sample().move).toEqual({ x: 0, y: 1 });
+    expect(controller.sample().move).toEqual({ x: 0, y: -1 });
   });
 
   it('returns an un-normalized diagonal (magnitude ~1.41)', () => {
@@ -59,7 +62,7 @@ describe('createInputController — movement', () => {
     key('keydown', 'w');
     key('keydown', 'd');
     const move = controller.sample().move;
-    expect(move).toEqual({ x: 1, y: 1 });
+    expect(move).toEqual({ x: 1, y: -1 });
     expect(Math.hypot(move.x, move.y)).toBeCloseTo(Math.SQRT2, 6);
   });
 
@@ -160,7 +163,7 @@ describe('createInputController — focus loss', () => {
     controller = createInputController(target, echoGround);
 
     key('keydown', 'w');
-    expect(controller.sample().move).toEqual({ x: 0, y: 1 });
+    expect(controller.sample().move).toEqual({ x: 0, y: -1 });
 
     // Alt-tab: the OS delivers the keyup to the *other* window, so we never
     // see it. Without a blur handler 'w' stays in the set permanently.
@@ -247,7 +250,7 @@ describe('createInputController — HUD control interop', () => {
     window.dispatchEvent(ev);
 
     expect(ev.defaultPrevented).toBe(true);
-    expect(controller.sample().move).toEqual({ x: 0, y: 1 });
+    expect(controller.sample().move).toEqual({ x: 0, y: -1 });
   });
 });
 

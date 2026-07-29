@@ -270,17 +270,20 @@ describe('stepAi', () => {
       expect(w.tanks[0].turretAngle).toBeCloseTo(maxDelta, 10);
     });
 
-    it('grace: AI tanks move, but still cannot fire or lay mines', () => {
+    it('the tick the countdown ends on is fully live for the AI too', () => {
+      // GRACE_TICKS is 0, so the AI gets no window where it may drive but not shoot --
+      // and neither does the player. Asserted on both paths because they gate through
+      // the same helper and have drifted apart before.
+      expect(GRACE_TICKS).toBe(0);
       const grey = tank(1, 'grey', { x: 0, y: 0 });
-      const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS -> would fire and mine if live
-      const w = world([grey, player], { tick: COUNTDOWN_TICKS, roundStartTick: 0 }); // first grace tick
+      const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS -> fires
+      const w = world([grey, player], { tick: COUNTDOWN_TICKS, roundStartTick: 0 });
       stepAi(w, []);
       expect(Math.hypot(w.tanks[0].desiredMove.x, w.tanks[0].desiredMove.y)).toBeGreaterThan(0.9);
-      expect(w.bullets.length).toBe(0);
-      expect(w.mines.length).toBe(0);
+      expect(w.bullets.length).toBe(1);
     });
 
-    it('the last grace tick still suppresses fire; the first live tick fires normally', () => {
+    it('the last suppressed tick still cannot fire; the first live tick fires normally', () => {
       const buildGrey = () => tank(1, 'grey', { x: 0, y: 0 });
       const buildPlayer = () => tank(2, 'player', { x: 5, y: 0 });
 

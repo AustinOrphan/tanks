@@ -1,6 +1,7 @@
 import type { Vec2, AABB, Tank, Wall } from './types';
-import { vadd, vsub, vscale, vlen, vnorm, vdot, angleOf } from './types';
-import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS, TANK_SPEED } from './constants';
+import { vadd, vsub, vscale, vlen, vnorm, vdot, slewAngle, angleOf } from './types';
+import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS, TANK_TURN_RATE,
+  TANK_SPEED } from './constants';
 
 export interface Hit {
   hit: boolean;
@@ -305,8 +306,21 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
   const move = driveDirection(tank.desiredMove);
   const mlen = vlen(tank.desiredMove);
 
-  tank.pos = vadd(tank.pos, vscale(move, TANK_SPEED * dt));
-  if (mlen > 0) tank.bodyAngle = angleOf(move);
+  if (mlen > 0) {
+    // TURN, THEN DRIVE. The hull swings toward the input at a finite rate and the tank
+    // travels along the heading it ACTUALLY has, not the one being asked for. Before
+    // this, bodyAngle was assigned straight from the input and the position stepped in
+    // the input direction, so tapping the opposite key reversed travel within one tick
+    // and the tank never turned -- it teleported its facing.
+    tank.bodyAngle = slewAngle(tank.bodyAngle, angleOf(move), TANK_TURN_RATE * dt);
+    const heading = { x: Math.cos(tank.bodyAngle), y: Math.sin(tank.bodyAngle) };
+    // Speed falls off with how far the hull still has to swing, so a reversal is a pivot
+    // in place rather than a wide slide: full speed facing the way you asked, nothing at
+    // 90 degrees or worse. Without this the tank carves a large arc through whatever it
+    // was trying to back away from.
+    const align = Math.max(0, heading.x * move.x + heading.y * move.y);
+    tank.pos = vadd(tank.pos, vscale(heading, TANK_SPEED * align * dt));
+  }
 
   resolveWalls(tank, walls); // slide along whatever it ran into
 }

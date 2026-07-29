@@ -312,12 +312,22 @@ describe('step() stage ORDER', () => {
     // very first tick moves nobody and every later tick drives on stale intent. Measured
     // over 12 full games, that reordering diverges from the shipped one in all 12.
     const w = makeWorld();
-    const spawn = { ...tankById(w, GREY_ID).pos };
+    const before = tankById(w, GREY_ID);
+    const spawnPos = { ...before.pos };
+    const spawnAngle = before.bodyAngle;
 
     const r = step(w, idleInput);
 
-    // Grey is a roamer: one tick of its own decision must already have displaced it.
-    expect(tankById(r.world, GREY_ID).pos).not.toEqual(spawn);
+    // Grey is a roamer: one tick of its own decision must already have MOVED it or
+    // TURNED it. Position alone is no longer the right probe -- now that the hull slews
+    // and speed falls off with misalignment, a tank asked to drive more than 90 degrees
+    // off its spawn facing pivots on the spot for the first ticks and does not displace
+    // at all. Either half of the pose is enough: with stepMovement first, desiredMove is
+    // still {0,0}, moveTank returns without touching pos OR bodyAngle, and both hold.
+    const after = tankById(r.world, GREY_ID);
+    const moved = after.pos.x !== spawnPos.x || after.pos.y !== spawnPos.y;
+    const turned = after.bodyAngle !== spawnAngle;
+    expect(moved || turned).toBe(true);
   });
 
   it('resolveBulletHits runs BEFORE stepMines: a shell that kills its target is consumed, not left flying', () => {
