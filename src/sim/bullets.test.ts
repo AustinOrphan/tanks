@@ -498,3 +498,91 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     expect(world.bullets[0].alive).toBe(true);
   });
 });
+
+describe('shells destroy each other', () => {
+  const shell = (id: number, owner: number, x: number, y: number, vx: number, vy: number): Bullet => ({
+    id, ownerId: owner, type: 'normal', pos: { x, y }, vel: { x: vx, y: vy }, bouncesLeft: 3, alive: true,
+  });
+  const w = (bullets: Bullet[]) =>
+    ({ ...createWorld({ walls: [], tanks: [], spawns: [], lives: 3 }), bullets });
+
+  it('cancels a head-on pair', () => {
+    // The case a player aims for. At NORMAL_SPEED each shell covers 0.1 per
+    // tick and the pair closes 0.2 -- exactly the bullet diameter -- so an
+    // end-position check would miss about half of these. Start them 0.15 apart
+    // so they pass THROUGH each other within one tick without ever ending
+    // within a diameter.
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 8, 0.15, 0, -6, 0)]);
+    const ev: SimEvent[] = [];
+    stepBullets(world, 1 / 60, ev);
+    expect(world.bullets.filter((b) => b.alive)).toHaveLength(0);
+  });
+
+  it('reports where they met, so the burst is drawn there', () => {
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 8, 0.15, 0, -6, 0)]);
+    const ev: SimEvent[] = [];
+    stepBullets(world, 1 / 60, ev);
+    const boom = ev.filter((e) => e.type === 'explosion');
+    expect(boom).toHaveLength(1);
+    const pos = (boom[0] as Extract<SimEvent, { type: 'explosion' }>).pos;
+    expect(pos.x).toBeGreaterThan(-0.2);
+    expect(pos.x).toBeLessThan(0.35);
+  });
+
+  it('cancels shells from the SAME owner', () => {
+    // Two of your own shells meeting after a ricochet is a real case, and
+    // physically they do not care who fired them.
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 7, 0.15, 0, -6, 0)]);
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets.filter((b) => b.alive)).toHaveLength(0);
+  });
+
+  it('leaves shells that merely pass nearby', () => {
+    // The control. Without it, "cancel everything" would pass every test above.
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 8, 0.15, 2, -6, 0)]);
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets.filter((b) => b.alive)).toHaveLength(2);
+  });
+
+  it('cancels a graze just inside the diameter', () => {
+    // Head-on shells on the SAME line have a closest approach of zero, so they
+    // collide whatever the radius is -- those tests pass even with the radius
+    // shrunk to nothing. Offsetting the paths is what actually exercises it.
+    // 0.15 lateral is inside the 0.2 diameter.
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 8, 0.15, 0.15, -6, 0)]);
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets.filter((b) => b.alive)).toHaveLength(0);
+  });
+
+  it('spares a graze just outside the diameter', () => {
+    // 0.25 lateral is outside the 0.2 diameter: near miss, both survive. The
+    // pair of grazes brackets the radius, so widening or narrowing it fails one.
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 8, 0.15, 0.25, -6, 0)]);
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets.filter((b) => b.alive)).toHaveLength(2);
+  });
+
+  it('leaves a lone shell alone', () => {
+    const world = w([shell(1, 7, 0, 0, 6, 0)]);
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets[0].alive).toBe(true);
+  });
+
+  it('kills exactly the pair that met, not every shell present', () => {
+    const world = w([
+      shell(1, 7, 0, 0, 6, 0),
+      shell(2, 8, 0.15, 0, -6, 0),
+      shell(3, 9, 0, 5, 6, 0), // far away, minding its own business
+    ]);
+    stepBullets(world, 1 / 60, []);
+    const alive = world.bullets.filter((b) => b.alive);
+    expect(alive).toHaveLength(1);
+    expect(alive[0].id).toBe(3);
+  });
+
+  it('cancels a crossing pair, not just a head-on one', () => {
+    const world = w([shell(1, 7, 0, 0, 6, 0), shell(2, 8, 0.1, 0.1, 0, -6)]);
+    stepBullets(world, 1 / 60, []);
+    expect(world.bullets.filter((b) => b.alive)).toHaveLength(0);
+  });
+});
