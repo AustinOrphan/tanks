@@ -1,5 +1,5 @@
 import type { Vec2, AABB, Tank, Wall } from './types';
-import { vadd, vsub, vscale, vlen, vnorm, vdot, slewAngle, angleOf } from './types';
+import { vadd, vsub, vscale, vlen, vnorm, vdot, angleDelta, slewAngle, angleOf } from './types';
 import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS, TANK_TURN_RATE,
   TANK_SPEED } from './constants';
 
@@ -307,19 +307,33 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
   const mlen = vlen(tank.desiredMove);
 
   if (mlen > 0) {
-    // TURN, THEN DRIVE. The hull swings toward the input at a finite rate and the tank
-    // travels along the heading it ACTUALLY has, not the one being asked for. Before
-    // this, bodyAngle was assigned straight from the input and the position stepped in
-    // the input direction, so tapping the opposite key reversed travel within one tick
-    // and the tank never turned -- it teleported its facing.
-    tank.bodyAngle = slewAngle(tank.bodyAngle, angleOf(move), TANK_TURN_RATE * dt);
+    // TURN, THEN DRIVE -- FORWARDS OR BACKWARDS, whichever is the shorter turn.
+    //
+    // Before this the hull was assigned the input direction outright and the position
+    // stepped along that same input, so a tank changed facing AND travel within one
+    // tick: it never turned, it teleported its heading.
+    //
+    // A tank has a reverse gear. Asking for the direction behind it should back it up,
+    // not spin it through 180 first -- that is both slower and not how a tracked vehicle
+    // behaves. So aim at whichever of the requested heading or its opposite the hull is
+    // already closer to, and drive along the hull with the sign that matches.
+    const want = angleOf(move);
+    const reverse = Math.abs(angleDelta(tank.bodyAngle, want)) > Math.PI / 2;
+    // Canonicalised into (-PI, PI]. `want + PI` is otherwise a raw 2PI when reversing
+    // from a heading of PI, and every later reversal adds another turn -- the hull
+    // renders identically but its angle marches off, and tests read as though it had
+    // spun rather than stood still.
+    const aim = angleDelta(0, reverse ? want + Math.PI : want);
+    tank.bodyAngle = slewAngle(tank.bodyAngle, aim, TANK_TURN_RATE * dt);
+
     const heading = { x: Math.cos(tank.bodyAngle), y: Math.sin(tank.bodyAngle) };
-    // Speed falls off with how far the hull still has to swing, so a reversal is a pivot
-    // in place rather than a wide slide: full speed facing the way you asked, nothing at
-    // 90 degrees or worse. Without this the tank carves a large arc through whatever it
-    // was trying to back away from.
-    const align = Math.max(0, heading.x * move.x + heading.y * move.y);
-    tank.pos = vadd(tank.pos, vscale(heading, TANK_SPEED * align * dt));
+    const gear = reverse ? -1 : 1;
+    const travel = { x: heading.x * gear, y: heading.y * gear };
+    // Speed still falls off with how far the hull has left to swing, so a turn costs
+    // ground rather than being free. Picking the nearer of the two headings caps that
+    // error at 90 degrees, so this never fully stalls the way a forced 180 did.
+    const align = Math.max(0, travel.x * move.x + travel.y * move.y);
+    tank.pos = vadd(tank.pos, vscale(travel, TANK_SPEED * align * dt));
   }
 
   resolveWalls(tank, walls); // slide along whatever it ran into
