@@ -86,7 +86,8 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     const group = new THREE.Group();
     const color = TANK_COLORS[kind];
 
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+    // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
+    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.25 });
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(TANK_RADIUS * 2, TANK_BODY_H, TANK_RADIUS * 1.6),
       bodyMat,
@@ -98,7 +99,9 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
 
     const turret = new THREE.Group();
     turret.position.y = TANK_BODY_H + 0.12;
-    const turretMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+    // The turret reads as the same paint, less worn -- smoother, so the highlight that
+    // separates it from the hull below sits on the turret rather than the body.
+    const turretMat = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.35 });
     const dome = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.5), turretMat);
     dome.castShadow = true;
     turret.add(dome);
@@ -130,7 +133,11 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
    */
   function makeBullet(): THREE.Group {
     const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0xf5f0d0, emissive: 0x444422 });
+    // Brass: the one genuinely metallic thing on the board, and small enough that it
+    // needs the specular to be visible at all against the felt.
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xf5f0d0, emissive: 0x444422, roughness: 0.3, metalness: 0.7,
+    });
 
     const body = new THREE.Mesh(new THREE.CylinderGeometry(SHELL_R, SHELL_R, SHELL_BODY_LEN, 14), mat);
     body.rotation.z = Math.PI / 2; // lay the cylinder along local +x
@@ -222,7 +229,7 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
   function makeMine(): THREE.Mesh {
     const mesh = new THREE.Mesh(
       mineGeometry(),
-      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.45, metalness: 0.55 }),
     );
     mesh.castShadow = true;
     scene.add(mesh);
@@ -235,8 +242,11 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     const geo = new THREE.BoxGeometry(w, WALL_H, d);
     const mat =
       wall.kind === 'destructible'
-        ? new THREE.MeshStandardMaterial({ color: 0xb08040, roughness: 0.95 })
-        : new THREE.MeshStandardMaterial({ color: 0x565b66, roughness: 0.85 });
+        // Destructible reads as crate timber: fully matte, no metal at all...
+        ? new THREE.MeshStandardMaterial({ color: 0xb08040, roughness: 1.0, metalness: 0.0 })
+        // ...and solid as poured concrete with rebar sheen. The pair now differ by MATERIAL,
+        // not only by hue, which is the cue that says which one a shell can open.
+        : new THREE.MeshStandardMaterial({ color: 0x565b66, roughness: 0.8, metalness: 0.3 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(
       (wall.aabb.minX + wall.aabb.maxX) / 2,

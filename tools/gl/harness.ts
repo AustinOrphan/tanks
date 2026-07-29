@@ -109,6 +109,67 @@ check('dispose releases the ground geometry and material', () => {
   return disposed === 2 ? null : `expected 2 dispose events, saw ${disposed}`;
 });
 
+check('tone mapping is on, so bright faces roll off instead of clipping', () => {
+  // Every material is untextured flat colour, so the response curve is the only thing
+  // separating a lit face from an unlit one. NoToneMapping clipped the wall tops to a
+  // single value.
+  const ctx = fresh();
+  const tm = ctx.renderer.toneMapping;
+  const exposure = ctx.renderer.toneMappingExposure;
+  ctx.dispose();
+  if (tm !== THREE.ACESFilmicToneMapping) return `toneMapping is ${tm}, not ACESFilmic`;
+  // Above 1 deliberately: the curve darkens the midrange, so 1.0 is dimmer than none.
+  if (exposure <= 1) return `exposure ${exposure} does not compensate for the curve`;
+  return null;
+});
+
+check('there is a fill and a rim light, not just the sun', () => {
+  // With one directional light every surface facing away from it fell to flat ambient.
+  // Counts, not names: three directionals and one ambient, and the two additions must
+  // NOT cast shadows -- a second shadow map is a real cost and a competing shadow.
+  const ctx = fresh();
+  const dirs: THREE.DirectionalLight[] = [];
+  let ambients = 0;
+  ctx.scene.traverse((o) => {
+    if ((o as THREE.DirectionalLight).isDirectionalLight) dirs.push(o as THREE.DirectionalLight);
+    if ((o as THREE.AmbientLight).isAmbientLight) ambients++;
+  });
+  const casters = dirs.filter((d) => d.castShadow).length;
+  ctx.dispose();
+  if (dirs.length !== 3) return `expected 3 directional lights, found ${dirs.length}`;
+  if (ambients !== 1) return `expected 1 ambient light, found ${ambients}`;
+  if (casters !== 1) return `expected exactly 1 shadow caster, found ${casters}`;
+  return null;
+});
+
+check('an environment map exists, so metalness is not just darkness', () => {
+  // MeshStandardMaterial takes a metal's colour from reflections. Without an
+  // environment, everything metallic renders near black -- so the material
+  // differentiation added alongside this would have made things darker, not different.
+  const ctx = fresh();
+  const env = ctx.scene.environment;
+  const intensity = ctx.scene.environmentIntensity;
+  ctx.dispose();
+  if (!env) return 'scene.environment is null';
+  // Low on purpose: the environment feeds reflections, it does not light the scene.
+  if (!(intensity > 0 && intensity < 0.7)) return `environmentIntensity ${intensity} out of range`;
+  return null;
+});
+
+check('dispose detaches every light and clears the environment', () => {
+  // The sun was already disposed; fill, rim and the generated env map are new and are
+  // exactly the kind of thing that leaks silently.
+  const ctx = fresh();
+  ctx.dispose();
+  let lights = 0;
+  ctx.scene.traverse((o) => {
+    if ((o as THREE.Light).isLight) lights++;
+  });
+  if (lights !== 0) return `${lights} light(s) still attached after dispose`;
+  if (ctx.scene.environment !== null) return 'scene.environment still set after dispose';
+  return null;
+});
+
 check('the renderer really has a live GL context', () => {
   // The negative control for every check above: if the context were dead these
   // would pass vacuously on a scene that can never draw.
