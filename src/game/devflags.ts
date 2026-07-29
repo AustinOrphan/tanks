@@ -8,6 +8,8 @@
  * Parsing a string rather than reading `location` directly keeps this a pure
  * function, so the whole table is assertable without a browser.
  */
+import type { UnarmedTrigger } from '../sim/types';
+
 export interface DevFlags {
   /**
    * Draw the player's computed aim: a ray along the turret and a marker where
@@ -40,12 +42,34 @@ export interface DevFlags {
    * degenerate, which is why deriveSeed never returns it.
    */
   seed: number | null;
+  /**
+   * What may detonate an UNARMED mine, for playtesting the "instant bomb".
+   *
+   * `null` leaves the world's own default ('none', the shipped rule). This
+   * chooses what world is CREATED; the sim reads the field off the world, never
+   * a flag, so a replay stays an exact function of its inputs.
+   */
+  mineTrigger: UnarmedTrigger | null;
 }
 
-export const DEV_FLAGS_OFF: DevFlags = { aimRay: false, shellCount: false, seed: null };
+export const DEV_FLAGS_OFF: DevFlags = {
+  aimRay: false,
+  shellCount: false,
+  seed: null,
+  mineTrigger: null,
+};
 
 /** Values that read as "off" when a flag is present but negative. */
 const FALSY = new Set(['0', 'false', 'off', 'no']);
+
+const MINE_TRIGGERS = new Set(['none', 'proximity', 'bullet', 'both']);
+
+/** One of the four UnarmedTrigger values, or null when absent or unrecognised. */
+function asMineTrigger(params: URLSearchParams): UnarmedTrigger | null {
+  const raw = params.get('mineTrigger');
+  if (raw === null) return null;
+  return MINE_TRIGGERS.has(raw) ? (raw as UnarmedTrigger) : null;
+}
 
 /** A positive integer flag, or null when absent, empty, or not one. */
 function asSeed(params: URLSearchParams, name: string): number | null {
@@ -74,5 +98,6 @@ export function parseDevFlags(search: string): DevFlags {
     aimRay: isOn(params, 'aimRay'),
     shellCount: isOn(params, 'shellCount'),
     seed: asSeed(params, 'seed'),
+    mineTrigger: asMineTrigger(params),
   };
 }

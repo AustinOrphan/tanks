@@ -55,6 +55,15 @@ export const MINE_PROXIMITY_RADIUS = 1.5;
 export const MINE_BLAST_RADIUS = 2.0;
 
 /**
+ * How close a shell must pass to set a mine off.
+ *
+ * The mine's own body, not its blast: a shell should have to HIT the thing, not
+ * merely enter the radius it would kill in. MINE_BLAST_RADIUS is 2.0, twenty
+ * times this -- using that here would make every mine a 2-unit shell trap.
+ */
+export const MINE_TRIGGER_RADIUS = 0.35;
+
+/**
  * Does a mine's blast continue past a DESTRUCTIBLE wall on its way to a tank?
  *
  * Solid walls always stop it -- being killed through intact cover is a defect,

@@ -21,7 +21,8 @@ const FAR_PAST = -100000;
 function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: FAR_PAST, ...over,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: FAR_PAST,
+    unarmedTrigger: 'none', ...over,
   };
 }
 
@@ -285,7 +286,7 @@ describe('stepAi', () => {
 
       const lastGrace = world([buildGrey(), buildPlayer()], {
         tick: COUNTDOWN_TICKS + GRACE_TICKS - 1,
-        roundStartTick: 0,
+        roundStartTick: 0, unarmedTrigger: 'none' as const,
       });
       stepAi(lastGrace, []);
       expect(lastGrace.bullets.length).toBe(0);

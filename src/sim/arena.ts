@@ -1,4 +1,4 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger } from './types';
 import { createWorld, type World } from './world';
 import { LIVES } from './constants';
 
@@ -182,6 +182,6 @@ export const CURRENT_ARENA: Arena = ARENA_01;
  * angles forever. The game layer passes a fresh one per session; tests and
  * replays omit it and get the reproducible default.
  */
-export function createArenaWorld(seed?: number): World {
-  return createWorld({ ...loadArena(CURRENT_ARENA), lives: LIVES, seed });
+export function createArenaWorld(seed?: number, unarmedTrigger?: UnarmedTrigger): World {
+  return createWorld({ ...loadArena(CURRENT_ARENA), lives: LIVES, seed, unarmedTrigger });
 }

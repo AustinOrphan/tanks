@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld } from './world'
 import { dropMine, stepMines, detonateMine, blastReaches } from './mines'
+import { resolveBulletHits } from './bullets'
 import type { SimEvent } from './events'
-import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Mine } from './types'
+import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Mine, Bullet, UnarmedTrigger } from './types'
 import {
   MINE_CAP,
   MINE_TIMER,
@@ -367,3 +368,84 @@ describe('mine blast occlusion', () => {
     expect(victim.alive).toBe(false)
   })
 })
+
+describe('what may set off an UNARMED mine', () => {
+  // Population: all four UnarmedTrigger values, against both trigger paths.
+  const shell = (x: number, y: number): Bullet =>
+    ({ id: 90, ownerId: 3, type: 'normal', pos: { x, y }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true }) as Bullet;
+  const laid = (armed: boolean): Mine =>
+    ({ id: 9, ownerId: 1, pos: { x: 0, y: 0 }, timer: 99, armed, detonated: false }) as Mine;
+
+  function shot(policy: UnarmedTrigger, armed: boolean): boolean {
+    const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3, unarmedTrigger: policy });
+    world.mines.push(laid(armed));
+    world.bullets.push(shell(0.1, 0));
+    resolveBulletHits(world, []);
+    return world.mines.length === 0; // detonated mines are filtered out
+  }
+
+  function walked(policy: UnarmedTrigger, armed: boolean): boolean {
+    // The OWNER must be present and standing on the mine, or stepMines arms it
+    // for us: arming fires when the owner is absent, dead, or clear of it, and
+    // an armed mine detonates whatever the policy says. Without this the
+    // fixture proves nothing about the unarmed case.
+    const owner = mkTank({ id: 1, kind: 'brown', pos: { x: 0, y: 0 } });
+    const walker = mkTank({ id: 2, kind: 'brown', pos: { x: 0.2, y: 0 } });
+    const world = createWorld({ walls: [], tanks: [owner, walker], spawns: [], lives: 3, unarmedTrigger: policy });
+    world.mines.push(laid(armed));
+    stepMines(world, 1 / 60, []);
+    return world.mines.length === 0;
+  }
+
+  it('an ARMED mine goes off either way, whatever the policy', () => {
+    // Not configurable: a mine live to a footstep must be live to a shell.
+    for (const p of ['none', 'proximity', 'bullet', 'both'] as UnarmedTrigger[]) {
+      expect(shot(p, true)).toBe(true);
+      expect(walked(p, true)).toBe(true);
+    }
+  });
+
+  it("'none' leaves an unarmed mine inert to both, which is the shipped rule", () => {
+    expect(shot('none', false)).toBe(false);
+    expect(walked('none', false)).toBe(false);
+  });
+
+  it("'bullet' lets a shell set it off but a footstep not", () => {
+    expect(shot('bullet', false)).toBe(true);
+    expect(walked('bullet', false)).toBe(false);
+  });
+
+  it("'proximity' lets a footstep set it off but a shell not", () => {
+    expect(walked('proximity', false)).toBe(true);
+    expect(shot('proximity', false)).toBe(false);
+  });
+
+  it("'both' lets either set it off", () => {
+    expect(shot('both', false)).toBe(true);
+    expect(walked('both', false)).toBe(true);
+  });
+
+  it('a shell must HIT the mine, not merely enter its blast radius', () => {
+    // MINE_BLAST_RADIUS is 2.0; triggering at that range would make every mine
+    // a 2-unit shell trap rather than a thing you have to hit.
+    const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3, unarmedTrigger: 'both' });
+    world.mines.push(laid(true));
+    world.bullets.push(shell(1.0, 0)); // well outside MINE_TRIGGER_RADIUS, inside the blast
+    resolveBulletHits(world, []);
+    expect(world.mines).toHaveLength(1);
+  });
+
+  it('the shell is consumed by the mine it sets off', () => {
+    const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3, unarmedTrigger: 'both' });
+    world.mines.push(laid(true));
+    const b = shell(0.1, 0);
+    world.bullets.push(b);
+    resolveBulletHits(world, []);
+    expect(b.alive).toBe(false);
+  });
+
+  it('defaults to the shipped rule when the world does not say', () => {
+    const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 });
+    expect(world.unarmedTrigger).toBe('none');
+  });
+});

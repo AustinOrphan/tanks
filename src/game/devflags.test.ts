@@ -76,6 +76,25 @@ describe('parseDevFlags: seed', () => {
   });
 
   it('does not disturb the boolean flags', () => {
-    expect(parseDevFlags('?dev=1&seed=7')).toEqual({ aimRay: false, shellCount: false, seed: 7 });
+    expect(parseDevFlags('?dev=1&seed=7')).toEqual({ aimRay: false, shellCount: false, seed: 7, mineTrigger: null });
+  });
+});
+
+describe('parseDevFlags: mineTrigger', () => {
+  it('is null without dev mode', () => {
+    expect(parseDevFlags('?mineTrigger=both').mineTrigger).toBeNull();
+  });
+
+  it('accepts each of the four policies', () => {
+    // Population: all four UnarmedTrigger values.
+    for (const v of ['none', 'proximity', 'bullet', 'both']) {
+      expect(parseDevFlags(`?dev=1&mineTrigger=${v}`).mineTrigger).toBe(v);
+    }
+  });
+
+  it('rejects anything else, rather than guessing', () => {
+    for (const v of ['', 'yes', 'BOTH', '1', 'proximty']) {
+      expect(parseDevFlags(`?dev=1&mineTrigger=${v}`).mineTrigger).toBeNull();
+    }
   });
 });
