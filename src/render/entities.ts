@@ -49,7 +49,7 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-const MINE_Y = 0.06;
+const MINE_Y = 0.09;
 /** How many full bright/dark cycles a mine goes through over its whole fuse. */
 const MINE_PULSE_TURNS = 6;
 const MINE_ARMED_LO = new THREE.Color(0x3a0a0a);
