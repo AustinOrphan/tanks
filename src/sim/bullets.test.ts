@@ -586,3 +586,51 @@ describe('shells destroy each other', () => {
     expect(world.bullets.filter((b) => b.alive)).toHaveLength(0);
   });
 });
+
+describe('shells versus wall kinds', () => {
+  // Shells treat every INTACT wall alike and ignore destroyed ones -- one filter, at the
+  // top of stepBullets. Nothing pinned it: deleting `.filter((w) => !w.destroyed)` left
+  // all 682 tests green while shells ricocheted off walls that no longer exist.
+  //
+  // The three cases below are one fixture with one field changed, so they discriminate
+  // rather than merely pass: same geometry, same shell, only `kind`/`destroyed` differ.
+  function shellAtWall(kind: WallKind, destroyed: boolean) {
+    const world = {
+      tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
+      roundStartTick: 0, unarmedTrigger: 'none' as const, tanks: [], mines: [], blasts: [],
+      walls: [{ id: 1, aabb: { minX: 2, minY: -2, maxX: 3, maxY: 2 }, kind, destroyed }],
+      bullets: [{
+        id: 50, ownerId: 1, type: 'normal' as const,
+        // Travelling +x at the wall, starting clear of it. One tick of travel at
+        // NORMAL_SPEED is 0.1, so it needs several ticks to arrive -- an immediate
+        // reflection would be the fixture, not the behaviour.
+        pos: { x: 0, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true,
+      }],
+    }
+    // Long enough to cross the wall entirely if nothing stops it.
+    for (let i = 0; i < 60; i++) stepBullets(world, DT, [])
+    return world.bullets[0]
+  }
+
+  it('is stopped by an intact SOLID wall', () => {
+    const b = shellAtWall('solid', false)
+    expect(b.pos.x).toBeLessThan(2) // never reached the far face at x=3
+    expect(b.vel.x).toBeLessThan(0) // turned around rather than passing
+  })
+
+  it('is stopped by an intact DESTRUCTIBLE wall', () => {
+    // The one a kind-sensitive bug would break: a shell must not treat "destructible"
+    // as "already a hole".
+    const b = shellAtWall('destructible', false)
+    expect(b.pos.x).toBeLessThan(2)
+    expect(b.vel.x).toBeLessThan(0)
+  })
+
+  it('passes straight through a DESTROYED destructible wall', () => {
+    // The discriminating case, and the one the missing filter broke. Same wall as
+    // above with destroyed:true -- it must now be as if it were not there.
+    const b = shellAtWall('destructible', true)
+    expect(b.pos.x).toBeGreaterThan(3) // clean through the far face
+    expect(b.vel.x).toBeGreaterThan(0) // never deflected
+  })
+})
