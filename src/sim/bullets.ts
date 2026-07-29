@@ -46,8 +46,11 @@ export function spawnBullet(
 
 export function stepBullets(world: World, dt: number, events: SimEvent[]): void {
   const wallAABBs = world.walls.filter((w) => !w.destroyed).map((w) => w.aabb)
+  // Where each shell started this tick, for the shell-vs-shell pass below.
+  const from = new Map<number, Vec2>()
   for (const b of world.bullets) {
     if (!b.alive) continue
+    from.set(b.id, { x: b.pos.x, y: b.pos.y })
     const speed = vlen(b.vel)
     const consumedBefore = bulletConfig[b.type].bounces - b.bouncesLeft
     const to = vadd(b.pos, vscale(b.vel, dt))
@@ -67,6 +70,66 @@ export function stepBullets(world: World, dt: number, events: SimEvent[]): void 
     // firing for the rest of the game.
     if (!Number.isFinite(b.vel.x) || !Number.isFinite(b.vel.y) || vlen(b.vel) === 0) {
       b.alive = false
+    }
+  }
+  resolveShellCollisions(world, from, events)
+}
+
+/** Closest approach of two points moving linearly over one tick, in [0,1]. */
+function closestApproach(a0: Vec2, a1: Vec2, b0: Vec2, b1: Vec2): number {
+  const px = a0.x - b0.x
+  const py = a0.y - b0.y
+  const vx = a1.x - a0.x - (b1.x - b0.x)
+  const vy = a1.y - a0.y - (b1.y - b0.y)
+  const vv = vx * vx + vy * vy
+  // Parallel or both stationary relative to each other: the gap never changes.
+  let t = vv === 0 ? 0 : -(px * vx + py * vy) / vv
+  t = t < 0 ? 0 : t > 1 ? 1 : t
+  const dx = px + vx * t
+  const dy = py + vy * t
+  return Math.hypot(dx, dy)
+}
+
+/**
+ * Shells that meet destroy each other.
+ *
+ * SWEPT rather than a check on end positions. Be clear about why, because the
+ * obvious justification is wrong: at NORMAL_SPEED (6) a shell covers 0.1 per
+ * tick, so a closing pair covers 0.2 -- EXACTLY the bullet diameter -- which
+ * means any pair that crosses also ends within a diameter. Tunnelling is
+ * impossible at current speeds, and a naive end-position check would behave
+ * identically. No test here distinguishes the two, and a mutation swapping the
+ * swept test for the naive one SURVIVES.
+ *
+ * It is written swept anyway because the equivalence is a coincidence of one
+ * constant: raise NORMAL_SPEED past 6 and shells begin passing through each
+ * other silently, with nothing to catch it. This costs a few lines and removes
+ * that trap.
+ *
+ * The path is treated as the straight segment from where the shell started to
+ * where it ended. A shell that ricocheted mid-tick actually travelled a bent
+ * path, so a collision very close to a wall can be missed or, less often,
+ * reported a fraction early. Sub-tick exactness here is not worth the
+ * complexity: the visible outcome is the same pair of shells cancelling.
+ */
+function resolveShellCollisions(world: World, from: Map<number, Vec2>, events: SimEvent[]): void {
+  const live = world.bullets.filter((b) => b.alive && from.has(b.id))
+  for (let i = 0; i < live.length; i++) {
+    const a = live[i]
+    if (!a.alive) continue
+    for (let j = i + 1; j < live.length; j++) {
+      const b = live[j]
+      if (!b.alive) continue
+      const gap = closestApproach(from.get(a.id)!, a.pos, from.get(b.id)!, b.pos)
+      if (gap > BULLET_RADIUS * 2) continue
+      a.alive = false
+      b.alive = false
+      // Where they met, near enough: particles burst at exactly this point.
+      events.push({
+        type: 'explosion',
+        pos: { x: (a.pos.x + b.pos.x) / 2, y: (a.pos.y + b.pos.y) / 2 },
+      })
+      break
     }
   }
 }
