@@ -101,8 +101,13 @@ export const LIVES = 3;
 //     maneuvering room before the first shot.
 // COUNTDOWN_TICKS = 180 ticks = 3s at 60Hz (TICK_HZ).
 export const COUNTDOWN_TICKS = 180;
-// GRACE_TICKS = 120 ticks = 2s at 60Hz (TICK_HZ).
-export const GRACE_TICKS = 120;
+// GRACE_TICKS is 0: the grace phase is OFF.
+//
+// It existed so a respawned player was not shot the instant a life began, but it cost
+// two seconds of standing still unable to fire, on every death, with nothing on screen
+// explaining why. The phase machinery and its tests stay -- roundPhase still returns
+// 'grace' whenever this is positive -- so restoring it is this one number.
+export const GRACE_TICKS = 0;
 
 // ---- Collision sweep (reflectSweep) ----
 export const SWEEP_EPS = 1e-7;
@@ -219,6 +224,20 @@ export const BANK_PREFER_TICKS = 120;
 // 8.0 rad/s ~= 458 deg/s at 60Hz -- responsive but not instant for the player; a full
 // 180-degree reversal takes ~0.39s (pi / 8.0).
 export const PLAYER_TURRET_TURN_RATE = 8.0;
+
+/**
+ * How fast a hull can swing to face where it is being driven, in radians/second.
+ *
+ * The tank used to snap: the body angle was assigned straight from the input direction,
+ * so tapping the opposite key reversed travel within one tick. It now slews, and drives
+ * along the hull it actually has rather than the one it wants -- so a turn is an arc and
+ * a reversal is a pivot.
+ *
+ * Below PLAYER_TURRET_TURN_RATE on purpose. The turret is the precision instrument and
+ * must stay quicker than the thing carrying it; a hull that outturned its own gun would
+ * make aiming while moving feel like fighting the tank.
+ */
+export const TANK_TURN_RATE = 5.0;
 // 2.5 rad/s ~= 143 deg/s at 60Hz -- ~1.26s to swing a full 180 degrees (pi / 2.5).
 // THIS IS A PRIMARY DIFFICULTY KNOB alongside AI_AIM_SPREAD: unlike aim spread (which
 // affects accuracy), this affects how long an enemy visibly telegraphs its aim before

@@ -16,6 +16,21 @@ export type RoundPhase = 'countdown' | 'grace' | 'live';
  * type is imported from world.ts here, which is erased at compile time, so there is no
  * runtime circularity.
  */
+/**
+ * The phase formula itself, independent of the shipped tick counts.
+ *
+ * Split out because GRACE_TICKS is currently 0, which makes the grace phase unreachable
+ * through roundPhase -- and a test for a phase that cannot occur is either deleted
+ * coverage or a vacuous pass. This lets the BOUNDARY MATHS stay pinned at any spans,
+ * including the positive-grace configuration the constant can be restored to, while a
+ * separate test pins what the shipped constants actually produce.
+ */
+export function phaseAt(elapsed: number, countdownTicks: number, graceTicks: number): RoundPhase {
+  if (elapsed < countdownTicks) return 'countdown';
+  if (elapsed < countdownTicks + graceTicks) return 'grace';
+  return 'live';
+}
+
 export function roundPhase(world: World): RoundPhase {
   // `roundStartTick` is the tick number the round's FIRST simulated tick will
   // carry, not the tick the reset happened on. step() increments `tick` before
@@ -24,9 +39,7 @@ export function roundPhase(world: World): RoundPhase {
   // COUNTDOWN_TICKS of 180. See resetArena and createWorld, which both anchor
   // to tick + 1.
   const elapsed = world.tick - world.roundStartTick;
-  if (elapsed < COUNTDOWN_TICKS) return 'countdown';
-  if (elapsed < COUNTDOWN_TICKS + GRACE_TICKS) return 'grace';
-  return 'live';
+  return phaseAt(elapsed, COUNTDOWN_TICKS, GRACE_TICKS);
 }
 
 /**
@@ -36,9 +49,20 @@ export function roundPhase(world: World): RoundPhase {
  * the number restarts at each boundary -- 3,2,1 through countdown, then 2,1
  * through grace -- which is what makes the two phases legible as two things.
  */
+/**
+ * Ticks remaining in the current phase, at arbitrary spans.
+ *
+ * The counterpart to phaseAt, and split out for the same reason: with GRACE_TICKS at 0
+ * the grace leg of this countdown is unreachable through roundPhaseTicksLeft, so a test
+ * for it would be vacuous. Restoring the constant must not land on untested code.
+ */
+export function ticksLeftAt(elapsed: number, countdownTicks: number, graceTicks: number): number {
+  if (elapsed < countdownTicks) return countdownTicks - elapsed;
+  if (elapsed < countdownTicks + graceTicks) return countdownTicks + graceTicks - elapsed;
+  return 0;
+}
+
 export function roundPhaseTicksLeft(world: World): number {
   const elapsed = world.tick - world.roundStartTick;
-  if (elapsed < COUNTDOWN_TICKS) return COUNTDOWN_TICKS - elapsed;
-  if (elapsed < COUNTDOWN_TICKS + GRACE_TICKS) return COUNTDOWN_TICKS + GRACE_TICKS - elapsed;
-  return 0;
+  return ticksLeftAt(elapsed, COUNTDOWN_TICKS, GRACE_TICKS);
 }

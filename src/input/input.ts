@@ -109,8 +109,12 @@ export function createInputController(
     let y = 0;
     if (keys.has('a') || keys.has('arrowleft')) x -= 1;
     if (keys.has('d') || keys.has('arrowright')) x += 1;
-    if (keys.has('w') || keys.has('arrowup')) y += 1;
-    if (keys.has('s') || keys.has('arrowdown')) y -= 1;
+    // The sim's +y is SOUTH on screen: render maps world y to three's z, and the camera
+    // sits at +z looking back, so growing y walks toward the viewer -- down the screen.
+    // W therefore has to DECREASE y. It did the opposite, and w drove the tank backwards;
+    // measured before the fix, holding w moved the player 65px DOWN a 600px viewport.
+    if (keys.has('w') || keys.has('arrowup')) y -= 1;
+    if (keys.has('s') || keys.has('arrowdown')) y += 1;
     return { x, y };
   }
 

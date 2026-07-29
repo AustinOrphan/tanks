@@ -264,26 +264,30 @@ describe('round phases (player path via applyPlayerInput)', () => {
     expect(player.turretAngle).toBeCloseTo(Math.PI - maxDelta, 10);
   });
 
-  it('grace: movement is allowed, but fire and mines are still suppressed', () => {
+  it('the tick countdown ends on is fully live: it moves, fires AND mines', () => {
+    // GRACE_TICKS is 0, so there is no longer a window where you may drive but not
+    // shoot. This is the assertion that fails if grace is switched back on without
+    // anyone deciding to -- the old version of this test asserted the opposite.
+    expect(GRACE_TICKS).toBe(0);
     const w = freshWorld();
-    // roundStartTick is 1 (the first tick step() will simulate), so the first
-    // grace tick is COUNTDOWN_TICKS + 1, not COUNTDOWN_TICKS.
-    w.tick = COUNTDOWN_TICKS + 1; // first grace tick
+    // roundStartTick is 1 (the first tick step() will simulate), so the first tick
+    // after the countdown is COUNTDOWN_TICKS + 1, not COUNTDOWN_TICKS.
+    w.tick = COUNTDOWN_TICKS + 1;
     const player = w.tanks[0];
     applyPlayerInput(w, { move: { x: 1, y: 0 }, aim: fireInput.aim, fire: true, mine: true }, []);
     expect(player.desiredMove).toEqual({ x: 1, y: 0 });
-    expect(w.bullets.length).toBe(0);
-    expect(w.mines.length).toBe(0);
+    expect(w.bullets.length).toBe(1);
+    expect(w.mines.length).toBe(1);
   });
 
-  it('boundary: the last grace tick still suppresses fire; the first live tick fires normally', () => {
-    const lastGrace = freshWorld();
-    lastGrace.tick = COUNTDOWN_TICKS + GRACE_TICKS; // elapsed = last grace tick
-    applyPlayerInput(lastGrace, fireInput, []);
-    expect(lastGrace.bullets.length).toBe(0);
+  it('boundary: the last countdown tick suppresses fire; the very next tick fires', () => {
+    const lastCountdown = freshWorld();
+    lastCountdown.tick = COUNTDOWN_TICKS; // elapsed = COUNTDOWN_TICKS - 1, still counting
+    applyPlayerInput(lastCountdown, fireInput, []);
+    expect(lastCountdown.bullets.length).toBe(0);
 
     const firstLive = freshWorld();
-    firstLive.tick = COUNTDOWN_TICKS + GRACE_TICKS + 1;
+    firstLive.tick = COUNTDOWN_TICKS + 1;
     applyPlayerInput(firstLive, fireInput, []);
     expect(firstLive.bullets.length).toBe(1);
   });

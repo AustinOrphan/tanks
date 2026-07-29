@@ -159,6 +159,20 @@ export function fromAngle(r: number): Vec2 {
 // (`> pi` / `< -pi`), so a raw delta of exactly +pi or -pi is left unchanged. Which
 // value that raw delta comes out to depends on the sign of (target - current), so the
 // resolved direction is arbitrary but deterministic and stable call-to-call.
+/**
+ * Shortest signed angle from `current` to `target`, in (-PI, PI].
+ *
+ * Used to decide whether a hull should drive forwards or reverse: if the requested
+ * heading is more than a quarter turn away, its opposite is nearer.
+ */
+export function angleDelta(current: number, target: number): number {
+  const TWO_PI = Math.PI * 2;
+  let delta = (target - current) % TWO_PI;
+  if (delta > Math.PI) delta -= TWO_PI;
+  if (delta < -Math.PI) delta += TWO_PI;
+  return delta;
+}
+
 export function slewAngle(current: number, target: number, maxDelta: number): number {
   const TWO_PI = Math.PI * 2;
   // NaN sink: without this, `Math.abs(NaN) <= maxDelta` is false and the fall-

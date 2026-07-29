@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { moveTank, separateTanks, circleVsAABB } from './collision';
 import { stepMovement } from './world';
 import { createWorld } from './world';
-import { TANK_RADIUS, TANK_SPEED, DT } from './constants';
+import { TANK_RADIUS, TANK_TURN_RATE, TANK_SPEED, DT } from './constants';
 import { vdist } from './types';
 import type { Tank, Wall, AABB, WallKind } from './types';
 
@@ -58,10 +58,58 @@ describe('moveTank', () => {
     expect(tank.bodyAngle).toBe(1.23);
   });
 
-  it('sets bodyAngle to the movement direction when moving', () => {
-    const tank = makeTank({ desiredMove: { x: 0, y: 1 } });
+  it('SLEWS bodyAngle toward the movement direction rather than snapping to it', () => {
+    // The hull used to be assigned the input direction outright, so a tank changed
+    // facing -- and therefore travel -- within a single tick. One tick may now cover at
+    // most TANK_TURN_RATE * DT radians.
+    const tank = makeTank({ desiredMove: { x: 0, y: 1 } }); // 90 degrees away from facing 0
     moveTank(tank, [], DT);
+    const step = TANK_TURN_RATE * DT;
+    expect(tank.bodyAngle).toBeCloseTo(step, 9);
+    expect(tank.bodyAngle).toBeLessThan(Math.PI / 2); // nowhere near arrived
+  });
+
+  it('arrives at the target angle and then stops there', () => {
+    // Slewing must converge, not orbit: enough ticks and the hull sits exactly on the
+    // requested heading, with no overshoot on the tick it lands.
+    const tank = makeTank({ desiredMove: { x: 0, y: 1 } });
+    const ticks = Math.ceil(Math.PI / 2 / (TANK_TURN_RATE * DT)) + 2;
+    for (let i = 0; i < ticks; i++) moveTank(tank, [], DT);
     expect(tank.bodyAngle).toBeCloseTo(Math.PI / 2, 9);
+  });
+
+  it('REVERSES rather than turning around when the input is behind it', () => {
+    // A tank has a reverse gear. Asked for the direction it is facing away from, it
+    // should back up at once -- not spin through 180 first, which is slower and not how
+    // a tracked vehicle behaves.
+    const tank = makeTank({ desiredMove: { x: -1, y: 0 } }); // facing 0 (+x), asked for -x
+    const start = { ...tank.pos };
+    moveTank(tank, [], DT);
+    expect(tank.pos.x).toBeLessThan(start.x); // moving the way it was ASKED...
+    expect(tank.bodyAngle).toBeCloseTo(0, 6); // ...while still FACING the other way
+  });
+
+  it('drives forward when the input is ahead, with the hull unchanged', () => {
+    // The discriminating partner to the case above: same fixture, opposite input. If
+    // the gear choice were stuck either way, one of these two fails.
+    const tank = makeTank({ desiredMove: { x: 1, y: 0 } });
+    const start = { ...tank.pos };
+    moveTank(tank, [], DT);
+    expect(tank.pos.x).toBeGreaterThan(start.x);
+    expect(tank.bodyAngle).toBeCloseTo(0, 6);
+  });
+
+  it('changes gear at the quarter turn, not before or after', () => {
+    // Just inside a quarter turn is still forward; just past it is cheaper in reverse.
+    // Straddling the boundary pins WHERE it flips, which a probe at 45 and 180 does not.
+    const eps = 0.02;
+    const fwd = makeTank({ desiredMove: { x: Math.cos(Math.PI / 2 - eps), y: Math.sin(Math.PI / 2 - eps) } });
+    moveTank(fwd, [], DT);
+    expect(fwd.bodyAngle).toBeGreaterThan(0); // turning toward the input itself
+
+    const rev = makeTank({ desiredMove: { x: Math.cos(Math.PI / 2 + eps), y: Math.sin(Math.PI / 2 + eps) } });
+    moveTank(rev, [], DT);
+    expect(rev.bodyAngle).toBeLessThan(0); // turning toward its OPPOSITE instead
   });
 
   it('drives straight THROUGH a destroyed wall, and is still blocked by the same wall intact', () => {
