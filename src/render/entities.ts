@@ -32,6 +32,18 @@ const BLAST_Y = 0.2;
  * left to happen in and the blast vanishes instantly.
  */
 const BLAST_LINGER_TICKS = 2;
+/**
+ * Vertical squash of the fireball, as a fraction of its radius.
+ *
+ * A charge going off ON the ground vents sideways -- it cannot dig down, so it spreads
+ * further than it rises. A true sphere reads as a ball hovering on the felt.
+ *
+ * Cosmetic, and safe to be cosmetic: the sim is 2D, so lethality is a circle in the
+ * horizontal plane. Only the y axis -- the one the sim does not have -- is scaled here.
+ * The x/z extent stays exactly blastRadiusAt, so the fireball's footprint is still
+ * precisely what it kills.
+ */
+const BLAST_FLATTEN = 0.7;
 const MINE_Y = 0.06;
 const WALL_H = 1.0;
 
@@ -270,7 +282,8 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
       const from = p ? blastRadiusAt(p.age) : 0;
       const radius = from + (blastRadiusAt(b.age) - from) * alpha;
       mesh.position.set(b.pos.x, BLAST_Y, b.pos.y);
-      mesh.scale.setScalar(Math.max(radius, 1e-4));
+      const r = Math.max(radius, 1e-4);
+      mesh.scale.set(r, r * BLAST_FLATTEN, r);
       // Solid while it expands, then it SITS at full size for a beat before dissipating.
       // Fading straight from the moment it stops growing loses the punch -- the blast
       // wants to arrive, hang, and then go. It still reaches zero exactly at the end of

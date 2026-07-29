@@ -257,6 +257,13 @@ describe('blast views', () => {
     expect(mesh).toBeDefined();
     expect(mesh.scale.x).toBeCloseTo(blastRadiusAt(2), 9);
     expect(mesh.scale.x).toBeLessThan(MINE_BLAST_RADIUS); // it really is mid-growth
+    // THE FOOTPRINT IS THE KILL RADIUS. The fireball is squashed vertically because a
+    // ground burst vents sideways, but that squash must never touch the horizontal axes:
+    // the sim is 2D and this circle is exactly what it kills. Scaling x or z would draw a
+    // blast whose reach lies about itself.
+    expect(mesh.scale.z).toBeCloseTo(mesh.scale.x, 9);
+    expect(mesh.scale.y).toBeLessThan(mesh.scale.x); // flattened, not a sphere
+    expect(mesh.scale.y).toBeGreaterThan(0);
     expect(mesh.position.x).toBeCloseTo(4, 9);
     expect(mesh.position.z).toBeCloseTo(6, 9); // sim y -> three z
     views.dispose();
