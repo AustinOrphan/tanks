@@ -112,14 +112,27 @@ export function createScene(
   sun.position.set(cx - worldWidth * 0.6, span * 1.6, cz - worldHeight * 0.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  // The felt is one large flat receiver, the classic shadow-acne surface.
-  sun.shadow.normalBias = 0.02;
-  sun.shadow.bias = -0.0005;
+  // The felt is one large flat receiver, the classic shadow-acne surface -- but the bias
+  // that fixes acne DETACHES the shadow from its caster if you overdo it, leaving a lit
+  // sliver of felt between a wall and its own shadow. It was overdone: normalBias 0.02
+  // is a full texel at the old shadow-camera size, and it showed at the base of every
+  // wall.
+  //
+  // The fix is texel density first, bias second. The camera was covering 2 * span (40
+  // units) for a board that with its boundary ring is 24 across, so ~40% of the map fell
+  // outside anything that can cast or receive. Fitting it to the framed bounds takes the
+  // texel from 0.0195 to 0.0117 world units, which is what lets the bias come down far
+  // enough to close the gap without acne returning.
+  sun.shadow.normalBias = 0.008;
+  sun.shadow.bias = -0.0001;
   const shadowCam = sun.shadow.camera as THREE.OrthographicCamera;
-  shadowCam.left = -span;
-  shadowCam.right = span;
-  shadowCam.top = span;
-  shadowCam.bottom = -span;
+  // Half-extents of the framed board, plus a margin so a caster right on the boundary
+  // still has its shadow inside the map.
+  const shadowHalf = Math.max(framed.width, framed.height) / 2 + boundary;
+  shadowCam.left = -shadowHalf;
+  shadowCam.right = shadowHalf;
+  shadowCam.top = shadowHalf;
+  shadowCam.bottom = -shadowHalf;
   shadowCam.near = 0.5;
   shadowCam.far = span * 4;
   shadowCam.updateProjectionMatrix();
