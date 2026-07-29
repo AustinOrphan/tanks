@@ -5,6 +5,7 @@ import { lerpAngle, lerpVec2 } from './interpolate';
 import { TANK_RADIUS, BULLET_RADIUS } from '../sim/constants';
 import { angleOf } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
+import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 export interface EntityViews {
@@ -44,7 +45,17 @@ const BLAST_LINGER_TICKS = 2;
  * precisely what it kills.
  */
 const BLAST_FLATTEN = 0.7;
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
 const MINE_Y = 0.06;
+/** How many full bright/dark cycles a mine goes through over its whole fuse. */
+const MINE_PULSE_TURNS = 6;
+const MINE_ARMED_LO = new THREE.Color(0x3a0a0a);
+const MINE_ARMED_HI = new THREE.Color(0xff3322);
+const MINE_IDLE_LO = new THREE.Color(0x000000);
+const MINE_IDLE_HI = new THREE.Color(0x2a0808);
 const WALL_H = 1.0;
 
 function indexById<T extends { id: number }>(arr: T[]): Map<number, T> {
@@ -162,9 +173,49 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     return mesh;
   }
 
+  const MINE_R = 0.28;
+  /** Height of the straight side wall, before the dome starts. */
+  const MINE_BASE_H = 0.05;
+  /**
+   * How far the dome rises above the side wall.
+   *
+   * FLATTENED, not hemispherical: at 0.07 against a 0.28 radius the dome is a quarter as
+   * tall as it is wide. A full hemisphere would read as a ball half-sunk in the felt; a
+   * mine is a squat thing you could drive over.
+   */
+  const MINE_DOME_H = 0.07;
+
+  /**
+   * A mine: a short cylindrical base capped by a low, wide dome.
+   *
+   * The original was a plain cylinder, whose hard rim catches the light as a bright ring
+   * and reads as a disc cut out and laid on the surface. Doming the top is what makes it
+   * read as an object sitting ON the ground.
+   *
+   * Built as a lathe rather than a cylinder plus a sphere section so it is one closed
+   * surface with no seam to misalign, and so the dome's height is a single number.
+   */
+  function mineGeometry(): THREE.LatheGeometry {
+    const half = MINE_Y;
+    const shoulder = -half + MINE_BASE_H; // where the side wall ends and the dome begins
+    const pts: THREE.Vector2[] = [
+      new THREE.Vector2(0, -half), // bottom centre
+      new THREE.Vector2(MINE_R, -half), // out to the rim
+      new THREE.Vector2(MINE_R, shoulder), // up the side
+    ];
+    // Elliptical dome: full radius at the shoulder, narrowing to the apex on the axis.
+    // Wide semi-axis MINE_R, short semi-axis MINE_DOME_H -- the flattening IS that ratio.
+    const DOME_STEPS = 10;
+    for (let i = 1; i <= DOME_STEPS; i++) {
+      const a = (i / DOME_STEPS) * (Math.PI / 2);
+      pts.push(new THREE.Vector2(MINE_R * Math.cos(a), shoulder + MINE_DOME_H * Math.sin(a)));
+    }
+    return new THREE.LatheGeometry(pts, 24);
+  }
+
   function makeMine(): THREE.Mesh {
     const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.28, 0.28, MINE_Y * 2, 12),
+      mineGeometry(),
       new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 }),
     );
     mesh.castShadow = true;
@@ -312,9 +363,24 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
         mineViews.set(m.id, mesh);
       }
       mesh.position.set(m.pos.x, MINE_Y, m.pos.y);
-      // Armed mines glow slightly to read as "hot".
+      // The fuse, made visible: the mine pulses, and pulses FASTER as it runs out.
+      //
+      // Driven entirely by mine.timer, never by a clock. The sim owns the countdown, so
+      // the blink is a projection of world state like everything else here -- two
+      // machines replaying the same world blink in step, and a paused game does not
+      // keep flashing.
+      //
+      // Phase is quadratic in elapsed fuse, which makes the RATE climb linearly: the
+      // mine ticks lazily when dropped and is strobing by the time it goes off.
+      const elapsed = clamp01(1 - m.timer / MINE_TIMER);
+      const pulse = 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(m.armed ? 0x661111 : 0x000000);
+      // Armed stays the loud one. An unarmed mine still burns its fuse -- it detonates on
+      // expiry whether or not it ever armed -- so it pulses too, but dimly, and the
+      // black-vs-red base still says at a glance which one can be set off by walking near.
+      const lo = m.armed ? MINE_ARMED_LO : MINE_IDLE_LO;
+      const hi = m.armed ? MINE_ARMED_HI : MINE_IDLE_HI;
+      mat.emissive.copy(lo).lerp(hi, pulse);
     }
     for (const [id, mesh] of mineViews) {
       if (!seen.has(id)) {

@@ -6,6 +6,7 @@ import { createScene, type SceneContext } from './scene';
 import { createEntityViews, type EntityViews } from './entities';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createAimRay, type AimRay } from './aimray';
+import { createMineDebug, type MineDebug } from './minedebug';
 
 export interface Renderer3D {
   render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
@@ -20,6 +21,10 @@ export interface RendererOptions {
    * IS the aim indicator; this separates a bad mapping from a bad render.
    */
   readonly aimRay?: boolean;
+  /** Dev overlay: ring each mine's trigger and kill radii. */
+  readonly mineReach?: boolean;
+  /** Dev overlay: print each mine's remaining fuse beside it. */
+  readonly mineTimer?: boolean;
 }
 
 export function createRenderer(
@@ -33,6 +38,10 @@ export function createRenderer(
   const entities: EntityViews = createEntityViews(ctx.scene);
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
+  const mineDebug: MineDebug | null =
+    options.mineReach || options.mineTimer
+      ? createMineDebug(ctx.scene, { reach: !!options.mineReach, timer: !!options.mineTimer })
+      : null;
 
   const raycaster = new THREE.Raycaster();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -48,6 +57,7 @@ export function createRenderer(
   ): void {
     entities.sync(prev, curr, alpha);
     aimRay?.sync(curr);
+    mineDebug?.sync(curr);
     particles.spawn(events);
     particles.update(dt);
     ctx.renderer.render(ctx.scene, ctx.camera);
@@ -70,6 +80,7 @@ export function createRenderer(
 
   function dispose(): void {
     aimRay?.dispose();
+    mineDebug?.dispose();
     entities.dispose();
     particles.dispose();
     ctx.dispose();

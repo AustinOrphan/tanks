@@ -4,6 +4,7 @@
 // `instanceof HTMLElement` check and the dispose path hands real elements
 // around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
 import { describe, it, expect } from 'vitest';
+import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
@@ -45,7 +46,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: boolean; shellCount: boolean; seed: number | null; mineTrigger: UnarmedTrigger | null } } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags> } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -227,7 +228,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
       cancel(): void {},
     },
     host,
-    devFlags: opts.devFlags ?? { aimRay: false, shellCount: false, seed: null, mineTrigger: null },
+    devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
   };
 
   return {
@@ -657,7 +658,7 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('drives the shell readout when the flag is on', () => {
-    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: true, seed: null, mineTrigger: null } }));
+    const h = boot(makeDeps({ devFlags: { shellCount: true } }));
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.shellCounts.length).toBeGreaterThan(0);
@@ -665,19 +666,35 @@ describe('startGameWith: dev flags stay off by default', () => {
     h.handle.dispose();
   });
 
-  it('asks the renderer for an aim ray only when that flag is on', () => {
+  it('asks the renderer for every dev overlay OFF by default', () => {
+    // Deliberately an exact-object assertion, not toMatchObject: this is the test that
+    // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
+    // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false });
     off.handle.dispose();
-    const on = boot(makeDeps({ devFlags: { aimRay: true, shellCount: false, seed: null, mineTrigger: null } }));
-    expect(on.rec.rendererArgs[0][4]).toEqual({ aimRay: true });
-    on.handle.dispose();
+  });
+
+  it('asks for each overlay only when its own flag is on', () => {
+    // One at a time, so a wiring that turns them all on together -- or crosses two of
+    // them -- fails rather than passing on the aggregate.
+    const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false });
+    ray.handle.dispose();
+
+    const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false });
+    reach.handle.dispose();
+
+    const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true });
+    timer.handle.dispose();
   });
 });
 
 describe('startGameWith: a pinned dev seed', () => {
   it('uses the pinned seed instead of the clock', () => {
-    const h = boot(makeDeps({ wallMs: 999, devFlags: { aimRay: false, shellCount: false, seed: 4242, mineTrigger: null } }));
+    const h = boot(makeDeps({ wallMs: 999, devFlags: { seed: 4242 } }));
     expect(h.rec.seeds[0]).toBe(4242);
     h.handle.dispose();
   });
@@ -685,7 +702,7 @@ describe('startGameWith: a pinned dev seed', () => {
   it('reuses it on restart, so a replay is the same fight', () => {
     // The whole point: without this a restart re-derives from the clock and
     // the comparison is against a different arena.
-    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: false, seed: 4242, mineTrigger: null } }));
+    const h = boot(makeDeps({ devFlags: { seed: 4242 } }));
     h.setState('win');
     h.hud.startRestart();
     expect(h.rec.seeds).toEqual([4242, 4242]);

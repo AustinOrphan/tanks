@@ -50,7 +50,7 @@ export interface GameDeps {
     worldWidth: number,
     worldHeight: number,
     boundary: number,
-    options?: { aimRay?: boolean },
+    options?: { aimRay?: boolean; mineReach?: boolean; mineTimer?: boolean },
   ) => Renderer3D;
   readonly createInput: (
     target: HTMLElement,
@@ -194,6 +194,8 @@ export function startGameWith(
   // start(). Deferring construction breaks an error path nothing tests.
   const renderer = deps.createRenderer(canvas, width, height, CURRENT_ARENA.cellSize, {
     aimRay: deps.devFlags.aimRay,
+    mineReach: deps.devFlags.mineReach,
+    mineTimer: deps.devFlags.mineTimer,
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
   const audio = deps.createAudio();
