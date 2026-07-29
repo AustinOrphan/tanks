@@ -28,12 +28,33 @@ export interface DevFlags {
    * is the point in the game and a nuisance in a debugger.
    */
   shellCount: boolean;
+  /**
+   * Fix the world seed instead of deriving one from the clock.
+   *
+   * The seed is normally `deriveSeed(Date.now())`, so no two sessions are the
+   * same fight -- which is right for playing and useless for comparing. Pinning
+   * it makes a scripted playthrough reproducible, so a before/after recording
+   * shows the change rather than a different game.
+   *
+   * `null` when absent or unusable. 0 is rejected: the PRNG treats it as
+   * degenerate, which is why deriveSeed never returns it.
+   */
+  seed: number | null;
 }
 
-export const DEV_FLAGS_OFF: DevFlags = { aimRay: false, shellCount: false };
+export const DEV_FLAGS_OFF: DevFlags = { aimRay: false, shellCount: false, seed: null };
 
 /** Values that read as "off" when a flag is present but negative. */
 const FALSY = new Set(['0', 'false', 'off', 'no']);
+
+/** A positive integer flag, or null when absent, empty, or not one. */
+function asSeed(params: URLSearchParams, name: string): number | null {
+  const raw = params.get(name);
+  if (raw === null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
 
 function isOn(params: URLSearchParams, name: string): boolean {
   if (!params.has(name)) return false;
@@ -49,5 +70,9 @@ function isOn(params: URLSearchParams, name: string): boolean {
 export function parseDevFlags(search: string): DevFlags {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   if (!isOn(params, 'dev')) return DEV_FLAGS_OFF;
-  return { aimRay: isOn(params, 'aimRay'), shellCount: isOn(params, 'shellCount') };
+  return {
+    aimRay: isOn(params, 'aimRay'),
+    shellCount: isOn(params, 'shellCount'),
+    seed: asSeed(params, 'seed'),
+  };
 }

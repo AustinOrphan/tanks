@@ -181,7 +181,12 @@ export function startGameWith(
 ): GameHandle {
   const { width, height } = arenaBounds(CURRENT_ARENA);
 
-  let world = deps.createWorld(deriveSeed(deps.wallMs()));
+  // A pinned dev seed makes a scripted playthrough reproducible; without one
+  // every session is a different fight, which is right for playing and useless
+  // for a before/after comparison.
+  const nextSeed = (): number => deps.devFlags.seed ?? deriveSeed(deps.wallMs());
+
+  let world = deps.createWorld(nextSeed());
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
   // try/catch to render a "this browser has no WebGL" page, and that only
@@ -237,7 +242,7 @@ export function startGameWith(
       sm.startPlaying();
     } else {
       // win or lose -> rebuild a fresh arena and re-enter playing
-      world = deps.createWorld(deriveSeed(deps.wallMs()));
+      world = deps.createWorld(nextSeed());
       driver.reset(world);
       refreshStats(world);
       sm.restart();
