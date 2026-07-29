@@ -530,7 +530,10 @@ describe('tank geometry', () => {
     // against a 1.0-diameter circle, so a tank looked like it should fit through gaps
     // that stop it. Asserted against the sim constant, not a literal, so shrinking the
     // hull below its own collider fails rather than merely looking odd.
-    expect(HULL_WIDTH).toBeGreaterThan(TANK_RADIUS * 2 * 0.9);
+    // EQUALITY, not a floor. A floor only catches the hull shrinking below its collider;
+    // a hull drawn WIDER than the circle lies the opposite way -- it looks like it should
+    // be stopped by gaps it slides through -- and would pass a one-sided check silently.
+    expect(HULL_WIDTH).toBeCloseTo(TANK_RADIUS * 2, 9);
     expect(HULL_LEN).toBeGreaterThanOrEqual(TANK_RADIUS * 2 * 0.95);
     // And roughly square in plan, which is what makes a circular collider defensible at
     // all -- a long narrow hull would need a different collider, not a different number.
@@ -545,24 +548,46 @@ describe('tank geometry', () => {
     const w = makeWorld();
     views.sync(w, w, 0);
 
-    // Two of them, one either side, spanning the hull's full width.
-    const boxes: THREE.Mesh[] = [];
+    // Found by NAME. They were BoxGeometry and are extrusions now; keying on the class
+    // meant the whole assertion silently found nothing the moment the shape changed.
+    const tracks: THREE.Mesh[] = [];
     scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.geometry instanceof THREE.BoxGeometry) boxes.push(m);
+      if (o.name === 'track') tracks.push(o as THREE.Mesh);
     });
-    const tracks = boxes.filter(
-      (m) => Math.abs((m.geometry as THREE.BoxGeometry).parameters.depth - TRACK_W) < 1e-9,
-    );
     expect(tracks).toHaveLength(2);
     expect(tracks[0].position.z).toBeCloseTo(-tracks[1].position.z, 9); // symmetric
+    // The tracks run UNDER the hull, so their outer edge sits just inside its width --
+    // never outside it, which would put running gear beyond the collision circle.
     const outer = Math.max(...tracks.map((t) => Math.abs(t.position.z))) + TRACK_W / 2;
-    expect(outer).toBeCloseTo(HULL_WIDTH / 2, 9); // they define the width
+    expect(outer).toBeLessThanOrEqual(HULL_WIDTH / 2 + 1e-9);
+    expect(outer).toBeGreaterThan(HULL_WIDTH / 2 - TRACK_W); // and still near the edge
 
     // Darker than the paint but not near-black: at 0.45 they read as the tank's own
     // shadow at play distance, which is the whole reason TRACK_SHADE exists.
     expect(TRACK_SHADE).toBeGreaterThan(0.55);
     expect(TRACK_SHADE).toBeLessThan(1);
+    views.dispose();
+  });
+
+  it('seats the turret ON the hull rather than sinking it in', () => {
+    // The dome is CENTRED on the turret group's origin. Placing that origin at the hull
+    // top buried 43% of the turret. A little seating is deliberate -- it should look
+    // fitted, not balanced -- but it must be a sliver, not half the turret.
+    const { scene, views } = build();
+    const dome = part(scene, 'turret');
+    const hull = part(scene, 'hull');
+    scene.updateMatrixWorld(true);
+
+    const pts = profile(dome);
+    const domeHalf = (Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y))) / 2;
+    const domeWorld = new THREE.Vector3();
+    dome.getWorldPosition(domeWorld);
+    hull.geometry.computeBoundingBox();
+    const hullTop = hull.geometry.boundingBox!.max.y + hull.position.y;
+
+    const sunk = hullTop - (domeWorld.y - domeHalf);
+    expect(sunk).toBeGreaterThan(0); // seated, not floating above the hull
+    expect(sunk).toBeLessThan(domeHalf * 0.5); // and nowhere near buried
     views.dispose();
   });
 
