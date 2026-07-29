@@ -11,6 +11,10 @@ export default defineConfig({
   base: './',
   test: {
     globals: true,
+    // Vitest stubs CSS imports by default, which makes `import css from './x.css?raw'`
+    // return an EMPTY STRING rather than failing -- so a stylesheet guard written against
+    // it passes vacuously. Processing CSS costs a little startup and makes the text real.
+    css: true,
     environment: 'node',
     // tools/ is included so the gallery runner's argument handling is covered by the
     // normal gate. tools/gl/ has no *.test.ts of its own -- its browser checks run under

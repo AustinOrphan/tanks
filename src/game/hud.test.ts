@@ -313,3 +313,60 @@ describe('hud: dev shell count', () => {
     hud.dispose();
   });
 });
+
+describe('hud: round-start phase feedback', () => {
+  function mount(): { root: HTMLElement; hud: ReturnType<typeof createHud> } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    return { root, hud: createHud(root) };
+  }
+
+  it('shows nothing until it is told to', () => {
+    const { root, hud } = mount();
+    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
+    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    hud.dispose();
+  });
+
+  it('shows the teaching banner when prominent', () => {
+    const { root, hud } = mount();
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: true });
+    const banner = root.querySelector('.hud-banner') as HTMLElement;
+    expect(banner.className).not.toContain('hud-banner--hidden');
+    expect(root.querySelector('.hud-banner-word')?.textContent).toBe('TAKE AIM');
+    expect(root.querySelector('.hud-banner-count')?.textContent).toBe('3');
+    // and not both at once
+    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    hud.dispose();
+  });
+
+  it('shows the quiet chip when not prominent', () => {
+    const { root, hud } = mount();
+    hud.setRoundPhase({ phase: 'grace', secondsLeft: 2, prominent: false });
+    expect(root.querySelector('.hud-phase')?.textContent).toBe('MOVE 2');
+    expect(root.querySelector('.hud-phase')?.className).not.toContain('hud-phase--hidden');
+    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
+    hud.dispose();
+  });
+
+  it('uses the phase word, not a generic countdown', () => {
+    const { root, hud } = mount();
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 1, prominent: false });
+    expect(root.querySelector('.hud-phase')?.textContent).toBe('AIM 1');
+    hud.setRoundPhase({ phase: 'grace', secondsLeft: 1, prominent: false });
+    expect(root.querySelector('.hud-phase')?.textContent).toBe('MOVE 1');
+    hud.dispose();
+  });
+
+  it('hides on null and on live', () => {
+    const { root, hud } = mount();
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: true });
+    hud.setRoundPhase(null);
+    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: false });
+    hud.setRoundPhase({ phase: 'live', secondsLeft: 0, prominent: false });
+    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    hud.dispose();
+  });
+
+});

@@ -28,3 +28,17 @@ export function roundPhase(world: World): RoundPhase {
   if (elapsed < COUNTDOWN_TICKS + GRACE_TICKS) return 'grace';
   return 'live';
 }
+
+/**
+ * Ticks left in the CURRENT phase; 0 once live.
+ *
+ * The HUD counts this down. Phase-relative rather than counting to `live`, so
+ * the number restarts at each boundary -- 3,2,1 through countdown, then 2,1
+ * through grace -- which is what makes the two phases legible as two things.
+ */
+export function roundPhaseTicksLeft(world: World): number {
+  const elapsed = world.tick - world.roundStartTick;
+  if (elapsed < COUNTDOWN_TICKS) return COUNTDOWN_TICKS - elapsed;
+  if (elapsed < COUNTDOWN_TICKS + GRACE_TICKS) return COUNTDOWN_TICKS + GRACE_TICKS - elapsed;
+  return 0;
+}

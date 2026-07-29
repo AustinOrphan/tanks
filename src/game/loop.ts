@@ -10,6 +10,8 @@ import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createGameStateMachine, type GameStateMachine } from './state';
 import { createHud, type Hud } from './hud';
 import { createDriver, type RafScheduler } from './driver';
+import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
+import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, type DevFlags } from './devflags';
 import { SHELL_CAP } from '../sim/constants';
 
@@ -73,6 +75,7 @@ export interface GameDeps {
   readonly wallMs: () => number;
   readonly raf: RafScheduler;
   readonly host: HostWindow;
+  /** Opt-in switches for unshipped work. Off unless the URL says otherwise. */
   /** Opt-in diagnostics. Off unless the URL says otherwise. */
   readonly devFlags: DevFlags;
 }
@@ -212,6 +215,30 @@ export function startGameWith(
     }
   }
 
+  // Rounds restart on every RESPAWN, not just at game start (resetArena moves
+  // roundStartTick), so a player with 3 lives sees the opening phases at least
+  // three times. The banner teaches once per page load; every round after it
+  // gets the quiet chip.
+  let lastRoundStartTick: number | null = null;
+  let roundsSeen = 0;
+  function refreshRoundPhase(w: World): void {
+    if (!deps.devFlags.roundPhaseHud) return;
+    if (w.roundStartTick !== lastRoundStartTick) {
+      lastRoundStartTick = w.roundStartTick;
+      roundsSeen += 1;
+    }
+    const phase = roundPhase(w);
+    if (phase === 'live') {
+      hud.setRoundPhase(null);
+      return;
+    }
+    hud.setRoundPhase({
+      phase,
+      secondsLeft: Math.ceil(roundPhaseTicksLeft(w) / TICK_HZ),
+      prominent: roundsSeen <= 1,
+    });
+  }
+
   const driver = createDriver({
     now: deps.now,
     raf: deps.raf,
@@ -220,13 +247,16 @@ export function startGameWith(
     director,
     stateMachine: sm,
     world,
+    onSimulated(w): void {
+      refreshStats(w);
+      refreshRoundPhase(w);
+    },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
     // CLAUDE.md warns about. Discriminate on kind.
     onFrameEvents(events): void {
       if (isPlayerDeath(events)) hud.signalPlayerDeath();
     },
-    onSimulated: refreshStats,
   });
 
   hud.onMuteToggle(() => {

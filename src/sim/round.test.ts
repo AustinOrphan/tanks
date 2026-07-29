@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { roundPhase } from './round';
-import { createWorld } from './world';
+import { roundPhase, roundPhaseTicksLeft } from './round';
+import { createWorld, type World } from './world';
 import { COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
 
 // Minimal empty world; only `tick` and `roundStartTick` matter for roundPhase().
@@ -49,5 +49,38 @@ describe('roundPhase', () => {
     expect(roundPhase(worldAt(start + COUNTDOWN_TICKS, start))).toBe('grace');
     expect(roundPhase(worldAt(start + COUNTDOWN_TICKS + GRACE_TICKS - 1, start))).toBe('grace');
     expect(roundPhase(worldAt(start + COUNTDOWN_TICKS + GRACE_TICKS, start))).toBe('live');
+  });
+});
+
+describe('roundPhaseTicksLeft', () => {
+  const at = (elapsed: number): World => ({ tick: elapsed, roundStartTick: 0 }) as World;
+
+  it('counts down through countdown, then RESTARTS for grace', () => {
+    // Phase-relative on purpose: the number restarts at the boundary so the two
+    // phases read as two things (3,2,1 then 2,1) rather than one 5s wait.
+    expect(roundPhaseTicksLeft(at(0))).toBe(COUNTDOWN_TICKS);
+    expect(roundPhaseTicksLeft(at(COUNTDOWN_TICKS - 1))).toBe(1);
+    expect(roundPhaseTicksLeft(at(COUNTDOWN_TICKS))).toBe(GRACE_TICKS);
+    expect(roundPhaseTicksLeft(at(COUNTDOWN_TICKS + GRACE_TICKS - 1))).toBe(1);
+  });
+
+  it('is 0 once live, so the HUD has nothing to show', () => {
+    expect(roundPhaseTicksLeft(at(COUNTDOWN_TICKS + GRACE_TICKS))).toBe(0);
+    expect(roundPhaseTicksLeft(at(COUNTDOWN_TICKS + GRACE_TICKS + 500))).toBe(0);
+  });
+
+  it('agrees with roundPhase at every boundary', () => {
+    // Population: the 6 ticks either side of the two boundaries.
+    for (const e of [COUNTDOWN_TICKS - 1, COUNTDOWN_TICKS, COUNTDOWN_TICKS + GRACE_TICKS - 1, COUNTDOWN_TICKS + GRACE_TICKS]) {
+      const live = roundPhase(at(e)) === 'live';
+      expect(roundPhaseTicksLeft(at(e)) === 0).toBe(live);
+    }
+  });
+
+  it('tracks roundStartTick, so a respawn restarts the count', () => {
+    // resetArena sets roundStartTick = tick + 1 on every respawn, not just at
+    // game start, so this must be relative and not absolute.
+    const respawned = { tick: 5000, roundStartTick: 5000 } as World;
+    expect(roundPhaseTicksLeft(respawned)).toBe(COUNTDOWN_TICKS);
   });
 });
