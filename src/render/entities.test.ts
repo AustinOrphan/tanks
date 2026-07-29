@@ -8,6 +8,7 @@ import { createEntityViews } from './entities';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
+import { MINE_TIMER } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
@@ -327,6 +328,123 @@ describe('blast views', () => {
     const gone = makeWorld(); // no blasts
     views.sync(live, gone, 0);
     expect(blastMesh(scene)).toBeUndefined();
+    views.dispose();
+  });
+});
+
+describe('mine views', () => {
+  function withMine(over: Partial<{ timer: number; armed: boolean }>): World {
+    const w = makeWorld();
+    w.mines.push({
+      id: 70, ownerId: 1, pos: { x: 2, y: -3 },
+      timer: over.timer ?? MINE_TIMER, armed: over.armed ?? false, detonated: false,
+    });
+    return w;
+  }
+  const mineMesh = (scene: THREE.Scene): THREE.Mesh =>
+    scene.children.find(
+      (c): c is THREE.Mesh => c instanceof THREE.Mesh && c.geometry instanceof THREE.LatheGeometry,
+    )!;
+
+  it('is a puck capped by a dome that is WIDE and LOW, not a hemisphere', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = withMine({});
+    views.sync(w, w, 0);
+
+    const geo = mineMesh(scene).geometry as THREE.LatheGeometry;
+    expect(geo).toBeDefined();
+    const pts = geo.parameters.points;
+    // Closed on the axis, so the dome has an apex rather than a hole.
+    expect(pts[pts.length - 1].x).toBeCloseTo(0, 9);
+
+    const maxR = Math.max(...pts.map((p) => p.x));
+    const top = Math.max(...pts.map((p) => p.y));
+    const bottom = Math.min(...pts.map((p) => p.y));
+
+    // CURVED ACROSS THE WHOLE TOP. A plain cylinder jumps from full radius to the axis in
+    // one step, and a flat top with a rounded rim only bends near the edge. Requiring
+    // many intermediate radii spread over the dome's height rejects both.
+    const domeStart = pts.filter((p) => p.x > maxR - 1e-9).reduce((m, p) => Math.max(m, p.y), bottom);
+    const dome = pts.filter((p) => p.y > domeStart + 1e-9);
+    expect(dome.length).toBeGreaterThan(5);
+    // Monotonically narrowing as it rises -- an actual dome, not a stack of rims.
+    for (let i = 1; i < dome.length; i++) {
+      expect(dome[i].x).toBeLessThan(dome[i - 1].x);
+      expect(dome[i].y).toBeGreaterThan(dome[i - 1].y);
+    }
+    // FLATTENED is the whole point: the dome must be much wider than it is tall. A
+    // hemisphere would have rise === radius, so this is the assertion that fails if the
+    // dome is ever rounded up into a ball.
+    const rise = top - domeStart;
+    expect(rise).toBeGreaterThan(0);
+    expect(rise).toBeLessThan(maxR / 2);
+
+    // The specified split: a third of the height is straight side wall, the dome is the
+    // other two thirds. Ratios rather than absolutes, so retuning the puck's overall size
+    // does not have to come back here -- but reshaping it does.
+    const totalH = top - bottom;
+    const sideH = domeStart - bottom;
+    expect(sideH / totalH).toBeCloseTo(1 / 3, 2);
+    expect(rise / totalH).toBeCloseTo(2 / 3, 2);
+    views.dispose();
+  });
+
+  it('pulses from the sim timer alone, and faster as the fuse burns down', () => {
+    // THE POINT OF THIS TEST: the blink must be a projection of world state, not a clock.
+    // Same timer in, same emissive out -- otherwise a paused game keeps flashing and two
+    // machines replaying one world disagree.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const mat = () => (mineMesh(scene).material as THREE.MeshStandardMaterial);
+
+    const sample = (timer: number): number => {
+      const w = withMine({ timer, armed: true });
+      views.sync(w, w, 0);
+      return mat().emissive.r;
+    };
+
+    const a = sample(2.0);
+    const b = sample(2.0);
+    expect(b).toBeCloseTo(a, 12); // deterministic: no wall-clock anywhere in it
+
+    // Count how often the pulse turns over across the first and last thirds of the fuse.
+    // Rate, not brightness: a mine that merely got brighter would pass a peak check.
+    const crossings = (from: number, to: number): number => {
+      let n = 0;
+      let prev = sample(from);
+      let rising = false;
+      for (let i = 1; i <= 60; i++) {
+        const t = from + ((to - from) * i) / 60;
+        const v = sample(t);
+        if (i > 1 && (v > prev) !== rising) n++;
+        rising = v > prev;
+        prev = v;
+      }
+      return n;
+    };
+    const early = crossings(MINE_TIMER, MINE_TIMER * (2 / 3));
+    const late = crossings(MINE_TIMER / 3, 0);
+    expect(late).toBeGreaterThan(early); // accelerating, not a constant blink
+    views.dispose();
+  });
+
+  it('keeps armed and unarmed distinguishable at the same point in the fuse', () => {
+    // The pulse encodes the fuse; the base colour still has to say whether walking near
+    // it will set it off. Sampled at one timer so only `armed` differs.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const mat = () => (mineMesh(scene).material as THREE.MeshStandardMaterial);
+
+    const idle = withMine({ timer: 1.0, armed: false });
+    views.sync(idle, idle, 0);
+    const dim = mat().emissive.r;
+
+    const live = withMine({ timer: 1.0, armed: true });
+    views.sync(live, live, 0);
+    const hot = mat().emissive.r;
+
+    expect(hot).toBeGreaterThan(dim);
     views.dispose();
   });
 });

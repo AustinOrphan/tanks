@@ -50,6 +50,20 @@ export interface DevFlags {
    * a flag, so a replay stays an exact function of its inputs.
    */
   mineTrigger: UnarmedTrigger | null;
+
+  /**
+   * Ring a mine's proximity-trigger radius and its kill radius.
+   *
+   * A mine is a 0.28 puck that kills at 2.5, so it shows about one part in eighty of the
+   * ground it covers. That is deliberate -- a mine you can read perfectly is a much
+   * weaker weapon -- which is exactly why the numbers need playtesting rather than
+   * shipping. The two rings are separate because triggering and dying are separate
+   * radii, and the gap between them is the counter-intuitive part.
+   */
+  mineReach: boolean;
+
+  /** Show each mine's remaining fuse, in seconds, beside it. */
+  mineTimer: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -57,6 +71,8 @@ export const DEV_FLAGS_OFF: DevFlags = {
   shellCount: false,
   seed: null,
   mineTrigger: null,
+  mineReach: false,
+  mineTimer: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -99,5 +115,7 @@ export function parseDevFlags(search: string): DevFlags {
     shellCount: isOn(params, 'shellCount'),
     seed: asSeed(params, 'seed'),
     mineTrigger: asMineTrigger(params),
+    mineReach: isOn(params, 'mineReach'),
+    mineTimer: isOn(params, 'mineTimer'),
   };
 }

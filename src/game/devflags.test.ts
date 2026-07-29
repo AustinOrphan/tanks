@@ -76,7 +76,7 @@ describe('parseDevFlags: seed', () => {
   });
 
   it('does not disturb the boolean flags', () => {
-    expect(parseDevFlags('?dev=1&seed=7')).toEqual({ aimRay: false, shellCount: false, seed: 7, mineTrigger: null });
+    expect(parseDevFlags('?dev=1&seed=7')).toEqual({ ...DEV_FLAGS_OFF, seed: 7 });
   });
 });
 

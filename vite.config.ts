@@ -12,6 +12,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // tools/ is included so the gallery runner's argument handling is covered by the
+    // normal gate. tools/gl/ has no *.test.ts of its own -- its browser checks run under
+    // "npm run test:gl", which vitest cannot host because they need a GL context.
+    include: ['src/**/*.test.ts', 'tools/**/*.test.ts'],
   },
 });
