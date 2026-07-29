@@ -9,7 +9,14 @@ projected from it. Spec and plan live in `docs/superpowers/`.
 npm test     # tsc --noEmit && vitest run
 npm run build # tsc --noEmit && vite build
 npm run dev   # vite
+npm run gallery -- --elements mine,tank,shell --view low   # look at any element
 ```
+
+`npm run gallery` renders game elements as stills, animations or labelled sweep grids,
+through the REAL render modules against a REAL world. Views are directions and each
+element declares its own span, so any view frames any scene. `--sweep A,B --values
+"1|2; 3|4"` patches constants in `src/` between passes and restores them in a `finally`;
+it refuses to start if the target file is already dirty. See `tools/gallery/`.
 
 CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a bundle-portability
 assertion on Node 20.19.0 — the declared floor — and 22. `engines.node` is
@@ -63,6 +70,17 @@ that would break it. Watch for tautologies against the fixture: asserting `angle
 fixture whose angle is 0 passes even when the field is hardcoded. Decorative assertions are
 worse than none — they advertise coverage that does not exist.
 
+**Files no test reads are where defects live forever.** `hud.css` lost a closing brace in
+a merge and silently swallowed every rule after it -- the entire losing-a-life vignette was
+dead on `main` for as long as the feature existed, and a second merge did the identical
+thing to the round banner. Neither `tsc` nor any test could see it, because CSS is not
+typechecked and nothing read it. `hud.css.test.ts` now checks brace balance, checks no
+block opens inside a plain rule (at-rule aware), and checks the selectors features depend
+on are still present. It needs `test.css: true` in `vite.config.ts`: vitest stubs CSS
+imports, so `?raw` returns an **empty string** and every assertion passes vacuously --
+which is why that guard asserts it loaded something first. Any new stylesheet wants the
+same treatment.
+
 **A guard is worth what its own tests prove.** The purity guard reported green for four of
 five known-bad imports until it was given a meta-test. Guards need negative controls.
 
@@ -92,6 +110,10 @@ The deciding reason is CI. Code on `main` is exercised on every run; a branch is
 only when someone updates it. `round-ux` passes today, and nobody would learn the day it
 stopped.
 
+The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
+`roundPhaseHud`. `parseDevFlags` derives the boolean list from `DEV_FLAGS_OFF` in its
+tests, so adding one cannot quietly shrink what they cover.
+
 Two rules follow:
 
 **Nothing is on unless `dev` is present.** `?aimRay=1` alone does nothing; it needs
@@ -106,6 +128,27 @@ Flags are **build-time-free but not free**: they are parsed at runtime, so they 
 reach `src/sim/`. That core is pure and deterministic, and a replay has to stay an exact
 function of its inputs — a runtime-varying flag there would break it. `MINE_BLAST_THROUGH_DESTRUCTIBLE`
 is a *constant* for exactly this reason.
+
+## Numbers that are feel, not measurement
+
+Some constants were chosen by eye and are cheap to change; the tests are written against
+the constant rather than a hardcoded result, so retuning does not mean rewriting tests.
+
+- `TANK_TURN_RATE` (5.0 rad/s) -- how fast the hull swings. Modelled on Wii Play: Tanks!
+  from recollection, **not measured against it**. Must stay below
+  `PLAYER_TURRET_TURN_RATE` (8.0): a hull that outturns its own gun makes aiming while
+  moving feel like fighting the tank.
+- `MINE_BLAST_EXPAND_TICKS` / `MINE_BLAST_HOLD_TICKS` (5/5) -- the blast ramp. **Measured**
+  to be a feel change, not a balance one: at `TANK_SPEED` 3.0 a tank covers 0.25 units
+  while the blast expands, 10% of the 2.5 kill reach. 60 seeded games, 25 detonations,
+  7 tanks in reach, 0 escapes either with the ramp or with it flattened to instant.
+- `BLAST_FLATTEN` (0.7), `BLAST_LINGER_TICKS` (2), `MINE_DOME_H` -- pure look. Compare
+  candidates with `npm run gallery --sweep` rather than guessing.
+
+**`GRACE_TICKS` is 0 -- the grace phase is switched off**, but its machinery is intact.
+`roundPhase` and `roundPhaseTicksLeft` delegate to pure `phaseAt(elapsed, countdown,
+grace)` and `ticksLeftAt(...)`, which are tested at a POSITIVE grace span precisely so
+turning the constant back on does not land on untested code.
 
 ## Commits
 
@@ -133,7 +176,7 @@ stay getters, since a plain property snapshots at construction and `tsc` will no
 so cannot see whether `loop.ts` wires the real collaborators into them — the composition
 blindness above, one layer up. Do not delete it.
 
-Modules with no sibling test file, re-swept at `e47a4bc`: `main.ts`,
+Modules with no sibling test file, re-swept at `620eef4`: `main.ts`, `render/aimray.ts`,
 `render/renderer.ts`, `render/scene.ts`, `sim/ai/decision.ts`, `sim/ai/index.ts`.
 
 **A missing sibling file is not the same as untested, and for three of those five it is
