@@ -379,6 +379,14 @@ describe('mine views', () => {
     const rise = top - domeStart;
     expect(rise).toBeGreaterThan(0);
     expect(rise).toBeLessThan(maxR / 2);
+
+    // The specified split: a third of the height is straight side wall, the dome is the
+    // other two thirds. Ratios rather than absolutes, so retuning the puck's overall size
+    // does not have to come back here -- but reshaping it does.
+    const totalH = top - bottom;
+    const sideH = domeStart - bottom;
+    expect(sideH / totalH).toBeCloseTo(1 / 3, 2);
+    expect(rise / totalH).toBeCloseTo(2 / 3, 2);
     views.dispose();
   });
 

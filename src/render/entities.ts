@@ -174,16 +174,22 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
   }
 
   const MINE_R = 0.28;
-  /** Height of the straight side wall, before the dome starts. */
-  const MINE_BASE_H = 0.05;
+  /**
+   * Height of the straight side wall, before the dome starts.
+   *
+   * A third of the puck's total height; the dome is the other two thirds. The two must
+   * sum to MINE_Y * 2, which is the height the original cylinder had -- the silhouette
+   * changed shape, not size.
+   */
+  const MINE_BASE_H = (MINE_Y * 2) / 3;
   /**
    * How far the dome rises above the side wall.
    *
-   * FLATTENED, not hemispherical: at 0.07 against a 0.28 radius the dome is a quarter as
-   * tall as it is wide. A full hemisphere would read as a ball half-sunk in the felt; a
-   * mine is a squat thing you could drive over.
+   * FLATTENED, not hemispherical: at 0.08 against a 0.28 radius the dome is under a third
+   * as tall as it is wide. A full hemisphere would read as a ball half-sunk in the felt;
+   * a mine is a squat thing you could drive over.
    */
-  const MINE_DOME_H = 0.07;
+  const MINE_DOME_H = MINE_Y * 2 - MINE_BASE_H;
 
   /**
    * A mine: a short cylindrical base capped by a low, wide dome.
