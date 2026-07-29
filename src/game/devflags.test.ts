@@ -53,3 +53,29 @@ describe('parseDevFlags', () => {
     expect(parseDevFlags('?utm_source=x&ref=y').aimRay).toBe(false);
   });
 });
+
+describe('parseDevFlags: seed', () => {
+  it('is null without dev mode, whatever the seed says', () => {
+    expect(parseDevFlags('?seed=1234').seed).toBeNull();
+  });
+
+  it('is null when absent', () => {
+    expect(parseDevFlags('?dev=1').seed).toBeNull();
+  });
+
+  it('takes a positive integer', () => {
+    expect(parseDevFlags('?dev=1&seed=1234').seed).toBe(1234);
+  });
+
+  it('rejects values the PRNG cannot use', () => {
+    // 0 is degenerate for the PRNG -- deriveSeed never returns it -- and the
+    // rest are simply not seeds. Population: the 6 forms below.
+    for (const v of ['0', '-5', 'abc', '1.5', '', 'NaN']) {
+      expect(parseDevFlags(`?dev=1&seed=${v}`).seed).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&seed=7')).toEqual({ aimRay: false, shellCount: false, seed: 7 });
+  });
+});

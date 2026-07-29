@@ -44,7 +44,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { roundPhaseHud: boolean; aimRay: boolean; shellCount: boolean } } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: boolean; shellCount: boolean; seed: number | null } } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -224,7 +224,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { roundPhas
       cancel(): void {},
     },
     host,
-    devFlags: opts.devFlags ?? { roundPhaseHud: false, aimRay: false, shellCount: false },
+    devFlags: opts.devFlags ?? { aimRay: false, shellCount: false, seed: null },
   };
 
   return {
@@ -654,7 +654,7 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('drives the shell readout when the flag is on', () => {
-    const h = boot(makeDeps({ devFlags: { roundPhaseHud: false, aimRay: false, shellCount: true } }));
+    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: true, seed: null } }));
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.shellCounts.length).toBeGreaterThan(0);
@@ -666,8 +666,32 @@ describe('startGameWith: dev flags stay off by default', () => {
     const off = boot();
     expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false });
     off.handle.dispose();
-    const on = boot(makeDeps({ devFlags: { roundPhaseHud: false, aimRay: true, shellCount: false } }));
+    const on = boot(makeDeps({ devFlags: { aimRay: true, shellCount: false, seed: null } }));
     expect(on.rec.rendererArgs[0][4]).toEqual({ aimRay: true });
     on.handle.dispose();
+  });
+});
+
+describe('startGameWith: a pinned dev seed', () => {
+  it('uses the pinned seed instead of the clock', () => {
+    const h = boot(makeDeps({ wallMs: 999, devFlags: { aimRay: false, shellCount: false, seed: 4242 } }));
+    expect(h.rec.seeds[0]).toBe(4242);
+    h.handle.dispose();
+  });
+
+  it('reuses it on restart, so a replay is the same fight', () => {
+    // The whole point: without this a restart re-derives from the clock and
+    // the comparison is against a different arena.
+    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: false, seed: 4242 } }));
+    h.setState('win');
+    h.hud.startRestart();
+    expect(h.rec.seeds).toEqual([4242, 4242]);
+    h.handle.dispose();
+  });
+
+  it('falls back to the clock when unpinned', () => {
+    const h = boot(makeDeps({ wallMs: 1000 }));
+    expect(h.rec.seeds[0]).toBe(deriveSeed(1000));
+    h.handle.dispose();
   });
 });
