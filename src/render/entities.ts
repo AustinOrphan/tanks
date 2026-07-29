@@ -23,6 +23,15 @@ const TANK_BODY_H = 0.4;
 const BULLET_Y = 0.35;
 /** Centre of the fireball: sat on the deck, so its lower half is buried like a real one. */
 const BLAST_Y = 0.2;
+/**
+ * How long the fireball sits at full size before it starts to fade, in ticks.
+ *
+ * Purely visual, which is why it lives here and not in sim/constants: it splits the
+ * SIM's hold phase into a beat at full opacity and a fade, without changing how long
+ * the blast kills for. Must stay below MINE_BLAST_HOLD_TICKS, or the fade has no ticks
+ * left to happen in and the blast vanishes instantly.
+ */
+const BLAST_LINGER_TICKS = 2;
 const MINE_Y = 0.06;
 const WALL_H = 1.0;
 
@@ -262,11 +271,14 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
       const radius = from + (blastRadiusAt(b.age) - from) * alpha;
       mesh.position.set(b.pos.x, BLAST_Y, b.pos.y);
       mesh.scale.setScalar(Math.max(radius, 1e-4));
-      // Solid while it expands, then fading over the hold so it dissipates rather than
-      // vanishing on a frame boundary.
+      // Solid while it expands, then it SITS at full size for a beat before dissipating.
+      // Fading straight from the moment it stops growing loses the punch -- the blast
+      // wants to arrive, hang, and then go. It still reaches zero exactly at the end of
+      // its life, so it is never invisible while it is still killing.
       const held = b.age - MINE_BLAST_EXPAND_TICKS + alpha;
+      const fading = held - BLAST_LINGER_TICKS;
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.opacity = held <= 0 ? 1 : Math.max(0, 1 - held / MINE_BLAST_HOLD_TICKS);
+      mat.opacity = fading <= 0 ? 1 : Math.max(0, 1 - fading / (MINE_BLAST_HOLD_TICKS - BLAST_LINGER_TICKS));
     }
     for (const [id, mesh] of blastViews) {
       if (!seen.has(id)) {

@@ -275,23 +275,35 @@ describe('blast views', () => {
     views.dispose();
   });
 
-  it('is solid while expanding and fades away over the hold', () => {
+  it('holds at full opacity after it stops growing, THEN fades', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
+    const mat = () => (blastMesh(scene)!.material as THREE.MeshStandardMaterial);
 
     const early = withBlast(1);
     views.sync(early, early, 0);
-    const mat = () => (blastMesh(scene)!.material as THREE.MeshStandardMaterial);
+    expect(mat().opacity).toBeCloseTo(1, 9); // still growing
+
+    // THE ASSERTION THIS TEST EXISTS FOR. The tick right after expansion ends used to be
+    // already fading; it must now still be solid, or there is no beat at full size.
+    const justHeld = withBlast(MINE_BLAST_EXPAND_TICKS);
+    views.sync(justHeld, justHeld, 0);
     expect(mat().opacity).toBeCloseTo(1, 9);
 
-    const mid = withBlast(MINE_BLAST_EXPAND_TICKS + Math.floor(MINE_BLAST_HOLD_TICKS / 2));
-    views.sync(mid, mid, 0);
-    const halfway = mat().opacity;
-    expect(halfway).toBeLessThan(1);
-    expect(halfway).toBeGreaterThan(0);
+    const stillHeld = withBlast(MINE_BLAST_EXPAND_TICKS + 1);
+    views.sync(stillHeld, stillHeld, 0);
+    expect(mat().opacity).toBeCloseTo(1, 9);
 
-    const last = withBlast(MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS);
-    views.sync(last, last, 0);
+    // Then it does fade, partway through the hold rather than at the end of it.
+    const fading = withBlast(MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS - 1);
+    views.sync(fading, fading, 0);
+    expect(mat().opacity).toBeLessThan(1);
+    expect(mat().opacity).toBeGreaterThan(0);
+
+    // And reaches zero exactly as it retires -- the last tick carried to alpha 1. Without
+    // this the fireball pops out of existence at a third of its opacity.
+    const last = withBlast(MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS - 1);
+    views.sync(last, last, 1);
     expect(mat().opacity).toBeCloseTo(0, 9);
     views.dispose();
   });
