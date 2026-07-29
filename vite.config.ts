@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite';
+// From 'vitest/config', not 'vite': since vitest 3 / vite 8, vite's own defineConfig no
+// longer accepts a `test` block and tsc rejects it. Runtime behaviour is unchanged.
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Relative base, so the built bundle carries no assumption about where it is
