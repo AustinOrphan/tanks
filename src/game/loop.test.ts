@@ -10,6 +10,7 @@ import type { SimEvent } from '../sim/events';
 import type { Vec2, Bullet } from '../sim/types';
 import type { GameState } from './state';
 import {
+  isPlayerDeath,
   playerShellsInFlight,
   startGameWith,
   deriveSeed,
@@ -31,6 +32,7 @@ interface Recorder {
   hudStates: GameState[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
+  deathSignals: number;
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -42,7 +44,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: boolean; shellCount: boolean } } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { roundPhaseHud: boolean; aimRay: boolean; shellCount: boolean } } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -69,6 +71,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
     hudStates: [],
     muted: [],
     shellCounts: [],
+    deathSignals: 0,
     volumes: [],
     resizes: [],
     listeners: [],
@@ -194,6 +197,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
         setState: (s) => rec.hudStates.push(s),
         setMuted: (m) => rec.muted.push(m),
         setShellCount: (i) => rec.shellCounts.push(i),
+        signalPlayerDeath: () => { rec.deathSignals += 1; },
         onMuteToggle: (cb) => {
           onMute = cb;
         },
@@ -220,7 +224,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
       cancel(): void {},
     },
     host,
-    devFlags: opts.devFlags ?? { aimRay: false, shellCount: false },
+    devFlags: opts.devFlags ?? { roundPhaseHud: false, aimRay: false, shellCount: false },
   };
 
   return {
@@ -473,6 +477,7 @@ describe('startGameWith: listeners and teardown', () => {
 // REAL startGameWith. Without these, inverting the play gate, dropping audio
 // routing, emptying the render call or freezing the HUD all pass the gate.
 // ---------------------------------------------------------------------------
+
 describe('startGameWith: composition (a real frame, pumped)', () => {
   it('simulates only while playing, and renders either way', () => {
     const h = boot();
@@ -528,6 +533,98 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
   });
 });
 
+describe('isPlayerDeath', () => {
+  const destroyed = (kind: string): SimEvent =>
+    ({ type: 'tank-destroyed', tankId: 1, kind, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  it('is true for the player', () => {
+    expect(isPlayerDeath([destroyed('player')])).toBe(true);
+  });
+
+  it('is FALSE for every enemy kind', () => {
+    // The whole point: the stream is shared, so a presence-only check would
+    // flash the screen red every time the player scored a kill.
+    // Population: all three enemy kinds in TankKind.
+    for (const kind of ['brown', 'grey', 'teal']) {
+      expect(isPlayerDeath([destroyed(kind)])).toBe(false);
+    }
+  });
+
+  it('finds the player among a mixed frame', () => {
+    expect(isPlayerDeath([destroyed('brown'), destroyed('player'), destroyed('teal')])).toBe(true);
+  });
+
+  it('is false for a frame with no deaths at all', () => {
+    expect(isPlayerDeath([{ type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 0 } as SimEvent])).toBe(false);
+    expect(isPlayerDeath([])).toBe(false);
+  });
+});
+
+describe('startGameWith: a real player death reaches the HUD', () => {
+  it('flashes the HUD when the player is actually killed in a driven frame', () => {
+    // The predicate and the flash are tested separately; this is the seam
+    // BETWEEN them, which two mutations survived without it -- emptying loop's
+    // handler, and dropping the driver's call to it, both passed everything
+    // else. Built by putting a live enemy shell on top of the player and
+    // pumping one real frame, so the death comes from the real sim.
+    const base = createArenaWorld(1);
+    const player = base.tanks.find((t) => t.kind === 'player');
+    if (!player) throw new Error('fixture has no player');
+    const enemy = base.tanks.find((t) => t.kind !== 'player');
+    if (!enemy) throw new Error('fixture has no enemy');
+    const world = {
+      ...base,
+      roundStartTick: -1000, // past countdown+grace so nothing is gated
+      bullets: [
+        {
+          id: 900,
+          ownerId: enemy.id,
+          type: 'normal' as const,
+          pos: { x: player.pos.x, y: player.pos.y },
+          vel: { x: 1, y: 0 },
+          bouncesLeft: 1,
+          alive: true,
+        },
+      ],
+    };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    expect(h.rec.deathSignals).toBe(0);
+    h.fireFrame(20);
+    expect(h.rec.deathSignals).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('does NOT flash when an enemy dies', () => {
+    // The control. A presence-only check would flash on every kill the player
+    // scores, which is the opposite of the signal intended.
+    const base = createArenaWorld(1);
+    const enemy = base.tanks.find((t) => t.kind !== 'player');
+    const other = base.tanks.filter((t) => t.kind !== 'player')[1];
+    if (!enemy || !other) throw new Error('fixture needs two enemies');
+    const world = {
+      ...base,
+      roundStartTick: -1000,
+      bullets: [
+        {
+          id: 901,
+          ownerId: other.id,
+          type: 'normal' as const,
+          pos: { x: enemy.pos.x, y: enemy.pos.y },
+          vel: { x: 1, y: 0 },
+          bouncesLeft: 1,
+          alive: true,
+        },
+      ],
+    };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.deathSignals).toBe(0);
+    h.handle.dispose();
+  });
+});
+
 describe('playerShellsInFlight', () => {
   const bullet = (id: number, ownerId: number, alive: boolean): Bullet =>
     ({ id, ownerId, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive }) as Bullet;
@@ -557,7 +654,7 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('drives the shell readout when the flag is on', () => {
-    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: true } }));
+    const h = boot(makeDeps({ devFlags: { roundPhaseHud: false, aimRay: false, shellCount: true } }));
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.shellCounts.length).toBeGreaterThan(0);
@@ -569,7 +666,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     const off = boot();
     expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false });
     off.handle.dispose();
-    const on = boot(makeDeps({ devFlags: { aimRay: true, shellCount: false } }));
+    const on = boot(makeDeps({ devFlags: { roundPhaseHud: false, aimRay: true, shellCount: false } }));
     expect(on.rec.rendererArgs[0][4]).toEqual({ aimRay: true });
     on.handle.dispose();
   });

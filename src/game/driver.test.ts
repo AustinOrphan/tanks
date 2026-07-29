@@ -86,6 +86,7 @@ function harness(
   directed: SimEvent[][];
   machineSaw: SimEvent[][];
   simulated: World[];
+  framed: SimEvent[][];
   samples: number;
   setState(s: GameState): void;
   state(): GameState;
@@ -95,6 +96,7 @@ function harness(
   const directed: SimEvent[][] = [];
   const machineSaw: SimEvent[][] = [];
   const simulated: World[] = [];
+  const framed: SimEvent[][] = [];
   let state: GameState = opts.state ?? 'playing';
   const box = { samples: 0 };
 
@@ -129,6 +131,9 @@ function harness(
       },
     },
     world: opts.world ?? createArenaWorld(1),
+    onFrameEvents(evs): void {
+      framed.push(evs);
+    },
     onSimulated(w): void {
       simulated.push(w);
     },
@@ -141,6 +146,7 @@ function harness(
     directed,
     machineSaw,
     simulated,
+    framed,
     get samples(): number {
       return box.samples;
     },
@@ -254,12 +260,22 @@ describe('driver: event routing', () => {
     expect(h.renders[1].events.every((e) => e.type !== 'fire')).toBe(true);
   });
 
+  it('hands the same frame events to the extra consumer', () => {
+    // A third consumer (loop.ts drives HUD damage feedback from it) must see
+    // the same frame the director and the machine do, or the three drift.
+    const { h, playerId } = firedByPlayer();
+    expect(h.framed).toHaveLength(1);
+    expect(h.framed[0].filter((e) => e.type === 'fire' && e.ownerId === playerId)).toHaveLength(1);
+    expect(h.framed[0]).toEqual(h.directed[0]);
+  });
+
   it('routes nothing when the frame produced no events', () => {
     const h = harness();
     h.driver.start();
     h.raf.fire(20);
     expect(h.directed).toHaveLength(0);
     expect(h.machineSaw).toHaveLength(0);
+    expect(h.framed).toHaveLength(0);
   });
 });
 

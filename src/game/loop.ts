@@ -1,5 +1,6 @@
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
+import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
@@ -119,6 +120,18 @@ export function playerShellsInFlight(world: World, playerId: number | undefined)
   return n;
 }
 
+/**
+ * Did the PLAYER die this frame?
+ *
+ * The event stream is shared, so `some(e => e.type === 'tank-destroyed')` is
+ * true for every enemy kill as well -- the presence-only mistake CLAUDE.md
+ * warns about. Exported so the discrimination is testable without engineering
+ * a real death inside a driven frame.
+ */
+export function isPlayerDeath(events: SimEvent[]): boolean {
+  return events.some((e) => e.type === 'tank-destroyed' && e.kind === 'player');
+}
+
 function countEnemies(world: World): number {
   let n = 0;
   for (const t of world.tanks) {
@@ -200,6 +213,12 @@ export function startGameWith(
     director,
     stateMachine: sm,
     world,
+    // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
+    // fires on every enemy kill too -- exactly the presence-only mistake
+    // CLAUDE.md warns about. Discriminate on kind.
+    onFrameEvents(events): void {
+      if (isPlayerDeath(events)) hud.signalPlayerDeath();
+    },
     onSimulated: refreshStats,
   });
 

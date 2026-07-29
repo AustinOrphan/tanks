@@ -16,6 +16,12 @@ export interface Hud {
    * is broken", which are indistinguishable from the player's seat.
    */
   setShellCount(info: { inFlight: number; cap: number } | null): void;
+  /**
+   * The player just lost a life. Losing one was previously invisible: the only
+   * cue was the Lives number quietly decrementing in a corner, plus a sound --
+   * and with no audio assets committed, that sound is a procedural blip.
+   */
+  signalPlayerDeath(): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
   /** Extension: fired when the title/win/lose panel's start/restart button is clicked. */
@@ -41,6 +47,7 @@ export function createHud(root: HTMLElement): Hud {
         <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
       </div>
     </div>
+    <div class="hud-damage" aria-hidden="true"></div>
     <div class="hud-panel hud-panel--hidden">
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
@@ -50,6 +57,7 @@ export function createHud(root: HTMLElement): Hud {
   root.appendChild(el);
 
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
+  const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const muteBtn = el.querySelector('.hud-mute') as HTMLButtonElement;
@@ -157,6 +165,16 @@ export function createHud(root: HTMLElement): Hud {
       // state worth seeing while developing.
       shellsEl.classList.toggle('hud-shells--full', info.inFlight >= info.cap);
       shellsEl.classList.remove('hud-shells--hidden');
+    },
+    signalPlayerDeath(): void {
+      // Restart the animation even if one is already running: two deaths in
+      // quick succession must read as two, not one. Removing the class and
+      // forcing a reflow is what makes the browser replay it.
+      damageEl.classList.remove('hud-damage--hit');
+      livesEl.classList.remove('hud-lives--hit');
+      void damageEl.offsetWidth;
+      damageEl.classList.add('hud-damage--hit');
+      livesEl.classList.add('hud-lives--hit');
     },
     onMuteToggle(cb: () => void): void {
       muteCbs.push(cb);
