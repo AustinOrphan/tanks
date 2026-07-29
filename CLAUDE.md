@@ -76,6 +76,37 @@ relaying an agent's self-report.
 Review agents that *mutate* files each need their own worktree, or they overwrite each
 other's experiments and every result becomes noise.
 
+## Dev flags
+
+Unshipped work lives behind a flag in `src/game/devflags.ts`, on `main` — **not on a
+long-lived experimental branch**. Both approaches were measured before choosing:
+
+- Flags cost **4.15 kB raw / 1.45 kB gzipped**, 0.8% of the bundle.
+- An unmerged branch (`round-ux`) had NOT rotted after 11 commits — it merged clean and
+  passed. Branch rot is not the argument.
+- What the split *did* cost was real: `devflags.ts` ended up on two branches at 40 and 53
+  lines and had **already diverged**, in the one file whose job is to be the single place
+  flags are defined.
+
+The deciding reason is CI. Code on `main` is exercised on every run; a branch is exercised
+only when someone updates it. `round-ux` passes today, and nobody would learn the day it
+stopped.
+
+Two rules follow:
+
+**Nothing is on unless `dev` is present.** `?aimRay=1` alone does nothing; it needs
+`?dev=1&aimRay=1`, so a shared link cannot enable anything by accident.
+
+**A flag is temporary.** It exists so work can land tested and unshipped, not so `main` can
+accumulate features nobody decided on. Each one should end up either shipped — flag deleted,
+behaviour on — or deleted outright. A flag with no owner and no decision is the thing this
+arrangement is meant to avoid, and it is worse than the branch would have been.
+
+Flags are **build-time-free but not free**: they are parsed at runtime, so they must never
+reach `src/sim/`. That core is pure and deterministic, and a replay has to stay an exact
+function of its inputs — a runtime-varying flag there would break it. `MINE_BLAST_THROUGH_DESTRUCTIBLE`
+is a *constant* for exactly this reason.
+
 ## Commits
 
 No `Co-Authored-By` or tool-attribution trailers — the history carries none. `gh pr merge
