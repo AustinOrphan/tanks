@@ -53,16 +53,20 @@ const BLAST_FLATTEN = 0.7;
 /**
  * Hull dimensions, in world units, along the tank's own axes: +x is forward.
  *
- * The sim collides tanks as a CIRCLE of radius TANK_RADIUS (0.5), so nothing here can
- * make the collision wrong -- but it can make it MISLEADING. The old hull was 1.0 long
- * by 0.8 wide, NARROWER than the 1.0 circle it actually collides with, so a tank looked
- * like it should slip through gaps that stop it. 0.94 including the tracks closes almost
- * all of that while keeping the tank visibly longer than it is wide.
+ * The sim collides tanks as a CIRCLE of radius TANK_RADIUS, so nothing here can make the
+ * collision wrong -- but it can make it MISLEADING, and it did: the hull was drawn 0.8
+ * wide against a circle 1.0 across, so a tank looked like it should slip through gaps
+ * that stop it.
+ *
+ * HULL_WIDTH is now EXACTLY TANK_RADIUS * 2, tracks included. Not approximately: any
+ * other value is the visual over- or under-stating the collider, and there is no reason
+ * to pick one. The test asserts the equality, so drift in either direction fails --
+ * including too WIDE, which lies the opposite way and would otherwise pass unnoticed.
  */
 export const HULL_LEN = 1.0;
-export const HULL_WIDTH = 0.94;
+export const HULL_WIDTH = 1.0;
 /** Width of ONE track. The two of them make up the hull's full width at the edges. */
-export const TRACK_W = 0.22;
+export const TRACK_W = 0.25;
 /** Tracks are shorter than the body is tall and sit on the ground; the body rides above. */
 export const TRACK_H = 0.34;
 /**
@@ -73,6 +77,33 @@ export const TRACK_H = 0.34;
  * through the real camera; the height mattered far less than the shade.
  */
 export const TRACK_SHADE = 0.7;
+/** Corner radius of the hull body in plan. */
+export const HULL_CORNER = 0.12;
+/** Edge bevel on the hull body. */
+export const HULL_BEVEL = 0.035;
+/** Edge bevel on the tracks. Smaller: they are narrow, and a big bevel eats the face. */
+export const TRACK_BEVEL = 0.025;
+/**
+ * Ground clearance under the hull body.
+ *
+ * The body used to start at 55% of the track's height, which put most of its mass ABOVE
+ * the track and made the tank read as stacked slabs -- a pancake stack rather than a
+ * hull. Dropping it to a small clearance sets the body ALONGSIDE the track run, which is
+ * how a real tank is arranged and what stops the tracks looking like a plinth.
+ */
+export const HULL_RIDE = 0.14;
+/**
+ * How far the tracks stand PROUD of the body, from 0 to 1.
+ *
+ *   0    tracks entirely under the hull -- realistic, and nearly invisible from above
+ *   0.5  half proud, half tucked
+ *   1    tracks entirely outside the body -- toy-tank, most readable from overhead
+ *
+ * The total footprint is HULL_WIDTH either way; this only decides how it is divided
+ * between body and track. Which matters because the game camera looks down at ~50deg:
+ * anything tucked under the hull is hidden at exactly the angle the game is played from.
+ */
+export const TRACK_PROUD = 0.25;
 /** How far the tracks overhang the body front and back. */
 export const TRACK_OVERHANG = 0.05;
 
@@ -93,6 +124,48 @@ export const BARREL_OUT = 0.50;
 export const MUZZLE_LEN = 0.18;
 /** How much wider the muzzle is than the barrel behind it. */
 export const MUZZLE_FLARE = 1.40;
+
+/** A rectangle with rounded corners, centred on the origin, in the shape's own XY. */
+function roundedRect(w: number, h: number, r: number): THREE.Shape {
+  const rad = Math.min(r, w / 2, h / 2);
+  const x = -w / 2;
+  const y = -h / 2;
+  const s = new THREE.Shape();
+  s.moveTo(x + rad, y);
+  s.lineTo(x + w - rad, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + rad);
+  s.lineTo(x + w, y + h - rad);
+  s.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  s.lineTo(x + rad, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - rad);
+  s.lineTo(x, y + rad);
+  s.quadraticCurveTo(x, y, x + rad, y);
+  return s;
+}
+
+/**
+ * A box with rounded corners in-plane AND bevelled edges along the extrusion, centred
+ * on the origin, whose finished size is exactly (w, h, depth).
+ *
+ * The bevel is subtracted from the shape and the extrusion depth first, because
+ * ExtrudeGeometry ADDS bevelSize outward and bevelThickness at each end. Without that
+ * correction every rounded part comes out larger than asked, which matters here: the
+ * hull's width is asserted to equal the sim's collision diameter exactly.
+ */
+function roundedBox(w: number, h: number, depth: number, corner: number, bevel: number): THREE.ExtrudeGeometry {
+  const b = Math.min(bevel, w / 4, h / 4, depth / 4);
+  const shape = roundedRect(w - b * 2, h - b * 2, Math.max(0.001, corner - b));
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: depth - b * 2,
+    bevelEnabled: true,
+    bevelThickness: b,
+    bevelSize: b,
+    bevelSegments: 2,
+    curveSegments: 6,
+  });
+  geo.translate(0, 0, -depth / 2 + b);
+  return geo;
+}
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -137,6 +210,8 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
    */
   const BARREL_R = BULLET_RADIUS * 1.3;
   const TURRET_H = 0.28;
+  /** How much of the turret ring is deliberately seated into the hull. */
+  const TURRET_SEAT = 0.03;
   /** Rounds the top edge, so the turret is a cylinder with a crown rather than a can. */
   const TURRET_FILLET = 0.09;
 
@@ -205,12 +280,17 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // and at this camera angle the hull and turret were one silhouette. Tracks are what
     // say "this thing drives", and they carry the width so the body can stay narrower and
     // sit higher, which separates it from the ground.
-    const bodyWidth = HULL_WIDTH - TRACK_W * 2 + 0.06; // slight overlap, no visible seam
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(HULL_LEN, TANK_BODY_H - TRACK_H * 0.35, bodyWidth),
-      bodyMat,
-    );
-    body.position.y = TRACK_H * 0.55 + (TANK_BODY_H - TRACK_H * 0.35) / 2;
+    const bodyWidth = HULL_WIDTH - TRACK_W * TRACK_PROUD * 2;
+    const bodyH = TANK_BODY_H;
+    // Rounded in plan and bevelled at the edges. A hard-edged box reads as a placeholder
+    // at any distance; the corners are what make it look built rather than blocked out.
+    // Shape is (length, width) and extrudes along its own +z, so rotating -90deg about x
+    // stands the extrusion up into height.
+    const bodyGeo = roundedBox(HULL_LEN, bodyWidth, bodyH, HULL_CORNER, HULL_BEVEL);
+    bodyGeo.rotateX(-Math.PI / 2);
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.name = 'hull';
+    body.position.y = HULL_RIDE + bodyH / 2;
     body.castShadow = true;
     body.receiveShadow = true;
     group.add(body);
@@ -224,18 +304,31 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       metalness: 0.35,
     });
     for (const side of [-1, 1]) {
-      const track = new THREE.Mesh(
-        new THREE.BoxGeometry(HULL_LEN + TRACK_OVERHANG * 2, TRACK_H, TRACK_W),
-        trackMat,
+      // TRACK SHAPED: a stadium in side profile -- fully rounded front and back, like the
+      // run of a real track round its drive sprockets. The corner radius is half the
+      // height, which is what turns a rounded rectangle into a stadium; anything less
+      // reads as a box with softened corners.
+      const trackGeo = roundedBox(
+        HULL_LEN + TRACK_OVERHANG * 2,
+        TRACK_H,
+        TRACK_W,
+        TRACK_H / 2,
+        TRACK_BEVEL,
       );
-      track.position.set(0, TRACK_H / 2, side * (HULL_WIDTH - TRACK_W) / 2);
+      const track = new THREE.Mesh(trackGeo, trackMat);
+      track.name = 'track';
+      track.position.set(0, TRACK_H / 2, side * (HULL_WIDTH / 2 - TRACK_W / 2));
       track.castShadow = true;
       track.receiveShadow = true;
       group.add(track);
     }
 
     const turret = new THREE.Group();
-    turret.position.y = TRACK_H * 0.55 + (TANK_BODY_H - TRACK_H * 0.35) + 0.02;
+    // + TURRET_H / 2, because the dome is CENTRED on the turret group's origin. Placing
+    // that origin at the hull top buried half the turret in the hull -- 43% of its height
+    // at these proportions. TURRET_SEAT is the deliberate part: a little of the turret
+    // ring sunk in, so it looks seated rather than balanced on top.
+    turret.position.y = HULL_RIDE + bodyH + TURRET_H / 2 - TURRET_SEAT;
     // The turret reads as the same paint, less worn -- smoother, so the highlight that
     // separates it from the hull below sits on the turret rather than the body.
     const turretMat = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.35 });
