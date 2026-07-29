@@ -183,7 +183,9 @@ describe('stepMines', () => {
 
     expect(events.some((e) => e.type === 'mine-armed')).toBe(true)
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
-    expect(enemy.alive).toBe(true) // at 1.1 the edge has not reached him on the detonation tick
+    // At 1.1 he is inside the age-0 radius now that the ramp eases out (0.72 + TANK_RADIUS
+    // = 1.22 reach on the detonation tick), so he dies immediately. Settle anyway: the
+    // subject here is arming, and it should not care which tick of the blast lands.
     settleBlasts(world, events)
     expect(enemy.alive).toBe(false)
     expect(player.alive).toBe(true) // 10+ units away, well clear of the blast
@@ -479,17 +481,24 @@ describe('blast ramp', () => {
   // the ramp: flattening blastRadiusAt to `return MINE_BLAST_RADIUS` passes all of it.
   // These pin the growth itself.
 
-  it('grows to full radius over MINE_BLAST_EXPAND_TICKS, then holds', () => {
-    const step = MINE_BLAST_RADIUS / MINE_BLAST_EXPAND_TICKS
-    // Age 0 is already lethal at point-blank: a mine you are standing on is not survivable.
-    expect(blastRadiusAt(0)).toBeCloseTo(step, 10)
+  it('grows to full radius over MINE_BLAST_EXPAND_TICKS, decelerating, then holds', () => {
+    expect(blastRadiusAt(0)).toBeGreaterThan(0) // age 0 is already lethal point-blank
     expect(blastRadiusAt(0)).toBeLessThan(MINE_BLAST_RADIUS) // the ramp exists at all
     // Strictly increasing while expanding -- a monotonicity check alone would pass on a
     // ramp that jumped to full size on tick 1.
-    for (let age = 1; age < MINE_BLAST_EXPAND_TICKS; age++) {
-      expect(blastRadiusAt(age)).toBeCloseTo(step * (age + 1), 10)
-      expect(blastRadiusAt(age)).toBeGreaterThan(blastRadiusAt(age - 1))
+    const steps: number[] = []
+    for (let age = 0; age < MINE_BLAST_EXPAND_TICKS; age++) {
+      const prev = age === 0 ? 0 : blastRadiusAt(age - 1)
+      expect(blastRadiusAt(age)).toBeGreaterThan(prev)
+      steps.push(blastRadiusAt(age) - prev)
     }
+    // DECELERATING: each tick adds strictly less than the one before. This is the
+    // assertion that fails on the linear ramp this replaced, where every step is equal --
+    // monotonicity and the endpoints hold under both, so they cannot tell them apart.
+    for (let i = 1; i < steps.length; i++) {
+      expect(steps[i]).toBeLessThan(steps[i - 1])
+    }
+    expect(steps[0]).toBeGreaterThan(steps[steps.length - 1] * 2) // and by a visible margin
     // Full size on the last expanding tick, and flat from there.
     expect(blastRadiusAt(MINE_BLAST_EXPAND_TICKS - 1)).toBeCloseTo(MINE_BLAST_RADIUS, 10)
     expect(blastRadiusAt(MINE_BLAST_EXPAND_TICKS)).toBe(MINE_BLAST_RADIUS)

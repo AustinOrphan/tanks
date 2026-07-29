@@ -87,7 +87,12 @@ export function blastReaches(
  */
 export function blastRadiusAt(age: number): number {
   if (age >= MINE_BLAST_EXPAND_TICKS) return MINE_BLAST_RADIUS
-  return (MINE_BLAST_RADIUS * (age + 1)) / MINE_BLAST_EXPAND_TICKS
+  // Quadratic ease-out: fast off the mark, slowing as it approaches full size, which is
+  // how a real overpressure front behaves and reads far better than a constant rate.
+  // t reaches exactly 1 on the last expanding tick, so f(1) = 1 and the radius lands on
+  // MINE_BLAST_RADIUS exactly rather than approaching it.
+  const t = (age + 1) / MINE_BLAST_EXPAND_TICKS
+  return MINE_BLAST_RADIUS * (1 - (1 - t) * (1 - t))
 }
 
 /** Ticks a blast exists for: expanding, then holding at full size. */

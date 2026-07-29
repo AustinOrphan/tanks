@@ -6,7 +6,9 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { createEntityViews } from './entities';
 import { createWorld, type World } from '../sim/world';
-import type { Tank, Spawn } from '../sim/types';
+import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
+import { blastRadiusAt } from '../sim/mines';
+import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
   return {
@@ -168,6 +170,163 @@ describe('entity views — interpolation discontinuities', () => {
     const group = scene.children.find((c) => c instanceof THREE.Group) as THREE.Group;
     expect(group.position.x).toBeCloseTo(11, 9);
 
+    views.dispose();
+  });
+});
+
+// Helpers that pick a specific view out of the scene. Tanks are Groups too now that a
+// shell is one, so "the first Group" is no longer good enough to identify either.
+function shellGroup(scene: THREE.Scene): THREE.Group {
+  const g = scene.children.find(
+    (c): c is THREE.Group =>
+      c instanceof THREE.Group && c.children.some((k) => (k as THREE.Mesh).geometry instanceof THREE.CylinderGeometry)
+      && Math.abs(c.position.y - 0.35) < 1e-9,
+  );
+  if (!g) throw new Error('no shell view in scene');
+  return g;
+}
+function blastMesh(scene: THREE.Scene): THREE.Mesh | undefined {
+  return scene.children.find(
+    (c): c is THREE.Mesh => c instanceof THREE.Mesh && c.geometry instanceof THREE.SphereGeometry,
+  );
+}
+function mkBullet(id: number, pos: Vec2, vel: Vec2): Bullet {
+  return { id, ownerId: 1, type: 'normal', pos, vel, bouncesLeft: 1, alive: true };
+}
+
+describe('shell geometry', () => {
+  it('is a cylinder with a rounded nose ahead of the body', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.bullets.push(mkBullet(50, { x: 1, y: 1 }, { x: NORMAL_SPEED, y: 0 }));
+    views.sync(w, w, 0);
+
+    const shell = shellGroup(scene);
+    const body = shell.children.find((c) => (c as THREE.Mesh).geometry instanceof THREE.CylinderGeometry) as THREE.Mesh;
+    const nose = shell.children.find((c) => (c as THREE.Mesh).geometry instanceof THREE.SphereGeometry) as THREE.Mesh;
+    expect(body).toBeDefined();
+    expect(nose).toBeDefined();
+    // A COMPLETE sphere, and this assertion is the wrong-way-round one I got caught by:
+    // a half sphere (phiLength PI) is an open single-sided shell you can see inside of
+    // from overhead. Closed is what makes it read as solid from the gameplay camera.
+    const np = (nose.geometry as THREE.SphereGeometry).parameters;
+    expect(np.phiLength).toBeCloseTo(Math.PI * 2, 9);
+    expect(np.thetaLength).toBeCloseTo(Math.PI, 9);
+    // And it is at the FRONT. With the parts laid along local +x, a nose at -x or at the
+    // origin would be a shell with its point buried in its own body.
+    expect(nose.position.x).toBeGreaterThan(0);
+    expect(nose.position.x).toBeCloseTo(
+      (body.geometry as THREE.CylinderGeometry).parameters.height / 2,
+      9,
+    );
+    views.dispose();
+  });
+
+  it('points along its velocity, with the sim-to-three sign flip', () => {
+    // The classic silent failure in this layer. Velocity straight up the sim's +y is
+    // angle +PI/2, which must become rotation.y = -PI/2; a missing minus draws every
+    // shell mirrored about the axis and nothing else in the suite would notice.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.bullets.push(mkBullet(50, { x: 1, y: 1 }, { x: 0, y: NORMAL_SPEED }));
+    views.sync(w, w, 0);
+
+    expect(shellGroup(scene).rotation.y).toBeCloseTo(-Math.PI / 2, 9);
+    views.dispose();
+  });
+});
+
+describe('blast views', () => {
+  function withBlast(age: number): World {
+    const w = makeWorld();
+    w.blasts.push({ id: 900, ownerId: 1, pos: { x: 4, y: 6 }, age });
+    return w;
+  }
+
+  it('is drawn at the radius the SIM says it has, not a look-alike curve', () => {
+    // Mid-expansion, so the value is neither 0 nor the full radius -- either of those
+    // would pass against a hardcoded constant.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = withBlast(2);
+    views.sync(w, w, 0);
+
+    const mesh = blastMesh(scene)!;
+    expect(mesh).toBeDefined();
+    expect(mesh.scale.x).toBeCloseTo(blastRadiusAt(2), 9);
+    expect(mesh.scale.x).toBeLessThan(MINE_BLAST_RADIUS); // it really is mid-growth
+    // THE FOOTPRINT IS THE KILL RADIUS. The fireball is squashed vertically because a
+    // ground burst vents sideways, but that squash must never touch the horizontal axes:
+    // the sim is 2D and this circle is exactly what it kills. Scaling x or z would draw a
+    // blast whose reach lies about itself.
+    expect(mesh.scale.z).toBeCloseTo(mesh.scale.x, 9);
+    expect(mesh.scale.y).toBeLessThan(mesh.scale.x); // flattened, not a sphere
+    expect(mesh.scale.y).toBeGreaterThan(0);
+    expect(mesh.position.x).toBeCloseTo(4, 9);
+    expect(mesh.position.z).toBeCloseTo(6, 9); // sim y -> three z
+    views.dispose();
+  });
+
+  it('interpolates its radius between ticks', () => {
+    // A 5-tick expansion drawn in discrete steps reads as a stutter at 60fps.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    views.sync(withBlast(1), withBlast(2), 0.5);
+
+    const expected = (blastRadiusAt(1) + blastRadiusAt(2)) / 2;
+    expect(blastMesh(scene)!.scale.x).toBeCloseTo(expected, 9);
+    // The midpoint is distinct from both endpoints, so this fails if alpha is ignored.
+    expect(expected).not.toBeCloseTo(blastRadiusAt(2), 9);
+    views.dispose();
+  });
+
+  it('holds at full opacity after it stops growing, THEN fades', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const mat = () => (blastMesh(scene)!.material as THREE.MeshStandardMaterial);
+
+    const early = withBlast(1);
+    views.sync(early, early, 0);
+    expect(mat().opacity).toBeCloseTo(1, 9); // still growing
+
+    // THE ASSERTION THIS TEST EXISTS FOR. The tick right after expansion ends used to be
+    // already fading; it must now still be solid, or there is no beat at full size.
+    const justHeld = withBlast(MINE_BLAST_EXPAND_TICKS);
+    views.sync(justHeld, justHeld, 0);
+    expect(mat().opacity).toBeCloseTo(1, 9);
+
+    const stillHeld = withBlast(MINE_BLAST_EXPAND_TICKS + 1);
+    views.sync(stillHeld, stillHeld, 0);
+    expect(mat().opacity).toBeCloseTo(1, 9);
+
+    // Then it does fade, partway through the hold rather than at the end of it.
+    const fading = withBlast(MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS - 1);
+    views.sync(fading, fading, 0);
+    expect(mat().opacity).toBeLessThan(1);
+    expect(mat().opacity).toBeGreaterThan(0);
+
+    // And reaches zero exactly as it retires -- the last tick carried to alpha 1. Without
+    // this the fireball pops out of existence at a third of its opacity.
+    const last = withBlast(MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS - 1);
+    views.sync(last, last, 1);
+    expect(mat().opacity).toBeCloseTo(0, 9);
+    views.dispose();
+  });
+
+  it('removes the view when the blast retires', () => {
+    // stepBlasts drops the blast from the world; a view left behind is a fireball that
+    // never goes out.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const live = withBlast(2);
+    views.sync(live, live, 0);
+    expect(blastMesh(scene)).toBeDefined();
+
+    const gone = makeWorld(); // no blasts
+    views.sync(live, gone, 0);
+    expect(blastMesh(scene)).toBeUndefined();
     views.dispose();
   });
 });
