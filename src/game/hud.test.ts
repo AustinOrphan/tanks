@@ -271,3 +271,45 @@ describe('hud: losing a life', () => {
     hud.dispose();
   });
 });
+
+describe('hud: dev shell count', () => {
+  function mount(): { root: HTMLElement; hud: ReturnType<typeof createHud> } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    return { root, hud: createHud(root) };
+  }
+
+  it('is hidden until asked for, since it is off by default', () => {
+    const { root, hud } = mount();
+    expect(root.querySelector('.hud-shells')?.className).toContain('hud-shells--hidden');
+    hud.dispose();
+  });
+
+  it('shows shells against the cap', () => {
+    const { root, hud } = mount();
+    hud.setShellCount({ inFlight: 2, cap: 5 });
+    const el = root.querySelector('.hud-shells') as HTMLElement;
+    expect(el.textContent).toBe('shells 2/5');
+    expect(el.className).not.toContain('hud-shells--hidden');
+    hud.dispose();
+  });
+
+  it('marks the state where the cannon goes silent', () => {
+    // At the cap firing stops with no other cue. That is the state this
+    // readout exists for, so it must be distinguishable at a glance.
+    const { root, hud } = mount();
+    hud.setShellCount({ inFlight: 5, cap: 5 });
+    expect((root.querySelector('.hud-shells') as HTMLElement).className).toContain('hud-shells--full');
+    hud.setShellCount({ inFlight: 4, cap: 5 });
+    expect((root.querySelector('.hud-shells') as HTMLElement).className).not.toContain('hud-shells--full');
+    hud.dispose();
+  });
+
+  it('hides again on null', () => {
+    const { root, hud } = mount();
+    hud.setShellCount({ inFlight: 1, cap: 5 });
+    hud.setShellCount(null);
+    expect(root.querySelector('.hud-shells')?.className).toContain('hud-shells--hidden');
+    hud.dispose();
+  });
+});

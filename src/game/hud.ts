@@ -9,6 +9,14 @@ export interface Hud {
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
   /**
+   * Dev only: shells in flight against the cap. `null` hides it.
+   *
+   * The cap is meant to be FELT, not read -- running dry is part of the game.
+   * This exists so a developer can tell "the cap is working" from "the cannon
+   * is broken", which are indistinguishable from the player's seat.
+   */
+  setShellCount(info: { inFlight: number; cap: number } | null): void;
+  /**
    * The player just lost a life. Losing one was previously invisible: the only
    * cue was the Lives number quietly decrementing in a corner, plus a sound --
    * and with no audio assets committed, that sound is a procedural blip.
@@ -28,6 +36,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-topbar">
       <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
+      <div class="hud-shells hud-shells--hidden"></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
         <!-- autocomplete="off": Firefox restores form-control values across a
@@ -47,6 +56,7 @@ export function createHud(root: HTMLElement): Hud {
   `;
   root.appendChild(el);
 
+  const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
@@ -145,6 +155,17 @@ export function createHud(root: HTMLElement): Hud {
     },
     setState,
     setMuted,
+    setShellCount(info): void {
+      if (!info) {
+        shellsEl.classList.add('hud-shells--hidden');
+        return;
+      }
+      shellsEl.textContent = `shells ${info.inFlight}/${info.cap}`;
+      // At the cap the cannon silently stops responding, which is exactly the
+      // state worth seeing while developing.
+      shellsEl.classList.toggle('hud-shells--full', info.inFlight >= info.cap);
+      shellsEl.classList.remove('hud-shells--hidden');
+    },
     signalPlayerDeath(): void {
       // Restart the animation even if one is already running: two deaths in
       // quick succession must read as two, not one. Removing the class and

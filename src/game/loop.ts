@@ -10,6 +10,8 @@ import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createGameStateMachine, type GameStateMachine } from './state';
 import { createHud, type Hud } from './hud';
 import { createDriver, type RafScheduler } from './driver';
+import { parseDevFlags, type DevFlags } from './devflags';
+import { SHELL_CAP } from '../sim/constants';
 
 /**
  * Construction and wiring: the boundary where the untestable collaborators are
@@ -48,6 +50,7 @@ export interface GameDeps {
     worldWidth: number,
     worldHeight: number,
     boundary: number,
+    options?: { aimRay?: boolean },
   ) => Renderer3D;
   readonly createInput: (
     target: HTMLElement,
@@ -70,6 +73,8 @@ export interface GameDeps {
   readonly wallMs: () => number;
   readonly raf: RafScheduler;
   readonly host: HostWindow;
+  /** Opt-in diagnostics. Off unless the URL says otherwise. */
+  readonly devFlags: DevFlags;
 }
 
 export interface GameHandle {
@@ -97,6 +102,22 @@ export function isMuteHotkey(e: KeyboardEvent): boolean {
     return false;
   }
   return e.key === 'm' || e.key === 'M';
+}
+
+/**
+ * Shells the player currently has in flight, which is what SHELL_CAP limits.
+ *
+ * Counts the player's OWN live bullets: dropMine and spawnBullet enforce the
+ * cap per owner, so a shared count would read the whole arena's traffic and be
+ * meaningless as a cap indicator.
+ */
+export function playerShellsInFlight(world: World, playerId: number | undefined): number {
+  if (playerId === undefined) return 0;
+  let n = 0;
+  for (const b of world.bullets) {
+    if (b.alive && b.ownerId === playerId) n += 1;
+  }
+  return n;
 }
 
 /**
@@ -145,6 +166,7 @@ export function createBrowserDeps(): GameDeps {
       cancel: (h) => cancelAnimationFrame(h),
     },
     host: globalThis.window as unknown as HostWindow,
+    devFlags: parseDevFlags(globalThis.location?.search ?? ''),
   };
 }
 
@@ -165,7 +187,9 @@ export function startGameWith(
   // try/catch to render a "this browser has no WebGL" page, and that only
   // works if the renderer throws out of HERE rather than out of a later
   // start(). Deferring construction breaks an error path nothing tests.
-  const renderer = deps.createRenderer(canvas, width, height, CURRENT_ARENA.cellSize);
+  const renderer = deps.createRenderer(canvas, width, height, CURRENT_ARENA.cellSize, {
+    aimRay: deps.devFlags.aimRay,
+  });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
   const audio = deps.createAudio();
   const player = world.tanks.find((t) => t.kind === 'player');
@@ -176,6 +200,9 @@ export function startGameWith(
   function refreshStats(w: World): void {
     hud.setLives(w.lives);
     hud.setEnemiesRemaining(countEnemies(w));
+    if (deps.devFlags.shellCount) {
+      hud.setShellCount({ inFlight: playerShellsInFlight(w, player?.id), cap: SHELL_CAP });
+    }
   }
 
   const driver = createDriver({

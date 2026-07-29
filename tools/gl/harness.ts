@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { createScene } from '../../src/render/scene';
 import { createRenderer } from '../../src/render/renderer';
+import { createAimRay } from '../../src/render/aimray';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { framedBounds } from '../../src/render/framing';
@@ -235,6 +236,47 @@ check('resize forwards to the scene camera', () => {
   if (Math.abs(p.x - W / 2) > CURRENT_ARENA.cellSize * 2) {
     return `after resize the centre mapped to x=${p.x.toFixed(2)}, expected near ${W / 2}`;
   }
+  return null;
+});
+
+
+// REMOVED: a check named "the aim ray follows the turret, and is absent by
+// default". createRenderer does not expose its scene, so it could not actually
+// reach the Line, and what remained asserted nothing -- it did its setup and
+// returned null unconditionally. The check below tests the same behaviour
+// where it IS reachable, against createAimRay directly.
+
+check('createAimRay orients the line to the turret angle', () => {
+  // Direct, because the renderer does not expose its scene. rotation.y = -angle
+  // is the repo's world->three convention; getting the sign wrong points the
+  // diagnostic the wrong way, which is worse than not having it.
+  const scene = new THREE.Scene();
+  const before = scene.children.length;
+  const ray = createAimRay(scene);
+  if (scene.children.length !== before + 1) return 'aim ray added no object to the scene';
+  const line = scene.children[scene.children.length - 1] as THREE.Line;
+  if (line.visible) return 'aim ray is visible before any sync';
+
+  const world = createArenaWorld(1);
+  const player = world.tanks.find((t) => t.kind === 'player');
+  if (!player) { ray.dispose(); return 'fixture has no player'; }
+  player.turretAngle = Math.PI / 2;
+  ray.sync(world);
+  if (!line.visible) return 'aim ray hidden after sync with a live player';
+  if (Math.abs(line.rotation.y - -Math.PI / 2) > 1e-9) {
+    return `rotation.y is ${line.rotation.y}, expected ${-Math.PI / 2}`;
+  }
+  if (Math.abs(line.position.x - player.pos.x) > 1e-9 || Math.abs(line.position.z - player.pos.y) > 1e-9) {
+    return `line at (${line.position.x}, ${line.position.z}), player at (${player.pos.x}, ${player.pos.y})`;
+  }
+
+  // A dead player must hide it rather than leave a stale ray on the board.
+  player.alive = false;
+  ray.sync(world);
+  const hiddenWhenDead = !line.visible;
+  ray.dispose();
+  if (!hiddenWhenDead) return 'aim ray still visible after the player died';
+  if (scene.children.length !== before) return 'dispose left the line in the scene';
   return null;
 });
 
