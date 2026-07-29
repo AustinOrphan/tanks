@@ -20,6 +20,23 @@ export interface Wall {
 
 // ---- Entities ----
 export type BulletType = 'normal' | 'fast' | 'ricochet';
+/**
+ * What may detonate an UNARMED mine -- one dropped but not yet armed.
+ *
+ * `none` is the shipped rule and the safe one: arming (the owner stepping
+ * clear) is what makes a mine dangerous. The others reintroduce the "instant
+ * bomb" deliberately, for playtesting: a mine spawns at the owner's feet and
+ * the blast reaches further than the trigger, so dropping one beside an enemy
+ * can kill at range zero. When that shipped by accident it also made the AI
+ * wipe itself out -- at the first live tick two enemies laid mines beside each
+ * other and all three tanks died on the spot.
+ *
+ * Part of the WORLD, not a runtime flag: src/sim/ is pure and a replay must
+ * stay an exact function of its inputs. A dev flag chooses what world is
+ * created; the sim only ever reads this field.
+ */
+export type UnarmedTrigger = 'none' | 'proximity' | 'bullet' | 'both';
+
 export type TankKind = 'player' | 'brown' | 'grey' | 'teal';
 export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
 

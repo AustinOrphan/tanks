@@ -1,7 +1,7 @@
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2 } from '../sim/types';
+import type { Vec2, UnarmedTrigger } from '../sim/types';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -66,7 +66,7 @@ export interface GameDeps {
   readonly createDirector: (engine: AudioEngine, playerId: number) => AudioDirector;
   readonly createStateMachine: () => GameStateMachine;
   readonly createHud: (root: HTMLElement) => Hud;
-  readonly createWorld: (seed: number) => World;
+  readonly createWorld: (seed: number, unarmedTrigger?: UnarmedTrigger) => World;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -186,7 +186,7 @@ export function startGameWith(
   // for a before/after comparison.
   const nextSeed = (): number => deps.devFlags.seed ?? deriveSeed(deps.wallMs());
 
-  let world = deps.createWorld(nextSeed());
+  let world = deps.createWorld(nextSeed(), deps.devFlags.mineTrigger ?? undefined);
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
   // try/catch to render a "this browser has no WebGL" page, and that only
@@ -242,7 +242,7 @@ export function startGameWith(
       sm.startPlaying();
     } else {
       // win or lose -> rebuild a fresh arena and re-enter playing
-      world = deps.createWorld(nextSeed());
+      world = deps.createWorld(nextSeed(), deps.devFlags.mineTrigger ?? undefined);
       driver.reset(world);
       refreshStats(world);
       sm.restart();

@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2, Bullet } from '../sim/types';
+import type { Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
 import {
   isPlayerDeath,
@@ -24,6 +24,7 @@ interface Recorder {
   screenToGroundArgs: Array<[number, number]>;
   directorPlayerIds: number[];
   seeds: number[];
+  worldPolicies: Array<UnarmedTrigger | undefined>;
   renders: Array<{ prev: World; curr: World; alpha: number; events: SimEvent[]; dt: number }>;
   directed: SimEvent[][];
   machineSaw: SimEvent[][];
@@ -44,7 +45,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: boolean; shellCount: boolean; seed: number | null } } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: boolean; shellCount: boolean; seed: number | null; mineTrigger: UnarmedTrigger | null } } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -63,6 +64,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
     screenToGroundArgs: [],
     directorPlayerIds: [],
     seeds: [],
+    worldPolicies: [],
     renders: [],
     directed: [],
     machineSaw: [],
@@ -210,8 +212,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
         dispose: () => rec.disposed.push('hud'),
       };
     },
-    createWorld: (seed) => {
+    createWorld: (seed, policy) => {
       rec.seeds.push(seed);
+      rec.worldPolicies.push(policy);
       return opts.world ?? createArenaWorld(seed);
     },
     now: () => 0,
@@ -224,7 +227,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: { aimRay: b
       cancel(): void {},
     },
     host,
-    devFlags: opts.devFlags ?? { aimRay: false, shellCount: false, seed: null },
+    devFlags: opts.devFlags ?? { aimRay: false, shellCount: false, seed: null, mineTrigger: null },
   };
 
   return {
@@ -654,7 +657,7 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 
   it('drives the shell readout when the flag is on', () => {
-    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: true, seed: null } }));
+    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: true, seed: null, mineTrigger: null } }));
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.shellCounts.length).toBeGreaterThan(0);
@@ -666,7 +669,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     const off = boot();
     expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false });
     off.handle.dispose();
-    const on = boot(makeDeps({ devFlags: { aimRay: true, shellCount: false, seed: null } }));
+    const on = boot(makeDeps({ devFlags: { aimRay: true, shellCount: false, seed: null, mineTrigger: null } }));
     expect(on.rec.rendererArgs[0][4]).toEqual({ aimRay: true });
     on.handle.dispose();
   });
@@ -674,7 +677,7 @@ describe('startGameWith: dev flags stay off by default', () => {
 
 describe('startGameWith: a pinned dev seed', () => {
   it('uses the pinned seed instead of the clock', () => {
-    const h = boot(makeDeps({ wallMs: 999, devFlags: { aimRay: false, shellCount: false, seed: 4242 } }));
+    const h = boot(makeDeps({ wallMs: 999, devFlags: { aimRay: false, shellCount: false, seed: 4242, mineTrigger: null } }));
     expect(h.rec.seeds[0]).toBe(4242);
     h.handle.dispose();
   });
@@ -682,7 +685,7 @@ describe('startGameWith: a pinned dev seed', () => {
   it('reuses it on restart, so a replay is the same fight', () => {
     // The whole point: without this a restart re-derives from the clock and
     // the comparison is against a different arena.
-    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: false, seed: 4242 } }));
+    const h = boot(makeDeps({ devFlags: { aimRay: false, shellCount: false, seed: 4242, mineTrigger: null } }));
     h.setState('win');
     h.hud.startRestart();
     expect(h.rec.seeds).toEqual([4242, 4242]);
@@ -692,6 +695,22 @@ describe('startGameWith: a pinned dev seed', () => {
   it('falls back to the clock when unpinned', () => {
     const h = boot(makeDeps({ wallMs: 1000 }));
     expect(h.rec.seeds[0]).toBe(deriveSeed(1000));
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the mine-trigger policy reaches the world', () => {
+  it('passes the policy to createWorld', () => {
+    const h = boot(makeDeps({
+      devFlags: { aimRay: false, shellCount: false, seed: null, mineTrigger: 'both' },
+    }));
+    expect(h.rec.worldPolicies[0]).toBe('both');
+    h.handle.dispose();
+  });
+
+  it('passes undefined when unset, so the world keeps its own default', () => {
+    const h = boot();
+    expect(h.rec.worldPolicies[0]).toBeUndefined();
     h.handle.dispose();
   });
 });

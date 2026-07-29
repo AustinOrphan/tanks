@@ -107,6 +107,19 @@ export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void
   if (owner) owner.activeMineIds = owner.activeMineIds.filter((id) => id !== mine.id)
 }
 
+/**
+ * May a shell detonate this mine?
+ *
+ * An ARMED mine always can: a mine that is live to a footstep should be live to
+ * a shell, and that half is not configurable. An UNARMED one depends on the
+ * world's policy, because triggering it is the "instant bomb" -- drop at an
+ * enemy's feet, step back, shoot it, with no fuse and no arming delay.
+ */
+export function shellMayDetonate(world: World, mine: Mine): boolean {
+  if (mine.armed) return true
+  return world.unarmedTrigger === 'bullet' || world.unarmedTrigger === 'both'
+}
+
 export function stepMines(world: World, dt: number, events: SimEvent[]): void {
   for (const mine of [...world.mines]) {
     if (mine.detonated) continue
@@ -139,7 +152,12 @@ export function stepMines(world: World, dt: number, events: SimEvent[]): void {
     // self-kill for a free kill (walk up, tap the key, walk away unharmed),
     // and made the AI wipe itself out: at the first live tick two enemies laid
     // mines beside each other and all three died on the spot.
-    if (!mine.armed) continue
+    // Unarmed mines are inert unless the world says otherwise. See
+    // UnarmedTrigger: 'proximity' and 'both' reinstate the instant bomb on
+    // purpose, for playtesting, including the AI mutual-wipeout above.
+    if (!mine.armed && world.unarmedTrigger !== 'proximity' && world.unarmedTrigger !== 'both') {
+      continue
+    }
     for (const t of world.tanks) {
       if (!t.alive) continue
       if (vdist(t.pos, mine.pos) > MINE_PROXIMITY_RADIUS) continue

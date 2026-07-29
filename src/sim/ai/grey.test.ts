@@ -24,7 +24,7 @@ function mine(id: number, ownerId: number, pos: Vec2, over: Partial<Mine> = {}):
 function world(over: Partial<World>): World {
   return {
     tick: 0, nextId: 100, seed: 7, tanks: [], bullets: [], mines: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, ...over,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const, ...over,
   };
 }
 

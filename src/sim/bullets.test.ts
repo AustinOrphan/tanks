@@ -471,7 +471,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     // rather than the player's ability to fire.
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, tanks: [], mines: [],
+      roundStartTick: 0, unarmedTrigger: 'none' as const, tanks: [], mines: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -487,7 +487,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     // for being embedded, or every ricochet would die on contact.
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, tanks: [], mines: [],
+      roundStartTick: 0, unarmedTrigger: 'none' as const, tanks: [], mines: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,

@@ -1,4 +1,4 @@
-import type { Tank, Bullet, Mine, Wall, Spawn, InputState } from './types';
+import type { Tank, Bullet, Mine, Wall, Spawn, InputState, UnarmedTrigger } from './types';
 import { angleOf, slewAngle, vsub } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks, resolveWalls } from './collision';
@@ -12,6 +12,8 @@ export interface World {
   tick: number;
   nextId: number;
   seed: number;
+  /** What may detonate an UNARMED mine. See UnarmedTrigger. */
+  unarmedTrigger: UnarmedTrigger;
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
@@ -36,6 +38,8 @@ export function createWorld(init: {
   spawns: Spawn[];
   lives: number;
   seed?: number;
+  /** Defaults to 'none', the shipped rule. */
+  unarmedTrigger?: UnarmedTrigger;
 }): World {
   const maxId = Math.max(
     0,
@@ -46,6 +50,7 @@ export function createWorld(init: {
     tick: 0,
     nextId: maxId + 1,
     seed: init.seed ?? 1,
+    unarmedTrigger: init.unarmedTrigger ?? 'none',
     tanks: init.tanks,
     bullets: [],
     mines: [],
@@ -73,6 +78,7 @@ export function cloneWorld(world: World): World {
     tick: world.tick,
     nextId: world.nextId,
     seed: world.seed,
+    unarmedTrigger: world.unarmedTrigger,
     status: world.status,
     lives: world.lives,
     roundStartTick: world.roundStartTick,

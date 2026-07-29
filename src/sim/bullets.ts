@@ -1,9 +1,10 @@
 import type { Bullet, BulletType, Vec2 } from './types'
 import { fromAngle, vscale, vadd, vlen, vsub, vdot } from './types'
 import { reflectSweep, circleVsCircle } from './collision'
+import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS } from './constants'
+import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS } from './constants'
 
 export function ownerShellCount(world: World, ownerId: number): number {
   let n = 0
@@ -72,6 +73,22 @@ export function stepBullets(world: World, dt: number, events: SimEvent[]): void 
 }
 
 export function resolveBulletHits(world: World, events: SimEvent[]): void {
+  // Shells set off mines they run into. Checked BEFORE tanks, so a shell that
+  // would reach a tank standing on a mine sets the mine off rather than merely
+  // killing the tank -- the blast is the larger event and should not be lost.
+  for (const b of world.bullets) {
+    if (!b.alive) continue
+    for (const m of world.mines) {
+      if (m.detonated) continue
+      if (!circleVsCircle(b.pos, BULLET_RADIUS, m.pos, MINE_TRIGGER_RADIUS).hit) continue
+      if (!shellMayDetonate(world, m)) continue
+      b.alive = false
+      detonateMine(world, m, events)
+      break
+    }
+  }
+  world.mines = world.mines.filter((m) => !m.detonated)
+
   for (const b of world.bullets) {
     if (!b.alive) continue
     for (const t of world.tanks) {
