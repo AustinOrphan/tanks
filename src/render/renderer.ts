@@ -35,7 +35,7 @@ export function createRenderer(
   options: RendererOptions = {},
 ): Renderer3D {
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
-  const entities: EntityViews = createEntityViews(ctx.scene);
+  const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =
