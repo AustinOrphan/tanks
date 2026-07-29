@@ -104,3 +104,69 @@
   transform: translateY(3px);
   box-shadow: 0 3px 0 #2f8f45;
 }
+
+
+/* ---- Losing a life -------------------------------------------------------- */
+
+/*
+ * A red vignette over the whole viewport, plus a pulse on the Lives counter.
+ *
+ * Losing a life was the least legible event in the game: the sim emits
+ * tank-destroyed, the audio director plays a sound, and the HUD number changed
+ * silently. With no audio assets committed that sound is a procedural blip, so
+ * in practice a death had NO reliable feedback at all -- it was possible to
+ * play a whole life without noticing one had ended.
+ *
+ * pointer-events: none because this covers the board, and the player is aiming
+ * through it the instant they respawn.
+ */
+.hud-damage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(180, 30, 30, 0) 35%,
+    rgba(180, 30, 30, 0.55) 100%
+  );
+}
+
+.hud-damage--hit {
+  animation: hud-damage-flash 700ms ease-out 1;
+}
+
+@keyframes hud-damage-flash {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.hud-lives--hit {
+  animation: hud-lives-pulse 700ms ease-out 1;
+}
+
+@keyframes hud-lives-pulse {
+  0% { color: #d8dde6; transform: scale(1); }
+  15% { color: #ff6a6a; transform: scale(1.5); }
+  100% { color: #d8dde6; transform: scale(1); }
+}
+
+/* The counter needs to be its own box for transform to apply. */
+.hud-lives {
+  display: inline-block;
+}
+
+/*
+ * Respect a reduced-motion preference: keep the colour signal, drop the
+ * movement and the full-screen flash.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hud-damage--hit {
+    animation: none;
+  }
+  @keyframes hud-lives-pulse {
+    0%, 100% { color: #d8dde6; transform: none; }
+    50% { color: #ff6a6a; transform: none; }
+  }
+}

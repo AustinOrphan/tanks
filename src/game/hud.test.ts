@@ -216,3 +216,58 @@ describe('createHud does not keep keyboard focus after a pointer interaction', (
     expect(document.activeElement).not.toBe(slider);
   });
 });
+
+describe('hud: losing a life', () => {
+  function mount(): { root: HTMLElement; hud: ReturnType<typeof createHud> } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    return { root, hud: createHud(root) };
+  }
+
+  it('shows nothing until a life is actually lost', () => {
+    const { root, hud } = mount();
+    expect(root.querySelector('.hud-damage')?.className).not.toContain('hud-damage--hit');
+    hud.dispose();
+  });
+
+  it('flashes the screen and pulses the counter', () => {
+    const { root, hud } = mount();
+    hud.signalPlayerDeath();
+    expect(root.querySelector('.hud-damage')?.className).toContain('hud-damage--hit');
+    expect(root.querySelector('.hud-lives')?.className).toContain('hud-lives--hit');
+    hud.dispose();
+  });
+
+  it('replays for a second death, so two deaths read as two', () => {
+    // Re-adding a class the element already has does NOT restart a CSS
+    // animation. Without the remove-and-reflow, a second death inside the
+    // animation window would be invisible -- the case where the player most
+    // needs telling. MutationObserver delivers on a microtask, so drain it
+    // synchronously with takeRecords rather than waiting.
+    const { root, hud } = mount();
+    hud.signalPlayerDeath();
+    const damage = root.querySelector('.hud-damage') as HTMLElement;
+    const obs = new MutationObserver(() => {});
+    obs.observe(damage, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+    hud.signalPlayerDeath();
+    const records = obs.takeRecords();
+    obs.disconnect();
+    const sawRemoval = records.some(
+      (r) => r.oldValue?.includes('hud-damage--hit') && !r.oldValue.endsWith('--hit '),
+    );
+    expect(records.length).toBeGreaterThanOrEqual(2); // removed, then re-added
+    expect(sawRemoval).toBe(true);
+    expect(damage.className).toContain('hud-damage--hit');
+    hud.dispose();
+  });
+
+  it('the flash cannot swallow the pointer', () => {
+    // It covers the whole board, and the player is aiming through it the
+    // instant they respawn.
+    const { root, hud } = mount();
+    hud.signalPlayerDeath();
+    const damage = root.querySelector('.hud-damage') as HTMLElement;
+    expect(damage.getAttribute('aria-hidden')).toBe('true');
+    hud.dispose();
+  });
+});

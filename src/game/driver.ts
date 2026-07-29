@@ -49,6 +49,14 @@ export interface DriverDeps {
   world: World;
   /** Once per SIMULATING frame, after events are routed. loop.ts refreshes HUD stats here. */
   onSimulated(world: World): void;
+  /**
+   * This frame's events, for consumers that are not the audio director or the
+   * state machine. loop.ts drives the HUD's damage feedback from here.
+   *
+   * Called only when the frame produced events, on the same terms as the other
+   * two -- so the three consumers cannot drift apart in when they see a frame.
+   */
+  onFrameEvents(events: SimEvent[]): void;
 }
 
 export interface Driver {
@@ -96,6 +104,7 @@ export function createDriver(deps: DriverDeps): Driver {
       if (frameEvents.length > 0) {
         deps.director.handle(frameEvents);
         deps.stateMachine.onEvents(frameEvents);
+        deps.onFrameEvents(frameEvents);
       }
       deps.onSimulated(curr);
     } else {
