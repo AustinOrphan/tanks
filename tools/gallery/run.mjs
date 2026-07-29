@@ -33,6 +33,13 @@ const outFile = args.out.endsWith('.gif') || args.out.endsWith('.png')
 function sh(cmd, argv) {
   return execFileSync(cmd, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 }
+/** Actual pixel dimensions of a rendered file, so padding can match the cells. */
+function probeSize(file) {
+  const out = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', file]).toString().trim();
+  const [w, h] = out.split(',').map(Number);
+  return { w, h };
+}
+
 function has(cmd) {
   try { execFileSync('which', [cmd], { stdio: 'ignore' }); return true; } catch { return false; }
 }
@@ -241,9 +248,15 @@ async function run(browser) {
     });
     const { cols, rows } = gridShape(cells.length);
     const pad = cols * rows - cells.length;
+    // Pad at the size the CELLS actually are, not the capture size. With --crop those
+    // differ, and hstack refuses to stack mismatched inputs -- it fails with a bare
+    // "Conversion failed!", which says nothing about sizes. Hit by every odd-numbered
+    // sweep that also cropped.
+    const cellSize = pad > 0 ? probeSize(cells[0]) : null;
     for (let i = 0; i < pad; i++) {
-      sh('ffmpeg', ['-y', '-f', 'lavfi', '-i', `color=c=black:s=${args.w}x${args.h}:d=1`, '-frames:v', '1', `${outDir}/cell-${cells.length + i}.png`]);
-      cells.push(`${outDir}/cell-${cells.length + i}.png`);
+      const dst = `${outDir}/cell-${cells.length}.png`;
+      sh('ffmpeg', ['-y', '-f', 'lavfi', '-i', `color=c=black:s=${cellSize.w}x${cellSize.h}:d=1`, '-frames:v', '1', dst]);
+      cells.push(dst);
     }
     const inputs = cells.flatMap((c) => ['-i', c]);
     // hstack/vstack REJECT inputs=1 -- "Numerical result out of range" -- so a single

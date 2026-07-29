@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { TANK_RADIUS, BULLET_RADIUS } from '../sim/constants';
+import { BULLET_RADIUS } from '../sim/constants';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -50,6 +50,32 @@ const BLAST_FLATTEN = 0.7;
  * Turret radius. 0.36 is 90% of the hull's 0.80 depth -- close to flush without
  * overhanging the sides. Chosen from two rendered sweeps, 0.26-0.44 then 0.32-0.38.
  */
+/**
+ * Hull dimensions, in world units, along the tank's own axes: +x is forward.
+ *
+ * The sim collides tanks as a CIRCLE of radius TANK_RADIUS (0.5), so nothing here can
+ * make the collision wrong -- but it can make it MISLEADING. The old hull was 1.0 long
+ * by 0.8 wide, NARROWER than the 1.0 circle it actually collides with, so a tank looked
+ * like it should slip through gaps that stop it. 0.94 including the tracks closes almost
+ * all of that while keeping the tank visibly longer than it is wide.
+ */
+export const HULL_LEN = 1.0;
+export const HULL_WIDTH = 0.94;
+/** Width of ONE track. The two of them make up the hull's full width at the edges. */
+export const TRACK_W = 0.22;
+/** Tracks are shorter than the body is tall and sit on the ground; the body rides above. */
+export const TRACK_H = 0.34;
+/**
+ * How much darker the tracks are than the hull paint.
+ *
+ * Too dark and they read as the tank's own shadow rather than as part of it -- which is
+ * exactly what 0.45 did at play distance. Chosen from a sweep of 0.45/0.70/0.90 shot
+ * through the real camera; the height mattered far less than the shade.
+ */
+export const TRACK_SHADE = 0.7;
+/** How far the tracks overhang the body front and back. */
+export const TRACK_OVERHANG = 0.05;
+
 export const TURRET_R = 0.36;
 /**
  * How far the barrel protrudes BEYOND the turret.
@@ -173,17 +199,43 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
     const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.25 });
+    // The hull is a body riding between two tracks, rather than one box.
+    //
+    // A single box gave the tank no ground contact to read: it was a brick with a turret,
+    // and at this camera angle the hull and turret were one silhouette. Tracks are what
+    // say "this thing drives", and they carry the width so the body can stay narrower and
+    // sit higher, which separates it from the ground.
+    const bodyWidth = HULL_WIDTH - TRACK_W * 2 + 0.06; // slight overlap, no visible seam
     const body = new THREE.Mesh(
-      new THREE.BoxGeometry(TANK_RADIUS * 2, TANK_BODY_H, TANK_RADIUS * 1.6),
+      new THREE.BoxGeometry(HULL_LEN, TANK_BODY_H - TRACK_H * 0.35, bodyWidth),
       bodyMat,
     );
-    body.position.y = TANK_BODY_H / 2;
+    body.position.y = TRACK_H * 0.55 + (TANK_BODY_H - TRACK_H * 0.35) / 2;
     body.castShadow = true;
     body.receiveShadow = true;
     group.add(body);
 
+    // Tracks: darker and rougher than the painted hull, because they are steel that
+    // spends its life in the dirt. Same colour family so the tank still reads as one
+    // object at a glance.
+    const trackMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color).multiplyScalar(TRACK_SHADE),
+      roughness: 0.95,
+      metalness: 0.35,
+    });
+    for (const side of [-1, 1]) {
+      const track = new THREE.Mesh(
+        new THREE.BoxGeometry(HULL_LEN + TRACK_OVERHANG * 2, TRACK_H, TRACK_W),
+        trackMat,
+      );
+      track.position.set(0, TRACK_H / 2, side * (HULL_WIDTH - TRACK_W) / 2);
+      track.castShadow = true;
+      track.receiveShadow = true;
+      group.add(track);
+    }
+
     const turret = new THREE.Group();
-    turret.position.y = TANK_BODY_H + 0.12;
+    turret.position.y = TRACK_H * 0.55 + (TANK_BODY_H - TRACK_H * 0.35) + 0.02;
     // The turret reads as the same paint, less worn -- smoother, so the highlight that
     // separates it from the hull below sits on the turret rather than the body.
     const turretMat = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.35 });
