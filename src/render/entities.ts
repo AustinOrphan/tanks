@@ -3,6 +3,9 @@ import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { TANK_RADIUS, BULLET_RADIUS } from '../sim/constants';
+import { angleOf } from '../sim/types';
+import { blastRadiusAt } from '../sim/mines';
+import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 export interface EntityViews {
   sync(prev: World, curr: World, alpha: number): void;
@@ -18,6 +21,8 @@ const TANK_COLORS: Record<TankKind, number> = {
 
 const TANK_BODY_H = 0.4;
 const BULLET_Y = 0.35;
+/** Centre of the fireball: sat on the deck, so its lower half is buried like a real one. */
+const BLAST_Y = 0.2;
 const MINE_Y = 0.06;
 const WALL_H = 1.0;
 
@@ -40,7 +45,8 @@ function disposeObject(obj: THREE.Object3D): void {
 
 export function createEntityViews(scene: THREE.Scene): EntityViews {
   const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D }>();
-  const bulletViews = new Map<number, THREE.Mesh>();
+  const bulletViews = new Map<number, THREE.Group>();
+  const blastViews = new Map<number, THREE.Mesh>();
   const mineViews = new Map<number, THREE.Mesh>();
   const wallViews = new Map<number, THREE.Mesh>();
 
@@ -78,12 +84,59 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     return { group, turret };
   }
 
-  function makeBullet(): THREE.Mesh {
+  /** Visual proportions of a shell. The sim's BULLET_RADIUS (0.1) is its collision size;
+   *  drawn dead-on it is nearly invisible, so the body is scaled up and given length. */
+  const SHELL_R = BULLET_RADIUS * 1.0;
+  const SHELL_BODY_LEN = BULLET_RADIUS * 4.5;
+
+  /**
+   * A shell: a cylinder with a rounded nose, pointed along its own velocity.
+   *
+   * Built as a Group rather than one mesh so the nose can be a hemisphere. The parts are
+   * laid out along local +x and the group is then yawed, which keeps the orientation maths
+   * in one place and matching the barrel (entities.ts lays that along +x too).
+   */
+  function makeBullet(): THREE.Group {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xf5f0d0, emissive: 0x444422 });
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(SHELL_R, SHELL_R, SHELL_BODY_LEN, 14), mat);
+    body.rotation.z = Math.PI / 2; // lay the cylinder along local +x
+    body.castShadow = true;
+    group.add(body);
+
+    // A COMPLETE sphere at the tip, half of it buried in the body, is what makes the
+    // rounded nose. The obvious economy -- SphereGeometry(r, ..., 0, Math.PI) for "just
+    // the half you can see" -- is a single-sided open shell: from directly overhead, which
+    // is the angle this game is played at, you look straight into its hollow interior and
+    // every shell reads as a piece of macaroni. Screenshot the top view before changing it.
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(SHELL_R, 14, 10), mat);
+    nose.position.x = SHELL_BODY_LEN / 2;
+    nose.castShadow = true;
+    group.add(nose);
+
+    // No tail cap is added: CylinderGeometry is closed unless openEnded is passed, so an
+    // extra disc there was redundant geometry and a second single-sided surface.
+
+    scene.add(group);
+    return group;
+  }
+
+  /**
+   * The visible fireball. Built at unit radius and scaled per frame, so growth costs a
+   * scale assignment rather than a geometry rebuild every tick.
+   */
+  function makeBlast(): THREE.Mesh {
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(BULLET_RADIUS * 1.6, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xf5f0d0, emissive: 0x444422 }),
+      new THREE.SphereGeometry(1, 16, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0xff8844,
+        emissive: 0xff5511,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false, // it is a glow, not a solid: do not let it occlude what is inside it
+      }),
     );
-    mesh.castShadow = true;
     scene.add(mesh);
     return mesh;
   }
@@ -170,11 +223,55 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
       const p = prevMap.get(b.id);
       const pos = p && p.alive ? lerpVec2(p.pos, b.pos, alpha) : b.pos;
       mesh.position.set(pos.x, BULLET_Y, pos.y);
+      // Same convention as the turret: world (x, y) -> three (x, z), and a world angle
+      // maps to rotation.y = -angle, because a CCW turn in the sim's xy-plane is
+      // clockwise about three's +y. A shell's heading is its velocity; it never has
+      // zero velocity while alive, so there is no degenerate case to guard.
+      mesh.rotation.y = -angleOf(b.vel);
     }
     for (const [id, mesh] of bulletViews) {
       if (!seen.has(id)) {
         disposeObject(mesh);
         bulletViews.delete(id);
+      }
+    }
+  }
+
+  /**
+   * Draw each live blast at the radius the SIM says it currently has.
+   *
+   * The radius comes from blastRadiusAt, the same function the damage uses, so what you
+   * see is what kills you -- a separate visual curve here would be a lie that no test
+   * could catch. It is interpolated between the two ticks like every other quantity,
+   * because at 60Hz a 5-tick expansion stepped discretely reads as a stutter.
+   */
+  function syncBlasts(prev: World, curr: World, alpha: number): void {
+    const prevMap = indexById(prev.blasts);
+    const seen = new Set<number>();
+    for (const b of curr.blasts) {
+      seen.add(b.id);
+      let mesh = blastViews.get(b.id);
+      if (!mesh) {
+        mesh = makeBlast();
+        blastViews.set(b.id, mesh);
+      }
+      const p = prevMap.get(b.id);
+      // A blast in its first frame has no previous tick: grow it from nothing rather
+      // than popping in at full age-0 size.
+      const from = p ? blastRadiusAt(p.age) : 0;
+      const radius = from + (blastRadiusAt(b.age) - from) * alpha;
+      mesh.position.set(b.pos.x, BLAST_Y, b.pos.y);
+      mesh.scale.setScalar(Math.max(radius, 1e-4));
+      // Solid while it expands, then fading over the hold so it dissipates rather than
+      // vanishing on a frame boundary.
+      const held = b.age - MINE_BLAST_EXPAND_TICKS + alpha;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      mat.opacity = held <= 0 ? 1 : Math.max(0, 1 - held / MINE_BLAST_HOLD_TICKS);
+    }
+    for (const [id, mesh] of blastViews) {
+      if (!seen.has(id)) {
+        disposeObject(mesh);
+        blastViews.delete(id);
       }
     }
   }
@@ -232,16 +329,19 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     syncTanks(prev, curr, a, snap);
     syncBullets(prev, curr, a);
     syncMines(prev, curr, a);
+    syncBlasts(prev, curr, a);
   }
 
   function dispose(): void {
     for (const v of tankViews.values()) disposeObject(v.group);
     for (const m of bulletViews.values()) disposeObject(m);
     for (const m of mineViews.values()) disposeObject(m);
+    for (const m of blastViews.values()) disposeObject(m);
     for (const m of wallViews.values()) disposeObject(m);
     tankViews.clear();
     bulletViews.clear();
     mineViews.clear();
+    blastViews.clear();
     wallViews.clear();
   }
 
