@@ -4,7 +4,9 @@
 // suite stays green.
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { createEntityViews, BARREL_OUT, MUZZLE_LEN } from './entities';
+import {
+  createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE,
+} from './entities';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
@@ -519,6 +521,48 @@ describe('tank geometry', () => {
     const breech = Math.min(...profile(part(scene, 'barrel')).map((p) => p.y));
     expect(breech).toBeGreaterThan(0);
     expect(breech).toBeLessThan(turretR);
+    views.dispose();
+  });
+
+  it('draws a hull no NARROWER than the circle it collides with', () => {
+    // The sim collides tanks as a circle of radius TANK_RADIUS. Nothing here can make
+    // that wrong, but it can make it MISLEADING, and it did: the hull was 0.8 wide
+    // against a 1.0-diameter circle, so a tank looked like it should fit through gaps
+    // that stop it. Asserted against the sim constant, not a literal, so shrinking the
+    // hull below its own collider fails rather than merely looking odd.
+    expect(HULL_WIDTH).toBeGreaterThan(TANK_RADIUS * 2 * 0.9);
+    expect(HULL_LEN).toBeGreaterThanOrEqual(TANK_RADIUS * 2 * 0.95);
+    // And roughly square in plan, which is what makes a circular collider defensible at
+    // all -- a long narrow hull would need a different collider, not a different number.
+    const ratio = HULL_LEN / HULL_WIDTH;
+    expect(ratio).toBeGreaterThan(0.8);
+    expect(ratio).toBeLessThan(1.3);
+  });
+
+  it('has tracks that read as part of the tank, not as its shadow', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    views.sync(w, w, 0);
+
+    // Two of them, one either side, spanning the hull's full width.
+    const boxes: THREE.Mesh[] = [];
+    scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry instanceof THREE.BoxGeometry) boxes.push(m);
+    });
+    const tracks = boxes.filter(
+      (m) => Math.abs((m.geometry as THREE.BoxGeometry).parameters.depth - TRACK_W) < 1e-9,
+    );
+    expect(tracks).toHaveLength(2);
+    expect(tracks[0].position.z).toBeCloseTo(-tracks[1].position.z, 9); // symmetric
+    const outer = Math.max(...tracks.map((t) => Math.abs(t.position.z))) + TRACK_W / 2;
+    expect(outer).toBeCloseTo(HULL_WIDTH / 2, 9); // they define the width
+
+    // Darker than the paint but not near-black: at 0.45 they read as the tank's own
+    // shadow at play distance, which is the whole reason TRACK_SHADE exists.
+    expect(TRACK_SHADE).toBeGreaterThan(0.55);
+    expect(TRACK_SHADE).toBeLessThan(1);
     views.dispose();
   });
 
