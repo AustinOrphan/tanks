@@ -34,6 +34,7 @@ interface Recorder {
   hudStates: GameState[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
+  roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
   deathSignals: number;
   volumes: number[];
   resizes: Array<[number, number]>;
@@ -74,6 +75,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     hudStates: [],
     muted: [],
     shellCounts: [],
+    roundPhases: [],
     deathSignals: 0,
     volumes: [],
     resizes: [],
@@ -200,6 +202,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setState: (s) => rec.hudStates.push(s),
         setMuted: (m) => rec.muted.push(m),
         setShellCount: (i) => rec.shellCounts.push(i),
+        setRoundPhase: (info) => rec.roundPhases.push(info),
         signalPlayerDeath: () => { rec.deathSignals += 1; },
         onMuteToggle: (cb) => {
           onMute = cb;
@@ -216,7 +219,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     createWorld: (seed, policy) => {
       rec.seeds.push(seed);
       rec.worldPolicies.push(policy);
-      return opts.world ?? createArenaWorld(seed);
+      // The real createArenaWorld returns a FRESH world each call, and
+      // resetArena moves roundStartTick forward -- so a fixed fixture object
+      // would make every round look like the same round to loop.ts. Advance it
+      // per call, as a respawn does.
+      const base = opts.world ?? createArenaWorld(seed);
+      return { ...base, roundStartTick: base.roundStartTick + rec.seeds.length - 1 };
     },
     now: () => 0,
     wallMs: () => opts.wallMs ?? 1234567,
@@ -728,6 +736,78 @@ describe('startGameWith: the mine-trigger policy reaches the world', () => {
   it('passes undefined when unset, so the world keeps its own default', () => {
     const h = boot();
     expect(h.rec.worldPolicies[0]).toBeUndefined();
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: round-phase HUD (dev flag)', () => {
+  function withFlag(on: boolean): ReturnType<typeof makeDeps> {
+    // A world that starts in countdown: roundStartTick equal to tick.
+    const base = createArenaWorld(1);
+    return makeDeps({
+      world: { ...base, tick: 0, roundStartTick: 0 },
+      devFlags: { roundPhaseHud: on, aimRay: false, shellCount: false },
+    });
+  }
+
+  it('says NOTHING to the HUD when the flag is off', () => {
+    // Default-off must be byte-identical to not having the feature.
+    const h = boot(withFlag(false));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.roundPhases).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('drives the HUD when the flag is on', () => {
+    const h = boot(withFlag(true));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.roundPhases.length).toBeGreaterThan(0);
+    const first = h.rec.roundPhases[0];
+    expect(first?.phase).toBe('countdown');
+    expect(first?.secondsLeft).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it('makes the FIRST round of the page load prominent', () => {
+    const h = boot(withFlag(true));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.roundPhases[0]?.prominent).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('drops to the quiet chip on the next round', () => {
+    // Rounds restart on every respawn, not just a new game -- resetArena moves
+    // roundStartTick -- so the second round must not re-teach.
+    const h = boot(withFlag(true));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.roundPhases[0]?.prominent).toBe(true);
+    // A restart builds a fresh world, which carries a different roundStartTick.
+    h.setState('win');
+    h.hud.startRestart();
+    h.setState('playing');
+    h.fireFrame(200);
+    const last = h.rec.roundPhases[h.rec.roundPhases.length - 1];
+    expect(last?.prominent).toBe(false);
+    h.handle.dispose();
+  });
+
+  it('hides once the round goes live', () => {
+    const base = createArenaWorld(1);
+    const h = boot(
+      makeDeps({
+        // Far past COUNTDOWN_TICKS + GRACE_TICKS.
+        world: { ...base, tick: 5000, roundStartTick: 0 },
+        devFlags: { roundPhaseHud: true, aimRay: false, shellCount: false },
+      }),
+    );
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.roundPhases.length).toBeGreaterThan(0);
+    expect(h.rec.roundPhases.every((p) => p === null)).toBe(true);
     h.handle.dispose();
   });
 });

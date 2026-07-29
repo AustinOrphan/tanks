@@ -126,6 +126,87 @@
 
 .hud-shells--hidden {
   display: none;
+}
+
+/* ---- Round-start phase feedback (dev flag: roundPhaseHud) ---------------- */
+
+/* Topbar chip: the quiet form, used on every round after the first. */
+.hud-phase {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(216, 221, 230, 0.12);
+  color: #d8dde6;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.hud-phase--hidden {
+  display: none;
+}
+
+/*
+ * Centred banner: the teaching form, first round of the page load only.
+ *
+ * pointer-events: none is load-bearing, not defensive. NOTE: it is NOT covered
+ * by a test, and three approaches were tried and rejected rather than shipping
+ * one that cannot fail -- jsdom applies no stylesheet so a computed-style check
+ * passes against an empty cascade; `?raw` returns an empty string under vitest;
+ * and a file read needs @types/node, which this project does not carry. If you
+ * remove this line, nothing will tell you. The whole point of the
+ * countdown phase is that the player aims with the mouse, and this sits over
+ * the board for exactly those seconds -- if it swallowed the pointer it would
+ * break the thing it is announcing. No background either, for the same reason:
+ * the player needs to see what they are aiming at.
+ */
+.hud-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.5em;
+  /*
+   * Anchored to the dead space ABOVE the board, not centred in the viewport.
+   * Centred, it sat across the middle of the arena -- over a wall and a tank --
+   * during the one phase whose entire purpose is looking at the board and
+   * aiming. Measured top dead space, board-only screenshots: 158px at 1280x800,
+   * 213px at 1920x1080, 314px at 390x844, and 103px at 1560x520 ultrawide,
+   * which is the binding case. Bottom dead space is 16-32px at three of those
+   * four, so below the board is not an option.
+   *
+   * MEASURED at 1560x520, the binding viewport: the topbar ends at 51px and the
+   * board starts at 103px, so the band is 52px. 55px top padding with the type
+   * capped at 26px puts the banner at 55..91 -- 4px below the topbar and 12px
+   * above the board. An earlier 32px cap left only 3px of board clearance,
+   * which is not enough to survive a font or framing change. It is also why the
+   * word and count share one line instead of stacking.
+   */
+  align-content: flex-start;
+  padding-top: 55px;
+  align-items: flex-start;
+  pointer-events: none;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+.hud-banner--hidden {
+  display: none;
+}
+
+.hud-banner-word {
+  font-size: clamp(16px, 2.2vw, 26px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #f2f5fa;
+}
+
+.hud-banner-count {
+  font-size: clamp(16px, 2.2vw, 26px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(242, 245, 250, 0.85);
+}
+
 /* ---- Losing a life -------------------------------------------------------- */
 
 /*

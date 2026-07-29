@@ -1,6 +1,15 @@
 import type { GameState } from './state';
+import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import './hud.css';
+
+export interface RoundPhaseInfo {
+  phase: RoundPhase;
+  /** Whole seconds left in this phase. */
+  secondsLeft: number;
+  /** Centred banner when true, topbar chip when false. */
+  prominent: boolean;
+}
 
 export interface Hud {
   setLives(n: number): void;
@@ -8,6 +17,13 @@ export interface Hud {
   setState(s: GameState): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
+  /**
+   * Round-start phase feedback. `null` hides it. `prominent` picks the centred
+   * banner over the topbar chip; the caller decides which, not the HUD.
+   *
+   * Only reached when the roundPhaseHud dev flag is on -- see devflags.ts.
+   */
+  setRoundPhase(info: RoundPhaseInfo | null): void;
   /**
    * Dev only: shells in flight against the cap. `null` hides it.
    *
@@ -36,6 +52,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-topbar">
       <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
+      <div class="hud-phase hud-phase--hidden"></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
@@ -47,6 +64,10 @@ export function createHud(root: HTMLElement): Hud {
         <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
       </div>
     </div>
+    <div class="hud-banner hud-banner--hidden">
+      <div class="hud-banner-word"></div>
+      <div class="hud-banner-count"></div>
+    </div>
     <div class="hud-damage" aria-hidden="true"></div>
     <div class="hud-panel hud-panel--hidden">
       <h1 class="hud-title"></h1>
@@ -56,6 +77,10 @@ export function createHud(root: HTMLElement): Hud {
   `;
   root.appendChild(el);
 
+  const phaseEl = el.querySelector('.hud-phase') as HTMLElement;
+  const bannerEl = el.querySelector('.hud-banner') as HTMLElement;
+  const bannerWordEl = el.querySelector('.hud-banner-word') as HTMLElement;
+  const bannerCountEl = el.querySelector('.hud-banner-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
@@ -155,6 +180,25 @@ export function createHud(root: HTMLElement): Hud {
     },
     setState,
     setMuted,
+    setRoundPhase(info: RoundPhaseInfo | null): void {
+      if (!info || info.phase === 'live') {
+        bannerEl.classList.add('hud-banner--hidden');
+        phaseEl.classList.add('hud-phase--hidden');
+        return;
+      }
+      const word = info.phase === 'countdown' ? 'TAKE AIM' : 'MOVE';
+      const short = info.phase === 'countdown' ? 'AIM' : 'MOVE';
+      if (info.prominent) {
+        bannerWordEl.textContent = word;
+        bannerCountEl.textContent = String(info.secondsLeft);
+        bannerEl.classList.remove('hud-banner--hidden');
+        phaseEl.classList.add('hud-phase--hidden');
+      } else {
+        phaseEl.textContent = `${short} ${info.secondsLeft}`;
+        phaseEl.classList.remove('hud-phase--hidden');
+        bannerEl.classList.add('hud-banner--hidden');
+      }
+    },
     setShellCount(info): void {
       if (!info) {
         shellsEl.classList.add('hud-shells--hidden');

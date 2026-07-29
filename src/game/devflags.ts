@@ -12,6 +12,13 @@ import type { UnarmedTrigger } from '../sim/types';
 
 export interface DevFlags {
   /**
+   * Round-start phase feedback in the HUD: a banner on the first round of the
+   * page load, a topbar chip on every round after it. The round opens with 3.0s
+   * where nothing moves and 2.0s where nothing fires, applied to the AI too,
+   * and the HUD says nothing about either.
+   */
+  roundPhaseHud: boolean;
+  /**
    * Draw the player's computed aim: a ray along the turret and a marker where
    * screenToGround says the cursor lands.
    *
@@ -67,6 +74,7 @@ export interface DevFlags {
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
+  roundPhaseHud: false,
   aimRay: false,
   shellCount: false,
   seed: null,
@@ -111,6 +119,7 @@ export function parseDevFlags(search: string): DevFlags {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   if (!isOn(params, 'dev')) return DEV_FLAGS_OFF;
   return {
+    roundPhaseHud: isOn(params, 'roundPhaseHud'),
     aimRay: isOn(params, 'aimRay'),
     shellCount: isOn(params, 'shellCount'),
     seed: asSeed(params, 'seed'),
