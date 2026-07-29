@@ -20,7 +20,7 @@ const FAR_PAST = -100000;
 
 function world(tanks: Tank[], over: Partial<World> = {}): World {
   return {
-    tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], walls: [],
+    tick: 0, nextId: 100, seed: 5, tanks, bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: FAR_PAST,
     unarmedTrigger: 'none', ...over,
   };

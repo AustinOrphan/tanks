@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld } from './world'
-import { dropMine, stepMines, detonateMine, blastReaches } from './mines'
+import type { World } from './world'
+import { dropMine, stepMines, detonateMine, blastReaches, stepBlasts, blastRadiusAt, BLAST_LIFETIME_TICKS } from './mines'
 import { resolveBulletHits } from './bullets'
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Mine, Bullet, UnarmedTrigger } from './types'
@@ -8,6 +9,7 @@ import {
   MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
+  MINE_BLAST_EXPAND_TICKS,
   MINE_BLAST_RADIUS,
   TANK_RADIUS,
   DT,
@@ -88,6 +90,25 @@ describe('dropMine', () => {
   })
 })
 
+
+/**
+ * Detonate and let the blast finish growing.
+ *
+ * The blast is no longer instantaneous, so a test about REACH -- who the blast
+ * ends up killing, and through what -- must run it out to full radius first.
+ * Tests about TIMING (which tick a given victim dies on) live in the 'blast
+ * ramp' block and deliberately do NOT use this.
+ */
+function detonateFully(world: World, mine: Mine, events: SimEvent[]): void {
+  detonateMine(world, mine, events)
+  for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
+}
+
+/** Run any in-flight blast out to full radius, for tests that detonate via stepMines. */
+function settleBlasts(world: World, events: SimEvent[]): void {
+  for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
+}
+
 describe('stepMines', () => {
   it('detonates on the ~3s timer with no one nearby', () => {
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
@@ -114,6 +135,7 @@ describe('stepMines', () => {
     const events: SimEvent[] = []
     stepMines(world, DT, events)
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
+    settleBlasts(world, events)
     expect(enemy.alive).toBe(false) // 1.0 <= blast radius 2.0
   })
 
@@ -148,7 +170,7 @@ describe('stepMines', () => {
     expect(player.alive).toBe(true)
   })
 
-  it('kills an enemy standing on the mine the moment the owner walks clear', () => {
+  it('kills an enemy standing on the mine once the owner walks clear and the blast reaches him', () => {
     // The flip side: arming is a real threat, not a permanent disarm.
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.1, y: 0 } })
@@ -161,6 +183,8 @@ describe('stepMines', () => {
 
     expect(events.some((e) => e.type === 'mine-armed')).toBe(true)
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
+    expect(enemy.alive).toBe(true) // at 1.1 the edge has not reached him on the detonation tick
+    settleBlasts(world, events)
     expect(enemy.alive).toBe(false)
     expect(player.alive).toBe(true) // 10+ units away, well clear of the blast
   })
@@ -258,7 +282,7 @@ describe('detonateMine', () => {
     const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
     world.mines.push(mine)
     const events: SimEvent[] = []
-    detonateMine(world, mine, events)
+    detonateFully(world, mine, events)
     expect(inside.alive).toBe(false) // centre 1.5, well inside the 2.5 reach
     expect(atReach.alive).toBe(false) // centre exactly 2.5: hull grazing, still killed (<=)
     expect(clear.alive).toBe(true) // centre 2.5 + 1e-9: the first distance that survives
@@ -279,7 +303,7 @@ describe('detonateMine', () => {
     const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
     world.mines.push(mine)
     const events: SimEvent[] = []
-    detonateMine(world, mine, events)
+    detonateFully(world, mine, events)
     expect(world.walls[0].destroyed).toBe(true)
     expect(world.walls[1].destroyed).toBe(false)
     expect(events.find((e) => e.type === 'wall-destroyed')).toMatchObject({ type: 'wall-destroyed', wallId: 1 })
@@ -319,7 +343,7 @@ describe('mine blast occlusion', () => {
     const mine = mineAt()
     const world = createWorld({ walls: [between('solid')], tanks: [victim], spawns: [], lives: 3 })
     world.mines.push(mine)
-    detonateMine(world, mine, [])
+    detonateFully(world, mine, [])
     expect(victim.alive).toBe(true)
     expect(world.walls[0].destroyed).toBe(false)
   })
@@ -330,7 +354,7 @@ describe('mine blast occlusion', () => {
     const mine = mineAt()
     const world = createWorld({ walls: [], tanks: [victim], spawns: [], lives: 3 })
     world.mines.push(mine)
-    detonateMine(world, mine, [])
+    detonateFully(world, mine, [])
     expect(victim.alive).toBe(false)
   })
 
@@ -341,7 +365,7 @@ describe('mine blast occlusion', () => {
     const mine = mineAt()
     const world = createWorld({ walls: [between('destructible')], tanks: [victim], spawns: [], lives: 3 })
     world.mines.push(mine)
-    detonateMine(world, mine, [])
+    detonateFully(world, mine, [])
     expect(victim.alive).toBe(false)
     expect(world.walls[0].destroyed).toBe(true)
   })
@@ -364,7 +388,7 @@ describe('mine blast occlusion', () => {
     w.destroyed = true
     const world = createWorld({ walls: [w], tanks: [victim], spawns: [], lives: 3 })
     world.mines.push(mine)
-    detonateMine(world, mine, [])
+    detonateFully(world, mine, [])
     expect(victim.alive).toBe(false)
   })
 })
@@ -449,3 +473,93 @@ describe('what may set off an UNARMED mine', () => {
     expect(world.unarmedTrigger).toBe('none');
   });
 });
+
+describe('blast ramp', () => {
+  // Everything above runs the blast out to full radius, so it pins REACH and is blind to
+  // the ramp: flattening blastRadiusAt to `return MINE_BLAST_RADIUS` passes all of it.
+  // These pin the growth itself.
+
+  it('grows to full radius over MINE_BLAST_EXPAND_TICKS, then holds', () => {
+    const step = MINE_BLAST_RADIUS / MINE_BLAST_EXPAND_TICKS
+    // Age 0 is already lethal at point-blank: a mine you are standing on is not survivable.
+    expect(blastRadiusAt(0)).toBeCloseTo(step, 10)
+    expect(blastRadiusAt(0)).toBeLessThan(MINE_BLAST_RADIUS) // the ramp exists at all
+    // Strictly increasing while expanding -- a monotonicity check alone would pass on a
+    // ramp that jumped to full size on tick 1.
+    for (let age = 1; age < MINE_BLAST_EXPAND_TICKS; age++) {
+      expect(blastRadiusAt(age)).toBeCloseTo(step * (age + 1), 10)
+      expect(blastRadiusAt(age)).toBeGreaterThan(blastRadiusAt(age - 1))
+    }
+    // Full size on the last expanding tick, and flat from there.
+    expect(blastRadiusAt(MINE_BLAST_EXPAND_TICKS - 1)).toBeCloseTo(MINE_BLAST_RADIUS, 10)
+    expect(blastRadiusAt(MINE_BLAST_EXPAND_TICKS)).toBe(MINE_BLAST_RADIUS)
+    expect(blastRadiusAt(BLAST_LIFETIME_TICKS)).toBe(MINE_BLAST_RADIUS)
+  })
+
+  it('kills point-blank at once but takes ticks to reach the fringe', () => {
+    // THE DISCRIMINATING PAIR. `near` dies on the detonation tick under both a ramped and
+    // an instant blast, so it proves nothing alone; `far` is the one that separates them,
+    // and the assertion that it is ALIVE first is what fails if the ramp is removed.
+    const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
+    const near = mkTank({ id: 2, kind: 'brown', pos: { x: 0.1, y: 0 } })
+    const far = mkTank({ id: 3, kind: 'grey', pos: { x: MINE_BLAST_RADIUS + TANK_RADIUS - 0.01, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [owner, near, far], spawns: [], lives: 3 })
+    const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+
+    detonateMine(world, mine, events)
+    expect(near.alive).toBe(false) // inside the age-0 radius
+    expect(far.alive).toBe(true) // just inside FULL reach, so only the ramp spares him here
+
+    // He dies exactly when the edge arrives, not before and not never.
+    let deathAge = -1
+    for (let age = 1; age < BLAST_LIFETIME_TICKS; age++) {
+      stepBlasts(world, events)
+      if (!far.alive) {
+        deathAge = age
+        break
+      }
+    }
+    expect(deathAge).toBe(MINE_BLAST_EXPAND_TICKS - 1) // the first tick at full radius
+  })
+
+  it('stops being lethal once it has run its course', () => {
+    // Without retirement a blast is a permanent kill zone: anything that later drives
+    // over the spot dies. Walk a tank in AFTER the blast should have faded.
+    const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
+    const latecomer = mkTank({ id: 2, kind: 'brown', pos: { x: 50, y: 50 } })
+    const world = createWorld({ walls: [], tanks: [owner, latecomer], spawns: [], lives: 3 })
+    const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+    detonateMine(world, mine, events)
+    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
+
+    expect(world.blasts).toHaveLength(0) // retired, not merely harmless
+    latecomer.pos = { x: 0, y: 0 } // standing exactly on ground zero
+    stepBlasts(world, events)
+    expect(latecomer.alive).toBe(true)
+  })
+
+  it('destroys a wall the growing edge reaches only later', () => {
+    // The wall sits outside the age-0 radius, so an un-ramped blast destroys it on the
+    // detonation tick and a ramped one cannot.
+    const owner = mkTank({ id: 1, kind: 'player', pos: { x: 100, y: 100 } })
+    const world = createWorld({
+      walls: [mkWall(1, { minX: 1.6, minY: -0.5, maxX: 1.9, maxY: 0.5 }, 'destructible')],
+      tanks: [owner],
+      spawns: [],
+      lives: 3,
+    })
+    const mine: Mine = { id: 50, ownerId: 1, pos: { x: 0, y: 0 }, timer: 1, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+    detonateMine(world, mine, events)
+    expect(world.walls[0].destroyed).toBe(false) // 1.6 away, outside the age-0 radius
+    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
+    expect(world.walls[0].destroyed).toBe(true)
+    // Emitted once, when it actually broke -- not re-emitted every tick the blast covers it.
+    expect(events.filter((e) => e.type === 'wall-destroyed')).toHaveLength(1)
+  })
+})

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createWorld, step } from './world';
 import type { World } from './world';
+import type { SimEvent } from './events';
+import { BLAST_LIFETIME_TICKS } from './mines';
 import type { Tank, Bullet, Mine, InputState } from './types';
 import {
   DT,
@@ -220,9 +222,13 @@ describe('step() calls stepMines', () => {
 
     expect(armTick.events).toContainEqual({ type: 'mine-armed', mineId: mine.id, pos: minePos });
     // Brown is static and stands inside MINE_PROXIMITY_RADIUS of the drop point, so the
-    // mine triggers on the same tick it arms, and the blast reaches him.
-    expect(tankById(armTick.world, BROWN_ID).alive).toBe(false);
+    // mine triggers on the same tick it arms. The blast then has to GROW out to him: at
+    // 1.4 away he survives the detonation tick and dies once the edge arrives.
+    expect(tankById(armTick.world, BROWN_ID).alive).toBe(true);
     expect(armTick.world.mines.find((m) => m.id === mine.id)).toBeUndefined();
+    let w2 = armTick.world;
+    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) w2 = step(w2, idleInput).world;
+    expect(tankById(w2, BROWN_ID).alive).toBe(false);
   });
 });
 
@@ -361,15 +367,30 @@ describe('step() stage ORDER', () => {
     const r = step(w, { ...idleInput, move: { x: 1, y: 0 } });
 
     expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, pos: { x: mineX, y: 5 } });
-    // Assert on the event record, not on r.world's tank: the player DOES die here, but
-    // resolveStatus then spends a life and resetArena revives him before the tick ends.
-    expect(r.events).toContainEqual({
+    // ...and the ORDER is the whole subject: the detonation above is what fails if
+    // stepMines is moved before stepMovement.
+    //
+    // The kill is a delayed consequence of it. The player ends the tick ~1.45 from the
+    // mine and the blast starts at MINE_BLAST_RADIUS/MINE_BLAST_EXPAND_TICKS, so its edge
+    // needs a few more ticks to reach him. Idle input from here so he stands still and
+    // the growing radius, not his own movement, is what closes the gap -- which also
+    // makes this fail if stepBlasts is dropped from the pipeline.
+    let w2 = r.world;
+    const deaths: SimEvent[] = [];
+    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) {
+      const rr = step(w2, idleInput);
+      w2 = rr.world;
+      deaths.push(...rr.events.filter((e) => e.type === 'tank-destroyed'));
+    }
+    // Assert on the event record, not on the world's tank: the player DOES die, but
+    // resolveStatus then spends a life and resetArena revives him before that tick ends.
+    expect(deaths).toContainEqual({
       type: 'tank-destroyed',
       tankId: PLAYER_ID,
       kind: 'player',
       pos: { x: 5 + TANK_SPEED * DT, y: 5 },
     });
-    expect(r.world.lives).toBe(2);
+    expect(w2.lives).toBe(2);
   });
 
   it('resolveStatus runs AFTER resolveBulletHits for a LOSS too: the shell that kills the player on its last life loses on the SAME tick', () => {

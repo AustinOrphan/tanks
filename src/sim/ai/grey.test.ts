@@ -23,7 +23,7 @@ function mine(id: number, ownerId: number, pos: Vec2, over: Partial<Mine> = {}):
 }
 function world(over: Partial<World>): World {
   return {
-    tick: 0, nextId: 100, seed: 7, tanks: [], bullets: [], mines: [], walls: [],
+    tick: 0, nextId: 100, seed: 7, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const, ...over,
   };
 }
@@ -79,6 +79,7 @@ describe('greyDecision', () => {
     const w = world({
       tanks: [grey],
       mines: [{ id: 70, ownerId: 1, pos: { x: 1, y: 0 }, timer: 3, armed: true, detonated: false }],
+      blasts: [],
     });
     const d = greyDecision(w, grey);
     // moving away from the mine at +x means a negative x component

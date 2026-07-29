@@ -1,4 +1,4 @@
-import type { Mine, Vec2, AABB, Wall } from './types'
+import type { Blast, Mine, Vec2, AABB, Wall } from './types'
 import { vdist } from './types'
 import type { World } from './world'
 import { raySegmentVsAABB } from './collision'
@@ -8,6 +8,8 @@ import {
   MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
+  MINE_BLAST_EXPAND_TICKS,
+  MINE_BLAST_HOLD_TICKS,
   MINE_BLAST_RADIUS,
   TANK_RADIUS,
 } from './constants'
@@ -75,10 +77,35 @@ export function blastReaches(
   return true
 }
 
-export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void {
-  if (mine.detonated) return
-  mine.detonated = true
-  events.push({ type: 'mine-detonate', mineId: mine.id, pos: { x: mine.pos.x, y: mine.pos.y } })
+/**
+ * How wide the blast is on a given tick of its life.
+ *
+ * Grows linearly to MINE_BLAST_RADIUS over MINE_BLAST_EXPAND_TICKS, then holds.
+ * Age 0 is already lethal at close range -- standing on a mine when it goes off
+ * is not survivable -- but the outer edge takes MINE_BLAST_EXPAND_TICKS to
+ * arrive, which is the window a tank at the fringe can use.
+ */
+export function blastRadiusAt(age: number): number {
+  if (age >= MINE_BLAST_EXPAND_TICKS) return MINE_BLAST_RADIUS
+  return (MINE_BLAST_RADIUS * (age + 1)) / MINE_BLAST_EXPAND_TICKS
+}
+
+/** Ticks a blast exists for: expanding, then holding at full size. */
+export const BLAST_LIFETIME_TICKS = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS
+
+/**
+ * Kill what the blast currently reaches and knock out the walls it has grown
+ * into. Called once when the mine goes off and once per tick after, with a
+ * larger radius each time, so lethality follows the area actually covered.
+ *
+ * Walls are re-tested every tick because the radius grows: a wall outside the
+ * age-0 radius but inside the full one must still come down, just later.
+ * (Re-testing does NOT currently let a blast see through a wall it just opened
+ * -- blastReaches skips destructible walls outright while
+ * MINE_BLAST_THROUGH_DESTRUCTIBLE is true, and solid walls never break.)
+ */
+function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
+  const radius = blastRadiusAt(blast.age)
   for (const t of world.tanks) {
     if (!t.alive) continue
     // Match resolveBulletHits: a tank is a circle of TANK_RADIUS, not a point.
@@ -86,8 +113,8 @@ export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void
     // walk away untouched, and made the two damage systems disagree about
     // where a tank actually is.
     if (
-      vdist(t.pos, mine.pos) <= MINE_BLAST_RADIUS + TANK_RADIUS &&
-      blastReaches(world.walls, mine.pos, t.pos)
+      vdist(t.pos, blast.pos) <= radius + TANK_RADIUS &&
+      blastReaches(world.walls, blast.pos, t.pos)
     ) {
       t.alive = false
       events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, pos: { x: t.pos.x, y: t.pos.y } })
@@ -96,13 +123,48 @@ export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void
   }
   for (const w of world.walls) {
     if (w.kind !== 'destructible' || w.destroyed) continue
-    if (blastHitsAABB(mine.pos, MINE_BLAST_RADIUS, w.aabb)) {
+    if (blastHitsAABB(blast.pos, radius, w.aabb)) {
       w.destroyed = true
       const cx = (w.aabb.minX + w.aabb.maxX) / 2
       const cy = (w.aabb.minY + w.aabb.maxY) / 2
       events.push({ type: 'wall-destroyed', wallId: w.id, pos: { x: cx, y: cy } })
     }
   }
+}
+
+/**
+ * Age every live blast one tick and re-apply it at its new radius.
+ *
+ * Runs BEFORE the stages that create blasts (stepBullets/stepMines), so a blast
+ * born this tick is not aged until the next one -- it gets its full age-0 tick
+ * at the radius detonateMine already applied.
+ */
+export function stepBlasts(world: World, events: SimEvent[]): void {
+  for (const b of world.blasts) {
+    b.age += 1
+    applyBlast(world, b, events)
+  }
+  world.blasts = world.blasts.filter((b) => b.age < BLAST_LIFETIME_TICKS - 1)
+}
+
+/**
+ * Set a mine off. The kill is no longer instantaneous: this applies the blast at
+ * its smallest radius and leaves a Blast behind for stepBlasts to grow.
+ */
+export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void {
+  if (mine.detonated) return
+  mine.detonated = true
+  events.push({ type: 'mine-detonate', mineId: mine.id, pos: { x: mine.pos.x, y: mine.pos.y } })
+
+  const blast: Blast = {
+    id: world.nextId++,
+    ownerId: mine.ownerId,
+    pos: { x: mine.pos.x, y: mine.pos.y },
+    age: 0,
+  }
+  world.blasts.push(blast)
+  applyBlast(world, blast, events)
+
   const owner = world.tanks.find((t) => t.id === mine.ownerId)
   if (owner) owner.activeMineIds = owner.activeMineIds.filter((id) => id !== mine.id)
 }
