@@ -83,6 +83,20 @@ describe('gallery args', () => {
       .toThrow(/2 entries for 3 variants/);
   });
 
+  it('validates the game-scene options rather than failing halfway through a run', () => {
+    // Each of these costs a browser launch per variant to discover at runtime.
+    expect(() => parseArgs(['--scene', 'arena'])).toThrow(/must be 'gallery' or 'game'/);
+    expect(() => parseArgs(['--crop', 'nonsense'])).toThrow(/640x480\+100\+50/);
+    // The game owns its own clock, so there is no pose to step. Allowing --anim here
+    // would silently produce N identical frames.
+    expect(() => parseArgs(['--scene', 'game', '--anim'])).toThrow(/not supported with --scene game/);
+    const ok = parseArgs(['--scene', 'game', '--crop', '470x350+505+470', '--settle', '4200', '--query', 'dev=1&seed=7']);
+    expect(ok.scene).toBe('game');
+    expect(ok.settle).toBe(4200);
+    expect(typeof ok.settle).toBe('number');
+    expect(ok.query).toBe('dev=1&seed=7');
+  });
+
   it('lays cells out in a grid that can hold them all', () => {
     for (const n of [1, 2, 3, 4, 6, 8, 9, 12]) {
       const { cols, rows } = gridShape(n);

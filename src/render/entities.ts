@@ -4,6 +4,7 @@ import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { TANK_RADIUS, BULLET_RADIUS } from '../sim/constants';
 import { angleOf } from '../sim/types';
+import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
@@ -45,6 +46,28 @@ const BLAST_LINGER_TICKS = 2;
  * precisely what it kills.
  */
 const BLAST_FLATTEN = 0.7;
+/**
+ * Turret radius. 0.36 is 90% of the hull's 0.80 depth -- close to flush without
+ * overhanging the sides. Chosen from two rendered sweeps, 0.26-0.44 then 0.32-0.38.
+ */
+export const TURRET_R = 0.36;
+/**
+ * How far the barrel protrudes BEYOND the turret.
+ *
+ * The barrel is positioned from this rather than absolutely, so growing the turret
+ * does not silently shorten the gun -- at a fixed position, going 0.26 -> 0.38 ate a
+ * third of the visible barrel.
+ *
+ * 0.50 chosen at PLAY distance, not in close-up. The barrel is the shipped aim
+ * indicator -- aimRay exists only as a dev flag because of that -- and at 0.40 it read
+ * as a nub from the real camera even though it looked generous up close.
+ */
+export const BARREL_OUT = 0.50;
+/** Length of the flared muzzle at the tip. */
+export const MUZZLE_LEN = 0.18;
+/** How much wider the muzzle is than the barrel behind it. */
+export const MUZZLE_FLARE = 1.40;
+
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
@@ -75,12 +98,74 @@ function disposeObject(obj: THREE.Object3D): void {
   obj.parent?.remove(obj);
 }
 
-export function createEntityViews(scene: THREE.Scene): EntityViews {
+export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): EntityViews {
   const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D }>();
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
   const mineViews = new Map<number, THREE.Mesh>();
   const wallViews = new Map<number, THREE.Mesh>();
+
+  /**
+   * Barrel radius. Must exceed the shell's, with wall thickness to spare -- see the
+   * assertion in entities.test.ts, which exists because this was wrong.
+   */
+  const BARREL_R = BULLET_RADIUS * 1.3;
+  const TURRET_H = 0.28;
+  /** Rounds the top edge, so the turret is a cylinder with a crown rather than a can. */
+  const TURRET_FILLET = 0.09;
+
+  /**
+   * The turret: a cylinder with a rounded top edge.
+   *
+   * It was a box, which read as a crate balanced on the hull -- and at this camera angle
+   * a square turret and a square hull are one silhouette. Round it and the turret
+   * separates from the body, which is what makes the tank legible when it rotates.
+   */
+  function turretGeometry(): THREE.LatheGeometry {
+    const half = TURRET_H / 2;
+    const pts: THREE.Vector2[] = [
+      new THREE.Vector2(0, -half),
+      new THREE.Vector2(TURRET_R, -half),
+      new THREE.Vector2(TURRET_R, half - TURRET_FILLET),
+    ];
+    const STEPS = 5;
+    for (let i = 1; i <= STEPS; i++) {
+      const a = (i / STEPS) * (Math.PI / 2);
+      pts.push(
+        new THREE.Vector2(
+          TURRET_R - TURRET_FILLET + TURRET_FILLET * Math.cos(a),
+          half - TURRET_FILLET + TURRET_FILLET * Math.sin(a),
+        ),
+      );
+    }
+    pts.push(new THREE.Vector2(0, half));
+    return new THREE.LatheGeometry(pts, 20);
+  }
+
+  /**
+   * The gun: a tube from inside the turret to the muzzle, with the last MUZZLE_LEN
+   * stepped out into a flare.
+   *
+   * One lathe rather than two cylinders, so the step is a real edge in the silhouette
+   * rather than a seam between meshes that can drift apart.
+   */
+  function barrelGeometry(): THREE.LatheGeometry {
+    const breech = TURRET_R * 0.3; // seated inside the turret
+    const muzzle = TURRET_R + BARREL_OUT;
+    const flareStart = muzzle - MUZZLE_LEN;
+    const rMuzzle = BARREL_R * MUZZLE_FLARE;
+    return new THREE.LatheGeometry(
+      [
+        new THREE.Vector2(0, breech), // closed at the breech
+        new THREE.Vector2(BARREL_R, breech),
+        new THREE.Vector2(BARREL_R, flareStart),
+        new THREE.Vector2(rMuzzle, flareStart), // step out
+        new THREE.Vector2(rMuzzle, muzzle),
+        new THREE.Vector2(0, muzzle), // and closed at the tip
+      ],
+      16,
+    );
+  }
 
   function makeTank(kind: TankKind): { group: THREE.Group; turret: THREE.Object3D } {
     const group = new THREE.Group();
@@ -102,15 +187,19 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     // The turret reads as the same paint, less worn -- smoother, so the highlight that
     // separates it from the hull below sits on the turret rather than the body.
     const turretMat = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.35 });
-    const dome = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.5), turretMat);
+    const dome = new THREE.Mesh(turretGeometry(), turretMat);
+    dome.name = 'turret';
     dome.castShadow = true;
     turret.add(dome);
-    const barrel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.07, 0.7, 8),
-      turretMat,
-    );
-    barrel.rotation.z = Math.PI / 2; // lay the cylinder along local +x
-    barrel.position.set(0.42, 0, 0);
+    // The bore has to clear the shell it fires. It did not: the barrel was radius 0.07
+    // against a shell of BULLET_RADIUS 0.10, so the round was WIDER than the tube it
+    // came out of -- visible the moment shells were drawn at their true size.
+    const barrel = new THREE.Mesh(barrelGeometry(), turretMat);
+    // The profile is built along the lathe's own +y from breech to muzzle, so rotating
+    // -90deg about z lays it along local +x already positioned -- no offset to keep in
+    // step with the length, which is how the barrel got shorter when the turret grew.
+    barrel.rotation.z = -Math.PI / 2;
+    barrel.name = 'barrel';
     barrel.castShadow = true;
     turret.add(barrel);
     group.add(turret);
@@ -242,11 +331,24 @@ export function createEntityViews(scene: THREE.Scene): EntityViews {
     const geo = new THREE.BoxGeometry(w, WALL_H, d);
     const mat =
       wall.kind === 'destructible'
-        // Destructible reads as crate timber: fully matte, no metal at all...
-        ? new THREE.MeshStandardMaterial({ color: 0xb08040, roughness: 1.0, metalness: 0.0 })
-        // ...and solid as poured concrete with rebar sheen. The pair now differ by MATERIAL,
-        // not only by hue, which is the cue that says which one a shell can open.
-        : new THREE.MeshStandardMaterial({ color: 0x565b66, roughness: 0.8, metalness: 0.3 });
+        // Destructible reads as crate timber: fully matte, no metal, and PLANK GROOVES --
+        // the cue that says this is the wall a shell can open, carried by the surface
+        // rather than by hue alone.
+        ? new THREE.MeshStandardMaterial({
+            color: 0xb08040,
+            roughness: 1.0,
+            metalness: 0.0,
+            normalMap: textures?.timberNormal ?? null,
+            normalScale: new THREE.Vector2(0.9, 0.9),
+          })
+        // ...and solid as poured concrete with rebar sheen and aggregate relief.
+        : new THREE.MeshStandardMaterial({
+            color: 0x565b66,
+            roughness: 0.8,
+            metalness: 0.3,
+            normalMap: textures?.concreteNormal ?? null,
+            normalScale: new THREE.Vector2(0.55, 0.55),
+          });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(
       (wall.aabb.minX + wall.aabb.maxX) / 2,

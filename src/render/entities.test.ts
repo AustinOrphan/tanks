@@ -4,11 +4,12 @@
 // suite stays green.
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { createEntityViews } from './entities';
+import { createEntityViews, BARREL_OUT, MUZZLE_LEN } from './entities';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
+import { BULLET_RADIUS, TANK_RADIUS } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
@@ -45,13 +46,18 @@ function makeWorld(): World {
 function renderedGunAngle(scene: THREE.Scene): number {
   scene.updateMatrixWorld(true);
   const group = scene.children.find((c) => c instanceof THREE.Group) as THREE.Group;
-  const turret = group.children.find((c) => c instanceof THREE.Group) as THREE.Group;
-  const barrel = turret.children.find(
-    (c) => (c as THREE.Mesh).geometry instanceof THREE.CylinderGeometry,
-  ) as THREE.Mesh;
+  let barrel: THREE.Mesh | undefined;
+  group.traverse((o) => {
+    if (o.name === 'barrel') barrel = o as THREE.Mesh;
+  });
+  if (!barrel) throw new Error('no barrel mesh');
 
-  const gunPos = new THREE.Vector3();
-  barrel.getWorldPosition(gunPos);
+  // The MUZZLE TIP in world space, not the mesh origin. The barrel is a lathe built in
+  // absolute breech-to-muzzle coordinates, so its origin sits at the turret centre --
+  // measuring from there gives the tank's own position and no direction at all.
+  const pts = (barrel.geometry as THREE.LatheGeometry).parameters.points;
+  const tipLocal = new THREE.Vector3(0, Math.max(...pts.map((p) => p.y)), 0);
+  const gunPos = barrel.localToWorld(tipLocal);
   const tankPos = new THREE.Vector3();
   group.getWorldPosition(tankPos);
 
@@ -445,6 +451,88 @@ describe('mine views', () => {
     const hot = mat().emissive.r;
 
     expect(hot).toBeGreaterThan(dim);
+    views.dispose();
+  });
+});
+
+describe('tank geometry', () => {
+  // Found by NAME, not by geometry class: turret and barrel are both lathes now, so
+  // "the first LatheGeometry" would silently pick whichever was added first.
+  function part(scene: THREE.Scene, name: string): THREE.Mesh {
+    let found: THREE.Mesh | undefined;
+    scene.traverse((o) => {
+      if (o.name === name) found = o as THREE.Mesh;
+    });
+    if (!found) throw new Error(`no mesh named ${name}`);
+    return found;
+  }
+  function profile(m: THREE.Mesh): THREE.Vector2[] {
+    return (m.geometry as THREE.LatheGeometry).parameters.points;
+  }
+  function build(): { scene: THREE.Scene; views: ReturnType<typeof createEntityViews> } {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    views.sync(w, w, 0);
+    return { scene, views };
+  }
+
+  it('has a bore WIDER than the shell it fires', () => {
+    // THE ASSERTION THIS BLOCK EXISTS FOR. The barrel was radius 0.07 against a shell of
+    // BULLET_RADIUS 0.10 -- the round was wider than the tube it came out of. Nothing
+    // caught it, because no test related the two numbers.
+    const { scene, views } = build();
+    const pts = profile(part(scene, 'barrel'));
+    // The bore is the barrel's narrow section, i.e. its smallest non-zero radius.
+    const bore = Math.min(...pts.map((p) => p.x).filter((x) => x > 1e-9));
+    expect(bore).toBeGreaterThan(BULLET_RADIUS);
+    expect(bore).toBeGreaterThan(BULLET_RADIUS * 1.15); // with wall thickness to spare
+    views.dispose();
+  });
+
+  it('flares at the muzzle, and only at the muzzle', () => {
+    // The widest point must be at the TIP. A flare in the middle, or a barrel that is
+    // one uniform tube, both fail -- and a uniform tube is what this replaced.
+    const { scene, views } = build();
+    const pts = profile(part(scene, 'barrel'));
+    const maxR = Math.max(...pts.map((p) => p.x));
+    const bore = Math.min(...pts.map((p) => p.x).filter((x) => x > 1e-9));
+    expect(maxR).toBeGreaterThan(bore); // there IS a flare
+    const tip = Math.max(...pts.map((p) => p.y));
+    // Every point at full radius sits in the last stretch of the barrel.
+    const widest = pts.filter((p) => Math.abs(p.x - maxR) < 1e-9);
+    for (const p of widest) expect(tip - p.y).toBeLessThanOrEqual(MUZZLE_LEN + 1e-9);
+    views.dispose();
+  });
+
+  it('keeps the barrel protruding past the turret, whatever the turret size', () => {
+    // The barrel is built from the turret radius, not placed absolutely. At a fixed
+    // position, growing the turret silently ate the visible gun -- 0.26 to 0.38 cost a
+    // third of it. An earlier version of this asserted `> turretR + 0.3`, which the old
+    // fixed placement ALSO satisfied at that turret size: it passed the mutation and
+    // proved nothing.
+    const { scene, views } = build();
+    const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
+    const turretR = Math.max(...profile(part(scene, 'turret')).map((p) => p.x));
+    expect(tip - turretR).toBeCloseTo(BARREL_OUT, 9);
+    // And the breech is seated INSIDE the turret, or the gun floats off the front.
+    const breech = Math.min(...profile(part(scene, 'barrel')).map((p) => p.y));
+    expect(breech).toBeGreaterThan(0);
+    expect(breech).toBeLessThan(turretR);
+    views.dispose();
+  });
+
+  it('has a turret that is round, not a box', () => {
+    // A square turret on a square hull is one silhouette at this camera angle; rounding
+    // it is what lets you see the turret rotate independently of the body.
+    const { scene, views } = build();
+    const pts = profile(part(scene, 'turret'));
+    expect(pts[0].x).toBeCloseTo(0, 9);
+    expect(pts[pts.length - 1].x).toBeCloseTo(0, 9);
+    const maxR = Math.max(...pts.map((p) => p.x));
+    const top = Math.max(...pts.map((p) => p.y));
+    const crown = pts.filter((p) => p.x > 0 && p.x < maxR - 1e-9 && p.y > top - TANK_RADIUS);
+    expect(crown.length).toBeGreaterThan(2);
     views.dispose();
   });
 });

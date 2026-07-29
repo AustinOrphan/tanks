@@ -11,10 +11,17 @@
  * in the sim's xy-plane is a clockwise rotation about three's +y axis.
  */
 import * as THREE from 'three';
+import { createTextures, type TextureSet } from './textures';
 import { framedBounds, fitCameraToArea } from './framing';
 
 export interface SceneContext {
   scene: THREE.Scene;
+  /**
+   * Surface detail, created here because this is what owns the frame's lifetime and
+   * therefore the dispose. entities.ts borrows from it rather than generating its own,
+   * so every wall shares one map instead of one per mesh.
+   */
+  textures: TextureSet;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   resize(w: number, h: number): void;
@@ -171,10 +178,18 @@ export function createScene(
   // margin (2.2) against a 2.0-thick ring, and that 0.2 of overhang showed as a
   // sliver of felt detached from the arena along the near edge.
   const groundGeo = new THREE.PlaneGeometry(framed.width, framed.height);
+  // Tile the fibre grain roughly once per two world units. Any coarser and the felt
+  // reads as fabric print; any finer and it aliases into shimmer at this camera height.
+  const textures = createTextures(Math.max(2, Math.round(Math.max(worldWidth, worldHeight) / 2)));
+
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x2f6d4f,
     roughness: 1.0,
     metalness: 0.0,
+    normalMap: textures.feltNormal,
+    // Low: the felt is a huge flat receiver and the grain should only show where light
+    // grazes it. Turned up, the whole board reads as gravel.
+    normalScale: new THREE.Vector2(0.35, 0.35),
   });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
@@ -221,6 +236,7 @@ export function createScene(
     // nearly missed.
     fill.dispose();
     rim.dispose();
+    textures.dispose();
     envMap.dispose();
     scene.environment = null;
     renderer.dispose();
@@ -229,5 +245,5 @@ export function createScene(
     renderer.forceContextLoss();
   }
 
-  return { scene, camera, renderer, resize, dispose };
+  return { scene, camera, renderer, textures, resize, dispose };
 }
