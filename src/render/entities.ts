@@ -76,8 +76,13 @@ export const TRACK_H = 0.34;
  * through the real camera; the height mattered far less than the shade.
  */
 export const TRACK_SHADE = 0.7;
-/** Corner radius of the hull body in plan. */
-export const HULL_CORNER = 0.12;
+/**
+ * Corner radius of the hull body in plan.
+ *
+ * Picked from a game-view sweep of 0.12/0.30 at nose 1.0 -- 0.12 still read as a slab
+ * from the play camera; 0.30 rounds the silhouette without tapering it.
+ */
+export const HULL_CORNER = 0.3;
 /**
  * How wide the hull's FRONT is, as a fraction of its rear width.
  *
