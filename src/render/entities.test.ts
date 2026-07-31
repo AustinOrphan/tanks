@@ -619,8 +619,10 @@ describe('tank geometry', () => {
   it('draws the muzzle exactly where the SIM spawns shells', () => {
     // The bug this closes: shells were born at the tank's centre and flew out through
     // the hull, because the render's barrel length and the sim's spawn point were
-    // unrelated numbers. Asserted against the sim constant, so lengthening one without
-    // the other fails here instead of showing up as shells appearing out of the turret.
+    // unrelated numbers. Asserted against the sim constant, so re-hardcoding
+    // BARREL_OUT fails here instead of showing up as shells appearing out of the
+    // turret. (Retuning SHELL_SPAWN_FORWARD stays green -- BARREL_OUT follows it,
+    // which is the point.)
     const { scene, views } = build();
     const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
     expect(tip).toBeCloseTo(SHELL_SPAWN_FORWARD, 9);

@@ -68,6 +68,23 @@ describe('gallery args', () => {
     ).toThrow(/--sweep/);
   });
 
+  it('refuses a .png target for animated output, where the gif encoder would fill it', () => {
+    // Found in review: --burst 30 --out clip.png ran palettegen/paletteuse into a file
+    // named .png. The same hole existed for --anim since the gif path shipped.
+    expect(() => parseArgs(['--scene', 'game', '--burst', '5', '--out', 'clip.png'])).toThrow(/\.gif/);
+    expect(() => parseArgs(['--anim', '--out', 'clip.png'])).toThrow(/\.gif/);
+    expect(parseArgs(['--scene', 'game', '--burst', '5', '--out', 'clip.gif']).burst).toBe(5);
+  });
+
+  it('refuses --crop on animated output instead of silently ignoring it', () => {
+    // The animated branch never crops; accepting the flag was a dead knob -- the
+    // 48-samples-that-were-one-sample failure mode, one layer up.
+    expect(() =>
+      parseArgs(['--scene', 'game', '--burst', '5', '--crop', '10x10+0+0', '--out', 'x.gif']),
+    ).toThrow(/--crop/);
+    expect(() => parseArgs(['--anim', '--crop', '10x10+0+0', '--out', 'x.gif'])).toThrow(/--crop/);
+  });
+
   it('strips what ffmpeg drawtext silently chokes on', () => {
     // THE REGRESSION THIS FILE EXISTS FOR. A label containing = or % is not escaped by
     // ffmpeg -- it is dropped, and the grid comes back unlabelled with no error at all.

@@ -125,6 +125,18 @@ export function parseArgs(argv) {
     // variant. Composing them would grid N timelines and satisfy neither.
     throw new Error('--burst cannot be combined with --sweep');
   }
+  const animated = out.anim || out.burst > 1;
+  if (animated && out.out.endsWith('.png')) {
+    // The animated branch runs the GIF encoder unconditionally; pointing it at a .png
+    // wrote gif-pipeline output into a .png filename. Refuse up front.
+    throw new Error('animated output (--anim/--burst) needs a .gif --out, or a directory for raw frames');
+  }
+  if (animated && out.crop !== null) {
+    // --crop is applied only when assembling a still grid; the animated branch never
+    // crops. Accepting it here was a silent no-op knob -- the flag parsed, validated,
+    // and did nothing.
+    throw new Error('--crop is not applied to animated output; crop the frames or gif afterwards');
+  }
   if (out.sweep && out.values.length === 0) throw new Error('--sweep needs --values');
   if (!out.sweep && out.values.length > 0) throw new Error('--values needs --sweep');
   if (out.sweep) {
