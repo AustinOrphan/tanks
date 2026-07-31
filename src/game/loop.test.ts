@@ -8,7 +8,7 @@ import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2, Bullet, UnarmedTrigger } from '../sim/types';
+import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
 import {
   isPlayerDeath,
@@ -43,6 +43,7 @@ interface Recorder {
   inputClears: number;
   cleared: number[];
   levelSelects: Array<[number, number]>;
+  builtWorlds: World[];
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -94,6 +95,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     inputClears: 0,
     cleared: [],
     levelSelects: [],
+    builtWorlds: [],
     volumes: [],
     resizes: [],
     listeners: [],
@@ -276,6 +278,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       tracksProgress: opts.tracksProgress ?? true,
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
+        // The same reference the loop receives: post-build mutations (invincibility)
+        // are visible here.
         rec.seeds.push(seed);
         rec.worldPolicies.push(policy);
         // The real createArenaWorld returns a FRESH world each call, and
@@ -289,11 +293,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // player id matches let a stale-id bug pass the rebind test.
         const tanks = level === 0 ? base.tanks
           : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + level } : t));
-        return {
+        const built = {
           ...base,
           tanks,
           roundStartTick: base.roundStartTick + (opts.staticRoundStart ? 0 : rec.seeds.length - 1),
         };
+        rec.builtWorlds.push(built);
+        return built;
       },
     },
     now: () => 0,
@@ -1158,6 +1164,29 @@ describe('startGameWith: a level pick is bounds-checked', () => {
     h.hud.pickLevel(-1);
     expect(h.rec.levelBuilds).toHaveLength(1); // only the boot build
     expect(h.getState()).toBe('title');
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: invincibility (dev playtest mode)', () => {
+  const playerOf = (w: World): Tank | undefined => w.tanks.find((t) => t.kind === 'player');
+
+  it('marks the PLAYER invincible in every world it builds, and only the player', () => {
+    const h = boot(makeDeps({ levelCount: 2, devFlags: { invincible: true } }));
+    h.setState('win');
+    h.hud.startRestart(); // the advance rebuild must apply it too, not just boot
+    // Population: both worlds built so far (boot + advance).
+    expect(h.rec.builtWorlds).toHaveLength(2);
+    for (const w of h.rec.builtWorlds) {
+      expect(playerOf(w)?.invincible).toBe(true);
+      expect(w.tanks.filter((t) => t.kind !== 'player').every((t) => t.invincible === undefined)).toBe(true);
+    }
+    h.handle.dispose();
+  });
+
+  it('marks nobody without the flag', () => {
+    const h = boot(makeDeps());
+    expect(playerOf(h.rec.builtWorlds[0])?.invincible).toBeUndefined();
     h.handle.dispose();
   });
 });

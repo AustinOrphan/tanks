@@ -30,6 +30,10 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     mineCooldown: p.mineCooldown ?? 0,
     aiState: p.aiState ?? 'idle',
     aiTimer: p.aiTimer ?? 0,
+    // Optional flags must pass through, or a fixture claiming them silently tests the
+    // default -- an "invincible" tank built here was mortal until this line existed.
+    disarmed: p.disarmed,
+    invincible: p.invincible,
   }
 }
 
@@ -669,5 +673,29 @@ describe('spawnBullet: where the shell is born', () => {
     const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
     expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
     expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+  })
+})
+
+describe('resolveBulletHits: invincible tanks (dev playtest mode)', () => {
+  it('the shell detonates on an invincible tank, which survives it', () => {
+    // The shell must still die -- an invincible tank that shells pass THROUGH would
+    // shield nothing and look broken; it is a wall to ordnance, not a ghost.
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, invincible: true })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(world.tanks[0].alive).toBe(true)
+    expect(world.bullets).toHaveLength(0) // the shell died on impact and was retired
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(false)
+    expect(events.some((e) => e.type === 'explosion')).toBe(true) // the impact still reads
+  })
+
+  it('the mortal twin dies to the identical shell -- the fixture really is lethal', () => {
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    resolveBulletHits(world, [])
+    expect(world.tanks[0].alive).toBe(false)
   })
 })
