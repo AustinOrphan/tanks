@@ -3,7 +3,7 @@ import {
   bulletConfig, DT, TICK_HZ, SHELL_CAP, MINE_CAP,
   NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES,
   PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE,
-  TANK_RADIUS, TANK_SPEED, BULLET_RADIUS,
+  TANK_RADIUS, TANK_SPEED, TANK_TURN_RATE, BULLET_RADIUS, MINE_TRIGGER_RADIUS,
   NORMAL_SPEED, FAST_SPEED, RICOCHET_SPEED,
   FIRE_COOLDOWN, MINE_COOLDOWN,
   MINE_TIMER, MINE_PROXIMITY_RADIUS, MINE_BLAST_RADIUS,
@@ -26,9 +26,10 @@ import type { BulletType } from './types';
 // game-defining changes that no test noticed.
 //
 // This file is the one place that must NOT float: it pins each tunable to its
-// spec literal, so retuning a value is a deliberate two-file edit (the constant
-// and its pin here) rather than a silent one. The citation on each line is the
-// authority the number comes from.
+// spec literal, so retuning a value is a deliberate two-file edit (the JSON
+// entry in config/data/balance.json -- the authoritative home the constants now
+// derive from -- and its pin here) rather than a silent one. The citation on
+// each line is the authority the number comes from.
 
 describe('constants', () => {
   it('DT is the reciprocal of the tick rate', () => {
@@ -72,6 +73,11 @@ describe('constants', () => {
     expect(MINE_TIMER).toBe(3.0);
     expect(MINE_PROXIMITY_RADIUS).toBe(1.5);
     expect(MINE_BLAST_RADIUS).toBe(2.0);
+    // The shell-trap radius (see its comment in constants.ts: the mine's BODY,
+    // twenty times smaller than the blast). Unpinned until the JSON inversion
+    // review: 20 of 22 balance.json values had pins, this and TANK_TURN_RATE
+    // did not -- so retuning them was a silent one-file edit.
+    expect(MINE_TRIGGER_RADIUS).toBe(0.35);
   });
 
   it('the blast reaches strictly farther than the proximity trigger', () => {
@@ -115,5 +121,14 @@ describe('constants', () => {
     expect(PLAYER_TURRET_TURN_RATE).toBe(8.0);
     expect(AI_TURRET_TURN_RATE).toBe(2.5);
     expect(PLAYER_TURRET_TURN_RATE).toBeGreaterThan(AI_TURRET_TURN_RATE);
+  });
+
+  it('hull turn rate stays below the turrets it carries (feel, constants.ts)', () => {
+    // 5.0 is a feel value (modelled on Wii Play from recollection) but the
+    // ORDERING is design: a hull that outturns its own gun makes aiming while
+    // moving feel like fighting the tank. Both the literal and the ordering are
+    // pinned; the literal was one of the two unpinned balance.json values.
+    expect(TANK_TURN_RATE).toBe(5.0);
+    expect(TANK_TURN_RATE).toBeLessThan(PLAYER_TURRET_TURN_RATE);
   });
 });

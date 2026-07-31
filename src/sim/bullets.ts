@@ -4,7 +4,8 @@ import { circleVsAABB, reflectSweep, circleVsCircle } from './collision'
 import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
+import { bulletConfig, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
+import { configFor } from './config'
 
 /**
  * Where the shell is born: at the muzzle, unless the muzzle is inside a wall.
@@ -49,7 +50,9 @@ export function spawnBullet(
   // Cap applies to every owner, not just the player: a cap each caller must opt into
   // is a cap the next spawner (AI) silently escapes. This was gated on owner.kind ===
   // 'player' when the player was the only shell-firer; that made it a no-op for AI owners.
-  if (ownerShellCount(world, ownerId) >= SHELL_CAP) {
+  // The cap is now the owner's resolved weapon limit (configFor); it is SHELL_CAP for
+  // every shipped kind today, so this is behaviour-identical (see config/roster.test.ts).
+  if (ownerShellCount(world, ownerId) >= configFor(owner.kind).weapon.maxActiveProjectiles) {
     return false
   }
   const cfg = bulletConfig[type]

@@ -1,0 +1,149 @@
+{
+  "movementSpeeds": {
+    "STATIONARY": 0.0,
+    "SLOW": 1.4,
+    "MEDIUM": 2.0,
+    "FAST": 2.7,
+    "VERY_FAST": 3.5
+  },
+  "rotationSpeeds": {
+    "SLOW": 75.0,
+    "MEDIUM": 105.0,
+    "FAST": 145.0,
+    "VERY_FAST": 190.0
+  },
+  "fireCooldowns": {
+    "SLOW": 2.0,
+    "MEDIUM": 1.25,
+    "FAST": 0.7
+  },
+  "projectiles": {
+    "STANDARD_SHELL": {
+      "speed": 7.5,
+      "damage": 1,
+      "radius": 0.12,
+      "lifetime": 8.0,
+      "explosionRadius": 0.0
+    },
+    "ROCKET": {
+      "speed": 12.0,
+      "damage": 1,
+      "radius": 0.15,
+      "lifetime": 6.0,
+      "explosionRadius": 0.0
+    },
+    "RICOCHET_ROCKET": {
+      "speed": 12.0,
+      "damage": 1,
+      "radius": 0.15,
+      "lifetime": 8.0,
+      "explosionRadius": 0.0
+    }
+  },
+  "aiProfiles": {
+    "STATIC_BASIC": {
+      "behavior": "STATIONARY",
+      "aimAccuracy": 0.55,
+      "reactionTime": 0.8,
+      "aggression": 0.35,
+      "preferredDistance": 10.0,
+      "minimumDistance": 0.0,
+      "retreatChance": 0.0,
+      "directShotWeight": 1.0,
+      "bankShotWeight": 0.0
+    },
+    "DEFENSIVE_BASIC": {
+      "behavior": "DEFENSIVE",
+      "aimAccuracy": 0.6,
+      "reactionTime": 0.7,
+      "aggression": 0.25,
+      "preferredDistance": 9.0,
+      "minimumDistance": 6.0,
+      "retreatChance": 0.75,
+      "directShotWeight": 0.9,
+      "bankShotWeight": 0.1
+    },
+    "DEFENSIVE_ROCKET": {
+      "behavior": "DEFENSIVE",
+      "aimAccuracy": 0.65,
+      "reactionTime": 0.65,
+      "aggression": 0.3,
+      "preferredDistance": 10.0,
+      "minimumDistance": 7.0,
+      "retreatChance": 0.8,
+      "directShotWeight": 1.0,
+      "bankShotWeight": 0.0
+    },
+    "MOBILE_MINE_LAYER": {
+      "behavior": "TACTICAL",
+      "aimAccuracy": 0.65,
+      "reactionTime": 0.6,
+      "aggression": 0.5,
+      "preferredDistance": 7.5,
+      "minimumDistance": 4.0,
+      "retreatChance": 0.4,
+      "directShotWeight": 0.85,
+      "bankShotWeight": 0.15,
+      "minePlacementChance": 0.3
+    },
+    "OFFENSIVE_ASSAULT": {
+      "behavior": "OFFENSIVE",
+      "aimAccuracy": 0.7,
+      "reactionTime": 0.5,
+      "aggression": 0.8,
+      "preferredDistance": 5.5,
+      "minimumDistance": 2.5,
+      "retreatChance": 0.15,
+      "directShotWeight": 0.8,
+      "bankShotWeight": 0.2
+    },
+    "RICOCHET_SNIPER": {
+      "behavior": "STATIONARY",
+      "aimAccuracy": 0.95,
+      "reactionTime": 0.35,
+      "aggression": 0.75,
+      "preferredDistance": 12.0,
+      "minimumDistance": 0.0,
+      "retreatChance": 0.0,
+      "directShotWeight": 0.45,
+      "bankShotWeight": 0.55
+    },
+    "OFFENSIVE_ELITE": {
+      "behavior": "OFFENSIVE",
+      "aimAccuracy": 0.78,
+      "reactionTime": 0.35,
+      "aggression": 0.9,
+      "preferredDistance": 5.0,
+      "minimumDistance": 2.0,
+      "retreatChance": 0.1,
+      "directShotWeight": 0.7,
+      "bankShotWeight": 0.3,
+      "minePlacementChance": 0.35
+    },
+    "BERSERKER_ROCKET": {
+      "behavior": "BERSERKER",
+      "aimAccuracy": 0.82,
+      "reactionTime": 0.25,
+      "aggression": 1.0,
+      "preferredDistance": 2.5,
+      "minimumDistance": 0.5,
+      "retreatChance": 0.0,
+      "directShotWeight": 1.0,
+      "bankShotWeight": 0.0,
+      "minePlacementChance": 0.4
+    }
+  },
+  "mines": {
+    "deploymentCooldown": 1.5,
+    "armingDelay": 0.75,
+    "triggerRadius": 0.8,
+    "explosionRadius": 1.25,
+    "lifetime": 30.0,
+    "damage": 1
+  },
+  "invisibility": {
+    "opacity": 0.0,
+    "trackLifetime": 1.6,
+    "trackSpawnInterval": 0.18
+  }
+}

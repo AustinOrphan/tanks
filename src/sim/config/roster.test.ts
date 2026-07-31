@@ -1,0 +1,127 @@
+import { describe, it, expect } from 'vitest';
+import {
+  bulletConfig,
+  DODGE_PATIENCE_TICKS,
+  FIRE_COOLDOWN_TICKS,
+  MINE_CAP,
+  SHELL_CAP,
+  TANK_SPEED,
+  TANK_TURN_RATE,
+  TICK_HZ,
+} from '../constants';
+import type { TankKind } from '../types';
+import { configFor, hasAbility } from './roster';
+import { AIBehavior, TankAbility } from './enums';
+
+// The shipped kinds. `player` is included because the player is now resolved through
+// the same pipeline (its weapon/movement/mine-capacity all come from configFor).
+const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal'];
+
+// The colours the renderer shipped before this refactor (entities.ts TANK_COLORS, as
+// 0x hex). config.color must reproduce them exactly, or the tanks change colour.
+const SHIPPED_COLORS: Record<TankKind, string> = {
+  player: '#3d7bd6',
+  brown: '#8a5a2b',
+  grey: '#8890a0',
+  teal: '#2bb0a6',
+};
+
+describe('game roster resolves to the shipped tunables (behaviour-preservation pins)', () => {
+  // These pins are the whole safety argument for the refactor: the sim now reads
+  // configFor(kind) where it used to read a global constant, so the resolved value
+  // MUST equal that constant for every kind or behaviour shifts. Each assertion
+  // fails if the roster/balance is authored with a different class or number.
+
+  it('movement speed equals TANK_SPEED for every kind (the game is uniform today)', () => {
+    for (const k of KINDS) expect(configFor(k).movementSpeed).toBe(TANK_SPEED);
+  });
+
+  it('rotation speed equals TANK_TURN_RATE for every kind', () => {
+    for (const k of KINDS) expect(configFor(k).rotationSpeed).toBe(TANK_TURN_RATE);
+  });
+
+  it('fire cooldown equals FIRE_COOLDOWN_TICKS for every kind', () => {
+    for (const k of KINDS) expect(configFor(k).weapon.fireCooldown).toBe(FIRE_COOLDOWN_TICKS);
+  });
+
+  it('shell cap equals SHELL_CAP and mine capacity equals MINE_CAP for every kind', () => {
+    for (const k of KINDS) {
+      expect(configFor(k).weapon.maxActiveProjectiles).toBe(SHELL_CAP);
+      expect(configFor(k).mineCapacity).toBe(MINE_CAP);
+    }
+  });
+
+  it('projectile speed/bounces mirror the sim bulletConfig for the resolved bullet type', () => {
+    for (const k of KINDS) {
+      const w = configFor(k).weapon;
+      expect(w.speed).toBe(bulletConfig[w.bulletType].speed);
+      // ricochetCount is carried per-tank; it must equal the sim's per-BulletType
+      // bounce table, or a tank's shells would bounce a different number of times
+      // than the bullet system actually grants them.
+      expect(w.ricochetCount).toBe(bulletConfig[w.bulletType].bounces);
+    }
+  });
+});
+
+describe('per-kind identity comes from config, not code branches', () => {
+  it('teal fires ricochet; brown/grey/player fire normal shells', () => {
+    expect(configFor('teal').weapon.bulletType).toBe('ricochet');
+    expect(configFor('brown').weapon.bulletType).toBe('normal');
+    expect(configFor('grey').weapon.bulletType).toBe('normal');
+    expect(configFor('player').weapon.bulletType).toBe('normal');
+  });
+
+  it('MINE_LAYER is held by exactly the kinds that lay mines today (grey/teal/player, not brown)', () => {
+    expect(hasAbility('brown', TankAbility.MINE_LAYER)).toBe(false);
+    expect(hasAbility('grey', TankAbility.MINE_LAYER)).toBe(true);
+    expect(hasAbility('teal', TankAbility.MINE_LAYER)).toBe(true);
+    expect(hasAbility('player', TankAbility.MINE_LAYER)).toBe(true);
+  });
+
+  it('reproduces the shipped render colours exactly', () => {
+    for (const k of KINDS) expect(configFor(k).color).toBe(SHIPPED_COLORS[k]);
+  });
+
+  it('routes each kind to its shipped behaviour class (decideAi dispatches on this)', () => {
+    // Changing any of these re-routes the kind to a DIFFERENT decision function --
+    // a gameplay change, so it must be a deliberate two-file edit (roster + here).
+    expect(configFor('brown').behavior).toBe(AIBehavior.STATIONARY);
+    expect(configFor('grey').behavior).toBe(AIBehavior.DEFENSIVE);
+    expect(configFor('teal').behavior).toBe(AIBehavior.TACTICAL);
+  });
+
+  it("grey's profile-derived dodge patience equals the tuned DODGE_PATIENCE_TICKS", () => {
+    // greyDecision computes patience as (1 - ai.aggression) * TICK_HZ. This pin is
+    // what makes retuning DEFENSIVE_BASIC.aggression a loud edit instead of a
+    // silent difficulty change: 45 ticks was measured/tuned, not incidental.
+    const derived = Math.round((1 - configFor('grey').ai.aggression) * TICK_HZ);
+    expect(derived).toBe(DODGE_PATIENCE_TICKS);
+  });
+
+  it('mine inclination (minePlacementChance sign) matches who lays mines today', () => {
+    // The decision functions propose mines only when the profile carries a positive
+    // minePlacementChance; brown must stay inert on both this and the ability gate.
+    expect(configFor('grey').ai.minePlacementChance ?? 0).toBeGreaterThan(0);
+    expect(configFor('teal').ai.minePlacementChance ?? 0).toBeGreaterThan(0);
+    expect(configFor('brown').ai.minePlacementChance ?? 0).toBe(0);
+  });
+
+  it("teal's profile keeps both shot types active (positive direct AND bank weights)", () => {
+    // tryDirect/tryBank are gated on these signs; zeroing either would silently
+    // delete a whole shot type from the shipped game.
+    expect(configFor('teal').ai.directShotWeight).toBeGreaterThan(0);
+    expect(configFor('teal').ai.bankShotWeight).toBeGreaterThan(0);
+  });
+
+  it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {
+    // entities.ts renders `parseInt(configFor(kind).color.slice(1), 16)`. Pinning the
+    // NUMBER (not just the string) locks the value THREE actually receives to the old
+    // TANK_COLORS literals -- the one migrated value whose consumed form is otherwise
+    // only asserted as a string. Mirrors the render expression exactly.
+    const asNumber = (k: TankKind) => parseInt(configFor(k).color.slice(1), 16);
+    expect(asNumber('player')).toBe(0x3d7bd6);
+    expect(asNumber('brown')).toBe(0x8a5a2b);
+    expect(asNumber('grey')).toBe(0x8890a0);
+    expect(asNumber('teal')).toBe(0x2bb0a6);
+  });
+});

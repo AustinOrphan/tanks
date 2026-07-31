@@ -1,8 +1,9 @@
 import type { Vec2, Wall, AABB, Bullet, Tank, Mine, BulletType } from '../types';
 import { vsub, angleOf, vdot, vdist, vnorm, fromAngle, nextRng } from '../types';
 import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../collision';
+import { configFor } from '../config';
 import {
-  AIM_EPS, TANK_RADIUS, TANK_SPEED, DT, THREAT_HORIZON, DANGER_CORRIDOR,
+  AIM_EPS, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig,
 } from '../constants';
@@ -349,13 +350,15 @@ export function aimJitter(world: World, tank: Tank, spread: number): number {
  * moveTank resolves such an overlap by pushing the tank straight back out, so a dodge
  * aimed into a wall nets EXACTLY zero displacement: the tank stays pinned in the danger
  * corridor and dies there, worse off than if it had not dodged at all. Probing one
- * TANK_SPEED*DT step is the same displacement moveTank is about to apply, so this asks
- * precisely the question that matters.
+ * movementSpeed*DT step is the same displacement moveTank is about to apply -- read from
+ * the tank's own resolved config, the same source moveTank uses -- so this asks precisely
+ * the question that matters.
  */
 function wallBlocksStep(world: World, tank: Tank, dir: Vec2): boolean {
+  const speed = configFor(tank.kind).movementSpeed;
   const probe = {
-    x: tank.pos.x + dir.x * TANK_SPEED * DT,
-    y: tank.pos.y + dir.y * TANK_SPEED * DT,
+    x: tank.pos.x + dir.x * speed * DT,
+    y: tank.pos.y + dir.y * speed * DT,
   };
   for (const w of world.walls) {
     if (w.destroyed) continue;

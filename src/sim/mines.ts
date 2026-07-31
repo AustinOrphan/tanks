@@ -3,9 +3,9 @@ import { vdist } from './types'
 import type { World } from './world'
 import { raySegmentVsAABB } from './collision'
 import type { SimEvent } from './events'
+import { configFor, wallConfigFor } from './config'
 import {
   MINE_BLAST_THROUGH_DESTRUCTIBLE,
-  MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_EXPAND_TICKS,
@@ -29,7 +29,9 @@ export function dropMine(world: World, ownerId: number, events: SimEvent[]): boo
   // Cap applies to every owner, not just the player: a cap each caller must opt into
   // is a cap the next spawner (AI) silently escapes. This was gated on owner.kind ===
   // 'player' when the player was the only mine-dropper; that made it a no-op for AI owners.
-  if (owner.activeMineIds.length >= MINE_CAP) return false
+  // The owner's resolved mine capacity (configFor); MINE_CAP for every shipped kind
+  // today, so behaviour-identical (see config/roster.test.ts).
+  if (owner.activeMineIds.length >= configFor(owner.kind).mineCapacity) return false
   const mine: Mine = {
     id: world.nextId++,
     ownerId,
@@ -71,7 +73,12 @@ export function blastReaches(
 ): boolean {
   for (const w of walls) {
     if (w.destroyed) continue
-    if (w.kind === 'destructible' && throughDestructible) continue
+    // Which walls the pass-through rule applies to is the same per-kind property
+    // the destroy loop reads (destructibleByBlast) -- keeping this a kind literal
+    // while applyBlast consulted config meant a future third kind could be
+    // destroyed by a blast its own body still blocked. `throughDestructible`
+    // (whether the rule is on at all) stays the caller's parameter.
+    if (wallConfigFor(w.kind).destructibleByBlast && throughDestructible) continue
     if (raySegmentVsAABB(from, to, w.aabb) !== null) return false
   }
   return true
@@ -127,7 +134,10 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     }
   }
   for (const w of world.walls) {
-    if (w.kind !== 'destructible' || w.destroyed) continue
+    // Whether a blast may destroy this wall comes from the wall's resolved config
+    // (config/walls.ts), not a kind literal -- destructibleByBlast is true for
+    // exactly today's 'destructible' kind, so behaviour is unchanged.
+    if (!wallConfigFor(w.kind).destructibleByBlast || w.destroyed) continue
     if (blastHitsAABB(blast.pos, radius, w.aabb)) {
       w.destroyed = true
       const cx = (w.aabb.minX + w.aabb.maxX) / 2

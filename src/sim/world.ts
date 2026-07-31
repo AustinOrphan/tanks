@@ -5,7 +5,8 @@ import { moveTank, separateTanks, resolveWalls } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepBlasts, stepMines } from './mines';
 import { stepAi } from './ai';
-import { DT, FIRE_COOLDOWN_TICKS, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE } from './constants';
+import { DT, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE } from './constants';
+import { configFor, hasAbility, TankAbility } from './config';
 import { roundPhase } from './round';
 
 export interface World {
@@ -121,6 +122,10 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
   const player = world.tanks.find((t) => t.kind === 'player');
   if (!player || !player.alive) return;
 
+  // The player's weapon (bullet type + fire cadence) and abilities come from the
+  // same resolved config as every enemy -- no 'normal'/cooldown literals here.
+  const pcfg = configFor(player.kind);
+
   // Round phases (see round.ts): countdown blocks movement entirely (pure orientation --
   // aim only); grace allows movement but still blocks fire/mines; live is unrestricted.
   // Cooldowns keep ticking through both phases regardless (simpler, and harmless since
@@ -154,12 +159,12 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
   const canAct = phase === 'live';
 
   if (canAct && input.fire && player.fireCooldown <= 0) {
-    if (spawnBullet(world, player.id, player.turretAngle, 'normal', events)) {
-      player.fireCooldown = FIRE_COOLDOWN_TICKS;
+    if (spawnBullet(world, player.id, player.turretAngle, pcfg.weapon.bulletType, events)) {
+      player.fireCooldown = pcfg.weapon.fireCooldown;
     }
   }
 
-  if (canAct && input.mine && player.mineCooldown <= 0) {
+  if (canAct && input.mine && hasAbility(player.kind, TankAbility.MINE_LAYER) && player.mineCooldown <= 0) {
     if (dropMine(world, player.id, events)) {
       player.mineCooldown = MINE_COOLDOWN_TICKS;
     }

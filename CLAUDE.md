@@ -44,6 +44,29 @@ screen) and `game/loop.ts`. If you change an event's shape, check all five.
 `step(world, input)` clones its input and returns `{ world, events }` — it never mutates
 what it is given.
 
+**Entity configs are data, resolved through `src/sim/config/`.** A tank is
+`TankDefinition` (roster.ts) + `BalanceConstants` (balance.ts) →
+`resolveTankConfig` → `ResolvedTankConfig`, read via `configFor(kind)`; gameplay
+code never branches on a kind literal **to pick stats or behaviour** (identity
+checks like `kind === 'player'` and the render's per-kind texture choice
+remain). Walls are the second family on the same catalog machinery (`walls.ts`,
+`wallConfigFor`); new families (power-ups, turrets, bosses) should ride
+`createCatalog` rather than invent parallel plumbing. The **authoritative
+balance scalars live in `config/data/balance.json`**; `constants.ts` derives
+from it and stays the sim's one import site, so retuning is a two-file edit —
+the JSON entry and its literal pin in `constants.test.ts` (every balance.json
+value is pinned; `SHELL_SPAWN_FORWARD` stays a TS literal, render-coupled).
+`decideAi` routes by the resolved profile's `behavior`; grey's dodge patience is
+`(1 − aggression) · TICK_HZ`, rounded, pinned equal to `DODGE_PATIENCE_TICKS` in
+`config/roster.test.ts`. Profile fields consumed today: `behavior`, `aggression`,
+the signs of `directShotWeight`/`bankShotWeight`/`minePlacementChance`; still
+carried-but-unread: `aimAccuracy`, `reactionTime`, `preferredDistance`,
+`minimumDistance`, `retreatChance`, and every chance magnitude — and the
+STATIONARY behaviour implementation reads neither shot weight, so a profile
+like RICOCHET_SNIPER's bank preference is authored intent awaiting an
+implementation. The 9-type Wii taxonomy in `config/reference/` is reference
+data only — nothing in the game reads it.
+
 ## Testing conventions, learned the hard way
 
 These are not style preferences. Each one exists because a real defect shipped green.
