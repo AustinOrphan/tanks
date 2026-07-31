@@ -16,6 +16,7 @@ import {
   startGameWith,
   deriveSeed,
   isMuteHotkey,
+  isPauseHotkey,
   type GameDeps,
   type HostWindow,
 } from './loop';
@@ -39,6 +40,7 @@ interface Recorder {
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
   roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
   deathSignals: number;
+  inputClears: number;
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -59,9 +61,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     mute(): void;
     volume(v: number): void;
     startRestart(): void;
+    quitToTitle(): void;
   };
   setState(s: GameState): void;
+  getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
+  blur(): void;
   resize(): void;
 } {
   const rec: Recorder = {
@@ -83,6 +88,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     shellCounts: [],
     roundPhases: [],
     deathSignals: 0,
+    inputClears: 0,
     volumes: [],
     resizes: [],
     listeners: [],
@@ -100,6 +106,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onMute = (): void => {};
   let onVolume = (_v: number): void => {};
   let onStartRestart = (): void => {};
+  let onQuit = (): void => {};
 
   function emit(): void {
     for (const cb of changeCbs) cb(state);
@@ -141,6 +148,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // Prove the wiring passes x and y through in that order, not swapped.
         screenToGround(3, 7);
         return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
+      },
+      clearQueuedPresses(): void {
+        rec.inputClears += 1;
       },
       dispose(): void {
         rec.disposed.push('input');
@@ -199,6 +209,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         state = 'playing';
         emit();
       },
+      pause(): void {
+        if (state === 'playing') {
+          state = 'paused';
+          emit();
+        }
+      },
+      resume(): void {
+        if (state === 'paused') {
+          state = 'playing';
+          emit();
+        }
+      },
       onChange(cb): void {
         changeCbs.push(cb);
       },
@@ -222,6 +244,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onStartRestart: (cb) => {
           onStartRestart = cb;
+        },
+        onQuitToTitle: (cb: () => void) => {
+          onQuit = cb;
         },
         dispose: () => rec.disposed.push('hud'),
       };
@@ -281,10 +306,17 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       mute: () => onMute(),
       volume: (v) => onVolume(v),
       startRestart: () => onStartRestart(),
+      quitToTitle: () => onQuit(),
     },
     setState: (s) => {
       state = s;
       emit();
+    },
+    getState: () => state,
+    blur(): void {
+      const entry = rec.listeners.find(([t]) => t === 'blur');
+      if (!entry) throw new Error('no blur listener');
+      (entry[1] as () => void)();
     },
     keydown(e): void {
       const entry = rec.listeners.find(([t]) => t === 'keydown');
@@ -313,6 +345,34 @@ describe('deriveSeed', () => {
 
   it('varies with wall-clock time', () => {
     expect(deriveSeed(1000)).not.toBe(deriveSeed(2000));
+  });
+});
+
+describe('isPauseHotkey', () => {
+  it('accepts Escape and both cases of P', () => {
+    for (const key of ['Escape', 'p', 'P']) {
+      expect(isPauseHotkey({ key, repeat: false, target: null } as unknown as KeyboardEvent)).toBe(
+        true,
+      );
+    }
+  });
+
+  it('ignores auto-repeat and other keys', () => {
+    expect(
+      isPauseHotkey({ key: 'Escape', repeat: true, target: null } as unknown as KeyboardEvent),
+    ).toBe(false);
+    expect(isPauseHotkey({ key: ' ', repeat: false, target: null } as unknown as KeyboardEvent)).toBe(
+      false,
+    );
+  });
+
+  it('ignores keys aimed at a focused control, so Esc cannot yank a slider mid-drag', () => {
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    expect(
+      isPauseHotkey({ key: 'Escape', repeat: false, target: input } as unknown as KeyboardEvent),
+    ).toBe(false);
+    input.remove();
   });
 });
 
@@ -453,9 +513,9 @@ describe('startGameWith: HUD wiring', () => {
 });
 
 describe('startGameWith: listeners and teardown', () => {
-  it('registers keydown and resize, and sizes the canvas once at boot', () => {
+  it('registers keydown, resize and blur, and sizes the canvas once at boot', () => {
     const h = boot();
-    expect(h.rec.listeners.map(([t]) => t).sort()).toEqual(['keydown', 'resize']);
+    expect(h.rec.listeners.map(([t]) => t).sort()).toEqual(['blur', 'keydown', 'resize']);
     expect(h.rec.resizes).toEqual([[1024, 768]]);
     h.handle.dispose();
   });
@@ -484,7 +544,7 @@ describe('startGameWith: listeners and teardown', () => {
   it('removes exactly the listeners it added, by identity', () => {
     const h = boot();
     h.handle.dispose();
-    expect(h.rec.removed).toHaveLength(2);
+    expect(h.rec.removed).toHaveLength(3);
     for (const [type, fn] of h.rec.removed) {
       expect(h.rec.listeners).toContainEqual([type, fn]);
     }
@@ -909,6 +969,116 @@ describe('startGameWith: level progression', () => {
     h.setState('win');
     h.hud.startRestart(); // final win -> back to start
     expect(h.rec.levelBuilds[2]).toEqual({ level: 0, lives: undefined });
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: pause', () => {
+  it('Escape pauses a playing game and Escape resumes it, without a rebuild', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.keydown({ key: 'Escape' });
+    expect(h.getState()).toBe('paused');
+    h.keydown({ key: 'Escape' });
+    expect(h.getState()).toBe('playing');
+    expect(h.rec.levelBuilds).toHaveLength(1); // pausing is not a restart
+    h.handle.dispose();
+  });
+
+  it('P pauses too, but a repeat or a focused control does not', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.keydown({ key: 'p', repeat: true });
+    expect(h.getState()).toBe('playing');
+    h.keydown({ key: 'P' });
+    expect(h.getState()).toBe('paused');
+    h.handle.dispose();
+  });
+
+  it('does nothing on the title or a finished game', () => {
+    // Population: the three non-playing, non-paused states.
+    const h = boot(makeDeps());
+    for (const s of ['title', 'win', 'lose'] as const) {
+      h.setState(s);
+      h.keydown({ key: 'Escape' });
+      expect(h.getState()).toBe(s);
+    }
+    h.handle.dispose();
+  });
+
+  it('auto-pauses when the window blurs mid-game, and only mid-game', () => {
+    // A blurred tab must not keep eating lives; a blurred title screen needs nothing.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.blur();
+    expect(h.getState()).toBe('paused');
+    h.setState('title');
+    h.blur();
+    expect(h.getState()).toBe('title'); // and focus never auto-resumes
+    h.handle.dispose();
+  });
+
+  it('the Resume button resumes; it must NOT fall into the rebuild path', () => {
+    // The action button is shared with Play Again/Retry, whose handler rebuilds the
+    // world. Resume from pause has to keep the game exactly as frozen.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.keydown({ key: 'Escape' });
+    h.hud.startRestart();
+    expect(h.getState()).toBe('playing');
+    expect(h.rec.levelBuilds).toHaveLength(1);
+    h.handle.dispose();
+  });
+
+  it('Quit to Title returns to the title over a FRESH run at the starting level', () => {
+    const h = boot(makeDeps({ levelCount: 2, levelStart: 1 }));
+    h.setState('playing');
+    h.keydown({ key: 'Escape' });
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('title');
+    // Rebuilt at levels.start with fresh lives, like the game-over path.
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
+    expect(h.rec.hudLevels.at(-1)).toEqual([2, 2]);
+    h.handle.dispose();
+  });
+
+  it('removes the blur listener on dispose, like every other host listener', () => {
+    const h = boot(makeDeps());
+    h.handle.dispose();
+    const added = h.rec.listeners.filter(([t]) => t === 'blur').length;
+    const removed = h.rec.removed.filter(([t]) => t === 'blur').length;
+    expect(added).toBe(1);
+    expect(removed).toBe(1);
+  });
+});
+
+describe('startGameWith: pause drops queued input', () => {
+  it('clears latched fire/mine presses on EVERY entry into paused', () => {
+    // Found in review: the blur path was safe (input.ts clears itself on window blur)
+    // but an Esc/P pause left a latched Space press to mine on the first resumed tick.
+    // Wired at the state change, so hotkey, blur and any future pause trigger all pass
+    // through the same clear.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.keydown({ key: 'Escape' });
+    expect(h.rec.inputClears).toBe(1);
+    h.keydown({ key: 'Escape' }); // resume: no extra clear
+    h.blur(); // auto-pause: clears again
+    expect(h.rec.inputClears).toBe(2);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: quit is pause-only', () => {
+  it('ignores a quit that arrives outside pause', () => {
+    // The HUD hides the button in every other state, so in production this cannot
+    // fire -- but a handler that rebuilds the world deserves its own guard, not a
+    // CSS class as its only defence.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('playing');
+    expect(h.rec.levelBuilds).toHaveLength(1); // no rebuild
     h.handle.dispose();
   });
 });

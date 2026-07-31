@@ -175,13 +175,18 @@ describe('driver: simulation', () => {
     expect(h.driver.world.tick).toBe(6);
   });
 
-  it('does not step while not playing, but still renders', () => {
-    const h = harness({ state: 'title' });
-    h.driver.start();
-    h.raf.fire(100);
-    expect(h.driver.world.tick).toBe(0);
-    expect(h.renders).toHaveLength(1);
-  });
+  it.each(['title', 'paused'] as const)(
+    'does not step while %s, but still renders the frozen pose',
+    (state) => {
+      // 'paused' deliberately rides the same hold-pose path as the title screen:
+      // sim frozen, renderer live, accumulator dropped so resume repays nothing.
+      const h = harness({ state });
+      h.driver.start();
+      h.raf.fire(100);
+      expect(h.driver.world.tick).toBe(0);
+      expect(h.renders).toHaveLength(1);
+    },
+  );
 
   it('samples input once per tick, not once per frame', () => {
     const h = harness();

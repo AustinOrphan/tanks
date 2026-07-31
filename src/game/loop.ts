@@ -35,8 +35,10 @@ export interface HostWindow {
   readonly innerHeight: number;
   addEventListener(type: 'keydown', fn: (e: KeyboardEvent) => void): void;
   addEventListener(type: 'resize', fn: (e: Event) => void): void;
+  addEventListener(type: 'blur', fn: (e: Event) => void): void;
   removeEventListener(type: 'keydown', fn: (e: KeyboardEvent) => void): void;
   removeEventListener(type: 'resize', fn: (e: Event) => void): void;
+  removeEventListener(type: 'blur', fn: (e: Event) => void): void;
 }
 
 /**
@@ -112,6 +114,15 @@ export function isMuteHotkey(e: KeyboardEvent): boolean {
     return false;
   }
   return e.key === 'm' || e.key === 'M';
+}
+
+/** Escape or P toggles pause, under the same repeat/focused-control guard as mute. */
+export function isPauseHotkey(e: KeyboardEvent): boolean {
+  if (e.repeat) return false;
+  if (e.target instanceof HTMLElement && e.target.closest('input,button,select,textarea')) {
+    return false;
+  }
+  return e.key === 'Escape' || e.key === 'p' || e.key === 'P';
 }
 
 /**
@@ -284,6 +295,10 @@ export function startGameWith(
     audio.unlock();
     if (sm.state === 'title') {
       sm.startPlaying();
+    } else if (sm.state === 'paused') {
+      // Resume shares the action button with Play Again/Retry, whose branch below
+      // REBUILDS the world. Resuming must keep the game exactly as frozen.
+      sm.resume();
     } else {
       // Intermediate win -> the NEXT level, with the lives that survived this one.
       // Final win or game over -> back to the session's starting level with fresh
@@ -306,9 +321,35 @@ export function startGameWith(
     }
   });
 
+  hud.onQuitToTitle(() => {
+    // The HUD hides the Quit button outside pause, but a handler that rebuilds the
+    // world deserves its own guard, not a CSS class as its only defence.
+    if (sm.state !== 'paused') return;
+    // Like the game-over path: the next Start begins a FRESH run at the session's
+    // starting level with fresh lives. Rebuilt NOW rather than lazily on Start, so
+    // the title screen renders over the new arena, not the abandoned game.
+    level = deps.levels.start;
+    world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+    playerId = world.tanks.find((t) => t.kind === 'player')?.id;
+    director.setPlayerId(playerId ?? -1);
+    lastRoundStartTick = null;
+    hud.setLevel(level + 1, deps.levels.count);
+    driver.reset(world);
+    refreshStats(world);
+    sm.toTitle();
+  });
+
   sm.onChange((s) => {
     hud.setState(s);
+    // startMusic is idempotent (engine checks music.playing()), so a resume passing
+    // back through 'playing' does not double-start anything.
     if (s === 'playing') audio.startMusic();
+    // The driver stops sampling while paused and only sample() resets the fire/mine
+    // latches, so a Space pressed around or during a pause would mine on the first
+    // resumed tick. At the state change, so hotkey, blur and any future pause trigger
+    // all pass through the same clear. (input.ts clears itself on window blur too;
+    // that covers alt-tab, this covers Esc/P.)
+    if (s === 'paused') input.clearQueuedPresses();
   });
 
   hud.setState(sm.state); // initial title panel
@@ -317,8 +358,22 @@ export function startGameWith(
 
   const onKey = (e: KeyboardEvent): void => {
     if (isMuteHotkey(e)) hud.setMuted(audio.toggleMute());
+    if (isPauseHotkey(e)) {
+      // Toggle, guarded by the state machine: pause() acts only from 'playing' and
+      // resume() only from 'paused', so title/win/lose ignore the key entirely.
+      if (sm.state === 'paused') sm.resume();
+      else sm.pause();
+    }
   };
   deps.host.addEventListener('keydown', onKey);
+
+  // A blurred tab must not keep eating lives. Focus deliberately does NOT
+  // auto-resume: coming back to a firefight you cannot see yet is worse than
+  // clicking Resume.
+  const onBlur = (): void => {
+    sm.pause();
+  };
+  deps.host.addEventListener('blur', onBlur);
 
   const onResize = (): void => {
     renderer.resize(deps.host.innerWidth, deps.host.innerHeight);
@@ -333,6 +388,7 @@ export function startGameWith(
       driver.stop();
       deps.host.removeEventListener('keydown', onKey);
       deps.host.removeEventListener('resize', onResize);
+      deps.host.removeEventListener('blur', onBlur);
       input.dispose();
       renderer.dispose();
       audio.dispose();

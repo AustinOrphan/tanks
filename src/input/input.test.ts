@@ -312,3 +312,31 @@ describe('createInputController — focus does not steal the tank', () => {
     text.remove();
   });
 });
+
+describe('createInputController — clearing queued presses', () => {
+  it('drops a latched mine/fire press without touching held movement', () => {
+    // Found in review: a Space pressed while the game is HOTKEY-paused latched here
+    // (the driver stops sampling, and only sample() resets the latch) and dropped a
+    // mine on the first tick after resume. The blur path was already safe -- window
+    // blur calls releaseAll -- but Esc/P pause never cleared anything.
+    const input = createInputController(makeTarget(), (x, y) => ({ x, y }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w' }));
+
+    input.clearQueuedPresses();
+
+    const s = input.sample();
+    expect(s.mine).toBe(false);
+    expect(s.fire).toBe(false);
+    // Held movement is NOT cleared: the key is physically still down on resume.
+    expect(s.move.y).not.toBe(0);
+    input.dispose();
+  });
+
+  it('the same press without a clear DOES mine — the latch this exists to drop', () => {
+    const input = createInputController(makeTarget(), (x, y) => ({ x, y }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    expect(input.sample().mine).toBe(true);
+    input.dispose();
+  });
+});

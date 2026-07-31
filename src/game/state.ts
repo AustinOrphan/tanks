@@ -1,6 +1,6 @@
 import type { SimEvent } from '../sim/events';
 
-export type GameState = 'title' | 'playing' | 'win' | 'lose';
+export type GameState = 'title' | 'playing' | 'win' | 'lose' | 'paused';
 
 export interface GameStateMachine {
   state: GameState;
@@ -8,6 +8,10 @@ export interface GameStateMachine {
   toTitle(): void;
   startPlaying(): void;
   restart(): void;
+  /** Only from 'playing': a finished or unstarted game has nothing to freeze. */
+  pause(): void;
+  /** Only from 'paused': a stray resume elsewhere must not restart anything. */
+  resume(): void;
   onChange(cb: (s: GameState) => void): void;
 }
 
@@ -41,6 +45,12 @@ export function createGameStateMachine(): GameStateMachine {
     },
     toTitle(): void {
       setState('title');
+    },
+    pause(): void {
+      if (machine.state === 'playing') setState('paused');
+    },
+    resume(): void {
+      if (machine.state === 'paused') setState('playing');
     },
     startPlaying(): void {
       setState('playing');
