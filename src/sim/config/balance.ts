@@ -134,6 +134,10 @@ export const GAME_BALANCE: BalanceConstants = {
       directShotWeight: 0.8, bankShotWeight: 0.2,
     },
     [AIProfile.RICOCHET_SNIPER]: {
+      // NOTE: the STATIONARY behaviour implementation (brown's) reads neither
+      // shot weight today, so this profile's bank preference (0.55) is authored
+      // intent a future stationary-sniper implementation must pick up -- naming
+      // this profile in a roster now yields a direct-only stationary tank.
       behavior: AIBehavior.STATIONARY, aimAccuracy: 0.95, reactionTime: 0.35,
       aggression: 0.75, preferredDistance: 12, minimumDistance: 0, retreatChance: 0,
       directShotWeight: 0.45, bankShotWeight: 0.55,

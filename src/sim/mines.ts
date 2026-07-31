@@ -73,7 +73,12 @@ export function blastReaches(
 ): boolean {
   for (const w of walls) {
     if (w.destroyed) continue
-    if (w.kind === 'destructible' && throughDestructible) continue
+    // Which walls the pass-through rule applies to is the same per-kind property
+    // the destroy loop reads (destructibleByBlast) -- keeping this a kind literal
+    // while applyBlast consulted config meant a future third kind could be
+    // destroyed by a blast its own body still blocked. `throughDestructible`
+    // (whether the rule is on at all) stays the caller's parameter.
+    if (wallConfigFor(w.kind).destructibleByBlast && throughDestructible) continue
     if (raySegmentVsAABB(from, to, w.aabb) !== null) return false
   }
   return true

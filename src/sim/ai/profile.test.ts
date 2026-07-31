@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { brownDecision } from './brown';
 import { greyDecision } from './grey';
 import { tealDecision } from './teal';
 import { configFor } from '../config';
@@ -7,11 +8,18 @@ import type { Tank, Vec2, Bullet, Wall } from '../types';
 import type { World } from '../world';
 
 // ---------------------------------------------------------------------------
-// PROFILE CONSUMPTION tests: each one injects a variant ResolvedTankConfig via
+// CONFIG-CONSUMPTION tests: each one injects a variant ResolvedTankConfig via
 // the decision functions' cfg parameter and asserts behaviour actually changes.
-// This is what separates "the profile is consumed" from "the profile is carried":
+// This is what separates "the config is consumed" from "the config is carried":
 // every test here fails if its field stops being read (verified by mutation --
 // reverting each consumption to its old hardcoded form kills the matching test).
+// The consumptions covered here: grey's aggression-derived patience, teal's
+// direct/bank weight gates, BOTH mine-inclination gates (grey and teal),
+// cfg.mineCapacity, and brown's cfg.weapon. The `behavior` routing consumption
+// lives in decideAi and cannot be reached by injection (configFor is
+// module-resolved there); its guards are the roster.test behaviour pins plus
+// dispatch.test's per-kind expectations, which fail together if a roster
+// profile is swapped.
 //
 // Each variant is paired with a same-fixture default-cfg control, so a fixture
 // drift that breaks the baseline cannot leave the variant assertion passing
@@ -123,5 +131,38 @@ describe('minePlacementChance sign gates mine proposals', () => {
     const { grey, w } = fixture();
     const d = greyDecision(w, grey, withAi(configFor('grey'), { minePlacementChance: undefined }));
     expect(d.mine).toBe(false);
+  });
+
+  it("teal's gate is the same consumption, not a copy that could rot separately", () => {
+    // Player inside tactical mine range of a roaming teal; control proposes.
+    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 3, y: 0 });
+    const w = world({ tanks: [teal, player] });
+    expect(tealDecision(w, teal).mine).toBe(true);
+    const d = tealDecision(w, teal, withAi(configFor('teal'), { minePlacementChance: undefined }));
+    expect(d.mine).toBe(false);
+  });
+});
+
+describe('mineCapacity bounds proposals (grey)', () => {
+  it('capacity 0 -> no proposal from the fixture whose control proposes', () => {
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 3, y: 0 });
+    const w = world({ tanks: [grey, player] });
+    expect(greyDecision(w, grey).mine).toBe(true); // control
+    const d = greyDecision(w, grey, { ...configFor('grey'), mineCapacity: 0 });
+    expect(d.mine).toBe(false);
+  });
+});
+
+describe('brown consumes cfg.weapon (not a hardcoded shell type)', () => {
+  it('an injected fast weapon changes the decision fireType; control stays normal', () => {
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const w = world({ tanks: [brown, player] });
+    expect(brownDecision(w, brown).fireType).toBe('normal'); // control
+    const base = configFor('brown');
+    const d = brownDecision(w, brown, { ...base, weapon: { ...base.weapon, bulletType: 'fast' } });
+    expect(d.fireType).toBe('fast');
   });
 });

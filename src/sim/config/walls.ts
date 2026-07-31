@@ -41,7 +41,10 @@ export const GAME_WALL_DEFS: Record<WallKind, WallDefinition> = {
 
 const WALL_CATALOG = createCatalog<WallKind, WallDefinition, WallDefinition>(
   GAME_WALL_DEFS,
-  (kind, defs) => defs[kind],
+  // Copied, not returned by reference, for the same reason resolveTankConfig
+  // copies `ai`: the resolved object must not be a live handle on the
+  // definition table.
+  (kind, defs) => ({ ...defs[kind] }),
 );
 
 /** The resolved runtime config for a wall kind. */

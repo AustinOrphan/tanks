@@ -1,12 +1,13 @@
 import type { BulletType } from './types';
-// THE AUTHORITATIVE HOME OF THE BALANCE SCALARS. Every gameplay tunable that
-// used to be a literal here now lives in config/data/balance.json; this module
-// derives its exports from that data (and stays the one import site the rest of
-// the sim knows). Retuning a value is still a deliberate two-file edit -- the
-// JSON entry and its pin in constants.test.ts -- and the JSON is a build-time
-// static import, so the sim stays pure and replays stay exact functions of
-// their inputs. Non-balance values (epsilons, derived radii, tick counts
-// measured in this file's comments) remain TypeScript below.
+// THE AUTHORITATIVE HOME OF THE BALANCE SCALARS. The tunables pinned by
+// constants.test.ts live in config/data/balance.json; this module derives its
+// exports from that data (and stays the one import site the rest of the sim
+// knows). Retuning one is a deliberate two-file edit -- the JSON entry and its
+// pin in constants.test.ts, which covers every balance.json value -- and the
+// JSON is a build-time static import, so the sim stays pure and replays stay
+// exact functions of their inputs. Everything else (epsilons, derived radii,
+// tick counts, and SHELL_SPAWN_FORWARD, whose value is coupled to the rendered
+// barrel geometry) remains TypeScript below.
 import data from './config/data/balance.json';
 
 // ---- Simulation timing ----
