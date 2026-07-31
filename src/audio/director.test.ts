@@ -132,3 +132,20 @@ describe('createAudioDirector', () => {
     expect(calls.map((c) => c.key)).toEqual(['cannon', 'cannon-enemy']);
   });
 });
+
+describe('createAudioDirector: rebinding the player across levels', () => {
+  it('follows setPlayerId, because loadArena numbers the player differently per arena', () => {
+    // Measured: the player is id 16 in ARENA_01 and id 15 in ARENA_02 (ids come from
+    // grid scan order). A director still bound to the old id would score the player's
+    // own cannon as an enemy's from level 2 onward.
+    const { engine, calls } = makeSpyEngine();
+    const director = createAudioDirector(engine, 16);
+    const fireBy = (ownerId: number): SimEvent =>
+      ({ type: 'fire', ownerId, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 });
+
+    director.handle([fireBy(15)]);
+    director.setPlayerId(15);
+    director.handle([fireBy(15), fireBy(16)]);
+    expect(calls.map((c) => c.key)).toEqual(['cannon-enemy', 'cannon', 'cannon-enemy']);
+  });
+});

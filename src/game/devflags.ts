@@ -8,7 +8,7 @@
  * Parsing a string rather than reading `location` directly keeps this a pure
  * function, so the whole table is assertable without a browser.
  */
-import type { UnarmedTrigger } from '../sim/types';
+import type { TankKind, UnarmedTrigger } from '../sim/types';
 
 export interface DevFlags {
   /**
@@ -71,6 +71,23 @@ export interface DevFlags {
 
   /** Show each mine's remaining fuse, in seconds, beside it. */
   mineTimer: boolean;
+
+  /**
+   * Jump straight to a level: a 1-based index into the shipped sequence, or the
+   * word `sandbox`. Range-checking against ARENAS is the caller's job -- knowing
+   * how many levels exist would mean importing the sim here.
+   */
+  level: number | 'sandbox' | null;
+  /**
+   * Sandbox roster: `tanks=brown,teal,teal`, any multiset of enemy kinds. Null on
+   * any unknown kind rather than dropping entries -- a silently-shrunk roster
+   * misreports the fixture being observed.
+   */
+  sandboxTanks: TankKind[] | null;
+  /** Sandbox enemies have their weapons OFF unless `disarmed=0` re-arms them. */
+  sandboxDisarmed: boolean;
+  /** Interior walls to scatter in the sandbox: `walls=8` or `walls=random:8`. */
+  sandboxWalls: number | null;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -81,6 +98,12 @@ export const DEV_FLAGS_OFF: DevFlags = {
   mineTrigger: null,
   mineReach: false,
   mineTimer: false,
+  level: null,
+  sandboxTanks: null,
+  // TRUE in the off state: the sandbox defaults to weapons-off, and this field is a
+  // VALUE the sandbox reads, not a feature the dev query enables.
+  sandboxDisarmed: true,
+  sandboxWalls: null,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -101,6 +124,35 @@ function asSeed(params: URLSearchParams, name: string): number | null {
   if (raw === null || raw === '') return null;
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+/** A 1-based level number, the word 'sandbox', or null. Case-sensitive on purpose. */
+function asLevel(params: URLSearchParams): number | 'sandbox' | null {
+  const raw = params.get('level');
+  if (raw === null) return null;
+  if (raw === 'sandbox') return 'sandbox';
+  return asSeed(params, 'level'); // same shape: a positive integer or null
+}
+
+const TANK_KINDS = new Set<TankKind>(['brown', 'grey', 'teal']);
+
+/** The sandbox roster: every entry must be an enemy kind, or the whole list is null. */
+function asTanks(params: URLSearchParams): TankKind[] | null {
+  const raw = params.get('tanks');
+  if (raw === null || raw === '') return null;
+  const kinds = raw.split(',').map((s) => s.trim());
+  if (!kinds.every((k) => TANK_KINDS.has(k as TankKind))) return null;
+  return kinds as TankKind[];
+}
+
+/** `walls=8` or `walls=random:8`: a positive integer count, or null. */
+function asWalls(params: URLSearchParams): number | null {
+  const raw = params.get('walls');
+  if (raw === null) return null;
+  const bare = raw.startsWith('random:') ? raw.slice('random:'.length) : raw;
+  const n = Number(bare);
+  if (bare === '' || !Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
   return n;
 }
 
@@ -126,5 +178,10 @@ export function parseDevFlags(search: string): DevFlags {
     mineTrigger: asMineTrigger(params),
     mineReach: isOn(params, 'mineReach'),
     mineTimer: isOn(params, 'mineTimer'),
+    level: asLevel(params),
+    sandboxTanks: asTanks(params),
+    // Absent means disarmed: the sandbox is scenery until explicitly re-armed.
+    sandboxDisarmed: params.has('disarmed') ? isOn(params, 'disarmed') : true,
+    sandboxWalls: asWalls(params),
   };
 }

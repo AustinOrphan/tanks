@@ -411,4 +411,53 @@ describe('stepAi', () => {
       expect(w.mines.length).toBe(1);
     });
   });
+
+  describe('disarmed enemies (the dev sandbox rides on this)', () => {
+    // Each case reuses THE fixture proven to produce the shot/mine two tests up, so the
+    // disarmed assertion cannot pass vacuously: the same world with the flag off acts.
+
+    it('never fires, while its armed twin does', () => {
+      const events: SimEvent[] = [];
+      const armed = world([tank(1, 'grey', { x: 0, y: 0 }), tank(2, 'player', { x: 5, y: 0 })]);
+      stepAi(armed, events);
+      expect(armed.bullets.length).toBe(1); // the fixture really is a firing solution
+
+      const w = world([
+        tank(1, 'grey', { x: 0, y: 0 }, { disarmed: true }),
+        tank(2, 'player', { x: 5, y: 0 }),
+      ]);
+      for (let i = 0; i < 120; i++) stepAi(w, events);
+      expect(w.bullets.length).toBe(0);
+    });
+
+    it('never lays a mine, while its armed twin does', () => {
+      const armed = world([
+        tank(1, 'grey', { x: 0, y: 0 }),
+        tank(3, 'brown', { x: 12, y: 0 }),
+        tank(9, 'player', { x: 3, y: 0 }),
+      ]);
+      stepAi(armed, []);
+      expect(armed.mines.length).toBe(1); // the fixture really does lay one
+
+      const w = world([
+        tank(1, 'grey', { x: 0, y: 0 }, { disarmed: true }),
+        tank(3, 'brown', { x: 12, y: 0 }),
+        tank(9, 'player', { x: 3, y: 0 }),
+      ]);
+      for (let i = 0; i < 120; i++) stepAi(w, []);
+      expect(w.mines.length).toBe(0);
+    });
+
+    it('still drives and aims: disarmed is not paralysed', () => {
+      // The flag must remove ordnance only. A disarmed tank that also stopped moving
+      // would make the sandbox useless for testing movement and pursuit.
+      const w = world([
+        tank(1, 'grey', { x: 0, y: 0 }, { disarmed: true }),
+        tank(2, 'player', { x: 5, y: 3 }),
+      ]);
+      const before = w.tanks[0].turretAngle;
+      for (let i = 0; i < 30; i++) stepAi(w, []);
+      expect(w.tanks[0].turretAngle).not.toBe(before); // turret tracks the player
+    });
+  });
 });

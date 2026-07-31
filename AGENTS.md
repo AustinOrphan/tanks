@@ -114,8 +114,9 @@ only when someone updates it. `round-ux` passes today, and nobody would learn th
 stopped.
 
 The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
-`roundPhaseHud`. `parseDevFlags` derives the boolean list from `DEV_FLAGS_OFF` in its
-tests, so adding one cannot quietly shrink what they cover.
+`roundPhaseHud`, `level` (a 1-based jump, or `level=sandbox`), and the sandbox knobs
+`tanks`, `disarmed`, `walls`. `parseDevFlags` derives the boolean list from
+`DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what they cover.
 
 Two rules follow:
 

@@ -61,6 +61,13 @@ export interface Tank {
   mineCooldown: number;
   aiState: AiState;
   aiTimer: number;
+  /**
+   * Weapons off: never fires, never lays a mine. OPTIONAL, so the dozens of existing
+   * tank fixtures stay valid; absent means armed. Exists for the dev sandbox, where
+   * enemies drive around as moving scenery -- it is world DATA, so replays stay exact
+   * functions of their inputs.
+   */
+  disarmed?: boolean;
 }
 
 export interface Bullet {

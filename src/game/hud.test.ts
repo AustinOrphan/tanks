@@ -370,3 +370,42 @@ describe('hud: round-start phase feedback', () => {
   });
 
 });
+
+describe('hud: level progression', () => {
+  it('shows the level position once told, and only in a multi-level sequence', () => {
+    const { hud: h, root } = mount();
+    const chip = (): HTMLElement => root.querySelector('.hud-level') as HTMLElement;
+    expect(chip().className).toContain('hud-level--hidden'); // nothing until setLevel
+
+    h.setLevel(1, 2);
+    expect(chip().className).not.toContain('hud-level--hidden');
+    expect(chip().textContent).toContain('1/2');
+
+    // A one-level sequence (the sandbox) shows no chip: "Level 1/1" is noise.
+    h.setLevel(1, 1);
+    expect(chip().className).toContain('hud-level--hidden');
+  });
+
+  it('offers Next Level on an intermediate win, Play Again on the final one', () => {
+    const { hud: h, root } = mount();
+    const title = (): string => (root.querySelector('.hud-title') as HTMLElement).textContent ?? '';
+    const button = (): string => (root.querySelector('.hud-action') as HTMLElement).textContent ?? '';
+
+    h.setLevel(1, 2);
+    h.setState('win');
+    expect(title()).toContain('cleared');
+    expect(button()).toBe('Next Level');
+
+    h.setLevel(2, 2);
+    h.setState('win'); // re-renders unconditionally; the equal-state guard lives in state.ts, not here
+    expect(title()).toBe('You Win!');
+    expect(button()).toBe('Play Again');
+  });
+
+  it('never says cleared before setLevel has been called at all', () => {
+    // A HUD that has not been told about levels behaves exactly as it always did.
+    const { hud: h, root } = mount();
+    h.setState('win');
+    expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('You Win!');
+  });
+});

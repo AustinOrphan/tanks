@@ -51,6 +51,42 @@ export const ARENA_01: Arena = {
   ],
 };
 
+// Level 2. Two horizontal bars split the field into an upper enemy half and a lower
+// player half, with a tall centre spine forcing engagements around its ends. Every
+// enemy's straight line to the player spawn is blocked -- arena-validation.test.ts
+// checks that with the sim's own lineOfSight. For the UPPER pair (Brown at row 2, Grey
+// at row 2) the only block is the DESTRUCTIBLE inner end of a bar ('x'), so blowing one
+// open is a real trade that opens the lane for both sides; the LOWER pair (Brown and
+// Teal at row 3) stays blocked by the bars' solid outer ends whatever is destroyed.
+// Measured, not argued: destroying both x's opens exactly the two upper lanes (see the
+// "destructible trade" test in arena-validation.test.ts). Four enemies against level
+// 1's three: two Browns anchoring the left, Grey and Teal roaming the right.
+export const ARENA_02: Arena = {
+  cols: 11,
+  rows: 9,
+  cellSize: 2,
+  legend: { '#': 'solid', x: 'destructible' },
+  grid: [
+    '...........', // 0
+    '...........', // 1
+    '.B...#...G.', // 2
+    '.B...#...T.', // 3
+    '.#x..#..x#.', // 4  bars: solid outer ends, destructible inner ends
+    '.....#.....', // 5
+    '..#.....#..', // 6  the player's flank guards, as in level 1
+    '.....P.....', // 7
+    '...........', // 8
+  ],
+};
+
+/**
+ * The shipped sequence, in play order. The game layer walks this list; the sim never
+ * knows a level number. Every entry is structurally validated by
+ * arena-validation.test.ts (connectivity, spawn sightlines, dimensions), so adding a
+ * level here is what makes it real -- and what makes it checked.
+ */
+export const ARENAS: Arena[] = [ARENA_01, ARENA_02];
+
 /**
  * The playable area, in world units. Derived from the same `cols * cellSize`
  * that `loadArena` lays the grid out with, so the two can never drift.
@@ -167,12 +203,24 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
 }
 
 /**
- * The arena the game currently ships. Both `createArenaWorld()` and the
- * renderer's sizing read THIS, so pointing the game at a new arena is one
- * edit. Referencing ARENA_01 directly from the game layer would let the
- * simulated arena and the rendered arena drift apart silently.
+ * Where a single-arena consumer should point. The gl harness sizes its board from
+ * this; the game layer proper walks ARENAS. Kept as ARENAS[0] so "the first level"
+ * and "the arena tools assume" cannot drift apart.
  */
-export const CURRENT_ARENA: Arena = ARENA_01;
+export const CURRENT_ARENA: Arena = ARENAS[0];
+
+/**
+ * Build a playable world from any arena. The progression's per-level constructor;
+ * `lives` is how a cleared level's remaining lives carry into the next one.
+ */
+export function createWorldFor(
+  arena: Arena,
+  seed?: number,
+  unarmedTrigger?: UnarmedTrigger,
+  lives: number = LIVES,
+): World {
+  return createWorld({ ...loadArena(arena), lives, seed, unarmedTrigger });
+}
 
 /**
  * `seed` drives every random draw in the sim (AI wander headings, aim jitter).
@@ -181,7 +229,10 @@ export const CURRENT_ARENA: Arena = ARENA_01;
  * ticks each, with the enemies walking the same paths and missing by the same
  * angles forever. The game layer passes a fresh one per session; tests and
  * replays omit it and get the reproducible default.
+ *
+ * Kept at its old one-arena signature: dozens of tests (and the pacifist suite's
+ * headline metric) mean "level 1" when they say createArenaWorld.
  */
 export function createArenaWorld(seed?: number, unarmedTrigger?: UnarmedTrigger): World {
-  return createWorld({ ...loadArena(CURRENT_ARENA), lives: LIVES, seed, unarmedTrigger });
+  return createWorldFor(ARENAS[0], seed, unarmedTrigger);
 }

@@ -3,6 +3,13 @@ import type { SimEvent } from '../sim/events';
 
 export interface AudioDirector {
   handle(events: SimEvent[]): void;
+  /**
+   * Rebind which tank is "the player". loadArena numbers tanks in grid-scan order, so
+   * the player's id differs per arena (16 in ARENA_01, 15 in ARENA_02) -- a director
+   * still bound to the old id scores the player's own cannon as an enemy's from the
+   * next level onward.
+   */
+  setPlayerId(id: number): void;
 }
 
 // Inert fallback only: the loop (task 33) passes the real player id. loadArena
@@ -13,8 +20,9 @@ const RICOCHET_RATE_STEP = 0.15;
 
 export function createAudioDirector(
   engine: AudioEngine,
-  playerId: number = DEFAULT_PLAYER_ID,
+  initialPlayerId: number = DEFAULT_PLAYER_ID,
 ): AudioDirector {
+  let playerId = initialPlayerId;
   function handleOne(e: SimEvent): void {
     switch (e.type) {
       case 'fire':
@@ -62,6 +70,9 @@ export function createAudioDirector(
   return {
     handle(events) {
       for (const e of events) handleOne(e);
+    },
+    setPlayerId(id) {
+      playerId = id;
     },
   };
 }

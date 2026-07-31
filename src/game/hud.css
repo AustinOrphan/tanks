@@ -144,6 +144,13 @@
   display: none;
 }
 
+/* Level chip: hidden until the loop reports a multi-level sequence. Without this rule
+ * the chip renders as a bare "Level:" from page load -- the class does nothing on its
+ * own, which is exactly the dead-CSS failure this file's test exists to catch. */
+.hud-level--hidden {
+  display: none;
+}
+
 /*
  * Centred banner: the teaching form, first round of the page load only.
  *
