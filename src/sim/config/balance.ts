@@ -93,11 +93,15 @@ export const GAME_BALANCE: BalanceConstants = {
       explosionRadius: 0,
     },
   },
-  // AI profiles are CARRIED as data but NOT consumed by the current bespoke AI
-  // (brown/grey/teal each have a hand-written decision function; none reads
-  // aggression/reactionTime/aimAccuracy/etc.). Values are the Wii reference
-  // figures, kept so a future profile-driven AI has a populated table to grow
-  // into. Wiring them to behaviour is an explicit residual, not this refactor.
+  // AI profiles: the fields the AI actually CONSUMES today are `behavior` (decideAi
+  // routes each tank to its behaviour implementation), `aggression` (grey's dodge
+  // patience is (1 - aggression) seconds), `directShotWeight`/`bankShotWeight`
+  // (whether teal attempts each shot type at all), and the SIGN of
+  // `minePlacementChance` (whether a tank proposes mines). The rest (aimAccuracy,
+  // reactionTime, preferredDistance, minimumDistance, retreatChance, and the
+  // chance magnitudes) are still carried-but-unread -- honest residuals, listed in
+  // the PR body. Values are the Wii reference figures except where noted: this is
+  // the GAME's table, retuned to describe the game's actual tanks.
   aiProfiles: {
     [AIProfile.STATIC_BASIC]: {
       behavior: AIBehavior.STATIONARY, aimAccuracy: 0.55, reactionTime: 0.8,
@@ -108,6 +112,11 @@ export const GAME_BALANCE: BalanceConstants = {
       behavior: AIBehavior.DEFENSIVE, aimAccuracy: 0.6, reactionTime: 0.7,
       aggression: 0.25, preferredDistance: 9, minimumDistance: 6, retreatChance: 0.75,
       directShotWeight: 0.9, bankShotWeight: 0.1,
+      // Not in the Wii reference table: added because the game's grey DOES lay
+      // mines, and the mine-proposal gate reads this field's sign. aggression 0.25
+      // is also load-bearing here: (1 - 0.25) * TICK_HZ is the tuned 45-tick dodge
+      // patience (pinned against DODGE_PATIENCE_TICKS in config/roster.test.ts).
+      minePlacementChance: 0.3,
     },
     [AIProfile.DEFENSIVE_ROCKET]: {
       behavior: AIBehavior.DEFENSIVE, aimAccuracy: 0.65, reactionTime: 0.65,

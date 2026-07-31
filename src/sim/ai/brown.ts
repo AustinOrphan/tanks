@@ -3,13 +3,16 @@ import type { Tank } from '../types';
 import { lineOfSight, aimLead, aimJitter, shotHitsOwnSide } from './targeting';
 import { driveVelocity } from '../collision';
 import { AI_AIM_SPREAD } from '../constants';
-import { configFor } from '../config';
+import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
-export function brownDecision(world: World, tank: Tank): AiDecision {
+// The STATIONARY-behaviour implementation (decideAi routes here for any tank whose
+// resolved profile behaviour is STATIONARY -- brown today). `cfg` is injectable so
+// tests can probe profile consumption; the default is the tank's own resolved config.
+export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig = configFor(tank.kind)): AiDecision {
   // The tank's weapon comes from its resolved config, not a hardcoded 'normal':
   // Brown fires the STANDARD_SHELL its definition names (config/roster.ts).
-  const weapon = configFor(tank.kind).weapon;
+  const weapon = cfg.weapon;
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
     return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };

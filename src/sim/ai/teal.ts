@@ -3,13 +3,16 @@ import type { Tank } from '../types';
 import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { BANK_PREFER_TICKS, AI_AIM_SPREAD } from '../constants';
-import { configFor } from '../config';
+import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
-export function tealDecision(world: World, tank: Tank): AiDecision {
+// The mobile/aggressive-behaviour implementation (decideAi routes TACTICAL --
+// teal today -- plus the not-yet-shipped OFFENSIVE and BERSERKER behaviours here).
+// `cfg` is injectable so tests can probe profile consumption.
+export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig = configFor(tank.kind)): AiDecision {
   // Weapon (ricochet bullet, its muzzle speed, and its bounce budget) comes from
   // the resolved config -- Teal fires the RICOCHET_ROCKET its definition names.
-  const weapon = configFor(tank.kind).weapon;
+  const weapon = cfg.weapon;
   const avoid = dangerAvoidMove(world, tank);
   // Mobile (spec §7): wander is the baseline move whenever there's nothing more specific
   // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
@@ -41,6 +44,10 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // `fire` at the end) is what lets the OTHER shot type still be tried: Teal loses the
   // blocked shot, not the whole tick.
   function tryDirect(): number | null {
+    // Profile-gated: a profile weighted entirely off direct shots never takes one.
+    // (Both weights are read as inclinations -- attempted at all or not; the shipped
+    // MOBILE_MINE_LAYER carries 0.85/0.15, so both paths stay active for teal.)
+    if (cfg.ai.directShotWeight <= 0) return null;
     if (!lineOfSight(tank.pos, player!.pos, world.walls)) return null;
     const targetVel = driveVelocity(player!);
     const angle = aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD);
@@ -51,6 +58,9 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // much denser arena would want throttling. Evaluated lazily below so the non-preferred
   // option only pays this cost when the preferred option actually fails.
   function tryBank(): number | null {
+    // Profile-gated, mirror of tryDirect: no bank inclination, no bank attempt --
+    // which also skips the O(walls^2) search below for profiles that never bank.
+    if (cfg.ai.bankShotWeight <= 0) return null;
     const raw = bankShot(tank.pos, player!.pos, world.walls, weapon.ricochetCount);
     if (raw === null) return null;
     const angle = raw + aimJitter(world, tank, AI_AIM_SPREAD);
@@ -71,7 +81,10 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // here avoids burning tank.mineCooldown on a request dropMine would refuse anyway.
   // Also gated on the player being near enough for the mine to matter -- see
   // mineThreatensPlayer. Availability is not a reason to lay ordnance.
-  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < configFor(tank.kind).mineCapacity
+  // Profile-gated inclination, as in grey.ts: only a profile with a positive
+  // minePlacementChance proposes mines (the magnitude is not consumed).
+  const mine = (cfg.ai.minePlacementChance ?? 0) > 0
+    && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
     && mineThreatensPlayer(world, tank);
 
   if (turretAngle !== null) {

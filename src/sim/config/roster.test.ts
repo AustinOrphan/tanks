@@ -1,15 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
   bulletConfig,
+  DODGE_PATIENCE_TICKS,
   FIRE_COOLDOWN_TICKS,
   MINE_CAP,
   SHELL_CAP,
   TANK_SPEED,
   TANK_TURN_RATE,
+  TICK_HZ,
 } from '../constants';
 import type { TankKind } from '../types';
 import { configFor, hasAbility } from './roster';
-import { TankAbility } from './enums';
+import { AIBehavior, TankAbility } from './enums';
 
 // The shipped kinds. `player` is included because the player is now resolved through
 // the same pipeline (its weapon/movement/mine-capacity all come from configFor).
@@ -78,6 +80,37 @@ describe('per-kind identity comes from config, not code branches', () => {
 
   it('reproduces the shipped render colours exactly', () => {
     for (const k of KINDS) expect(configFor(k).color).toBe(SHIPPED_COLORS[k]);
+  });
+
+  it('routes each kind to its shipped behaviour class (decideAi dispatches on this)', () => {
+    // Changing any of these re-routes the kind to a DIFFERENT decision function --
+    // a gameplay change, so it must be a deliberate two-file edit (roster + here).
+    expect(configFor('brown').behavior).toBe(AIBehavior.STATIONARY);
+    expect(configFor('grey').behavior).toBe(AIBehavior.DEFENSIVE);
+    expect(configFor('teal').behavior).toBe(AIBehavior.TACTICAL);
+  });
+
+  it("grey's profile-derived dodge patience equals the tuned DODGE_PATIENCE_TICKS", () => {
+    // greyDecision computes patience as (1 - ai.aggression) * TICK_HZ. This pin is
+    // what makes retuning DEFENSIVE_BASIC.aggression a loud edit instead of a
+    // silent difficulty change: 45 ticks was measured/tuned, not incidental.
+    const derived = Math.round((1 - configFor('grey').ai.aggression) * TICK_HZ);
+    expect(derived).toBe(DODGE_PATIENCE_TICKS);
+  });
+
+  it('mine inclination (minePlacementChance sign) matches who lays mines today', () => {
+    // The decision functions propose mines only when the profile carries a positive
+    // minePlacementChance; brown must stay inert on both this and the ability gate.
+    expect(configFor('grey').ai.minePlacementChance ?? 0).toBeGreaterThan(0);
+    expect(configFor('teal').ai.minePlacementChance ?? 0).toBeGreaterThan(0);
+    expect(configFor('brown').ai.minePlacementChance ?? 0).toBe(0);
+  });
+
+  it("teal's profile keeps both shot types active (positive direct AND bank weights)", () => {
+    // tryDirect/tryBank are gated on these signs; zeroing either would silently
+    // delete a whole shot type from the shipped game.
+    expect(configFor('teal').ai.directShotWeight).toBeGreaterThan(0);
+    expect(configFor('teal').ai.bankShotWeight).toBeGreaterThan(0);
   });
 
   it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {

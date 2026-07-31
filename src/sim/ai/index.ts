@@ -10,7 +10,7 @@ import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast } from './targeting';
 import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE } from '../constants';
-import { configFor, hasAbility, TankAbility } from '../config';
+import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
 /** An inert decision: hold position, hold aim, do nothing. */
@@ -19,18 +19,35 @@ function idleDecision(tank: Tank): AiDecision {
 }
 
 export function decideAi(world: World, tank: Tank): AiDecision {
-  switch (tank.kind) {
-    case 'brown': return brownDecision(world, tank);
-    case 'grey': return greyDecision(world, tank);
-    case 'teal': return tealDecision(world, tank);
-    // stepAi already skips the player; handled explicitly so the exhaustiveness
-    // check below is reachable.
-    case 'player': return idleDecision(tank);
+  // stepAi already skips the player; handled explicitly so tests can call this
+  // directly with a player tank and get the documented inert decision. The player
+  // never enters profile routing: its (schema-required) profile is inert data.
+  if (tank.kind === 'player') return idleDecision(tank);
+
+  // PROFILE-DRIVEN ROUTING: the decision implementation comes from the tank's
+  // resolved AI profile behaviour, not from its kind -- no code here knows that
+  // "teal banks shots"; the roster says so. A new tank type gets its AI by
+  // naming a profile in data.
+  //
+  // The old "a 5th TankKind must be a COMPILE error" guard that lived in a
+  // switch over tank.kind has MOVED, not vanished: GAME_TANK_DEFS is a
+  // Record<TankKind, TankDefinition>, so a new kind without a roster entry
+  // fails tsc in config/roster.ts -- earlier and with a better message than a
+  // silently inert enemy. The exhaustiveness check below now covers AIBehavior:
+  // a new behaviour class must be routed here or fail to compile.
+  const cfg = configFor(tank.kind);
+  switch (cfg.behavior) {
+    case AIBehavior.STATIONARY: return brownDecision(world, tank, cfg);
+    case AIBehavior.DEFENSIVE: return greyDecision(world, tank, cfg);
+    // The three mobile-aggressive behaviours share the mobile implementation
+    // today; OFFENSIVE/BERSERKER are vocabulary for future rosters, routed to
+    // the nearest real implementation rather than left silently inert.
+    case AIBehavior.TACTICAL:
+    case AIBehavior.OFFENSIVE:
+    case AIBehavior.BERSERKER:
+      return tealDecision(world, tank, cfg);
     default: {
-      // A 5th TankKind must be a COMPILE error here, not a silently inert enemy
-      // that ships looking like a bug in its own decision function. Requires
-      // `tsc --noEmit` to run -- see the `test` script in package.json.
-      const unreachable: never = tank.kind;
+      const unreachable: never = cfg.behavior;
       void unreachable;
       return idleDecision(tank);
     }

@@ -226,6 +226,12 @@ export const AI_JITTER_TICKS = 20;
 // sustained player fire still suppresses Grey most of the time, but never forever. This cap
 // is mandatory for any cautious personality: without it, the player's 0.4s reload against the
 // 1.0s THREAT_HORIZON locks the tank out of firing forever.
+//
+// NO LONGER READ BY greyDecision: the live value is PROFILE-DRIVEN there,
+// (1 - ai.aggression) * TICK_HZ, which at the shipped DEFENSIVE_BASIC aggression
+// (0.25) is exactly these 45 ticks. This constant stays as the tests' pinned
+// reference; config/roster.test.ts asserts the derivation equals it, so retuning
+// the profile without retuning this pin (or vice versa) fails loudly.
 export const DODGE_PATIENCE_TICKS = 45;
 
 // ---- Teal AI (tealDecision) ----
