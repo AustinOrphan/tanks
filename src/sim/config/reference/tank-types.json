@@ -1,0 +1,169 @@
+{
+  "BROWN": {
+    "displayName": "Brown",
+    "color": "#8A5A32",
+    "firstMission": 1,
+    "singlePlayerOnly": false,
+    "movementSpeed": "STATIONARY",
+    "rotationSpeed": "SLOW",
+    "aiProfile": "STATIC_BASIC",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "SLOW",
+      "maxActiveProjectiles": 1,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 0,
+    "abilities": []
+  },
+  "DARK_GREY": {
+    "displayName": "Dark Grey",
+    "color": "#4B4F52",
+    "firstMission": 2,
+    "singlePlayerOnly": false,
+    "movementSpeed": "SLOW",
+    "rotationSpeed": "SLOW",
+    "aiProfile": "DEFENSIVE_BASIC",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "SLOW",
+      "maxActiveProjectiles": 1,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 0,
+    "abilities": []
+  },
+  "TEAL": {
+    "displayName": "Teal",
+    "color": "#168C8C",
+    "firstMission": 5,
+    "singlePlayerOnly": false,
+    "movementSpeed": "SLOW",
+    "rotationSpeed": "SLOW",
+    "aiProfile": "DEFENSIVE_ROCKET",
+    "weapon": {
+      "projectileType": "ROCKET",
+      "fireRate": "SLOW",
+      "maxActiveProjectiles": 1,
+      "ricochetCount": 0
+    },
+    "mineCapacity": 0,
+    "abilities": []
+  },
+  "YELLOW": {
+    "displayName": "Yellow",
+    "color": "#E7C928",
+    "firstMission": 8,
+    "singlePlayerOnly": false,
+    "movementSpeed": "MEDIUM",
+    "rotationSpeed": "MEDIUM",
+    "aiProfile": "MOBILE_MINE_LAYER",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "MEDIUM",
+      "maxActiveProjectiles": 1,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 4,
+    "abilities": [
+      "MINE_LAYER"
+    ]
+  },
+  "RED": {
+    "displayName": "Red",
+    "color": "#C63D32",
+    "firstMission": 10,
+    "singlePlayerOnly": false,
+    "movementSpeed": "FAST",
+    "rotationSpeed": "FAST",
+    "aiProfile": "OFFENSIVE_ASSAULT",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "MEDIUM",
+      "maxActiveProjectiles": 3,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 0,
+    "abilities": []
+  },
+  "GREEN": {
+    "displayName": "Green",
+    "color": "#3D9A50",
+    "firstMission": 12,
+    "singlePlayerOnly": false,
+    "movementSpeed": "STATIONARY",
+    "rotationSpeed": "FAST",
+    "aiProfile": "RICOCHET_SNIPER",
+    "weapon": {
+      "projectileType": "RICOCHET_ROCKET",
+      "fireRate": "MEDIUM",
+      "maxActiveProjectiles": 2,
+      "ricochetCount": 2
+    },
+    "mineCapacity": 0,
+    "abilities": [
+      "PREDICTIVE_AIM",
+      "BANK_SHOT_AIM"
+    ]
+  },
+  "PURPLE": {
+    "displayName": "Purple",
+    "color": "#8052B8",
+    "firstMission": 15,
+    "singlePlayerOnly": false,
+    "movementSpeed": "FAST",
+    "rotationSpeed": "FAST",
+    "aiProfile": "OFFENSIVE_ELITE",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "FAST",
+      "maxActiveProjectiles": 5,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 2,
+    "abilities": [
+      "MINE_LAYER"
+    ]
+  },
+  "WHITE": {
+    "displayName": "White",
+    "color": "#F2F2EA",
+    "firstMission": 20,
+    "singlePlayerOnly": false,
+    "movementSpeed": "FAST",
+    "rotationSpeed": "FAST",
+    "aiProfile": "OFFENSIVE_ELITE",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "FAST",
+      "maxActiveProjectiles": 5,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 2,
+    "abilities": [
+      "MINE_LAYER",
+      "INVISIBILITY",
+      "VISIBLE_TRACKS"
+    ]
+  },
+  "BLACK": {
+    "displayName": "Black",
+    "color": "#151515",
+    "firstMission": 50,
+    "singlePlayerOnly": true,
+    "movementSpeed": "VERY_FAST",
+    "rotationSpeed": "VERY_FAST",
+    "aiProfile": "BERSERKER_ROCKET",
+    "weapon": {
+      "projectileType": "ROCKET",
+      "fireRate": "FAST",
+      "maxActiveProjectiles": 2,
+      "ricochetCount": 0
+    },
+    "mineCapacity": 2,
+    "abilities": [
+      "MINE_LAYER",
+      "RUSH_PLAYER"
+    ]
+  }
+}

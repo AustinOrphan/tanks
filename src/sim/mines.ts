@@ -3,9 +3,9 @@ import { vdist } from './types'
 import type { World } from './world'
 import { raySegmentVsAABB } from './collision'
 import type { SimEvent } from './events'
+import { configFor } from './config'
 import {
   MINE_BLAST_THROUGH_DESTRUCTIBLE,
-  MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_EXPAND_TICKS,
@@ -29,7 +29,9 @@ export function dropMine(world: World, ownerId: number, events: SimEvent[]): boo
   // Cap applies to every owner, not just the player: a cap each caller must opt into
   // is a cap the next spawner (AI) silently escapes. This was gated on owner.kind ===
   // 'player' when the player was the only mine-dropper; that made it a no-op for AI owners.
-  if (owner.activeMineIds.length >= MINE_CAP) return false
+  // The owner's resolved mine capacity (configFor); MINE_CAP for every shipped kind
+  // today, so behaviour-identical (see config/roster.test.ts).
+  if (owner.activeMineIds.length >= configFor(owner.kind).mineCapacity) return false
   const mine: Mine = {
     id: world.nextId++,
     ownerId,

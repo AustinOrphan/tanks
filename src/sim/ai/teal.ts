@@ -2,10 +2,14 @@ import type { World } from '../world';
 import type { Tank } from '../types';
 import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, RICOCHET_BOUNCES, BANK_PREFER_TICKS, MINE_CAP, AI_AIM_SPREAD } from '../constants';
+import { BANK_PREFER_TICKS, AI_AIM_SPREAD } from '../constants';
+import { configFor } from '../config';
 import type { AiDecision } from './decision';
 
 export function tealDecision(world: World, tank: Tank): AiDecision {
+  // Weapon (ricochet bullet, its muzzle speed, and its bounce budget) comes from
+  // the resolved config -- Teal fires the RICOCHET_ROCKET its definition names.
+  const weapon = configFor(tank.kind).weapon;
   const avoid = dangerAvoidMove(world, tank);
   // Mobile (spec §7): wander is the baseline move whenever there's nothing more specific
   // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
@@ -23,10 +27,10 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
     // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary
     // target for the whole of every countdown and every player respawn -- a hardcoded
     // zero, not a decision. `move` already folds in the dodge when one is present.
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine: false, nextState: 'idle', nextTimer: 0 };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
   }
 
-  const speed = bulletConfig.ricochet.speed;
+  const speed = weapon.speed;
 
   // Jitter is applied to BOTH the direct and bank solutions, right where each is
   // computed, so it's present regardless of which path preferBank ends up taking (and
@@ -40,17 +44,17 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
     if (!lineOfSight(tank.pos, player!.pos, world.walls)) return null;
     const targetVel = driveVelocity(player!);
     const angle = aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD);
-    return shotHitsOwnSide(world, tank, angle, 'ricochet') ? null : angle;
+    return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
   }
   // bankShot is O(walls^2): each surviving wall face runs two full losIgnoring scans.
   // Measured fine at ARENA_01's wall count (~480 ray tests/tick/Teal, microseconds); a
   // much denser arena would want throttling. Evaluated lazily below so the non-preferred
   // option only pays this cost when the preferred option actually fails.
   function tryBank(): number | null {
-    const raw = bankShot(tank.pos, player!.pos, world.walls, RICOCHET_BOUNCES);
+    const raw = bankShot(tank.pos, player!.pos, world.walls, weapon.ricochetCount);
     if (raw === null) return null;
     const angle = raw + aimJitter(world, tank, AI_AIM_SPREAD);
-    return shotHitsOwnSide(world, tank, angle, 'ricochet') ? null : angle;
+    return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
   }
 
   // Alternate which shot type Teal prefers on a deterministic ~2s cycle (user decision:
@@ -67,13 +71,13 @@ export function tealDecision(world: World, tank: Tank): AiDecision {
   // here avoids burning tank.mineCooldown on a request dropMine would refuse anyway.
   // Also gated on the player being near enough for the mine to matter -- see
   // mineThreatensPlayer. Availability is not a reason to lay ordnance.
-  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP
+  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < configFor(tank.kind).mineCapacity
     && mineThreatensPlayer(world, tank);
 
   if (turretAngle !== null) {
-    return { desiredMove: move, turretAngle, fire: true, fireType: 'ricochet', mine, nextState: 'fire', nextTimer: 0 };
+    return { desiredMove: move, turretAngle, fire: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0 };
   }
 
   // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
-  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'ricochet', mine, nextState: 'reposition', nextTimer: 0 };
+  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0 };
 }

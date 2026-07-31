@@ -1,7 +1,7 @@
 import type { Vec2, AABB, Tank, Wall } from './types';
 import { vadd, vsub, vscale, vlen, vnorm, vdot, angleDelta, slewAngle, angleOf } from './types';
-import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS, TANK_TURN_RATE,
-  TANK_SPEED } from './constants';
+import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS } from './constants';
+import { configFor } from './config';
 
 export interface Hit {
   hit: boolean;
@@ -290,7 +290,7 @@ export function driveDirection(move: Vec2): Vec2 {
 /** A tank's actual world velocity in units/sec — exactly what moveTank will apply.
  *  Shared by movement and AI aiming so the two definitions cannot drift. */
 export function driveVelocity(tank: Tank): Vec2 {
-  return vscale(driveDirection(tank.desiredMove), TANK_SPEED);
+  return vscale(driveDirection(tank.desiredMove), configFor(tank.kind).movementSpeed);
 }
 
 /** Push a tank out of every non-destroyed wall it overlaps. */
@@ -303,6 +303,7 @@ export function resolveWalls(tank: Tank, walls: Wall[]): void {
 }
 
 export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
+  const cfg = configFor(tank.kind);
   const move = driveDirection(tank.desiredMove);
   const mlen = vlen(tank.desiredMove);
 
@@ -324,7 +325,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
     // renders identically but its angle marches off, and tests read as though it had
     // spun rather than stood still.
     const aim = angleDelta(0, reverse ? want + Math.PI : want);
-    tank.bodyAngle = slewAngle(tank.bodyAngle, aim, TANK_TURN_RATE * dt);
+    tank.bodyAngle = slewAngle(tank.bodyAngle, aim, cfg.rotationSpeed * dt);
 
     const heading = { x: Math.cos(tank.bodyAngle), y: Math.sin(tank.bodyAngle) };
     const gear = reverse ? -1 : 1;
@@ -333,7 +334,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
     // ground rather than being free. Picking the nearer of the two headings caps that
     // error at 90 degrees, so this never fully stalls the way a forced 180 did.
     const align = Math.max(0, travel.x * move.x + travel.y * move.y);
-    tank.pos = vadd(tank.pos, vscale(travel, TANK_SPEED * align * dt));
+    tank.pos = vadd(tank.pos, vscale(travel, cfg.movementSpeed * align * dt));
   }
 
   resolveWalls(tank, walls); // slide along whatever it ran into

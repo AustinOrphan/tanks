@@ -9,7 +9,8 @@ import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast } from './targeting';
-import { FIRE_COOLDOWN_TICKS, MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE } from '../constants';
+import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE } from '../constants';
+import { configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
 /** An inert decision: hold position, hold aim, do nothing. */
@@ -75,13 +76,17 @@ export function stepAi(world: World, events: SimEvent[]): void {
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
       // fire with a perfect solution while the barrel visibly points elsewhere.
       if (spawnBullet(world, tank.id, tank.turretAngle, decision.fireType, events)) {
-        tank.fireCooldown = FIRE_COOLDOWN_TICKS;
+        tank.fireCooldown = configFor(tank.kind).weapon.fireCooldown;
       }
     }
     // Same idea for mines: the decision functions gate on cooldown/cap, but only here do
     // we know the tank's final position for this tick, and a mine laid on top of a
     // teammate kills it on a 3-second fuse (Brown, which never moves, cannot escape one).
-    if (canAct && !tank.disarmed && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
+    // MINE_LAYER gates the trigger from config: only kinds whose definition grants the
+    // ability lay mines. Brown lacks it (and its decision never sets mine anyway), grey
+    // and teal have it -- so this is behaviour-identical and removes the last implicit
+    // "which kinds lay mines" knowledge from the dispatcher. See config/roster.ts.
+    if (canAct && !tank.disarmed && hasAbility(tank.kind, TankAbility.MINE_LAYER) && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
       if (dropMine(world, tank.id, events)) {
         tank.mineCooldown = MINE_COOLDOWN_TICKS;
       }

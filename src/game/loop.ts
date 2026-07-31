@@ -14,7 +14,7 @@ import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, type DevFlags } from './devflags';
-import { SHELL_CAP } from '../sim/constants';
+import { configFor } from '../sim/config';
 
 /**
  * Construction and wiring: the boundary where the untestable collaborators are
@@ -223,7 +223,7 @@ export function startGameWith(
     hud.setLives(w.lives);
     hud.setEnemiesRemaining(countEnemies(w));
     if (deps.devFlags.shellCount) {
-      hud.setShellCount({ inFlight: playerShellsInFlight(w, playerId), cap: SHELL_CAP });
+      hud.setShellCount({ inFlight: playerShellsInFlight(w, playerId), cap: configFor('player').weapon.maxActiveProjectiles });
     }
   }
 

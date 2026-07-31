@@ -3,6 +3,7 @@ import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
+import { configFor } from '../sim/config';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -14,12 +15,12 @@ export interface EntityViews {
   dispose(): void;
 }
 
-const TANK_COLORS: Record<TankKind, number> = {
-  player: 0x3d7bd6,
-  brown: 0x8a5a2b,
-  grey: 0x8890a0,
-  teal: 0x2bb0a6,
-};
+// Tank body colour is presentation, so it comes from the resolved config's `color`
+// (a CSS hex string) rather than a literal table here -- the pure sim never reads it.
+// Parsed once per kind into the 0xRRGGBB THREE expects.
+function tankColor(kind: TankKind): number {
+  return parseInt(configFor(kind).color.slice(1), 16);
+}
 
 const TANK_BODY_H = 0.4;
 const TURRET_H = 0.28;
@@ -325,7 +326,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   function makeTank(kind: TankKind): { group: THREE.Group; turret: THREE.Object3D } {
     const group = new THREE.Group();
-    const color = TANK_COLORS[kind];
+    const color = tankColor(kind);
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
     const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.25 });

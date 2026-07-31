@@ -2,16 +2,20 @@ import type { World } from '../world';
 import type { Tank } from '../types';
 import { lineOfSight, aimLead, aimJitter, shotHitsOwnSide } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, AI_AIM_SPREAD } from '../constants';
+import { AI_AIM_SPREAD } from '../constants';
+import { configFor } from '../config';
 import type { AiDecision } from './decision';
 
 export function brownDecision(world: World, tank: Tank): AiDecision {
+  // The tank's weapon comes from its resolved config, not a hardcoded 'normal':
+  // Brown fires the STANDARD_SHELL its definition names (config/roster.ts).
+  const weapon = configFor(tank.kind).weapon;
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
-    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0 };
+    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
   }
 
-  const speed = bulletConfig.normal.speed;
+  const speed = weapon.speed;
   const los = lineOfSight(tank.pos, player.pos, world.walls);
   const targetVel = driveVelocity(player);
   // Jitter is applied ONLY to a genuine firing solution, never to the held/passthrough
@@ -24,7 +28,7 @@ export function brownDecision(world: World, tank: Tank): AiDecision {
   // lineOfSight only tests WALLS. resolveBulletHits kills any non-owner tank the shell
   // touches, so a clear wall-line with Grey or Teal standing on it is a teammate kill, not
   // a shot. Evaluated against the jittered angle actually being aimed, not the ideal one.
-  const clearOfFriendlies = los && !shotHitsOwnSide(world, tank, turretAngle, 'normal');
+  const clearOfFriendlies = los && !shotHitsOwnSide(world, tank, turretAngle, weapon.bulletType);
 
   let fire = false;
   let nextState = tank.aiState;
@@ -47,5 +51,5 @@ export function brownDecision(world: World, tank: Tank): AiDecision {
       break;
   }
 
-  return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, fireType: 'normal', mine: false, nextState, nextTimer: 0 };
+  return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, fireType: weapon.bulletType, mine: false, nextState, nextTimer: 0 };
 }

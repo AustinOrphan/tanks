@@ -2,10 +2,14 @@ import type { World } from '../world';
 import type { Tank, AiState } from '../types';
 import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { bulletConfig, MINE_CAP, DODGE_PATIENCE_TICKS, AI_AIM_SPREAD } from '../constants';
+import { DODGE_PATIENCE_TICKS, AI_AIM_SPREAD } from '../constants';
+import { configFor } from '../config';
 import type { AiDecision } from './decision';
 
 export function greyDecision(world: World, tank: Tank): AiDecision {
+  // Weapon (bullet type + muzzle speed) comes from the resolved config, not a
+  // hardcoded 'normal' -- Grey fires the STANDARD_SHELL its definition names.
+  const weapon = configFor(tank.kind).weapon;
   const avoid = dangerAvoidMove(world, tank);
   // dangerAvoidMove now vets its own direction against walls and armed mines (see
   // targeting.ts), so this can be trusted directly: a dodge into a wall used to net zero
@@ -30,7 +34,7 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   const underFire = incomingThreats(world, tank).length > 0;
   const dodgeTicks = underFire ? tank.aiTimer + 1 : 0;
   if (underFire && dodgeTicks < DODGE_PATIENCE_TICKS) {
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
   }
 
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
@@ -43,12 +47,12 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
       const targetVel = driveVelocity(player);
       // Jitter only the live firing solution (see brown.ts's comment for why the
       // held/passthrough angle below must stay untouched).
-      turretAngle = aimLead(tank.pos, player.pos, targetVel, bulletConfig.normal.speed)
+      turretAngle = aimLead(tank.pos, player.pos, targetVel, weapon.speed)
         + aimJitter(world, tank, AI_AIM_SPREAD);
       // lineOfSight only tests WALLS, but resolveBulletHits kills any non-owner tank the
       // shell touches. Keep tracking the player with the turret either way -- only the
       // trigger is held, so the shot goes off the moment the teammate clears the lane.
-      fire = !shotHitsOwnSide(world, tank, turretAngle, 'normal');
+      fire = !shotHitsOwnSide(world, tank, turretAngle, weapon.bulletType);
       nextState = fire ? 'fire' : 'reposition';
     } else {
       nextState = 'reposition';
@@ -63,7 +67,7 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // And gated on the player being close enough for the mine to threaten anything at all --
   // dropping merely because the cooldown allowed it made own mines the largest single cause
   // of AI deaths, with the tank littering ground nobody was contesting.
-  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < MINE_CAP
+  const mine = !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < configFor(tank.kind).mineCapacity
     && mineThreatensPlayer(world, tank);
 
   // nextState is still vestigial for Grey: unlike Brown, greyDecision never branches on
@@ -72,5 +76,5 @@ export function greyDecision(world: World, tank: Tank): AiDecision {
   // dodgeTicks back via the early return while suppressed; this path (dodging has ended
   // or never started) resets it to 0, which is what lets a fresh dodge start counting
   // from 1 again next time.
-  return { desiredMove: move, turretAngle, fire, fireType: 'normal', mine, nextState, nextTimer: 0 };
+  return { desiredMove: move, turretAngle, fire, fireType: weapon.bulletType, mine, nextState, nextTimer: 0 };
 }
