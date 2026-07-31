@@ -65,7 +65,11 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // (see the "fires with the ACTUAL (post-slew) turret angle" test in dispatch.test.ts).
     // A decision-time-only gate therefore sprays teammates on every turret swing. This is
     // the check against the angle the barrel is really pointing.
-    if (canAct && decision.fire && tank.fireCooldown <= 0 && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
+    // `disarmed` gates the TRIGGERS only, here at the act site rather than in the
+    // decision functions: the tank still drives, dodges and aims (the sandbox uses it
+    // as moving scenery), and the decision layer stays ignorant of a flag that is not
+    // its business.
+    if (canAct && !tank.disarmed && decision.fire && tank.fireCooldown <= 0 && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
       // Fire along the tank's ACTUAL (post-slew) turret angle, not the decision's desired
       // angle -- a shot taken mid-swing must go where the barrel currently points, not
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
@@ -77,7 +81,7 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // Same idea for mines: the decision functions gate on cooldown/cap, but only here do
     // we know the tank's final position for this tick, and a mine laid on top of a
     // teammate kills it on a 3-second fuse (Brown, which never moves, cannot escape one).
-    if (canAct && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
+    if (canAct && !tank.disarmed && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
       if (dropMine(world, tank.id, events)) {
         tank.mineCooldown = MINE_COOLDOWN_TICKS;
       }
