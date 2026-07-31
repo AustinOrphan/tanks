@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
+import { BULLET_Y } from './entities';
 
 /**
  * Dev-only overlay: draws where the player's turret is actually pointing.
@@ -23,8 +24,13 @@ export interface AimRay {
 
 /** How far along the turret heading to draw, in world units. */
 const RAY_LENGTH = 40;
-/** Just above the felt, so the ground plane does not z-fight it. */
-const RAY_Y = 0.35;
+/**
+ * At shell flight height, because the ray PREDICTS the shell's path and must lie on
+ * it. This was a hardcoded 0.35 -- the shell height of its day -- and stayed behind
+ * when BULLET_Y moved to the barrel centreline, so the overlay diverged on screen
+ * from the path shells actually take. (Well clear of the ground, so no z-fighting.)
+ */
+const RAY_Y = BULLET_Y;
 
 export function createAimRay(scene: THREE.Scene): AimRay {
   const geometry = new THREE.BufferGeometry().setFromPoints([
