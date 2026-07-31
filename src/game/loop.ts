@@ -344,8 +344,11 @@ export function startGameWith(
     Math.min(deps.progress.highestCleared() + 1, deps.levels.count);
 
   hud.onLevelSelect((picked) => {
-    // Panel-only control, guarded like Quit: CSS hiding is not the only defence.
+    // Panel-only control, guarded like Quit: CSS hiding is not the only defence --
+    // and neither is the HUD's button rendering, for the index. ARENAS[7] is
+    // undefined, and a handler that rebuilds the world does not get to crash on it.
     if (sm.state !== 'title') return;
+    if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.count) return;
     level = picked;
     world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;

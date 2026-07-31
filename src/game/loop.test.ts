@@ -1147,3 +1147,17 @@ describe('startGameWith: the main menu', () => {
     h.handle.dispose();
   });
 });
+
+describe('startGameWith: a level pick is bounds-checked', () => {
+  it('ignores an out-of-range index rather than indexing past the sequence', () => {
+    // The HUD only wires clicks for unlocked buttons, but a handler that rebuilds the
+    // world from ARENAS[picked] deserves its own guard -- ARENAS[7] is undefined and
+    // loadArena(undefined) is a crash, not a shrug.
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.hud.pickLevel(7);
+    h.hud.pickLevel(-1);
+    expect(h.rec.levelBuilds).toHaveLength(1); // only the boot build
+    expect(h.getState()).toBe('title');
+    h.handle.dispose();
+  });
+});

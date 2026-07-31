@@ -82,7 +82,7 @@ describe('hud.css is syntactically whole', () => {
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling
-      '.hud-levels', '.hud-levels--hidden', '.hud-level-btn--locked', // level select
+      '.hud-levels', '.hud-levels--hidden', '.hud-level-btn', '.hud-level-btn--locked', // level select
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

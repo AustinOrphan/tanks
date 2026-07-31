@@ -52,3 +52,16 @@ describe('createProgressStore', () => {
     expect(p.highestCleared()).toBe(1); // remembered in-memory for this session
   });
 });
+
+describe('two stores over one storage (the second-tab case)', () => {
+  it('never regresses a higher clear persisted by another instance', () => {
+    // Found in review: recordCleared wrote the stale shadow blindly. Tab A clears
+    // level 2; tab B, booted earlier at 0, clears level 1 -- and clobbered A's
+    // unlock. The write must max against CURRENT storage, not construction-time.
+    const tabA = createProgressStore(localStorage);
+    const tabB = createProgressStore(localStorage);
+    tabA.recordCleared(2);
+    tabB.recordCleared(1);
+    expect(createProgressStore(localStorage).highestCleared()).toBe(2);
+  });
+});

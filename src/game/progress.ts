@@ -40,10 +40,14 @@ export function createProgressStore(storage: Storage): ProgressStore {
       return shadow;
     },
     recordCleared(level: number): void {
-      if (!Number.isInteger(level) || level <= shadow) return;
-      shadow = level;
+      if (!Number.isInteger(level) || level <= 0) return;
+      // Max against CURRENT storage, not the construction-time shadow: another tab
+      // may have cleared further since this one booted, and a blind write would
+      // clobber its unlock. read() returns 0 when storage throws, so the shadow
+      // still carries a private-mode session.
+      shadow = Math.max(shadow, level, read());
       try {
-        storage.setItem(PROGRESS_KEY, String(level));
+        storage.setItem(PROGRESS_KEY, String(shadow));
       } catch {
         // Private mode or quota: the shadow carries the session; nothing persists.
       }
