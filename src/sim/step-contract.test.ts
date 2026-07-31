@@ -3,7 +3,7 @@ import { createWorld, step } from './world';
 import type { World } from './world';
 import type { Tank, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
-import { COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
+import { COUNTDOWN_TICKS, GRACE_TICKS, MUZZLE_OFFSET } from './constants';
 
 /**
  * Pins step()'s CONTRACT WITH ITS CALLER -- the parts of step() that are not about which
@@ -113,7 +113,8 @@ describe('step() hands its events back to the caller', () => {
     // event is dropped -- which is exactly what step-integration.test.ts does.
     // `pos` and `angle` are asserted too: particles.ts spawns every burst at exactly
     // ev.pos, so a wrong position is a visible defect that no presence-only assertion
-    // catches. spawnBullet reports the owner's centre here, not a muzzle offset.
+    // catches. The position is the MUZZLE now, not the owner's centre: shells used to be
+    // born inside the tank that fired them and fly out through it.
     const w = liveWorld();
     // Turret pre-aimed at +y and the aim point placed on that same bearing, so slewAngle
     // leaves it exactly at PI/2 this tick. A NON-ZERO angle on purpose: with the fixture's
@@ -129,7 +130,8 @@ describe('step() hands its events back to the caller', () => {
         type: 'fire',
         ownerId: PLAYER_ID,
         bulletType: 'normal',
-        pos: { x: 5, y: 5 },
+        // Firing along +y from (5,5), so the muzzle is MUZZLE_OFFSET up-axis.
+        pos: { x: 5, y: 5 + MUZZLE_OFFSET },
         angle: Math.PI / 2,
       }),
     );

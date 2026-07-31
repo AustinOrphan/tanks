@@ -45,6 +45,29 @@ describe('gallery args', () => {
     expect(ok.values).toEqual([['0.04'], ['0.08'], ['0.12']]); // trimmed, empties dropped
   });
 
+  it('confines slowmo and burst to the game scene, where the live clock is', () => {
+    const a = parseArgs(['--scene', 'game', '--slowmo', '0.05', '--burst', '150']);
+    expect(a.slowmo).toBe(0.05);
+    expect(a.burst).toBe(150);
+    // The gallery scene steps poses explicitly; a silent no-op knob is how a 48-sample
+    // comparison turns out to be one sample 48 times.
+    expect(() => parseArgs(['--slowmo', '0.5'])).toThrow(/--scene game/);
+    expect(() => parseArgs(['--burst', '10'])).toThrow(/--scene game/);
+  });
+
+  it('rejects slowmo outside (0,1] and non-integer bursts', () => {
+    expect(() => parseArgs(['--scene', 'game', '--slowmo', '0'])).toThrow(/slowmo/);
+    expect(() => parseArgs(['--scene', 'game', '--slowmo', '2'])).toThrow(/slowmo/);
+    expect(() => parseArgs(['--scene', 'game', '--burst', '2.5'])).toThrow(/burst/);
+    expect(() => parseArgs(['--scene', 'game', '--burst', '0'])).toThrow(/burst/);
+  });
+
+  it('refuses burst with sweep: a grid of timelines serves neither purpose', () => {
+    expect(() =>
+      parseArgs(['--scene', 'game', '--burst', '5', '--sweep', 'MINE_DOME_H', '--values', '1,2']),
+    ).toThrow(/--sweep/);
+  });
+
   it('strips what ffmpeg drawtext silently chokes on', () => {
     // THE REGRESSION THIS FILE EXISTS FOR. A label containing = or % is not escaped by
     // ffmpeg -- it is dropped, and the grid comes back unlabelled with no error at all.

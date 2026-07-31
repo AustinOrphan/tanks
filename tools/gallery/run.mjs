@@ -111,6 +111,31 @@ async function run(browser) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
 
+  if (args.slowmo !== 1) {
+    // Slow the game down by scaling the clocks the driver reads. BOTH of them:
+    // driver.ts takes its per-frame delta from the rAF CALLBACK TIMESTAMP and uses
+    // performance.now only to seed `last` on start/reset. Scaling performance.now
+    // alone was measured to be a dead knob -- the game ran at full speed. The two
+    // share a time origin, so one scale function serves both.
+    await page.addInitScript(`(() => {
+      const SCALE = ${args.slowmo};
+      const orig = performance.now.bind(performance);
+      const t0 = orig();
+      const scale = (t) => t0 + (t - t0) * SCALE;
+      performance.now = () => scale(orig());
+      const raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (cb) => raf((t) => cb(scale(t)));
+    })()`);
+  }
+
+  /**
+   * One rAF round-trip: the game steps and presents exactly one frame.
+   *
+   * Headless chromium throttles rAF when nothing forces frames -- a burst taken
+   * without this came back as 45 copies of 4 distinct images.
+   */
+  const pumpFrame = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
+
   const q = (extra = {}) => {
     const p = new URLSearchParams({ elements: args.elements, view: args.view, w: String(args.w), h: String(args.h), ...extra });
     if (args.reach) p.set('reach', '1');
@@ -150,6 +175,28 @@ async function run(browser) {
     const start = page.locator('button', { hasText: /start|play/i }).first();
     if (await start.count()) await start.click();
     else await page.keyboard.press('Enter');
+    // VERIFY the game actually left the title screen. One burst run silently shot 80
+    // frames of the title panel; a still would have lied the same way.
+    for (let tries = 0; ; tries++) {
+      await pumpFrame();
+      const hidden = await page.evaluate(
+        () => document.querySelector('.hud-panel')?.className.includes('hidden') ?? false,
+      );
+      if (hidden) break;
+      if (tries >= 20) throw new Error('HUD panel never hid: the game did not start');
+      if (tries % 5 === 4) await start.click().catch(() => {});
+    }
+    if (args.burst > 1) {
+      // A timeline, not a still: pump the settle (throttled rAF means waiting does not
+      // advance the game -- ticks only happen inside frames), then one shot per frame.
+      const s0 = Date.now();
+      while (Date.now() - s0 < args.settle) await pumpFrame();
+      for (let i = 0; i < args.burst; i++) {
+        await pumpFrame();
+        await page.locator('canvas').screenshot({ path: `${outDir}/${prefix}-${String(i).padStart(4, '0')}.png` });
+      }
+      return args.burst;
+    }
     await page.waitForTimeout(args.settle);
     await page.locator('canvas').screenshot({ path: `${outDir}/${prefix}.png` });
     return 1;
@@ -220,7 +267,7 @@ async function run(browser) {
     return;
   }
 
-  const animated = args.anim && shots[0].n > 1;
+  const animated = (args.anim || args.burst > 1) && shots[0].n > 1;
   if (animated && shots.length === 1) {
     const target = outFile ?? `${outDir}/gallery.gif`;
     sh('ffmpeg', ['-y', '-framerate', String(args.fps), '-i', `${outDir}/frame-%04d.png`,

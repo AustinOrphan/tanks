@@ -16,7 +16,10 @@ npm run gallery -- --elements mine,tank,shell --view low   # look at any element
 through the REAL render modules against a REAL world. Views are directions and each
 element declares its own span, so any view frames any scene. `--sweep A,B --values
 "1|2; 3|4"` patches constants in `src/` between passes and restores them in a `finally`;
-it refuses to start if the target file is already dirty. See `tools/gallery/`.
+it refuses to start if the target file is already dirty. `--scene game --slowmo 0.05
+--burst 150` records a slow-motion timeline of REAL gameplay, one frame per rAF — the way
+to catch a sub-second moment (a shell leaving the muzzle) that a still would miss. See
+`tools/gallery/`.
 
 CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a bundle-portability
 assertion on Node 20.19.0 — the declared floor — and 22. `engines.node` is

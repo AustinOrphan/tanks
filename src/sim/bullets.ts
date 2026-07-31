@@ -1,10 +1,11 @@
-import type { Bullet, BulletType, Vec2 } from './types'
+import type { Tank, Bullet, BulletType, Vec2 } from './types'
 import { fromAngle, vscale, vadd, vlen, vsub, vdot } from './types'
-import { reflectSweep, circleVsCircle } from './collision'
+import { circleVsAABB, reflectSweep, circleVsCircle } from './collision'
 import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS } from './constants'
+import { bulletConfig, SHELL_CAP, MUZZLE_OFFSET,
+  BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS } from './constants'
 
 export function ownerShellCount(world: World, ownerId: number): number {
   let n = 0
@@ -12,6 +13,29 @@ export function ownerShellCount(world: World, ownerId: number): number {
     if (b.alive && b.ownerId === ownerId) n++
   }
   return n
+}
+
+/**
+ * Where the shell is born: at the muzzle, unless the muzzle is inside a wall.
+ *
+ * MUZZLE_OFFSET reaches 0.36 past the tank's own collision radius, so a tank nose-to-wall
+ * has its muzzle INSIDE that wall. Spawning there would put a live shell in solid
+ * geometry -- the state stepBullets already has to retire on sight -- and firing while
+ * touching a wall would silently cost a shell from the cap.
+ *
+ * So the muzzle is used only when it is clear, and the tank's centre is the fallback,
+ * which is exactly the old behaviour. That keeps the degenerate case working the way it
+ * always has rather than inventing a new one.
+ */
+function muzzlePoint(world: World, owner: Tank, angle: number): Vec2 {
+  const muzzle = vadd(owner.pos, vscale(fromAngle(angle), MUZZLE_OFFSET))
+  for (const w of world.walls) {
+    if (w.destroyed) continue
+    if (circleVsAABB(muzzle, BULLET_RADIUS, w.aabb).hit) {
+      return { x: owner.pos.x, y: owner.pos.y }
+    }
+  }
+  return muzzle
 }
 
 export function spawnBullet(
@@ -30,7 +54,7 @@ export function spawnBullet(
     return false
   }
   const cfg = bulletConfig[type]
-  const pos: Vec2 = { x: owner.pos.x, y: owner.pos.y }
+  const pos = muzzlePoint(world, owner, angle)
   const bullet: Bullet = {
     id: world.nextId++,
     ownerId,
