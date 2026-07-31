@@ -397,8 +397,7 @@ describe('hud: level progression', () => {
     expect(button()).toBe('Next Level');
 
     h.setLevel(2, 2);
-    h.setState('lose'); // force a re-render; setState is a no-op on equal state
-    h.setState('win');
+    h.setState('win'); // re-renders unconditionally; the equal-state guard lives in state.ts, not here
     expect(title()).toBe('You Win!');
     expect(button()).toBe('Play Again');
   });

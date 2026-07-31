@@ -54,10 +54,13 @@ export const ARENA_01: Arena = {
 // Level 2. Two horizontal bars split the field into an upper enemy half and a lower
 // player half, with a tall centre spine forcing engagements around its ends. Every
 // enemy's straight line to the player spawn is blocked -- arena-validation.test.ts
-// checks that with the sim's own lineOfSight -- and each is blocked by the DESTRUCTIBLE
-// inner end of a bar ('x'), so blowing one open is a real trade: it opens the lane for
-// both sides, and Brown (stationary, top-left pair) profits most. Four enemies against
-// level 1's three: two Browns anchoring the left, Grey and Teal roaming the right.
+// checks that with the sim's own lineOfSight. For the UPPER pair (Brown at row 2, Grey
+// at row 2) the only block is the DESTRUCTIBLE inner end of a bar ('x'), so blowing one
+// open is a real trade that opens the lane for both sides; the LOWER pair (Brown and
+// Teal at row 3) stays blocked by the bars' solid outer ends whatever is destroyed.
+// Measured, not argued: destroying both x's opens exactly the two upper lanes (see the
+// "destructible trade" test in arena-validation.test.ts). Four enemies against level
+// 1's three: two Browns anchoring the left, Grey and Teal roaming the right.
 export const ARENA_02: Arena = {
   cols: 11,
   rows: 9,

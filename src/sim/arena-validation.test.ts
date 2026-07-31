@@ -90,3 +90,24 @@ describe('the shipped arena sequence', () => {
     });
   });
 });
+
+describe("ARENA_02's destructible trade", () => {
+  // The design comment claims blowing the bars' destructible ends opens the UPPER
+  // pair's lanes and nothing else. The generic sightline test above cannot see WHAT
+  // does the blocking -- it went green while the comment overclaimed the trade for
+  // all four enemies. Measured here instead: this fails if a grid edit either opens
+  // a lower lane (a solid outer end went missing) or seals an upper one (the trade
+  // the level is built around stopped existing).
+  it('opens exactly the two upper lanes when every destructible is gone', () => {
+    const { walls, spawns } = loadArena(ARENAS[1]);
+    for (const w of walls) if (w.kind === 'destructible') w.destroyed = true;
+    const player = spawns.find((s) => s.kind === 'player')!;
+    const open = spawns
+      .filter((s) => s.kind !== 'player')
+      .map((s) => ({ kind: s.kind, y: s.pos.y, sees: lineOfSight(s.pos, player.pos, walls) }));
+    // Population: all 4 enemy spawns. Upper row (y = 5) opens; lower row (y = 7) stays shut.
+    expect(open.filter((o) => o.y === 5).map((o) => o.sees)).toEqual([true, true]);
+    expect(open.filter((o) => o.y === 7).map((o) => o.sees)).toEqual([false, false]);
+    expect(open).toHaveLength(4);
+  });
+});

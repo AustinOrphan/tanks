@@ -50,7 +50,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -239,9 +239,19 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // The real createArenaWorld returns a FRESH world each call, and
         // resetArena moves roundStartTick forward -- so a fixed fixture object
         // would make every round look like the same round to loop.ts. Advance it
-        // per call, as a respawn does.
+        // per call, as a respawn does. staticRoundStart turns that OFF, modelling
+        // the level-advance case where two fresh worlds collide on the same tick.
         const base = opts.world ?? createArenaWorld(seed);
-        return { ...base, roundStartTick: base.roundStartTick + rec.seeds.length - 1 };
+        // Each level's player gets a DIFFERENT id, as loadArena's grid-scan numbering
+        // really does (16 in ARENA_01, 15 in ARENA_02) -- a fake where every level's
+        // player id matches let a stale-id bug pass the rebind test.
+        const tanks = level === 0 ? base.tanks
+          : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + level } : t));
+        return {
+          ...base,
+          tanks,
+          roundStartTick: base.roundStartTick + (opts.staticRoundStart ? 0 : rec.seeds.length - 1),
+        };
       },
     },
     now: () => 0,
@@ -839,25 +849,47 @@ describe('startGameWith: level progression', () => {
   });
 
   it('advances one level on an intermediate win, carrying the surviving lives', () => {
-    const h = boot(makeDeps({ levelCount: 2 }));
+    // Lives 2, deliberately NOT the fresh-world LIVES (3): with the default fixture
+    // this assertion could not tell "carried the survivor count" from "handed out a
+    // fresh set" -- the mutation `carried = LIVES` passed it.
+    const won = { ...createArenaWorld(1), lives: 2 };
+    const h = boot(makeDeps({ levelCount: 2, world: won }));
     h.setState('win');
     h.hud.startRestart();
-    // The carried count is read off the LIVE world (fixture lives: LIVES = 3).
-    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: 3 });
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: 2 });
     expect(h.rec.hudLevels[1]).toEqual([2, 2]);
     h.handle.dispose();
   });
 
-  it('rebinds the audio director to the NEW world\'s player on every rebuild', () => {
+  it('rebinds the audio director to the NEW world\'s player, not the old id', () => {
     // loadArena numbers tanks in scan order, so the player id is arena-dependent
-    // (16 in ARENA_01, 15 in ARENA_02). A director left on the old id scores the
-    // player's own cannon as an enemy's from level 2 on.
+    // (16 in ARENA_01, 15 in ARENA_02). The fake mirrors that: level 1's player id
+    // differs from level 0's by exactly 71, so a loop that forgets to re-read the id
+    // from the new world rebinds the STALE one and fails here.
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('win');
     h.hud.startRestart();
     expect(h.rec.directorRebinds).toHaveLength(1);
-    expect(h.rec.directorRebinds[0]).toBe(h.rec.directorPlayerIds[0]); // same fixture arena here
-    expect(h.rec.directorRebinds[0]).not.toBe(0);
+    expect(h.rec.directorRebinds[0]).toBe(h.rec.directorPlayerIds[0] + 71);
+    h.handle.dispose();
+  });
+
+  it('counts the next level\'s opening round, so the teaching banner does not re-show', () => {
+    // Two FRESH worlds start on the same roundStartTick, so without an explicit reset
+    // the round tracker cannot tell level 2's opening round from level 1's -- and the
+    // prominent banner, promised "once per page load", re-taught on every advance.
+    const h = boot(makeDeps({
+      levelCount: 2,
+      staticRoundStart: true,
+      devFlags: { roundPhaseHud: true },
+    }));
+    h.setState('playing');
+    h.fireFrame(16);
+    expect(h.rec.roundPhases.at(-1)?.prominent).toBe(true); // level 1 teaches
+    h.setState('win');
+    h.hud.startRestart();
+    h.fireFrame(32);
+    expect(h.rec.roundPhases.at(-1)?.prominent).toBe(false); // level 2 gets the chip
     h.handle.dispose();
   });
 

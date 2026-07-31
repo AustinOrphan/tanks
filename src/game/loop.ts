@@ -294,6 +294,11 @@ export function startGameWith(
       world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined, carried);
       playerId = world.tanks.find((t) => t.kind === 'player')?.id;
       director.setPlayerId(playerId ?? -1);
+      // A FRESH world's roundStartTick can equal the old one's (both start at the same
+      // tick), so without this reset the round tracker would not count the new level's
+      // opening round and the teaching banner would re-show -- the "once per page load"
+      // rule below depends on every round being SEEN, including this one.
+      lastRoundStartTick = null;
       hud.setLevel(level + 1, deps.levels.count);
       driver.reset(world);
       refreshStats(world);
