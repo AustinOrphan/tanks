@@ -22,7 +22,11 @@ const TANK_COLORS: Record<TankKind, number> = {
 };
 
 const TANK_BODY_H = 0.4;
-const BULLET_Y = 0.35;
+const TURRET_H = 0.28;
+/** How much of the turret ring is deliberately seated into the hull. */
+const TURRET_SEAT = 0.03;
+/** Shell centerline: match the gun bore height so shots leave the barrel, not the deck. */
+export const BULLET_Y = 0.65;
 /** Centre of the fireball: sat on the deck, so its lower half is buried like a real one. */
 const BLAST_Y = 0.2;
 /**
@@ -78,7 +82,9 @@ export const TRACK_H = 0.34;
  */
 export const TRACK_SHADE = 0.7;
 /** Corner radius of the hull body in plan. */
-export const HULL_CORNER = 0.12;
+export const HULL_CORNER = 0.3;
+/** Width of the hull's front shoulder, as a fraction of its mid-body width. */
+export const HULL_NOSE = 1; //0.85;
 /** Edge bevel on the hull body. */
 export const HULL_BEVEL = 0.035;
 /** Edge bevel on the tracks. Smaller: they are narrow, and a big bevel eats the face. */
@@ -167,6 +173,43 @@ function roundedBox(w: number, h: number, depth: number, corner: number, bevel: 
   return geo;
 }
 
+/** Bevelled extrusion of an arbitrary plan shape, centred in z like roundedBox(). */
+function beveledExtrude(shape: THREE.Shape, depth: number, bevel: number): THREE.ExtrudeGeometry {
+  const b = Math.min(bevel, depth / 4);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: depth - b * 2,
+    bevelEnabled: true,
+    bevelThickness: b,
+    bevelSize: b,
+    bevelSegments: 2,
+    curveSegments: 8,
+  });
+  geo.translate(0, 0, -depth / 2 + b);
+  return geo;
+}
+
+/**
+ * Hull plan: a rounded rear with a tapered nose.
+ *
+ * +x is forward. `nose` sets the shoulder width at the front relative to the mid-body.
+ */
+function hullPlan(len: number, width: number, round: number, nose: number): THREE.Shape {
+  const halfL = len / 2;
+  const halfW = width / 2;
+  const shoulderW = halfW * clamp01(nose);
+  const r = Math.min(round, halfW * 0.9, halfL * 0.45);
+  const s = new THREE.Shape();
+  s.moveTo(-halfL + r, -halfW);
+  s.lineTo(halfL - r, -shoulderW);
+  s.quadraticCurveTo(halfL, -shoulderW, halfL, 0);
+  s.quadraticCurveTo(halfL, shoulderW, halfL - r, shoulderW);
+  s.lineTo(-halfL + r, halfW);
+  s.quadraticCurveTo(-halfL, halfW, -halfL, halfW - r);
+  s.lineTo(-halfL, -halfW + r);
+  s.quadraticCurveTo(-halfL, -halfW, -halfL + r, -halfW);
+  return s;
+}
+
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
@@ -209,9 +252,6 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
    * assertion in entities.test.ts, which exists because this was wrong.
    */
   const BARREL_R = BULLET_RADIUS * 1.3;
-  const TURRET_H = 0.28;
-  /** How much of the turret ring is deliberately seated into the hull. */
-  const TURRET_SEAT = 0.03;
   /** Rounds the top edge, so the turret is a cylinder with a crown rather than a can. */
   const TURRET_FILLET = 0.09;
 
@@ -286,7 +326,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // at any distance; the corners are what make it look built rather than blocked out.
     // Shape is (length, width) and extrudes along its own +z, so rotating -90deg about x
     // stands the extrusion up into height.
-    const bodyGeo = roundedBox(HULL_LEN, bodyWidth, bodyH, HULL_CORNER, HULL_BEVEL);
+    const bodyGeo = beveledExtrude(hullPlan(HULL_LEN, bodyWidth, HULL_CORNER, HULL_NOSE), bodyH, HULL_BEVEL);
     bodyGeo.rotateX(-Math.PI / 2);
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = 'hull';

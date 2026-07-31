@@ -12,6 +12,7 @@ import {
   DT,
   bulletConfig,
   BULLET_RADIUS,
+  SHELL_SPAWN_FORWARD,
   TANK_RADIUS,
 } from './constants'
 
@@ -90,11 +91,13 @@ describe('spawnBullet + ownerShellCount', () => {
     expect(b.ownerId).toBe(1)
     expect(b.type).toBe('normal')
     expect(b.bouncesLeft).toBe(bulletConfig.normal.bounces)
-    expect(b.pos).toEqual({ x: 2, y: 3 })
+    expect(b.pos).toEqual({ x: 2 + SHELL_SPAWN_FORWARD, y: 3 })
     expect(b.vel.x).toBeCloseTo(NORMAL_SPEED, 6)
     expect(b.vel.y).toBeCloseTo(0, 6)
     const fire = events.find((e) => e.type === 'fire')
-    expect(fire).toMatchObject({ type: 'fire', ownerId: 1, bulletType: 'normal', angle: 0 })
+    expect(fire).toMatchObject({
+      type: 'fire', ownerId: 1, bulletType: 'normal', angle: 0, pos: { x: 2 + SHELL_SPAWN_FORWARD, y: 3 },
+    })
   })
 })
 

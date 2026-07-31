@@ -4,7 +4,7 @@ import { reflectSweep, circleVsCircle } from './collision'
 import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS } from './constants'
+import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
 
 export function ownerShellCount(world: World, ownerId: number): number {
   let n = 0
@@ -30,13 +30,17 @@ export function spawnBullet(
     return false
   }
   const cfg = bulletConfig[type]
-  const pos: Vec2 = { x: owner.pos.x, y: owner.pos.y }
+  const dir = fromAngle(angle)
+  const pos: Vec2 = {
+    x: owner.pos.x + dir.x * SHELL_SPAWN_FORWARD,
+    y: owner.pos.y + dir.y * SHELL_SPAWN_FORWARD,
+  }
   const bullet: Bullet = {
     id: world.nextId++,
     ownerId,
     type,
     pos,
-    vel: vscale(fromAngle(angle), cfg.speed),
+    vel: vscale(dir, cfg.speed),
     bouncesLeft: cfg.bounces,
     alive: true,
   }

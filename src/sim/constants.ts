@@ -10,6 +10,9 @@ export const TANK_SPEED = 3.0;
 
 // ---- Bullets ----
 export const BULLET_RADIUS = 0.1;
+// Horizontal spawn offset from tank centre to shell centre, in firing direction.
+// Tuned to match the rendered muzzle reach from the gameplay camera.
+export const SHELL_SPAWN_FORWARD = 0.85;
 
 export const NORMAL_SPEED = 6;
 export const FAST_SPEED = 12;
