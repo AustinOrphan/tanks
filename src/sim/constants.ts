@@ -1,15 +1,24 @@
 import type { BulletType } from './types';
+// THE AUTHORITATIVE HOME OF THE BALANCE SCALARS. Every gameplay tunable that
+// used to be a literal here now lives in config/data/balance.json; this module
+// derives its exports from that data (and stays the one import site the rest of
+// the sim knows). Retuning a value is still a deliberate two-file edit -- the
+// JSON entry and its pin in constants.test.ts -- and the JSON is a build-time
+// static import, so the sim stays pure and replays stay exact functions of
+// their inputs. Non-balance values (epsilons, derived radii, tick counts
+// measured in this file's comments) remain TypeScript below.
+import data from './config/data/balance.json';
 
 // ---- Simulation timing ----
 export const TICK_HZ = 60;
 export const DT = 1 / 60;
 
 // ---- Tanks ----
-export const TANK_RADIUS = 0.5;
-export const TANK_SPEED = 3.0;
+export const TANK_RADIUS = data.tank.radius;
+export const TANK_SPEED = data.tank.speed;
 
 // ---- Bullets ----
-export const BULLET_RADIUS = 0.1;
+export const BULLET_RADIUS = data.shells.radius;
 /**
  * Horizontal spawn offset from tank centre to shell centre, in the firing direction.
  * Tuned to match the rendered muzzle reach from the gameplay camera.
@@ -21,25 +30,25 @@ export const BULLET_RADIUS = 0.1;
  */
 export const SHELL_SPAWN_FORWARD = 0.85;
 
-export const NORMAL_SPEED = 6;
-export const FAST_SPEED = 12;
-export const RICOCHET_SPEED = 6;
+export const NORMAL_SPEED = data.shells.normal.speed;
+export const FAST_SPEED = data.shells.fast.speed;
+export const RICOCHET_SPEED = data.shells.ricochet.speed;
 
-export const NORMAL_BOUNCES = 1;
-export const FAST_BOUNCES = 0;
-export const RICOCHET_BOUNCES = 3;
+export const NORMAL_BOUNCES = data.shells.normal.bounces;
+export const FAST_BOUNCES = data.shells.fast.bounces;
+export const RICOCHET_BOUNCES = data.shells.ricochet.bounces;
 
 // ---- Resource caps ----
 // These caps apply to ALL tanks, player and AI alike (dropMine/spawnBullet enforce them
 // uniformly regardless of owner.kind). AI decision functions may also self-check these
 // caps as defence-in-depth, e.g. to avoid burning a cooldown on a request that would be
 // refused anyway, but the caps themselves are enforced at the shared spawn chokepoints.
-export const SHELL_CAP = 5;
-export const MINE_CAP = 2;
+export const SHELL_CAP = data.shells.cap;
+export const MINE_CAP = data.mines.cap;
 
 // ---- Cooldowns (seconds) ----
-export const FIRE_COOLDOWN = 0.4;
-export const MINE_COOLDOWN = 0.5;
+export const FIRE_COOLDOWN = data.shells.cooldownSeconds;
+export const MINE_COOLDOWN = data.mines.cooldownSeconds;
 
 /**
  * The same two cooldowns as whole TICKS, which is what the sim actually counts.
@@ -60,9 +69,9 @@ export const FIRE_COOLDOWN_TICKS = Math.round(FIRE_COOLDOWN * TICK_HZ);
 export const MINE_COOLDOWN_TICKS = Math.round(MINE_COOLDOWN * TICK_HZ);
 
 // ---- Mines ----
-export const MINE_TIMER = 3.0;
-export const MINE_PROXIMITY_RADIUS = 1.5;
-export const MINE_BLAST_RADIUS = 2.0;
+export const MINE_TIMER = data.mines.timerSeconds;
+export const MINE_PROXIMITY_RADIUS = data.mines.proximityRadius;
+export const MINE_BLAST_RADIUS = data.mines.blastRadius;
 
 /**
  * A detonation is not instantaneous: the blast grows to MINE_BLAST_RADIUS,
@@ -83,7 +92,7 @@ export const MINE_BLAST_HOLD_TICKS = 5;
  * merely enter the radius it would kill in. MINE_BLAST_RADIUS is 2.0, twenty
  * times this -- using that here would make every mine a 2-unit shell trap.
  */
-export const MINE_TRIGGER_RADIUS = 0.35;
+export const MINE_TRIGGER_RADIUS = data.mines.triggerRadius;
 
 /**
  * Does a mine's blast continue past a DESTRUCTIBLE wall on its way to a tank?
@@ -100,7 +109,7 @@ export const MINE_TRIGGER_RADIUS = 0.35;
 export const MINE_BLAST_THROUGH_DESTRUCTIBLE = true;
 
 // ---- Meta ----
-export const LIVES = 3;
+export const LIVES = data.lives;
 
 // ---- Round phases (roundPhase, applied uniformly to player + AI) ----
 // Two phases run before normal play, timed from `world.roundStartTick` (reset on every
@@ -205,7 +214,7 @@ export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5
 // error to every AI firing solution so enemies are threatening but survivable.
 // THIS IS THE PRIMARY DIFFICULTY KNOB for this slice -- the value most likely to need
 // retuning after playtest. Radians; ~4.6 degrees at the current value.
-export const AI_AIM_SPREAD = 0.08;
+export const AI_AIM_SPREAD = data.ai.aimSpread;
 // How often (in ticks) the jitter offset is re-rolled. ~0.33s at 60Hz. A constant offset
 // per tank would just be a fixed miss the AI could never correct for; re-rolling this
 // often makes shots scatter around the target instead of consistently missing to one side.
@@ -233,7 +242,7 @@ export const BANK_PREFER_TICKS = 120;
 // turn budget is RATE * DT.
 // 8.0 rad/s ~= 458 deg/s at 60Hz -- responsive but not instant for the player; a full
 // 180-degree reversal takes ~0.39s (pi / 8.0).
-export const PLAYER_TURRET_TURN_RATE = 8.0;
+export const PLAYER_TURRET_TURN_RATE = data.turret.playerTurnRate;
 
 /**
  * How fast a hull can swing to face where it is being driven, in radians/second.
@@ -247,13 +256,13 @@ export const PLAYER_TURRET_TURN_RATE = 8.0;
  * must stay quicker than the thing carrying it; a hull that outturned its own gun would
  * make aiming while moving feel like fighting the tank.
  */
-export const TANK_TURN_RATE = 5.0;
+export const TANK_TURN_RATE = data.tank.turnRate;
 // 2.5 rad/s ~= 143 deg/s at 60Hz -- ~1.26s to swing a full 180 degrees (pi / 2.5).
 // THIS IS A PRIMARY DIFFICULTY KNOB alongside AI_AIM_SPREAD: unlike aim spread (which
 // affects accuracy), this affects how long an enemy visibly telegraphs its aim before
 // it can land a shot, giving the player a real window to break line of sight or dodge.
 // Lowering it makes enemies more readable/telegraphed.
-export const AI_TURRET_TURN_RATE = 2.5;
+export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {

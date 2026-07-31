@@ -26,9 +26,10 @@ import type { BulletType } from './types';
 // game-defining changes that no test noticed.
 //
 // This file is the one place that must NOT float: it pins each tunable to its
-// spec literal, so retuning a value is a deliberate two-file edit (the constant
-// and its pin here) rather than a silent one. The citation on each line is the
-// authority the number comes from.
+// spec literal, so retuning a value is a deliberate two-file edit (the JSON
+// entry in config/data/balance.json -- the authoritative home the constants now
+// derive from -- and its pin here) rather than a silent one. The citation on
+// each line is the authority the number comes from.
 
 describe('constants', () => {
   it('DT is the reciprocal of the tick rate', () => {
