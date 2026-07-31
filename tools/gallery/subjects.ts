@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createWorld } from '../../src/sim/world';
 import type { World } from '../../src/sim/world';
-import { createEntityViews } from '../../src/render/entities';
+import { createEntityViews, BULLET_Y } from '../../src/render/entities';
 import { createMineDebug } from '../../src/render/minedebug';
 import {
   MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
@@ -72,7 +72,7 @@ export const ELEMENTS: Record<string, ElementDef> = {
   },
   /** One shell broadside and one nose-on: a shell's read changes with angle. */
   shell: {
-    width: 1.0, frames: 1, focusY: 0.35,
+    width: 1.0, frames: 1, focusY: BULLET_Y,
     place: (w, x) => {
       w.bullets.push({
         id: 100 + w.bullets.length, ownerId: 1, type: 'normal', bouncesLeft: 1, alive: true,
@@ -86,7 +86,7 @@ export const ELEMENTS: Record<string, ElementDef> = {
   },
   /** Every heading at once, for checking the yaw mapping from overhead. */
   shellring: {
-    width: 2.6, frames: 1, focusY: 0.35,
+    width: 2.6, frames: 1, focusY: BULLET_Y,
     place: (w, x) => {
       for (let i = 0; i < 8; i++) {
         const a = (i * 2 * Math.PI) / 8;

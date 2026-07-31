@@ -637,3 +637,37 @@ describe('shells versus wall kinds', () => {
     expect(b.vel.x).toBeGreaterThan(0) // never deflected
   })
 })
+
+describe('spawnBullet: where the shell is born', () => {
+  it('spawns at the muzzle, offset along the FIRING angle not the body', () => {
+    // Straight up the sim's +y, to catch an offset applied on the wrong axis -- which
+    // firing along +x in the test above cannot distinguish.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 5, y: 5 } })
+    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, Math.PI / 2, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos.x).toBeCloseTo(5, 9)
+    expect(world.bullets[0].pos.y).toBeCloseTo(5 + SHELL_SPAWN_FORWARD, 9)
+  })
+
+  it('falls back to the tank centre when the muzzle is inside a wall', () => {
+    // SHELL_SPAWN_FORWARD reaches past the tank's own collision radius, so a tank
+    // nose-to-wall has its muzzle in solid geometry. Spawning there would create the
+    // embedded-shell state stepBullets has to retire on sight, silently costing a
+    // shell from the cap.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const wall = mkWall(1, { minX: 0.5, minY: -2, maxX: 2, maxY: 2 }, 'solid')
+    const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos).toEqual({ x: 0, y: 0 })
+  })
+
+  it('still uses the muzzle when the wall is behind the tank', () => {
+    // The discriminating partner: same fixture, wall on the other side. Without this a
+    // fallback that always fired centre-spawn would pass the case above.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const wall = mkWall(1, { minX: -2, minY: -2, maxX: -0.5, maxY: 2 }, 'solid')
+    const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+  })
+})

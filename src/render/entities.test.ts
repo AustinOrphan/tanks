@@ -11,7 +11,7 @@ import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
-import { BULLET_RADIUS, TANK_RADIUS } from '../sim/constants';
+import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
@@ -229,6 +229,31 @@ describe('shell geometry', () => {
       (body.geometry as THREE.CylinderGeometry).parameters.height / 2,
       9,
     );
+    views.dispose();
+  });
+
+  it('flies at the height of the barrel that fires it', () => {
+    // BULLET_Y was a hardcoded 0.35 against a barrel centreline at 0.65 -- shells flew
+    // a third of a tank's height below the muzzle. The finder above follows BULLET_Y,
+    // so it alone cannot see that drift; this compares the shell's height against the
+    // barrel's MEASURED world height. Re-hardcoding either side fails here.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.bullets.push(mkBullet(50, { x: 1, y: 1 }, { x: NORMAL_SPEED, y: 0 }));
+    views.sync(w, w, 0);
+    scene.updateMatrixWorld(true);
+
+    let barrel: THREE.Object3D | undefined;
+    scene.traverse((o) => {
+      if (o.name === 'barrel') barrel = o;
+    });
+    if (!barrel) throw new Error('no barrel in scene');
+    // The barrel sits at its turret group's origin, laid along local +x, so its world
+    // position IS the centreline the shell must leave along.
+    const centreline = new THREE.Vector3();
+    barrel.getWorldPosition(centreline);
+    expect(shellGroup(scene).position.y).toBeCloseTo(centreline.y, 9);
     views.dispose();
   });
 
@@ -588,6 +613,19 @@ describe('tank geometry', () => {
     const sunk = hullTop - (domeWorld.y - domeHalf);
     expect(sunk).toBeGreaterThan(0); // seated, not floating above the hull
     expect(sunk).toBeLessThan(domeHalf * 0.5); // and nowhere near buried
+    views.dispose();
+  });
+
+  it('draws the muzzle exactly where the SIM spawns shells', () => {
+    // The bug this closes: shells were born at the tank's centre and flew out through
+    // the hull, because the render's barrel length and the sim's spawn point were
+    // unrelated numbers. Asserted against the sim constant, so re-hardcoding
+    // BARREL_OUT fails here instead of showing up as shells appearing out of the
+    // turret. (Retuning SHELL_SPAWN_FORWARD stays green -- BARREL_OUT follows it,
+    // which is the point.)
+    const { scene, views } = build();
+    const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
+    expect(tip).toBeCloseTo(SHELL_SPAWN_FORWARD, 9);
     views.dispose();
   });
 

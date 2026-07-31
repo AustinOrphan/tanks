@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { BULLET_RADIUS } from '../sim/constants';
+import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -25,8 +25,6 @@ const TANK_BODY_H = 0.4;
 const TURRET_H = 0.28;
 /** How much of the turret ring is deliberately seated into the hull. */
 const TURRET_SEAT = 0.03;
-/** Shell centerline: match the gun bore height so shots leave the barrel, not the deck. */
-export const BULLET_Y = 0.65;
 /** Centre of the fireball: sat on the deck, so its lower half is buried like a real one. */
 const BLAST_Y = 0.2;
 /**
@@ -114,6 +112,19 @@ export const TRACK_PROUD = 0.25;
 export const TRACK_OVERHANG = 0.05;
 
 export const TURRET_R = 0.36;
+
+/**
+ * Height of the barrel's centreline, and therefore of every shell in flight.
+ *
+ * DERIVED, because it has to equal the gun it comes out of: this is the same stack the
+ * turret group is positioned by in createTankView. It was a hardcoded 0.35 against a
+ * barrel at 0.65 -- shells flew a third of a tank's height BELOW the muzzle. A hardcoded
+ * 0.65 is right today and silently wrong the day any of these four terms is retuned.
+ * (Declared here, below HULL_RIDE, because a module-level const cannot read one
+ * declared after it.)
+ */
+export const BULLET_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
+
 /**
  * How far the barrel protrudes BEYOND the turret.
  *
@@ -121,11 +132,15 @@ export const TURRET_R = 0.36;
  * does not silently shorten the gun -- at a fixed position, going 0.26 -> 0.38 ate a
  * third of the visible barrel.
  *
- * 0.50 chosen at PLAY distance, not in close-up. The barrel is the shipped aim
- * indicator -- aimRay exists only as a dev flag because of that -- and at 0.40 it read
- * as a nub from the real camera even though it looked generous up close.
+ * DERIVED from the sim's SHELL_SPAWN_FORWARD: the sim decides where a shell is born,
+ * and the drawn muzzle has to be that same point or the render lies about where the
+ * gun fires from. To lengthen the gun, change SHELL_SPAWN_FORWARD -- which correctly
+ * moves the spawn point with it. The reach was chosen at PLAY distance, not in
+ * close-up: the barrel is the shipped aim indicator (aimRay is a dev flag precisely
+ * because of that), and a shorter one read as a nub from the real camera even though
+ * it looked generous up close.
  */
-export const BARREL_OUT = 0.50;
+export const BARREL_OUT = SHELL_SPAWN_FORWARD - TURRET_R;
 /** Length of the flared muzzle at the tip. */
 export const MUZZLE_LEN = 0.18;
 /** How much wider the muzzle is than the barrel behind it. */

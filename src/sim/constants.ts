@@ -10,8 +10,15 @@ export const TANK_SPEED = 3.0;
 
 // ---- Bullets ----
 export const BULLET_RADIUS = 0.1;
-// Horizontal spawn offset from tank centre to shell centre, in firing direction.
-// Tuned to match the rendered muzzle reach from the gameplay camera.
+/**
+ * Horizontal spawn offset from tank centre to shell centre, in the firing direction.
+ * Tuned to match the rendered muzzle reach from the gameplay camera.
+ *
+ * This lives in the sim because the sim decides where a shell exists. The render derives
+ * its barrel length from it (entities.ts: BARREL_OUT = SHELL_SPAWN_FORWARD - TURRET_R),
+ * so the drawn muzzle is exactly the point shells come out of -- lengthening the gun
+ * moves the spawn with it. Nothing related the two before, which is how they drifted.
+ */
 export const SHELL_SPAWN_FORWARD = 0.85;
 
 export const NORMAL_SPEED = 6;

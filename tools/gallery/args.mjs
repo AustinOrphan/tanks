@@ -41,6 +41,15 @@ export const DEFAULTS = {
   values: [],
   labels: null,
   label: true,
+  /**
+   * Sim clock multiplier for --scene game, 0 < slowmo <= 1. Scales BOTH clocks the
+   * driver reads -- rAF callback timestamps and performance.now -- because driver.ts
+   * takes its frame delta from the rAF timestamp and only seeds from now(). Scaling
+   * performance.now alone was measured to be a dead knob.
+   */
+  slowmo: 1,
+  /** Frames to shoot in --scene game, one per rAF. >1 needs no --anim; it IS the anim. */
+  burst: 1,
 };
 
 const BOOLISH = ['anim', 'reach', 'timer', 'fill'];
@@ -65,7 +74,7 @@ export function parseValues(raw) {
     .map((v) => v.split('|').map((x) => x.trim()).filter(Boolean))
     .filter((v) => v.length > 0);
 }
-const NUMERIC = ['w', 'h', 'fps', 'subdiv', 'settle'];
+const NUMERIC = ['w', 'h', 'fps', 'subdiv', 'settle', 'slowmo', 'burst'];
 
 export function parseArgs(argv) {
   const out = { ...DEFAULTS, values: [] };
@@ -98,8 +107,35 @@ export function parseArgs(argv) {
   if (out.scene === 'game' && out.anim) {
     // The game runs its own clock; there is no age to step. Recording gameplay is a
     // different job from stepping a pose, and pretending otherwise would silently
-    // produce N identical frames.
-    throw new Error('--anim is not supported with --scene game');
+    // produce N identical frames. Recording gameplay is what --burst is for.
+    throw new Error('--anim is not supported with --scene game (use --burst N)');
+  }
+  if (out.scene !== 'game' && (out.slowmo !== 1 || out.burst !== 1)) {
+    // The gallery scene has no live clock to slow and steps poses explicitly.
+    throw new Error('--slowmo and --burst only apply to --scene game');
+  }
+  if (out.slowmo <= 0 || out.slowmo > 1) {
+    throw new Error(`--slowmo must be in (0, 1], got ${out.slowmo}`);
+  }
+  if (!Number.isInteger(out.burst) || out.burst < 1) {
+    throw new Error(`--burst must be a whole number of frames, got ${out.burst}`);
+  }
+  if (out.burst > 1 && out.sweep) {
+    // A sweep wants one comparable cell per variant; a burst wants a timeline of one
+    // variant. Composing them would grid N timelines and satisfy neither.
+    throw new Error('--burst cannot be combined with --sweep');
+  }
+  const animated = out.anim || out.burst > 1;
+  if (animated && out.out.endsWith('.png')) {
+    // The animated branch runs the GIF encoder unconditionally; pointing it at a .png
+    // wrote gif-pipeline output into a .png filename. Refuse up front.
+    throw new Error('animated output (--anim/--burst) needs a .gif --out, or a directory for raw frames');
+  }
+  if (animated && out.crop !== null) {
+    // --crop is applied only when assembling a still grid; the animated branch never
+    // crops. Accepting it here was a silent no-op knob -- the flag parsed, validated,
+    // and did nothing.
+    throw new Error('--crop is not applied to animated output; crop the frames or gif afterwards');
   }
   if (out.sweep && out.values.length === 0) throw new Error('--sweep needs --values');
   if (!out.sweep && out.values.length > 0) throw new Error('--values needs --sweep');
