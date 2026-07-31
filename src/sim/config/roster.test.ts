@@ -79,4 +79,16 @@ describe('per-kind identity comes from config, not code branches', () => {
   it('reproduces the shipped render colours exactly', () => {
     for (const k of KINDS) expect(configFor(k).color).toBe(SHIPPED_COLORS[k]);
   });
+
+  it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {
+    // entities.ts renders `parseInt(configFor(kind).color.slice(1), 16)`. Pinning the
+    // NUMBER (not just the string) locks the value THREE actually receives to the old
+    // TANK_COLORS literals -- the one migrated value whose consumed form is otherwise
+    // only asserted as a string. Mirrors the render expression exactly.
+    const asNumber = (k: TankKind) => parseInt(configFor(k).color.slice(1), 16);
+    expect(asNumber('player')).toBe(0x3d7bd6);
+    expect(asNumber('brown')).toBe(0x8a5a2b);
+    expect(asNumber('grey')).toBe(0x8890a0);
+    expect(asNumber('teal')).toBe(0x2bb0a6);
+  });
 });
