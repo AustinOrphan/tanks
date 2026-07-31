@@ -70,8 +70,8 @@ export const ARENA_02: Arena = {
     '...........', // 0
     '...........', // 1
     '.B...#...G.', // 2
-    '.B...#...T.', // 3
-    '.#x..#..x#.', // 4  bars: solid outer ends, destructible inner ends
+    '.T...#...B.', // 3
+    'x#xxx#xxx#x', // 4  bars: solid outer ends, destructible inner ends
     '.....#.....', // 5
     '..#.....#..', // 6  the player's flank guards, as in level 1
     '.....P.....', // 7

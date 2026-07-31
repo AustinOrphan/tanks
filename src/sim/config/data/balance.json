@@ -7,7 +7,7 @@
     "cooldownSeconds": 0.4,
     "normal": { "speed": 6, "bounces": 1 },
     "fast": { "speed": 12, "bounces": 0 },
-    "ricochet": { "speed": 6, "bounces": 3 }
+    "ricochet": { "speed": 4, "bounces": 2 }
   },
   "mines": {
     "cap": 2,
