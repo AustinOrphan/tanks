@@ -2,6 +2,13 @@ import type { InputState, Vec2 } from '../sim/types';
 
 export interface InputController {
   sample(): InputState;
+  /**
+   * Drop latched fire/mine presses WITHOUT releasing held movement keys. For pause:
+   * the driver stops sampling, and only sample() resets these latches, so a Space
+   * pressed while hotkey-paused would mine on the first tick after resume. Held
+   * movement stays held on purpose -- the key is physically still down.
+   */
+  clearQueuedPresses(): void;
   dispose(): void;
 }
 
@@ -129,6 +136,10 @@ export function createInputController(
       firePressed = false;
       minePressed = false;
       return state;
+    },
+    clearQueuedPresses(): void {
+      firePressed = false;
+      minePressed = false;
     },
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);

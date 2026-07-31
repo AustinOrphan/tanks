@@ -322,6 +322,9 @@ export function startGameWith(
   });
 
   hud.onQuitToTitle(() => {
+    // The HUD hides the Quit button outside pause, but a handler that rebuilds the
+    // world deserves its own guard, not a CSS class as its only defence.
+    if (sm.state !== 'paused') return;
     // Like the game-over path: the next Start begins a FRESH run at the session's
     // starting level with fresh lives. Rebuilt NOW rather than lazily on Start, so
     // the title screen renders over the new arena, not the abandoned game.
@@ -341,6 +344,12 @@ export function startGameWith(
     // startMusic is idempotent (engine checks music.playing()), so a resume passing
     // back through 'playing' does not double-start anything.
     if (s === 'playing') audio.startMusic();
+    // The driver stops sampling while paused and only sample() resets the fire/mine
+    // latches, so a Space pressed around or during a pause would mine on the first
+    // resumed tick. At the state change, so hotkey, blur and any future pause trigger
+    // all pass through the same clear. (input.ts clears itself on window blur too;
+    // that covers alt-tab, this covers Esc/P.)
+    if (s === 'paused') input.clearQueuedPresses();
   });
 
   hud.setState(sm.state); // initial title panel

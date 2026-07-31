@@ -81,6 +81,7 @@ describe('hud.css is syntactically whole', () => {
       '.hud-level--hidden', // level progression: without it the empty chip always shows
       // pause: without the hidden rules, Quit and the settings row show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-pause-settings', '.hud-pause-settings--hidden',
+      '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

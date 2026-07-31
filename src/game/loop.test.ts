@@ -40,6 +40,7 @@ interface Recorder {
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
   roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
   deathSignals: number;
+  inputClears: number;
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -87,6 +88,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     shellCounts: [],
     roundPhases: [],
     deathSignals: 0,
+    inputClears: 0,
     volumes: [],
     resizes: [],
     listeners: [],
@@ -146,6 +148,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // Prove the wiring passes x and y through in that order, not swapped.
         screenToGround(3, 7);
         return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
+      },
+      clearQueuedPresses(): void {
+        rec.inputClears += 1;
       },
       dispose(): void {
         rec.disposed.push('input');
@@ -1044,5 +1049,36 @@ describe('startGameWith: pause', () => {
     const removed = h.rec.removed.filter(([t]) => t === 'blur').length;
     expect(added).toBe(1);
     expect(removed).toBe(1);
+  });
+});
+
+describe('startGameWith: pause drops queued input', () => {
+  it('clears latched fire/mine presses on EVERY entry into paused', () => {
+    // Found in review: the blur path was safe (input.ts clears itself on window blur)
+    // but an Esc/P pause left a latched Space press to mine on the first resumed tick.
+    // Wired at the state change, so hotkey, blur and any future pause trigger all pass
+    // through the same clear.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.keydown({ key: 'Escape' });
+    expect(h.rec.inputClears).toBe(1);
+    h.keydown({ key: 'Escape' }); // resume: no extra clear
+    h.blur(); // auto-pause: clears again
+    expect(h.rec.inputClears).toBe(2);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: quit is pause-only', () => {
+  it('ignores a quit that arrives outside pause', () => {
+    // The HUD hides the button in every other state, so in production this cannot
+    // fire -- but a handler that rebuilds the world deserves its own guard, not a
+    // CSS class as its only defence.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('playing');
+    expect(h.rec.levelBuilds).toHaveLength(1); // no rebuild
+    h.handle.dispose();
   });
 });
