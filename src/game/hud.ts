@@ -48,6 +48,8 @@ export interface Hud {
   onVolumeChange(cb: (v: number) => void): void;
   /** Extension: fired when the title/win/lose panel's start/restart button is clicked. */
   onStartRestart(cb: () => void): void;
+  /** Fired by the pause panel's Quit to Title button, and by nothing else. */
+  onQuitToTitle(cb: () => void): void;
   dispose(): void;
 }
 
@@ -80,6 +82,15 @@ export function createHud(root: HTMLElement): Hud {
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
       <button class="hud-action" type="button"></button>
+      <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
+      <!-- The pause panel's settings row: the seed of the settings pane. Mirrors the
+           topbar audio pair (same engine, same callbacks) rather than moving it, so
+           audio stays adjustable mid-game too. autocomplete="off" for the same
+           Firefox bfcache reason as the topbar slider. -->
+      <div class="hud-pause-settings hud-pause-settings--hidden">
+        <button class="hud-panel-mute" type="button">Mute (M)</button>
+        <input class="hud-panel-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
+      </div>
     </div>
   `;
   root.appendChild(el);
@@ -100,20 +111,36 @@ export function createHud(root: HTMLElement): Hud {
   const titleEl = el.querySelector('.hud-title') as HTMLElement;
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
+  const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
+  const pauseSettings = el.querySelector('.hud-pause-settings') as HTMLElement;
+  const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
+  const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
   const startRestartCbs: Array<() => void> = [];
+  const quitCbs: Array<() => void> = [];
 
   const handleMute = (): void => {
     for (const cb of muteCbs) cb();
   };
+  // Two sliders, one truth: whichever moves, the other follows before subscribers
+  // hear about it -- reopening the pause panel must never show a stale level.
   const handleVolume = (): void => {
+    panelVolumeEl.value = volumeEl.value;
     const v = Number(volumeEl.value);
+    for (const cb of volumeCbs) cb(v);
+  };
+  const handlePanelVolume = (): void => {
+    volumeEl.value = panelVolumeEl.value;
+    const v = Number(panelVolumeEl.value);
     for (const cb of volumeCbs) cb(v);
   };
   const handleAction = (): void => {
     for (const cb of startRestartCbs) cb();
+  };
+  const handleQuit = (): void => {
+    for (const cb of quitCbs) cb();
   };
 
   // A focused control legitimately claims Space, Enter and the arrow keys -- input.ts
@@ -135,6 +162,12 @@ export function createHud(root: HTMLElement): Hud {
   volumeEl.addEventListener('mouseup', blurAfterDrag);
   actionBtn.addEventListener('click', handleAction);
   actionBtn.addEventListener('click', blurIfPointer);
+  quitBtn.addEventListener('click', handleQuit);
+  quitBtn.addEventListener('click', blurIfPointer);
+  panelMuteBtn.addEventListener('click', handleMute);
+  panelMuteBtn.addEventListener('click', blurIfPointer);
+  panelVolumeEl.addEventListener('input', handlePanelVolume);
+  panelVolumeEl.addEventListener('mouseup', blurAfterDrag);
 
   // Where the session stands in the level sequence, for the win panel's copy. Null
   // until the loop calls setLevel, and a HUD never told about levels keeps its
@@ -147,6 +180,16 @@ export function createHud(root: HTMLElement): Hud {
       return;
     }
     panel.classList.remove('hud-panel--hidden');
+    // Quit and the settings row belong to the pause panel ALONE: a quit button on
+    // the win panel would be a second, untested path out of a finished game.
+    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
+    pauseSettings.classList.toggle('hud-pause-settings--hidden', s !== 'paused');
+    if (s === 'paused') {
+      titleEl.textContent = 'Paused';
+      subtitleEl.textContent = 'The arena waits.';
+      actionBtn.textContent = 'Resume';
+      return; // do NOT fall through: the final else renders a Game Over corpse screen
+    }
     if (s === 'title') {
       titleEl.textContent = 'TANKS!';
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
@@ -175,9 +218,11 @@ export function createHud(root: HTMLElement): Hud {
   // music shipped, so "silent" is the normal condition -- without this a muted
   // game and a broken game look identical.
   function setMuted(muted: boolean): void {
-    muteBtn.setAttribute('aria-pressed', String(muted));
-    muteBtn.textContent = muted ? 'Muted (M)' : 'Mute (M)';
-    muteBtn.classList.toggle('hud-mute--active', muted);
+    for (const btn of [muteBtn, panelMuteBtn]) {
+      btn.setAttribute('aria-pressed', String(muted));
+      btn.textContent = muted ? 'Muted (M)' : 'Mute (M)';
+      btn.classList.toggle('hud-mute--active', muted);
+    }
   }
 
   setMuted(false);
@@ -256,7 +301,16 @@ export function createHud(root: HTMLElement): Hud {
     onStartRestart(cb: () => void): void {
       startRestartCbs.push(cb);
     },
+    onQuitToTitle(cb: () => void): void {
+      quitCbs.push(cb);
+    },
     dispose(): void {
+      quitBtn.removeEventListener('click', handleQuit);
+      quitBtn.removeEventListener('click', blurIfPointer);
+      panelMuteBtn.removeEventListener('click', handleMute);
+      panelMuteBtn.removeEventListener('click', blurIfPointer);
+      panelVolumeEl.removeEventListener('input', handlePanelVolume);
+      panelVolumeEl.removeEventListener('mouseup', blurAfterDrag);
       muteBtn.removeEventListener('click', handleMute);
       muteBtn.removeEventListener('click', blurIfPointer);
       volumeEl.removeEventListener('input', handleVolume);

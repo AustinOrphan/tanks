@@ -409,3 +409,81 @@ describe('hud: level progression', () => {
     expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('You Win!');
   });
 });
+
+describe('hud: pause panel', () => {
+  const panel = (root: HTMLElement): HTMLElement => root.querySelector('.hud-panel') as HTMLElement;
+  const quit = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-quit') as HTMLButtonElement;
+  const settings = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-pause-settings') as HTMLElement;
+
+  it('shows the frozen-scene panel with Resume, Quit and the audio pair', () => {
+    const { hud: h, root } = mount();
+    h.setState('paused');
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
+    expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('Paused');
+    expect((root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Resume');
+    expect(quit(root).classList.contains('hud-quit--hidden')).toBe(false);
+    expect(settings(root).classList.contains('hud-pause-settings--hidden')).toBe(false);
+  });
+
+  it('keeps Quit and the settings row out of every OTHER panel state', () => {
+    // Population: all four non-paused states. A quit button on the win panel would
+    // be a second untested path out of a finished game.
+    const { hud: h, root } = mount();
+    for (const s of ['title', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(quit(root).classList.contains('hud-quit--hidden'), s).toBe(true);
+      expect(settings(root).classList.contains('hud-pause-settings--hidden'), s).toBe(true);
+    }
+    h.setState('playing'); // panel hidden entirely
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
+  });
+
+  it('does NOT render a Game Over corpse screen for paused', () => {
+    // setState's final else renders "Game Over"; a forgotten branch for a new state
+    // lands exactly there. This is the pin that keeps 'paused' out of it.
+    const { hud: h, root } = mount();
+    h.setState('paused');
+    expect((root.querySelector('.hud-title') as HTMLElement).textContent).not.toBe('Game Over');
+  });
+
+  it('notifies quit subscribers, separately from start/restart', () => {
+    const { hud: h, root } = mount();
+    let quits = 0;
+    let starts = 0;
+    h.onQuitToTitle(() => quits++);
+    h.onStartRestart(() => starts++);
+    h.setState('paused');
+    quit(root).dispatchEvent(new MouseEvent('click'));
+    expect(quits).toBe(1);
+    expect(starts).toBe(0);
+  });
+
+  it('mirrors mute state onto the panel button too', () => {
+    const { hud: h, root } = mount();
+    h.setMuted(true);
+    expect((root.querySelector('.hud-panel-mute') as HTMLElement).textContent).toBe('Muted (M)');
+    expect((root.querySelector('.hud-mute') as HTMLElement).textContent).toBe('Muted (M)');
+  });
+
+  it('panel volume slider reports changes and keeps the topbar slider in step', () => {
+    const { hud: h, root } = mount();
+    const seen: number[] = [];
+    h.onVolumeChange((v) => seen.push(v));
+    const panelSlider = root.querySelector('.hud-panel-volume') as HTMLInputElement;
+    panelSlider.value = '0.2';
+    panelSlider.dispatchEvent(new Event('input'));
+    expect(seen).toEqual([0.2]);
+    expect((root.querySelector('.hud-volume') as HTMLInputElement).value).toBe('0.2');
+  });
+
+  it('topbar slider keeps the panel slider in step, so reopening pause never lies', () => {
+    const { hud: h, root } = mount();
+    void h;
+    const topbar = root.querySelector('.hud-volume') as HTMLInputElement;
+    topbar.value = '0.7';
+    topbar.dispatchEvent(new Event('input'));
+    expect((root.querySelector('.hud-panel-volume') as HTMLInputElement).value).toBe('0.7');
+  });
+});

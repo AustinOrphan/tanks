@@ -68,3 +68,52 @@ describe('game state machine', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 });
+
+describe('pause transitions', () => {
+  it('pauses only from playing', () => {
+    const sm = createGameStateMachine();
+    sm.pause();
+    expect(sm.state).toBe('title'); // title is not pausable
+    sm.startPlaying();
+    sm.pause();
+    expect(sm.state).toBe('paused');
+  });
+
+  it('resumes only from paused', () => {
+    const sm = createGameStateMachine();
+    sm.startPlaying();
+    sm.resume();
+    expect(sm.state).toBe('playing'); // no-op, not a crash
+    sm.pause();
+    sm.resume();
+    expect(sm.state).toBe('playing');
+  });
+
+  it('cannot pause a finished game into a zombie state', () => {
+    const sm = createGameStateMachine();
+    sm.startPlaying();
+    sm.onEvents([{ type: 'lose' }]);
+    sm.pause();
+    expect(sm.state).toBe('lose');
+  });
+
+  it('ignores win/lose events while paused: the sim is not stepping', () => {
+    // Nothing SHOULD emit events while paused -- the driver holds -- but a stray
+    // queued frame must not end a game the player believes is frozen.
+    const sm = createGameStateMachine();
+    sm.startPlaying();
+    sm.pause();
+    sm.onEvents([{ type: 'lose' }]);
+    expect(sm.state).toBe('paused');
+  });
+
+  it('notifies subscribers on pause and resume', () => {
+    const sm = createGameStateMachine();
+    const seen: string[] = [];
+    sm.onChange((s) => seen.push(s));
+    sm.startPlaying();
+    sm.pause();
+    sm.resume();
+    expect(seen).toEqual(['playing', 'paused', 'playing']);
+  });
+});
