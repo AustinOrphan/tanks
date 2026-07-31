@@ -1,7 +1,8 @@
-import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
+import { CURRENT_ARENA, arenaBounds } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2, UnarmedTrigger } from '../sim/types';
+import type { Vec2 } from '../sim/types';
+import { createLevelSystem, type LevelSystem } from './levels';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -68,7 +69,13 @@ export interface GameDeps {
   readonly createDirector: (engine: AudioEngine, playerId: number) => AudioDirector;
   readonly createStateMachine: () => GameStateMachine;
   readonly createHud: (root: HTMLElement) => Hud;
-  readonly createWorld: (seed: number, unarmedTrigger?: UnarmedTrigger) => World;
+  /**
+   * The level sequence: how many levels exist, where this session starts, and how
+   * to build the world for any of them. Injected as one object so a test can
+   * substitute a two-level fake and still exercise the real advance/carry/reset
+   * wiring in startGameWith.
+   */
+  readonly levels: LevelSystem;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -154,6 +161,7 @@ function countEnemies(world: World): number {
  * site rather than a ReferenceError at import.
  */
 export function createBrowserDeps(): GameDeps {
+  const devFlags = parseDevFlags(globalThis.location?.search ?? '');
   return {
     createRenderer,
     createInput: createInputController,
@@ -161,7 +169,7 @@ export function createBrowserDeps(): GameDeps {
     createDirector: createAudioDirector,
     createStateMachine: createGameStateMachine,
     createHud,
-    createWorld: createArenaWorld,
+    levels: createLevelSystem(devFlags),
     now: () => performance.now(),
     wallMs: () => Date.now(),
     raf: {
@@ -169,7 +177,7 @@ export function createBrowserDeps(): GameDeps {
       cancel: (h) => cancelAnimationFrame(h),
     },
     host: globalThis.window as unknown as HostWindow,
-    devFlags: parseDevFlags(globalThis.location?.search ?? ''),
+    devFlags,
   };
 }
 
@@ -189,7 +197,8 @@ export function startGameWith(
   // for a before/after comparison.
   const nextSeed = (): number => deps.devFlags.seed ?? deriveSeed(deps.wallMs());
 
-  let world = deps.createWorld(nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+  let level = deps.levels.start;
+  let world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
   // try/catch to render a "this browser has no WebGL" page, and that only
@@ -202,8 +211,11 @@ export function startGameWith(
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
   const audio = deps.createAudio();
-  const player = world.tanks.find((t) => t.kind === 'player');
-  const director = deps.createDirector(audio, player ? player.id : -1);
+  // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
+  // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
+  // rebinds the director, or the player's own cannon scores as an enemy's.
+  let playerId = world.tanks.find((t) => t.kind === 'player')?.id;
+  const director = deps.createDirector(audio, playerId ?? -1);
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
 
@@ -211,7 +223,7 @@ export function startGameWith(
     hud.setLives(w.lives);
     hud.setEnemiesRemaining(countEnemies(w));
     if (deps.devFlags.shellCount) {
-      hud.setShellCount({ inFlight: playerShellsInFlight(w, player?.id), cap: SHELL_CAP });
+      hud.setShellCount({ inFlight: playerShellsInFlight(w, playerId), cap: SHELL_CAP });
     }
   }
 
@@ -273,8 +285,16 @@ export function startGameWith(
     if (sm.state === 'title') {
       sm.startPlaying();
     } else {
-      // win or lose -> rebuild a fresh arena and re-enter playing
-      world = deps.createWorld(nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+      // Intermediate win -> the NEXT level, with the lives that survived this one.
+      // Final win or game over -> back to the session's starting level with fresh
+      // lives (levels.start, not 0: a dev who jumped to level 2 retries level 2).
+      const advancing = sm.state === 'win' && level + 1 < deps.levels.count;
+      const carried = advancing ? driver.world.lives : undefined;
+      level = advancing ? level + 1 : deps.levels.start;
+      world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined, carried);
+      playerId = world.tanks.find((t) => t.kind === 'player')?.id;
+      director.setPlayerId(playerId ?? -1);
+      hud.setLevel(level + 1, deps.levels.count);
       driver.reset(world);
       refreshStats(world);
       sm.restart();
@@ -287,6 +307,7 @@ export function startGameWith(
   });
 
   hud.setState(sm.state); // initial title panel
+  hud.setLevel(level + 1, deps.levels.count);
   refreshStats(world);
 
   const onKey = (e: KeyboardEvent): void => {

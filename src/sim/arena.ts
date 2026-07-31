@@ -206,9 +206,17 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
  */
 export const CURRENT_ARENA: Arena = ARENAS[0];
 
-/** Build a playable world from any arena. The progression's per-level constructor. */
-export function createWorldFor(arena: Arena, seed?: number, unarmedTrigger?: UnarmedTrigger): World {
-  return createWorld({ ...loadArena(arena), lives: LIVES, seed, unarmedTrigger });
+/**
+ * Build a playable world from any arena. The progression's per-level constructor;
+ * `lives` is how a cleared level's remaining lives carry into the next one.
+ */
+export function createWorldFor(
+  arena: Arena,
+  seed?: number,
+  unarmedTrigger?: UnarmedTrigger,
+  lives: number = LIVES,
+): World {
+  return createWorld({ ...loadArena(arena), lives, seed, unarmedTrigger });
 }
 
 /**

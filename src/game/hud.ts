@@ -14,6 +14,12 @@ export interface RoundPhaseInfo {
 export interface Hud {
   setLives(n: number): void;
   setEnemiesRemaining(n: number): void;
+  /**
+   * Where the session stands in the level sequence: drives the topbar chip and the
+   * win panel's copy (Next Level vs Play Again). A one-level total shows no chip --
+   * "Level 1/1" is noise, and the sandbox is exactly that.
+   */
+  setLevel(current: number, total: number): void;
   setState(s: GameState): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
@@ -52,6 +58,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-topbar">
       <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
+      <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
       <div class="hud-phase hud-phase--hidden"></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <div class="hud-audio">
@@ -85,6 +92,8 @@ export function createHud(root: HTMLElement): Hud {
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
+  const levelChip = el.querySelector('.hud-level') as HTMLElement;
+  const levelNum = el.querySelector('.hud-level-num') as HTMLElement;
   const muteBtn = el.querySelector('.hud-mute') as HTMLButtonElement;
   const volumeEl = el.querySelector('.hud-volume') as HTMLInputElement;
   const panel = el.querySelector('.hud-panel') as HTMLElement;
@@ -127,6 +136,11 @@ export function createHud(root: HTMLElement): Hud {
   actionBtn.addEventListener('click', handleAction);
   actionBtn.addEventListener('click', blurIfPointer);
 
+  // Where the session stands in the level sequence, for the win panel's copy. Null
+  // until the loop calls setLevel, and a HUD never told about levels keeps its
+  // original single-arena wording.
+  let levelPos: { current: number; total: number } | null = null;
+
   function setState(s: GameState): void {
     if (s === 'playing') {
       panel.classList.add('hud-panel--hidden');
@@ -138,9 +152,16 @@ export function createHud(root: HTMLElement): Hud {
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
       actionBtn.textContent = 'Start';
     } else if (s === 'win') {
-      titleEl.textContent = 'You Win!';
-      subtitleEl.textContent = 'Arena cleared.';
-      actionBtn.textContent = 'Play Again';
+      // An intermediate win advances; only the LAST level's win is the game's.
+      if (levelPos && levelPos.current < levelPos.total) {
+        titleEl.textContent = `Level ${levelPos.current} cleared!`;
+        subtitleEl.textContent = 'On to the next.';
+        actionBtn.textContent = 'Next Level';
+      } else {
+        titleEl.textContent = 'You Win!';
+        subtitleEl.textContent = 'Arena cleared.';
+        actionBtn.textContent = 'Play Again';
+      }
     } else {
       titleEl.textContent = 'Game Over';
       subtitleEl.textContent = 'Out of lives.';
@@ -172,6 +193,12 @@ export function createHud(root: HTMLElement): Hud {
       if (n === lastLives) return;
       lastLives = n;
       livesEl.textContent = String(n);
+    },
+    setLevel(current: number, total: number): void {
+      levelPos = { current, total };
+      const show = total > 1;
+      levelChip.classList.toggle('hud-level--hidden', !show);
+      if (show) levelNum.textContent = `${current}/${total}`;
     },
     setEnemiesRemaining(n: number): void {
       if (n === lastEnemies) return;

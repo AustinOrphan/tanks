@@ -121,3 +121,50 @@ describe('parseDevFlags: mineTrigger', () => {
     }
   });
 });
+
+describe('parseDevFlags: level', () => {
+  it('is null without dev mode, so a shared link cannot skip levels', () => {
+    expect(parseDevFlags('?level=2').level).toBeNull();
+  });
+
+  it('accepts a 1-based level number or the sandbox', () => {
+    expect(parseDevFlags('?dev=1&level=1').level).toBe(1);
+    expect(parseDevFlags('?dev=1&level=2').level).toBe(2);
+    expect(parseDevFlags('?dev=1&level=sandbox').level).toBe('sandbox');
+  });
+
+  it('rejects non-levels, rather than guessing', () => {
+    // Population: the 6 forms below. Range against ARENAS is the caller's job --
+    // this module cannot know how many levels exist without importing the sim.
+    for (const v of ['0', '-1', '1.5', 'abc', '', 'SANDBOX']) {
+      expect(parseDevFlags(`?dev=1&level=${v}`).level).toBeNull();
+    }
+  });
+});
+
+describe('parseDevFlags: sandbox knobs', () => {
+  it('parses an enemy multiset, keeping duplicates and order', () => {
+    expect(parseDevFlags('?dev=1&tanks=brown,teal,teal').sandboxTanks)
+      .toEqual(['brown', 'teal', 'teal']);
+  });
+
+  it('rejects the whole list on any unknown kind: a silent drop would misreport the fixture', () => {
+    expect(parseDevFlags('?dev=1&tanks=brown,gray').sandboxTanks).toBeNull();
+    expect(parseDevFlags('?dev=1&tanks=player').sandboxTanks).toBeNull();
+    expect(parseDevFlags('?dev=1&tanks=').sandboxTanks).toBeNull();
+  });
+
+  it('defaults to disarmed; disarmed=0 re-arms', () => {
+    expect(parseDevFlags('?dev=1').sandboxDisarmed).toBe(true);
+    expect(parseDevFlags('?dev=1&disarmed=0').sandboxDisarmed).toBe(false);
+    expect(parseDevFlags('?dev=1&disarmed=1').sandboxDisarmed).toBe(true);
+  });
+
+  it('parses a wall count, bare or in the promised random:N form', () => {
+    expect(parseDevFlags('?dev=1&walls=8').sandboxWalls).toBe(8);
+    expect(parseDevFlags('?dev=1&walls=random:8').sandboxWalls).toBe(8);
+    for (const v of ['0', '-3', 'abc', 'random:', '']) {
+      expect(parseDevFlags(`?dev=1&walls=${v}`).sandboxWalls).toBeNull();
+    }
+  });
+});

@@ -78,6 +78,7 @@ describe('hud.css is syntactically whole', () => {
       '.hud-damage', '.hud-damage--hit', '.hud-lives--hit', // losing a life
       '.hud-shells', '.hud-shells--hidden', // dev shell count
       '.hud-phase', '.hud-banner', '.hud-banner-word', '.hud-banner-count', // round phase
+      '.hud-level--hidden', // level progression: without it the empty chip always shows
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

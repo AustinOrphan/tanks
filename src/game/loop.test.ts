@@ -24,6 +24,9 @@ interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
   screenToGroundArgs: Array<[number, number]>;
   directorPlayerIds: number[];
+  directorRebinds: number[];
+  levelBuilds: Array<{ level: number; lives: number | undefined }>;
+  hudLevels: Array<[number, number]>;
   seeds: number[];
   worldPolicies: Array<UnarmedTrigger | undefined>;
   renders: Array<{ prev: World; curr: World; alpha: number; events: SimEvent[]; dt: number }>;
@@ -47,7 +50,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags> } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -65,6 +68,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     rendererArgs: [],
     screenToGroundArgs: [],
     directorPlayerIds: [],
+    directorRebinds: [],
+    levelBuilds: [],
+    hudLevels: [],
     seeds: [],
     worldPolicies: [],
     renders: [],
@@ -166,6 +172,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         handle(events): void {
           rec.directed.push(events);
         },
+        setPlayerId(id): void {
+          rec.directorRebinds.push(id);
+        },
       };
     },
     createStateMachine: () => ({
@@ -202,6 +211,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setState: (s) => rec.hudStates.push(s),
         setMuted: (m) => rec.muted.push(m),
         setShellCount: (i) => rec.shellCounts.push(i),
+        setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
         setRoundPhase: (info) => rec.roundPhases.push(info),
         signalPlayerDeath: () => { rec.deathSignals += 1; },
         onMuteToggle: (cb) => {
@@ -216,15 +226,23 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         dispose: () => rec.disposed.push('hud'),
       };
     },
-    createWorld: (seed, policy) => {
-      rec.seeds.push(seed);
-      rec.worldPolicies.push(policy);
-      // The real createArenaWorld returns a FRESH world each call, and
-      // resetArena moves roundStartTick forward -- so a fixed fixture object
-      // would make every round look like the same round to loop.ts. Advance it
-      // per call, as a respawn does.
-      const base = opts.world ?? createArenaWorld(seed);
-      return { ...base, roundStartTick: base.roundStartTick + rec.seeds.length - 1 };
+    levels: {
+      // Defaults to a ONE-level sequence: every pre-progression test in this file was
+      // written against "restart rebuilds the same arena", which is exactly what a
+      // one-level sequence still does. Progression tests opt into more.
+      count: opts.levelCount ?? 1,
+      start: opts.levelStart ?? 0,
+      world: (level, seed, policy, lives) => {
+        rec.levelBuilds.push({ level, lives });
+        rec.seeds.push(seed);
+        rec.worldPolicies.push(policy);
+        // The real createArenaWorld returns a FRESH world each call, and
+        // resetArena moves roundStartTick forward -- so a fixed fixture object
+        // would make every round look like the same round to loop.ts. Advance it
+        // per call, as a respawn does.
+        const base = opts.world ?? createArenaWorld(seed);
+        return { ...base, roundStartTick: base.roundStartTick + rec.seeds.length - 1 };
+      },
     },
     now: () => 0,
     wallMs: () => opts.wallMs ?? 1234567,
@@ -808,6 +826,57 @@ describe('startGameWith: round-phase HUD (dev flag)', () => {
     h.fireFrame(100);
     expect(h.rec.roundPhases.length).toBeGreaterThan(0);
     expect(h.rec.roundPhases.every((p) => p === null)).toBe(true);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: level progression', () => {
+  it('builds the opening world at levels.start and tells the HUD where it is', () => {
+    const h = boot(makeDeps({ levelCount: 3, levelStart: 1 }));
+    expect(h.rec.levelBuilds[0]).toEqual({ level: 1, lives: undefined });
+    expect(h.rec.hudLevels[0]).toEqual([2, 3]); // 1-based for humans
+    h.handle.dispose();
+  });
+
+  it('advances one level on an intermediate win, carrying the surviving lives', () => {
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('win');
+    h.hud.startRestart();
+    // The carried count is read off the LIVE world (fixture lives: LIVES = 3).
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: 3 });
+    expect(h.rec.hudLevels[1]).toEqual([2, 2]);
+    h.handle.dispose();
+  });
+
+  it('rebinds the audio director to the NEW world\'s player on every rebuild', () => {
+    // loadArena numbers tanks in scan order, so the player id is arena-dependent
+    // (16 in ARENA_01, 15 in ARENA_02). A director left on the old id scores the
+    // player's own cannon as an enemy's from level 2 on.
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('win');
+    h.hud.startRestart();
+    expect(h.rec.directorRebinds).toHaveLength(1);
+    expect(h.rec.directorRebinds[0]).toBe(h.rec.directorPlayerIds[0]); // same fixture arena here
+    expect(h.rec.directorRebinds[0]).not.toBe(0);
+    h.handle.dispose();
+  });
+
+  it('resets to the starting level with fresh lives on a game over', () => {
+    const h = boot(makeDeps({ levelCount: 2, levelStart: 1 }));
+    h.setState('lose');
+    h.hud.startRestart();
+    // levels.start, not 0: a dev who jumped to level 2 retries level 2.
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
+    h.handle.dispose();
+  });
+
+  it('treats the final win as Play Again: back to the start, fresh lives', () => {
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('win');
+    h.hud.startRestart(); // -> level 1, the last
+    h.setState('win');
+    h.hud.startRestart(); // final win -> back to start
+    expect(h.rec.levelBuilds[2]).toEqual({ level: 0, lives: undefined });
     h.handle.dispose();
   });
 });
