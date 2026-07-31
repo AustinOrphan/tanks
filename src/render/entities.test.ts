@@ -5,14 +5,13 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
-  createEntityViews, BARREL_OUT, BULLET_Y, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE,
+  createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
 } from './entities';
-import { MUZZLE_OFFSET } from '../sim/constants';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
-import { BULLET_RADIUS, TANK_RADIUS } from '../sim/constants';
+import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
@@ -234,10 +233,10 @@ describe('shell geometry', () => {
   });
 
   it('flies at the height of the barrel that fires it', () => {
-    // BULLET_Y was a hardcoded 0.35 against a barrel centreline at 0.65 -- shells flew a
-    // third of a tank's height below the muzzle. The finder above follows BULLET_Y, so it
-    // alone cannot see that drift; this compares the shell's height against the barrel's
-    // MEASURED world height. Re-hardcoding either side fails here.
+    // BULLET_Y was a hardcoded 0.35 against a barrel centreline at 0.65 -- shells flew
+    // a third of a tank's height below the muzzle. The finder above follows BULLET_Y,
+    // so it alone cannot see that drift; this compares the shell's height against the
+    // barrel's MEASURED world height. Re-hardcoding either side fails here.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();
@@ -618,13 +617,13 @@ describe('tank geometry', () => {
   });
 
   it('draws the muzzle exactly where the SIM spawns shells', () => {
-    // The bug this closes: shells were born at the tank's centre and flew out through the
-    // hull, because the render's barrel length and the sim's spawn point were unrelated
-    // numbers. Asserted against the sim constant, so lengthening one without the other
-    // fails here instead of showing up as shells appearing out of the turret.
+    // The bug this closes: shells were born at the tank's centre and flew out through
+    // the hull, because the render's barrel length and the sim's spawn point were
+    // unrelated numbers. Asserted against the sim constant, so lengthening one without
+    // the other fails here instead of showing up as shells appearing out of the turret.
     const { scene, views } = build();
     const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
-    expect(tip).toBeCloseTo(MUZZLE_OFFSET, 9);
+    expect(tip).toBeCloseTo(SHELL_SPAWN_FORWARD, 9);
     views.dispose();
   });
 

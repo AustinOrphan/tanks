@@ -4,31 +4,22 @@ import { circleVsAABB, reflectSweep, circleVsCircle } from './collision'
 import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, SHELL_CAP, MUZZLE_OFFSET,
-  BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS } from './constants'
-
-export function ownerShellCount(world: World, ownerId: number): number {
-  let n = 0
-  for (const b of world.bullets) {
-    if (b.alive && b.ownerId === ownerId) n++
-  }
-  return n
-}
+import { bulletConfig, SHELL_CAP, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
 
 /**
  * Where the shell is born: at the muzzle, unless the muzzle is inside a wall.
  *
- * MUZZLE_OFFSET reaches 0.36 past the tank's own collision radius, so a tank nose-to-wall
- * has its muzzle INSIDE that wall. Spawning there would put a live shell in solid
- * geometry -- the state stepBullets already has to retire on sight -- and firing while
- * touching a wall would silently cost a shell from the cap.
+ * SHELL_SPAWN_FORWARD reaches past the tank's own collision radius, so a tank
+ * nose-to-wall has its muzzle INSIDE that wall. Spawning there would put a live shell
+ * in solid geometry -- the state stepBullets already has to retire on sight -- and
+ * firing while touching a wall would silently burn a SHELL_CAP slot.
  *
  * So the muzzle is used only when it is clear, and the tank's centre is the fallback,
- * which is exactly the old behaviour. That keeps the degenerate case working the way it
- * always has rather than inventing a new one.
+ * which is exactly the pre-offset behaviour. That keeps the degenerate case working
+ * the way it always has rather than inventing a new one.
  */
-function muzzlePoint(world: World, owner: Tank, angle: number): Vec2 {
-  const muzzle = vadd(owner.pos, vscale(fromAngle(angle), MUZZLE_OFFSET))
+function muzzlePoint(world: World, owner: Tank, dir: Vec2): Vec2 {
+  const muzzle = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))
   for (const w of world.walls) {
     if (w.destroyed) continue
     if (circleVsAABB(muzzle, BULLET_RADIUS, w.aabb).hit) {
@@ -36,6 +27,14 @@ function muzzlePoint(world: World, owner: Tank, angle: number): Vec2 {
     }
   }
   return muzzle
+}
+
+export function ownerShellCount(world: World, ownerId: number): number {
+  let n = 0
+  for (const b of world.bullets) {
+    if (b.alive && b.ownerId === ownerId) n++
+  }
+  return n
 }
 
 export function spawnBullet(
@@ -54,13 +53,14 @@ export function spawnBullet(
     return false
   }
   const cfg = bulletConfig[type]
-  const pos = muzzlePoint(world, owner, angle)
+  const dir = fromAngle(angle)
+  const pos = muzzlePoint(world, owner, dir)
   const bullet: Bullet = {
     id: world.nextId++,
     ownerId,
     type,
     pos,
-    vel: vscale(fromAngle(angle), cfg.speed),
+    vel: vscale(dir, cfg.speed),
     bouncesLeft: cfg.bounces,
     alive: true,
   }

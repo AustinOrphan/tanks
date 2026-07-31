@@ -10,20 +10,16 @@ export const TANK_SPEED = 3.0;
 
 // ---- Bullets ----
 export const BULLET_RADIUS = 0.1;
-
 /**
- * How far from the tank's centre a shell is born, along the turret's heading.
- *
- * Shells used to spawn at owner.pos -- the middle of the tank -- and fly out through it.
- * At NORMAL_SPEED that is 0.1 world units a tick, so a shell spent its first nine ticks
- * INSIDE the tank that fired it, which is visible and wrong.
+ * Horizontal spawn offset from tank centre to shell centre, in the firing direction.
+ * Tuned to match the rendered muzzle reach from the gameplay camera.
  *
  * This lives in the sim because the sim decides where a shell exists. The render derives
- * its barrel length from it (entities.ts: BARREL_OUT = MUZZLE_OFFSET - TURRET_R), so the
- * drawn muzzle is exactly the point shells come out of. Nothing related the two before,
- * which is how they drifted apart.
+ * its barrel length from it (entities.ts: BARREL_OUT = SHELL_SPAWN_FORWARD - TURRET_R),
+ * so the drawn muzzle is exactly the point shells come out of -- lengthening the gun
+ * moves the spawn with it. Nothing related the two before, which is how they drifted.
  */
-export const MUZZLE_OFFSET = 0.86;
+export const SHELL_SPAWN_FORWARD = 0.85;
 
 export const NORMAL_SPEED = 6;
 export const FAST_SPEED = 12;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { BULLET_RADIUS, MUZZLE_OFFSET } from '../sim/constants';
+import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -21,7 +21,10 @@ const TANK_COLORS: Record<TankKind, number> = {
   teal: 0x2bb0a6,
 };
 
-export const TANK_BODY_H = 0.4;
+const TANK_BODY_H = 0.4;
+const TURRET_H = 0.28;
+/** How much of the turret ring is deliberately seated into the hull. */
+const TURRET_SEAT = 0.03;
 /** Centre of the fireball: sat on the deck, so its lower half is buried like a real one. */
 const BLAST_Y = 0.2;
 /**
@@ -76,21 +79,10 @@ export const TRACK_H = 0.34;
  * through the real camera; the height mattered far less than the shade.
  */
 export const TRACK_SHADE = 0.7;
-/**
- * Corner radius of the hull body in plan.
- *
- * Picked from a game-view sweep of 0.12/0.30 at nose 1.0 -- 0.12 still read as a slab
- * from the play camera; 0.30 rounds the silhouette without tapering it.
- */
+/** Corner radius of the hull body in plan. */
 export const HULL_CORNER = 0.3;
-/**
- * How wide the hull's FRONT is, as a fraction of its rear width.
- *
- * 1.0 is a plain slab; below that the hull tapers to a nose. Only the front narrows, so
- * the widest point stays at the rear and still equals HULL_WIDTH -- the footprint keeps
- * matching the collision circle whatever shape is picked.
- */
-export const HULL_NOSE = 1.0;
+/** Width of the hull's front shoulder, as a fraction of its mid-body width. */
+export const HULL_NOSE = 1; //0.85;
 /** Edge bevel on the hull body. */
 export const HULL_BEVEL = 0.035;
 /** Edge bevel on the tracks. Smaller: they are narrow, and a big bevel eats the face. */
@@ -119,20 +111,20 @@ export const TRACK_PROUD = 0.25;
 /** How far the tracks overhang the body front and back. */
 export const TRACK_OVERHANG = 0.05;
 
-export const TURRET_H = 0.28;
-/** How much of the turret ring is deliberately seated into the hull. */
-export const TURRET_SEAT = 0.03;
 export const TURRET_R = 0.36;
 
 /**
  * Height of the barrel's centreline, and therefore of every shell in flight.
  *
- * DERIVED, because it has to equal the gun it comes out of. It was a hardcoded 0.35
- * against a barrel that sits at 0.65 -- shells flew a third of a tank's height BELOW the
- * muzzle. Same failure as the spawn point: two numbers that must agree, with nothing
- * relating them.
+ * DERIVED, because it has to equal the gun it comes out of: this is the same stack the
+ * turret group is positioned by in createTankView. It was a hardcoded 0.35 against a
+ * barrel at 0.65 -- shells flew a third of a tank's height BELOW the muzzle. A hardcoded
+ * 0.65 is right today and silently wrong the day any of these four terms is retuned.
+ * (Declared here, below HULL_RIDE, because a module-level const cannot read one
+ * declared after it.)
  */
 export const BULLET_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
+
 /**
  * How far the barrel protrudes BEYOND the turret.
  *
@@ -140,74 +132,19 @@ export const BULLET_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
  * does not silently shorten the gun -- at a fixed position, going 0.26 -> 0.38 ate a
  * third of the visible barrel.
  *
- * DERIVED from the sim's MUZZLE_OFFSET, not chosen independently. The sim decides where
- * a shell is born; the drawn muzzle has to be that same point or the render lies about
- * where the gun fires from. Nothing related the two before, and they drifted: shells
- * spawned at the tank's CENTRE and flew out through the hull.
- *
- * To lengthen the gun, change MUZZLE_OFFSET -- which correctly moves the spawn point
- * with it. 0.86 total was chosen at PLAY distance, not in close-up: the barrel is the
- * shipped aim indicator (aimRay is a dev flag precisely because of that), and a shorter
- * one read as a nub from the real camera even though it looked generous up close.
+ * DERIVED from the sim's SHELL_SPAWN_FORWARD: the sim decides where a shell is born,
+ * and the drawn muzzle has to be that same point or the render lies about where the
+ * gun fires from. To lengthen the gun, change SHELL_SPAWN_FORWARD -- which correctly
+ * moves the spawn point with it. The reach was chosen at PLAY distance, not in
+ * close-up: the barrel is the shipped aim indicator (aimRay is a dev flag precisely
+ * because of that), and a shorter one read as a nub from the real camera even though
+ * it looked generous up close.
  */
-export const BARREL_OUT = MUZZLE_OFFSET - TURRET_R;
+export const BARREL_OUT = SHELL_SPAWN_FORWARD - TURRET_R;
 /** Length of the flared muzzle at the tip. */
 export const MUZZLE_LEN = 0.18;
 /** How much wider the muzzle is than the barrel behind it. */
 export const MUZZLE_FLARE = 1.40;
-
-/**
- * A closed polygon with every corner rounded to `r`.
- *
- * Generalises roundedRect so the hull plan can be something other than a rectangle --
- * a tapered nose, a hexagonal deck -- without hand-building each outline. Each corner is
- * a quadratic through the original vertex, pulled back along both adjacent edges, and the
- * radius is clamped per corner so a short edge cannot produce a self-crossing curve.
- */
-function roundedPolygon(pts: [number, number][], r: number): THREE.Shape {
-  const n = pts.length;
-  const shape = new THREE.Shape();
-  const at = (i: number): [number, number] => pts[(i + n) % n];
-  const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-  ];
-  const dist = (a: [number, number], b: [number, number]): number => Math.hypot(b[0] - a[0], b[1] - a[1]);
-
-  for (let i = 0; i < n; i++) {
-    const prev = at(i - 1);
-    const cur = at(i);
-    const next = at(i + 1);
-    // Never eat more than half of either adjacent edge, or the curves overlap.
-    const rad = Math.min(r, dist(cur, prev) / 2, dist(cur, next) / 2);
-    const from = lerp(cur, prev, rad / Math.max(dist(cur, prev), 1e-9));
-    const to = lerp(cur, next, rad / Math.max(dist(cur, next), 1e-9));
-    if (i === 0) shape.moveTo(from[0], from[1]);
-    else shape.lineTo(from[0], from[1]);
-    shape.quadraticCurveTo(cur[0], cur[1], to[0], to[1]);
-  }
-  shape.closePath();
-  return shape;
-}
-
-/**
- * The hull's outline in plan: +x forward, +y across.
- *
- * HULL_NOSE narrows the FRONT only, so the widest point stays at the rear and equals
- * HULL_WIDTH -- which is what keeps the hull's footprint equal to the collision circle
- * no matter what shape is chosen here.
- */
-function hullPlan(len: number, width: number, nose: number): [number, number][] {
-  const hx = len / 2;
-  const hy = width / 2;
-  const ny = hy * nose;
-  return [
-    [hx, -ny],
-    [hx, ny],
-    [-hx, hy],
-    [-hx, -hy],
-  ];
-}
 
 /** A rectangle with rounded corners, centred on the origin, in the shape's own XY. */
 function roundedRect(w: number, h: number, r: number): THREE.Shape {
@@ -251,20 +188,41 @@ function roundedBox(w: number, h: number, depth: number, corner: number, bevel: 
   return geo;
 }
 
-/** Extrude a hull plan to `height`, bevelled, finishing at exactly the requested size. */
-function hullGeometry(len: number, width: number, height: number, nose: number, corner: number, bevel: number): THREE.ExtrudeGeometry {
-  const b = Math.min(bevel, width / 4, height / 4);
-  const shape = roundedPolygon(hullPlan(len - b * 2, width - b * 2, nose), Math.max(0.001, corner - b));
+/** Bevelled extrusion of an arbitrary plan shape, centred in z like roundedBox(). */
+function beveledExtrude(shape: THREE.Shape, depth: number, bevel: number): THREE.ExtrudeGeometry {
+  const b = Math.min(bevel, depth / 4);
   const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: height - b * 2,
+    depth: depth - b * 2,
     bevelEnabled: true,
     bevelThickness: b,
     bevelSize: b,
     bevelSegments: 2,
-    curveSegments: 6,
+    curveSegments: 8,
   });
-  geo.translate(0, 0, -height / 2 + b);
+  geo.translate(0, 0, -depth / 2 + b);
   return geo;
+}
+
+/**
+ * Hull plan: a rounded rear with a tapered nose.
+ *
+ * +x is forward. `nose` sets the shoulder width at the front relative to the mid-body.
+ */
+function hullPlan(len: number, width: number, round: number, nose: number): THREE.Shape {
+  const halfL = len / 2;
+  const halfW = width / 2;
+  const shoulderW = halfW * clamp01(nose);
+  const r = Math.min(round, halfW * 0.9, halfL * 0.45);
+  const s = new THREE.Shape();
+  s.moveTo(-halfL + r, -halfW);
+  s.lineTo(halfL - r, -shoulderW);
+  s.quadraticCurveTo(halfL, -shoulderW, halfL, 0);
+  s.quadraticCurveTo(halfL, shoulderW, halfL - r, shoulderW);
+  s.lineTo(-halfL + r, halfW);
+  s.quadraticCurveTo(-halfL, halfW, -halfL, halfW - r);
+  s.lineTo(-halfL, -halfW + r);
+  s.quadraticCurveTo(-halfL, -halfW, -halfL + r, -halfW);
+  return s;
 }
 
 function clamp01(v: number): number {
@@ -383,7 +341,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // at any distance; the corners are what make it look built rather than blocked out.
     // Shape is (length, width) and extrudes along its own +z, so rotating -90deg about x
     // stands the extrusion up into height.
-    const bodyGeo = hullGeometry(HULL_LEN, bodyWidth, bodyH, HULL_NOSE, HULL_CORNER, HULL_BEVEL);
+    const bodyGeo = beveledExtrude(hullPlan(HULL_LEN, bodyWidth, HULL_CORNER, HULL_NOSE), bodyH, HULL_BEVEL);
     bodyGeo.rotateX(-Math.PI / 2);
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = 'hull';

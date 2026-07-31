@@ -5,13 +5,14 @@ import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Bullet } from './types'
 import {
   SHELL_CAP,
-  MUZZLE_OFFSET, NORMAL_SPEED,
+  NORMAL_SPEED,
   RICOCHET_SPEED,
   FAST_SPEED,
   RICOCHET_BOUNCES,
   DT,
   bulletConfig,
   BULLET_RADIUS,
+  SHELL_SPAWN_FORWARD,
   TANK_RADIUS,
 } from './constants'
 
@@ -90,14 +91,13 @@ describe('spawnBullet + ownerShellCount', () => {
     expect(b.ownerId).toBe(1)
     expect(b.type).toBe('normal')
     expect(b.bouncesLeft).toBe(bulletConfig.normal.bounces)
-    // At the MUZZLE, not the tank's centre. Firing along +x from (2,3) puts the shell
-    // MUZZLE_OFFSET ahead; spawning at the centre meant it flew out through the tank
-    // that fired it, visibly, for its first nine ticks.
-    expect(b.pos).toEqual({ x: 2 + MUZZLE_OFFSET, y: 3 })
+    expect(b.pos).toEqual({ x: 2 + SHELL_SPAWN_FORWARD, y: 3 })
     expect(b.vel.x).toBeCloseTo(NORMAL_SPEED, 6)
     expect(b.vel.y).toBeCloseTo(0, 6)
     const fire = events.find((e) => e.type === 'fire')
-    expect(fire).toMatchObject({ type: 'fire', ownerId: 1, bulletType: 'normal', angle: 0 })
+    expect(fire).toMatchObject({
+      type: 'fire', ownerId: 1, bulletType: 'normal', angle: 0, pos: { x: 2 + SHELL_SPAWN_FORWARD, y: 3 },
+    })
   })
 })
 
@@ -646,13 +646,14 @@ describe('spawnBullet: where the shell is born', () => {
     const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
     expect(spawnBullet(world, 1, Math.PI / 2, 'normal', [])).toBe(true)
     expect(world.bullets[0].pos.x).toBeCloseTo(5, 9)
-    expect(world.bullets[0].pos.y).toBeCloseTo(5 + MUZZLE_OFFSET, 9)
+    expect(world.bullets[0].pos.y).toBeCloseTo(5 + SHELL_SPAWN_FORWARD, 9)
   })
 
   it('falls back to the tank centre when the muzzle is inside a wall', () => {
-    // MUZZLE_OFFSET reaches past the tank's own collision radius, so a tank nose-to-wall
-    // has its muzzle in solid geometry. Spawning there would create the embedded-shell
-    // state stepBullets has to retire on sight, silently costing a shell from the cap.
+    // SHELL_SPAWN_FORWARD reaches past the tank's own collision radius, so a tank
+    // nose-to-wall has its muzzle in solid geometry. Spawning there would create the
+    // embedded-shell state stepBullets has to retire on sight, silently costing a
+    // shell from the cap.
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const wall = mkWall(1, { minX: 0.5, minY: -2, maxX: 2, maxY: 2 }, 'solid')
     const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
@@ -662,11 +663,11 @@ describe('spawnBullet: where the shell is born', () => {
 
   it('still uses the muzzle when the wall is behind the tank', () => {
     // The discriminating partner: same fixture, wall on the other side. Without this a
-    // fallback that always fired would pass the case above.
+    // fallback that always fired centre-spawn would pass the case above.
     const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const wall = mkWall(1, { minX: -2, minY: -2, maxX: -0.5, maxY: 2 }, 'solid')
     const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
     expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
-    expect(world.bullets[0].pos.x).toBeCloseTo(MUZZLE_OFFSET, 9)
+    expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
   })
 })
