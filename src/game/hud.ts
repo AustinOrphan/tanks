@@ -20,6 +20,14 @@ export interface Hud {
    * "Level 1/1" is noise, and the sandbox is exactly that.
    */
   setLevel(current: number, total: number): void;
+  /**
+   * The main menu's level select: `unlocked` of `total` levels are pickable
+   * (1-based count; level 1 is always open). A one-level total hides the row --
+   * the sandbox is not a choice. Locked buttons are DISABLED, not merely grey.
+   */
+  setLevelSelect(unlocked: number, total: number): void;
+  /** Fired with the 0-BASED level index when an unlocked level button is clicked. */
+  onLevelSelect(cb: (level: number) => void): void;
   setState(s: GameState): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
@@ -81,13 +89,14 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-panel hud-panel--hidden">
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
+      <div class="hud-levels hud-levels--hidden"></div>
       <button class="hud-action" type="button"></button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
-      <!-- The pause panel's settings row: the seed of the settings pane. Mirrors the
-           topbar audio pair (same engine, same callbacks) rather than moving it, so
-           audio stays adjustable mid-game too. autocomplete="off" for the same
-           Firefox bfcache reason as the topbar slider. -->
-      <div class="hud-pause-settings hud-pause-settings--hidden">
+      <!-- The panel settings row, shown on the main menu AND the pause panel: the
+           seed of the settings pane. Mirrors the topbar audio pair (same engine, same
+           callbacks) rather than moving it, so audio stays adjustable mid-game too.
+           autocomplete="off" for the same Firefox bfcache reason as the topbar slider. -->
+      <div class="hud-panel-settings hud-panel-settings--hidden">
         <button class="hud-panel-mute" type="button">Mute (M)</button>
         <input class="hud-panel-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
       </div>
@@ -112,7 +121,8 @@ export function createHud(root: HTMLElement): Hud {
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
   const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
-  const pauseSettings = el.querySelector('.hud-pause-settings') as HTMLElement;
+  const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
+  const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
 
@@ -173,6 +183,13 @@ export function createHud(root: HTMLElement): Hud {
   // until the loop calls setLevel, and a HUD never told about levels keeps its
   // original single-arena wording.
   let levelPos: { current: number; total: number } | null = null;
+  // Whether level select has anything to offer (more than one level). Gates the row's
+  // visibility together with the title state.
+  let levelChoice = false;
+  // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
+  // up (unlocks are recorded at the win event), and must not splash the row onto it.
+  let shownState: GameState = 'title';
+  const levelSelectCbs: Array<(level: number) => void> = [];
 
   function setState(s: GameState): void {
     if (s === 'playing') {
@@ -180,10 +197,14 @@ export function createHud(root: HTMLElement): Hud {
       return;
     }
     panel.classList.remove('hud-panel--hidden');
-    // Quit and the settings row belong to the pause panel ALONE: a quit button on
-    // the win panel would be a second, untested path out of a finished game.
+    // Quit belongs to the pause panel ALONE: a quit button on the win panel would be
+    // a second, untested path out of a finished game. The settings row serves the
+    // title (the main menu) and pause; win/lose stay verdict-only. Level select is a
+    // menu affair -- and only when there is a choice to make (see setLevelSelect).
+    shownState = s;
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
-    pauseSettings.classList.toggle('hud-pause-settings--hidden', s !== 'paused');
+    panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
+    levelsRow.classList.toggle('hud-levels--hidden', s !== 'title' || !levelChoice);
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
@@ -244,6 +265,33 @@ export function createHud(root: HTMLElement): Hud {
       const show = total > 1;
       levelChip.classList.toggle('hud-level--hidden', !show);
       if (show) levelNum.textContent = `${current}/${total}`;
+    },
+    setLevelSelect(unlocked: number, total: number): void {
+      levelChoice = total > 1;
+      // REPLACE, never append: this re-renders after every unlock.
+      levelsRow.textContent = '';
+      for (let i = 0; i < total; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hud-level-btn';
+        btn.textContent = String(i + 1);
+        if (i + 1 > unlocked) {
+          // Disabled, not merely grey: a locked level must be unclickable, and a
+          // disabled button never fires click handlers.
+          btn.disabled = true;
+          btn.classList.add('hud-level-btn--locked');
+        } else {
+          btn.addEventListener('click', (e) => {
+            for (const cb of levelSelectCbs) cb(i);
+            if ((e as MouseEvent).detail > 0) btn.blur();
+          });
+        }
+        levelsRow.appendChild(btn);
+      }
+      levelsRow.classList.toggle('hud-levels--hidden', shownState !== 'title' || !levelChoice);
+    },
+    onLevelSelect(cb: (level: number) => void): void {
+      levelSelectCbs.push(cb);
     },
     setEnemiesRemaining(n: number): void {
       if (n === lastEnemies) return;

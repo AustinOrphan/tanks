@@ -415,7 +415,7 @@ describe('hud: pause panel', () => {
   const quit = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-quit') as HTMLButtonElement;
   const settings = (root: HTMLElement): HTMLElement =>
-    root.querySelector('.hud-pause-settings') as HTMLElement;
+    root.querySelector('.hud-panel-settings') as HTMLElement;
 
   it('shows the frozen-scene panel with Resume, Quit and the audio pair', () => {
     const { hud: h, root } = mount();
@@ -424,18 +424,24 @@ describe('hud: pause panel', () => {
     expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('Paused');
     expect((root.querySelector('.hud-action') as HTMLElement).textContent).toBe('Resume');
     expect(quit(root).classList.contains('hud-quit--hidden')).toBe(false);
-    expect(settings(root).classList.contains('hud-pause-settings--hidden')).toBe(false);
+    expect(settings(root).classList.contains('hud-panel-settings--hidden')).toBe(false);
   });
 
-  it('keeps Quit and the settings row out of every OTHER panel state', () => {
+  it('keeps Quit out of every other panel state, and settings off the END screens', () => {
     // Population: all four non-paused states. A quit button on the win panel would
-    // be a second untested path out of a finished game.
+    // be a second untested path out of a finished game. The settings row serves the
+    // TITLE (the main menu) and pause; win/lose panels stay verdict-only.
     const { hud: h, root } = mount();
     for (const s of ['title', 'win', 'lose'] as const) {
       h.setState(s);
       expect(quit(root).classList.contains('hud-quit--hidden'), s).toBe(true);
-      expect(settings(root).classList.contains('hud-pause-settings--hidden'), s).toBe(true);
     }
+    for (const s of ['win', 'lose'] as const) {
+      h.setState(s);
+      expect(settings(root).classList.contains('hud-panel-settings--hidden'), s).toBe(true);
+    }
+    h.setState('title');
+    expect(settings(root).classList.contains('hud-panel-settings--hidden')).toBe(false);
     h.setState('playing'); // panel hidden entirely
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
   });
@@ -485,5 +491,71 @@ describe('hud: pause panel', () => {
     topbar.value = '0.7';
     topbar.dispatchEvent(new Event('input'));
     expect((root.querySelector('.hud-panel-volume') as HTMLInputElement).value).toBe('0.7');
+  });
+});
+
+describe('hud: level select on the main menu', () => {
+  const row = (root: HTMLElement): HTMLElement => root.querySelector('.hud-levels') as HTMLElement;
+  const buttons = (root: HTMLElement): HTMLButtonElement[] =>
+    Array.from(root.querySelectorAll('.hud-level-btn'));
+
+  it('renders one button per level, locking those past the unlock line', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(1, 3); // cleared nothing beyond level 1's unlock
+    const btns = buttons(root);
+    expect(btns.map((b) => b.textContent)).toEqual(['1', '2', '3']);
+    // Population: all 3 buttons. Level 1 open; 2 and 3 locked and DISABLED --
+    // a locked level must be unclickable, not merely grey.
+    expect(btns.map((b) => b.disabled)).toEqual([false, true, true]);
+    expect(btns.map((b) => b.classList.contains('hud-level-btn--locked')))
+      .toEqual([false, true, true]);
+  });
+
+  it('reports a click on an unlocked level, 0-based, and nothing for a locked one', () => {
+    const { hud: h, root } = mount();
+    const picks: number[] = [];
+    h.onLevelSelect((i) => picks.push(i));
+    h.setLevelSelect(2, 3);
+    h.setState('title');
+    buttons(root)[1].dispatchEvent(new MouseEvent('click'));
+    buttons(root)[2].dispatchEvent(new MouseEvent('click')); // locked: disabled anyway
+    expect(picks).toEqual([1]);
+  });
+
+  it('shows the row on the title panel only', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(1, 2);
+    h.setState('title');
+    expect(row(root).classList.contains('hud-levels--hidden')).toBe(false);
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(row(root).classList.contains('hud-levels--hidden'), s).toBe(true);
+    }
+  });
+
+  it('hides the row entirely for a one-level sequence (the sandbox)', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(1, 1);
+    h.setState('title');
+    expect(row(root).classList.contains('hud-levels--hidden')).toBe(true);
+  });
+
+  it('a re-render while another panel is up must not splash the row onto it', () => {
+    // The natural call order: the loop records an unlock AT the win event and
+    // refreshes the select -- while the WIN panel is showing.
+    const { hud: h, root } = mount();
+    h.setState('win');
+    h.setLevelSelect(2, 2);
+    expect(row(root).classList.contains('hud-levels--hidden')).toBe(true);
+    h.setState('title');
+    expect(row(root).classList.contains('hud-levels--hidden')).toBe(false);
+  });
+
+  it('re-rendering after an unlock replaces the buttons rather than appending', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(1, 2);
+    h.setLevelSelect(2, 2); // level 1 cleared -> level 2 unlocks
+    expect(buttons(root)).toHaveLength(2);
+    expect(buttons(root)[1].disabled).toBe(false);
   });
 });

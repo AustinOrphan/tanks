@@ -79,9 +79,10 @@ describe('hud.css is syntactically whole', () => {
       '.hud-shells', '.hud-shells--hidden', // dev shell count
       '.hud-phase', '.hud-banner', '.hud-banner-word', '.hud-banner-count', // round phase
       '.hud-level--hidden', // level progression: without it the empty chip always shows
-      // pause: without the hidden rules, Quit and the settings row show on EVERY panel
-      '.hud-quit', '.hud-quit--hidden', '.hud-pause-settings', '.hud-pause-settings--hidden',
+      // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
+      '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling
+      '.hud-levels', '.hud-levels--hidden', '.hud-level-btn', '.hud-level-btn--locked', // level select
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

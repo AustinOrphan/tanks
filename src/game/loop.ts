@@ -3,6 +3,7 @@ import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
 import { createLevelSystem, type LevelSystem } from './levels';
+import { createProgressStore, type ProgressStore } from './progress';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -78,6 +79,8 @@ export interface GameDeps {
    * wiring in startGameWith.
    */
   readonly levels: LevelSystem;
+  /** Saved progress: which levels are cleared. Drives level select and Start's level. */
+  readonly progress: ProgressStore;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -171,8 +174,22 @@ function countEnemies(world: World): number {
  * read off globalThis so that a mis-call under node yields undefined at the use
  * site rather than a ReferenceError at import.
  */
+/**
+ * localStorage can be absent or throw at ACCESS time in locked-down contexts; the
+ * progress store handles throwing METHODS, so only the property access needs guarding.
+ */
+function browserStorage(): Storage {
+  try {
+    if (globalThis.localStorage) return globalThis.localStorage;
+  } catch {
+    // fall through to the inert stand-in
+  }
+  return { getItem: () => null, setItem: () => {} } as unknown as Storage;
+}
+
 export function createBrowserDeps(): GameDeps {
   const devFlags = parseDevFlags(globalThis.location?.search ?? '');
+  const progress = createProgressStore(browserStorage());
   return {
     createRenderer,
     createInput: createInputController,
@@ -180,7 +197,8 @@ export function createBrowserDeps(): GameDeps {
     createDirector: createAudioDirector,
     createStateMachine: createGameStateMachine,
     createHud,
-    levels: createLevelSystem(devFlags),
+    levels: createLevelSystem(devFlags, progress),
+    progress,
     now: () => performance.now(),
     wallMs: () => Date.now(),
     raf: {
@@ -321,6 +339,30 @@ export function startGameWith(
     }
   });
 
+  /** How many levels are pickable: everything cleared plus the next one, capped. */
+  const unlockedLevels = (): number =>
+    Math.min(deps.progress.highestCleared() + 1, deps.levels.count);
+
+  hud.onLevelSelect((picked) => {
+    // Panel-only control, guarded like Quit: CSS hiding is not the only defence --
+    // and neither is the HUD's button rendering, for the index. ARENAS[7] is
+    // undefined, and a handler that rebuilds the world does not get to crash on it.
+    if (sm.state !== 'title') return;
+    if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.count) return;
+    level = picked;
+    world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+    playerId = world.tanks.find((t) => t.kind === 'player')?.id;
+    director.setPlayerId(playerId ?? -1);
+    lastRoundStartTick = null;
+    hud.setLevel(level + 1, deps.levels.count);
+    driver.reset(world);
+    refreshStats(world);
+    // A level click is as real a gesture as the Start button, and it starts play, so
+    // it must unlock the audio context too -- Safari accepts no later opportunity.
+    audio.unlock();
+    sm.startPlaying();
+  });
+
   hud.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause, but a handler that rebuilds the
     // world deserves its own guard, not a CSS class as its only defence.
@@ -344,6 +386,13 @@ export function startGameWith(
     // startMusic is idempotent (engine checks music.playing()), so a resume passing
     // back through 'playing' does not double-start anything.
     if (s === 'playing') audio.startMusic();
+    // Progress is recorded AT the win, not at the Next Level click: quitting after a
+    // win keeps the unlock. The sandbox records nothing -- a test rig must not
+    // unlock real levels.
+    if (s === 'win' && deps.levels.tracksProgress) {
+      deps.progress.recordCleared(level + 1);
+      hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+    }
     // The driver stops sampling while paused and only sample() resets the fire/mine
     // latches, so a Space pressed around or during a pause would mine on the first
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger
@@ -354,6 +403,7 @@ export function startGameWith(
 
   hud.setState(sm.state); // initial title panel
   hud.setLevel(level + 1, deps.levels.count);
+  hud.setLevelSelect(unlockedLevels(), deps.levels.count);
   refreshStats(world);
 
   const onKey = (e: KeyboardEvent): void => {

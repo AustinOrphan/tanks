@@ -107,7 +107,7 @@
 
 /* ---- Pause panel extras: Quit and the settings row (dev spec 2026-07-31) -------- */
 
-/* Quieter than Resume on purpose: quitting is the panel's secondary path. */
+/* Quieter than the action button on purpose: quitting is the panel's secondary path. */
 .hud-quit {
   pointer-events: auto;
   cursor: pointer;
@@ -125,7 +125,7 @@
   display: none;
 }
 
-.hud-pause-settings {
+.hud-panel-settings {
   pointer-events: auto;
   display: flex;
   align-items: center;
@@ -135,8 +135,41 @@
 
 /* Without this rule the settings row shows on every panel -- the class alone does
  * nothing, which is exactly the dead-CSS failure this file's test exists to catch. */
-.hud-pause-settings--hidden {
+.hud-panel-settings--hidden {
   display: none;
+}
+
+/* ---- Main menu: level select ---------------------------------------------------- */
+
+.hud-levels {
+  pointer-events: auto;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.hud-levels--hidden {
+  display: none;
+}
+
+.hud-level-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  font-weight: 800;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
+
+/* Locked levels read as locked, and the disabled attribute makes them unclickable --
+ * the style is the SIGNAL, the attribute is the mechanism. */
+.hud-level-btn--locked {
+  cursor: default;
+  opacity: 0.35;
 }
 
 .hud-panel-mute {
