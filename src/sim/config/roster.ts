@@ -10,6 +10,7 @@ import {
 } from './enums';
 import type { ResolvedTankConfig, TankDefinition } from './types';
 import { GAME_BALANCE } from './balance';
+import { createCatalog } from './catalog';
 import { resolveTankConfig } from './resolve';
 
 // ---------------------------------------------------------------------------
@@ -109,21 +110,20 @@ export const GAME_TANK_DEFS: Record<TankKind, TankDefinition> = {
   },
 };
 
-// Resolved once at module load -- pure, deterministic, no per-tick cost. Every
+// The tank family expressed on the generic catalog machinery (catalog.ts):
+// resolved once at module load -- pure, deterministic, no per-tick cost. Every
 // gameplay read goes through configFor(kind); no code branches on a kind literal.
-const RESOLVED: Record<TankKind, ResolvedTankConfig> = {
-  player: resolveTankConfig('player', GAME_TANK_DEFS, GAME_BALANCE),
-  brown: resolveTankConfig('brown', GAME_TANK_DEFS, GAME_BALANCE),
-  grey: resolveTankConfig('grey', GAME_TANK_DEFS, GAME_BALANCE),
-  teal: resolveTankConfig('teal', GAME_TANK_DEFS, GAME_BALANCE),
-};
+const TANK_CATALOG = createCatalog<TankKind, TankDefinition, ResolvedTankConfig>(
+  GAME_TANK_DEFS,
+  (kind, defs) => resolveTankConfig(kind, defs, GAME_BALANCE),
+);
 
 /** The resolved runtime config for a tank kind. The one entry point gameplay uses. */
 export function configFor(kind: TankKind): ResolvedTankConfig {
-  return RESOLVED[kind];
+  return TANK_CATALOG.get(kind);
 }
 
 /** True when a kind has a given ability. Sugar over configFor(kind).abilities. */
 export function hasAbility(kind: TankKind, ability: TankAbility): boolean {
-  return RESOLVED[kind].abilities.includes(ability);
+  return TANK_CATALOG.get(kind).abilities.includes(ability);
 }

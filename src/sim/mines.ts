@@ -3,7 +3,7 @@ import { vdist } from './types'
 import type { World } from './world'
 import { raySegmentVsAABB } from './collision'
 import type { SimEvent } from './events'
-import { configFor } from './config'
+import { configFor, wallConfigFor } from './config'
 import {
   MINE_BLAST_THROUGH_DESTRUCTIBLE,
   MINE_TIMER,
@@ -129,7 +129,10 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     }
   }
   for (const w of world.walls) {
-    if (w.kind !== 'destructible' || w.destroyed) continue
+    // Whether a blast may destroy this wall comes from the wall's resolved config
+    // (config/walls.ts), not a kind literal -- destructibleByBlast is true for
+    // exactly today's 'destructible' kind, so behaviour is unchanged.
+    if (!wallConfigFor(w.kind).destructibleByBlast || w.destroyed) continue
     if (blastHitsAABB(blast.pos, radius, w.aabb)) {
       w.destroyed = true
       const cx = (w.aabb.minX + w.aabb.maxX) / 2

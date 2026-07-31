@@ -3,7 +3,7 @@ import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
-import { configFor } from '../sim/config';
+import { configFor, wallConfigFor } from '../sim/config';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -15,11 +15,14 @@ export interface EntityViews {
   dispose(): void;
 }
 
-// Tank body colour is presentation, so it comes from the resolved config's `color`
-// (a CSS hex string) rather than a literal table here -- the pure sim never reads it.
-// Parsed once per kind into the 0xRRGGBB THREE expects.
+// Entity colour is presentation, so it comes from each resolved config's `color`
+// (a CSS hex string) rather than literal tables here -- the pure sim never reads it.
+// Parsed on use into the 0xRRGGBB THREE expects.
+function cssHex(color: string): number {
+  return parseInt(color.slice(1), 16);
+}
 function tankColor(kind: TankKind): number {
-  return parseInt(configFor(kind).color.slice(1), 16);
+  return cssHex(configFor(kind).color);
 }
 
 const TANK_BODY_H = 0.4;
@@ -530,13 +533,16 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     const w = wall.aabb.maxX - wall.aabb.minX;
     const d = wall.aabb.maxY - wall.aabb.minY;
     const geo = new THREE.BoxGeometry(w, WALL_H, d);
+    // Hue comes from the wall's resolved config (config/walls.ts), like tank body
+    // colour; the material TREATMENT (roughness/metalness/normal maps are render
+    // assets, not sim data) stays here per kind.
     const mat =
       wall.kind === 'destructible'
         // Destructible reads as crate timber: fully matte, no metal, and PLANK GROOVES --
         // the cue that says this is the wall a shell can open, carried by the surface
         // rather than by hue alone.
         ? new THREE.MeshStandardMaterial({
-            color: 0xb08040,
+            color: cssHex(wallConfigFor(wall.kind).color),
             roughness: 1.0,
             metalness: 0.0,
             normalMap: textures?.timberNormal ?? null,
@@ -544,7 +550,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
           })
         // ...and solid as poured concrete with rebar sheen and aggregate relief.
         : new THREE.MeshStandardMaterial({
-            color: 0x565b66,
+            color: cssHex(wallConfigFor(wall.kind).color),
             roughness: 0.8,
             metalness: 0.3,
             normalMap: textures?.concreteNormal ?? null,
