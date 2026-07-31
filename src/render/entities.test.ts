@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
-  createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE,
+  createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
 } from './entities';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
@@ -189,7 +189,7 @@ function shellGroup(scene: THREE.Scene): THREE.Group {
   const g = scene.children.find(
     (c): c is THREE.Group =>
       c instanceof THREE.Group && c.children.some((k) => (k as THREE.Mesh).geometry instanceof THREE.CylinderGeometry)
-      && Math.abs(c.position.y - 0.35) < 1e-9,
+      && Math.abs(c.position.y - BULLET_Y) < 1e-9,
   );
   if (!g) throw new Error('no shell view in scene');
   return g;

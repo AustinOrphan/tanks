@@ -3,7 +3,7 @@ import { createWorld, step } from './world';
 import type { World } from './world';
 import type { Tank, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
-import { COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
+import { COUNTDOWN_TICKS, GRACE_TICKS, SHELL_SPAWN_FORWARD } from './constants';
 
 /**
  * Pins step()'s CONTRACT WITH ITS CALLER -- the parts of step() that are not about which
@@ -113,7 +113,7 @@ describe('step() hands its events back to the caller', () => {
     // event is dropped -- which is exactly what step-integration.test.ts does.
     // `pos` and `angle` are asserted too: particles.ts spawns every burst at exactly
     // ev.pos, so a wrong position is a visible defect that no presence-only assertion
-    // catches. spawnBullet reports the owner's centre here, not a muzzle offset.
+    // catches. spawnBullet reports a muzzle-forward position, not the owner's centre.
     const w = liveWorld();
     // Turret pre-aimed at +y and the aim point placed on that same bearing, so slewAngle
     // leaves it exactly at PI/2 this tick. A NON-ZERO angle on purpose: with the fixture's
@@ -124,15 +124,14 @@ describe('step() hands its events back to the caller', () => {
 
     const r = step(w, aimedUp);
 
-    expect(r.events).toContainEqual(
-      expect.objectContaining({
-        type: 'fire',
-        ownerId: PLAYER_ID,
-        bulletType: 'normal',
-        pos: { x: 5, y: 5 },
-        angle: Math.PI / 2,
-      }),
+    const fire = r.events.find(
+      (e): e is Extract<SimEvent, { type: 'fire' }> => e.type === 'fire' && e.ownerId === PLAYER_ID,
     );
+    expect(fire).toBeDefined();
+    expect(fire!.bulletType).toBe('normal');
+    expect(fire!.angle).toBeCloseTo(Math.PI / 2, 9);
+    expect(fire!.pos.x).toBeCloseTo(5, 9);
+    expect(fire!.pos.y).toBeCloseTo(5 + SHELL_SPAWN_FORWARD, 9);
   });
 
   it('pressing the mine key drops a mine, and the mine-dropped event reaches the caller', () => {
