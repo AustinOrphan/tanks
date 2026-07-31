@@ -41,6 +41,8 @@ interface Recorder {
   roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
   deathSignals: number;
   inputClears: number;
+  cleared: number[];
+  levelSelects: Array<[number, number]>;
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -52,7 +54,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -62,6 +64,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     volume(v: number): void;
     startRestart(): void;
     quitToTitle(): void;
+    pickLevel(i: number): void;
   };
   setState(s: GameState): void;
   getState(): GameState;
@@ -89,6 +92,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     roundPhases: [],
     deathSignals: 0,
     inputClears: 0,
+    cleared: [],
+    levelSelects: [],
     volumes: [],
     resizes: [],
     listeners: [],
@@ -107,6 +112,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onVolume = (_v: number): void => {};
   let onStartRestart = (): void => {};
   let onQuit = (): void => {};
+  let onPickLevel = (_i: number): void => {};
 
   function emit(): void {
     for (const cb of changeCbs) cb(state);
@@ -248,8 +254,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onQuitToTitle: (cb: () => void) => {
           onQuit = cb;
         },
+        setLevelSelect: (u: number, t: number) => rec.levelSelects.push([u, t]),
+        onLevelSelect: (cb: (i: number) => void) => {
+          onPickLevel = cb;
+        },
         dispose: () => rec.disposed.push('hud'),
       };
+    },
+    progress: {
+      highestCleared: () => Math.max(opts.progressHighest ?? 0, ...rec.cleared, 0),
+      recordCleared: (level: number) => {
+        rec.cleared.push(level);
+      },
     },
     levels: {
       // Defaults to a ONE-level sequence: every pre-progression test in this file was
@@ -257,6 +273,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // one-level sequence still does. Progression tests opt into more.
       count: opts.levelCount ?? 1,
       start: opts.levelStart ?? 0,
+      tracksProgress: opts.tracksProgress ?? true,
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
         rec.seeds.push(seed);
@@ -307,6 +324,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       volume: (v) => onVolume(v),
       startRestart: () => onStartRestart(),
       quitToTitle: () => onQuit(),
+      pickLevel: (i) => onPickLevel(i),
     },
     setState: (s) => {
       state = s;
@@ -1079,6 +1097,53 @@ describe('startGameWith: quit is pause-only', () => {
     h.hud.quitToTitle();
     expect(h.getState()).toBe('playing');
     expect(h.rec.levelBuilds).toHaveLength(1); // no rebuild
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the main menu', () => {
+  it('tells the HUD the unlock state at boot: cleared+1 pickable, capped at the count', () => {
+    const h = boot(makeDeps({ levelCount: 2, progressHighest: 0 }));
+    expect(h.rec.levelSelects[0]).toEqual([1, 2]);
+    h.handle.dispose();
+    const h2 = boot(makeDeps({ levelCount: 2, progressHighest: 5 }));
+    expect(h2.rec.levelSelects[0]).toEqual([2, 2]); // capped: 6 of 2 is nonsense
+    h2.handle.dispose();
+  });
+
+  it('records the cleared level AT the win, and refreshes the unlock state', () => {
+    // At the win event, not the Next Level click: quitting after a win keeps the
+    // unlock.
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('playing');
+    h.setState('win');
+    expect(h.rec.cleared).toEqual([1]);
+    expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]);
+    h.handle.dispose();
+  });
+
+  it('records nothing for a sequence that does not track progress (the sandbox)', () => {
+    const h = boot(makeDeps({ levelCount: 1, tracksProgress: false }));
+    h.setState('playing');
+    h.setState('win');
+    expect(h.rec.cleared).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('a level pick from the title rebuilds at that level and starts play', () => {
+    const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
+    h.hud.pickLevel(1);
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
+    expect(h.getState()).toBe('playing');
+    expect(h.rec.unlocks).toBe(1); // a level click is a user gesture: unlock audio here
+    h.handle.dispose();
+  });
+
+  it('ignores a pick outside the title, like every other panel-only control', () => {
+    const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
+    h.setState('playing');
+    h.hud.pickLevel(1);
+    expect(h.rec.levelBuilds).toHaveLength(1);
     h.handle.dispose();
   });
 });
