@@ -589,7 +589,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       if (!t.alive) continue;
       seen.add(t.id);
       let view = tankViews.get(t.id);
-      if (view && (view.kind !== t.kind || view.gen !== colorGen)) {
+      // The paint generation only matters for the PLAYER: rebuilding every enemy on
+      // a swatch click churned ~25 geometries per click for tanks whose colour never
+      // changes (measured in review; bounded but pointless).
+      if (view && (view.kind !== t.kind || (view.gen !== colorGen && t.kind === 'player'))) {
         disposeObject(view.group);
         tankViews.delete(t.id);
         view = undefined;

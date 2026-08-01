@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { ZERO_STATS } from './stats';
-import type { HullColorId } from './customization';
+import { PALETTE, type HullColorId } from './customization';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
@@ -313,7 +313,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     },
     customization: (() => {
       let hull: HullColorId = (opts.savedHull ?? 'blue') as HullColorId;
-      const VALID = new Set(['blue', 'red', 'orange', 'purple', 'green', 'white']);
+      // From the REAL palette, not a duplicate list that drifts (review nit).
+      const VALID = new Set<string>(PALETTE.map((sw) => sw.id));
       return {
         hull: () => hull,
         setHull: (id: HullColorId) => {

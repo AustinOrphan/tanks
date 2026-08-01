@@ -181,6 +181,9 @@ export function createHud(root: HTMLElement): Hud {
   let currentHull: HullColorId = PALETTE[0].id;
 
   // One button per palette entry, built once: the palette is a frozen constant.
+  // Their click closures are deliberately NOT in dispose()'s removeEventListener
+  // list: nothing outside this subtree holds them, so el.remove() reclaims all of
+  // it -- the explicit removals elsewhere cover elements tests re-dispatch into.
   for (const swatch of PALETTE) {
     const b = document.createElement('button');
     b.type = 'button';

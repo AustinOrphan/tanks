@@ -8,14 +8,36 @@ import { GAME_TANK_DEFS } from '../sim/config/roster';
 
 beforeEach(() => localStorage.clear());
 
+/** Rough CIE Lab from sRGB hex, enough for a coarse deltaE76 floor. */
+function lab(hex: string): [number, number, number] {
+  const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const r = lin(parseInt(hex.slice(1, 3), 16) / 255);
+  const g = lin(parseInt(hex.slice(3, 5), 16) / 255);
+  const b = lin(parseInt(hex.slice(5, 7), 16) / 255);
+  const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = (t: number): number => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+}
+function deltaE(a: string, b: string): number {
+  const [l1, a1, b1] = lab(a);
+  const [l2, a2, b2] = lab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
 describe('the palette', () => {
-  it('offers no enemy identity', () => {
+  it('keeps every swatch PERCEPTUALLY clear of every enemy identity', () => {
     // Population: every non-player kind in the shipped roster, against every swatch.
-    const enemyHues = Object.entries(GAME_TANK_DEFS)
-      .filter(([kind]) => kind !== 'player')
-      .map(([, def]) => def.color.toLowerCase());
+    // A distance floor, not exact-hex inequality: review pointed out the equality pin
+    // would accept a swatch one hex off an enemy. Floor 20 deltaE76 -- the shipped
+    // minimum is ~27.7 (green vs olive), measured, so this passes with headroom while
+    // failing anything that would genuinely read as an enemy at play distance.
+    const enemies = Object.entries(GAME_TANK_DEFS).filter(([kind]) => kind !== 'player');
     for (const swatch of PALETTE) {
-      expect(enemyHues, swatch.id).not.toContain(swatch.hex.toLowerCase());
+      for (const [kind, def] of enemies) {
+        expect(deltaE(swatch.hex, def.color), `${swatch.id} vs ${kind}`).toBeGreaterThan(20);
+      }
     }
   });
 
