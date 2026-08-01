@@ -33,6 +33,19 @@ function rgbOf(hex: string): RGB {
   ];
 }
 
+/**
+ * Mix toward white rather than scalar-multiply for LIGHT tones: on saturated
+ * bases a multiply clips one channel and the lift disappears under the scene's
+ * lighting and tone mapping -- measured on-tank, x1.45 read as solid.
+ */
+function lighten(c: RGB, t: number): RGB {
+  return [
+    Math.round(c[0] + (255 - c[0]) * t),
+    Math.round(c[1] + (255 - c[1]) * t),
+    Math.round(c[2] + (255 - c[2]) * t),
+  ];
+}
+
 function scale(c: RGB, f: number): RGB {
   return [
     Math.min(255, Math.round(c[0] * f)),
@@ -55,7 +68,7 @@ function fill(px: Uint8ClampedArray, i: number, c: RGB): void {
 const PAINTERS: Record<Exclude<SkinId, 'solid'>, (px: Uint8ClampedArray, base: RGB) => void> = {
   stripes(px, base) {
     // Two pale racing bands along the hull's long axis (texture v).
-    const light = scale(base, 1.45);
+    const light = lighten(base, 0.75);
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         const u = x / SIZE;
@@ -101,7 +114,7 @@ const PAINTERS: Record<Exclude<SkinId, 'solid'>, (px: Uint8ClampedArray, base: R
   flow(px, base) {
     // Soft diagonal bands built on a sine, so the tile scrolls seamlessly -- this is
     // the ANIMATED one; its speed lives in the skin def (game/customization.ts).
-    const light = scale(base, 1.35);
+    const light = lighten(base, 0.6);
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         const t = (Math.sin(((x + y) / SIZE) * Math.PI * 4) + 1) / 2;
