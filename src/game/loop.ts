@@ -339,7 +339,6 @@ export function startGameWith(
   let lastRoundStartTick: number | null = null;
   let roundsSeen = 0;
   function refreshRoundPhase(w: World): void {
-    if (!deps.devFlags.roundPhaseHud) return;
     if (w.roundStartTick !== lastRoundStartTick) {
       lastRoundStartTick = w.roundStartTick;
       roundsSeen += 1;

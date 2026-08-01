@@ -151,10 +151,18 @@ only when someone updates it. `round-ux` passes today, and nobody would learn th
 stopped.
 
 The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
-`roundPhaseHud`, `invincible`, `level` (a 1-based jump, or `level=sandbox`), and the
-sandbox knobs `tanks`, `disarmed`, `walls`. `playtest=1` is a parse-time BUNDLE, not a
-field: it expands to invincible + roundPhaseHud + shellCount + mineReach + mineTimer. `parseDevFlags` derives the boolean list from
-`DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what they cover.
+`invincible`, `level` (a 1-based jump, or `level=sandbox`), and the sandbox knobs
+`tanks`, `disarmed`, `walls`. `playtest=1` is a parse-time BUNDLE, not a field: it
+expands to invincible + shellCount + mineReach + mineTimer. `parseDevFlags` derives the
+boolean list from `DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what
+they cover.
+
+**`roundPhaseHud` is the first flag to complete the cycle: it SHIPPED, so the flag is
+gone and the behaviour is on.** The round opens with `COUNTDOWN_TICKS` (3.0s) in which
+movement is blocked; with no HUD, the player pressed a direction and the game read as
+broken for three seconds of every round and every respawn. `devflags.test.ts` pins that
+the retired key is not merely ignored but absent, so a stale `?dev=1&roundPhaseHud=1`
+link cannot read as still meaning something.
 
 Two rules follow:
 
