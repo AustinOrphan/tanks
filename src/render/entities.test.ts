@@ -824,6 +824,28 @@ describe('skins (player texture override)', () => {
     views.dispose();
   });
 
+  it('a respawn keeps the SAME live texture: death must not dispose the skin', () => {
+    // disposeObject deliberately skips material maps; if it ever starts disposing
+    // them, the player's skin dies with the player and every respawn wears a
+    // disposed (blank) texture. This pins the respawn path directly.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const alive = makeWorld();
+    alive.tanks = [makeTank(1, 'player', 3, 3)];
+    const dead = makeWorld();
+    dead.tanks = [];
+    views.setPlayerStyle(null, 'camo');
+    views.sync(alive, alive, 0);
+    const worn = matOf(scene, 3, 'hull').map as THREE.Texture;
+    let disposed = 0;
+    worn.addEventListener('dispose', () => disposed++);
+    views.sync(dead, dead, 0); // death: the view is swept
+    views.sync(alive, alive, 0); // respawn: rebuilt view
+    expect(matOf(scene, 3, 'hull').map).toBe(worn); // same texture object, not a remint
+    expect(disposed).toBe(0); // and it was never disposed in between
+    views.dispose();
+  });
+
   it('restyling and dispose() both release the owned skin texture', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);

@@ -276,10 +276,11 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // swatch click repaints the tank already standing behind the menu.
   const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number }>();
   let playerHex: string | null = null;
-  let playerSkin: SkinId = 'solid';
   // The one skin texture, owned HERE: disposeObject deliberately skips material maps
   // (walls borrow the shared TextureSet), so per-style disposal happens on change.
   let playerSkinMap: THREE.DataTexture | null = null;
+  // Resolved once per restyle, not per frame: sync runs at 60fps.
+  let playerScroll: { u: number; v: number } | null = null;
   let colorGen = 0;
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
@@ -802,12 +803,9 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   function sync(prev: World, curr: World, alpha: number, dt = 0): void {
     // Animated skins drift their texture offset; speed is per-skin DATA in the skin
     // defs. RepeatWrapping makes the offset cyclic, so no clamping is needed.
-    if (playerSkinMap && dt > 0) {
-      const scroll = SKINS.find((sk) => sk.id === playerSkin)?.scroll;
-      if (scroll) {
-        playerSkinMap.offset.x = (playerSkinMap.offset.x + scroll.u * dt) % 1;
-        playerSkinMap.offset.y = (playerSkinMap.offset.y + scroll.v * dt) % 1;
-      }
+    if (playerSkinMap && playerScroll && dt > 0) {
+      playerSkinMap.offset.x = (playerSkinMap.offset.x + playerScroll.u * dt) % 1;
+      playerSkinMap.offset.y = (playerSkinMap.offset.y + playerScroll.v * dt) % 1;
     }
     // Clamp at the boundary rather than trusting the caller. alpha is in [0,1)
     // today only because loop.ts's accumulator drains below DT before
@@ -843,9 +841,9 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     sync,
     setPlayerStyle(hex: string | null, skin: SkinId): void {
       playerHex = hex;
-      playerSkin = skin;
       playerSkinMap?.dispose();
       playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color);
+      playerScroll = SKINS.find((sk) => sk.id === skin)?.scroll ?? null;
       colorGen++;
     },
     dispose,
