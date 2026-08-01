@@ -103,7 +103,9 @@ describe('skins', () => {
     expect(b.skin()).toBe('camo');
     expect(b.hull()).toBe('red'); // the two fields do not clobber each other
     localStorage.setItem(CUSTOM_KEY, '{"hull":"red","skin":"zebra"}');
-    expect(createCustomizationStore(localStorage).skin()).toBe(DEFAULT_SKIN);
+    const junkSkin = createCustomizationStore(localStorage);
+    expect(junkSkin.skin()).toBe(DEFAULT_SKIN);
+    expect(junkSkin.hull()).toBe('red'); // a junk skin must NOT reset the hull
     const c = createCustomizationStore(localStorage);
     c.setSkin('zebra' as never);
     expect(c.skin()).toBe(DEFAULT_SKIN);
