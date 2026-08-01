@@ -79,8 +79,9 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // And gated on the player being close enough for the mine to threaten anything at all --
   // dropping merely because the cooldown allowed it made own mines the largest single cause
   // of AI deaths, with the tank littering ground nobody was contesting.
-  // proposes mines at all (the MAGNITUDE is not consumed -- mine timing here is
-  // deterministic, gated on tactics, never on a random draw).
+  // Profile-drawn inclination (mineInclination, targeting.ts): the chance's
+  // MAGNITUDE is the per-bucket probability of proposing when every tactical
+  // gate below already says yes.
   const mine = mineInclination(world, tank, cfg)
     && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
     && mineThreatensPlayer(world, tank);

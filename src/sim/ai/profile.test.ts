@@ -222,6 +222,21 @@ describe("minePlacementChance's MAGNITUDE is the proposal rate per draw bucket",
     }
   });
 
+  it("teal's draw is pinned too: fraction tracks the chance through tealDecision", () => {
+    // Review: with the rate pinned only through greyDecision, reverting TEAL's
+    // gate to sign-only left the whole suite green. Same loop, teal's decision.
+    let proposals = 0;
+    const windows = 400;
+    for (let i = 0; i < windows; i++) {
+      const teal = tank(1, 'teal', { x: 0, y: 0 });
+      const player = tank(2, 'player', { x: 3, y: 0 });
+      const w = world({ tanks: [teal, player], tick: i * 30 });
+      if (tealDecision(w, teal, withAi(configFor('teal'), { minePlacementChance: 0.3 })).mine) proposals++;
+    }
+    expect(proposals / windows).toBeGreaterThan(0.3 - 0.12);
+    expect(proposals / windows).toBeLessThan(0.3 + 0.12);
+  });
+
   it('chance 1 proposes in every eligible bucket; chance 0 in none', () => {
     let always = 0, never = 0;
     for (let i = 0; i < 50; i++) {
