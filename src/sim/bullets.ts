@@ -85,7 +85,7 @@ export function stepBullets(world: World, dt: number, events: SimEvent[]): void 
     const result = reflectSweep(b.pos, to, wallAABBs, b.bouncesLeft)
     for (let i = 0; i < result.hits.length; i++) {
       const p = result.hits[i].point
-      events.push({ type: 'ricochet', pos: { x: p.x, y: p.y }, bounceIndex: consumedBefore + i })
+      events.push({ type: 'ricochet', ownerId: b.ownerId, pos: { x: p.x, y: p.y }, bounceIndex: consumedBefore + i })
     }
     b.pos = result.end
     b.vel = vscale(result.dir, speed)
@@ -197,7 +197,7 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
         b.alive = false
         if (!t.invincible) {
           t.alive = false
-          events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, pos: { x: t.pos.x, y: t.pos.y } })
+          events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { source: 'shell', ownerId: b.ownerId }, pos: { x: t.pos.x, y: t.pos.y } })
         }
         events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
         break

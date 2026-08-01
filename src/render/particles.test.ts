@@ -54,7 +54,7 @@ describe('particles: where a burst is drawn', () => {
     const { scene, ps } = setup();
     ps.spawn([
       { type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: -5, y: 2 }, angle: 0 },
-      { type: 'ricochet', pos: { x: 11, y: -4 }, bounceIndex: 1 },
+      { type: 'ricochet', ownerId: 1, pos: { x: 11, y: -4 }, bounceIndex: 1 },
     ]);
     const xs = new Set(activeMeshes(scene).map((m) => m.position.x));
     expect(xs).toEqual(new Set([-5, 11]));
@@ -65,10 +65,10 @@ describe('particles: which events burst, and how much', () => {
   // Population: all 10 SimEvent kinds. Five burst, five deliberately do not.
   const bursting: Array<[SimEvent, number]> = [
     [{ type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 }, 5],
-    [{ type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 0 }, 6],
+    [{ type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 0 }, 6],
     [{ type: 'explosion', pos: { x: 0, y: 0 } }, 24],
-    [{ type: 'wall-destroyed', wallId: 1, pos: { x: 0, y: 0 } }, 16],
-    [{ type: 'mine-detonate', mineId: 1, pos: { x: 0, y: 0 } }, 40],
+    [{ type: 'wall-destroyed', wallId: 1, ownerId: 1, pos: { x: 0, y: 0 } }, 16],
+    [{ type: 'mine-detonate', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } }, 40],
   ];
 
   for (const [ev, count] of bursting) {
@@ -83,15 +83,15 @@ describe('particles: which events burst, and how much', () => {
     // Both kill sites emit `explosion` at the same position on the same tick.
     // Handling tank-destroyed too doubled every kill into a 48-particle burst.
     const { scene, ps } = setup();
-    ps.spawn([{ type: 'tank-destroyed', tankId: 1, kind: 'brown', pos: { x: 0, y: 0 } }]);
+    ps.spawn([{ type: 'tank-destroyed', tankId: 1, kind: 'brown', by: { source: 'shell', ownerId: 9 }, pos: { x: 0, y: 0 } }]);
     expect(activeMeshes(scene).length).toBe(0);
   });
 
   it('the four non-visual events spawn nothing', () => {
     const { scene, ps } = setup();
     ps.spawn([
-      { type: 'mine-dropped', mineId: 1, pos: { x: 0, y: 0 } },
-      { type: 'mine-armed', mineId: 1, pos: { x: 0, y: 0 } },
+      { type: 'mine-dropped', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
+      { type: 'mine-armed', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
       { type: 'win' },
       { type: 'lose' },
     ]);
@@ -119,7 +119,7 @@ describe('particles: the pool', () => {
   it('stops allocating at the cap instead of growing without bound', () => {
     const { scene, ps } = setup();
     // 40 per mine-detonate; 20 of them is 800, well past the 500 cap.
-    const burst: SimEvent = { type: 'mine-detonate', mineId: 1, pos: { x: 0, y: 0 } };
+    const burst: SimEvent = { type: 'mine-detonate', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } };
     ps.spawn(Array.from({ length: 20 }, () => burst));
     expect(activeMeshes(scene).length).toBe(500);
     expect(scene.children.length).toBe(500);

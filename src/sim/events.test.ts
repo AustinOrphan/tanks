@@ -26,13 +26,13 @@ describe('SimEvent', () => {
   it('labels representative events across the union', () => {
     const events: SimEvent[] = [
       { type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 },
-      { type: 'ricochet', pos: { x: 1, y: 1 }, bounceIndex: 2 },
+      { type: 'ricochet', ownerId: 1, pos: { x: 1, y: 1 }, bounceIndex: 2 },
       { type: 'explosion', pos: { x: 2, y: 2 } },
-      { type: 'mine-dropped', mineId: 7, pos: { x: 3, y: 3 } },
-      { type: 'mine-armed', mineId: 7, pos: { x: 3, y: 3 } },
-      { type: 'mine-detonate', mineId: 7, pos: { x: 3, y: 3 } },
-      { type: 'tank-destroyed', tankId: 4, kind: 'brown', pos: { x: 4, y: 4 } },
-      { type: 'wall-destroyed', wallId: 9, pos: { x: 5, y: 5 } },
+      { type: 'mine-dropped', mineId: 7, ownerId: 1, pos: { x: 3, y: 3 } },
+      { type: 'mine-armed', mineId: 7, ownerId: 1, pos: { x: 3, y: 3 } },
+      { type: 'mine-detonate', mineId: 7, ownerId: 1, pos: { x: 3, y: 3 } },
+      { type: 'tank-destroyed', tankId: 4, kind: 'brown', by: { source: 'shell', ownerId: 9 }, pos: { x: 4, y: 4 } },
+      { type: 'wall-destroyed', wallId: 9, ownerId: 1, pos: { x: 5, y: 5 } },
       { type: 'win' },
       { type: 'lose' },
     ];
