@@ -81,6 +81,51 @@ like RICOCHET_SNIPER's bank preference is authored intent awaiting an
 implementation. The 9-type Wii taxonomy in `config/reference/` is reference
 data only — nothing in the game reads it.
 
+**Arenas are data too.** Grids, design rationale (`notes`) and machine-checkable
+design `claims` live in `config/data/arenas.json`, validated at load by
+`validateArenas` — a bad edit is a boot failure naming the exact path (e.g.
+`arenas[2].grid[4]`). `arena.ts` keeps every export it always had; `SPAWN_LETTERS`
+(`config/arena-types.ts`) is the single source of the spawn-letter map for the
+validator and `loadArena` — `src/sim/sandbox.ts` keeps its own `KIND_LETTER`
+table (plus a hardcoded `'P'`) for grid GENERATION, so re-lettering a kind in
+`SPAWN_LETTERS` without also updating `sandbox.ts` would leave the dev sandbox
+emitting a character `loadArena` rejects. Three claim types —
+`sightlineAfterBreach`, `lane`, `spawnBlockRobust` — are verified by
+`src/sim/arena-claims.ts` from the test layer (it imports the AI's
+`lineOfSight`, so it must never be imported by `config/`). `sightlineAfterBreach`
+is all-or-nothing per arena: declaring one commits the arena to declaring one
+for EVERY enemy spawn, checked by set equality (both directions) in
+`arena-validation.test.ts` — an arena's claims of this type are a COMPLETE
+statement of its post-breach spawn lines, never a sample (an arena may still
+declare zero, as arena-01 does). `spawnBlockRobust` checks more than its name
+suggests: every enemy spawn against 4 cardinal nudges of the player, in BOTH
+wall phases (intact and breached) — measured across all 5 scenarios that can
+run it (arena-01, arena-02, arena-03, and the two fixtures built in
+`arena-claims.test.ts` to discriminate the phases), 0 failures were
+intact-only, so the intact phase's value is labelling which wall state a
+failure lives in, not added detection power on its own; the breached phase is
+what actually catches a corner tangency. Only 4 of those 5 DECLARE the claim —
+arena-02 does not, because checked the same way it fails 12 of its 16
+breached-phase checks (0 of 16 intact): the level's design is to open
+sightlines when its centre barrier breaches, not survive it. **That 12-of-16
+figure is not regression-protected**: the switch case in `arena-claims.ts` only
+runs a claim type an arena actually DECLARES, so arena-02's number came from a
+one-off, out-of-suite invocation of the same check by hand, not from anything
+`npm test` runs — no test recomputes it, and it will rot silently if arena-02's
+grid ever changes. Adding a level is editing JSON: the generic runner in
+`arena-validation.test.ts` picks up its claims automatically, and `npx vitest
+watch src/sim/arena-validation.test.ts` is the authoring loop — though the
+claim MIX itself is pinned separately by that file's `EXPECTED_CLAIMS` table,
+so changing an arena's claims is a deliberate two-file edit. `spawnBlockRobust`
+exists because arena-03 once shipped a corner tangency a 0.1-unit nudge opened.
+A `lane` claim's `from`/`to` are LITERAL grid cells, not tied to a spawn by the
+validator (`cell()`, not `enemySpawnCell()`) — moving the spawn a lane's `why`
+refers to does not invalidate the claim, which keeps measuring the same two
+cells and keeps passing; arena-03's two lanes survive this only because each is
+co-located with a `sightlineAfterBreach` claim at the same cell, which DOES
+require a live spawn there and so catches the move at load time instead. See
+the `lane` variant's doc comment in `config/arena-types.ts`.
+
 ## Testing conventions, learned the hard way
 
 These are not style preferences. Each one exists because a real defect shipped green.

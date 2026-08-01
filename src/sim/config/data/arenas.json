@@ -1,0 +1,96 @@
+{
+  "arenas": [
+    {
+      "id": "arena-01",
+      "cols": 11, "rows": 9, "cellSize": 2,
+      "legend": { "#": "solid", "x": "destructible" },
+      "grid": [
+        "...........",
+        "..#.....#..",
+        "..#.B.G.#..",
+        ".....T.....",
+        "..x..#..x..",
+        ".....#..#..",
+        "..#.....#..",
+        "..#..P..#..",
+        "..........."
+      ],
+      "notes": [
+        "Hand-designed slice arena. Player bottom (row 7), Brown+Grey+Teal across the top (rows 2-3).",
+        "The centre solid block (col 5, row 4) sits on the Teal->player line, so Teal must bank a ricochet off a side wall.",
+        "The solid cell at (col 8, row 5) is the bank-shot reflector: a shell from Teal can clear the centre block through the row-4 gap, bank off its west face, and reach the player through rows 6-7.",
+        "Cover depth (col 5, row 5): with the row-4 block alone, Brown's and Grey's lines to the player spawn were exactly tangent to its corners -- a knife edge where a 0.1-unit nudge gave one of them a clear 10-unit lane. The second cell turns that graze into a real chord."
+      ],
+      "claims": [
+        { "type": "spawnBlockRobust", "nudge": 0.1,
+          "why": "The row-5 cell exists for exactly this: with the row-4 block alone, Brown's and Grey's lines to the player spawn were tangent to its corners, and a 0.1-unit nudge opened a clear lane. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the row-5 cell in place." }
+      ]
+    },
+    {
+      "id": "arena-02",
+      "cols": 11, "rows": 9, "cellSize": 2,
+      "legend": { "#": "solid", "x": "destructible" },
+      "grid": [
+        "...........",
+        "...........",
+        ".B...#...G.",
+        ".T...#...B.",
+        "x#xxx#xxx#x",
+        ".....#.....",
+        "..#.....#..",
+        ".....P.....",
+        "..........."
+      ],
+      "notes": [
+        "Reshaped in the 2026-07-31 balance pass: row 4 is a FULL destructible barrier with solid anchors (cols 1, 5, 9), so the halves START sealed -- tanks cannot cross and shells cannot pass until someone blasts a hole. Breaching the bar IS the level.",
+        "Four enemies against level 1's three."
+      ],
+      "claims": [
+        { "type": "sightlineAfterBreach", "from": [1, 2], "sees": true,
+          "why": "Blowing the bar's inner end opens the UPPER pair's lane -- the trade the level is built around. Fails if a solid outer end went missing or the trade stopped existing." },
+        { "type": "sightlineAfterBreach", "from": [9, 2], "sees": true, "why": "The mirrored upper lane." },
+        { "type": "sightlineAfterBreach", "from": [1, 3], "sees": false,
+          "why": "The LOWER pair stays shielded by the bar's solid anchors however much is destroyed." },
+        { "type": "sightlineAfterBreach", "from": [9, 3], "sees": false, "why": "Mirrored lower lane." }
+      ]
+    },
+    {
+      "id": "arena-03",
+      "cols": 11, "rows": 9, "cellSize": 2,
+      "legend": { "#": "solid", "x": "destructible" },
+      "grid": [
+        "...........",
+        ".O.......O.",
+        ".x..BGB..x.",
+        "...#...#...",
+        "..#..#..#..",
+        ".....#.....",
+        "..#..x..#..",
+        ".....P.....",
+        "..........."
+      ],
+      "notes": [
+        "The rocket debut: two Olives (DEFENSIVE_ROCKET, one rocket in flight) flank high behind destructible shields, with a brown-grey-brown trio behind solid cover.",
+        "Each flank column (1 and 9) is open floor top-to-bottom EXCEPT the olive's shield, so blasting a shield opens that vertical lane end-to-end, both ways. The shield is the level's trade, one per flank.",
+        "The row-3/row-4 anchors deny the olives any diagonal into the player half. The browns' spawn lines are shut by a REAL CHORD through the row-4/row-5 centre pillar -- the row-5 cell exists for ARENA_01's reason: with row 4 alone, a breached centre peek left both brown lines blocked only by a corner tangency.",
+        "The centre peek 'x' (row 6) is breachable mid-field cover on the centre axis, not a spawn-line blocker."
+      ],
+      "claims": [
+        { "type": "lane", "from": [1, 1], "to": [1, 7],
+          "intact": "blocked", "breached": "open",
+          "why": "The olive's shield is the ONLY wall on its flank column: breaching opens the lane end-to-end both ways -- the player can hunt up it, the olive's rockets command it down." },
+        { "type": "lane", "from": [9, 1], "to": [9, 7],
+          "intact": "blocked", "breached": "open",
+          "why": "The mirrored flank: one shield per side is the level's trade." },
+        { "type": "sightlineAfterBreach", "from": [1, 1], "sees": false,
+          "why": "Unlike level 2, breaching opens NO spawn-to-spawn line here: the trade is lanes for mobile tanks, not spawn lines." },
+        { "type": "sightlineAfterBreach", "from": [9, 1], "sees": false, "why": "Mirrored olive: same rule." },
+        { "type": "sightlineAfterBreach", "from": [4, 2], "sees": false, "why": "Trio brown: the centre pillar keeps its line shut after the peek is breached." },
+        { "type": "sightlineAfterBreach", "from": [5, 2], "sees": false, "why": "Trio grey: same pillar." },
+        { "type": "sightlineAfterBreach", "from": [6, 2], "sees": false, "why": "Trio brown, mirrored." },
+        { "type": "spawnBlockRobust", "nudge": 0.1,
+          "why": "The row-5 chord-maker exists for this: with row 4 alone, both browns' post-breach blocks were a single-point corner tangency that a 0.1-unit player nudge opened into a full lane. Found by slab math in review. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the chord-maker in place." }
+      ]
+    }
+  ]
+}

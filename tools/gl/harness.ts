@@ -19,6 +19,7 @@ import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
+import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -84,6 +85,38 @@ check('the ground is centred on the arena, not on the origin', () => {
   ctx.dispose();
   if (Math.abs(x - W / 2) > 1e-9 || Math.abs(z - H / 2) > 1e-9) {
     return `ground centre (${x}, ${z}), arena centre (${W / 2}, ${H / 2})`;
+  }
+  return null;
+});
+
+check('the ground sizes to a NON-shipped board (15x11) at construction', () => {
+  // vitest cannot construct a WebGLRenderer, so per-level sizing can only be
+  // proven in a real browser. Without this, "variable dimensions work" rests on
+  // geometry tests that never build a scene.
+  //
+  // fresh() is not reused here: it hardcodes the shipped CURRENT_ARENA's W/H/BOUNDARY
+  // into createScene, and createScene takes plain dimension numbers rather than a
+  // World -- World itself carries no width/height field. Widening fresh() to accept
+  // a World would give it nothing it could use, so this builds its own scene straight
+  // from WIDE_ARENA's bounds instead.
+  const { width: w, height: h } = arenaBounds(WIDE_ARENA);
+  const boundary = WIDE_ARENA.cellSize;
+  const want = framedBounds(w, h, boundary);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280;
+  canvas.height = 800;
+  document.body.appendChild(canvas);
+  const ctx = createScene(canvas, w, h, boundary);
+  const g = groundOf(ctx);
+  if (!g) { ctx.dispose(); return 'no PlaneGeometry mesh in the scene'; }
+  const p = g.geometry.parameters;
+  const centre = { x: g.position.x, z: g.position.z };
+  ctx.dispose();
+  if (p.width !== want.width || p.height !== want.height) {
+    return `ground is ${p.width}x${p.height}, framed area for 15x11 is ${want.width}x${want.height}`;
+  }
+  if (Math.abs(centre.x - w / 2) > 1e-9 || Math.abs(centre.z - h / 2) > 1e-9) {
+    return `ground centre (${centre.x}, ${centre.z}), arena centre (${w / 2}, ${h / 2})`;
   }
   return null;
 });
@@ -281,6 +314,33 @@ check('refit resizes the ground plane to the new framed bounds, both directions'
   ctx.dispose();
   if (!p2 || Math.abs(p2.width - framed.width) > 1e-6 || Math.abs(p2.height - framed.height) > 1e-6) {
     return `after refitting back, ground is ${p2?.width}x${p2?.height}, want ${framed.width}x${framed.height}`;
+  }
+  return null;
+});
+
+check('WIDE_ARENA (15x11) sizes correctly through refit, not just construction', () => {
+  // arena-fixtures.ts states, in shipped source, that WIDE_ARENA exists to prove
+  // "the per-level render refit (PR #53)" -- but until this check, nothing actually
+  // ran it through refit(): the sibling check above only proves refit works for an
+  // unnamed 34x18 board, and the construction check a few lines up never calls
+  // refit() at all. This exercises the SAME path a live level switch takes
+  // (src/game/loop.ts:393, renderer.refit(b.width, b.height, b.cellSize)) with the
+  // fixture the doc comment names.
+  const { width: w, height: h } = arenaBounds(WIDE_ARENA);
+  const boundary = WIDE_ARENA.cellSize;
+  const want = framedBounds(w, h, boundary);
+  const ctx = fresh(); // constructed at the shipped board size, same as every other refit check
+  ctx.refit(w, h, boundary);
+  const g = groundOf(ctx);
+  if (!g) { ctx.dispose(); return 'no PlaneGeometry mesh in the scene'; }
+  const p = g.geometry.parameters;
+  const centre = { x: g.position.x, z: g.position.z };
+  ctx.dispose();
+  if (p.width !== want.width || p.height !== want.height) {
+    return `after refit, ground is ${p.width}x${p.height}, want ${want.width}x${want.height}`;
+  }
+  if (Math.abs(centre.x - w / 2) > 1e-9 || Math.abs(centre.z - h / 2) > 1e-9) {
+    return `after refit, ground centre (${centre.x}, ${centre.z}), want (${w / 2}, ${h / 2})`;
   }
   return null;
 });
