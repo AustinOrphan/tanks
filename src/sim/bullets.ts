@@ -192,13 +192,14 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
       if (circleVsCircle(b.pos, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
         // An invincible tank (dev playtest mode) is a wall to ordnance, not a ghost:
         // the shell still detonates on it -- letting it pass through would shield
-        // nothing and read as a collision bug -- but no one dies.
+        // nothing and read as a collision bug -- but no one dies. Event order matches
+        // mines.ts for a mortal kill: tank-destroyed, then explosion.
         b.alive = false
-        events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
         if (!t.invincible) {
           t.alive = false
           events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, pos: { x: t.pos.x, y: t.pos.y } })
         }
+        events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
         break
       }
     }

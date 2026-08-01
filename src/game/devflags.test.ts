@@ -195,3 +195,13 @@ describe('parseDevFlags: invincibility and the playtest bundle', () => {
     expect(parseDevFlags('?dev=1&playtest=0')).toEqual(DEV_FLAGS_OFF);
   });
 });
+
+describe('parseDevFlags: playtest is additive, never a veto', () => {
+  it('an explicit =0 on a bundled flag loses to the bundle, by documented OR semantics', () => {
+    // The one surprising interaction: playtest=1&mineTimer=0 keeps mineTimer ON.
+    // Individual flags can ADD to the kit, not subtract from it -- anyone wanting
+    // the kit minus a piece lists the pieces instead of using the bundle.
+    expect(parseDevFlags('?dev=1&playtest=1&mineTimer=0').mineTimer).toBe(true);
+    expect(parseDevFlags('?dev=1&playtest=1&invincible=0').invincible).toBe(true);
+  });
+});
