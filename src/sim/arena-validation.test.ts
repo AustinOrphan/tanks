@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { ARENAS, ARENA_01, loadArena } from './arena';
 import { structuralFailures, claimFailures } from './arena-claims';
 import { ARENA_DEFS } from './config/arenas';
+import type { ArenaClaim } from './config/arena-types';
 
 describe('the shipped arena sequence', () => {
   it('starts at ARENA_01, the arena the game has always shipped', () => {
@@ -36,32 +37,56 @@ describe.each(ARENA_DEFS.map((a) => ({ id: a.id, arena: a })))('$id claims', ({ 
   });
 });
 
-it('the shipped arenas declare design claims, not just structure', () => {
-  // Guards the migration itself: if a port dropped the claims, the runner above
-  // would pass vacuously on empty arrays. Population: all 3 shipped arenas.
-  const claimed = ARENA_DEFS.filter((a) => a.claims.length > 0);
-  expect(claimed.length).toBeGreaterThanOrEqual(2); // arena-02 and arena-03 at minimum
+// Per-arena claim inventory, read from the shipped data (config/data/arenas.json) as of
+// this writing -- NOT a formula, deliberately. Claim mix is a design decision, not
+// something derivable: ARENA_01 legitimately has zero sightline claims (it only claims
+// spawnBlockRobust), and lanes are not one-per-enemy by definition (ARENA_03 has 2 lanes
+// for 5 enemies). Pinning the exact table makes changing an arena's claims a deliberate
+// two-file edit -- config/data/arenas.json AND this table -- the same contract
+// constants.test.ts uses to pin each balance value individually rather than with a range.
+const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>>> = {
+  'arena-01': { spawnBlockRobust: 1 },
+  'arena-02': { sightlineAfterBreach: 4 },
+  'arena-03': { lane: 2, sightlineAfterBreach: 5, spawnBlockRobust: 1 },
+};
+
+it('each shipped arena declares its claim inventory exactly, per this table', () => {
+  // Replaces two guards that were each independently bypassable:
+  //  - `claimed.length >= 2` (deleted): passed as long as ANY two arenas had ANY claims
+  //    at all, so an arena could drop every claim of one type, or lose the `lane` pin
+  //    entirely (the deleted bespoke block's `expect(lanes).toHaveLength(2)` was never
+  //    re-pinned by anything else), without the count ever moving.
+  //  - the enemy-count check (deleted): `if (sightlineClaims.length === 0) continue`
+  //    let an arena exempt itself from its own population check by deleting every
+  //    sightlineAfterBreach claim it had -- the exact silent-bypass hole this replaces.
+  //
+  // The table's key set is checked against the shipped arena ids first, so a new arena
+  // cannot ship without declaring an inventory for review to compare against the design.
+  expect(new Set(ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED_CLAIMS)));
+
+  for (const arena of ARENA_DEFS) {
+    const counts: Partial<Record<ArenaClaim['type'], number>> = {};
+    for (const claim of arena.claims) counts[claim.type] = (counts[claim.type] ?? 0) + 1;
+    expect(counts, arena.id).toEqual(EXPECTED_CLAIMS[arena.id]);
+  }
 });
 
-it('every enemy spawn has a declared post-breach sightline, where the arena uses that claim at all', () => {
-  // The deleted bespoke blocks each pinned a population: ARENA_02's
-  // `expect(open).toHaveLength(4)`, ARENA_03's `expect(enemies).toHaveLength(5)`. Named
-  // cells alone don't re-assert that -- an arena could gain a 5th enemy with no matching
-  // claim and the claims-holds runner above would stay green, since it only ever checks
-  // the claims that exist. This pins the count so a silently undeclared enemy fails loud.
-  //
-  // Scope: ARENA_01 doesn't use sightlineAfterBreach at all (it claims spawnBlockRobust
-  // only), so it is correctly excluded rather than forced to zero. Population: the 2 of 3
-  // shipped arenas that declare at least one sightlineAfterBreach claim -- arena-02 and
-  // arena-03, both measured to already match 1:1 before this guard was added.
-  //
-  // Caveat: this pins that every enemy HAS a declared line, not that the declared value
-  // is correct -- the claims-holds runner above is what checks the sightline itself.
+it('a sightlineAfterBreach claim names every enemy CELL, not just the right count of them', () => {
+  // Strictly stronger than the inventory table above: a claim's `from` moved from one
+  // enemy's cell to another's keeps every count in EXPECTED_CLAIMS unchanged (same
+  // arena, same claim type, same total), but changes WHICH enemy is actually covered.
+  // Set equality (not cardinality) is what catches that.
   for (const arena of ARENA_DEFS) {
     const sightlineClaims = arena.claims.filter((c) => c.type === 'sightlineAfterBreach');
-    if (sightlineClaims.length === 0) continue;
+    if (sightlineClaims.length === 0) continue; // ARENA_01: no claims of this type to check
     const { spawns } = loadArena(arena);
-    const enemyCount = spawns.filter((s) => s.kind !== 'player').length;
-    expect(sightlineClaims.length, arena.id).toBe(enemyCount);
+    const cellOf = (x: number) => Math.round(x / arena.cellSize - 0.5); // inverse of loadArena's (c+0.5)*cellSize
+    const enemyCells = new Set(
+      spawns
+        .filter((s) => s.kind !== 'player')
+        .map((s) => `${cellOf(s.pos.x)},${cellOf(s.pos.y)}`),
+    );
+    const claimCells = new Set(sightlineClaims.map((c) => `${c.from[0]},${c.from[1]}`));
+    expect(claimCells, arena.id).toEqual(enemyCells);
   }
 });
