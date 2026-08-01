@@ -48,6 +48,20 @@ function num(file: string, path: string, v: unknown): number {
   return v;
 }
 
+/** Counts (caps, bounce budgets, mission numbers): whole and non-negative. */
+function nonNegInt(file: string, path: string, v: unknown): number {
+  const n = num(file, path, v);
+  if (!Number.isInteger(n) || n < 0) fail(file, path, `must be a non-negative integer, got ${n}`);
+  return n;
+}
+
+/** Chances, accuracies and weights: the sim reasons about these as [0, 1]. */
+function unitInterval(file: string, path: string, v: unknown): number {
+  const n = num(file, path, v);
+  if (n < 0 || n > 1) fail(file, path, `must be within [0, 1], got ${n}`);
+  return n;
+}
+
 function str(file: string, path: string, v: unknown): string {
   if (typeof v !== 'string') fail(file, path, `must be a string, got ${JSON.stringify(v)}`);
   return v;
@@ -105,7 +119,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
     out[kind] = {
       displayName: str(file, `${kind}.displayName`, d.displayName),
       color: cssHexColor(file, `${kind}.color`, d.color),
-      firstMission: num(file, `${kind}.firstMission`, d.firstMission),
+      firstMission: nonNegInt(file, `${kind}.firstMission`, d.firstMission),
       singlePlayerOnly: bool(file, `${kind}.singlePlayerOnly`, d.singlePlayerOnly),
       movementSpeed: oneOf(file, `${kind}.movementSpeed`, d.movementSpeed, Object.values(MovementSpeed), 'MovementSpeed'),
       rotationSpeed: oneOf(file, `${kind}.rotationSpeed`, d.rotationSpeed, Object.values(RotationSpeed), 'RotationSpeed'),
@@ -113,10 +127,10 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
       weapon: {
         projectileType: oneOf(file, `${kind}.weapon.projectileType`, w.projectileType, Object.values(ProjectileType), 'ProjectileType'),
         fireRate: oneOf(file, `${kind}.weapon.fireRate`, w.fireRate, Object.values(FireRate), 'FireRate'),
-        maxActiveProjectiles: num(file, `${kind}.weapon.maxActiveProjectiles`, w.maxActiveProjectiles),
-        ricochetCount: num(file, `${kind}.weapon.ricochetCount`, w.ricochetCount),
+        maxActiveProjectiles: nonNegInt(file, `${kind}.weapon.maxActiveProjectiles`, w.maxActiveProjectiles),
+        ricochetCount: nonNegInt(file, `${kind}.weapon.ricochetCount`, w.ricochetCount),
       },
-      mineCapacity: num(file, `${kind}.mineCapacity`, d.mineCapacity),
+      mineCapacity: nonNegInt(file, `${kind}.mineCapacity`, d.mineCapacity),
       abilities: d.abilities.map((a, i) =>
         oneOf(file, `${kind}.abilities[${i}]`, a, Object.values(TankAbility), 'TankAbility'),
       ),
@@ -147,19 +161,23 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
         fail(file, profile, `has unknown entry "${k}"`);
       }
     }
+    // Accuracies, chances and weights are [0, 1] by meaning -- grey's patience
+    // formula (1 - aggression) * TICK_HZ goes NEGATIVE for aggression > 1, so
+    // the range check is load-bearing, not pedantry. reactionTime (seconds) and
+    // the two distances (world units) are genuinely unbounded above.
     const resolved: AIProfileBalance = {
       behavior: oneOf(file, `${profile}.behavior`, p.behavior, Object.values(AIBehavior), 'AIBehavior'),
-      aimAccuracy: num(file, `${profile}.aimAccuracy`, p.aimAccuracy),
+      aimAccuracy: unitInterval(file, `${profile}.aimAccuracy`, p.aimAccuracy),
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
-      aggression: num(file, `${profile}.aggression`, p.aggression),
+      aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
       minimumDistance: num(file, `${profile}.minimumDistance`, p.minimumDistance),
-      retreatChance: num(file, `${profile}.retreatChance`, p.retreatChance),
-      directShotWeight: num(file, `${profile}.directShotWeight`, p.directShotWeight),
-      bankShotWeight: num(file, `${profile}.bankShotWeight`, p.bankShotWeight),
+      retreatChance: unitInterval(file, `${profile}.retreatChance`, p.retreatChance),
+      directShotWeight: unitInterval(file, `${profile}.directShotWeight`, p.directShotWeight),
+      bankShotWeight: unitInterval(file, `${profile}.bankShotWeight`, p.bankShotWeight),
     };
     if ('minePlacementChance' in p) {
-      resolved.minePlacementChance = num(file, `${profile}.minePlacementChance`, p.minePlacementChance);
+      resolved.minePlacementChance = unitInterval(file, `${profile}.minePlacementChance`, p.minePlacementChance);
     }
     out[profile] = resolved;
   }
