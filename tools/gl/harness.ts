@@ -310,6 +310,33 @@ check('refit resizes the ground plane to the new framed bounds, both directions'
   return null;
 });
 
+check('WIDE_ARENA (15x11) sizes correctly through refit, not just construction', () => {
+  // arena-fixtures.ts states, in shipped source, that WIDE_ARENA exists to prove
+  // "the per-level render refit (PR #53)" -- but until this check, nothing actually
+  // ran it through refit(): the sibling check above only proves refit works for an
+  // unnamed 34x18 board, and the construction check a few lines up never calls
+  // refit() at all. This exercises the SAME path a live level switch takes
+  // (src/game/loop.ts:393, renderer.refit(b.width, b.height, b.cellSize)) with the
+  // fixture the doc comment names.
+  const { width: w, height: h } = arenaBounds(WIDE_ARENA);
+  const boundary = WIDE_ARENA.cellSize;
+  const want = framedBounds(w, h, boundary);
+  const ctx = fresh(); // constructed at the shipped board size, same as every other refit check
+  ctx.refit(w, h, boundary);
+  const g = groundOf(ctx);
+  if (!g) { ctx.dispose(); return 'no PlaneGeometry mesh in the scene'; }
+  const p = g.geometry.parameters;
+  const centre = { x: g.position.x, z: g.position.z };
+  ctx.dispose();
+  if (p.width !== want.width || p.height !== want.height) {
+    return `after refit, ground is ${p.width}x${p.height}, want ${want.width}x${want.height}`;
+  }
+  if (Math.abs(centre.x - w / 2) > 1e-9 || Math.abs(centre.z - h / 2) > 1e-9) {
+    return `after refit, ground centre (${centre.x}, ${centre.z}), want (${w / 2}, ${h / 2})`;
+  }
+  return null;
+});
+
 check('refit moves the shadow camera with the board, no wasted margin', () => {
   // The shadow lesson (extents fitted to the board, bias second) has to survive
   // refit: a wider board with the OLD extents clips casters at the edges, and OLD
