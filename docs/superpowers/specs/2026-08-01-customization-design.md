@@ -27,5 +27,8 @@ untouched.
   stripes, two-tone hull maps are mintable without assets. v2.
 - **Animations**: idle turret sway, spawn drop-in, victory spin -- render-layer,
   driven from the existing per-frame sync. v3.
+- **Emotes** (user, 2026-08-01: "emotes could even be a thing lol"): popup
+  billboards over the turret -- the mine-timer label machinery (canvas sprite,
+  billboarded) is exactly the rendering path. Wants a keybind + a small set.
 - **Loadouts** (gameplay customization): parked until the level set settles; it is a
   balance feature and wants pacifist-suite treatment per loadout.

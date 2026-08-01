@@ -12,6 +12,12 @@ import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants
 
 export interface EntityViews {
   sync(prev: World, curr: World, alpha: number): void;
+  /**
+   * The paint shop: override the PLAYER's hull colour (a CSS hex), or null for the
+   * roster default. Takes effect on the next sync via the same rebuild path a
+   * kind change uses -- live, even for the tank already standing behind the menu.
+   */
+  setPlayerColor(hex: string | null): void;
   dispose(): void;
 }
 
@@ -262,8 +268,12 @@ function disposeObject(obj: THREE.Object3D): void {
 export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
-  // draws the old tank's mesh and colour under the new tank's position.
-  const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind }>();
+  // draws the old tank's mesh and colour under the new tank's position. `gen` is the
+  // paint-shop generation: bumping it forces the same rebuild path, which is how a
+  // swatch click repaints the tank already standing behind the menu.
+  const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number }>();
+  let playerHex: string | null = null;
+  let colorGen = 0;
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
   const mineViews = new Map<number, THREE.Mesh>();
@@ -332,7 +342,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   function makeTank(kind: TankKind): { group: THREE.Group; turret: THREE.Object3D } {
     const group = new THREE.Group();
-    const color = tankColor(kind);
+    const color = kind === 'player' && playerHex ? cssHex(playerHex) : tankColor(kind);
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
     const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.25 });
@@ -579,13 +589,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       if (!t.alive) continue;
       seen.add(t.id);
       let view = tankViews.get(t.id);
-      if (view && view.kind !== t.kind) {
+      if (view && (view.kind !== t.kind || view.gen !== colorGen)) {
         disposeObject(view.group);
         tankViews.delete(t.id);
         view = undefined;
       }
       if (!view) {
-        view = { ...makeTank(t.kind), kind: t.kind };
+        view = { ...makeTank(t.kind), kind: t.kind, gen: colorGen };
         tankViews.set(t.id, view);
       }
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
@@ -794,5 +804,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     wallViews.clear();
   }
 
-  return { sync, dispose };
+  return {
+    sync,
+    setPlayerColor(hex: string | null): void {
+      playerHex = hex;
+      colorGen++;
+    },
+    dispose,
+  };
 }

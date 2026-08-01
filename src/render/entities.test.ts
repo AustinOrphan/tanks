@@ -710,3 +710,39 @@ describe('world replacement (level switch)', () => {
     refViews.dispose();
   });
 });
+
+describe('the paint shop (player colour override)', () => {
+  it('repaints the PLAYER live on the next sync, and never the enemies', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+    views.sync(w, w, 0);
+
+    views.setPlayerColor('#d64545');
+    views.sync(w, w, 0);
+
+    const colors = new Map<number, number>();
+    scene.traverse((o) => {
+      if (o.name === 'hull') {
+        const g = o.parent as THREE.Group;
+        const id = g.position.x === 3 ? 1 : 2;
+        colors.set(id, ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex());
+      }
+    });
+    expect(colors.get(1)).toBe(0xd64545);
+    expect(colors.get(2)).not.toBe(0xd64545); // brown keeps its identity
+
+    // And back to the roster default.
+    views.setPlayerColor(null);
+    views.sync(w, w, 0);
+    let restored = -1;
+    scene.traverse((o) => {
+      if (o.name === 'hull' && (o.parent as THREE.Group).position.x === 3) {
+        restored = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+      }
+    });
+    expect(restored).toBe(0x3d7bd6); // the roster's player blue
+    views.dispose();
+  });
+});

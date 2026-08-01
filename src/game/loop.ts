@@ -4,6 +4,7 @@ import type { Vec2 } from '../sim/types';
 import { createLevelSystem, type LevelSystem } from './levels';
 import { createProgressStore, type ProgressStore } from './progress';
 import { createStatsStore, type StatsStore } from './stats';
+import { createCustomizationStore, type CustomizationStore } from './customization';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -56,7 +57,7 @@ export interface GameDeps {
     worldWidth: number,
     worldHeight: number,
     boundary: number,
-    options?: { aimRay?: boolean; mineReach?: boolean; mineTimer?: boolean },
+    options?: { aimRay?: boolean; mineReach?: boolean; mineTimer?: boolean; playerColor?: string },
   ) => Renderer3D;
   readonly createInput: (
     target: HTMLElement,
@@ -83,6 +84,8 @@ export interface GameDeps {
   readonly progress: ProgressStore;
   /** The lifetime and per-run tallies, fed from the attributed event stream. */
   readonly stats: StatsStore;
+  /** The paint shop's saved choice. Render-only downstream. */
+  readonly customization: CustomizationStore;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -193,6 +196,7 @@ export function createBrowserDeps(): GameDeps {
   const devFlags = parseDevFlags(globalThis.location?.search ?? '');
   const progress = createProgressStore(browserStorage());
   const stats = createStatsStore(browserStorage());
+  const customization = createCustomizationStore(browserStorage());
   return {
     createRenderer,
     createInput: createInputController,
@@ -203,6 +207,7 @@ export function createBrowserDeps(): GameDeps {
     levels: createLevelSystem(devFlags, progress),
     progress,
     stats,
+    customization,
     now: () => performance.now(),
     wallMs: () => Date.now(),
     raf: {
@@ -259,6 +264,8 @@ export function startGameWith(
     aimRay: deps.devFlags.aimRay,
     mineReach: deps.devFlags.mineReach,
     mineTimer: deps.devFlags.mineTimer,
+    // The paint shop's saved colour, applied from the first frame.
+    playerColor: deps.customization.hexFor(deps.customization.hull()),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
   const audio = deps.createAudio();
@@ -415,6 +422,14 @@ export function startGameWith(
     sm.toTitle();
   });
 
+  hud.onPickHullColor((id) => {
+    deps.customization.setHull(id);
+    // Echo the ACCEPTED value back: the store refuses off-palette ids, and the
+    // swatch ring must show what was stored, not what was clicked.
+    hud.setHullColor(deps.customization.hull());
+    renderer.setPlayerColor(deps.customization.hexFor(deps.customization.hull()));
+  });
+
   hud.onResetStats(() => {
     deps.stats.resetLifetime();
     hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
@@ -452,6 +467,7 @@ export function startGameWith(
   hud.setLevelSelect(unlockedLevels(), deps.levels.count);
   deps.stats.startRun();
   hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
+  hud.setHullColor(deps.customization.hull());
   refreshStats(world);
 
   const onKey = (e: KeyboardEvent): void => {
