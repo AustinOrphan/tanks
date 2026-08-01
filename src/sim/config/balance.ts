@@ -33,16 +33,18 @@ import aiProfilesJson from './data/ai-profiles.json';
 // resolved config with it. This module supplies the STRUCTURE (which class means
 // which number); constants.ts supplies the numbers.
 //
-// Only the classes the shipped roster (config/roster.ts) actually selects are
-// exercised by the running game today -- MEDIUM movement/rotation/fire. The other
-// class slots are required by the Record<> shape and are filled with an ordered
-// placeholder scale anchored on the live value; they are vocabulary for future
-// entities, NOT measured game values, and nothing resolves to them yet.
+// Live classes, since the 2026-07-31 balance pass (#52): MEDIUM everywhere,
+// plus SLOW movement (teal), SLOW rotation (brown, teal), and SLOW/FAST fire
+// (brown/teal). The ordered scale below (0.6x / 1.4x / 1.8x anchored on the
+// MEDIUM value) started as placeholders; the balance pass adopted the SLOW and
+// FAST points as real tuning, so retuning a multiplier here is now a GAMEPLAY
+// change gated by the roster pins. VERY_FAST (and STATIONARY movement) remain
+// unselected vocabulary.
 // ---------------------------------------------------------------------------
 
 export const GAME_BALANCE: BalanceConstants = {
-  // World units/second. Only MEDIUM is live (= TANK_SPEED, the game's uniform hull
-  // speed). The rest are a placeholder scale for future/variable-speed entities.
+  // World units/second. MEDIUM = TANK_SPEED; SLOW is live for teal since the
+  // balance pass. FAST/VERY_FAST remain unselected vocabulary.
   movementSpeeds: {
     [MovementSpeed.STATIONARY]: 0,
     [MovementSpeed.SLOW]: TANK_SPEED * 0.6,
@@ -50,15 +52,16 @@ export const GAME_BALANCE: BalanceConstants = {
     [MovementSpeed.FAST]: TANK_SPEED * 1.4,
     [MovementSpeed.VERY_FAST]: TANK_SPEED * 1.8,
   },
-  // Radians/second (hull slew). Only MEDIUM is live (= TANK_TURN_RATE).
+  // Radians/second (hull slew). MEDIUM = TANK_TURN_RATE; SLOW is live for
+  // brown and teal since the balance pass.
   rotationSpeeds: {
     [RotationSpeed.SLOW]: TANK_TURN_RATE * 0.6,
     [RotationSpeed.MEDIUM]: TANK_TURN_RATE,
     [RotationSpeed.FAST]: TANK_TURN_RATE * 1.4,
     [RotationSpeed.VERY_FAST]: TANK_TURN_RATE * 1.8,
   },
-  // Whole ticks between shots. Only MEDIUM is live (= FIRE_COOLDOWN_TICKS, the
-  // game's single fire cadence shared by every tank). SLOW/FAST are placeholders.
+  // Whole ticks between shots. MEDIUM = FIRE_COOLDOWN_TICKS; SLOW (brown) and
+  // FAST (teal) are live since the balance pass.
   fireCooldowns: {
     [FireRate.SLOW]: Math.round(FIRE_COOLDOWN_TICKS * 1.6),
     [FireRate.MEDIUM]: FIRE_COOLDOWN_TICKS,
@@ -103,11 +106,12 @@ export const GAME_BALANCE: BalanceConstants = {
   // the PR body. Values are the Wii reference figures except where noted: this is
   // the GAME's table, retuned to describe the game's actual tanks.
   // The per-profile numbers now live in data/ai-profiles.json, validated at
-  // load (validate.ts). Two authored deviations from the Wii reference, since
-  // the JSON cannot carry comments: DEFENSIVE_BASIC's minePlacementChance (0.3)
-  // exists because the game's grey DOES lay mines, and its aggression (0.25) is
-  // load-bearing -- (1 - 0.25) * TICK_HZ is the tuned 45-tick dodge patience
-  // pinned in config/roster.test.ts. And a caveat: the STATIONARY behaviour
+  // load (validate.ts). ONE authored deviation from the Wii reference (review
+  // recounted: 1 of 76 field slots), since the JSON cannot carry comments:
+  // DEFENSIVE_BASIC's minePlacementChance (0.3) exists because the game's grey
+  // DOES lay mines. Its aggression (0.25) IS the Wii figure but is load-bearing
+  // here -- (1 - 0.25) * TICK_HZ is the tuned 45-tick dodge patience pinned in
+  // config/roster.test.ts. And a caveat: the STATIONARY behaviour
   // implementation reads neither shot weight, so RICOCHET_SNIPER's bank
   // preference (0.55) is authored intent awaiting an implementation (also
   // noted in CLAUDE.md).
