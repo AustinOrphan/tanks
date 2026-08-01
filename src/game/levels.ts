@@ -43,15 +43,23 @@ export function createLevelSystem(flags: DevFlags, progress: ProgressStore): Lev
     };
   }
 
-  // A dev-flag jump beats saved progress; otherwise the session opens at the furthest
-  // unlocked level. Clamped either way: a stale link or an over-generous save should
-  // land on the last level, not crash the session.
-  const start = flags.level === null
-    ? Math.min(progress.highestCleared(), ARENAS.length - 1)
-    : Math.min(flags.level - 1, ARENAS.length - 1);
+  // A dev-flag jump beats saved progress; otherwise the furthest unlocked level.
+  // `start` is a LIVE getter, not a boot-time snapshot: quit-to-title and game over
+  // both return to it, and an unlock earned THIS SESSION must move it -- a snapshot
+  // sent the player back to level 1 after they had just unlocked level 2 (visible as
+  // "correct after a refresh, wrong within the session"). Clamped either way: a stale
+  // link or an over-generous save should land on the last level, not crash.
+  //
+  // `jump` is captured outside the getter: the sandbox early-return above already
+  // narrows flags.level in this scope, but narrowing does not survive into a closure.
+  const jump: number | null = typeof flags.level === 'number' ? flags.level : null;
   return {
     count: ARENAS.length,
-    start,
+    get start(): number {
+      return jump === null
+        ? Math.min(progress.highestCleared(), ARENAS.length - 1)
+        : Math.min(jump - 1, ARENAS.length - 1);
+    },
     tracksProgress: true,
     world: (level, seed, unarmedTrigger, lives) =>
       createWorldFor(ARENAS[level], seed, unarmedTrigger, lives),

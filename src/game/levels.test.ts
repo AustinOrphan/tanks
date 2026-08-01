@@ -96,3 +96,27 @@ describe('createLevelSystem: saved progress', () => {
     ).toBe(false);
   });
 });
+
+describe('createLevelSystem: start is live, not a boot-time snapshot', () => {
+  it('moves when progress moves, so a mid-session unlock changes where quit lands', () => {
+    // Reported 2026-07-31: clear level 1, quit -- the menu rebuilt at level 1 even
+    // though level 2 was now unlocked, because start was computed once at boot. The
+    // tell: correct after a refresh (boot recomputes), wrong within the session.
+    let cleared = 0;
+    const live: ProgressStore = {
+      highestCleared: () => cleared,
+      recordCleared: (l) => {
+        cleared = Math.max(cleared, l);
+      },
+    };
+    const sys = createLevelSystem(DEV_FLAGS_OFF, live);
+    expect(sys.start).toBe(0);
+    live.recordCleared(1);
+    expect(sys.start).toBe(1); // the same system object, no rebuild, no reload
+  });
+
+  it('a dev-flag jump stays pinned regardless of progress', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, level: 1 }, progressAt(1));
+    expect(sys.start).toBe(0); // the flag said level 1; the save says level 2
+  });
+});
