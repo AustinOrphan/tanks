@@ -40,9 +40,12 @@ throwing storage degrades to an in-memory shadow, unknown ids in storage are dro
 
 - `AchievementDef { id, label, description, earned(ctx) }` — the catalog is data, and
   `earned` is a **pure predicate**, so every entry is testable without a game.
-- `AchievementContext { lifetime, run, highestCleared, totalLevels, clearedLevel }`.
-  `clearedLevel` is non-null **only on the frame a win lands**, which is what keeps a
-  run feat from re-firing on later frames of the same run.
+- `AchievementContext { lifetime, run, highestCleared, totalLevels, clearedLevel,
+  livesLeft, tracksProgress }`. `clearedLevel` is non-null **only on the frame a win
+  lands**, which is what keeps a run feat from re-firing on later frames of the same
+  run. `livesLeft` serves Survivor. `tracksProgress` exists because the dev sandbox is
+  a one-level set: without it, Campaigner's denominator collapses to 1 and anyone who
+  has cleared level 1 latches "clear every level" by opening `?level=sandbox`.
 - `store.check(ctx)` evaluates the catalog, latches anything newly true, and **returns
   the newly earned defs** — that return value is the toast queue. Already-earned
   entries never re-return, so the toast cannot repeat.
@@ -56,9 +59,16 @@ Two, both in `loop.ts`:
 
 1. **Per frame-events batch**, right after `stats.record` — cumulative milestones can
    land mid-firefight.
-2. **At the win**, in `sm.onChange`, with `clearedLevel` set — run feats and level
-   milestones. Recorded at the win, not at the Next Level click, matching how
-   `progress.recordCleared` already behaves so quitting after a win keeps both.
+2. **At the win**, but *not* directly from `sm.onChange`. The winning `tank-destroyed`
+   and the `win` event ride one `step()` batch, and the driver routes it to the state
+   machine — which flips synchronously — **before** `onFrameEvents`, where
+   `stats.record` runs. Evaluating from the state change therefore reads a run tally
+   one kill short: Dead Eye unearnable on a normal clear, Bomb Squad blind to a
+   single-mine-kill win, Flawless granted for a mutual kill. So `onChange` only
+   **latches** `pendingClear = level + 1`, and the same frame's `onFrameEvents`
+   consumes it after `stats.record`. `progress.recordCleared` still happens at the
+   state change, so level milestones see the clear; and recording at the win rather
+   than at the Next Level click means quitting after a win keeps both.
 
 ## The catalog (14)
 

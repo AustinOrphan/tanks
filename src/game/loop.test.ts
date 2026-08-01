@@ -63,7 +63,12 @@ interface Recorder {
   skinEchoes: string[];
   toasts: string[][];
   achPushes: string[][];
-  achChecks: Array<{ clearedLevel: number | null; livesLeft: number; highestCleared: number }>;
+  achChecks: Array<{
+    clearedLevel: number | null;
+    livesLeft: number;
+    highestCleared: number;
+    runShellKills: number;
+  }>;
   achResets: number;
   listeners: Array<[string, (e: never) => void]>;
   removed: Array<[string, (e: never) => void]>;
@@ -74,7 +79,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }> } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[] } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -252,6 +257,15 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       onEvents(events: SimEvent[]): void {
         rec.machineSaw.push(events);
+        // Faithful to state.ts: a win event flips the state SYNCHRONOUSLY inside
+        // this call, so every onChange subscriber runs BEFORE the driver reaches
+        // onFrameEvents. The fake used to only record, and that divergence hid a
+        // real ordering defect -- the win-time achievement check ran before the
+        // winning frame's stats were recorded.
+        if (state === 'playing' && events.some((e) => e.type === 'win')) {
+          state = 'win';
+          emit();
+        }
       },
       toTitle(): void {
         state = 'title';
@@ -359,7 +373,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       };
     })(),
     achievements: (() => {
-      const earned = new Set<AchievementId>();
+      const earned = new Set<AchievementId>((opts.savedAchievements ?? []) as AchievementId[]);
       return {
         earned: () => earned,
         // Deliberately NOT the real catalog: this harness pins the loop's WIRING
@@ -370,6 +384,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
             clearedLevel: ctx.clearedLevel,
             livesLeft: ctx.livesLeft,
             highestCleared: ctx.highestCleared,
+            runShellKills: ctx.run.shellKills,
           });
           const due = (opts.earnsOn ?? []).filter(
             (e) => e.when(ctx) && !earned.has(e.id as AchievementId),
@@ -388,19 +403,34 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     })(),
-    stats: {
-      lifetime: () => ({ ...ZERO_STATS }),
-      run: () => ({ ...ZERO_STATS }),
-      record: (events: SimEvent[], playerId: number) => {
-        rec.statBatches.push({ count: events.length, playerId });
-      },
-      startRun: () => {
-        rec.statRunStarts += 1;
-      },
-      resetLifetime: () => {
-        rec.statResets += 1;
-      },
-    },
+    stats: (() => {
+      // Accumulating, not a frozen ZERO_STATS literal: a stub that returns fresh
+      // zeros every call makes a STALE read indistinguishable from a fresh one,
+      // which is exactly how the win-ordering defect stayed invisible.
+      let run = { ...ZERO_STATS };
+      let lifetime = { ...ZERO_STATS };
+      const fold = (events: SimEvent[]): void => {
+        const kills = events.filter((e) => e.type === 'tank-destroyed').length;
+        run = { ...run, shellKills: run.shellKills + kills };
+        lifetime = { ...lifetime, shellKills: lifetime.shellKills + kills };
+      };
+      return {
+        lifetime: () => ({ ...lifetime }),
+        run: () => ({ ...run }),
+        record: (events: SimEvent[], playerId: number) => {
+          rec.statBatches.push({ count: events.length, playerId });
+          fold(events);
+        },
+        startRun: () => {
+          run = { ...ZERO_STATS };
+          rec.statRunStarts += 1;
+        },
+        resetLifetime: () => {
+          lifetime = { ...ZERO_STATS };
+          rec.statResets += 1;
+        },
+      };
+    })(),
     progress: (() => {
       // Mutable base so reset() models the real store: everything re-locks,
       // including clears that predate this session.
@@ -1457,9 +1487,33 @@ describe('startGameWith: stats wiring', () => {
 });
 
 describe('startGameWith: achievements wiring', () => {
-  it('seeds the HUD with the earned set at boot', () => {
-    const h = boot(makeDeps());
-    expect(h.rec.achPushes.length).toBeGreaterThan(0);
+  /**
+   * A world one tick from being cleared: the last enemy stands on a player-owned
+   * mine whose fuse expires immediately, so the killing blow and the `win` event
+   * ride ONE step() batch. That is how a real level ends, and driving it this way
+   * (rather than calling setState('win')) is what exercises the ordering between
+   * the state flip and stats.record.
+   */
+  const winningWorld = (over: Partial<World> = {}): World => {
+    const base = createArenaWorld(1);
+    const player = base.tanks.find((t) => t.kind === 'player')!;
+    const enemy = base.tanks.find((t) => t.kind !== 'player')!;
+    return {
+      ...base,
+      roundStartTick: -100000,
+      tanks: [player, enemy],
+      mines: [
+        { id: 700, ownerId: player.id, pos: { ...enemy.pos }, timer: 0.001, armed: true, detonated: false },
+      ],
+      ...over,
+    };
+  };
+
+  it('seeds the HUD with the SAVED earned set at boot', () => {
+    // A pre-earned store, so the assertion can tell "read the store" from
+    // "pushed an empty set" -- with an always-empty fixture both look identical.
+    const h = boot(makeDeps({ savedAchievements: ['petard', 'trick-shot'] }));
+    expect(h.rec.achPushes[0].sort()).toEqual(['petard', 'trick-shot']);
     h.handle.dispose();
   });
 
@@ -1482,9 +1536,9 @@ describe('startGameWith: achievements wiring', () => {
   it('evaluates at the win with the cleared level and the lives that survived', () => {
     // lives: 2, NOT the fixture default of 3 -- against a 3-life world a hardcoded
     // `livesLeft: 3` passes, which is the tautology that hid here first time round.
-    const world = { ...createArenaWorld(1), lives: 2 };
-    const h = boot(makeDeps({ levelStart: 1, world }));
-    h.setState('win');
+    const h = boot(makeDeps({ levelStart: 1, world: winningWorld({ lives: 2 }) }));
+    h.setState('playing');
+    h.fireFrame(100);
     const atWin = h.rec.achChecks.filter((c) => c.clearedLevel !== null);
     expect(atWin).toHaveLength(1);
     // 1-based level number, matching progress.recordCleared, not the 0-based index.
@@ -1496,20 +1550,41 @@ describe('startGameWith: achievements wiring', () => {
   it('checks the win AFTER the clear is recorded, so level milestones see it', () => {
     // Ordering is the whole point: evaluating first would make Campaigner need a
     // SECOND win to notice the one that finished the game.
-    const h = boot(makeDeps({ levelCount: 1, progressHighest: 0 }));
-    h.setState('win');
+    const h = boot(makeDeps({ levelCount: 1, progressHighest: 0, world: winningWorld() }));
+    h.setState('playing');
+    h.fireFrame(100);
     const atWin = h.rec.achChecks.filter((c) => c.clearedLevel !== null);
     expect(atWin).toHaveLength(1);
     expect(atWin[0].highestCleared).toBe(1);
     h.handle.dispose();
   });
 
+  it('the win-time context INCLUDES the winning frame\'s kill', () => {
+    // The winning tank-destroyed and the win event ride the SAME step() batch, and
+    // the state machine flips inside stateMachine.onEvents -- which the driver calls
+    // BEFORE onFrameEvents, where stats.record runs. Evaluate run feats at the state
+    // change and they see a tally one kill short: Dead Eye (shellKills ===
+    // shotsFired) becomes unearnable on a normal clear and Bomb Squad misses a
+    // single-mine-kill win. This asserts the check sees the FINISHED run.
+    const h = boot(makeDeps({ world: winningWorld() }));
+    h.setState('playing');
+    h.fireFrame(100);
+    const atWin = h.rec.achChecks.filter((c) => c.clearedLevel !== null);
+    expect(atWin).toHaveLength(1); // the win really landed in-frame
+    expect(atWin[0].runShellKills).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
   it('toasts newly earned achievements and pushes the fresh set to the HUD', () => {
     const h = boot(
-      makeDeps({ earnsOn: [{ id: 'boots-on-ground', when: (c) => c.clearedLevel !== null }] }),
+      makeDeps({
+        world: winningWorld(),
+        earnsOn: [{ id: 'boots-on-ground', when: (c) => c.clearedLevel !== null }],
+      }),
     );
     const pushesBefore = h.rec.achPushes.length;
-    h.setState('win');
+    h.setState('playing');
+    h.fireFrame(100);
     expect(h.rec.toasts).toEqual([['boots-on-ground']]);
     expect(h.rec.achPushes.length).toBe(pushesBefore + 1);
     expect(h.rec.achPushes.at(-1)).toEqual(['boots-on-ground']);

@@ -98,4 +98,18 @@ describe('hud.css is syntactically whole', () => {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
   });
+
+  it('keeps the stacking order the overlays depend on', () => {
+    // Three positioned layers with no z-index would be ordered by tree position
+    // alone. Two real defects came from that: the stats page painted over the
+    // topbar and ate its clicks, and unlock toasts painted UNDER the win panel
+    // that is always up when a clear-gated achievement fires.
+    const block = (sel: string): string =>
+      stripComments(css).split(sel)[1]?.split('}')[0] ?? '';
+    expect(block('.hud-topbar')).toContain('z-index: 1');
+    expect(block('.hud-toasts')).toContain('z-index: 2'); // above topbar and panel
+    for (const overlay of ['.hud-stats ', '.hud-customize ', '.hud-achievements ']) {
+      expect(block(overlay), overlay).toContain('z-index: 0'); // under the topbar
+    }
+  });
 });

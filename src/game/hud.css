@@ -415,6 +415,10 @@
 
 .hud-toasts {
   position: absolute;
+  /* Above the topbar (1) AND the panel (auto): the six clear-gated unlocks toast
+   * while the win panel is up, and with tree order deciding they landed behind its
+   * scrim. Safe to raise because the rail is pointer-events: none. */
+  z-index: 2;
   top: 64px;
   right: 16px;
   display: flex;

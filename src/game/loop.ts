@@ -297,6 +297,17 @@ export function startGameWith(
    * has just landed, which is what stops a run feat firing mid-round on a tally that
    * happens to qualify. Newly earned entries come back and become toasts.
    */
+  /**
+   * Set when a win lands, consumed on the SAME frame once that frame's stats are
+   * recorded. The winning tank-destroyed and the win event ride one step() batch,
+   * and the driver routes it to the state machine (which flips synchronously)
+   * BEFORE onFrameEvents, where stats.record runs. Evaluating run feats straight
+   * from the state change therefore reads a tally one kill short -- Dead Eye
+   * unearnable on a normal clear, Bomb Squad blind to a single-mine-kill win,
+   * Flawless granted for a mutual kill the player did not survive.
+   */
+  let pendingClear: number | null = null;
+
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
       lifetime: deps.stats.lifetime(),
@@ -305,6 +316,7 @@ export function startGameWith(
       totalLevels: deps.levels.count,
       clearedLevel,
       livesLeft: driver.world.lives,
+      tracksProgress: deps.levels.tracksProgress,
     };
     const fresh = deps.achievements.check(ctx);
     if (fresh.length === 0) return;
@@ -364,7 +376,9 @@ export function startGameWith(
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
-      checkAchievements(null);
+      // AFTER record, so a run feat sees the run that just finished.
+      checkAchievements(pendingClear);
+      pendingClear = null;
       // Keep the HUD's copy fresh: the stats page re-renders only while visible, and
       // the win/lose run-summary line updates a beat after the state flips -- the
       // winning kill is in THIS batch, not the one before the panel opened.
@@ -478,7 +492,6 @@ export function startGameWith(
   hud.onPickSkin((id) => {
     deps.customization.setSkin(id);
     hud.setSkin(deps.customization.skin());
-  hud.setAchievements(deps.achievements.earned());
     restyle();
   });
 
@@ -510,10 +523,10 @@ export function startGameWith(
       deps.progress.recordCleared(level + 1);
       hud.setLevelSelect(unlockedLevels(), deps.levels.count);
     }
-    // AFTER recordCleared, so the level milestones see the clear they just earned.
-    // Outside the tracksProgress guard on purpose: the sandbox unlocks no levels but
-    // a feat performed there is still a feat.
-    if (s === 'win') checkAchievements(level + 1);
+    // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
+    // guard on purpose: the sandbox unlocks no levels but a feat performed there is
+    // still a feat. recordCleared has already run, so level milestones see the clear.
+    if (s === 'win') pendingClear = level + 1;
     // The driver stops sampling while paused and only sample() resets the fire/mine
     // latches, so a Space pressed around or during a pause would mine on the first
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger

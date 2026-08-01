@@ -30,6 +30,12 @@ export interface AchievementContext {
   clearedLevel: number | null;
   /** Lives remaining, for feats about finishing on the ropes. */
   livesLeft: number;
+  /**
+   * Whether this level set is the real campaign. The dev sandbox is a ONE-level
+   * set, so a progress milestone measured against `totalLevels` would hand out
+   * "clear every level" to anyone who opens ?level=sandbox having cleared level 1.
+   */
+  tracksProgress: boolean;
 }
 
 export interface AchievementDef {
@@ -123,7 +129,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     description: 'Clear every level.',
     // >= totalLevels, not "the last one unlocked": with one level left this must
     // stay locked, which a `highestCleared > 0` style test would not catch.
-    earned: (c) => c.totalLevels > 0 && c.highestCleared >= c.totalLevels,
+    earned: (c) => c.tracksProgress && c.totalLevels > 0 && c.highestCleared >= c.totalLevels,
   },
   {
     id: 'flawless',
@@ -189,16 +195,32 @@ function read(storage: Storage): Set<AchievementId> {
 export function createAchievementsStore(storage: Storage): AchievementsStore {
   let shadow = read(storage);
 
-  function persist(): void {
+  /** The blind write. Only reset() may use it: a union would resurrect what it clears. */
+  function write(ids: Iterable<AchievementId>): void {
     try {
-      storage.setItem(ACHIEVEMENTS_KEY, JSON.stringify({ earned: [...shadow] }));
+      storage.setItem(ACHIEVEMENTS_KEY, JSON.stringify({ earned: [...ids] }));
     } catch {
-      // Private mode: the shadow carries the session.
+      // Private mode or quota: the shadow carries the session.
     }
   }
 
+  function persist(): void {
+    // UNION-merge against current storage before writing, exactly as stats.ts and
+    // progress.ts do and for the same reason found in review there: a blind write
+    // of this tab's copy erases what another tab earned since we booted. Union is
+    // the no-loss choice for a latched set.
+    // KNOWN RESIDUAL, shared with the siblings: a tab still open across a Reset
+    // progress can resurrect pre-reset ids with its next write.
+    for (const id of read(storage)) shadow.add(id);
+    write(shadow);
+  }
+
   return {
-    earned: () => shadow,
+    // A COPY, not the live Set: `ReadonlySet` is compile-time only, and a caller
+    // that added to the internal set would silently suppress that achievement's
+    // real toast forever. It also makes the HUD's refresh wiring falsifiable --
+    // a held reference no longer updates itself.
+    earned: () => new Set(shadow),
     check(ctx: AchievementContext): AchievementDef[] {
       const fresh = ACHIEVEMENTS.filter((a) => !shadow.has(a.id) && a.earned(ctx));
       if (fresh.length === 0) return [];
@@ -207,8 +229,10 @@ export function createAchievementsStore(storage: Storage): AchievementsStore {
       return fresh;
     },
     reset(): void {
-      shadow = new Set();
-      persist();
+      // clear(), not a new Set: a swap leaves any held reference pointing at the
+      // pre-reset ids, which is a different behaviour from the in-place add above.
+      shadow.clear();
+      write(shadow); // NOT persist(): the union would instantly resurrect everything
     },
   };
 }
