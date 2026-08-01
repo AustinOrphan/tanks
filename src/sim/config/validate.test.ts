@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TANK_KINDS, validateAiProfiles, validateTankDefinitions } from './validate';
+import { TANK_KINDS, validateAiProfiles, validateArenaShape, validateArenas, validateTankDefinitions } from './validate';
 import tankDefsJson from './data/tank-defs.json';
 import aiProfilesJson from './data/ai-profiles.json';
 import { AIProfile } from './enums';
@@ -165,5 +165,286 @@ describe('validateAiProfiles', () => {
     const profiles = validateAiProfiles(aiProfilesJson);
     expect('minePlacementChance' in profiles[AIProfile.STATIC_BASIC]).toBe(false);
     expect(profiles[AIProfile.DEFENSIVE_BASIC].minePlacementChance).toBe(0.3);
+  });
+});
+
+const GOOD_ARENA = {
+  id: 'test-01',
+  cols: 4, rows: 3, cellSize: 2,
+  legend: { '#': 'solid' },
+  grid: ['.B..', '.#..', '..P.'],
+  notes: ['a note'],
+  claims: [],
+};
+
+describe('validateArenas', () => {
+  it('accepts a well-formed arena file and returns it intact', () => {
+    expect(validateArenas({ arenas: [GOOD_ARENA] })).toEqual([GOOD_ARENA]);
+  });
+
+  it('rejects a grid whose row count disagrees with rows', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).rows = 4;
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.grid.*3 rows.*declares 4/);
+  });
+
+  it('rejects a row whose length disagrees with cols', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).grid = ['.B..', '.#.', '..P.'];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.grid\[1\].*length 3.*declares 4/);
+  });
+
+  it('rejects a grid character that is neither legend, spawn letter, nor floor', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).grid = ['.B..', '.Z..', '..P.'];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.grid\[1\]\[1\].*"Z"/);
+  });
+
+  it('rejects a legend value that is not a WallKind', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).legend = { '#': 'squishy' };
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.legend\["#"\].*WallKind/);
+  });
+
+  it('rejects zero or one player spawns, and demands an enemy', () => {
+    const none = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).grid = ['.B..', '.#..', '....'];
+    });
+    expect(() => validateArenas(none)).toThrow(/exactly one player spawn.*found 0/);
+    const two = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).grid = ['.B..', '.#..', '.PP.'];
+    });
+    expect(() => validateArenas(two)).toThrow(/exactly one player spawn.*found 2/);
+    const noEnemy = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).grid = ['....', '.#..', '..P.'];
+    });
+    expect(() => validateArenas(noEnemy)).toThrow(/at least one enemy/);
+  });
+
+  it('rejects duplicate ids', () => {
+    expect(() => validateArenas({ arenas: [GOOD_ARENA, GOOD_ARENA] }))
+      .toThrow(/duplicate id "test-01"/);
+  });
+
+  it('rejects an empty arena list, a non-array, and a non-object root', () => {
+    expect(() => validateArenas({ arenas: [] })).toThrow(/at least one arena/);
+    expect(() => validateArenas({ arenas: 'nope' })).toThrow(/must be an array/);
+    expect(() => validateArenas(null)).toThrow(/root.*object/);
+  });
+
+  it('rejects an unknown claim type and a malformed claim', () => {
+    const badType = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [{ type: 'vibes', why: 'x' }];
+    });
+    expect(() => validateArenas(badType)).toThrow(/arenas\[0\]\.claims\[0\]\.type.*"vibes"/);
+    const noWhy = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'spawnBlockRobust', nudge: 0.1 },
+      ];
+    });
+    expect(() => validateArenas(noWhy)).toThrow(/arenas\[0\]\.claims\[0\].*"why"/);
+  });
+
+  it('rejects a claim cell outside the grid, or a sightline claim not on an enemy spawn', () => {
+    const oob = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [9, 9], sees: true, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(oob)).toThrow(/arenas\[0\]\.claims\[0\]\.from.*outside the grid/);
+    const notSpawn = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [0, 0], sees: true, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(notSpawn))
+      .toThrow(/arenas\[0\]\.claims\[0\]\.from.*enemy spawn/);
+  });
+
+  it('rejects a sightline claim aimed at the player spawn (an enemy spawn only, not any spawn)', () => {
+    // GOOD_ARENA's P is at [2, 2]; picking it -- rather than a floor tile like
+    // the "not on an enemy spawn" control above -- proves enemySpawnCell's
+    // `kind === 'player'` branch specifically, not just its `!kind` branch.
+    const atPlayer = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [2, 2], sees: true, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(atPlayer))
+      .toThrow(/arenas\[0\]\.claims\[0\]\.from.*enemy spawn/);
+  });
+
+  it('accepts a lane claim naming any two in-grid cells, and returns it intact', () => {
+    const laneClaim = { type: 'lane', from: [0, 0], to: [3, 2], intact: 'blocked', breached: 'open', why: 'x' };
+    const withLane = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [laneClaim];
+    });
+    expect(validateArenas(withLane)[0].claims).toEqual([laneClaim]);
+  });
+
+  it('rejects a non-boolean "sees" on a sightline claim', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [1, 0], sees: 'yes', why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.sees.*boolean/);
+  });
+
+  it('rejects a lane claim whose intact/breached state is not "blocked" or "open"', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'lane', from: [0, 0], to: [3, 2], intact: 'ajar', breached: 'open', why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.intact.*"ajar"/);
+  });
+
+  it('rejects a claim that is not an object', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = ['vibes'];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\] must be an object/);
+  });
+
+  it('rejects an unknown field on a claim', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'spawnBlockRobust', nudge: 0.1, why: 'x', panache: true },
+      ];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\].*unknown entry "panache"/);
+  });
+
+  it('rejects a whitespace-only "why"', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'spawnBlockRobust', nudge: 0.1, why: '   ' },
+      ];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.why must not be empty/);
+  });
+
+  it('rejects a spawnBlockRobust nudge that is zero or negative', () => {
+    const zero = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'spawnBlockRobust', nudge: 0, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(zero)).toThrow(/arenas\[0\]\.claims\[0\]\.nudge.*greater than zero/);
+  });
+
+  it('rejects a claim cell that is not a [col, row] pair', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [1, 1, 1], sees: true, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.from.*\[col, row\] pair/);
+  });
+
+  it('rejects an arena entry that is not an object', () => {
+    expect(() => validateArenas({ arenas: ['nope'] })).toThrow(/arenas\[0\] must be an object/);
+  });
+
+  it('rejects an arena missing a required top-level field', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      delete ((c.arenas as Mutable[])[0] as Mutable).cellSize;
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\].*missing required entry "cellSize"/);
+  });
+
+  it('rejects an arena with an unknown top-level field', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).difficulty = 'hard';
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\].*unknown entry "difficulty"/);
+  });
+
+  it('rejects notes that are not an array, or a note that is not a string', () => {
+    const notArray = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).notes = 'nope';
+    });
+    expect(() => validateArenas(notArray)).toThrow(/arenas\[0\]\.notes.*array of strings/);
+    const badNote = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).notes = [7];
+    });
+    expect(() => validateArenas(badNote)).toThrow(/arenas\[0\]\.notes\[0\].*string/);
+  });
+
+  it('rejects claims that are not an array', () => {
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = 'nope';
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims must be an array/);
+  });
+});
+
+describe('validateArenaShape', () => {
+  it('accepts a bare Arena (no id/notes/claims) -- the sandbox path', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(validateArenaShape(shape, 'sandbox', 'sandbox')).toEqual(shape);
+  });
+
+  it('rejects a shape that is not an object', () => {
+    expect(() => validateArenaShape('nope', 'sandbox', 'sandbox')).toThrow(/sandbox must be an object/);
+  });
+
+  it('rejects cols or rows of zero', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, cols: 0 }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.cols.*greater than zero/);
+    expect(() => validateArenaShape({ ...shape, rows: 0 }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.rows.*greater than zero/);
+  });
+
+  it('rejects a cellSize of zero or negative', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, cellSize: 0 }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.cellSize.*greater than zero/);
+  });
+
+  it('rejects a legend that is not an object', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, legend: 'nope' }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.legend must be an object/);
+  });
+
+  it('rejects a legend key that is not a single character', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, legend: { '##': 'solid' } }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.legend\["##"\].*single character/);
+  });
+
+  it('rejects a legend key that collides with floor or a spawn letter', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, legend: { '.': 'solid' } }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.legend\["\."\].*collides/);
+    expect(() => validateArenaShape({ ...shape, legend: { P: 'solid' } }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.legend\["P"\].*collides/);
+  });
+
+  it('rejects a grid that is not an array', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, grid: 'nope' }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.grid.*array of strings/);
+  });
+
+  it('rejects a grid row that is not a string', () => {
+    const { id, notes, claims, ...shape } = GOOD_ARENA;
+    void id; void notes; void claims;
+    expect(() => validateArenaShape({ ...shape, grid: [5, '.#..', '..P.'] }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.grid\[0\].*string/);
   });
 });

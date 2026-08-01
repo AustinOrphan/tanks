@@ -1,4 +1,4 @@
-import type { TankKind } from '../types';
+import type { TankKind, WallKind } from '../types';
 import {
   AIBehavior,
   AIProfile,
@@ -9,6 +9,8 @@ import {
   TankAbility,
 } from './enums';
 import type { AIProfileBalance, TankDefinition } from './types';
+import type { ArenaClaim, ArenaDefinition, ArenaShape } from './arena-types';
+import { SPAWN_LETTERS } from './arena-types';
 
 // ---------------------------------------------------------------------------
 // Runtime validation for the JSON entity data (data/tank-defs.json,
@@ -193,4 +195,139 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
     out[profile] = resolved;
   }
   return out;
+}
+
+const SHAPE_FIELDS = ['cols', 'rows', 'cellSize', 'legend', 'grid'] as const;
+const DEFINITION_ARENA_FIELDS = [...SHAPE_FIELDS, 'id', 'notes', 'claims'] as const;
+const WALL_KINDS = ['solid', 'destructible'] as const;
+
+function posInt(file: string, path: string, v: unknown): number {
+  const n = nonNegInt(file, path, v);
+  if (n === 0) fail(file, path, 'must be greater than zero');
+  return n;
+}
+
+/**
+ * The geometry half: dimensions, legend, grid, spawn counts. Split out from
+ * validateArenas so the SANDBOX -- which generates a bare Arena programmatically
+ * and has no id/notes/claims -- can be held to the same structural bar.
+ */
+export function validateArenaShape(raw: unknown, file: string, path: string): ArenaShape {
+  if (!isRecord(raw)) fail(file, path, 'must be an object');
+  const cols = posInt(file, `${path}.cols`, raw.cols);
+  const rows = posInt(file, `${path}.rows`, raw.rows);
+  const cellSize = num(file, `${path}.cellSize`, raw.cellSize);
+  if (cellSize <= 0) fail(file, `${path}.cellSize`, 'must be greater than zero');
+
+  if (!isRecord(raw.legend)) fail(file, `${path}.legend`, 'must be an object');
+  const legend: Record<string, WallKind> = {};
+  for (const [ch, kind] of Object.entries(raw.legend)) {
+    if (ch.length !== 1) fail(file, `${path}.legend["${ch}"]`, 'key must be a single character');
+    if (ch === '.' || ch in SPAWN_LETTERS) {
+      fail(file, `${path}.legend["${ch}"]`, 'collides with floor or a spawn letter');
+    }
+    legend[ch] = oneOf(file, `${path}.legend["${ch}"]`, kind, WALL_KINDS, 'WallKind');
+  }
+
+  if (!Array.isArray(raw.grid)) fail(file, `${path}.grid`, 'must be an array of strings');
+  if (raw.grid.length !== rows) {
+    fail(file, `${path}.grid`, `has ${raw.grid.length} rows but the arena declares ${rows}`);
+  }
+  let players = 0;
+  let enemies = 0;
+  const grid = raw.grid.map((row, r) => {
+    const line = str(file, `${path}.grid[${r}]`, row);
+    if (line.length !== cols) {
+      fail(file, `${path}.grid[${r}]`, `has length ${line.length} but the arena declares ${cols}`);
+    }
+    for (let c = 0; c < line.length; c++) {
+      const ch = line[c];
+      if (ch === '.') continue;
+      if (ch in legend) continue;
+      const kind = SPAWN_LETTERS[ch];
+      if (!kind) {
+        fail(file, `${path}.grid[${r}][${c}]`,
+          `${JSON.stringify(ch)} is neither floor, a legend character, nor a spawn letter`);
+      }
+      if (kind === 'player') players++;
+      else enemies++;
+    }
+    return line;
+  });
+  if (players !== 1) fail(file, path, `must have exactly one player spawn, found ${players}`);
+  if (enemies < 1) fail(file, path, 'must have at least one enemy spawn');
+
+  return { cols, rows, cellSize, legend, grid };
+}
+
+const CLAIM_FIELDS: Record<ArenaClaim['type'], readonly string[]> = {
+  sightlineAfterBreach: ['type', 'from', 'sees', 'why'],
+  lane: ['type', 'from', 'to', 'intact', 'breached', 'why'],
+  spawnBlockRobust: ['type', 'nudge', 'why'],
+};
+const BLOCK_STATES = ['blocked', 'open'] as const;
+
+function cell(file: string, path: string, v: unknown, shape: ArenaShape): [number, number] {
+  if (!Array.isArray(v) || v.length !== 2) fail(file, path, 'must be a [col, row] pair');
+  const c = nonNegInt(file, `${path}[0]`, v[0]);
+  const r = nonNegInt(file, `${path}[1]`, v[1]);
+  if (c >= shape.cols || r >= shape.rows) {
+    fail(file, path, `[${c}, ${r}] is outside the grid (${shape.cols}x${shape.rows})`);
+  }
+  return [c, r];
+}
+
+function enemySpawnCell(file: string, path: string, v: unknown, shape: ArenaShape): [number, number] {
+  const [c, r] = cell(file, path, v, shape);
+  const kind = SPAWN_LETTERS[shape.grid[r][c]];
+  if (!kind || kind === 'player') {
+    fail(file, path, `[${c}, ${r}] must hold an enemy spawn, found ${JSON.stringify(shape.grid[r][c])}`);
+  }
+  return [c, r];
+}
+
+function validateClaim(file: string, path: string, v: unknown, shape: ArenaShape): ArenaClaim {
+  if (!isRecord(v)) fail(file, path, 'must be an object');
+  const type = oneOf(file, `${path}.type`, v.type,
+    Object.keys(CLAIM_FIELDS) as ArenaClaim['type'][], 'claim type');
+  exactKeys(file, path, v, CLAIM_FIELDS[type]);
+  const why = str(file, `${path}.why`, v.why);
+  if (why.trim() === '') fail(file, `${path}.why`, 'must not be empty');
+  switch (type) {
+    case 'sightlineAfterBreach':
+      return { type, from: enemySpawnCell(file, `${path}.from`, v.from, shape),
+        sees: bool(file, `${path}.sees`, v.sees), why };
+    case 'lane':
+      return { type, from: cell(file, `${path}.from`, v.from, shape),
+        to: cell(file, `${path}.to`, v.to, shape),
+        intact: oneOf(file, `${path}.intact`, v.intact, BLOCK_STATES, 'block state'),
+        breached: oneOf(file, `${path}.breached`, v.breached, BLOCK_STATES, 'block state'), why };
+    case 'spawnBlockRobust': {
+      const nudge = num(file, `${path}.nudge`, v.nudge);
+      if (nudge <= 0) fail(file, `${path}.nudge`, 'must be greater than zero');
+      return { type, nudge, why };
+    }
+  }
+}
+
+export function validateArenas(raw: unknown, file = 'arenas.json'): ArenaDefinition[] {
+  if (!isRecord(raw)) fail(file, 'root', 'must be an object with an "arenas" array');
+  if (!Array.isArray(raw.arenas)) fail(file, 'root.arenas', 'must be an array');
+  if (raw.arenas.length === 0) fail(file, 'root.arenas', 'must hold at least one arena');
+
+  const seen = new Set<string>();
+  return raw.arenas.map((entry, i) => {
+    const path = `arenas[${i}]`;
+    if (!isRecord(entry)) fail(file, path, 'must be an object');
+    exactKeys(file, path, entry, DEFINITION_ARENA_FIELDS);
+    const shape = validateArenaShape(entry, file, path);
+    const id = str(file, `${path}.id`, entry.id);
+    if (seen.has(id)) fail(file, path, `duplicate id ${JSON.stringify(id)}`);
+    seen.add(id);
+    if (!Array.isArray(entry.notes)) fail(file, `${path}.notes`, 'must be an array of strings');
+    const notes = entry.notes.map((n, j) => str(file, `${path}.notes[${j}]`, n));
+    if (!Array.isArray(entry.claims)) fail(file, `${path}.claims`, 'must be an array');
+    const claims = entry.claims.map((c, j) => validateClaim(file, `${path}.claims[${j}]`, c, shape));
+    return { id, ...shape, notes, claims };
+  });
 }
