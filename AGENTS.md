@@ -107,12 +107,12 @@ failure lives in, not added detection power on its own; the breached phase is
 what actually catches a corner tangency. Only 4 of those 5 DECLARE the claim —
 arena-02 does not, because checked the same way it fails 12 of its 16
 breached-phase checks (0 of 16 intact): the level's design is to open
-sightlines when its centre barrier breaches, not survive it. **That 12-of-16
-figure is not regression-protected**: the switch case in `arena-claims.ts` only
-runs a claim type an arena actually DECLARES, so arena-02's number came from a
-one-off, out-of-suite invocation of the same check by hand, not from anything
-`npm test` runs — no test recomputes it, and it will rot silently if arena-02's
-grid ever changes. Adding a level is editing JSON: the generic runner in
+sightlines when its centre barrier breaches, not survive it. The switch case in
+`arena-claims.ts` only runs a claim type an arena actually DECLARES, so nothing
+about arena-02's number falls out of the claim runner — it is recomputed
+instead by its own test in `arena-validation.test.ts` (denominator pinned at 4
+enemies × 4 cardinal nudges), which fails if that grid changes. Deliberately
+not a claim: making it one would assert a property arena-02 does not have. Adding a level is editing JSON: the generic runner in
 `arena-validation.test.ts` picks up its claims automatically, and `npx vitest
 watch src/sim/arena-validation.test.ts` is the authoring loop — though the
 claim MIX itself is pinned separately by that file's `EXPECTED_CLAIMS` table,

@@ -3,6 +3,7 @@ import { loadArena } from './arena';
 import type { Vec2, Wall } from './types';
 import { lineOfSight } from './ai/targeting';
 import type { ArenaClaim } from './config/arena-types';
+import { SPAWN_LETTERS } from './config/arena-types';
 
 /**
  * Evaluates an arena's declared design claims (config/arena-types.ts) against the
@@ -14,20 +15,56 @@ import type { ArenaClaim } from './config/arena-types';
  * bundle imports this.
  */
 
-/** The world-space centre of a grid cell, matching loadArena's spawn placement. */
-function cellCentre(arena: Arena, [c, r]: readonly [number, number]): Vec2 {
+/**
+ * The world-space centre of a grid cell, matching loadArena's spawn placement
+ * (`(c + 0.5) * cellSize`, arena.ts). Exported with its inverse below because
+ * this formula previously existed in three places -- here, loadArena, and a
+ * hand-rolled inverse in arena-validation.test.ts -- with nothing pinning them
+ * together. `cell-mapping.test.ts` now does.
+ */
+export function cellCentre(arena: Arena, [c, r]: readonly [number, number]): Vec2 {
   return { x: (c + 0.5) * arena.cellSize, y: (r + 0.5) * arena.cellSize };
 }
 
-function breach(walls: Wall[]): Wall[] {
+/** The inverse of cellCentre: which cell a world point sits in. */
+export function cellOf(arena: Arena, p: Vec2): [number, number] {
+  return [Math.round(p.x / arena.cellSize - 0.5), Math.round(p.y / arena.cellSize - 0.5)];
+}
+
+/**
+ * Every destructible wall destroyed, as a COPY -- the caller's array is left
+ * intact. Exported so tests stop open-coding the idiom (three sites did, and
+ * they mutated in place, which is a different thing).
+ */
+export function breach(walls: Wall[]): Wall[] {
   return walls.map((w) => (w.kind === 'destructible' ? { ...w, destroyed: true } : w));
 }
 
-/** The grid with `marks` overwritten as `*`, for failure messages. */
-export function renderBoard(arena: Arena, marks: ReadonlyArray<[number, number]>): string {
+/**
+ * The grid with `marks` overwritten as `*`, for failure messages.
+ *
+ * An out-of-grid mark is REPORTED, not thrown: this runs on the failure path, so
+ * a raw TypeError here would bury the failure it was called to explain. Data
+ * from arenas.json cannot get here out of range (the validator bounds-checks
+ * every claim cell), but a hand-built test claim can.
+ */
+export function renderBoard(
+  arena: Arena,
+  marks: ReadonlyArray<readonly [number, number, string?]>,
+): string {
   const rows = arena.grid.map((row) => [...row]);
-  for (const [c, r] of marks) rows[r][c] = '*';
-  return rows.map((row) => row.join('')).join('\n');
+  const outside: string[] = [];
+  for (const [c, r, glyph] of marks) {
+    if (c < 0 || c >= arena.cols || r < 0 || r >= arena.rows) {
+      outside.push(`[${c}, ${r}]`);
+      continue;
+    }
+    rows[r][c] = glyph ?? '*';
+  }
+  const board = rows.map((row) => row.join('')).join('\n');
+  return outside.length === 0
+    ? board
+    : `${board}\n(not drawn -- outside the ${arena.cols}x${arena.rows} grid: ${outside.join(' ')})`;
 }
 
 /**
@@ -42,21 +79,35 @@ function isBreachable(arena: Arena, r: number, c: number): boolean {
   return !kind || kind === 'destructible';
 }
 
-/** 4-neighbour flood fill over breachable cells. */
-function reachable(arena: Arena): { open: number; reached: number } {
+/**
+ * 4-neighbour flood fill over breachable cells; also names what it could not reach.
+ *
+ * The fill starts at the PLAYER's cell, not at the first breachable cell in scan
+ * order. Connectivity is symmetric so the pass/fail answer is identical either way,
+ * but the REPORTED set is not: review caught the scan-order version marking the whole
+ * play area as "cut off" on the sealed-pocket fixture, because that fixture's sealed
+ * cell sorts first and became the fill's origin. Anchoring on the player makes
+ * `unreached` mean "cut off from the player", which is the thing worth drawing.
+ */
+function reachable(arena: Arena): { open: number; reached: number; unreached: Array<[number, number]> } {
   const { rows, cols } = arena;
   const seen = Array.from({ length: rows }, () => Array(cols).fill(false));
   let open = 0;
   let start: [number, number] | null = null;
+  let fallback: [number, number] | null = null;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (isBreachable(arena, r, c)) {
         open++;
-        if (!start) start = [r, c];
+        if (!fallback) fallback = [r, c];
+        if (SPAWN_LETTERS[arena.grid[r][c]] === 'player') start = [r, c];
       }
     }
   }
-  if (!start) return { open, reached: 0 };
+  // A grid with no player spawn cannot reach the validator, but structuralFailures
+  // is called on hand-built fixtures too; fall back rather than crash.
+  start = start ?? fallback;
+  if (!start) return { open, reached: 0, unreached: [] };
   const seenStack: Array<[number, number]> = [start];
   seen[start[0]][start[1]] = true;
   let reachedCount = 0;
@@ -72,7 +123,13 @@ function reachable(arena: Arena): { open: number; reached: number } {
       seenStack.push([nr, nc]);
     }
   }
-  return { open, reached: reachedCount };
+  const unreached: Array<[number, number]> = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (isBreachable(arena, r, c) && !seen[r][c]) unreached.push([c, r]);
+    }
+  }
+  return { open, reached: reachedCount, unreached };
 }
 
 /**
@@ -85,10 +142,11 @@ function reachable(arena: Arena): { open: number; reached: number } {
  */
 export function structuralFailures(arena: Arena): string[] {
   const failures: string[] = [];
-  const { open, reached } = reachable(arena);
+  const { open, reached, unreached } = reachable(arena);
   if (reached !== open) {
     failures.push(
-      `sealed pocket: ${reached} of ${open} breachable cells reachable\n${renderBoard(arena, [])}`,
+      `sealed pocket: ${reached} of ${open} breachable cells reachable; ` +
+      `${unreached.length} cut off, marked below\n${renderBoard(arena, unreached)}`,
     );
   }
   const { walls, spawns } = loadArena(arena);
@@ -97,7 +155,11 @@ export function structuralFailures(arena: Arena): string[] {
   for (const enemy of spawns.filter((s) => s.kind !== 'player')) {
     if (lineOfSight(enemy.pos, player.pos, walls)) {
       failures.push(
-        `spawn sightline: ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the player spawn`,
+        `spawn sightline: ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the player spawn\n` +
+        renderBoard(arena, [
+          [...cellOf(arena, enemy.pos), 'E'] as const,
+          [...cellOf(arena, player.pos), 'P'] as const,
+        ]),
       );
     }
   }
@@ -154,8 +216,8 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
         // this claim type replaced, but not because intact adds detection power on
         // its own: measured across all 5 arena-01/02/03-and-fixture scenarios --
         // this switch case only runs where the claim is DECLARED, so arena-02 (which
-        // does not declare it) was checked by hand, the same way, outside the suite
-        // -- 0 failures were intact-only. Breach only ever reveals sightlines, never
+        // does not declare it) is measured by its own test in arena-validation.test.ts
+        // rather than here -- 0 failures were intact-only. Breach only ever reveals sightlines, never
         // hides them, so an intact failure is always also a breached one at the same
         // enemy/offset. arena-02 fails 12 of its 16 breached-phase checks and 0 of 16
         // intact -- exactly why it carries no spawnBlockRobust claim: the level's
@@ -176,7 +238,12 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
                 failures.push(
                   `spawnBlockRobust (${phase.name}): ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the ` +
                   `player nudged by (${off.x}, ${off.y}) -- the block is a tangency, not a chord\n` +
-                  `  why: ${claim.why}\n${renderBoard(arena, [])}`,
+                  `  why: ${claim.why}\n` +
+                  `  (E = the enemy that sees, P = the player spawn)\n` +
+                  renderBoard(arena, [
+                    [...cellOf(arena, enemy.pos), 'E'] as const,
+                    [...cellOf(arena, player.pos), 'P'] as const,
+                  ]),
                 );
               }
             }

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { claimFailures, renderBoard, structuralFailures } from './arena-claims';
+import { claimFailures, renderBoard, structuralFailures, cellOf } from './arena-claims';
+import { SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import { arenaById } from './config/arenas';
-import type { Arena } from './arena';
-import { ARENA_01 } from './arena';
+import { ARENA_01, loadArena, type Arena } from './arena';
 import type { ArenaClaim } from './config/arena-types';
 
 // A guard is worth what its own tests prove: the purity guard passed four of five
@@ -172,5 +172,70 @@ describe('renderBoard', () => {
     expect(lines[1][3]).toBe('*'); // row 1, col 3 -- the marked cell
     expect(lines[3][1]).toBe('.'); // row 3, col 1 -- untouched; a transposed write lands here instead
     expect(lines[7]).toContain('P'); // untouched rows still read as the grid
+  });
+});
+
+// The marking behaviour itself, which nothing asserted before: review found the
+// sealed-pocket board marking the ENTIRE play area as cut off (its flood fill
+// started at the first breachable cell in scan order, which on that fixture IS
+// the sealed cell) while leaving the real pocket blank. Nothing caught it because
+// no test read board content -- only that a failure string existed.
+describe('failure boards point at the thing that failed', () => {
+  it('the sealed-pocket board marks the CUT-OFF cell, not the play area', () => {
+    const [failure] = structuralFailures(SEALED_POCKET_ARENA);
+    const board = failure.split('\n').slice(1);
+    // The fixture's pocket is the B at [0,0]; everything else is the reachable half.
+    expect(board[0][0]).toBe('*');
+    expect(failure).toMatch(/1 cut off/);
+    // The play area must NOT be marked -- this is the regression under guard.
+    expect(board[3]).not.toContain('*'); // the player's row
+    expect(board.join('').split('*')).toHaveLength(2); // exactly one mark
+  });
+
+  it('a spawn-sightline board marks E at the enemy and P at the player', () => {
+    // POSITIONAL, not merely present: re-review noted that asserting `toContain('E')`
+    // and `toContain('P')` cannot catch the two glyphs being swapped, because this
+    // fixture's grid already holds a literal 'P' at the player's own cell whatever
+    // the marking does. Assert the cells.
+    const [failure] = structuralFailures(OPEN_SIGHTLINE_ARENA);
+    const board = failure.split('\n').slice(1);
+    const { spawns } = loadArena(OPEN_SIGHTLINE_ARENA);
+    const enemy = spawns.find((sp) => sp.kind !== 'player')!;
+    const player = spawns.find((sp) => sp.kind === 'player')!;
+    const [ec, er] = cellOf(OPEN_SIGHTLINE_ARENA, enemy.pos);
+    const [pc, pr] = cellOf(OPEN_SIGHTLINE_ARENA, player.pos);
+    expect(board[er][ec]).toBe('E');
+    expect(board[pr][pc]).toBe('P');
+  });
+
+  it('an arena with no player spawn is diagnosed, not crashed on', () => {
+    // reachable()'s flood fill anchors on the player; this exercises the fallback.
+    // validateArenas would reject such an arena, but structuralFailures is called
+    // on hand-built fixtures too, so the branch is real and was untested.
+    const noPlayer: Arena = {
+      cols: 5, rows: 3, cellSize: 2,
+      legend: { '#': 'solid' },
+      grid: ['B#...', '#....', '.....'],
+    };
+    const failures = structuralFailures(noPlayer);
+    expect(() => structuralFailures(noPlayer)).not.toThrow();
+    expect(failures).toContain('no player spawn');
+  });
+
+  it('renderBoard reports an out-of-grid mark instead of throwing', () => {
+    // It runs on the failure path, so a raw TypeError here buries the failure it
+    // was called to explain. Before this, `rows[r][c] = '*'` threw.
+    const arena = arenaById('arena-01');
+    expect(() => renderBoard(arena, [[99, 99]])).not.toThrow();
+    const out = renderBoard(arena, [[99, 99], [1, 1]]);
+    expect(out).toMatch(/not drawn -- outside the 11x9 grid: \[99, 99\]/);
+    expect(out.split('\n')[1][1]).toBe('*'); // the in-range mark still drawn
+  });
+
+  it('renderBoard honours a per-mark glyph', () => {
+    const arena = arenaById('arena-01');
+    const out = renderBoard(arena, [[2, 3, 'E'], [4, 5]]);
+    expect(out.split('\n')[3][2]).toBe('E');
+    expect(out.split('\n')[5][4]).toBe('*'); // default when no glyph given
   });
 });

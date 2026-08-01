@@ -440,10 +440,18 @@ describe('validateArenas', () => {
   });
 });
 
+// The geometry half of GOOD_ARENA -- what a bare `Arena` is, with the definition-only
+// fields (id/notes/claims) dropped. Hoisted: this destructure appeared 8 times in the
+// block below, each with its own `void` dance to satisfy noUnusedLocals.
+const GOOD_SHAPE = (() => {
+  const { id, notes, claims, ...shape } = GOOD_ARENA;
+  void id; void notes; void claims;
+  return shape;
+})();
+
 describe('validateArenaShape', () => {
   it('accepts a bare Arena (no id/notes/claims) -- the sandbox path', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(validateArenaShape(shape, 'sandbox', 'sandbox')).toEqual(shape);
   });
 
@@ -452,8 +460,7 @@ describe('validateArenaShape', () => {
   });
 
   it('rejects cols or rows of zero', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, cols: 0 }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.cols.*greater than zero/);
     expect(() => validateArenaShape({ ...shape, rows: 0 }, 'sandbox', 'sandbox'))
@@ -461,8 +468,7 @@ describe('validateArenaShape', () => {
   });
 
   it('rejects a cellSize of zero or negative', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, cellSize: 0 }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.cellSize.*greater than zero/);
     expect(() => validateArenaShape({ ...shape, cellSize: -1 }, 'sandbox', 'sandbox'))
@@ -470,22 +476,19 @@ describe('validateArenaShape', () => {
   });
 
   it('rejects a legend that is not an object', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, legend: 'nope' }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.legend must be an object/);
   });
 
   it('rejects a legend key that is not a single character', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, legend: { '##': 'solid' } }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.legend\["##"\].*single character/);
   });
 
   it('rejects a legend key that collides with floor or a spawn letter', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, legend: { '.': 'solid' } }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.legend\["\."\].*collides/);
     expect(() => validateArenaShape({ ...shape, legend: { P: 'solid' } }, 'sandbox', 'sandbox'))
@@ -493,15 +496,13 @@ describe('validateArenaShape', () => {
   });
 
   it('rejects a grid that is not an array', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, grid: 'nope' }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.grid.*array of strings/);
   });
 
   it('rejects a grid row that is not a string', () => {
-    const { id, notes, claims, ...shape } = GOOD_ARENA;
-    void id; void notes; void claims;
+    const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, grid: [5, '.#..', '..P.'] }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.grid\[0\].*string/);
   });

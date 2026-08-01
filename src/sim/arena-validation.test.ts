@@ -3,9 +3,10 @@
 // spawn sightline is invisible until a player dies to it three seconds into a level.
 // New arenas added to ARENAS get all of this for free -- that is the point of the file.
 import { describe, it, expect } from 'vitest';
+import { lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
-import { structuralFailures, claimFailures } from './arena-claims';
-import { ARENA_DEFS } from './config/arenas';
+import { structuralFailures, claimFailures, cellOf, breach } from './arena-claims';
+import { ARENA_DEFS, arenaById } from './config/arenas';
 import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import type { ArenaClaim } from './config/arena-types';
 
@@ -15,24 +16,27 @@ describe('the shipped arena sequence', () => {
     expect(ARENAS.length).toBeGreaterThanOrEqual(2); // progression needs somewhere to go
   });
 
-  describe.each(ARENAS.map((a, i) => ({ a, i })))('arena $i', ({ a }) => {
-    it('loads, with exactly one player spawn and at least one enemy', () => {
-      const { tanks, spawns } = loadArena(a);
-      expect(spawns.filter((s) => s.kind === 'player')).toHaveLength(1);
-      expect(tanks.filter((t) => t.kind !== 'player').length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('obeys every universal structural rule', () => {
-      expect(structuralFailures(a).join('\n')).toBe('');
-    });
-  });
 });
 
-// Design intent lives WITH the data now (config/data/arenas.json `claims`), verified
-// here by one generic runner. The two hand-written describe blocks this replaces --
-// ARENA_02's destructible trade and ARENA_03's flank lanes -- are re-expressed as
-// claims, which is the migration's own proof: same properties, no bespoke geometry.
-describe.each(ARENA_DEFS.map((a) => ({ id: a.id, arena: a })))('$id claims', ({ arena }) => {
+// ONE parametrised block over ARENA_DEFS, not two under two names for the same
+// array object (`arena.ts`'s ARENAS and `config/arenas.ts`'s ARENA_DEFS are the
+// same reference -- a reader hunting for the difference finds none).
+//
+// Design intent lives WITH the data now (config/data/arenas.json `claims`),
+// verified by one generic runner. The two hand-written describe blocks this
+// replaces -- ARENA_02's destructible trade and ARENA_03's flank lanes -- are
+// re-expressed as claims: same properties, no bespoke geometry.
+describe.each(ARENA_DEFS.map((a) => ({ id: a.id, arena: a })))('$id', ({ arena }) => {
+  it('loads, with exactly one player spawn and at least one enemy', () => {
+    const { tanks, spawns } = loadArena(arena);
+    expect(spawns.filter((s) => s.kind === 'player')).toHaveLength(1);
+    expect(tanks.filter((t) => t.kind !== 'player').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('obeys every universal structural rule', () => {
+    expect(structuralFailures(arena).join('\n')).toBe('');
+  });
+
   it('every declared design claim holds', () => {
     expect(claimFailures(arena, arena.claims).join('\n\n')).toBe('');
   });
@@ -81,11 +85,12 @@ it('a sightlineAfterBreach claim names every enemy CELL, not just the right coun
     const sightlineClaims = arena.claims.filter((c) => c.type === 'sightlineAfterBreach');
     if (sightlineClaims.length === 0) continue; // ARENA_01: no claims of this type to check
     const { spawns } = loadArena(arena);
-    const cellOf = (x: number) => Math.round(x / arena.cellSize - 0.5); // inverse of loadArena's (c+0.5)*cellSize
+    // The SHARED inverse (arena-claims.ts), not a local copy: cell-mapping.test.ts
+    // pins it against loadArena's placement, so this cannot drift on its own.
     const enemyCells = new Set(
       spawns
         .filter((s) => s.kind !== 'player')
-        .map((s) => `${cellOf(s.pos.x)},${cellOf(s.pos.y)}`),
+        .map((s) => cellOf(arena, s.pos).join(',')),
     );
     const claimCells = new Set(sightlineClaims.map((c) => `${c.from[0]},${c.from[1]}`));
     expect(claimCells, arena.id).toEqual(enemyCells);
@@ -139,5 +144,49 @@ describe('the universal rules have negative controls', () => {
     const failures = structuralFailures(OPEN_SIGHTLINE_ARENA);
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatch(/spawn sightline/);
+  });
+});
+
+describe("arena-02's spawnBlockRobust figures, which no claim can protect", () => {
+  // arena-02 declares no `spawnBlockRobust` claim -- correctly: breaching its centre
+  // barrier IS the level, so the property is false there by design. But the runner
+  // only evaluates claims that are DECLARED, so the numbers documented in
+  // arena-claims.ts and CLAUDE.md ("12 of 16 breached, 0 of 16 intact") were measured
+  // by hand and nothing recomputed them. They would have rotted silently the first
+  // time anyone edited that grid.
+  //
+  // This recomputes them. It is deliberately NOT a claim: making it one would assert
+  // a property arena-02 does not have. A grid edit that changes these counts fails
+  // here and forces the documented numbers to be updated with it.
+  it('recomputes 0 of 16 intact and 12 of 16 breached', () => {
+    const arena = arenaById('arena-02');
+    const { walls, spawns } = loadArena(arena);
+    const breached = breach(walls);
+    const player = spawns.find((s) => s.kind === 'player')!;
+    const enemies = spawns.filter((s) => s.kind !== 'player');
+    const NUDGE = 0.1;
+    const offsets = [
+      { x: NUDGE, y: 0 }, { x: -NUDGE, y: 0 },
+      { x: 0, y: NUDGE }, { x: 0, y: -NUDGE },
+    ];
+
+    const count = (w: typeof walls): number => {
+      let seen = 0;
+      for (const enemy of enemies) {
+        for (const off of offsets) {
+          const target = { x: player.pos.x + off.x, y: player.pos.y + off.y };
+          if (lineOfSight(enemy.pos, target, w)) seen++;
+        }
+      }
+      return seen;
+    };
+
+    // The denominator, stated: 4 enemy spawns x 4 cardinal nudges = 16 checks per
+    // wall phase. Pinned so a fifth enemy cannot silently change what "of 16" means.
+    expect(enemies).toHaveLength(4);
+    expect(enemies.length * offsets.length).toBe(16);
+
+    expect(count(walls)).toBe(0);       // intact: the barrier seals both halves
+    expect(count(breached)).toBe(12);   // breached: the trade the level is built on
   });
 });
