@@ -111,6 +111,7 @@ describe('per-kind identity comes from config, not code branches', () => {
     expect(configFor('brown').behavior).toBe(AIBehavior.STATIONARY);
     expect(configFor('grey').behavior).toBe(AIBehavior.DEFENSIVE);
     expect(configFor('teal').behavior).toBe(AIBehavior.TACTICAL);
+    expect(configFor('olive').behavior).toBe(AIBehavior.DEFENSIVE);
   });
 
   it("grey's profile-derived dodge patience equals the tuned DODGE_PATIENCE_TICKS", () => {

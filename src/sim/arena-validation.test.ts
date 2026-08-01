@@ -129,11 +129,15 @@ describe("ARENA_03's flank-lane trade", () => {
   // the negative: breaching every destructible opens NO spawn-to-spawn sightline,
   // which is what distinguishes this level's trade from ARENA_02's.
   it('a breached shield opens its vertical lane, both flanks; intact blocks both', () => {
-    const { walls } = loadArena(ARENAS[2]);
-    const lanes = [
-      { olive: { x: 3, y: 3 }, foot: { x: 3, y: 15 } },
-      { olive: { x: 19, y: 3 }, foot: { x: 19, y: 15 } },
-    ];
+    const { walls, spawns } = loadArena(ARENAS[2]);
+    // Lanes are DERIVED from the olive spawns (review: hardcoded coordinates keep
+    // checking an empty cell if a spawn moves a row). The foot of each lane is the
+    // same column at the player's row.
+    const player = spawns.find((s) => s.kind === 'player')!;
+    const lanes = spawns
+      .filter((s) => s.kind === 'olive')
+      .map((s) => ({ olive: s.pos, foot: { x: s.pos.x, y: player.pos.y } }));
+    expect(lanes).toHaveLength(2);
     for (const lane of lanes) {
       expect(lineOfSight(lane.olive, lane.foot, walls)).toBe(false);
     }
@@ -151,6 +155,17 @@ describe("ARENA_03's flank-lane trade", () => {
     expect(enemies).toHaveLength(5); // 2 olive + 2 brown + 1 grey; the level-3 roster
     for (const s of enemies) {
       expect(lineOfSight(s.pos, player.pos, walls), `${s.kind} at (${s.pos.x},${s.pos.y})`).toBe(false);
+    }
+    // NOT a knife edge: review found that with row 4 alone, both browns' post-breach
+    // lines were blocked only by an exact corner tangency (raySegmentVsAABB counts
+    // tmin === tmax as a hit) that a 0.1-unit player nudge opened into a full lane.
+    // The row-5 chord-maker fixes that; these probes pin the fix -- they FAIL on the
+    // tangent-only geometry.
+    for (const dx of [-0.1, 0.1]) {
+      const nudged = { x: player.pos.x + dx, y: player.pos.y };
+      for (const s of enemies) {
+        expect(lineOfSight(s.pos, nudged, walls), `${s.kind} vs player nudged ${dx}`).toBe(false);
+      }
     }
   });
 });

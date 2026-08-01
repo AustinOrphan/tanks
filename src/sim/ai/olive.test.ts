@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
 import { greyDecision } from './grey';
 import { bulletConfig } from '../constants';
-import type { Tank, Vec2 } from '../types';
+import type { Bullet, Tank, Vec2 } from '../types';
 import { vlen } from '../types';
-import type { World } from '../world';
+import { createWorld, step, type World } from '../world';
 
 // ---------------------------------------------------------------------------
 // Olive is the first kind added PURELY AS DATA -- a roster entry naming
@@ -31,9 +31,12 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
 }
 
 describe('olive, driven end-to-end by its resolved config', () => {
-  it('fires a FAST rocket: bullet type, speed and zero bounces all from the roster', () => {
+  it("fires a FAST rocket: the roster selects the type; the sim's bullet table arms it", () => {
     // Breaks if olive's weapon.projectileType stops being ROCKET, or the
-    // ProjectileType->BulletType mapping changes.
+    // ProjectileType->BulletType mapping changes. The speed/bounces lines pin
+    // spawnBullet's construction FOR that type (bulletConfig), not the roster --
+    // the roster<->bulletConfig consistency is pinned in config/roster.test.ts's
+    // mirror loop. (Review: the old title claimed all three came from the roster.)
     const olive = tank(1, 'olive', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS
     const w = world([olive, player]);
@@ -46,9 +49,11 @@ describe('olive, driven end-to-end by its resolved config', () => {
 
   it('one rocket in flight, ever: the per-kind cap reaches spawnBullet', () => {
     // Bullets are never advanced here (no stepBullets), so they only accumulate:
-    // the strictest possible test of maxActiveProjectiles = 1. Breaks if the
-    // roster raises the cap -- 400 ticks spans many 38-tick cooldown cycles, so
-    // a cap of SHELL_CAP would land 5 shells.
+    // the strictest possible test of the cap's BLOCKING half. Mechanism (review
+    // corrected the original comment): a blocked spawnBullet does not re-arm the
+    // cooldown, so after the single completed 38-tick cycle olive attempts every
+    // tick (~360 blocked attempts in 400) -- while a cap of SHELL_CAP would land
+    // 5 shells (successes at ticks 0/39/78/117/156 all fit).
     const olive = tank(1, 'olive', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const w = world([olive, player]);
@@ -71,15 +76,50 @@ describe('olive, driven end-to-end by its resolved config', () => {
     expect(w.mines).toHaveLength(0);
   });
 
-  it('routes to the DEFENSIVE implementation: decideAi(olive) IS greyDecision(olive)', () => {
-    // A fixture where the implementations visibly differ: brown would return
-    // desiredMove {0,0}; the mobile implementations wander. Olive's decision must
-    // match greyDecision exactly (same wander draw, same weapon) -- breaks if the
-    // roster's aiProfile stops resolving to a DEFENSIVE behaviour.
-    const build = () => world([tank(1, 'olive', { x: 0, y: 0 }), tank(2, 'player', { x: 8, y: 3 })]);
-    const viaDispatch = decideAi(build(), build().tanks[0]);
-    const direct = greyDecision(build(), build().tanks[0]);
-    expect(viaDispatch).toEqual(direct);
-    expect(vlen(viaDispatch.desiredMove)).toBeGreaterThan(0.9); // and it is genuinely mobile
+  it('routes to the DEFENSIVE implementation: under fire, olive SUPPRESSES like grey', () => {
+    // The fixture that discriminates every implementation (review: the original
+    // no-threat fixture produced byte-identical grey and teal decisions, so it
+    // proved only "not stationary"). A bullet parked in the danger corridor:
+    //   grey/DEFENSIVE  -> dodge, HOLD fire, patience counter starts (nextTimer 1)
+    //   teal/TACTICAL   -> dodge but FIRE anyway, nextTimer 0
+    //   brown/STATIONARY-> desiredMove {0,0}
+    // So each assertion below kills a specific wrong routing.
+    const threat: Bullet = {
+      id: 999, ownerId: 2, type: 'normal', pos: { x: -1, y: 0 }, vel: { x: 5, y: 0 },
+      bouncesLeft: 1, alive: true,
+    };
+    const w = world(
+      [tank(1, 'olive', { x: 0, y: 0 }), tank(2, 'player', { x: 20, y: 0 })],
+      { bullets: [threat] },
+    );
+    const d = decideAi(w, w.tanks[0]);
+    expect(d).toEqual(greyDecision(w, w.tanks[0]));
+    expect(d.fire).toBe(false); // teal-routing fires here
+    expect(d.nextTimer).toBe(1); // the DEFENSIVE patience counter, running
+    expect(vlen(d.desiredMove)).toBeGreaterThan(0.9); // brown-routing sits still
+  });
+
+  it('fires AGAIN once the first rocket dies: the cap RELEASES through the full pipeline', () => {
+    // Review found the cap's release half unpinned: nothing proved a second
+    // rocket ever flies. Full step() here (not bare stepAi), with an INVINCIBLE
+    // player -- ordnance detonates on it harmlessly (bullets.ts), so each rocket
+    // dies on arrival, frees the single cap slot, and the 38-tick cooldown then
+    // permits the next. Breaks if retired shells stop freeing the cap, or if
+    // anything in the pipeline blocks refire after the first success.
+    const olive = tank(1, 'olive', { x: 1, y: 9 });
+    const player = tank(2, 'player', { x: 6, y: 9 }, { invincible: true });
+    let w = createWorld({ walls: [], tanks: [olive, player], spawns: [], lives: 3 });
+    w.roundStartTick = FAR_PAST; // straight to the live phase
+    const input = { move: { x: 0, y: 0 }, aim: { x: 6, y: 0 }, fire: false, mine: false };
+    let fires = 0;
+    let maxLive = 0;
+    for (let i = 0; i < 150; i++) {
+      const r = step(w, input);
+      w = r.world;
+      fires += r.events.filter((e) => e.type === 'fire' && e.ownerId === 1).length;
+      maxLive = Math.max(maxLive, w.bullets.filter((b) => b.alive && b.ownerId === 1).length);
+    }
+    expect(fires).toBeGreaterThanOrEqual(2); // released and refired
+    expect(maxLive).toBe(1); // and the cap held the whole time
   });
 });

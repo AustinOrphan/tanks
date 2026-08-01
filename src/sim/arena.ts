@@ -90,8 +90,15 @@ export const ARENA_02: Arena = {
 //     the same column down. The shield is the level's trade, one per flank.
 //   - breaching every destructible opens NO spawn-to-spawn sightline (0 of 5) --
 //     unlike level 2, the trade here is lanes for MOBILE tanks, not spawn lines.
-// The row-3/row-4 solid anchors keep the centre trio's lines shut permanently and
-// deny the olives any diagonal into the player's half.
+// The row-3/row-4 anchors deny the olives any diagonal into the player's half. The
+// browns' spawn lines are shut by a REAL CHORD through the row-4/row-5 centre
+// pillar -- the row-5 cell exists for exactly ARENA_01's reason (see its comment):
+// with row 4 alone, a breached centre peek left both brown lines blocked only by a
+// single-point corner tangency, where a 0.1-unit player nudge opened a full lane.
+// Found in review by slab math, fixed the way ARENA_01 fixed it, and pinned with
+// nudged-player probes in the design test. The centre peek 'x' (row 6) is NOT a
+// spawn-line blocker after that fix: it is breachable mid-field cover on the
+// centre axis, and destroying it opens one more passage cell through row 6.
 export const ARENA_03: Arena = {
   cols: 11,
   rows: 9,
@@ -103,7 +110,7 @@ export const ARENA_03: Arena = {
     '.x..BGB..x.', // 2  destructible olive shields; the trio's own row
     '...#...#...', // 3  anchors: deny diagonals into the player half
     '..#..#..#..', // 4  mid-field teeth
-    '...........', // 5  open manoeuvre band
+    '.....#.....', // 5  chord-maker under the centre tooth (see comment above)
     '..#..x..#..', // 6  the player's flank guards + a centre peek 'x'
     '.....P.....', // 7
     '...........', // 8

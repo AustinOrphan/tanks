@@ -5,6 +5,7 @@
 // around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
 import { describe, it, expect } from 'vitest';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
+import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
@@ -674,8 +675,10 @@ describe('isPlayerDeath', () => {
   it('is FALSE for every enemy kind', () => {
     // The whole point: the stream is shared, so a presence-only check would
     // flash the screen red every time the player scored a kill.
-    // Population: all three enemy kinds in TankKind.
-    for (const kind of ['brown', 'grey', 'teal']) {
+    // Population: DERIVED -- every non-player kind in the canonical TANK_KINDS,
+    // so a new enemy kind is swept the moment it exists (review: this was a
+    // hand-kept list of three whose "all" claim silently went stale).
+    for (const kind of TANK_KINDS.filter((k) => k !== 'player')) {
       expect(isPlayerDeath([destroyed(kind)])).toBe(false);
     }
   });
