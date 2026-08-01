@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { BANK_PREFER_TICKS, AI_AIM_SPREAD } from '../constants';
+import { BANK_PREFER_TICKS } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -53,7 +53,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     if (cfg.ai.directShotWeight <= 0) return null;
     if (!lineOfSight(tank.pos, player!.pos, world.walls)) return null;
     const targetVel = driveVelocity(player!);
-    const angle = aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD);
+    const angle = aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, profileAimSpread(cfg));
     return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
   }
   // bankShot is O(walls^2): each surviving wall face runs two full losIgnoring scans.
@@ -66,7 +66,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     if (cfg.ai.bankShotWeight <= 0) return null;
     const raw = bankShot(tank.pos, player!.pos, world.walls, weapon.ricochetCount);
     if (raw === null) return null;
-    const angle = raw + aimJitter(world, tank, AI_AIM_SPREAD);
+    const angle = raw + aimJitter(world, tank, profileAimSpread(cfg));
     return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
   }
 

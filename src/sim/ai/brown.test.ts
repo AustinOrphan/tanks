@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { brownDecision } from './brown';
-import { aimJitter, aimLead } from './targeting';
-import { AI_AIM_SPREAD, bulletConfig } from '../constants';
+import { aimJitter, aimLead, profileAimSpread } from './targeting';
+import { bulletConfig } from '../constants';
 import type { Tank, Vec2, Wall } from '../types';
 import type { World } from '../world';
+import { configFor } from '../config';
+
+// The spread these fixtures' expected angles float with: brown's PROFILE-derived
+// jitter (aimAccuracy pass), not the global anchor.
+const BROWN_SPREAD = profileAimSpread(configFor('brown'));
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -44,7 +49,7 @@ describe('brownDecision', () => {
     // Brown at (0,0), player at (5,0) moving +y with TANK_SPEED=3 gives targetVel=(0,3)
     // With normal-shell speed 6, the intercept is at (5, 2.88675)
     // atan2(2.88675, 5) = π/6 exactly, plus this tank/tick's seeded aim jitter.
-    expect(d.turretAngle).toBeCloseTo(Math.PI / 6 + aimJitter(w, brown, AI_AIM_SPREAD), 6);
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 6 + aimJitter(w, brown, BROWN_SPREAD), 6);
   });
 
   it('leads a diagonal-moving player (clamped velocity)', () => {
@@ -62,7 +67,7 @@ describe('brownDecision', () => {
     expect(velocityMagnitude).toBeCloseTo(3.0, 6);
     // The exact angle computed from aimLead with clamped velocity (3/√2, 3/√2), plus this
     // tank/tick's seeded aim jitter.
-    expect(d.turretAngle).toBeCloseTo(0.36137 + aimJitter(w, brown, AI_AIM_SPREAD), 5);
+    expect(d.turretAngle).toBeCloseTo(0.36137 + aimJitter(w, brown, BROWN_SPREAD), 5);
   });
 
   it('applies aim jitter: the final turret angle differs from the un-jittered aimLead result', () => {
@@ -72,7 +77,7 @@ describe('brownDecision', () => {
     const d = brownDecision(w, brown);
     const unjittered = aimLead(brown.pos, player.pos, { x: 0, y: 0 }, bulletConfig.normal.speed);
     expect(d.turretAngle).not.toBe(unjittered);
-    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
+    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(BROWN_SPREAD + 1e-12);
   });
 
   it('fires only with clear line-of-sight, and advances Aim -> Fire', () => {

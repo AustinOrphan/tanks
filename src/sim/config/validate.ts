@@ -62,6 +62,13 @@ function unitInterval(file: string, path: string, v: unknown): number {
   return n;
 }
 
+/** As unitInterval but excluding 0 -- for values the sim divides by. */
+function positiveUnitInterval(file: string, path: string, v: unknown): number {
+  const n = unitInterval(file, path, v);
+  if (n === 0) fail(file, path, `must be strictly positive (the sim divides by it)`);
+  return n;
+}
+
 function str(file: string, path: string, v: unknown): string {
   if (typeof v !== 'string') fail(file, path, `must be a string, got ${JSON.stringify(v)}`);
   return v;
@@ -167,7 +174,11 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
     // the two distances (world units) are genuinely unbounded above.
     const resolved: AIProfileBalance = {
       behavior: oneOf(file, `${profile}.behavior`, p.behavior, Object.values(AIBehavior), 'AIBehavior'),
-      aimAccuracy: unitInterval(file, `${profile}.aimAccuracy`, p.aimAccuracy),
+      // Strictly positive: profileAimSpread divides by this, and 0 -- which the
+      // plain [0,1] check admits -- would make the spread Infinity. Contained
+      // downstream (slewAngle's non-finite sink freezes the turret) but a
+      // degenerate config should die at load, not limp (review, PR #57).
+      aimAccuracy: positiveUnitInterval(file, `${profile}.aimAccuracy`, p.aimAccuracy),
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),

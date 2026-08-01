@@ -102,8 +102,10 @@ export const GAME_BALANCE: BalanceConstants = {
   // type), the SIGN of `minePlacementChance`, and -- since the seek layer
   // (targeting.ts seekMove) -- `preferredDistance`/`minimumDistance` (the
   // distance band mobile tanks hold) and `retreatChance` INCLUDING its magnitude
-  // (the per-window retreat draw when pressed). Still carried-but-unread:
-  // `aimAccuracy`, `reactionTime`, and the minePlacementChance magnitude. Values
+  // (the per-window retreat draw when pressed), and `aimAccuracy` (per-profile
+  // jitter derived from the AI_AIM_SPREAD anchor as anchor/accuracy --
+  // targeting.ts profileAimSpread). Still carried-but-unread: `reactionTime`
+  // and the minePlacementChance magnitude. Values
   // are the Wii reference figures except where noted: this is the GAME's table,
   // retuned to describe the game's actual tanks.
   // The per-profile numbers now live in data/ai-profiles.json, validated at

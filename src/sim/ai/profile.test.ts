@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { brownDecision } from './brown';
 import { greyDecision } from './grey';
 import { tealDecision } from './teal';
+import { aimLead, profileAimSpread } from './targeting';
+import { AI_AIM_SPREAD } from '../constants';
 import { configFor } from '../config';
 import type { ResolvedTankConfig } from '../config';
 import type { Tank, Vec2, Bullet, Wall } from '../types';
@@ -164,5 +166,35 @@ describe('brown consumes cfg.weapon (not a hardcoded shell type)', () => {
     const base = configFor('brown');
     const d = brownDecision(w, brown, { ...base, weapon: { ...base.weapon, bulletType: 'fast' } });
     expect(d.fireType).toBe('fast');
+  });
+});
+
+describe('aimAccuracy scales the jitter from the AI_AIM_SPREAD anchor', () => {
+  it('profileAimSpread: accuracy 1.0 IS the anchor; lower accuracy widens by 1/accuracy', () => {
+    expect(profileAimSpread(withAi(configFor('grey'), { aimAccuracy: 1 }))).toBe(AI_AIM_SPREAD);
+    expect(profileAimSpread(withAi(configFor('grey'), { aimAccuracy: 0.5 }))).toBeCloseTo(AI_AIM_SPREAD * 2, 12);
+  });
+
+  it('observed through greyDecision: a low-accuracy cfg jitters beyond the anchor; a perfect one never does', () => {
+    // Max |deviation from the pure intercept| across 200 jitter re-roll windows.
+    // Under the old uniform code (every call site passing AI_AIM_SPREAD) the
+    // low-accuracy max stays <= the anchor and this test FAILS -- proven by
+    // mutation before commit. The perfect-accuracy bound doubles as the
+    // anchor's meaning: accuracy 1.0 reproduces the pre-pass jitter exactly.
+    const maxDev = (accuracy: number): number => {
+      let max = 0;
+      for (let i = 0; i < 200; i++) {
+        const grey = tank(1, 'grey', { x: 0, y: 0 });
+        const player = tank(2, 'player', { x: 20, y: 0 });
+        const w = world({ tanks: [grey, player], tick: i * 20 }); // AI_JITTER_TICKS re-roll windows
+        const d = greyDecision(w, grey, withAi(configFor('grey'), { aimAccuracy: accuracy }));
+        const pure = aimLead(grey.pos, player.pos, { x: 0, y: 0 }, configFor('grey').weapon.speed);
+        max = Math.max(max, Math.abs(d.turretAngle - pure));
+      }
+      return max;
+    };
+    expect(maxDev(1)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
+    expect(maxDev(0.4)).toBeGreaterThan(AI_AIM_SPREAD * 1.5); // 2.5x spread; max draw comfortably exceeds 1.5x
+    expect(maxDev(0.4)).toBeLessThanOrEqual(AI_AIM_SPREAD / 0.4 + 1e-12);
   });
 });

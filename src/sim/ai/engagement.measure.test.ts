@@ -38,6 +38,7 @@ const SEEDS = 60;
 
 function run(arenaIdx: number): string {
   const samples = new Map<string, number[]>();
+  const gameTicks: number[] = [];
   let losses = 0, timeouts = 0, freeWins = 0;
   for (let seed = 1; seed <= SEEDS; seed++) {
     let w = createWorldFor(ARENAS[arenaIdx], seed);
@@ -61,11 +62,14 @@ function run(arenaIdx: number): string {
     if (w.status === 'lose') losses++;
     else if (w.status === 'win') freeWins++;
     else timeouts++;
+    gameTicks.push(ticks);
   }
   const q = (a: number[], p: number) => [...a].sort((x, y) => x - y)[Math.floor(a.length * p)];
   const rows = [...samples.entries()].map(([k, v]) =>
     `${k}: median=${q(v, 0.5).toFixed(2)} p25=${q(v, 0.25).toFixed(2)} p75=${q(v, 0.75).toFixed(2)} n=${v.length}`);
-  return `arena${arenaIdx + 1}: losses=${losses}/${SEEDS} freeWins=${freeWins} timeouts=${timeouts}\n  ${rows.join('\n  ')}`;
+  // Median game length = the lethality axis (added for the aimAccuracy sweep):
+  // more AI jitter -> slower kills -> longer games. Population: all SEEDS games.
+  return `arena${arenaIdx + 1}: losses=${losses}/${SEEDS} freeWins=${freeWins} timeouts=${timeouts} medianTicks=${q(gameTicks, 0.5)}\n  ${rows.join('\n  ')}`;
 }
 
 describe.skip('engagement-distance measurement (flip skip off to run locally)', () => {

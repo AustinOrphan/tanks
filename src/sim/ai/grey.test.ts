@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { greyDecision } from './grey';
-import { aimJitter, aimLead } from './targeting';
+import { aimJitter, aimLead, profileAimSpread } from './targeting';
 import type { Tank, Vec2, Wall, Bullet, Mine } from '../types';
 import type { World } from '../world';
-import { DODGE_PATIENCE_TICKS, AI_AIM_SPREAD, AI_MINE_TACTICAL_RADIUS, bulletConfig } from '../constants';
+import { configFor } from '../config';
+import { DODGE_PATIENCE_TICKS, AI_MINE_TACTICAL_RADIUS, bulletConfig } from '../constants';
+
+// The spread these fixtures' expected angles float with: grey's PROFILE-derived
+// jitter (aimAccuracy pass), not the global anchor.
+const GREY_SPREAD = profileAimSpread(configFor('grey'));
 
 function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
   return {
@@ -71,7 +76,7 @@ describe('greyDecision', () => {
     const d = greyDecision(w, grey);
     const unjittered = aimLead(grey.pos, player.pos, { x: 0, y: 0 }, bulletConfig.normal.speed);
     expect(d.turretAngle).not.toBe(unjittered);
-    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
+    expect(Math.abs(d.turretAngle - unjittered)).toBeLessThanOrEqual(GREY_SPREAD + 1e-12);
   });
 
   it("steers away from its own armed mine's blast radius", () => {
@@ -259,7 +264,7 @@ describe('greyDecision', () => {
     const d = greyDecision(w, grey);
     expect(d.fire).toBe(true);
     // direct shot, player stationary, plus this tank/tick's seeded aim jitter
-    expect(d.turretAngle).toBeCloseTo(aimJitter(w, grey, AI_AIM_SPREAD), 6);
+    expect(d.turretAngle).toBeCloseTo(aimJitter(w, grey, GREY_SPREAD), 6);
     // Still dodging: desiredMove is the dodge vector (signed +y), not the wander heading.
     expect(d.desiredMove.x).toBeCloseTo(0, 6);
     expect(d.desiredMove.y).toBeCloseTo(1, 6);
@@ -293,7 +298,7 @@ describe('greyDecision', () => {
     const d = greyDecision(world({ tanks: [grey, mate, player] }), grey);
     expect(d.fire).toBe(false);
     // The turret still tracks the player -- only the trigger is held.
-    expect(d.turretAngle).toBeCloseTo(aimJitter(world({ tanks: [grey, mate, player] }), grey, AI_AIM_SPREAD), 6);
+    expect(d.turretAngle).toBeCloseTo(aimJitter(world({ tanks: [grey, mate, player] }), grey, GREY_SPREAD), 6);
   });
 
   it('fires when the teammate is well clear of the firing line', () => {
