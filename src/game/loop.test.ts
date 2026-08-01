@@ -1052,7 +1052,6 @@ describe('startGameWith: round-phase HUD', () => {
     const base = createArenaWorld(1);
     return makeDeps({
       world: { ...base, tick: 0, roundStartTick: 0 },
-      devFlags: { aimRay: false, shellCount: false },
     });
   }
 
@@ -1081,9 +1080,31 @@ describe('startGameWith: round-phase HUD', () => {
     expect(h.rec.roundPhases.length).toBe(h.rec.renders.length);
     const firstSilent = h.rec.roundPhases.findIndex((p) => p === null);
     expect(firstSilent).toBeGreaterThan(0); // it announced before it stopped
-    // The frame it first went quiet on must already be live: any countdown frame
-    // with no announcement is a frozen tank the player has no explanation for.
+    // BOTH edges. Too early: a countdown frame with no announcement is a frozen
+    // tank the player has no explanation for. Too late: the frame before must
+    // still have been countdown, or the chip outstays the block it explains.
+    // Asserting only the first left a "goes quiet one tick LATE" mutant alive.
     expect(roundPhase(h.rec.renders[firstSilent].curr)).not.toBe('countdown');
+    expect(roundPhase(h.rec.renders[firstSilent - 1].curr)).toBe('countdown');
+    h.handle.dispose();
+  });
+
+  it('clears the indicator when play stops, so no frozen chip is left behind', () => {
+    // refreshRoundPhase only runs from onSimulated, which the driver calls ONLY
+    // while playing. Pause during the 3s countdown and the last push is whatever
+    // was on screen -- and quitting to title leaves it there indefinitely, since
+    // switchTo rebuilds the world without simulating a frame. The chip lives in
+    // the topbar (z-index 1) and paints ABOVE the panel, so it is not subtle.
+    const h = boot(inCountdown());
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.roundPhases.at(-1)).not.toBeNull(); // it is announcing
+
+    h.setState('paused');
+    expect(h.rec.roundPhases.at(-1)).toBeNull(); // ... and stops when play does
+
+    h.setState('title');
+    expect(h.rec.roundPhases.at(-1)).toBeNull();
     h.handle.dispose();
   });
 
@@ -1118,8 +1139,7 @@ describe('startGameWith: round-phase HUD', () => {
       makeDeps({
         // Far past COUNTDOWN_TICKS + GRACE_TICKS.
         world: { ...base, tick: 5000, roundStartTick: 0 },
-        devFlags: { aimRay: false, shellCount: false },
-      }),
+        }),
     );
     h.setState('playing');
     h.fireFrame(100);

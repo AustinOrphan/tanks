@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  bulletConfig, DT, TICK_HZ, SHELL_CAP, MINE_CAP,
+  bulletConfig, DT, TICK_HZ, COUNTDOWN_TICKS, SHELL_CAP, MINE_CAP,
   NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES,
   PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE,
   TANK_RADIUS, TANK_SPEED, TANK_TURN_RATE, BULLET_RADIUS, MINE_TRIGGER_RADIUS,
@@ -35,6 +35,14 @@ describe('constants', () => {
   it('DT is the reciprocal of the tick rate', () => {
     expect(TICK_HZ).toBe(60);
     expect(DT).toBeCloseTo(1 / 60, 12);
+  });
+
+  it('opens the round with a 3.0-second movement block, the span the HUD announces', () => {
+    // The countdown is now SHIPPED behaviour with a banner and a docstring that
+    // both say "3.0s" (hud.ts, CLAUDE.md/AGENTS.md). Retuning the constant used to
+    // leave all of that silently wrong with a green suite -- expressed as seconds
+    // so the pin fails on a tick-rate change too.
+    expect(COUNTDOWN_TICKS / TICK_HZ).toBe(3);
   });
 
   it('carries the spec default caps and lives (caps apply to every tank, player and AI)', () => {

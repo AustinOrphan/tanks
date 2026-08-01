@@ -512,6 +512,12 @@ export function startGameWith(
 
   sm.onChange((s) => {
     hud.setState(s);
+    // The round indicator is pushed ONLY from onSimulated, which the driver runs
+    // only while playing. Without this, pausing or blurring during the 3s
+    // countdown freezes the chip on screen -- and quitting to title strands it
+    // there indefinitely, since switchTo rebuilds the world without simulating.
+    // The chip sits in the topbar (z-index 1), so it paints over the panel.
+    if (s !== 'playing') hud.setRoundPhase(null);
     // startMusic is idempotent (engine checks music.playing()), so a resume passing
     // back through 'playing' does not double-start anything.
     if (s === 'playing') audio.startMusic();
