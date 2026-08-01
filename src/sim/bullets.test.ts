@@ -159,7 +159,9 @@ describe('stepBullets', () => {
       type: 'ricochet',
       pos: { x: 0, y: 0 },
       vel: { x: RICOCHET_SPEED * s, y: RICOCHET_SPEED * s },
-      bouncesLeft: 3,
+      // From config, not a literal: a stale 3 against a retuned budget of 2 made
+      // consumedBefore NEGATIVE and the first bounceIndex -1.
+      bouncesLeft: bulletConfig.ricochet.bounces,
       alive: true,
     }
     world.bullets.push(b)
@@ -214,7 +216,10 @@ describe('bullet types', () => {
     }
     world.bullets.push(b)
     const indices: number[] = []
-    for (let k = 0; k < 3; k++) {
+    // Exactly the configured budget: the tick after the last bounce EXPIRES the shell
+    // instead of reflecting it, so walking further asserts on a ricochet that
+    // correctly never happens. 2 since the 2026-07-31 balance pass.
+    for (let k = 0; k < bulletConfig.ricochet.bounces; k++) {
       // re-present the bullet at the wall each tick to force one bounce per tick
       b.pos = { x: 1.95, y: 0 }
       b.vel = { x: RICOCHET_SPEED, y: 0 }
@@ -227,7 +232,8 @@ describe('bullet types', () => {
       expect(ric.length).toBe(1)
       indices.push(ric[0].bounceIndex)
     }
-    expect(indices).toEqual([0, 1, 2])
+    expect(indices).toEqual([...Array(bulletConfig.ricochet.bounces).keys()])
+    expect(indices.length).toBeGreaterThanOrEqual(2) // pitch-shift needs at least two steps
   })
 
   it('a fast shell dies on the first wall hit with no bounce and emits no ricochet', () => {

@@ -43,18 +43,18 @@ describe('constants', () => {
     expect(LIVES).toBe(3);
   });
 
-  it('carries the spec default tank and bullet geometry/speeds', () => {
-    // docs/superpowers/plans/2026-07-22-tanks-vertical-slice.md, task 3
-    // "Produces (the single home for all tunable numbers, spec section 4 defaults)":
-    //   TANK_RADIUS = 0.5, TANK_SPEED = 3.0
-    //   BULLET_RADIUS = 0.1
-    //   NORMAL_SPEED = 6, FAST_SPEED = 12, RICOCHET_SPEED = 6
+  it('carries the shipped tank and bullet geometry/speeds', () => {
+    // Geometry and the straight-flying shells still match the original spec
+    // (docs/superpowers/plans/2026-07-22-tanks-vertical-slice.md, task 3). RICOCHET
+    // diverged from the spec's 6 on purpose: retuned to 4 in the 2026-07-31 balance
+    // pass. balance.json is authoritative and this pin moves WITH it -- that is the
+    // retuning contract from #46.
     expect(TANK_RADIUS).toBe(0.5);
     expect(TANK_SPEED).toBe(3.0);
     expect(BULLET_RADIUS).toBe(0.1);
     expect(NORMAL_SPEED).toBe(6);
     expect(FAST_SPEED).toBe(12);
-    expect(RICOCHET_SPEED).toBe(6);
+    expect(RICOCHET_SPEED).toBe(4);
   });
 
   it('carries the spec default cooldowns in seconds', () => {
@@ -108,13 +108,14 @@ describe('constants', () => {
     expect(Object.keys(bulletConfig).sort()).toEqual([...types].sort());
   });
 
-  it('bounce counts match the spec: fast=0, normal=1, ricochet=3', () => {
+  it('bounce counts match the shipped balance: fast=0, normal=1, ricochet=2', () => {
     expect(bulletConfig.fast.bounces).toBe(FAST_BOUNCES);
     expect(bulletConfig.normal.bounces).toBe(NORMAL_BOUNCES);
     expect(bulletConfig.ricochet.bounces).toBe(RICOCHET_BOUNCES);
     expect(FAST_BOUNCES).toBe(0);
     expect(NORMAL_BOUNCES).toBe(1);
-    expect(RICOCHET_BOUNCES).toBe(3);
+    // 3 in the original spec; 2 since the 2026-07-31 balance pass.
+    expect(RICOCHET_BOUNCES).toBe(2);
   });
 
   it('turret turn rates: player is faster (more responsive) than AI (more telegraphed)', () => {
