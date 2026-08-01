@@ -17,11 +17,19 @@ import { createAimRay } from '../../src/render/aimray';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { framedBounds } from '../../src/render/framing';
+import { synthVoice, isSfxKey } from '../../src/audio/synth';
+import { createMusicBed } from '../../src/audio/music';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
 
 const results: Result[] = [];
+
+/** The manifest's sfx keys, filtered through the synth's own guard. */
+const SFX_KEYS = [
+  'cannon', 'cannon-enemy', 'ping', 'explosion',
+  'mine-drop', 'mine-arm', 'mine-boom', 'victory', 'defeat',
+].filter(isSfxKey);
 function check(name: string, fn: () => string | null): void {
   try {
     const failure = fn();
@@ -424,6 +432,73 @@ check('createAimRay orients the line to the turret angle', () => {
   if (!hiddenWhenDead) return 'aim ray still visible after the player died';
   if (scene.children.length !== before) return 'dispose left the line in the scene';
   return null;
+});
+
+// ---- Audio: does the synth actually produce SAMPLES? ------------------------
+//
+// vitest has no Web Audio, so synth.test.ts and music.test.ts can only assert
+// the GRAPH is built -- every node and every scheduled value, but never a single
+// sample. A graph can be perfectly shaped and still render silence (an envelope
+// that never opens, a source never started, a layer connected to nothing).
+// OfflineAudioContext renders faster than real time and deterministically, so
+// the browser is where "it makes a sound" can finally be asserted.
+
+async function renderPeak(
+  build: (ctx: OfflineAudioContext) => void,
+  seconds = 1,
+): Promise<number> {
+  const ctx = new OfflineAudioContext(1, Math.floor(44100 * seconds), 44100);
+  build(ctx);
+  const buf = await ctx.startRendering();
+  const data = buf.getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  return peak;
+}
+
+async function checkAsync(name: string, fn: () => Promise<string | null>): Promise<void> {
+  try {
+    const failure = await fn();
+    results.push({ name, pass: failure === null, detail: failure ?? 'ok' });
+  } catch (e) {
+    results.push({ name, pass: false, detail: `threw: ${String(e)}` });
+  }
+}
+
+for (const key of SFX_KEYS) {
+  await checkAsync(`synth renders audible samples for "${key}"`, async () => {
+    const peak = await renderPeak((ctx) => {
+      const v = synthVoice(ctx, ctx.destination, key, 0, { volume: 1 });
+      if (!v) throw new Error('synthVoice returned null in a real context');
+    });
+    // Well above the noise floor: a silent render peaks at 0, and an envelope
+    // that never opens lands around the 1e-4 floor the ramps start from.
+    return peak > 0.01 ? null : `peak amplitude was ${peak.toExponential(2)}, effectively silent`;
+  });
+}
+
+await checkAsync('synth volume 0 renders true silence', async () => {
+  const peak = await renderPeak((ctx) => {
+    synthVoice(ctx, ctx.destination, 'explosion', 0, { volume: 0 });
+  });
+  // The negative control for the checks above: if THIS also came out loud, the
+  // peak measurement would be reading something other than the voice.
+  return peak < 1e-3 ? null : `muted voice still peaked at ${peak.toExponential(2)}`;
+});
+
+await checkAsync('the generated music bed renders audible samples', async () => {
+  const peak = await renderPeak((ctx) => {
+    const bed = createMusicBed(ctx, ctx.destination, {
+      // No timer in an offline render: start() schedules the first window
+      // synchronously, which is all a 2s render needs.
+      setInterval: () => 0 as unknown as ReturnType<typeof setInterval>,
+      clearInterval: () => undefined,
+      seed: 4242,
+    });
+    bed.setVolume(1);
+    bed.start();
+  }, 2);
+  return peak > 0.01 ? null : `music peaked at ${peak.toExponential(2)}, effectively silent`;
 });
 
 window.__glResults = results;

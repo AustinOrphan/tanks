@@ -1,5 +1,7 @@
 import { Howl, Howler } from 'howler';
 import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
+import { synthVoice } from './synth';
+import { createMusicBed, type MusicBed } from './music';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -58,6 +60,11 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   let masterBus: AudioNode | null = null;
   let activeVoices = 0;
   let disposed = false;
+  // Pending synth-voice teardowns, cancelled on dispose so a timer cannot fire
+  // into a closed context and decrement a counter that no longer exists.
+  const voiceTimers = new Set<ReturnType<typeof setTimeout>>();
+  // The generated bed, built lazily on the first startMusic with no track.
+  let bed: MusicBed | null = null;
 
   // Push the default through immediately. Howler's own default is 1.0, so
   // deferring this until the first slider drag leaves the HUD showing
@@ -168,11 +175,42 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     document.addEventListener('keydown', onGesture);
   }
 
+  // The synthesised voice: real sound design (see synth.ts), used whenever the
+  // context can support it. `beep` below stays as the floor for a context that
+  // cannot -- a bare test fake, or one without createBufferSource.
+  function synth(key: string, opts?: { rate?: number; volume?: number }): boolean {
+    const audio = ensureCtx();
+    if (!audio) return false;
+    const voice = synthVoice(audio, ensureBus(audio), key, audio.currentTime, {
+      rate: opts?.rate,
+      volume: VOICE_GAIN * masterVolume * (opts?.volume ?? 1),
+    });
+    if (!voice) return false;
+    activeVoices += 1;
+    let done = false;
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      activeVoices -= 1;
+      voiceTimers.delete(timer);
+      voice.release();
+    };
+    // Scheduled teardown: a synthesised voice is several nodes with no single
+    // 'ended' event covering all of them, so release on a timer keyed to the
+    // voice's own end time. This is the path every shot takes -- a leak here is
+    // a leak on every shot fired -- and dispose() must cancel any still pending.
+    const ms = Math.max(0, (voice.endsAt - audio.currentTime) * 1000) + 60;
+    const timer = setTimeout(finish, ms);
+    voiceTimers.add(timer);
+    return true;
+  }
+
   // Procedural fallback: a short decaying tone so dev is never blocked on assets.
   // No-ops safely when there is no Web Audio (e.g. headless test/node env).
   function beep(key: string, opts?: { rate?: number; volume?: number }): void {
     if (muted || disposed) return;
     if (activeVoices >= MAX_VOICES) return;
+    if (synth(key, opts)) return;
     const audio = ensureCtx();
     if (!audio) return;
     const freq = (FALLBACK_FREQ[key] ?? 440) * (opts?.rate ?? 1);
@@ -219,18 +257,34 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       }
     },
     startMusic() {
-      if (music && !music.playing()) music.play();
+      if (music && !music.playing()) {
+        music.play();
+        return;
+      }
+      // No track loaded: generate one. Music was the ONE thing with no fallback
+      // -- a failed load left the game silent with nothing able to retry -- so
+      // this is the path that actually runs today.
+      if (music) return;
+      const audio = ensureCtx();
+      if (!audio) return;
+      if (!bed) bed = createMusicBed(audio, ensureBus(audio));
+      bed.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
+      bed.start();
     },
     stopMusic() {
       if (music) music.stop();
+      bed?.stop();
     },
     setMuted(m) {
       muted = m;
       Howler.mute(m);
+      // Howler.mute does not reach the generated bed: it is our own graph.
+      bed?.setVolume(m ? 0 : MUSIC_VOLUME * masterVolume);
     },
     toggleMute() {
       muted = !muted;
       Howler.mute(muted);
+      bed?.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
       return muted;
     },
     isMuted() {
@@ -239,6 +293,9 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     setVolume(v) {
       masterVolume = Math.max(0, Math.min(1, v));
       Howler.volume(masterVolume);
+      // Same reason as setMuted: Howler.volume does not touch our own graph, so
+      // the slider would move the SFX and leave the bed at its old level.
+      bed?.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
     },
     getVolume() {
       return masterVolume;
@@ -255,6 +312,10 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
         document.removeEventListener('pointerdown', onGesture);
         document.removeEventListener('keydown', onGesture);
       }
+      bed?.dispose();
+      bed = null;
+      for (const t of voiceTimers) clearTimeout(t);
+      voiceTimers.clear();
       for (const k of Object.keys(sounds)) sounds[k]?.unload();
       music?.unload();
       masterBus = null;
