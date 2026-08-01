@@ -104,9 +104,10 @@ export const GAME_BALANCE: BalanceConstants = {
   // distance band mobile tanks hold) and `retreatChance` INCLUDING its magnitude
   // (the per-window retreat draw when pressed), `aimAccuracy` (per-profile jitter
   // derived from the AI_AIM_SPREAD anchor as anchor/accuracy), and
-  // `minePlacementChance` in FULL -- sign and magnitude, the per-window mine
-  // draw (targeting.ts mineInclination). Still carried-but-unread:
-  // `reactionTime` alone. Values
+  // `minePlacementChance` in FULL (the per-bucket mine draw, targeting.ts
+  // mineInclination), and `reactionTime` (the dispatcher's reaction gate on
+  // held solutions, ai/index.ts). EVERY profile field is now consumed --
+  // the carried-but-unread list is empty. Values
   // are the Wii reference figures except where noted: this is the GAME's table,
   // retuned to describe the game's actual tanks.
   // The per-profile numbers now live in data/ai-profiles.json, validated at

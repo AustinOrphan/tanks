@@ -9,13 +9,13 @@ import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast } from './targeting';
-import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE } from '../constants';
+import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, TICK_HZ } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
 /** An inert decision: hold position, hold aim, do nothing. */
 function idleDecision(tank: Tank): AiDecision {
-  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0 };
+  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0 };
 }
 
 export function decideAi(world: World, tank: Tank): AiDecision {
@@ -70,6 +70,17 @@ export function stepAi(world: World, events: SimEvent[]): void {
     if (tank.mineCooldown > 0) tank.mineCooldown -= 1;
 
     const decision = decideAi(world, tank);
+    // The reaction clock: consecutive ticks a firing solution has been HELD
+    // (see AiDecision.hasSolution). Accumulated here, where the per-tick truth
+    // arrives; losing the solution resets it, so cover breaks the clock.
+    //
+    // DELIBERATELY accumulates through the countdown: an enemy that can see
+    // (or bank on) the player during the announced, fire-free phase has been
+    // aiming that whole time, and fires at the bell -- review measured teal
+    // holding 180 countdown ticks on arena 1 and firing 1 tick into live,
+    // exactly as it did before the gate existed. The telegraph guarantee is
+    // therefore about COVER BREAKS in live play, not round openings.
+    tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
     // Turret turns at a finite rate rather than snapping instantly (slewAngle, types.ts)
     // -- see AI_TURRET_TURN_RATE's comment in constants.ts (a primary difficulty knob).
@@ -87,7 +98,25 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // decision functions: the tank still drives, dodges and aims (the sandbox uses it
     // as moving scenery), and the decision layer stays ignorant of a flag that is not
     // its business.
-    if (canAct && !tank.disarmed && decision.fire && tank.fireCooldown <= 0 && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
+    // The reaction gate: reactionTime consumed. An enemy may not fire until it
+    // has held its solution for the profile's reactionTime -- the delay between
+    // SEEING you and PUNISHING you, per kind. Sits with the other act-site
+    // gates (cooldown, disarmed) so decision-level tests stay decision-level.
+    //
+    // Measured on the 60-seed harness before shipping, reference spans as-is
+    // (brown 48 / grey 42 / olive 39 / teal 36 ticks):
+    //   without the gate: a1 losses 58/60, freeWins 2/60, medianTicks 1496
+    //   with the gate:    a1 losses 57/60, freeWins 3/60, medianTicks 1671
+    //   (arena 3: 60/60 both rows; 1750 -> 1852; pacifist suite passes)
+    // Kills arrive ~6-12% later and every cover-break punish is telegraphed by
+    // the profile's span. 3/60 sits ON the pacifist boundary (as the pre-series
+    // baseline did): an earlier draft measured 0/60, but that draft's teal
+    // clock was resetting on teammate crossings against hasSolution's own
+    // semantics -- review caught it, and the correct clock gives teal back its
+    // instant shot when a mate clears the lane. Correct semantics kept over
+    // the nicer number.
+    const reactionTicks = Math.round(configFor(tank.kind).ai.reactionTime * TICK_HZ);
+    if (canAct && !tank.disarmed && decision.fire && tank.fireCooldown <= 0 && (tank.aimTicks ?? 0) >= reactionTicks && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
       // Fire along the tank's ACTUAL (post-slew) turret angle, not the decision's desired
       // angle -- a shot taken mid-swing must go where the barrel currently points, not
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI

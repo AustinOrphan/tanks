@@ -62,6 +62,14 @@ export interface Tank {
   aiState: AiState;
   aiTimer: number;
   /**
+   * Consecutive ticks the AI has HELD a firing solution (decision.hasSolution),
+   * reset the tick it loses one. The dispatcher's reaction gate compares this
+   * against the profile's reactionTime before letting a shot off -- an enemy
+   * must SEE you for reactionTime seconds before it may punish you. OPTIONAL so
+   * the many existing fixtures stay valid; absent means 0 (never held one).
+   */
+  aimTicks?: number;
+  /**
    * Weapons off: never fires, never lays a mine. OPTIONAL, so the dozens of existing
    * tank fixtures stay valid; absent means armed. Exists for the dev sandbox, where
    * enemies drive around as moving scenery -- it is world DATA, so replays stay exact

@@ -33,10 +33,19 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary
     // target for the whole of every countdown and every player respawn -- a hardcoded
     // zero, not a decision. `move` already folds in the dodge when one is present.
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
   }
 
   const speed = weapon.speed;
+  // Raw solution existence, for the reaction clock (hasSolution): LINE OF SIGHT
+  // or a bank path -- NOT the vetted, jittered firing angle. A teammate crossing
+  // the lane holds the TRIGGER (shotHitsOwnSide below), but must not reset the
+  // clock: review measured teal's clock zeroing where grey's kept 60 held ticks
+  // on identical geometry, against the field's own doc. bankSeen is only known
+  // when tryBank actually runs; when it doesn't, either the direct line exists
+  // (sees) or the profile never banks -- both give the honest answer.
+  const sees = lineOfSight(tank.pos, player.pos, world.walls);
+  let bankSeen = false;
 
   // Jitter is applied to BOTH the direct and bank solutions, right where each is
   // computed, so it's present regardless of which path preferBank ends up taking (and
@@ -51,7 +60,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     // (Both weights are read as inclinations -- attempted at all or not; the shipped
     // MOBILE_MINE_LAYER carries 0.85/0.15, so both paths stay active for teal.)
     if (cfg.ai.directShotWeight <= 0) return null;
-    if (!lineOfSight(tank.pos, player!.pos, world.walls)) return null;
+    if (!sees) return null;
     const targetVel = driveVelocity(player!);
     const angle = aimLead(tank.pos, player!.pos, targetVel, speed) + aimJitter(world, tank, profileAimSpread(cfg));
     return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
@@ -65,6 +74,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     // which also skips the O(walls^2) search below for profiles that never bank.
     if (cfg.ai.bankShotWeight <= 0) return null;
     const raw = bankShot(tank.pos, player!.pos, world.walls, weapon.ricochetCount);
+    bankSeen = raw !== null;
     if (raw === null) return null;
     const angle = raw + aimJitter(world, tank, profileAimSpread(cfg));
     return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
@@ -91,9 +101,10 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     && mineThreatensPlayer(world, tank);
 
   if (turretAngle !== null) {
-    return { desiredMove: move, turretAngle, fire: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0 };
+    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0 };
   }
 
+
   // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
-  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0 };
+  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0 };
 }

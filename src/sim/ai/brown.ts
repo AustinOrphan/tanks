@@ -14,7 +14,7 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
   const weapon = cfg.weapon;
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
-    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
+    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
   }
 
   const speed = weapon.speed;
@@ -53,5 +53,5 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
       break;
   }
 
-  return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, fireType: weapon.bulletType, mine: false, nextState, nextTimer: 0 };
+  return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, hasSolution: los, fireType: weapon.bulletType, mine: false, nextState, nextTimer: 0 };
 }
