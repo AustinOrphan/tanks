@@ -18,6 +18,8 @@
  * when the notes themselves were placed on a sample-accurate clock.
  */
 
+import { VOICES, type MusicTrackDef } from './music-data';
+
 /** Bass root notes, A minor, one octave apart from the drone. */
 const BASS_HZ = [55, 55, 61.74, 55, 65.41, 55, 49, 55];
 /** Drone partials, a fifth and an octave above the root. */
@@ -41,6 +43,11 @@ export interface MusicBed {
 }
 
 export interface MusicDeps {
+  /**
+   * A composed track to play. Without one the bed generates, exactly as before:
+   * the game is never silent while authoring is half-finished.
+   */
+  track?: MusicTrackDef | null;
   /** Injected so tests can drive the clock without real timers. */
   setInterval?: (fn: () => void, ms: number) => ReturnType<typeof setInterval>;
   clearInterval?: (h: ReturnType<typeof setInterval>) => void;
@@ -88,6 +95,10 @@ export function createMusicBed(
   // `|| 0x5eed`, not `?? 0x5eed`: xorshift on 0 stays 0 forever, so a seed of 0
   // would fire the drone on every step and always pick the same partial.
   let rng = deps.seed || 0x5eed;
+  const track = deps.track ?? null;
+  // Per-layer cursors: layers advance INDEPENDENTLY, so a 8-step bass under an
+  // 11-step drone gives an 88-step combined cycle without authoring one.
+  const cursors = track ? track.tracks.map(() => 0) : [];
 
   function nextRandom(): number {
     rng ^= rng << 13;
@@ -125,7 +136,18 @@ export function createMusicBed(
     }
   }
 
-  function scheduleStep(at: number): void {
+  function scheduleComposed(at: number): void {
+    if (!track) return;
+    track.tracks.forEach((layer, i) => {
+      const hz = layer.notes[cursors[i] % layer.notes.length];
+      cursors[i] += 1;
+      if (hz === null) return; // a rest: advance the cursor, sound nothing
+      const v = VOICES[layer.voice];
+      note(hz, at, track.stepSeconds * v.hold, v.peak, v.type);
+    });
+  }
+
+  function scheduleGenerated(at: number): void {
     const bass = BASS_HZ[step % BASS_HZ.length];
     note(bass, at, STEP_SECONDS * 0.9, 0.22, 'triangle');
     // The drone enters sparsely -- roughly one step in three -- so the bed has
@@ -137,6 +159,16 @@ export function createMusicBed(
     step += 1;
   }
 
+  function scheduleStep(at: number): void {
+    if (track) scheduleComposed(at);
+    else scheduleGenerated(at);
+  }
+
+  /** The composed track's tempo when there is one; the bed's otherwise. */
+  function stepLength(): number {
+    return track ? track.stepSeconds : STEP_SECONDS;
+  }
+
   function pump(): void {
     if (!bus || disposed) return;
     const horizon = ctx.currentTime + LOOKAHEAD_SECONDS;
@@ -145,7 +177,7 @@ export function createMusicBed(
     if (nextStepAt < ctx.currentTime) nextStepAt = ctx.currentTime;
     while (nextStepAt < horizon) {
       scheduleStep(nextStepAt);
-      nextStepAt += STEP_SECONDS;
+      nextStepAt += stepLength();
     }
   }
 

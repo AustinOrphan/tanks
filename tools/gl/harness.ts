@@ -19,6 +19,7 @@ import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
+import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -564,6 +565,22 @@ check('every SFX key is actually covered by an audio check', () => {
   const rendered = results.filter((r) => r.name.startsWith('synth renders audible samples')).length;
   if (SFX_KEYS.length !== 9) return `SFX_KEYS has ${SFX_KEYS.length} entries, expected 9`;
   return rendered === 9 ? null : `only ${rendered} of 9 sfx render checks ran`;
+});
+
+await checkAsync('a COMPOSED track renders audible samples', async () => {
+  // The authored path, end to end: JSON -> validator -> scheduler -> samples.
+  const track = trackById('arena');
+  if (!track) return 'the shipped "arena" track is missing from music-tracks.json';
+  const peak = await renderPeak((ctx) => {
+    const bed = createMusicBed(ctx, ctx.destination, {
+      setInterval: () => 0 as unknown as ReturnType<typeof setInterval>,
+      clearInterval: () => undefined,
+      track,
+    });
+    bed.setVolume(1);
+    bed.start();
+  }, 2);
+  return peak > 0.01 ? null : `composed track peaked at ${peak.toExponential(2)}, silent`;
 });
 
 await checkAsync('the generated music bed renders audible samples', async () => {

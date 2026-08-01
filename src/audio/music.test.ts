@@ -2,6 +2,7 @@
 // timer makes the whole thing testable without waiting in real time.
 import { describe, it, expect } from 'vitest';
 import { createMusicBed } from './music';
+import { noteToHz, trackById, type MusicTrackDef } from './music-data';
 
 interface Sched {
   freq: number;
@@ -89,6 +90,133 @@ const make = (seed = 1234) => {
   });
   return { ctx, t, bed };
 };
+
+describe('composed tracks', () => {
+  const withTrack = (track: MusicTrackDef) => {
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval,
+      clearInterval: t.clearInterval,
+      track,
+    });
+    return { ctx, t, bed };
+  };
+
+  const twoLayers: MusicTrackDef = {
+    id: 'test',
+    stepSeconds: 1,
+    tracks: [
+      { voice: 'bass', notes: [noteToHz('A1'), noteToHz('B1')] },
+      { voice: 'drone', notes: [noteToHz('E3'), null, noteToHz('C4')] },
+    ],
+  };
+
+  it('plays the AUTHORED notes, not the generated pattern', () => {
+    const { ctx, bed } = withTrack(twoLayers);
+    bed.start();
+    const played = ctx.notes.map((n) => Math.round(n.freq));
+    expect(played).toContain(Math.round(noteToHz('A1')!));
+    expect(played).toContain(Math.round(noteToHz('E3')!));
+    bed.stop();
+  });
+
+  it('advances each layer INDEPENDENTLY, so lengths need not divide each other', () => {
+    // 2-step bass under a 3-step drone gives a 6-step cycle. If both layers
+    // shared one cursor the drone would restart with the bass and the whole
+    // point of differing lengths would be lost.
+    const { ctx, t, bed } = withTrack(twoLayers);
+    bed.start();
+    for (let i = 1; i <= 6; i++) {
+      ctx.currentTime = i;
+      t.tick();
+    }
+    const bass = ctx.notes.filter((n) => n.freq < 100).map((n) => Math.round(n.freq));
+    const a1 = Math.round(noteToHz('A1')!);
+    const b1 = Math.round(noteToHz('B1')!);
+    // The bass alternates every step; a shared cursor would break the alternation.
+    expect(bass.slice(0, 4)).toEqual([a1, b1, a1, b1]);
+    bed.stop();
+  });
+
+  it('honours a REST: the step passes silently and the cursor still advances', () => {
+    const { ctx, t, bed } = withTrack(twoLayers);
+    bed.start();
+    for (let i = 1; i <= 3; i++) {
+      ctx.currentTime = i;
+      t.tick();
+    }
+    // The drone is E3, rest, C4. If a rest sounded, there would be a note
+    // between them; if it did not advance the cursor, C4 would never arrive.
+    const highs = ctx.notes.filter((n) => n.freq > 100).map((n) => Math.round(n.freq));
+    expect(highs).toContain(Math.round(noteToHz('C4')!));
+    expect(highs.filter((h) => h === Math.round(noteToHz('E3')!)).length).toBeGreaterThan(0);
+    bed.stop();
+  });
+
+  it("uses the TRACK's tempo, not the generated bed's", () => {
+    const fast: MusicTrackDef = { ...twoLayers, stepSeconds: 0.25 };
+    const { ctx, bed } = withTrack(fast);
+    bed.start();
+    const starts = [...new Set(ctx.notes.map((n) => Math.round(n.startedAt * 100)))].sort((a, b) => a - b);
+    // At 0.25s steps the 0.6s lookahead covers several steps; at the bed's 1.5s
+    // it would cover exactly one.
+    expect(starts.length).toBeGreaterThan(1);
+    bed.stop();
+  });
+
+  it('falls back to the generated bed when no track is given', () => {
+    // The whole point of keeping the generator: authoring can be incomplete and
+    // the game still has music.
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval,
+      clearInterval: t.clearInterval,
+      track: null,
+    });
+    bed.start();
+    expect(ctx.notes.length).toBeGreaterThan(0);
+    bed.stop();
+  });
+
+  it('LOOPS without a seam: the wrap is just another step', () => {
+    // In game the bed never restarts -- cursors wrap with % and scheduling runs
+    // continuously -- so the loop point should be indistinguishable from any
+    // other step. This pins both halves of that: the note SEQUENCE repeats with
+    // the layer's period, and the TIMING has no gap or overlap at the wrap.
+    const { ctx, t, bed } = withTrack(twoLayers); // bass has 2 steps, drone 3
+    bed.start();
+    for (let i = 1; i <= 14; i++) {
+      ctx.currentTime = i;
+      t.tick();
+    }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort(
+      (a, b) => a - b,
+    );
+    expect(starts.length).toBeGreaterThan(8);
+    // Every consecutive pair is exactly one step apart: a gap at the wrap would
+    // show up as a doubled interval, an overlap as a zero one.
+    for (let i = 1; i < starts.length; i++) {
+      expect(starts[i] - starts[i - 1], `gap at index ${i}`).toBeCloseTo(twoLayers.stepSeconds, 9);
+    }
+    // And the bass alternates without interruption across its wrap.
+    const bass = ctx.notes.filter((n) => n.freq < 100).map((n) => Math.round(n.freq));
+    const period = twoLayers.tracks[0].notes.length;
+    for (let i = period; i < bass.length; i++) {
+      expect(bass[i], `bass step ${i} should repeat step ${i - period}`).toBe(bass[i - period]);
+    }
+    bed.stop();
+  });
+
+  it('plays a SHIPPED track from the data file end to end', () => {
+    const arena = trackById('arena')!;
+    const { ctx, bed } = withTrack(arena);
+    bed.start();
+    expect(ctx.notes.length).toBeGreaterThan(0);
+    bed.stop();
+  });
+});
 
 describe('the generated music bed', () => {
   it('schedules notes ahead on the AUDIO clock, not on timer time', () => {

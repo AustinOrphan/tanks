@@ -2,6 +2,7 @@ import { Howl, Howler } from 'howler';
 import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
 import { synthVoice } from './synth';
 import { createMusicBed, type MusicBed } from './music';
+import { trackById } from './music-data';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -23,6 +24,12 @@ export interface AudioEngine {
 }
 
 const MUSIC_VOLUME = 0.25;
+/**
+ * The track the game plays. One at a time for now -- per-context routing (menu
+ * theme, per-level pieces) is explicitly deferred in the design doc. An id with
+ * no matching entry falls through to the generated bed rather than going silent.
+ */
+const MUSIC_TRACK_ID = 'arena';
 
 // Cap on simultaneous procedural voices. A mine chain-reaction can emit a
 // dozen SFX on one tick; identical tones started at the same currentTime sum
@@ -267,7 +274,10 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       if (music) return;
       const audio = ensureCtx();
       if (!audio) return;
-      if (!bed) bed = createMusicBed(audio, ensureBus(audio));
+      // A composed track if one is authored, else the generated bed. Same
+      // relationship the synth has with samples: authored content wins, and the
+      // generator covers whatever has not been written yet.
+      if (!bed) bed = createMusicBed(audio, ensureBus(audio), { track: trackById(MUSIC_TRACK_ID) });
       bed.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
       bed.start();
     },
