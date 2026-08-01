@@ -9,6 +9,7 @@
  * function, so the whole table is assertable without a browser.
  */
 import type { TankKind, UnarmedTrigger } from '../sim/types';
+import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 
 export interface DevFlags {
   /**
@@ -141,7 +142,11 @@ function asLevel(params: URLSearchParams): number | 'sandbox' | null {
   return asSeed(params, 'level'); // same shape: a positive integer or null
 }
 
-const TANK_KINDS = new Set<TankKind>(['brown', 'grey', 'teal']);
+// Derived from the config module's canonical kind list, minus the player, so a
+// new enemy kind is sandbox-spawnable the moment it exists -- this used to be a
+// hand-kept subset that a new kind could silently miss (Set<TankKind> accepts
+// any subset; no compile error would have named it).
+const TANK_KINDS = new Set<TankKind>(ALL_TANK_KINDS.filter((k) => k !== 'player'));
 
 /** The sandbox roster: every entry must be an enemy kind, or the whole list is null. */
 function asTanks(params: URLSearchParams): TankKind[] | null {

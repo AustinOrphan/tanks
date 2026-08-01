@@ -13,7 +13,7 @@ import { LIVES } from './constants';
  * so runtime flags never enter src/sim/ and a sandbox session replays exactly.
  */
 export interface SandboxOptions {
-  /** Enemy kinds to spawn, any multiset. Default: one of each. */
+  /** Enemy kinds to spawn, any multiset. Default: the classic trio (brown, grey, teal) -- deliberately NOT every kind, so existing sandbox links keep meaning what they meant. */
   tanks?: TankKind[];
   /** Weapons off for every enemy. Default TRUE: the sandbox is scenery until asked. */
   disarmed?: boolean;
@@ -38,6 +38,7 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   brown: 'B',
   grey: 'G',
   teal: 'T',
+  olive: 'O',
 };
 
 /** Chebyshev-adjacent to any spawn cell: walls may not crowd a tank at birth. */

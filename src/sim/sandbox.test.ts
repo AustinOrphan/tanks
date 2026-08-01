@@ -16,7 +16,7 @@ describe('sandboxArena', () => {
     expect(walls).toHaveLength(4);
     expect(spawns.filter((s) => s.kind === 'player')).toHaveLength(1);
     expect(spawns.filter((s) => s.kind !== 'player').map((s) => s.kind).sort())
-      .toEqual(['brown', 'grey', 'teal']); // one of each, the user's chosen default
+      .toEqual(['brown', 'grey', 'teal']); // the classic-trio default, deliberately olive-free
   });
 
   it('spawns exactly the requested enemy multiset', () => {

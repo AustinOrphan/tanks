@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { TANK_KINDS } from '../sim/config';
 import { parseDevFlags, DEV_FLAGS_OFF } from './devflags';
 
 describe('parseDevFlags', () => {
@@ -205,3 +206,14 @@ describe('parseDevFlags: playtest is additive, never a veto', () => {
     expect(parseDevFlags('?dev=1&playtest=1&invincible=0').invincible).toBe(true);
   });
 });
+describe('the sandbox roster tracks the canonical kind list', () => {
+  it('every enemy kind in TANK_KINDS parses in tanks= -- a new kind is spawnable the moment it exists', () => {
+    // Pins the derivation in devflags.ts (review: it was built to admit new
+    // kinds automatically, but nothing named the property). Fails if the
+    // derived set ever loses a kind or the parser rejects one.
+    const enemies = TANK_KINDS.filter((k) => k !== 'player');
+    const flags = parseDevFlags(`?dev=1&level=sandbox&tanks=${enemies.join(',')}`);
+    expect(flags.sandboxTanks).toEqual(enemies);
+  });
+});
+
