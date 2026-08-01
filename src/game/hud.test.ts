@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
 import { SKINS } from './customization';
+import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 
 let hud: Hud | null = null;
@@ -662,6 +663,94 @@ describe('hud: the stats page', () => {
     // kill is recorded a beat after the state flips.
     h.setStats({ lifetime: SOME, run: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
     expect((root.querySelector('.hud-run-summary') as HTMLElement).textContent).toContain('4 kills');
+  });
+});
+
+describe('hud: achievements', () => {
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-achievements-open') as HTMLButtonElement;
+  const page = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-achievements') as HTMLElement;
+  const rows = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-achievement'));
+
+  it('lists every catalog entry, marking only the earned ones', () => {
+    const { hud: h, root } = mount();
+    h.setAchievements(new Set(['first-blood', 'flawless'] as const));
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(page(root).classList.contains('hud-achievements--hidden')).toBe(false);
+    // Population: the whole catalog -- locked entries stay visible with criteria.
+    expect(rows(root)).toHaveLength(ACHIEVEMENTS.length);
+    const earned = rows(root)
+      .filter((r) => r.classList.contains('hud-achievement--earned'))
+      .map((r) => r.dataset.achievement);
+    expect(earned.sort()).toEqual(['first-blood', 'flawless']);
+    expect(
+      (root.querySelector('.hud-achievements-count') as HTMLElement).textContent,
+    ).toBe(`2 of ${ACHIEVEMENTS.length} earned`);
+    // Descriptions ship with the row: the list doubles as the to-do.
+    const locked = rows(root).find((r) => !r.classList.contains('hud-achievement--earned'))!;
+    expect((locked.querySelector('.hud-achievement-desc') as HTMLElement).textContent!.length)
+      .toBeGreaterThan(0);
+  });
+
+  it('re-renders live while open: an achievement earned behind the page appears', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(rows(root).filter((r) => r.classList.contains('hud-achievement--earned'))).toHaveLength(0);
+    h.setAchievements(new Set(['petard'] as const));
+    const earned = rows(root)
+      .filter((r) => r.classList.contains('hud-achievement--earned'))
+      .map((r) => r.dataset.achievement);
+    expect(earned).toEqual(['petard']);
+  });
+
+  it('is a title-screen affair, closed by any state change', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing');
+    expect(page(root).classList.contains('hud-achievements--hidden')).toBe(true);
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(openBtn(root).classList.contains('hud-achievements-open--hidden'), s).toBe(true);
+    }
+  });
+
+  it('toasts each unlock, stacks simultaneous ones, and expires them', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const defs = ACHIEVEMENTS.filter((a) => a.id === 'first-blood' || a.id === 'marksman');
+      h.showAchievementToasts(defs);
+      const toasts = (): HTMLElement[] => Array.from(root.querySelectorAll('.hud-toast'));
+      // Two at once STACK rather than replacing one another.
+      expect(toasts().map((t) => t.dataset.achievement)).toEqual(['first-blood', 'marksman']);
+      expect(toasts()[0].textContent).toContain('First Blood');
+      vi.advanceTimersByTime(3199);
+      expect(toasts()).toHaveLength(2); // still up just before the deadline
+      vi.advanceTimersByTime(2);
+      expect(toasts()).toHaveLength(0); // and gone after it
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('dispose clears pending toast timers, so none fires into a removed HUD', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
+      const toast = root.querySelector('.hud-toast') as HTMLElement;
+      h.dispose();
+      const removeSpy = vi.spyOn(toast, 'remove');
+      vi.advanceTimersByTime(10000);
+      expect(removeSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
