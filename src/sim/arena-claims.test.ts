@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { claimFailures, renderBoard, structuralFailures } from './arena-claims';
+import { SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import { arenaById } from './config/arenas';
 import type { Arena } from './arena';
 import { ARENA_01 } from './arena';
@@ -172,5 +173,47 @@ describe('renderBoard', () => {
     expect(lines[1][3]).toBe('*'); // row 1, col 3 -- the marked cell
     expect(lines[3][1]).toBe('.'); // row 3, col 1 -- untouched; a transposed write lands here instead
     expect(lines[7]).toContain('P'); // untouched rows still read as the grid
+  });
+});
+
+// The marking behaviour itself, which nothing asserted before: review found the
+// sealed-pocket board marking the ENTIRE play area as cut off (its flood fill
+// started at the first breachable cell in scan order, which on that fixture IS
+// the sealed cell) while leaving the real pocket blank. Nothing caught it because
+// no test read board content -- only that a failure string existed.
+describe('failure boards point at the thing that failed', () => {
+  it('the sealed-pocket board marks the CUT-OFF cell, not the play area', () => {
+    const [failure] = structuralFailures(SEALED_POCKET_ARENA);
+    const board = failure.split('\n').slice(1);
+    // The fixture's pocket is the B at [0,0]; everything else is the reachable half.
+    expect(board[0][0]).toBe('*');
+    expect(failure).toMatch(/1 cut off/);
+    // The play area must NOT be marked -- this is the regression under guard.
+    expect(board[3]).not.toContain('*'); // the player's row
+    expect(board.join('').split('*')).toHaveLength(2); // exactly one mark
+  });
+
+  it('a spawn-sightline board distinguishes the enemy from the player', () => {
+    const [failure] = structuralFailures(OPEN_SIGHTLINE_ARENA);
+    const board = failure.split('\n').slice(1).join('\n');
+    expect(board).toContain('E');
+    expect(board).toContain('P');
+  });
+
+  it('renderBoard reports an out-of-grid mark instead of throwing', () => {
+    // It runs on the failure path, so a raw TypeError here buries the failure it
+    // was called to explain. Before this, `rows[r][c] = '*'` threw.
+    const arena = arenaById('arena-01');
+    expect(() => renderBoard(arena, [[99, 99]])).not.toThrow();
+    const out = renderBoard(arena, [[99, 99], [1, 1]]);
+    expect(out).toMatch(/not drawn -- outside the 11x9 grid: \[99, 99\]/);
+    expect(out.split('\n')[1][1]).toBe('*'); // the in-range mark still drawn
+  });
+
+  it('renderBoard honours a per-mark glyph', () => {
+    const arena = arenaById('arena-01');
+    const out = renderBoard(arena, [[2, 3, 'E'], [4, 5]]);
+    expect(out.split('\n')[3][2]).toBe('E');
+    expect(out.split('\n')[5][4]).toBe('*'); // default when no glyph given
   });
 });

@@ -3,6 +3,7 @@ import { loadArena } from './arena';
 import type { Vec2, Wall } from './types';
 import { lineOfSight } from './ai/targeting';
 import type { ArenaClaim } from './config/arena-types';
+import { SPAWN_LETTERS } from './config/arena-types';
 
 /**
  * Evaluates an arena's declared design claims (config/arena-types.ts) against the
@@ -47,15 +48,18 @@ export function breach(walls: Wall[]): Wall[] {
  * from arenas.json cannot get here out of range (the validator bounds-checks
  * every claim cell), but a hand-built test claim can.
  */
-export function renderBoard(arena: Arena, marks: ReadonlyArray<[number, number]>): string {
+export function renderBoard(
+  arena: Arena,
+  marks: ReadonlyArray<readonly [number, number, string?]>,
+): string {
   const rows = arena.grid.map((row) => [...row]);
   const outside: string[] = [];
-  for (const [c, r] of marks) {
+  for (const [c, r, glyph] of marks) {
     if (c < 0 || c >= arena.cols || r < 0 || r >= arena.rows) {
       outside.push(`[${c}, ${r}]`);
       continue;
     }
-    rows[r][c] = '*';
+    rows[r][c] = glyph ?? '*';
   }
   const board = rows.map((row) => row.join('')).join('\n');
   return outside.length === 0
@@ -75,20 +79,34 @@ function isBreachable(arena: Arena, r: number, c: number): boolean {
   return !kind || kind === 'destructible';
 }
 
-/** 4-neighbour flood fill over breachable cells; also names what it could not reach. */
+/**
+ * 4-neighbour flood fill over breachable cells; also names what it could not reach.
+ *
+ * The fill starts at the PLAYER's cell, not at the first breachable cell in scan
+ * order. Connectivity is symmetric so the pass/fail answer is identical either way,
+ * but the REPORTED set is not: review caught the scan-order version marking the whole
+ * play area as "cut off" on the sealed-pocket fixture, because that fixture's sealed
+ * cell sorts first and became the fill's origin. Anchoring on the player makes
+ * `unreached` mean "cut off from the player", which is the thing worth drawing.
+ */
 function reachable(arena: Arena): { open: number; reached: number; unreached: Array<[number, number]> } {
   const { rows, cols } = arena;
   const seen = Array.from({ length: rows }, () => Array(cols).fill(false));
   let open = 0;
   let start: [number, number] | null = null;
+  let fallback: [number, number] | null = null;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (isBreachable(arena, r, c)) {
         open++;
-        if (!start) start = [r, c];
+        if (!fallback) fallback = [r, c];
+        if (SPAWN_LETTERS[arena.grid[r][c]] === 'player') start = [r, c];
       }
     }
   }
+  // A grid with no player spawn cannot reach the validator, but structuralFailures
+  // is called on hand-built fixtures too; fall back rather than crash.
+  start = start ?? fallback;
   if (!start) return { open, reached: 0, unreached: [] };
   const seenStack: Array<[number, number]> = [start];
   seen[start[0]][start[1]] = true;
@@ -138,7 +156,10 @@ export function structuralFailures(arena: Arena): string[] {
     if (lineOfSight(enemy.pos, player.pos, walls)) {
       failures.push(
         `spawn sightline: ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the player spawn\n` +
-        renderBoard(arena, [cellOf(arena, enemy.pos), cellOf(arena, player.pos)]),
+        renderBoard(arena, [
+          [...cellOf(arena, enemy.pos), 'E'] as const,
+          [...cellOf(arena, player.pos), 'P'] as const,
+        ]),
       );
     }
   }
@@ -195,8 +216,8 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
         // this claim type replaced, but not because intact adds detection power on
         // its own: measured across all 5 arena-01/02/03-and-fixture scenarios --
         // this switch case only runs where the claim is DECLARED, so arena-02 (which
-        // does not declare it) was checked by hand, the same way, outside the suite
-        // -- 0 failures were intact-only. Breach only ever reveals sightlines, never
+        // does not declare it) is measured by its own test in arena-validation.test.ts
+        // rather than here -- 0 failures were intact-only. Breach only ever reveals sightlines, never
         // hides them, so an intact failure is always also a breached one at the same
         // enemy/offset. arena-02 fails 12 of its 16 breached-phase checks and 0 of 16
         // intact -- exactly why it carries no spawnBlockRobust claim: the level's
@@ -217,7 +238,12 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
                 failures.push(
                   `spawnBlockRobust (${phase.name}): ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the ` +
                   `player nudged by (${off.x}, ${off.y}) -- the block is a tangency, not a chord\n` +
-                  `  why: ${claim.why}\n${renderBoard(arena, [cellOf(arena, enemy.pos), cellOf(arena, player.pos)])}`,
+                  `  why: ${claim.why}\n` +
+                  `  (E = the enemy that sees, P = the player spawn)\n` +
+                  renderBoard(arena, [
+                    [...cellOf(arena, enemy.pos), 'E'] as const,
+                    [...cellOf(arena, player.pos), 'P'] as const,
+                  ]),
                 );
               }
             }
