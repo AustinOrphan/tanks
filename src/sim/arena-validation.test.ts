@@ -7,9 +7,16 @@ import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
 import type { Arena } from './arena';
 import { lineOfSight } from './ai/targeting';
 
-/** Open = not a wall. Spawn letters stand on open floor. */
-function isOpen(arena: Arena, r: number, c: number): boolean {
-  return !arena.legend[arena.grid[r][c]];
+/**
+ * A cell a tank could EVER stand on: open now, or openable by demolition. The
+ * 2026-07-31 balance pass made ARENA_02's middle bar a full destructible barrier --
+ * the halves START sealed and the level is about breaching it -- so plain-open
+ * connectivity is a design choice, not an invariant. Solid-sealed pockets remain
+ * forbidden: no amount of play opens those.
+ */
+function isBreachable(arena: Arena, r: number, c: number): boolean {
+  const kind = arena.legend[arena.grid[r][c]];
+  return !kind || kind === 'destructible';
 }
 
 /** 4-neighbour flood fill from the first open cell; returns the number reached. */
@@ -20,7 +27,7 @@ function reachableOpenCells(arena: Arena): { open: number; reached: number } {
   let start: [number, number] | null = null;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (isOpen(arena, r, c)) {
+      if (isBreachable(arena, r, c)) {
         open++;
         if (!start) start = [r, c];
       }
@@ -37,7 +44,7 @@ function reachableOpenCells(arena: Arena): { open: number; reached: number } {
       const nr = r + dr;
       const nc = c + dc;
       if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-      if (seen[nr][nc] || !isOpen(arena, nr, nc)) continue;
+      if (seen[nr][nc] || !isBreachable(arena, nr, nc)) continue;
       seen[nr][nc] = true;
       stack.push([nr, nc]);
     }
@@ -71,7 +78,9 @@ describe('the shipped arena sequence', () => {
       expect(tanks.filter((t) => t.kind !== 'player').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('has every open cell reachable from every other (no sealed pockets)', () => {
+    it('has every breachable cell reachable from every other (no SOLID-sealed pockets)', () => {
+      // Destructibles count as passable-eventually: a region behind them is gameplay
+      // (ARENA_02's sealed halves), a region behind solids is a dead zone forever.
       const { open, reached } = reachableOpenCells(a);
       expect(reached).toBe(open);
     });

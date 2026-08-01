@@ -276,8 +276,11 @@ describe('shotHitsOwnSide', () => {
     // drives straight through it, arriving exactly when the shell does.
     // Shell: speed 6 along +x, so it reaches x=5 at t = 5/6 s.
     // Mate: TANK_SPEED 3 along -y from y=2.5, so it reaches y=0 at t = 2.5/3 = 5/6 s.
-    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
-    const mate = aiTank(2, 'teal', { x: 5, y: 2.5 }, { desiredMove: { x: 0, y: -1 } });
+    // The mate is a GREY: the choreography needs a full-TANK_SPEED walker, and the
+    // 2026-07-31 balance pass slowed teal to 0.6x -- a teal arrives after the shell
+    // has passed and the intercept this test is about never happens.
+    const shooter = aiTank(1, 'brown', { x: 0, y: 0 });
+    const mate = aiTank(2, 'grey', { x: 5, y: 2.5 }, { desiredMove: { x: 0, y: -1 } });
     expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(true);
   });
 
@@ -285,8 +288,9 @@ describe('shotHitsOwnSide', () => {
     // The mirror of the case above: prediction must not turn into blanket paranoia about
     // any teammate near the line, or the AI stops shooting, which is its own bug.
     // This mate starts 2.5 clear and drives AWAY, so it is never near the shell.
-    const shooter = aiTank(1, 'grey', { x: 0, y: 0 });
-    const mate = aiTank(2, 'teal', { x: 5, y: 2.5 }, { desiredMove: { x: 0, y: 1 } });
+    // Grey, to mirror the walk-in case exactly (teal creeps since 2026-07-31).
+    const shooter = aiTank(1, 'brown', { x: 0, y: 0 });
+    const mate = aiTank(2, 'grey', { x: 5, y: 2.5 }, { desiredMove: { x: 0, y: 1 } });
     expect(shotHitsOwnSide(w([shooter, mate]), shooter, 0, 'normal')).toBe(false);
   });
 

@@ -32,16 +32,33 @@ describe('game roster resolves to the shipped tunables (behaviour-preservation p
   // MUST equal that constant for every kind or behaviour shifts. Each assertion
   // fails if the roster/balance is authored with a different class or number.
 
-  it('movement speed equals TANK_SPEED for every kind (the game is uniform today)', () => {
-    for (const k of KINDS) expect(configFor(k).movementSpeed).toBe(TANK_SPEED);
+  // The uniform era ended with the 2026-07-31 balance pass: Brown turns and fires
+  // slowly, Teal creeps but fires fast. Pinned PER KIND now -- retuning the roster
+  // means updating the entry here too, exactly the balance.json contract.
+  it('movement speed: uniform TANK_SPEED except Teal, who creeps', () => {
+    for (const k of ['player', 'brown', 'grey'] as const) {
+      expect(configFor(k).movementSpeed).toBe(TANK_SPEED);
+    }
+    expect(configFor('teal').movementSpeed).toBeCloseTo(TANK_SPEED * 0.6, 9);
   });
 
-  it('rotation speed equals TANK_TURN_RATE for every kind', () => {
-    for (const k of KINDS) expect(configFor(k).rotationSpeed).toBe(TANK_TURN_RATE);
+  it('rotation speed: player and grey at TANK_TURN_RATE; brown and teal slow', () => {
+    for (const k of ['player', 'grey'] as const) {
+      expect(configFor(k).rotationSpeed).toBe(TANK_TURN_RATE);
+    }
+    for (const k of ['brown', 'teal'] as const) {
+      expect(configFor(k).rotationSpeed).toBeCloseTo(TANK_TURN_RATE * 0.6, 9);
+    }
   });
 
-  it('fire cooldown equals FIRE_COOLDOWN_TICKS for every kind', () => {
-    for (const k of KINDS) expect(configFor(k).weapon.fireCooldown).toBe(FIRE_COOLDOWN_TICKS);
+  it('fire cooldown: player and grey at FIRE_COOLDOWN_TICKS; brown slow, teal fast', () => {
+    for (const k of ['player', 'grey'] as const) {
+      expect(configFor(k).weapon.fireCooldown).toBe(FIRE_COOLDOWN_TICKS);
+    }
+    // Measured from the resolved FireRate enums on 2026-07-31: SLOW = 38 ticks
+    // (~0.63s), FAST = 14 (~0.23s). Integers, because cooldowns are counted in ticks.
+    expect(configFor('brown').weapon.fireCooldown).toBe(38);
+    expect(configFor('teal').weapon.fireCooldown).toBe(14);
   });
 
   it('shell cap equals SHELL_CAP and mine capacity equals MINE_CAP for every kind', () => {
