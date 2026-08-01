@@ -46,6 +46,7 @@ interface Recorder {
   builtWorlds: World[];
   volumes: number[];
   resizes: Array<[number, number]>;
+  refits: Array<[number, number, number]>;
   listeners: Array<[string, (e: never) => void]>;
   removed: Array<[string, (e: never) => void]>;
   disposed: string[];
@@ -55,7 +56,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }> } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -98,6 +99,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     builtWorlds: [],
     volumes: [],
     resizes: [],
+    refits: [],
     listeners: [],
     removed: [],
     disposed: [],
@@ -144,6 +146,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         resize(w2, h2): void {
           rec.resizes.push([w2, h2]);
+        },
+        refit(w2: number, h2: number, b: number): void {
+          rec.refits.push([w2, h2, b]);
         },
         dispose(): void {
           rec.disposed.push('renderer');
@@ -282,6 +287,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         return Math.min(cleared, (opts.levelCount ?? 1) - 1);
       },
       tracksProgress: opts.tracksProgress ?? true,
+      bounds: (level: number) =>
+        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 2 },
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
         // The same reference the loop receives: post-build mutations (invincibility)
@@ -1223,6 +1230,30 @@ describe('startGameWith: invincibility (dev playtest mode)', () => {
   it('marks nobody without the flag', () => {
     const h = boot(makeDeps());
     expect(playerOf(h.rec.builtWorlds[0])?.invincible).toBeUndefined();
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: per-level renderer refit', () => {
+  it('refits the renderer when a rebuild lands on a different board', () => {
+    const h = boot(makeDeps({
+      levelCount: 2,
+      boundsByLevel: [
+        { width: 22, height: 18, cellSize: 2 },
+        { width: 30, height: 18, cellSize: 2 },
+      ],
+    }));
+    h.setState('win');
+    h.hud.startRestart(); // advance to the wider level 2
+    expect(h.rec.refits).toEqual([[30, 18, 2]]);
+    h.handle.dispose();
+  });
+
+  it('does NOT refit for a same-size rebuild: a respawn-restart is not a new board', () => {
+    const h = boot(makeDeps({ levelCount: 1 }));
+    h.setState('lose');
+    h.hud.startRestart(); // retry the same level
+    expect(h.rec.refits).toEqual([]);
     h.handle.dispose();
   });
 });

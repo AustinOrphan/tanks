@@ -12,6 +12,8 @@ export interface Renderer3D {
   render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
   screenToGround(clientX: number, clientY: number): Vec2;
   resize(w: number, h: number): void;
+  /** Re-aim the scene at a new board size. In place: the GL context survives. */
+  refit(worldWidth: number, worldHeight: number, boundary: number): void;
   dispose(): void;
 }
 
@@ -34,6 +36,9 @@ export function createRenderer(
   boundary: number,
   options: RendererOptions = {},
 ): Renderer3D {
+  // Mutable: refit() moves the board, and screenToGround's miss-fallback must keep
+  // pointing at the CURRENT arena's centre.
+  let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
   const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
@@ -69,13 +74,18 @@ export function createRenderer(
     ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(ndc, ctx.camera);
     const hit = raycaster.ray.intersectPlane(groundPlane, hitPoint);
-    if (!hit) return { x: worldWidth / 2, y: worldHeight / 2 };
+    if (!hit) return { x: centre.x, y: centre.y };
     // three (x, z) -> world (x, y)
     return { x: hitPoint.x, y: hitPoint.z };
   }
 
   function resize(w: number, h: number): void {
     ctx.resize(w, h);
+  }
+
+  function refit(w: number, h: number, boundaryRing: number): void {
+    centre = { x: w / 2, y: h / 2 };
+    ctx.refit(w, h, boundaryRing);
   }
 
   function dispose(): void {
@@ -86,5 +96,5 @@ export function createRenderer(
     ctx.dispose();
   }
 
-  return { render, screenToGround, resize, dispose };
+  return { render, screenToGround, resize, refit, dispose };
 }

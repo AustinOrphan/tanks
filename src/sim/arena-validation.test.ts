@@ -3,7 +3,7 @@
 // spawn sightline is invisible until a player dies to it three seconds into a level.
 // New arenas added to ARENAS get all of this for free -- that is the point of the file.
 import { describe, it, expect } from 'vitest';
-import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
+import { ARENAS, ARENA_01, loadArena } from './arena';
 import type { Arena } from './arena';
 import { lineOfSight } from './ai/targeting';
 
@@ -56,19 +56,6 @@ describe('the shipped arena sequence', () => {
   it('starts at ARENA_01, the arena the game has always shipped', () => {
     expect(ARENAS[0]).toBe(ARENA_01);
     expect(ARENAS.length).toBeGreaterThanOrEqual(2); // progression needs somewhere to go
-  });
-
-  it('keeps every arena at ARENA_01\'s dimensions, until the renderer can refit', () => {
-    // The renderer sizes its ground plane from the arena ONCE, at construction
-    // (scene.ts), and rebuilding it per level is out of scope for maps pass 1 -- see
-    // docs/superpowers/specs/2026-07-31-maps-design.md. DELETE this test when per-level
-    // renderer refit lands; until then an odd-sized arena would render on a wrong-sized
-    // board with the walls hanging over the void.
-    const { width, height } = arenaBounds(ARENA_01);
-    for (const a of ARENAS) {
-      expect(arenaBounds(a)).toEqual({ width, height });
-      expect(a.cellSize).toBe(ARENA_01.cellSize);
-    }
   });
 
   describe.each(ARENAS.map((a, i) => ({ a, i })))('arena $i', ({ a }) => {
