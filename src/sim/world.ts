@@ -195,6 +195,7 @@ function resetArena(world: World): void {
     t.mineCooldown = 0;
     t.aiState = 'idle';
     t.aiTimer = 0;
+    t.aimTicks = 0;
   }
   for (const w of world.walls) w.destroyed = false;
   world.bullets = [];

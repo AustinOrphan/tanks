@@ -26,9 +26,16 @@ function world(tanks: Tank[], over: Partial<World> = {}): World {
   };
 }
 
+// REACTION isolation: reactionTime (dispatcher gate on tank.aimTicks) would hold
+// every first shot in this file for the profile's reaction span. These tests are
+// about OTHER dispatcher gates -- phases, cooldown, caps, friendly fire, disarmed
+// -- so their fixtures start with the solution long HELD. The reaction gate has
+// its own suite (reaction.test.ts).
+const HELD = { aimTicks: 999 };
+
 describe('decideAi', () => {
   it('routes by tank kind (Brown never moves)', () => {
-    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { ...HELD, aiState: 'aim' });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const d = decideAi(world([brown, player]), brown);
     expect(d.desiredMove).toEqual({ x: 0, y: 0 });
@@ -37,7 +44,7 @@ describe('decideAi', () => {
 
 describe('stepAi', () => {
   it('leaves a Brown stationary (desiredMove {0,0})', () => {
-    const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { ...HELD, aiState: 'aim' });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const w = world([brown, player]);
     stepAi(w, []);
@@ -45,7 +52,7 @@ describe('stepAi', () => {
   });
 
   it('creates enemy bullets via spawnBullet when the enemy decides to fire', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS -> grey fires
     const w = world([grey, player]);
     const events: SimEvent[] = [];
@@ -56,7 +63,7 @@ describe('stepAi', () => {
   });
 
   it('respects fireCooldown (no every-tick spam)', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const w = world([grey, player]);
     stepAi(w, []);
@@ -67,7 +74,7 @@ describe('stepAi', () => {
   });
 
   it('is deterministic across identical worlds', () => {
-    const build = () => world([tank(1, 'grey', { x: 0, y: 0 }), tank(2, 'player', { x: 5, y: 0 })]);
+    const build = () => world([tank(1, 'grey', { x: 0, y: 0 }, { ...HELD }), tank(2, 'player', { x: 5, y: 0 })]);
     const a = build(); const b = build();
     stepAi(a, []); stepAi(b, []);
     expect(JSON.stringify(a.bullets)).toBe(JSON.stringify(b.bullets));
@@ -90,7 +97,7 @@ describe('stepAi', () => {
   // which is exactly what isolates "does stepAi's own per-tick state write-back work" from
   // "does the bullet-motion system also cooperate".
   it('REGRESSION: aiTimer advances tick-over-tick under sustained threat, and Grey eventually fires', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
     const player = tank(2, 'player', { x: 20, y: 0 }); // far away, clear LOS -> a shot exists
     // A bullet parked just behind Grey on its own axis, moving toward it: this sits inside
     // both THREAT_HORIZON and DANGER_CORRIDOR (see targeting.ts's incomingThreats), so
@@ -149,7 +156,7 @@ describe('stepAi', () => {
   // --- C: the player is untouched by stepAi. ---
   it('leaves the player tank untouched (player is driven by applyPlayerInput, not stepAi)', () => {
     const player = tank(1, 'player', { x: 0, y: 0 }, { turretAngle: 2.5, desiredMove: { x: -1, y: 0.5 } });
-    const grey = tank(2, 'grey', { x: 5, y: 0 });
+    const grey = tank(2, 'grey', { x: 5, y: 0 }, { ...HELD });
     const w = world([player, grey]);
     stepAi(w, []);
     expect(w.tanks[0].turretAngle).toBe(2.5);
@@ -158,7 +165,7 @@ describe('stepAi', () => {
 
   // --- D: fire-rate gating actually limits shots over a full simulated second. ---
   it('fire-rate gating: an enemy that wants to fire every tick only fires ~2-3 times per simulated second', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
     const player = tank(2, 'player', { x: 5, y: 0 }); // permanent clear LOS -> grey always wants to fire
     const w = world([grey, player]);
     for (let i = 0; i < 60; i++) {
@@ -172,7 +179,7 @@ describe('stepAi', () => {
 
   // --- E: enemy shells respect SHELL_CAP. ---
   it('enemy shells never exceed SHELL_CAP even when firing freely for a long time', () => {
-    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const w = world([grey, player]);
     // Long enough for many fire-cooldown cycles (FIRE_COOLDOWN_TICKS=0.4s = 24 ticks) to elapse;
@@ -189,9 +196,9 @@ describe('stepAi', () => {
   it('is deterministic across many ticks with mixed enemy kinds', () => {
     const build = (): World => world([
       tank(1, 'player', { x: 0, y: 0 }),
-      tank(2, 'brown', { x: 5, y: 5 }, { aiState: 'idle' }),
-      tank(3, 'grey', { x: -5, y: 5 }),
-      tank(4, 'teal', { x: 5, y: -5 }),
+      tank(2, 'brown', { x: 5, y: 5 }, { ...HELD, aiState: 'idle' }),
+      tank(3, 'grey', { x: -5, y: 5 }, { ...HELD }),
+      tank(4, 'teal', { x: 5, y: -5 }, { ...HELD }),
     ]);
     const a = build();
     const b = build();
@@ -212,7 +219,7 @@ describe('stepAi', () => {
   // --- G: decideAi dispatches by kind, including the default branch. ---
   describe('decideAi dispatches by kind', () => {
     it('brown: fireType normal, only fires from aiState "aim" with LOS', () => {
-      const brown = tank(1, 'brown', { x: 0, y: 0 }, { aiState: 'aim' });
+      const brown = tank(1, 'brown', { x: 0, y: 0 }, { ...HELD, aiState: 'aim' });
       const player = tank(2, 'player', { x: 5, y: 0 });
       const d = decideAi(world([brown, player]), brown);
       expect(d.fireType).toBe('normal');
@@ -221,7 +228,7 @@ describe('stepAi', () => {
     });
 
     it('grey: fireType normal, fires immediately on LOS (no aim state gating) and can move', () => {
-      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
       const player = tank(2, 'player', { x: 5, y: 0 });
       const d = decideAi(world([grey, player]), grey);
       expect(d.fireType).toBe('normal');
@@ -229,7 +236,7 @@ describe('stepAi', () => {
     });
 
     it('teal: fireType ricochet, distinct from brown/grey', () => {
-      const teal = tank(1, 'teal', { x: 0, y: 0 });
+      const teal = tank(1, 'teal', { x: 0, y: 0 }, { ...HELD });
       const player = tank(2, 'player', { x: 5, y: 0 });
       const d = decideAi(world([teal, player]), teal);
       expect(d.fireType).toBe('ricochet');
@@ -253,7 +260,7 @@ describe('stepAi', () => {
     it('countdown: no AI tank moves or fires, even with a clear kill shot', () => {
       // Player at (0,5) -- NOT on grey's turretAngle:0 axis -- so a turret update away
       // from the initial angle is visible proof that aiming still runs during countdown.
-      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
       const player = tank(2, 'player', { x: 0, y: 5 });
       const w = world([grey, player], { tick: 0, roundStartTick: 0 }); // elapsed 0 -> countdown
       stepAi(w, []);
@@ -275,7 +282,7 @@ describe('stepAi', () => {
       // and neither does the player. Asserted on both paths because they gate through
       // the same helper and have drifted apart before.
       expect(GRACE_TICKS).toBe(0);
-      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
       const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS -> fires
       const w = world([grey, player], { tick: COUNTDOWN_TICKS, roundStartTick: 0 });
       stepAi(w, []);
@@ -284,7 +291,7 @@ describe('stepAi', () => {
     });
 
     it('the last suppressed tick still cannot fire; the first live tick fires normally', () => {
-      const buildGrey = () => tank(1, 'grey', { x: 0, y: 0 });
+      const buildGrey = () => tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
       const buildPlayer = () => tank(2, 'player', { x: 5, y: 0 });
 
       const lastGrace = world([buildGrey(), buildPlayer()], {
@@ -314,7 +321,7 @@ describe('stepAi', () => {
     const BEHIND_PLAYER_POS = { x: -10, y: 5.7735026918962575 };
 
     it('an AI cannot instantly face a target that appears behind it: the turret only advances by AI_TURRET_TURN_RATE*DT after one tick', () => {
-      const grey = tank(1, 'grey', { x: 0, y: 0 }); // turretAngle starts at 0 (facing +x)
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD }); // turretAngle starts at 0 (facing +x)
       const player = tank(2, 'player', BEHIND_PLAYER_POS); // stationary, bearing ~150deg
       const w = world([grey, player]);
       stepAi(w, []);
@@ -324,7 +331,7 @@ describe('stepAi', () => {
     });
 
     it('does not drift when holding the last angle (no line of sight): slewing toward a no-op target is a no-op', () => {
-      const grey = tank(1, 'grey', { x: 0, y: 0 }, { turretAngle: 1.75 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 1.75 });
       const player = tank(2, 'player', { x: 5, y: 0 });
       // A solid wall directly between them blocks LOS -> greyDecision holds tank.turretAngle
       // unchanged as its desired angle (see grey.ts: `let turretAngle = tank.turretAngle`).
@@ -340,7 +347,7 @@ describe('stepAi', () => {
       // too large to complete in one tick. If spawnBullet were (bug) called with
       // decision.turretAngle instead of tank.turretAngle, the bullet would fire toward the
       // player (~150deg) despite the barrel visibly still pointing near +x.
-      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
       const player = tank(2, 'player', BEHIND_PLAYER_POS);
       const w = world([grey, player]);
       stepAi(w, []);
@@ -367,8 +374,8 @@ describe('stepAi', () => {
       // Grey's barrel points +x and can only creep AI_TURRET_TURN_RATE*DT per tick, so the
       // shot would leave along ~+x -- straight through Brown at (3,0) -- even though the
       // decision function is aiming at the player behind Grey.
-      const grey = tank(1, 'grey', { x: 0, y: 0 }, { turretAngle: 0 });
-      const mate = tank(3, 'brown', { x: 3, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 0 });
+      const mate = tank(3, 'brown', { x: 3, y: 0 }, { ...HELD });
       const player = tank(2, 'player', { x: -5, y: 0.5 });
       const w = world([grey, mate, player]);
       stepAi(w, []);
@@ -380,8 +387,8 @@ describe('stepAi', () => {
 
     it('still fires when the post-slew line is clear of teammates', () => {
       // Same fixture with the teammate off the +x line.
-      const grey = tank(1, 'grey', { x: 0, y: 0 }, { turretAngle: 0 });
-      const mate = tank(3, 'brown', { x: 3, y: 5 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 0 });
+      const mate = tank(3, 'brown', { x: 3, y: 5 }, { ...HELD });
       const player = tank(2, 'player', { x: -5, y: 0.5 });
       const w = world([grey, mate, player]);
       stepAi(w, []);
@@ -391,8 +398,8 @@ describe('stepAi', () => {
     it('does not drop a mine that would sit inside a teammate\'s blast radius', () => {
       // Brown never moves, so a mine laid at its feet by a roaming teammate is a
       // guaranteed kill once it arms. Grey is otherwise fully mine-eligible here.
-      const grey = tank(1, 'grey', { x: 0, y: 0 });
-      const mate = tank(3, 'brown', { x: 1, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
+      const mate = tank(3, 'brown', { x: 1, y: 0 }, { ...HELD });
       const w = world([grey, mate]);
       stepAi(w, []);
       expect(w.mines.length).toBe(0);
@@ -400,8 +407,8 @@ describe('stepAi', () => {
     });
 
     it('still drops a mine when no teammate is within the blast', () => {
-      const grey = tank(1, 'grey', { x: 0, y: 0 });
-      const mate = tank(3, 'brown', { x: 12, y: 0 });
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
+      const mate = tank(3, 'brown', { x: 12, y: 0 }, { ...HELD });
       // A player in range: laying a mine is gated on it being worth doing (see
       // mineThreatensPlayer), so without a nearby player this would prove nothing about
       // the friendly-fire gate this test is actually about.
@@ -418,12 +425,12 @@ describe('stepAi', () => {
 
     it('never fires, while its armed twin does', () => {
       const events: SimEvent[] = [];
-      const armed = world([tank(1, 'grey', { x: 0, y: 0 }), tank(2, 'player', { x: 5, y: 0 })]);
+      const armed = world([tank(1, 'grey', { x: 0, y: 0 }, { ...HELD }), tank(2, 'player', { x: 5, y: 0 })]);
       stepAi(armed, events);
       expect(armed.bullets.length).toBe(1); // the fixture really is a firing solution
 
       const w = world([
-        tank(1, 'grey', { x: 0, y: 0 }, { disarmed: true }),
+        tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, disarmed: true }),
         tank(2, 'player', { x: 5, y: 0 }),
       ]);
       for (let i = 0; i < 120; i++) stepAi(w, events);
@@ -432,16 +439,16 @@ describe('stepAi', () => {
 
     it('never lays a mine, while its armed twin does', () => {
       const armed = world([
-        tank(1, 'grey', { x: 0, y: 0 }),
-        tank(3, 'brown', { x: 12, y: 0 }),
+        tank(1, 'grey', { x: 0, y: 0 }, { ...HELD }),
+        tank(3, 'brown', { x: 12, y: 0 }, { ...HELD }),
         tank(9, 'player', { x: 3, y: 0 }),
       ]);
       stepAi(armed, []);
       expect(armed.mines.length).toBe(1); // the fixture really does lay one
 
       const w = world([
-        tank(1, 'grey', { x: 0, y: 0 }, { disarmed: true }),
-        tank(3, 'brown', { x: 12, y: 0 }),
+        tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, disarmed: true }),
+        tank(3, 'brown', { x: 12, y: 0 }, { ...HELD }),
         tank(9, 'player', { x: 3, y: 0 }),
       ]);
       for (let i = 0; i < 120; i++) stepAi(w, []);
@@ -452,7 +459,7 @@ describe('stepAi', () => {
       // The flag must remove ordnance only. A disarmed tank that also stopped moving
       // would make the sandbox useless for testing movement and pursuit.
       const w = world([
-        tank(1, 'grey', { x: 0, y: 0 }, { disarmed: true }),
+        tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, disarmed: true }),
         tank(2, 'player', { x: 5, y: 3 }),
       ]);
       const before = w.tanks[0].turretAngle;

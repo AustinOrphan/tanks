@@ -18,6 +18,9 @@ function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
     activeMineIds: [],
     fireCooldown: 0,
     mineCooldown: 0,
+    // Solution long HELD: this file pins pipeline COMPOSITION; the reaction
+    // gate (which would hold every first shot ~0.7-0.8s) has its own suite.
+    aimTicks: 999,
     aiState: 'idle',
     aiTimer: 0,
   };

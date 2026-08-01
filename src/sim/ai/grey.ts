@@ -45,17 +45,21 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // The patience mechanism is about bullets and nothing else.
   const underFire = incomingThreats(world, tank).length > 0;
   const dodgeTicks = underFire ? tank.aiTimer + 1 : 0;
+  // `sees` is computed BEFORE the patience early-return: a dodging grey still
+  // SEES the player, and the reaction clock (dispatcher, aimTicks) must keep
+  // running through a dodge -- suppression is patience, not blindness.
+  const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
+  const sees = player !== undefined && lineOfSight(tank.pos, player.pos, world.walls);
   if (underFire && dodgeTicks < patienceTicks) {
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
   }
 
-  const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   let turretAngle = tank.turretAngle;
   let fire = false;
   let nextState: AiState = tank.aiState;
 
   if (player) {
-    if (lineOfSight(tank.pos, player.pos, world.walls)) {
+    if (sees) {
       const targetVel = driveVelocity(player);
       // Jitter only the live firing solution (see brown.ts's comment for why the
       // held/passthrough angle below must stay untouched).
@@ -92,5 +96,5 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // dodgeTicks back via the early return while suppressed; this path (dodging has ended
   // or never started) resets it to 0, which is what lets a fresh dodge start counting
   // from 1 again next time.
-  return { desiredMove: move, turretAngle, fire, fireType: weapon.bulletType, mine, nextState, nextTimer: 0 };
+  return { desiredMove: move, turretAngle, fire, hasSolution: sees, fireType: weapon.bulletType, mine, nextState, nextTimer: 0 };
 }

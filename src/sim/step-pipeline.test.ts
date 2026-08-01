@@ -89,6 +89,10 @@ function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
     activeMineIds: [],
     fireCooldown: 0,
     mineCooldown: 0,
+    // Solution long HELD: this file pins COMPOSITION, not the reaction gate
+    // (which has its own suite); without this every first shot waits out the
+    // profile's reactionTime and the one-tick pipeline test goes silent.
+    aimTicks: 999,
     aiState: 'idle',
     aiTimer: 0,
   };

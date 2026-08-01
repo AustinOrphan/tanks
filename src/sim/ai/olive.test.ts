@@ -37,7 +37,7 @@ describe('olive, driven end-to-end by its resolved config', () => {
     // spawnBullet's construction FOR that type (bulletConfig), not the roster --
     // the roster<->bulletConfig consistency is pinned in config/roster.test.ts's
     // mirror loop. (Review: the old title claimed all three came from the roster.)
-    const olive = tank(1, 'olive', { x: 0, y: 0 });
+    const olive = tank(1, 'olive', { x: 0, y: 0 }, { aimTicks: 999 }); // reaction held; see reaction.test.ts
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS
     const w = world([olive, player]);
     stepAi(w, []);
