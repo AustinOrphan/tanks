@@ -92,11 +92,14 @@ describe('claimFailures reports a false claim of each type', () => {
 // chord-maker) is invisible to an intact-only check, and a claims migration built
 // on that check silently lost the coverage the deleted bespoke test had. Fixed by
 // checking BOTH wall phases and tagging each failure with which one it came from.
-// These two fixtures are built to discriminate the phases from each other -- each
-// dies if its own phase is removed from the runner, and survives if the other is.
+// These two fixtures are built to discriminate the phases from each other. Verified
+// by mutating the runner both directions: the breached fixture survives removal of
+// the intact phase (it never needed an (intact) tag to reach its expected count) but
+// dies if the breached phase is removed; the intact fixture requires BOTH phases --
+// it dies if either is removed, since its count only holds with both tags present.
 // Neither mutates the shipped arenas.json; both are inline Arena literals so this
 // meta-test can see geometry the shipped grids don't (and shouldn't) contain.
-describe('spawnBlockRobust checks both wall phases, independently provable', () => {
+describe('spawnBlockRobust tags both wall phases, each tag independently provable', () => {
   it('breached-only defect: fails via (breached), passes via (intact) -- ARENA_03 minus its row-5 chord-maker', () => {
     // Row 5's only occupied cell (col 5) is SOLID, not destructible -- removing it
     // from the fixture (not breaching it; it can't be breached) reproduces the

@@ -42,3 +42,26 @@ it('the shipped arenas declare design claims, not just structure', () => {
   const claimed = ARENA_DEFS.filter((a) => a.claims.length > 0);
   expect(claimed.length).toBeGreaterThanOrEqual(2); // arena-02 and arena-03 at minimum
 });
+
+it('every enemy spawn has a declared post-breach sightline, where the arena uses that claim at all', () => {
+  // The deleted bespoke blocks each pinned a population: ARENA_02's
+  // `expect(open).toHaveLength(4)`, ARENA_03's `expect(enemies).toHaveLength(5)`. Named
+  // cells alone don't re-assert that -- an arena could gain a 5th enemy with no matching
+  // claim and the claims-holds runner above would stay green, since it only ever checks
+  // the claims that exist. This pins the count so a silently undeclared enemy fails loud.
+  //
+  // Scope: ARENA_01 doesn't use sightlineAfterBreach at all (it claims spawnBlockRobust
+  // only), so it is correctly excluded rather than forced to zero. Population: the 2 of 3
+  // shipped arenas that declare at least one sightlineAfterBreach claim -- arena-02 and
+  // arena-03, both measured to already match 1:1 before this guard was added.
+  //
+  // Caveat: this pins that every enemy HAS a declared line, not that the declared value
+  // is correct -- the claims-holds runner above is what checks the sightline itself.
+  for (const arena of ARENA_DEFS) {
+    const sightlineClaims = arena.claims.filter((c) => c.type === 'sightlineAfterBreach');
+    if (sightlineClaims.length === 0) continue;
+    const { spawns } = loadArena(arena);
+    const enemyCount = spawns.filter((s) => s.kind !== 'player').length;
+    expect(sightlineClaims.length, arena.id).toBe(enemyCount);
+  }
+});

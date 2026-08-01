@@ -150,8 +150,16 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
         // (arena-03's original corner-tangency) was a POST-breach tangency -- with
         // the centre peek destroyed, both browns' lines were blocked only by a
         // single-point tangency that a 0.1-unit nudge opened. Checking intact alone
-        // is silently blind to that; checking both is strictly stronger than the
-        // bespoke test this claim type replaced, which only checked breached.
+        // is silently blind to that. Checking both IS stronger than the bespoke test
+        // this claim type replaced, but not because intact adds detection power on
+        // its own: measured across 5 spawnBlockRobust scenarios (arena-01, arena-02,
+        // arena-03, and the two arena-claims.test.ts fixtures built to discriminate
+        // the phases), 0 failures were intact-only -- breach only ever reveals
+        // sightlines, never hides them, so an intact failure is always also a
+        // breached one at the same enemy/offset. The actual gain over the deleted
+        // test is the 4 cardinal offsets here versus its 2 (±x), run on every
+        // claiming arena; the intact phase's value is labelling which wall state a
+        // failure lives in, not catching anything breached alone would miss.
         const phases = [
           { name: 'intact', walls } as const,
           { name: 'breached', walls: breached } as const,
