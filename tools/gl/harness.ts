@@ -318,7 +318,7 @@ check('refit resizes the ground plane to the new framed bounds, both directions'
   return null;
 });
 
-check('WIDE_ARENA (15x11) sizes correctly through refit, not just construction', () => {
+check('WIDE_ARENA (17x13) sizes correctly through refit, not just construction', () => {
   // arena-fixtures.ts states, in shipped source, that WIDE_ARENA exists to prove
   // "the per-level render refit (PR #53)" -- but until this check, nothing actually
   // ran it through refit(): the sibling check above only proves refit works for an

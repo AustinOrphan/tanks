@@ -53,6 +53,7 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   'arena-01': { spawnBlockRobust: 1 },
   'arena-02': { sightlineAfterBreach: 4 },
   'arena-03': { lane: 2, sightlineAfterBreach: 5, spawnBlockRobust: 1 },
+  'arena-04': { lane: 7, sightlineAfterBreach: 6, spawnBlockRobust: 1 },
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {
@@ -98,10 +99,10 @@ it('a sightlineAfterBreach claim names every enemy CELL, not just the right coun
 });
 
 describe('variable arena dimensions', () => {
-  it('a 15x11 arena loads, validates, and is NOT the shipped size', () => {
-    expect(WIDE_ARENA.cols).toBe(15);
-    expect(WIDE_ARENA.rows).toBe(11);
-    expect(arenaBounds(WIDE_ARENA)).toEqual({ width: 30, height: 22 });
+  it('a 17x13 arena loads, validates, and is NOT any shipped size', () => {
+    expect(WIDE_ARENA.cols).toBe(17);
+    expect(WIDE_ARENA.rows).toBe(13);
+    expect(arenaBounds(WIDE_ARENA)).toEqual({ width: 34, height: 26 });
     // The point of the fixture: it differs from every shipped arena.
     for (const a of ARENA_DEFS) expect(arenaBounds(a)).not.toEqual(arenaBounds(WIDE_ARENA));
   });

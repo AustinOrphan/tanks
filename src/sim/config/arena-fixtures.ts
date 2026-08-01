@@ -2,12 +2,19 @@ import type { ArenaDefinition } from './arena-types';
 import { validateArenas } from './validate';
 
 /**
- * A deliberately NON-11x9 arena. It exists to prove the per-level render refit
+ * A deliberately NON-SHIPPED size. It exists to prove the per-level render refit
  * (PR #53) sizes and centres the ground plane correctly for a board other than
- * the shipped one -- checked in `tools/gl/harness.ts`, both at construction and
+ * the shipped ones -- checked in `tools/gl/harness.ts`, both at construction and
  * through `refit()` -- and to run the geometry and claim-validation paths (this
  * file, `arena-validation.test.ts`) at that size. NOT every size-generic code
  * path: walls and tanks are not separately checked at this size.
+ *
+ * 17x13, NOT 15x11: it was 15x11 until arena-04 shipped at exactly that size,
+ * which would have made `arena-validation.test.ts`'s "differs from every shipped
+ * arena" assertion false. The fixture moved rather than the level -- a fixture
+ * whose whole job is to be an unshipped size must give way to production data,
+ * and the suite now covers three distinct board sizes instead of two. The name
+ * stays WIDE_ARENA; every consumer reads its dimensions off the object.
  *
  * TEST-ONLY: never in ARENAS, so it cannot reach the shipped sequence. It runs
  * through the same validator as the shipped file, so it cannot rot into
@@ -18,30 +25,32 @@ export const WIDE_ARENA: ArenaDefinition = validateArenas(
     arenas: [
       {
         id: 'fixture-wide',
-        cols: 15, rows: 11, cellSize: 2,
+        cols: 17, rows: 13, cellSize: 2,
         legend: { '#': 'solid', x: 'destructible' },
         grid: [
-          '...............',
-          '.B...........G.',
-          '...............',
-          '....#####......',
-          '...............',
-          '......x........',
-          '...............',
-          '......###......',
-          '...............',
-          '.......P.......',
-          '...............',
+          '.................',
+          '.B.............G.',
+          '.................',
+          '.................',
+          '.....#######.....',
+          '.................',
+          '........x........',
+          '.................',
+          '.................',
+          '.......#####.....',
+          '.................',
+          '........P........',
+          '.................',
         ],
-        notes: ['15x11 fixture: proves per-level ground-plane refit and the geometry/claim validation paths at a non-shipped size.'],
+        notes: ['17x13 fixture: proves per-level ground-plane refit and the geometry/claim validation paths at a size no shipped level uses.'],
         claims: [
           {
             // Measured, not guessed: brown's line to the player spawn crosses the
-            // solid '###' block at row 7 (cols 6-8), which is unaffected by breach
-            // -- only the single destructible 'x' at (6, 5) opens, and it is not on
+            // solid '#####' block at row 9 (cols 7-11), which is unaffected by breach
+            // -- only the single destructible 'x' at (8, 6) opens, and it is not on
             // this line. So the claim is sees=false both before and after breach.
             type: 'sightlineAfterBreach', from: [1, 1], sees: false,
-            why: 'The row-7 solid block still stands between brown and the player spawn after ' +
+            why: 'The row-9 solid block still stands between brown and the player spawn after ' +
               'breach; the only destructible cell on the board is elsewhere, so brown never ' +
               'sees the player.',
           },

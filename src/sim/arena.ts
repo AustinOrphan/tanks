@@ -18,6 +18,7 @@ export interface Arena {
 export const ARENA_01: Arena = arenaById('arena-01');
 export const ARENA_02: Arena = arenaById('arena-02');
 export const ARENA_03: Arena = arenaById('arena-03');
+export const ARENA_04: Arena = arenaById('arena-04');
 export const ARENAS: Arena[] = ARENA_DEFS;
 
 /**
