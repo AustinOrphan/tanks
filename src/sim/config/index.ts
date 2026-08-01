@@ -22,3 +22,6 @@ export { GAME_TANK_DEFS, configFor, hasAbility } from './roster';
 export { createCatalog, type EntityCatalog } from './catalog';
 export { GAME_WALL_DEFS, wallConfigFor, type WallDefinition } from './walls';
 export { TANK_KINDS, validateTankDefinitions, validateAiProfiles } from './validate';
+export { ARENA_DEFS, arenaById } from './arenas';
+export { SPAWN_LETTERS, type ArenaClaim, type ArenaDefinition, type ArenaShape } from './arena-types';
+export { validateArenas, validateArenaShape } from './validate';
