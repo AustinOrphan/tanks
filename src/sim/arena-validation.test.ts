@@ -120,3 +120,37 @@ describe("ARENA_02's destructible trade", () => {
     expect(open).toHaveLength(4);
   });
 });
+
+describe("ARENA_03's flank-lane trade", () => {
+  // The design comment claims each olive's destructible shield is the ONLY wall on
+  // its vertical flank column, and that breaching opens that lane end-to-end --
+  // measured here with the sim's own lineOfSight, exactly as it was designed
+  // (intact=false, breached=true on both flanks; see the arena comment). Also pins
+  // the negative: breaching every destructible opens NO spawn-to-spawn sightline,
+  // which is what distinguishes this level's trade from ARENA_02's.
+  it('a breached shield opens its vertical lane, both flanks; intact blocks both', () => {
+    const { walls } = loadArena(ARENAS[2]);
+    const lanes = [
+      { olive: { x: 3, y: 3 }, foot: { x: 3, y: 15 } },
+      { olive: { x: 19, y: 3 }, foot: { x: 19, y: 15 } },
+    ];
+    for (const lane of lanes) {
+      expect(lineOfSight(lane.olive, lane.foot, walls)).toBe(false);
+    }
+    for (const w of walls) if (w.kind === 'destructible') w.destroyed = true;
+    for (const lane of lanes) {
+      expect(lineOfSight(lane.olive, lane.foot, walls)).toBe(true);
+    }
+  });
+
+  it('breaching everything still opens no spawn-to-spawn sightline (0 of 5 enemies)', () => {
+    const { walls, spawns } = loadArena(ARENAS[2]);
+    for (const w of walls) if (w.kind === 'destructible') w.destroyed = true;
+    const player = spawns.find((s) => s.kind === 'player')!;
+    const enemies = spawns.filter((s) => s.kind !== 'player');
+    expect(enemies).toHaveLength(5); // 2 olive + 2 brown + 1 grey; the level-3 roster
+    for (const s of enemies) {
+      expect(lineOfSight(s.pos, player.pos, walls), `${s.kind} at (${s.pos.x},${s.pos.y})`).toBe(false);
+    }
+  });
+});

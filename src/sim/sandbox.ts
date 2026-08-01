@@ -38,6 +38,7 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   brown: 'B',
   grey: 'G',
   teal: 'T',
+  olive: 'O',
 };
 
 /** Chebyshev-adjacent to any spawn cell: walls may not crowd a tank at birth. */

@@ -73,5 +73,22 @@
       "MINE_LAYER",
       "BANK_SHOT_AIM"
     ]
+  },
+  "olive": {
+    "displayName": "Olive",
+    "color": "#7a8f3c",
+    "firstMission": 3,
+    "singlePlayerOnly": false,
+    "movementSpeed": "SLOW",
+    "rotationSpeed": "SLOW",
+    "aiProfile": "DEFENSIVE_ROCKET",
+    "weapon": {
+      "projectileType": "ROCKET",
+      "fireRate": "SLOW",
+      "maxActiveProjectiles": 1,
+      "ricochetCount": 0
+    },
+    "mineCapacity": 0,
+    "abilities": []
   }
 }

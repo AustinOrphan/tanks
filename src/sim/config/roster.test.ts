@@ -15,7 +15,7 @@ import { AIBehavior, TankAbility } from './enums';
 
 // The shipped kinds. `player` is included because the player is now resolved through
 // the same pipeline (its weapon/movement/mine-capacity all come from configFor).
-const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal'];
+const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive'];
 
 // The colours the renderer shipped before this refactor (entities.ts TANK_COLORS, as
 // 0x hex). config.color must reproduce them exactly, or the tanks change colour.
@@ -24,6 +24,7 @@ const SHIPPED_COLORS: Record<TankKind, string> = {
   brown: '#8a5a2b',
   grey: '#8890a0',
   teal: '#2bb0a6',
+  olive: '#7a8f3c', // new with the kind itself: no prior render literal to reproduce
 };
 
 describe('game roster resolves to the shipped tunables (behaviour-preservation pins)', () => {
@@ -61,11 +62,16 @@ describe('game roster resolves to the shipped tunables (behaviour-preservation p
     expect(configFor('teal').weapon.fireCooldown).toBe(14);
   });
 
-  it('shell cap equals SHELL_CAP and mine capacity equals MINE_CAP for every kind', () => {
-    for (const k of KINDS) {
+  it('shell cap and mine capacity: SHELL_CAP/MINE_CAP everywhere except olive', () => {
+    for (const k of ['player', 'brown', 'grey', 'teal'] as const) {
       expect(configFor(k).weapon.maxActiveProjectiles).toBe(SHELL_CAP);
       expect(configFor(k).mineCapacity).toBe(MINE_CAP);
     }
+    // Olive is the first kind with a genuinely PER-TANK cap: one rocket in
+    // flight at a time (its whole rhythm -- a slow, telegraphed lance), and no
+    // mines at all. Raising either is a gameplay change, not a tidy-up.
+    expect(configFor('olive').weapon.maxActiveProjectiles).toBe(1);
+    expect(configFor('olive').mineCapacity).toBe(0);
   });
 
   it('projectile speed/bounces mirror the sim bulletConfig for the resolved bullet type', () => {
@@ -128,6 +134,23 @@ describe('per-kind identity comes from config, not code branches', () => {
     // delete a whole shot type from the shipped game.
     expect(configFor('teal').ai.directShotWeight).toBeGreaterThan(0);
     expect(configFor('teal').ai.bankShotWeight).toBeGreaterThan(0);
+  });
+
+  it("olive, the rocket debut: every stat the level-3 design depends on", () => {
+    // The first kind added purely as data (PR: rocket tank + level 3). Each line
+    // is a design decision: SLOW chassis (a deliberate, creeping siege tank),
+    // SLOW fire but a 'fast' 12 u/s no-bounce rocket, one in flight at a time,
+    // no mines, DEFENSIVE routing (grey's implementation drives it).
+    const o = configFor('olive');
+    expect(o.behavior).toBe(AIBehavior.DEFENSIVE);
+    expect(o.weapon.bulletType).toBe('fast');
+    expect(o.weapon.speed).toBe(bulletConfig.fast.speed);
+    expect(o.weapon.ricochetCount).toBe(bulletConfig.fast.bounces);
+    expect(o.movementSpeed).toBeCloseTo(TANK_SPEED * 0.6, 9);
+    expect(o.rotationSpeed).toBeCloseTo(TANK_TURN_RATE * 0.6, 9);
+    expect(o.weapon.fireCooldown).toBe(38); // SLOW, same tick count pinned for brown
+    expect(hasAbility('olive', TankAbility.MINE_LAYER)).toBe(false);
+    expect(o.ai.minePlacementChance ?? 0).toBe(0);
   });
 
   it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {

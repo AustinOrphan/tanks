@@ -78,13 +78,45 @@ export const ARENA_02: Arena = {
   ],
 };
 
+// Level 3: the rocket debut. Two Olives -- the first DEFENSIVE_ROCKET tanks, firing
+// the sim's 'fast' shell (12 u/s, no bounces) one-at-a-time -- flank high behind
+// DESTRUCTIBLE shields ('x', row 2, cols 1/9), with a brown-grey-brown trio behind
+// solid cover in the middle. Measured with the sim's own lineOfSight (see the
+// flank-lane test in arena-validation.test.ts):
+//   - at spawn, no enemy sees the player spawn (the generic rule);
+//   - each flank column (1 and 9) is open floor top-to-bottom EXCEPT the olive's
+//     shield, so blasting a shield opens that vertical lane end-to-end, both ways:
+//     the player can hunt the olive up its column, and the olive's rockets command
+//     the same column down. The shield is the level's trade, one per flank.
+//   - breaching every destructible opens NO spawn-to-spawn sightline (0 of 5) --
+//     unlike level 2, the trade here is lanes for MOBILE tanks, not spawn lines.
+// The row-3/row-4 solid anchors keep the centre trio's lines shut permanently and
+// deny the olives any diagonal into the player's half.
+export const ARENA_03: Arena = {
+  cols: 11,
+  rows: 9,
+  cellSize: 2,
+  legend: { '#': 'solid', x: 'destructible' },
+  grid: [
+    '...........', // 0
+    '.O.......O.', // 1  olives flank high
+    '.x..BGB..x.', // 2  destructible olive shields; the trio's own row
+    '...#...#...', // 3  anchors: deny diagonals into the player half
+    '..#..#..#..', // 4  mid-field teeth
+    '...........', // 5  open manoeuvre band
+    '..#..x..#..', // 6  the player's flank guards + a centre peek 'x'
+    '.....P.....', // 7
+    '...........', // 8
+  ],
+};
+
 /**
  * The shipped sequence, in play order. The game layer walks this list; the sim never
  * knows a level number. Every entry is structurally validated by
  * arena-validation.test.ts (connectivity, spawn sightlines, dimensions), so adding a
  * level here is what makes it real -- and what makes it checked.
  */
-export const ARENAS: Arena[] = [ARENA_01, ARENA_02];
+export const ARENAS: Arena[] = [ARENA_01, ARENA_02, ARENA_03];
 
 /**
  * The playable area, in world units. Derived from the same `cols * cellSize`
@@ -105,6 +137,7 @@ const SPAWN_KINDS: Record<string, TankKind> = {
   B: 'brown',
   G: 'grey',
   T: 'teal',
+  O: 'olive',
 };
 
 function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, angle: number): Tank {
