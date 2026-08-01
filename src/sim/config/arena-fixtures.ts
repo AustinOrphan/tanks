@@ -3,8 +3,11 @@ import { validateArenas } from './validate';
 
 /**
  * A deliberately NON-11x9 arena. It exists to prove the per-level render refit
- * (PR #53) and every size-generic code path really handle a different board --
- * the maps spec deferred variable dimensions until tooling could check them.
+ * (PR #53) sizes and centres the ground plane correctly for a board other than
+ * the shipped one -- checked in `tools/gl/harness.ts`, both at construction and
+ * through `refit()` -- and to run the geometry and claim-validation paths (this
+ * file, `arena-validation.test.ts`) at that size. NOT every size-generic code
+ * path: walls and tanks are not separately checked at this size.
  *
  * TEST-ONLY: never in ARENAS, so it cannot reach the shipped sequence. It runs
  * through the same validator as the shipped file, so it cannot rot into
@@ -30,7 +33,7 @@ export const WIDE_ARENA: ArenaDefinition = validateArenas(
           '.......P.......',
           '...............',
         ],
-        notes: ['15x11 fixture: proves per-level refit and every size-generic path.'],
+        notes: ['15x11 fixture: proves per-level ground-plane refit and the geometry/claim validation paths at a non-shipped size.'],
         claims: [
           {
             // Measured, not guessed: brown's line to the player spawn crosses the

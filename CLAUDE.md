@@ -81,6 +81,28 @@ like RICOCHET_SNIPER's bank preference is authored intent awaiting an
 implementation. The 9-type Wii taxonomy in `config/reference/` is reference
 data only — nothing in the game reads it.
 
+**Arenas are data too.** Grids, design rationale (`notes`) and machine-checkable
+design `claims` live in `config/data/arenas.json`, validated at load by
+`validateArenas` — a bad edit is a boot failure naming the exact path (e.g.
+`arenas[2].grid[4]`). `arena.ts` keeps every export it always had; `SPAWN_LETTERS`
+(`config/arena-types.ts`) is the single source of the spawn-letter map. Three
+claim types — `sightlineAfterBreach`, `lane`, `spawnBlockRobust` — are verified
+by `src/sim/arena-claims.ts` from the test layer (it imports the AI's
+`lineOfSight`, so it must never be imported by `config/`). `spawnBlockRobust`
+checks more than its name suggests: every enemy spawn against 4 cardinal nudges
+of the player, in BOTH wall phases (intact and breached) — measured across the
+5 scenarios that claim it (arena-01, arena-02, arena-03, and the two fixtures
+built in `arena-claims.test.ts` to discriminate the phases), 0 failures were
+intact-only, so the intact phase's value is labelling which wall state a
+failure lives in, not added detection power on its own; the breached phase is
+what actually catches a corner tangency. Adding a level is editing JSON: the
+generic runner in `arena-validation.test.ts` picks up its claims automatically,
+and `npx vitest watch src/sim/arena-validation.test.ts` is the authoring loop —
+though the claim MIX itself is pinned separately by that file's
+`EXPECTED_CLAIMS` table, so changing an arena's claims is a deliberate two-file
+edit. `spawnBlockRobust` exists because ARENA_03 once shipped a corner tangency
+a 0.1-unit nudge opened.
+
 ## Testing conventions, learned the hard way
 
 These are not style preferences. Each one exists because a real defect shipped green.
