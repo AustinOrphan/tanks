@@ -719,7 +719,7 @@ describe('the paint shop (player colour override)', () => {
     w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
     views.sync(w, w, 0);
 
-    views.setPlayerColor('#d64545');
+    views.setPlayerStyle('#d64545', 'solid');
     views.sync(w, w, 0);
 
     const partColor = (x: number, name: string): number => {
@@ -744,7 +744,7 @@ describe('the paint shop (player colour override)', () => {
     expect(partColor(7, 'hull')).not.toBe(0xd64545); // brown keeps its identity
 
     // And back to the roster default.
-    views.setPlayerColor(null);
+    views.setPlayerStyle(null, 'solid');
     views.sync(w, w, 0);
     let restored = -1;
     scene.traverse((o) => {
@@ -754,5 +754,93 @@ describe('the paint shop (player colour override)', () => {
     });
     expect(restored).toBe(0x3d7bd6); // the roster's player blue
     views.dispose();
+  });
+});
+
+describe('skins (player texture override)', () => {
+  const matOf = (scene: THREE.Scene, x: number, name: string): THREE.MeshStandardMaterial => {
+    let m: THREE.MeshStandardMaterial | null = null;
+    scene.traverse((o) => {
+      if (o.name === name) {
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if (g && (g as THREE.Group).position.x === x) {
+          m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        }
+      }
+    });
+    if (!m) throw new Error(`no ${name} at x=${x}`);
+    return m;
+  };
+
+  it('dresses hull AND turret in the map, leaves tracks solid and enemies bare', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+    views.setPlayerStyle('#d64545', 'camo');
+    views.sync(w, w, 0);
+
+    // Mapped parts go WHITE so the map's own tint is not multiplied twice.
+    expect(matOf(scene, 3, 'hull').map).not.toBeNull();
+    expect(matOf(scene, 3, 'hull').color.getHex()).toBe(0xffffff);
+    expect(matOf(scene, 3, 'turret').map).not.toBeNull();
+    expect(matOf(scene, 3, 'turret').color.getHex()).toBe(0xffffff);
+    // Tracks stay the solid shaded derivative of the chosen hex (design decision).
+    expect(matOf(scene, 3, 'track').map).toBeNull();
+    expect(matOf(scene, 3, 'track').color.getHex()).toBe(
+      new THREE.Color(0xd64545).multiplyScalar(TRACK_SHADE).getHex(),
+    );
+    // The enemy keeps its identity: no map, roster colour.
+    expect(matOf(scene, 7, 'hull').map).toBeNull();
+
+    // Back to solid: the map comes OFF and the tint returns to the material.
+    views.setPlayerStyle('#d64545', 'solid');
+    views.sync(w, w, 0);
+    expect(matOf(scene, 3, 'hull').map).toBeNull();
+    expect(matOf(scene, 3, 'hull').color.getHex()).toBe(0xd64545);
+    views.dispose();
+  });
+
+  it('flow drifts its texture offset with dt; a static skin does not', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+
+    views.setPlayerStyle(null, 'flow');
+    views.sync(w, w, 0, 0.5);
+    const flowMap = matOf(scene, 3, 'hull').map as THREE.Texture;
+    // 0.08 repeats/s (the skin def's scroll.u) over 0.5s of dt.
+    expect(flowMap.offset.x).toBeCloseTo(0.04, 6);
+    expect(flowMap.offset.y).toBe(0);
+    views.sync(w, w, 0); // dt omitted: animation frozen, offset holds
+    expect(flowMap.offset.x).toBeCloseTo(0.04, 6);
+
+    views.setPlayerStyle(null, 'camo');
+    views.sync(w, w, 0, 0.5);
+    const camoMap = matOf(scene, 3, 'hull').map as THREE.Texture;
+    expect(camoMap.offset.x).toBe(0); // no scroll in the def, no drift
+    views.dispose();
+  });
+
+  it('restyling and dispose() both release the owned skin texture', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+    views.setPlayerStyle(null, 'camo');
+    views.sync(w, w, 0);
+    const first = matOf(scene, 3, 'hull').map as THREE.Texture;
+    let disposed = 0;
+    first.addEventListener('dispose', () => disposed++);
+    views.setPlayerStyle(null, 'checker'); // replaces the map -> old one must go
+    expect(disposed).toBe(1);
+    views.sync(w, w, 0);
+    const second = matOf(scene, 3, 'hull').map as THREE.Texture;
+    let disposed2 = 0;
+    second.addEventListener('dispose', () => disposed2++);
+    views.dispose();
+    expect(disposed2).toBe(1);
   });
 });

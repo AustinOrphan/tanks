@@ -89,6 +89,8 @@ describe('hud.css is syntactically whole', () => {
       // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
       '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
       '.hud-swatch', '.hud-swatch--selected',
+      // skins: the border is the pane's only current-skin signal
+      '.hud-skin', '.hud-skin--selected',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

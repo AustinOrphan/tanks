@@ -4,6 +4,8 @@ import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
+import { createSkinTexture } from './skins';
+import { SKINS, type SkinId } from '../game/customization';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -11,13 +13,14 @@ import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 
 export interface EntityViews {
-  sync(prev: World, curr: World, alpha: number): void;
+  /** `dt` drives animated skins; omitting it freezes them, which is what tests want. */
+  sync(prev: World, curr: World, alpha: number, dt?: number): void;
   /**
-   * The paint shop: override the PLAYER's hull colour (a CSS hex), or null for the
-   * roster default. Takes effect on the next sync via the same rebuild path a
-   * kind change uses -- live, even for the tank already standing behind the menu.
+   * The paint shop: override the PLAYER's hull colour (a CSS hex, null for the roster
+   * default) and skin. Takes effect on the next sync via the same rebuild path a kind
+   * change uses -- live, even for the tank already standing behind the menu.
    */
-  setPlayerColor(hex: string | null): void;
+  setPlayerStyle(hex: string | null, skin: SkinId): void;
   dispose(): void;
 }
 
@@ -273,6 +276,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // swatch click repaints the tank already standing behind the menu.
   const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number }>();
   let playerHex: string | null = null;
+  let playerSkin: SkinId = 'solid';
+  // The one skin texture, owned HERE: disposeObject deliberately skips material maps
+  // (walls borrow the shared TextureSet), so per-style disposal happens on change.
+  let playerSkinMap: THREE.DataTexture | null = null;
   let colorGen = 0;
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
@@ -345,7 +352,17 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     const color = kind === 'player' && playerHex ? cssHex(playerHex) : tankColor(kind);
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.25 });
+    // A patterned skin rides as a map on the hull and turret ONLY -- tracks keep
+    // their solid shade for grounding. The map already carries the tint, so mapped
+    // materials use white (color multiplies the map; tinting twice goes muddy).
+    const skinMap = kind === 'player' ? playerSkinMap : null;
+    const matColor = skinMap ? 0xffffff : color;
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: matColor,
+      map: skinMap,
+      roughness: 0.72,
+      metalness: 0.25,
+    });
     // The hull is a body riding between two tracks, rather than one box.
     //
     // A single box gave the tank no ground contact to read: it was a brick with a turret,
@@ -403,7 +420,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     turret.position.y = HULL_RIDE + bodyH + TURRET_H / 2 - TURRET_SEAT;
     // The turret reads as the same paint, less worn -- smoother, so the highlight that
     // separates it from the hull below sits on the turret rather than the body.
-    const turretMat = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.35 });
+    const turretMat = new THREE.MeshStandardMaterial({
+      color: matColor,
+      map: skinMap,
+      roughness: 0.42,
+      metalness: 0.35,
+    });
     const dome = new THREE.Mesh(turretGeometry(), turretMat);
     dome.name = 'turret';
     dome.castShadow = true;
@@ -777,7 +799,16 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     }
   }
 
-  function sync(prev: World, curr: World, alpha: number): void {
+  function sync(prev: World, curr: World, alpha: number, dt = 0): void {
+    // Animated skins drift their texture offset; speed is per-skin DATA in the skin
+    // defs. RepeatWrapping makes the offset cyclic, so no clamping is needed.
+    if (playerSkinMap && dt > 0) {
+      const scroll = SKINS.find((sk) => sk.id === playerSkin)?.scroll;
+      if (scroll) {
+        playerSkinMap.offset.x = (playerSkinMap.offset.x + scroll.u * dt) % 1;
+        playerSkinMap.offset.y = (playerSkinMap.offset.y + scroll.v * dt) % 1;
+      }
+    }
     // Clamp at the boundary rather than trusting the caller. alpha is in [0,1)
     // today only because loop.ts's accumulator drains below DT before
     // computing it; any future change there (variable DT, a pause/resume path,
@@ -795,6 +826,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   }
 
   function dispose(): void {
+    playerSkinMap?.dispose();
     for (const v of tankViews.values()) disposeObject(v.group);
     for (const m of bulletViews.values()) disposeObject(m);
     for (const m of mineViews.values()) disposeObject(m);
@@ -809,8 +841,11 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   return {
     sync,
-    setPlayerColor(hex: string | null): void {
+    setPlayerStyle(hex: string | null, skin: SkinId): void {
       playerHex = hex;
+      playerSkin = skin;
+      playerSkinMap?.dispose();
+      playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color);
       colorGen++;
     },
     dispose,

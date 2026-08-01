@@ -1,6 +1,6 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
-import { PALETTE, type HullColorId } from './customization';
+import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import './hud.css';
@@ -74,6 +74,10 @@ export interface Hud {
   setHullColor(id: HullColorId): void;
   /** Fired with the swatch id when the player clicks one. */
   onPickHullColor(cb: (id: HullColorId) => void): void;
+  /** The paint shop's current skin, echoed back by the loop after an accepted pick. */
+  setSkin(id: SkinId): void;
+  /** Fired with the skin id when the player clicks one. */
+  onPickSkin(cb: (id: SkinId) => void): void;
   dispose(): void;
 }
 
@@ -106,6 +110,8 @@ export function createHud(root: HTMLElement): Hud {
       <h1>Customize</h1>
       <p>Hull colour — repaints the tank behind this menu.</p>
       <div class="hud-swatches"></div>
+      <p>Skin — patterns the hull and turret; tracks stay solid.</p>
+      <div class="hud-skins"></div>
       <button class="hud-customize-back" type="button">Back</button>
     </div>
     <div class="hud-stats hud-stats--hidden">
@@ -204,6 +210,31 @@ export function createHud(root: HTMLElement): Hud {
     }
   }
 
+  const skinsRow = el.querySelector('.hud-skins') as HTMLElement;
+  const pickSkinCbs: Array<(id: SkinId) => void> = [];
+  let currentSkin: SkinId = SKINS[0].id;
+
+  // One button per skin, built once, like the swatches above -- and like them,
+  // the click closures live and die with the subtree.
+  for (const skin of SKINS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hud-skin';
+    b.dataset.skin = skin.id;
+    b.textContent = skin.label;
+    b.addEventListener('click', (e) => {
+      for (const cb of pickSkinCbs) cb(skin.id);
+      if ((e as MouseEvent).detail > 0) b.blur();
+    });
+    skinsRow.appendChild(b);
+  }
+
+  function renderSkinSelection(): void {
+    for (const b of Array.from(skinsRow.children) as HTMLButtonElement[]) {
+      b.classList.toggle('hud-skin--selected', b.dataset.skin === currentSkin);
+    }
+  }
+
   let statsData: { lifetime: StatCounts; run: StatCounts } | null = null;
 
   const pct = (num: number, den: number): string =>
@@ -282,7 +313,10 @@ export function createHud(root: HTMLElement): Hud {
   function showCustomize(show: boolean): void {
     customizeView.classList.toggle('hud-customize--hidden', !show);
     panel.classList.toggle('hud-panel--hidden', show);
-    if (show) renderSwatchSelection();
+    if (show) {
+      renderSwatchSelection();
+      renderSkinSelection();
+    }
   }
 
   const handleMute = (): void => {
@@ -556,6 +590,13 @@ export function createHud(root: HTMLElement): Hud {
     },
     onPickHullColor(cb: (id: HullColorId) => void): void {
       pickHullCbs.push(cb);
+    },
+    setSkin(id: SkinId): void {
+      currentSkin = id;
+      renderSkinSelection();
+    },
+    onPickSkin(cb: (id: SkinId) => void): void {
+      pickSkinCbs.push(cb);
     },
     dispose(): void {
       disarmReset(); // a pending confirm timer must not outlive the HUD

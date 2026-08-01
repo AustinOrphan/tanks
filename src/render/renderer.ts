@@ -6,6 +6,7 @@ import { createScene, type SceneContext } from './scene';
 import { createEntityViews, type EntityViews } from './entities';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createAimRay, type AimRay } from './aimray';
+import type { SkinId } from '../game/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
 
 export interface Renderer3D {
@@ -14,8 +15,8 @@ export interface Renderer3D {
   resize(w: number, h: number): void;
   /** Re-aim the scene at a new board size. In place: the GL context survives. */
   refit(worldWidth: number, worldHeight: number, boundary: number): void;
-  /** The paint shop: repaint the player live. Null restores the roster default. */
-  setPlayerColor(hex: string | null): void;
+  /** The paint shop: restyle the player live. Null hex restores the roster default. */
+  setPlayerStyle(hex: string | null, skin: SkinId): void;
   dispose(): void;
 }
 
@@ -31,6 +32,8 @@ export interface RendererOptions {
   readonly mineTimer?: boolean;
   /** The paint shop's saved hull colour, applied from the first frame. */
   readonly playerColor?: string;
+  /** The paint shop's saved skin, applied from the first frame. */
+  readonly playerSkin?: SkinId;
 }
 
 export function createRenderer(
@@ -45,7 +48,9 @@ export function createRenderer(
   let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
   const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
-  if (options.playerColor) entities.setPlayerColor(options.playerColor);
+  if (options.playerColor || options.playerSkin) {
+    entities.setPlayerStyle(options.playerColor ?? null, options.playerSkin ?? 'solid');
+  }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =
@@ -65,7 +70,7 @@ export function createRenderer(
     events: SimEvent[],
     dt: number,
   ): void {
-    entities.sync(prev, curr, alpha);
+    entities.sync(prev, curr, alpha, dt);
     aimRay?.sync(curr);
     mineDebug?.sync(curr);
     particles.spawn(events);
@@ -106,7 +111,7 @@ export function createRenderer(
     screenToGround,
     resize,
     refit,
-    setPlayerColor: (hex) => entities.setPlayerColor(hex),
+    setPlayerStyle: (hex, skin) => entities.setPlayerStyle(hex, skin),
     dispose,
   };
 }

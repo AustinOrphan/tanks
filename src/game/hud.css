@@ -305,6 +305,29 @@
   border-color: #ffffff;
 }
 
+.hud-skins {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hud-skin {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 700;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
+
+/* Same contract as the swatch ring: the border is the only current-skin signal. */
+.hud-skin--selected {
+  border-color: #ffffff;
+}
+
 .hud-customize-back {
   pointer-events: auto;
   cursor: pointer;
