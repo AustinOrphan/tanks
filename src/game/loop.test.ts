@@ -8,7 +8,7 @@ import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2, Bullet, UnarmedTrigger } from '../sim/types';
+import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
 import {
   isPlayerDeath,
@@ -43,6 +43,7 @@ interface Recorder {
   inputClears: number;
   cleared: number[];
   levelSelects: Array<[number, number]>;
+  builtWorlds: World[];
   volumes: number[];
   resizes: Array<[number, number]>;
   listeners: Array<[string, (e: never) => void]>;
@@ -94,6 +95,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     inputClears: 0,
     cleared: [],
     levelSelects: [],
+    builtWorlds: [],
     volumes: [],
     resizes: [],
     listeners: [],
@@ -272,10 +274,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // written against "restart rebuilds the same arena", which is exactly what a
       // one-level sequence still does. Progression tests opt into more.
       count: opts.levelCount ?? 1,
-      start: opts.levelStart ?? 0,
+      // LIVE, like the real system: an unlock earned mid-session must move the
+      // session's start. A fixed opts.levelStart models a dev-flag jump.
+      get start(): number {
+        if (opts.levelStart !== undefined) return opts.levelStart;
+        const cleared = Math.max(opts.progressHighest ?? 0, ...rec.cleared, 0);
+        return Math.min(cleared, (opts.levelCount ?? 1) - 1);
+      },
       tracksProgress: opts.tracksProgress ?? true,
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
+        // The same reference the loop receives: post-build mutations (invincibility)
+        // are visible here.
         rec.seeds.push(seed);
         rec.worldPolicies.push(policy);
         // The real createArenaWorld returns a FRESH world each call, and
@@ -289,11 +299,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // player id matches let a stale-id bug pass the rebind test.
         const tanks = level === 0 ? base.tanks
           : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + level } : t));
-        return {
+        const built = {
           ...base,
           tanks,
           roundStartTick: base.roundStartTick + (opts.staticRoundStart ? 0 : rec.seeds.length - 1),
         };
+        rec.builtWorlds.push(built);
+        return built;
       },
     },
     now: () => 0,
@@ -980,13 +992,16 @@ describe('startGameWith: level progression', () => {
     h.handle.dispose();
   });
 
-  it('treats the final win as Play Again: back to the start, fresh lives', () => {
+  it('treats the final win as Play Again at the furthest unlocked level, fresh lives', () => {
+    // Everything that leaves a run -- quit, game over, the final win -- returns to
+    // the LIVE furthest-unlocked level (user decision 2026-07-31). Having cleared
+    // the whole two-level game, that is the last level; the level row goes back.
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('win');
     h.hud.startRestart(); // -> level 1, the last
     h.setState('win');
-    h.hud.startRestart(); // final win -> back to start
-    expect(h.rec.levelBuilds[2]).toEqual({ level: 0, lives: undefined });
+    h.hud.startRestart(); // final win -> furthest unlocked, which is now level 2
+    expect(h.rec.levelBuilds[2]).toEqual({ level: 1, lives: undefined });
     h.handle.dispose();
   });
 });
@@ -1158,6 +1173,56 @@ describe('startGameWith: a level pick is bounds-checked', () => {
     h.hud.pickLevel(-1);
     expect(h.rec.levelBuilds).toHaveLength(1); // only the boot build
     expect(h.getState()).toBe('title');
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: quit and retry follow LIVE progress', () => {
+  it('quit after unlocking a level this session rebuilds at the NEW furthest level', () => {
+    // Reported 2026-07-31: clear level 1, advance, quit -- the menu background
+    // rebuilt at level 1 even though level 2 was now unlocked, because levels.start
+    // was a boot-time snapshot of saved progress.
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('playing');
+    h.setState('win'); // clears level 1 -> level 2 unlocked
+    h.hud.startRestart(); // advance to level 2
+    h.keydown({ key: 'Escape' });
+    h.hud.quitToTitle();
+    expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: undefined });
+    h.handle.dispose();
+  });
+
+  it('game over after a mid-session unlock retries at the furthest level too', () => {
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('playing');
+    h.setState('win');
+    h.hud.startRestart(); // now on level 2
+    h.setState('lose');
+    h.hud.startRestart(); // retry
+    expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: undefined });
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: invincibility (dev playtest mode)', () => {
+  const playerOf = (w: World): Tank | undefined => w.tanks.find((t) => t.kind === 'player');
+
+  it('marks the PLAYER invincible in every world it builds, and only the player', () => {
+    const h = boot(makeDeps({ levelCount: 2, devFlags: { invincible: true } }));
+    h.setState('win');
+    h.hud.startRestart(); // the advance rebuild must apply it too, not just boot
+    // Population: both worlds built so far (boot + advance).
+    expect(h.rec.builtWorlds).toHaveLength(2);
+    for (const w of h.rec.builtWorlds) {
+      expect(playerOf(w)?.invincible).toBe(true);
+      expect(w.tanks.filter((t) => t.kind !== 'player').every((t) => t.invincible === undefined)).toBe(true);
+    }
+    h.handle.dispose();
+  });
+
+  it('marks nobody without the flag', () => {
+    const h = boot(makeDeps());
+    expect(playerOf(h.rec.builtWorlds[0])?.invincible).toBeUndefined();
     h.handle.dispose();
   });
 });

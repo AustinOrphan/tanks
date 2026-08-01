@@ -88,6 +88,11 @@ export interface DevFlags {
   sandboxDisarmed: boolean;
   /** Interior walls to scatter in the sandbox: `walls=8` or `walls=random:8`. */
   sandboxWalls: number | null;
+  /**
+   * The player cannot die: shells detonate on the hull harmlessly, blasts wash over.
+   * The playtest staple -- walk a level, watch the AI, tune feel, no respawns.
+   */
+  invincible: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -104,6 +109,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   // VALUE the sandbox reads, not a feature the dev query enables.
   sandboxDisarmed: true,
   sandboxWalls: null,
+  invincible: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -170,7 +176,7 @@ function isOn(params: URLSearchParams, name: string): boolean {
 export function parseDevFlags(search: string): DevFlags {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   if (!isOn(params, 'dev')) return DEV_FLAGS_OFF;
-  return {
+  const flags: DevFlags = {
     roundPhaseHud: isOn(params, 'roundPhaseHud'),
     aimRay: isOn(params, 'aimRay'),
     shellCount: isOn(params, 'shellCount'),
@@ -183,5 +189,17 @@ export function parseDevFlags(search: string): DevFlags {
     // Absent means disarmed: the sandbox is scenery until explicitly re-armed.
     sandboxDisarmed: params.has('disarmed') ? isOn(params, 'disarmed') : true,
     sandboxWalls: asWalls(params),
+    invincible: isOn(params, 'invincible'),
   };
+  // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
+  // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
+  // its meaning. OR semantics -- individual flags can add to the kit, not veto it.
+  if (isOn(params, 'playtest')) {
+    flags.invincible = true;
+    flags.roundPhaseHud = true;
+    flags.shellCount = true;
+    flags.mineReach = true;
+    flags.mineTimer = true;
+  }
+  return flags;
 }

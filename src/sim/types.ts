@@ -68,6 +68,12 @@ export interface Tank {
    * functions of their inputs.
    */
   disarmed?: boolean;
+  /**
+   * Cannot be killed: shells detonate on it harmlessly, blasts wash over it. OPTIONAL
+   * like `disarmed`, and world data for the same reason -- replays stay exact functions
+   * of their inputs. Set by the game layer on the PLAYER under ?dev=1&invincible=1.
+   */
+  invincible?: boolean;
 }
 
 export interface Bullet {

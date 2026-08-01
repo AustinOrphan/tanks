@@ -8,6 +8,7 @@ import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
 } from './entities';
 import { createWorld, type World } from '../sim/world';
+import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
@@ -641,5 +642,71 @@ describe('tank geometry', () => {
     const crown = pts.filter((p) => p.x > 0 && p.x < maxR - 1e-9 && p.y > top - TANK_RADIUS);
     expect(crown.length).toBeGreaterThan(2);
     views.dispose();
+  });
+});
+
+describe('world replacement (level switch)', () => {
+  // Both bugs reported 2026-07-31 live here: wall views were created per id and never
+  // removed when an id vanished, nor rebuilt when the same id came back as a DIFFERENT
+  // wall. Tanks re-sync per frame, so switching levels showed the OLD level's walls
+  // around the NEW level's tanks -- and the sim ran the new walls, so shells and tanks
+  // drove through drawn walls and bounced off invisible ones.
+  function wallMeshes(scene: THREE.Scene): THREE.Mesh[] {
+    const out: THREE.Mesh[] = [];
+    scene.traverse((o) => {
+      if (o.name === 'wall') out.push(o as THREE.Mesh);
+    });
+    return out;
+  }
+  const centres = (ms: THREE.Mesh[]): string[] =>
+    ms.map((m) => `${m.position.x},${m.position.z}`).sort();
+
+  it('draws exactly the NEW world\'s walls after a switch, none of the old', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const l2 = createWorldFor(ARENAS[1], 1);
+    views.sync(l2, l2, 0);
+    const l1 = createWorldFor(ARENAS[0], 1);
+    views.sync(l1, l1, 0);
+
+    const want = l1.walls
+      .filter((w) => !w.destroyed)
+      .map((w) => `${(w.aabb.minX + w.aabb.maxX) / 2},${(w.aabb.minY + w.aabb.maxY) / 2}`)
+      .sort();
+    // Population: every wall of the world now being played, boundaries included.
+    expect(centres(wallMeshes(scene))).toEqual(want);
+    views.dispose();
+  });
+
+  it('rebuilds a tank view whose id changed KIND across worlds', () => {
+    // loadArena numbers ids by grid scan, so the same id can be a different kind on a
+    // different level. Position re-syncs every frame, but the mesh and colour were
+    // built once per id -- a stale view draws the wrong tank.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const a = makeWorld();
+    a.tanks = [makeTank(5, 'brown', 3, 3)];
+    views.sync(a, a, 0);
+    const b = makeWorld();
+    b.tanks = [makeTank(5, 'teal', 3, 3)];
+    views.sync(b, b, 0);
+
+    // Reference: what a teal tank looks like when built fresh.
+    const refScene = new THREE.Scene();
+    const refViews = createEntityViews(refScene);
+    const r = makeWorld();
+    r.tanks = [makeTank(5, 'teal', 3, 3)];
+    refViews.sync(r, r, 0);
+
+    const hullColor = (s: THREE.Scene): number => {
+      let c = -1;
+      s.traverse((o) => {
+        if (o.name === 'hull') c = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+      });
+      return c;
+    };
+    expect(hullColor(scene)).toBe(hullColor(refScene));
+    views.dispose();
+    refViews.dispose();
   });
 });

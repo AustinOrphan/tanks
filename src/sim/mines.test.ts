@@ -10,6 +10,7 @@ import {
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_EXPAND_TICKS,
+  MINE_BLAST_HOLD_TICKS,
   MINE_BLAST_RADIUS,
   TANK_RADIUS,
   DT,
@@ -29,6 +30,9 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     mineCooldown: p.mineCooldown ?? 0,
     aiState: p.aiState ?? 'idle',
     aiTimer: p.aiTimer ?? 0,
+    // Optional flags must pass through, or a fixture claiming them tests the default.
+    disarmed: p.disarmed,
+    invincible: p.invincible,
   }
 }
 
@@ -570,5 +574,25 @@ describe('blast ramp', () => {
     expect(world.walls[0].destroyed).toBe(true)
     // Emitted once, when it actually broke -- not re-emitted every tick the blast covers it.
     expect(events.filter((e) => e.type === 'wall-destroyed')).toHaveLength(1)
+  })
+})
+
+describe('blasts and invincible tanks (dev playtest mode)', () => {
+  it('the blast washes over an invincible tank; its mortal twin dies where it stands', () => {
+    // Both tanks inside the kill reach, one flag apart -- the mortal one is the proof
+    // the fixture is lethal, so the invincible assertion cannot pass vacuously.
+    const ghost = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, invincible: true })
+    const mortal = mkTank({ id: 3, kind: 'brown', pos: { x: -1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [ghost, mortal], spawns: [], lives: 3 })
+    const mine: Mine = { id: 50, ownerId: 9, pos: { x: 0, y: 0 }, timer: 0, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+    detonateMine(world, mine, events)
+    for (let i = 0; i < MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS + 2; i++) stepBlasts(world, events)
+    expect(world.tanks.find((t) => t.id === 2)!.alive).toBe(true)
+    expect(world.tanks.find((t) => t.id === 3)!.alive).toBe(false)
+    // No corpse event for the ghost. Discriminated by id, not presence: the mortal
+    // twin's tank-destroyed is in the same stream.
+    expect(events.filter((e) => e.type === 'tank-destroyed').map((e) => (e as { tankId: number }).tankId)).toEqual([3])
   })
 })

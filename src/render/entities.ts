@@ -260,11 +260,14 @@ function disposeObject(obj: THREE.Object3D): void {
 }
 
 export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): EntityViews {
-  const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D }>();
+  // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
+  // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
+  // draws the old tank's mesh and colour under the new tank's position.
+  const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind }>();
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
   const mineViews = new Map<number, THREE.Mesh>();
-  const wallViews = new Map<number, THREE.Mesh>();
+  const wallViews = new Map<number, { mesh: THREE.Mesh; signature: string }>();
 
   /**
    * Barrel radius. Must exceed the shell's, with wall thickness to spare -- see the
@@ -557,6 +560,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
             normalScale: new THREE.Vector2(0.55, 0.55),
           });
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'wall';
     mesh.position.set(
       (wall.aabb.minX + wall.aabb.maxX) / 2,
       WALL_H / 2,
@@ -575,8 +579,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       if (!t.alive) continue;
       seen.add(t.id);
       let view = tankViews.get(t.id);
+      if (view && view.kind !== t.kind) {
+        disposeObject(view.group);
+        tankViews.delete(t.id);
+        view = undefined;
+      }
       if (!view) {
-        view = makeTank(t.kind);
+        view = { ...makeTank(t.kind), kind: t.kind };
         tankViews.set(t.id, view);
       }
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
@@ -715,18 +724,42 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     }
   }
 
+  /**
+   * Everything that makes two walls "the same wall" for rendering purposes. A level
+   * switch hands sync() a WHOLE NEW WORLD whose wall ids overlap the old one's, so id
+   * alone said "already drawn" about walls that were somewhere else entirely -- the
+   * old level stayed on screen while the sim ran the new one, shells sailing through
+   * drawn walls and stopping at invisible ones.
+   */
+  function wallSignature(wall: Wall): string {
+    return `${wall.aabb.minX},${wall.aabb.minY},${wall.aabb.maxX},${wall.aabb.maxY},${wall.kind}`;
+  }
+
   function syncWalls(curr: World): void {
+    const seen = new Set<number>();
     for (const wall of curr.walls) {
       const existing = wallViews.get(wall.id);
       if (wall.destroyed) {
         if (existing) {
-          disposeObject(existing);
+          disposeObject(existing.mesh);
           wallViews.delete(wall.id);
         }
         continue;
       }
-      if (!existing) {
-        wallViews.set(wall.id, makeWall(wall));
+      seen.add(wall.id);
+      if (existing && existing.signature !== wallSignature(wall)) {
+        disposeObject(existing.mesh);
+        wallViews.delete(wall.id);
+      }
+      if (!wallViews.has(wall.id)) {
+        wallViews.set(wall.id, { mesh: makeWall(wall), signature: wallSignature(wall) });
+      }
+    }
+    // Ids the new world does not have at all -- the other half of the level switch.
+    for (const [id, view] of [...wallViews]) {
+      if (!seen.has(id)) {
+        disposeObject(view.mesh);
+        wallViews.delete(id);
       }
     }
   }
@@ -753,7 +786,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     for (const m of bulletViews.values()) disposeObject(m);
     for (const m of mineViews.values()) disposeObject(m);
     for (const m of blastViews.values()) disposeObject(m);
-    for (const m of wallViews.values()) disposeObject(m);
+    for (const v of wallViews.values()) disposeObject(v.mesh);
     tankViews.clear();
     bulletViews.clear();
     mineViews.clear();

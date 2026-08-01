@@ -14,7 +14,9 @@
       "ricochetCount": 1
     },
     "mineCapacity": 2,
-    "abilities": ["MINE_LAYER"]
+    "abilities": [
+      "MINE_LAYER"
+    ]
   },
   "brown": {
     "displayName": "Brown",
@@ -22,11 +24,11 @@
     "firstMission": 1,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",
-    "rotationSpeed": "MEDIUM",
+    "rotationSpeed": "SLOW",
     "aiProfile": "STATIC_BASIC",
     "weapon": {
       "projectileType": "STANDARD_SHELL",
-      "fireRate": "MEDIUM",
+      "fireRate": "SLOW",
       "maxActiveProjectiles": 5,
       "ricochetCount": 1
     },
@@ -48,23 +50,28 @@
       "ricochetCount": 1
     },
     "mineCapacity": 2,
-    "abilities": ["MINE_LAYER"]
+    "abilities": [
+      "MINE_LAYER"
+    ]
   },
   "teal": {
     "displayName": "Teal",
     "color": "#2bb0a6",
     "firstMission": 5,
     "singlePlayerOnly": false,
-    "movementSpeed": "MEDIUM",
-    "rotationSpeed": "MEDIUM",
+    "movementSpeed": "SLOW",
+    "rotationSpeed": "SLOW",
     "aiProfile": "MOBILE_MINE_LAYER",
     "weapon": {
       "projectileType": "RICOCHET_ROCKET",
-      "fireRate": "MEDIUM",
+      "fireRate": "FAST",
       "maxActiveProjectiles": 5,
-      "ricochetCount": 3
+      "ricochetCount": 2
     },
     "mineCapacity": 2,
-    "abilities": ["MINE_LAYER", "BANK_SHOT_AIM"]
+    "abilities": [
+      "MINE_LAYER",
+      "BANK_SHOT_AIM"
+    ]
   }
 }

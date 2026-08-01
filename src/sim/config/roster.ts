@@ -15,18 +15,22 @@ import tankDefsJson from './data/tank-defs.json';
 //
 // Fidelity notes that used to sit on the TS literals (the JSON cannot carry
 // comments, so they live here):
-//  - Every kind shares MEDIUM movement/rotation/fire because the game is
-//    uniform on those today. Brown's stillness is an AI-decision property
-//    (STATIONARY behaviour), not a chassis one.
-//  - `teal` is the ricochet/bank tank; no Wii entry matches it, so it is
-//    authored to preserve teal's real behaviour rather than relabelled.
+//  - The classes are NOT uniform since the 2026-07-31 balance pass (codified on
+//    main by #52): brown turns and reloads SLOW; teal drives and turns SLOW but
+//    reloads FAST; player and grey are MEDIUM across the board. Brown's
+//    stillness is still an AI-decision property (STATIONARY behaviour), not a
+//    chassis one -- its movementSpeed stays MEDIUM and simply goes unasked-for.
+//  - `teal` is the ricochet/bank tank; no Wii entry matches it (their TEAL is a
+//    plain rocket; their GREEN banks but is stationary), so it is authored to
+//    preserve teal's real behaviour rather than relabelled.
 //  - abilities carry MINE_LAYER for exactly the kinds that lay mines (grey,
-//    teal, player -- NOT brown); the mine paths gate on it, so the list is
-//    behaviour, not decoration.
-//  - weapon.maxActiveProjectiles (5) and ricochetCount (1/3) are JSON literals
-//    now, but config/roster.test.ts pins them equal to SHELL_CAP and the
-//    per-BulletType bounce table, so drifting them apart from the balance
-//    scalars is a loud two-file edit, same as every other tunable.
+//    teal, player -- NOT brown); the mine paths gate on it, so that entry is
+//    behaviour. BANK_SHOT_AIM on teal is DESCRIPTIVE only: the bank logic gates
+//    on the profile's bankShotWeight, not on this ability.
+//  - weapon.maxActiveProjectiles and ricochetCount are JSON literals, but
+//    config/roster.test.ts pins them equal to SHELL_CAP and the per-BulletType
+//    bounce table, so drifting them apart from the balance scalars is a loud
+//    two-file edit, same as every other tunable.
 //  - the player carries an (inert) aiProfile only because the schema requires
 //    one; stepAi never runs it.
 // ---------------------------------------------------------------------------

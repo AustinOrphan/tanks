@@ -124,6 +124,9 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     // Testing the centre alone let a tank whose hull was well inside the blast
     // walk away untouched, and made the two damage systems disagree about
     // where a tank actually is.
+    // An invincible tank (dev playtest mode) stands in the blast unharmed. Checked
+    // here rather than at the loop top so the wall/radius reasoning stays identical.
+    if (t.invincible) continue
     if (
       vdist(t.pos, blast.pos) <= radius + TANK_RADIUS &&
       blastReaches(world.walls, blast.pos, t.pos)

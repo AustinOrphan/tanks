@@ -15,6 +15,13 @@ import { MINE_PROXIMITY_RADIUS, MINE_BLAST_RADIUS, TANK_RADIUS } from '../sim/co
  * problem: the inner one is where walking sets it off, the outer is where it kills. The
  * gap between them is the counter-intuitive part -- you can trigger a mine from well
  * inside its lethal range and still be standing in it when it goes.
+ *
+ * Both rings mark TANK-CENTRE thresholds, and both are exact: bisected through the real
+ * step() (2026-07-31), the trigger fires at centre distance 1.500000 and the blast
+ * kills at 2.500000 -- the drawn radii to six decimals. Read them as "where my tank's
+ * CENTRE may go": a hull merely touching a ring is still ~half a hull safe. (The sim
+ * treats a tank as a point for triggering and as a TANK_RADIUS circle for the blast;
+ * the constants below bake that so the rings stay honest either way.)
  */
 export interface MineDebug {
   /** Redraw for this frame's world. Cheap to call when disabled. */

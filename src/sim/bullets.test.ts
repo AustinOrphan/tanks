@@ -30,6 +30,10 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     mineCooldown: p.mineCooldown ?? 0,
     aiState: p.aiState ?? 'idle',
     aiTimer: p.aiTimer ?? 0,
+    // Optional flags must pass through, or a fixture claiming them silently tests the
+    // default -- an "invincible" tank built here was mortal until this line existed.
+    disarmed: p.disarmed,
+    invincible: p.invincible,
   }
 }
 
@@ -155,7 +159,9 @@ describe('stepBullets', () => {
       type: 'ricochet',
       pos: { x: 0, y: 0 },
       vel: { x: RICOCHET_SPEED * s, y: RICOCHET_SPEED * s },
-      bouncesLeft: 3,
+      // From config, not a literal: a stale 3 against a retuned budget of 2 made
+      // consumedBefore NEGATIVE and the first bounceIndex -1.
+      bouncesLeft: bulletConfig.ricochet.bounces,
       alive: true,
     }
     world.bullets.push(b)
@@ -210,7 +216,10 @@ describe('bullet types', () => {
     }
     world.bullets.push(b)
     const indices: number[] = []
-    for (let k = 0; k < 3; k++) {
+    // Exactly the configured budget: the tick after the last bounce EXPIRES the shell
+    // instead of reflecting it, so walking further asserts on a ricochet that
+    // correctly never happens. 2 since the 2026-07-31 balance pass.
+    for (let k = 0; k < bulletConfig.ricochet.bounces; k++) {
       // re-present the bullet at the wall each tick to force one bounce per tick
       b.pos = { x: 1.95, y: 0 }
       b.vel = { x: RICOCHET_SPEED, y: 0 }
@@ -223,7 +232,8 @@ describe('bullet types', () => {
       expect(ric.length).toBe(1)
       indices.push(ric[0].bounceIndex)
     }
-    expect(indices).toEqual([0, 1, 2])
+    expect(indices).toEqual([...Array(bulletConfig.ricochet.bounces).keys()])
+    expect(indices.length).toBeGreaterThanOrEqual(2) // pitch-shift needs at least two steps
   })
 
   it('a fast shell dies on the first wall hit with no bounce and emits no ricochet', () => {
@@ -669,5 +679,29 @@ describe('spawnBullet: where the shell is born', () => {
     const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
     expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
     expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+  })
+})
+
+describe('resolveBulletHits: invincible tanks (dev playtest mode)', () => {
+  it('the shell detonates on an invincible tank, which survives it', () => {
+    // The shell must still die -- an invincible tank that shells pass THROUGH would
+    // shield nothing and look broken; it is a wall to ordnance, not a ghost.
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, invincible: true })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(world.tanks[0].alive).toBe(true)
+    expect(world.bullets).toHaveLength(0) // the shell died on impact and was retired
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(false)
+    expect(events.some((e) => e.type === 'explosion')).toBe(true) // the impact still reads
+  })
+
+  it('the mortal twin dies to the identical shell -- the fixture really is lethal', () => {
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    resolveBulletHits(world, [])
+    expect(world.tanks[0].alive).toBe(false)
   })
 })
