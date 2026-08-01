@@ -152,14 +152,18 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
         // single-point tangency that a 0.1-unit nudge opened. Checking intact alone
         // is silently blind to that. Checking both IS stronger than the bespoke test
         // this claim type replaced, but not because intact adds detection power on
-        // its own: measured across 5 spawnBlockRobust scenarios (arena-01, arena-02,
-        // arena-03, and the two arena-claims.test.ts fixtures built to discriminate
-        // the phases), 0 failures were intact-only -- breach only ever reveals
-        // sightlines, never hides them, so an intact failure is always also a
-        // breached one at the same enemy/offset. The actual gain over the deleted
-        // test is the 4 cardinal offsets here versus its 2 (±x), run on every
-        // claiming arena; the intact phase's value is labelling which wall state a
-        // failure lives in, not catching anything breached alone would miss.
+        // its own: measured across all 5 arena-01/02/03-and-fixture scenarios --
+        // this switch case only runs where the claim is DECLARED, so arena-02 (which
+        // does not declare it) was checked by hand, the same way, outside the suite
+        // -- 0 failures were intact-only. Breach only ever reveals sightlines, never
+        // hides them, so an intact failure is always also a breached one at the same
+        // enemy/offset. arena-02 fails 12 of its 16 breached-phase checks and 0 of 16
+        // intact -- exactly why it carries no spawnBlockRobust claim: the level's
+        // design is to open sightlines when the centre barrier breaches, not to
+        // survive it. The actual gain over the deleted test is the 4 cardinal
+        // offsets here versus its 2 (±x), run on every claiming arena; the intact
+        // phase's value is labelling which wall state a failure lives in, not
+        // catching anything breached alone would miss.
         const phases = [
           { name: 'intact', walls } as const,
           { name: 'breached', walls: breached } as const,

@@ -90,18 +90,21 @@ claim types — `sightlineAfterBreach`, `lane`, `spawnBlockRobust` — are verif
 by `src/sim/arena-claims.ts` from the test layer (it imports the AI's
 `lineOfSight`, so it must never be imported by `config/`). `spawnBlockRobust`
 checks more than its name suggests: every enemy spawn against 4 cardinal nudges
-of the player, in BOTH wall phases (intact and breached) — measured across the
-5 scenarios that claim it (arena-01, arena-02, arena-03, and the two fixtures
+of the player, in BOTH wall phases (intact and breached) — measured across all
+5 scenarios that can run it (arena-01, arena-02, arena-03, and the two fixtures
 built in `arena-claims.test.ts` to discriminate the phases), 0 failures were
 intact-only, so the intact phase's value is labelling which wall state a
 failure lives in, not added detection power on its own; the breached phase is
-what actually catches a corner tangency. Adding a level is editing JSON: the
-generic runner in `arena-validation.test.ts` picks up its claims automatically,
-and `npx vitest watch src/sim/arena-validation.test.ts` is the authoring loop —
-though the claim MIX itself is pinned separately by that file's
-`EXPECTED_CLAIMS` table, so changing an arena's claims is a deliberate two-file
-edit. `spawnBlockRobust` exists because ARENA_03 once shipped a corner tangency
-a 0.1-unit nudge opened.
+what actually catches a corner tangency. Only 4 of those 5 DECLARE the claim —
+arena-02 does not, because checked the same way it fails 12 of its 16
+breached-phase checks (0 of 16 intact): the level's design is to open
+sightlines when its centre barrier breaches, not survive it. Adding a level is
+editing JSON: the generic runner in `arena-validation.test.ts` picks up its
+claims automatically, and `npx vitest watch src/sim/arena-validation.test.ts`
+is the authoring loop — though the claim MIX itself is pinned separately by
+that file's `EXPECTED_CLAIMS` table, so changing an arena's claims is a
+deliberate two-file edit. `spawnBlockRobust` exists because arena-03 once
+shipped a corner tangency a 0.1-unit nudge opened.
 
 ## Testing conventions, learned the hard way
 
