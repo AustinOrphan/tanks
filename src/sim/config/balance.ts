@@ -97,14 +97,15 @@ export const GAME_BALANCE: BalanceConstants = {
     },
   },
   // AI profiles: the fields the AI actually CONSUMES today are `behavior` (decideAi
-  // routes each tank to its behaviour implementation), `aggression` (grey's dodge
-  // patience is (1 - aggression) seconds), `directShotWeight`/`bankShotWeight`
-  // (whether teal attempts each shot type at all), and the SIGN of
-  // `minePlacementChance` (whether a tank proposes mines). The rest (aimAccuracy,
-  // reactionTime, preferredDistance, minimumDistance, retreatChance, and the
-  // chance magnitudes) are still carried-but-unread -- honest residuals, listed in
-  // the PR body. Values are the Wii reference figures except where noted: this is
-  // the GAME's table, retuned to describe the game's actual tanks.
+  // routing), `aggression` (grey's dodge patience, (1 - aggression) seconds),
+  // `directShotWeight`/`bankShotWeight` signs (whether teal attempts each shot
+  // type), the SIGN of `minePlacementChance`, and -- since the seek layer
+  // (targeting.ts seekMove) -- `preferredDistance`/`minimumDistance` (the
+  // distance band mobile tanks hold) and `retreatChance` INCLUDING its magnitude
+  // (the per-window retreat draw when pressed). Still carried-but-unread:
+  // `aimAccuracy`, `reactionTime`, and the minePlacementChance magnitude. Values
+  // are the Wii reference figures except where noted: this is the GAME's table,
+  // retuned to describe the game's actual tanks.
   // The per-profile numbers now live in data/ai-profiles.json, validated at
   // load (validate.ts). ONE authored deviation from the Wii reference (review
   // recounted: 1 of 76 field slots), since the JSON cannot carry comments:

@@ -1,9 +1,9 @@
 import type { Vec2, Wall, AABB, Bullet, Tank, Mine, BulletType } from '../types';
-import { vsub, angleOf, vdot, vdist, vnorm, fromAngle, nextRng } from '../types';
+import { vsub, angleOf, vdot, vdist, vlen, vnorm, fromAngle, nextRng } from '../types';
 import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../collision';
-import { configFor } from '../config';
+import { configFor, type ResolvedTankConfig } from '../config';
 import {
-  AIM_EPS, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR,
+  AIM_EPS, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig,
 } from '../constants';
@@ -320,6 +320,59 @@ export function wanderMove(world: World, tank: Tank): Vec2 {
   const bucket = Math.floor(world.tick / WANDER_TICKS);
   const rng = nextRng(world.seed + tank.id * 1000 + bucket);
   return fromAngle(rng.value * Math.PI * 2);
+}
+
+/**
+ * Distance-band movement: the layer that makes preferredDistance, minimumDistance
+ * and retreatChance REAL. Replaces bare wanderMove as the mobile decisions'
+ * baseline move (dodging still overrides both -- see grey.ts/teal.ts).
+ *
+ *   d > preferredDistance  -> approach: a blend of the toward-player unit and the
+ *                             wander heading (SEEK_APPROACH_BIAS), so closing in
+ *                             stays organic rather than a robotic beeline.
+ *   d < minimumDistance    -> pressed: a seeded draw against retreatChance each
+ *                             WANDER_TICKS window decides retreat (same blend,
+ *                             away) or hold ground (wander). This is the first
+ *                             chance field whose MAGNITUDE is consumed: grey
+ *                             (0.75) usually gives ground, teal (0.4) usually
+ *                             stands and fights.
+ *   in band, or no player  -> wanderMove, unchanged -- today's texture.
+ *
+ * The draw is the house pure-hash recipe (wanderMove/aimJitter): seed + id x a
+ * fresh prime + tick bucket. No threaded state, so any caller at any tick gets
+ * the same answer and replays stay exact. A seek direction that would step into
+ * a wall falls back to wanderMove -- same philosophy as dangerAvoidMove's own
+ * vetting: never hand moveTank a guaranteed-zero displacement.
+ */
+export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec2 {
+  const wander = wanderMove(world, tank);
+  const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
+  if (!player) return wander;
+
+  const d = vdist(tank.pos, player.pos);
+  const { preferredDistance, minimumDistance, retreatChance } = cfg.ai;
+
+  let dir: Vec2 | null = null;
+  if (d > preferredDistance) {
+    const toward = vnorm(vsub(player.pos, tank.pos));
+    dir = vnorm({
+      x: toward.x * SEEK_APPROACH_BIAS + wander.x * (1 - SEEK_APPROACH_BIAS),
+      y: toward.y * SEEK_APPROACH_BIAS + wander.y * (1 - SEEK_APPROACH_BIAS),
+    });
+  } else if (d < minimumDistance) {
+    const bucket = Math.floor(world.tick / WANDER_TICKS);
+    const draw = nextRng(world.seed + tank.id * 4243 + bucket);
+    if (draw.value < retreatChance) {
+      const away = vnorm(vsub(tank.pos, player.pos));
+      dir = vnorm({
+        x: away.x * SEEK_APPROACH_BIAS + wander.x * (1 - SEEK_APPROACH_BIAS),
+        y: away.y * SEEK_APPROACH_BIAS + wander.y * (1 - SEEK_APPROACH_BIAS),
+      });
+    }
+  }
+
+  if (dir === null || vlen(dir) < VEC_EPS) return wander;
+  return wallBlocksStep(world, tank, dir) ? wander : dir;
 }
 
 /**

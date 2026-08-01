@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { BANK_PREFER_TICKS, AI_AIM_SPREAD } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
@@ -18,7 +18,10 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
   // (and reposition itself into new bank opportunities) instead of standing still as a
   // stationary turret while it has line-of-sight or a bank path.
-  const move = avoid ?? wanderMove(world, tank);
+  // The baseline move is the distance-band seek (targeting.ts seekMove): approach
+  // beyond ai.preferredDistance, retreat-by-draw inside ai.minimumDistance, wander
+  // in the band. Dodging still overrides it entirely.
+  const move = avoid ?? seekMove(world, tank, cfg);
 
   // Aggressive (swapped from Grey): the dodge above overrides only `move`. Unlike Grey,
   // Teal does NOT hold fire while dodging and has no patience counter — it dodges and
