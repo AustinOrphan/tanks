@@ -320,7 +320,11 @@ describe('tealDecision', () => {
     const w = world({ tanks: [teal, player] });
     const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
-    expect(d.turretAngle).toBeCloseTo(0.36136712390670783 + aimJitter(w, teal, AI_AIM_SPREAD), 6);
+    // Closed-form intercept, rederived for the 2026-07-31 ricochet speed of 4:
+    // a = |v|^2 - s^2 = 9 - 16, b = 2(rel.v) = 30/sqrt2, c = |rel|^2 = 25;
+    // t = 3.93748952..., aim = atan2(v_y t, 5 + v_x t) = 0.55898986... (was
+    // 0.36136712 at the spec's speed 6).
+    expect(d.turretAngle).toBeCloseTo(0.5589898660249855 + aimJitter(w, teal, AI_AIM_SPREAD), 6);
   });
 
   // ---- Teal now lays mines too (mirrors Grey's rule, spec §7 "avoids its own mines").

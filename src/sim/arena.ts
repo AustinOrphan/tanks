@@ -51,16 +51,15 @@ export const ARENA_01: Arena = {
   ],
 };
 
-// Level 2. Two horizontal bars split the field into an upper enemy half and a lower
-// player half, with a tall centre spine forcing engagements around its ends. Every
-// enemy's straight line to the player spawn is blocked -- arena-validation.test.ts
-// checks that with the sim's own lineOfSight. For the UPPER pair (Brown at row 2, Grey
-// at row 2) the only block is the DESTRUCTIBLE inner end of a bar ('x'), so blowing one
-// open is a real trade that opens the lane for both sides; the LOWER pair (Brown and
-// Teal at row 3) stays blocked by the bars' solid outer ends whatever is destroyed.
-// Measured, not argued: destroying both x's opens exactly the two upper lanes (see the
-// "destructible trade" test in arena-validation.test.ts). Four enemies against level
-// 1's three: two Browns anchoring the left, Grey and Teal roaming the right.
+// Level 2, reshaped in the 2026-07-31 balance pass: row 4 is a FULL destructible
+// barrier with solid anchors (cols 1, 5, 9), so the enemy half and the player half
+// START sealed off from each other -- tanks cannot cross and shells cannot pass until
+// someone blasts a hole. Breaching the bar IS the level. Every enemy's straight line
+// to the player spawn is blocked while the bar stands (arena-validation.test.ts checks
+// that with the sim's own lineOfSight); with every 'x' destroyed, exactly the two
+// UPPER lanes (Brown row 2, Grey row 2) open, and the lower pair (Teal and Brown,
+// row 3) stays shielded by the solid anchors -- measured, not argued, see the
+// "destructible trade" test. Four enemies against level 1's three.
 export const ARENA_02: Arena = {
   cols: 11,
   rows: 9,
