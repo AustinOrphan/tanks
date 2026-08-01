@@ -99,12 +99,14 @@ for EVERY enemy spawn, checked by set equality (both directions) in
 statement of its post-breach spawn lines, never a sample (an arena may still
 declare zero, as arena-01 does). `spawnBlockRobust` checks more than its name
 suggests: every enemy spawn against 4 cardinal nudges of the player, in BOTH
-wall phases (intact and breached) — measured across all 5 scenarios that can
-run it (arena-01, arena-02, arena-03, and the two fixtures built in
+wall phases (intact and breached) — measured across all 6 scenarios that can
+run it (arena-01, arena-02, arena-03, arena-04, and the two fixtures built in
 `arena-claims.test.ts` to discriminate the phases), 0 failures were
 intact-only, so the intact phase's value is labelling which wall state a
 failure lives in, not added detection power on its own; the breached phase is
-what actually catches a corner tangency. Only 4 of those 5 DECLARE the claim —
+what actually catches a corner tangency. arena-04 contributes 0 failures in
+either phase (0 of 24 probes each: 6 enemies × 4 cardinal nudges). Only 5 of
+those 6 DECLARE the claim —
 arena-02 does not, because checked the same way it fails 12 of its 16
 breached-phase checks (0 of 16 intact): the level's design is to open
 sightlines when its centre barrier breaches, not survive it. The switch case in
@@ -121,10 +123,23 @@ exists because arena-03 once shipped a corner tangency a 0.1-unit nudge opened.
 A `lane` claim's `from`/`to` are LITERAL grid cells, not tied to a spawn by the
 validator (`cell()`, not `enemySpawnCell()`) — moving the spawn a lane's `why`
 refers to does not invalidate the claim, which keeps measuring the same two
-cells and keeps passing; arena-03's two lanes survive this only because each is
-co-located with a `sightlineAfterBreach` claim at the same cell, which DOES
-require a live spawn there and so catches the move at load time instead. See
-the `lane` variant's doc comment in `config/arena-types.ts`.
+cells and keeps passing; arena-03's two lanes and arena-04's seven survive this
+only because every one of them has an enemy spawn at its `from` end carrying a
+`sightlineAfterBreach` claim at that same cell, which DOES require a live spawn
+there and so catches the move at load time instead. Their `to` ends are plain
+floor cells and are pinned by nothing — moving a wall so a lane's target cell
+stops meaning what its `why` says is a change no test can see. See the `lane`
+variant's doc comment in `config/arena-types.ts`.
+
+**arena-04 is the first shipped board that is not 11x9** (15x11), so PR #53's
+per-level render refit is now exercised by a level players actually reach rather
+than only by a fixture. `WIDE_ARENA` moved 15x11 -> 17x13 when it landed, because
+`arena-validation.test.ts` asserts the fixture differs from every shipped arena
+and a fixture whose whole job is to be an unshipped size gives way to production
+data. Three distinct board sizes are now covered. Anything asserting a board is
+11x9, or counting cells or spawns across all arenas, is a population pin that
+must move with a new level — `cell-mapping.test.ts` (683 cells, 25 spawns) and
+`EXPECTED_CLAIMS` in `arena-validation.test.ts` are the two that did.
 
 ## Testing conventions, learned the hard way
 
