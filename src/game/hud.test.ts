@@ -559,3 +559,107 @@ describe('hud: level select on the main menu', () => {
     expect(buttons(root)[1].disabled).toBe(false);
   });
 });
+
+describe('hud: the stats page', () => {
+  const statsView = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-stats') as HTMLElement;
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-stats-open') as HTMLButtonElement;
+  const cell = (root: HTMLElement, row: string, col: 0 | 1): string => {
+    const tr = Array.from(root.querySelectorAll('.hud-stats-table tr')).find(
+      (r) => r.querySelector('th')?.textContent === row,
+    );
+    return tr?.querySelectorAll('td')[col]?.textContent ?? '(no row)';
+  };
+  const SOME = {
+    shotsFired: 10, shellKills: 4, mineKills: 1, deaths: 2, selfKills: 1,
+    friendlyFireKills: 3, minesLaid: 2, wallsDestroyed: 5, ricochets: 7,
+  };
+  const NONE = {
+    shotsFired: 0, shellKills: 0, mineKills: 0, deaths: 0, selfKills: 0,
+    friendlyFireKills: 0, minesLaid: 0, wallsDestroyed: 0, ricochets: 0,
+  };
+
+  it('opens from the title, shows both columns, and Back returns to the menu', () => {
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: SOME, run: NONE });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(false);
+    expect(cell(root, 'Shell kills', 0)).toBe('4'); // lifetime column
+    expect(cell(root, 'Shell kills', 1)).toBe('0'); // run column
+    (root.querySelector('.hud-stats-back') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
+    expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(true);
+  });
+
+  it('derives both accuracies, and shows -- when the denominator is zero', () => {
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: SOME, run: NONE });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(cell(root, 'Accuracy', 0)).toBe('40%'); // 4 shell kills / 10 shots
+    expect(cell(root, 'Mine accuracy', 0)).toBe('50%'); // 1 mine kill / 2 laid
+    expect(cell(root, 'Accuracy', 1)).toBe('--'); // 0 shots this run
+  });
+
+  it('the Stats button lives on the title panel only', () => {
+    const { hud: h, root } = mount();
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(openBtn(root).classList.contains('hud-stats-open--hidden'), s).toBe(true);
+    }
+    h.setState('title');
+    expect(openBtn(root).classList.contains('hud-stats-open--hidden')).toBe(false);
+  });
+
+  it('both resets are two-click: the first arms, the second fires', () => {
+    const { hud: h, root } = mount();
+    let statResets = 0;
+    let progResets = 0;
+    h.onResetStats(() => statResets++);
+    h.onResetProgress(() => progResets++);
+    h.setStats({ lifetime: SOME, run: NONE });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+
+    const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
+    reset.dispatchEvent(new MouseEvent('click'));
+    expect(statResets).toBe(0); // armed, not fired
+    expect(reset.textContent).toBe('Really reset?');
+    reset.dispatchEvent(new MouseEvent('click'));
+    expect(statResets).toBe(1);
+    expect(reset.textContent).toBe('Reset stats'); // disarmed after firing
+
+    const prog = root.querySelector('.hud-reset-progress') as HTMLButtonElement;
+    prog.dispatchEvent(new MouseEvent('click'));
+    prog.dispatchEvent(new MouseEvent('click'));
+    expect(progResets).toBe(1);
+  });
+
+  it('arming one reset does not arm the other, and leaving the page disarms', () => {
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: SOME, run: NONE });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
+    const prog = root.querySelector('.hud-reset-progress') as HTMLButtonElement;
+    reset.dispatchEvent(new MouseEvent('click'));
+    expect(prog.textContent).toBe('Reset progress'); // untouched
+    (root.querySelector('.hud-stats-back') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(reset.textContent).toBe('Reset stats'); // disarmed by leaving
+  });
+
+  it('win panel carries the run summary line', () => {
+    const { hud: h, root } = mount();
+    h.setStats({ lifetime: SOME, run: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
+    h.setState('win');
+    const line = (root.querySelector('.hud-run-summary') as HTMLElement).textContent ?? '';
+    expect(line).toContain('3 kills');
+    expect(line).toContain('50%');
+    // And updates if the final batch lands after the panel opened -- the winning
+    // kill is recorded a beat after the state flips.
+    h.setStats({ lifetime: SOME, run: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
+    expect((root.querySelector('.hud-run-summary') as HTMLElement).textContent).toContain('4 kills');
+  });
+});

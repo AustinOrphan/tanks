@@ -1,4 +1,5 @@
 import type { GameState } from './state';
+import type { StatCounts } from './stats';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import './hud.css';
@@ -58,6 +59,16 @@ export interface Hud {
   onStartRestart(cb: () => void): void;
   /** Fired by the pause panel's Quit to Title button, and by nothing else. */
   onQuitToTitle(cb: () => void): void;
+  /**
+   * Both tallies, pushed by the loop whenever they change. The HUD re-renders the
+   * stats table only while it is visible, and keeps the win/lose run-summary line
+   * live -- the winning kill is recorded a beat AFTER the state flips.
+   */
+  setStats(data: { lifetime: StatCounts; run: StatCounts }): void;
+  /** Two-click-confirmed on the stats page. */
+  onResetStats(cb: () => void): void;
+  /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
+  onResetProgress(cb: () => void): void;
   dispose(): void;
 }
 
@@ -86,11 +97,22 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <div class="hud-stats hud-stats--hidden">
+      <h1>Stats</h1>
+      <table class="hud-stats-table"></table>
+      <div class="hud-stats-actions">
+        <button class="hud-reset-stats hud-danger" type="button">Reset stats</button>
+        <button class="hud-reset-progress hud-danger" type="button">Reset progress</button>
+        <button class="hud-stats-back" type="button">Back</button>
+      </div>
+    </div>
     <div class="hud-panel hud-panel--hidden">
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
       <div class="hud-levels hud-levels--hidden"></div>
+      <p class="hud-run-summary hud-run-summary--hidden"></p>
       <button class="hud-action" type="button"></button>
+      <button class="hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
@@ -121,6 +143,13 @@ export function createHud(root: HTMLElement): Hud {
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
   const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
+  const statsOpenBtn = el.querySelector('.hud-stats-open') as HTMLButtonElement;
+  const statsView = el.querySelector('.hud-stats') as HTMLElement;
+  const statsTable = el.querySelector('.hud-stats-table') as HTMLElement;
+  const resetStatsBtn = el.querySelector('.hud-reset-stats') as HTMLButtonElement;
+  const resetProgressBtn = el.querySelector('.hud-reset-progress') as HTMLButtonElement;
+  const statsBackBtn = el.querySelector('.hud-stats-back') as HTMLButtonElement;
+  const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
@@ -130,6 +159,83 @@ export function createHud(root: HTMLElement): Hud {
   const volumeCbs: Array<(v: number) => void> = [];
   const startRestartCbs: Array<() => void> = [];
   const quitCbs: Array<() => void> = [];
+  const resetStatsCbs: Array<() => void> = [];
+  const resetProgressCbs: Array<() => void> = [];
+
+  let statsData: { lifetime: StatCounts; run: StatCounts } | null = null;
+
+  const pct = (num: number, den: number): string =>
+    den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
+
+  /** The page's rows: label + a getter, so both columns derive from one list. */
+  const STAT_ROWS: Array<[string, (c: StatCounts) => string]> = [
+    ['Shell kills', (c) => String(c.shellKills)],
+    ['Mine kills', (c) => String(c.mineKills)],
+    ['Deaths', (c) => String(c.deaths)],
+    ['Self kills', (c) => String(c.selfKills)],
+    ['AI friendly fire', (c) => String(c.friendlyFireKills)],
+    ['Shots fired', (c) => String(c.shotsFired)],
+    ['Accuracy', (c) => pct(c.shellKills, c.shotsFired)],
+    ['Mines laid', (c) => String(c.minesLaid)],
+    ['Mine accuracy', (c) => pct(c.mineKills, c.minesLaid)],
+    ['Walls destroyed', (c) => String(c.wallsDestroyed)],
+    ['Ricochets', (c) => String(c.ricochets)],
+  ];
+
+  function renderStatsTable(): void {
+    if (!statsData) return;
+    const { lifetime, run } = statsData;
+    const rows = STAT_ROWS.map(
+      ([label, get]) => `<tr><th>${label}</th><td>${get(lifetime)}</td><td>${get(run)}</td></tr>`,
+    ).join('');
+    statsTable.innerHTML = `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;
+  }
+
+  function renderRunSummary(): void {
+    if (!statsData) {
+      runSummaryEl.classList.add('hud-run-summary--hidden');
+      return;
+    }
+    const r = statsData.run;
+    const kills = r.shellKills + r.mineKills;
+    runSummaryEl.textContent =
+      `This run: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
+    runSummaryEl.classList.remove('hud-run-summary--hidden');
+  }
+
+  /**
+   * Two-click confirm: the first click arms, the second within the window fires.
+   * One armed button at a time -- arming Reset stats must not leave Reset progress
+   * one accidental click from firing.
+   */
+  let armedReset: { btn: HTMLButtonElement; timer: ReturnType<typeof setTimeout> } | null = null;
+
+  function disarmReset(): void {
+    if (!armedReset) return;
+    clearTimeout(armedReset.timer);
+    armedReset.btn.textContent = armedReset.btn === resetStatsBtn ? 'Reset stats' : 'Reset progress';
+    armedReset.btn.classList.remove('hud-danger--armed');
+    armedReset = null;
+  }
+
+  function handleDangerClick(btn: HTMLButtonElement, cbs: Array<() => void>): void {
+    if (armedReset?.btn === btn) {
+      disarmReset();
+      for (const cb of cbs) cb();
+      return;
+    }
+    disarmReset();
+    btn.textContent = 'Really reset?';
+    btn.classList.add('hud-danger--armed');
+    armedReset = { btn, timer: setTimeout(disarmReset, 4000) };
+  }
+
+  function showStats(show: boolean): void {
+    disarmReset(); // entering OR leaving, no reset stays one click from firing
+    statsView.classList.toggle('hud-stats--hidden', !show);
+    panel.classList.toggle('hud-panel--hidden', show);
+    if (show) renderStatsTable();
+  }
 
   const handleMute = (): void => {
     for (const cb of muteCbs) cb();
@@ -174,6 +280,19 @@ export function createHud(root: HTMLElement): Hud {
   actionBtn.addEventListener('click', blurIfPointer);
   quitBtn.addEventListener('click', handleQuit);
   quitBtn.addEventListener('click', blurIfPointer);
+  const handleStatsOpen = (): void => showStats(true);
+  const handleStatsBack = (): void => {
+    showStats(false);
+    setState('title'); // re-render the title panel it covered
+  };
+  const handleResetStats = (): void => handleDangerClick(resetStatsBtn, resetStatsCbs);
+  const handleResetProgress = (): void => handleDangerClick(resetProgressBtn, resetProgressCbs);
+  statsOpenBtn.addEventListener('click', handleStatsOpen);
+  statsOpenBtn.addEventListener('click', blurIfPointer);
+  statsBackBtn.addEventListener('click', handleStatsBack);
+  statsBackBtn.addEventListener('click', blurIfPointer);
+  resetStatsBtn.addEventListener('click', handleResetStats);
+  resetProgressBtn.addEventListener('click', handleResetProgress);
   panelMuteBtn.addEventListener('click', handleMute);
   panelMuteBtn.addEventListener('click', blurIfPointer);
   panelVolumeEl.addEventListener('input', handlePanelVolume);
@@ -202,9 +321,17 @@ export function createHud(root: HTMLElement): Hud {
     // title (the main menu) and pause; win/lose stay verdict-only. Level select is a
     // menu affair -- and only when there is a choice to make (see setLevelSelect).
     shownState = s;
+    // Any state change closes the stats page: it is a title-screen affair, and a
+    // win/lose/pause panel must never render underneath it.
+    statsView.classList.add('hud-stats--hidden');
+    disarmReset();
+    statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
     levelsRow.classList.toggle('hud-levels--hidden', s !== 'title' || !levelChoice);
+    // The run summary belongs to the END screens alone.
+    runSummaryEl.classList.toggle('hud-run-summary--hidden', s !== 'win' && s !== 'lose');
+    if (s === 'win' || s === 'lose') renderRunSummary();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
@@ -352,7 +479,25 @@ export function createHud(root: HTMLElement): Hud {
     onQuitToTitle(cb: () => void): void {
       quitCbs.push(cb);
     },
+    setStats(data: { lifetime: StatCounts; run: StatCounts }): void {
+      statsData = data;
+      if (!statsView.classList.contains('hud-stats--hidden')) renderStatsTable();
+      if (!runSummaryEl.classList.contains('hud-run-summary--hidden')) renderRunSummary();
+    },
+    onResetStats(cb: () => void): void {
+      resetStatsCbs.push(cb);
+    },
+    onResetProgress(cb: () => void): void {
+      resetProgressCbs.push(cb);
+    },
     dispose(): void {
+      disarmReset(); // a pending confirm timer must not outlive the HUD
+      statsOpenBtn.removeEventListener('click', handleStatsOpen);
+      statsOpenBtn.removeEventListener('click', blurIfPointer);
+      statsBackBtn.removeEventListener('click', handleStatsBack);
+      statsBackBtn.removeEventListener('click', blurIfPointer);
+      resetStatsBtn.removeEventListener('click', handleResetStats);
+      resetProgressBtn.removeEventListener('click', handleResetProgress);
       quitBtn.removeEventListener('click', handleQuit);
       quitBtn.removeEventListener('click', blurIfPointer);
       panelMuteBtn.removeEventListener('click', handleMute);

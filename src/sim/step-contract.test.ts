@@ -144,6 +144,7 @@ describe('step() hands its events back to the caller', () => {
     expect(r.events).toContainEqual({
       type: 'mine-dropped',
       mineId: mine!.id,
+      ownerId: PLAYER_ID, // attribution: the stats layer counts mines laid per owner
       pos: { x: 5, y: 5 },
     });
   });

@@ -184,6 +184,7 @@ describe('step() calls resolveBulletHits', () => {
       type: 'tank-destroyed',
       tankId: BROWN_ID,
       kind: 'brown',
+      by: { source: 'shell', ownerId: PLAYER_ID }, // putBullet's default owner
       pos: { x: 20, y: 20 },
     });
   });
@@ -198,7 +199,7 @@ describe('step() calls stepMines', () => {
 
     const r = step(w, idleInput);
 
-    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, pos: { x: 40, y: 40 } });
+    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: 40, y: 40 } });
     // Scoped to THIS mine's id rather than world.mines.length. Grey cannot actually reach
     // a drop in this fixture (it spawns 35 units from the player, well outside
     // AI_MINE_TACTICAL_RADIUS of 8.5), but a length assertion couples the test to that
@@ -220,7 +221,7 @@ describe('step() calls stepMines', () => {
 
     const armTick = step(w, idleInput);
 
-    expect(armTick.events).toContainEqual({ type: 'mine-armed', mineId: mine.id, pos: minePos });
+    expect(armTick.events).toContainEqual({ type: 'mine-armed', mineId: mine.id, ownerId: PLAYER_ID, pos: minePos });
     // Brown is static and stands inside MINE_PROXIMITY_RADIUS of the drop point, so the
     // mine triggers on the same tick it arms. The blast then has to GROW out to him: at
     // 1.4 away he survives the detonation tick and dies once the edge arrives.
@@ -376,7 +377,7 @@ describe('step() stage ORDER', () => {
 
     const r = step(w, { ...idleInput, move: { x: 1, y: 0 } });
 
-    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, pos: { x: mineX, y: 5 } });
+    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: mineX, y: 5 } });
     // ...and the ORDER is the whole subject: the detonation above is what fails if
     // stepMines is moved before stepMovement.
     //
@@ -398,6 +399,8 @@ describe('step() stage ORDER', () => {
       type: 'tank-destroyed',
       tankId: PLAYER_ID,
       kind: 'player',
+      // The player's OWN mine: the attribution the stats layer reads as a self kill.
+      by: { source: 'blast', ownerId: PLAYER_ID },
       pos: { x: 5 + TANK_SPEED * DT, y: 5 },
     });
     expect(w2.lives).toBe(2);

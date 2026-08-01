@@ -54,9 +54,9 @@ describe('createAudioDirector', () => {
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
     director.handle([
-      { type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 0 },
-      { type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 1 },
-      { type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 2 },
+      { type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 0 },
+      { type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 1 },
+      { type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 2 },
     ]);
     expect(calls.every((c) => c.key === 'ping')).toBe(true);
     const rates = calls.map((c) => c.opts?.rate ?? 0);
@@ -85,7 +85,7 @@ describe('createAudioDirector', () => {
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
     director.handle([
-      { type: 'tank-destroyed', tankId: 3, kind: 'brown', pos: { x: 0, y: 0 } },
+      { type: 'tank-destroyed', tankId: 3, kind: 'brown', by: { source: 'shell', ownerId: 9 }, pos: { x: 0, y: 0 } },
       { type: 'explosion', pos: { x: 0, y: 0 } },
     ]);
     expect(calls.map((c) => c.key)).toEqual(['explosion']);
@@ -95,8 +95,8 @@ describe('createAudioDirector', () => {
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
     director.handle([
-      { type: 'mine-dropped', mineId: 7, pos: { x: 0, y: 0 } },
-      { type: 'mine-armed', mineId: 7, pos: { x: 0, y: 0 } },
+      { type: 'mine-dropped', mineId: 7, ownerId: 1, pos: { x: 0, y: 0 } },
+      { type: 'mine-armed', mineId: 7, ownerId: 1, pos: { x: 0, y: 0 } },
     ]);
     expect(calls.map((c) => c.key)).toEqual(['mine-drop', 'mine-arm']);
   });
@@ -104,7 +104,7 @@ describe('createAudioDirector', () => {
   it('maps mine-detonate to mine-boom', () => {
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
-    director.handle([{ type: 'mine-detonate', mineId: 7, pos: { x: 0, y: 0 } }]);
+    director.handle([{ type: 'mine-detonate', mineId: 7, ownerId: 1, pos: { x: 0, y: 0 } }]);
     expect(calls.map((c) => c.key)).toEqual(['mine-boom']);
   });
 
@@ -118,7 +118,7 @@ describe('createAudioDirector', () => {
   it('plays nothing for wall-destroyed (blast is already covered by explosion/mine-boom)', () => {
     const { engine, calls } = makeSpyEngine();
     const director = createAudioDirector(engine);
-    director.handle([{ type: 'wall-destroyed', wallId: 12, pos: { x: 0, y: 0 } }]);
+    director.handle([{ type: 'wall-destroyed', wallId: 12, ownerId: 1, pos: { x: 0, y: 0 } }]);
     expect(calls).toHaveLength(0);
   });
 

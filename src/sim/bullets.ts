@@ -85,7 +85,7 @@ export function stepBullets(world: World, dt: number, events: SimEvent[]): void 
     const result = reflectSweep(b.pos, to, wallAABBs, b.bouncesLeft)
     for (let i = 0; i < result.hits.length; i++) {
       const p = result.hits[i].point
-      events.push({ type: 'ricochet', pos: { x: p.x, y: p.y }, bounceIndex: consumedBefore + i })
+      events.push({ type: 'ricochet', ownerId: b.ownerId, pos: { x: p.x, y: p.y }, bounceIndex: consumedBefore + i })
     }
     b.pos = result.end
     b.vel = vscale(result.dir, speed)
@@ -173,7 +173,9 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
       if (!circleVsCircle(b.pos, BULLET_RADIUS, m.pos, MINE_TRIGGER_RADIUS).hit) continue
       if (!shellMayDetonate(world, m)) continue
       b.alive = false
-      detonateMine(world, m, events)
+      // The SHOOTER gets credit for whatever this blast destroys: detonating a mine
+      // with a shell is a skill shot, whoever owns the mine.
+      detonateMine(world, m, events, { source: 'shell', ownerId: b.ownerId })
       break
     }
   }
@@ -197,7 +199,7 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
         b.alive = false
         if (!t.invincible) {
           t.alive = false
-          events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, pos: { x: t.pos.x, y: t.pos.y } })
+          events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { source: 'shell', ownerId: b.ownerId }, pos: { x: t.pos.x, y: t.pos.y } })
         }
         events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
         break

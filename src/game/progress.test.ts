@@ -65,3 +65,13 @@ describe('two stores over one storage (the second-tab case)', () => {
     expect(createProgressStore(localStorage).highestCleared()).toBe(2);
   });
 });
+
+describe('reset', () => {
+  it('re-locks everything, persisted: a reload after reset starts fresh', () => {
+    const p = createProgressStore(localStorage);
+    p.recordCleared(2);
+    p.reset();
+    expect(p.highestCleared()).toBe(0);
+    expect(createProgressStore(localStorage).highestCleared()).toBe(0);
+  });
+});
