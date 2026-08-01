@@ -17,6 +17,7 @@ import { createAimRay } from '../../src/render/aimray';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
 import { framedBounds } from '../../src/render/framing';
+import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -76,6 +77,38 @@ check('the ground is centred on the arena, not on the origin', () => {
   ctx.dispose();
   if (Math.abs(x - W / 2) > 1e-9 || Math.abs(z - H / 2) > 1e-9) {
     return `ground centre (${x}, ${z}), arena centre (${W / 2}, ${H / 2})`;
+  }
+  return null;
+});
+
+check('the ground sizes to a NON-shipped board (15x11) at construction', () => {
+  // vitest cannot construct a WebGLRenderer, so per-level sizing can only be
+  // proven in a real browser. Without this, "variable dimensions work" rests on
+  // geometry tests that never build a scene.
+  //
+  // fresh() is not reused here: it hardcodes the shipped CURRENT_ARENA's W/H/BOUNDARY
+  // into createScene, and createScene takes plain dimension numbers rather than a
+  // World -- World itself carries no width/height field. Widening fresh() to accept
+  // a World would give it nothing it could use, so this builds its own scene straight
+  // from WIDE_ARENA's bounds instead.
+  const { width: w, height: h } = arenaBounds(WIDE_ARENA);
+  const boundary = WIDE_ARENA.cellSize;
+  const want = framedBounds(w, h, boundary);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280;
+  canvas.height = 800;
+  document.body.appendChild(canvas);
+  const ctx = createScene(canvas, w, h, boundary);
+  const g = groundOf(ctx);
+  if (!g) { ctx.dispose(); return 'no PlaneGeometry mesh in the scene'; }
+  const p = g.geometry.parameters;
+  const centre = { x: g.position.x, z: g.position.z };
+  ctx.dispose();
+  if (p.width !== want.width || p.height !== want.height) {
+    return `ground is ${p.width}x${p.height}, framed area for 15x11 is ${want.width}x${want.height}`;
+  }
+  if (Math.abs(centre.x - w / 2) > 1e-9 || Math.abs(centre.z - h / 2) > 1e-9) {
+    return `ground centre (${centre.x}, ${centre.z}), arena centre (${w / 2}, ${h / 2})`;
   }
   return null;
 });
