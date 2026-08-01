@@ -1,8 +1,7 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, shotHitsOwnSide } from './targeting';
+import { lineOfSight, aimLead, aimJitter, profileAimSpread, shotHitsOwnSide } from './targeting';
 import { driveVelocity } from '../collision';
-import { AI_AIM_SPREAD } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -25,7 +24,7 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
   // angle: jittering a held angle would make it visibly drift every tick with nothing to
   // aim at, which is a bug, not difficulty.
   const turretAngle = los
-    ? aimLead(tank.pos, player.pos, targetVel, speed) + aimJitter(world, tank, AI_AIM_SPREAD)
+    ? aimLead(tank.pos, player.pos, targetVel, speed) + aimJitter(world, tank, profileAimSpread(cfg))
     : tank.turretAngle;
 
   // lineOfSight only tests WALLS. resolveBulletHits kills any non-owner tank the shell

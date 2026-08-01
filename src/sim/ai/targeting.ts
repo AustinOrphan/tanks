@@ -3,7 +3,7 @@ import { vsub, angleOf, vdot, vdist, vlen, vnorm, fromAngle, nextRng } from '../
 import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../collision';
 import { configFor, type ResolvedTankConfig } from '../config';
 import {
-  AIM_EPS, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
+  AIM_EPS, AI_AIM_SPREAD, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig,
 } from '../constants';
@@ -320,6 +320,19 @@ export function wanderMove(world: World, tank: Tank): Vec2 {
   const bucket = Math.floor(world.tick / WANDER_TICKS);
   const rng = nextRng(world.seed + tank.id * 1000 + bucket);
   return fromAngle(rng.value * Math.PI * 2);
+}
+
+/**
+ * Per-profile aim spread, derived from the global anchor: AI_AIM_SPREAD is the
+ * jitter of a PERFECT-accuracy profile (aimAccuracy 1.0), and lower accuracy
+ * widens it -- Austin's framing: the anchor is maximal accuracy, profiles
+ * derate from there. Curve chosen by sweep (see AI_AIM_SPREAD's comment in
+ * constants.ts). Every shipped profile has accuracy < 1, so every enemy
+ * jitters MORE than the old uniform spread -- a deliberate, measured
+ * difficulty change, not an accident.
+ */
+export function profileAimSpread(cfg: ResolvedTankConfig): number {
+  return AI_AIM_SPREAD / cfg.ai.aimAccuracy;
 }
 
 /**

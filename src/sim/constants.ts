@@ -237,6 +237,19 @@ export const SEEK_APPROACH_BIAS = 0.5;
 // error to every AI firing solution so enemies are threatening but survivable.
 // THIS IS THE PRIMARY DIFFICULTY KNOB for this slice -- the value most likely to need
 // retuning after playtest. Radians; ~4.6 degrees at the current value.
+// SINCE THE aimAccuracy PASS this is the ANCHOR, not the spread every enemy
+// fires at: it is the jitter of a hypothetical PERFECT-accuracy profile, and
+// each profile derives its real spread as AI_AIM_SPREAD / ai.aimAccuracy
+// (targeting.ts profileAimSpread) -- so grey (0.60) jitters at 0.133 rad,
+// brown (0.55) at 0.145. Every shipped profile sits below accuracy 1, so every
+// enemy is WILDER than the old uniform 0.08; measured over the 60-seed harness
+// (engagement.measure.test.ts) before shipping:
+//   uniform 0.08 (old):      gate 2/60, medianTicks 1558 (a1) / 1750 (a3)
+//   / accuracy (shipped):    gate 3/60 pass, medianTicks 1497 / 1730
+//   * (2 - accuracy) (alt):  gate 4/60 FAIL, medianTicks 1599 / 1736
+// The gentler-looking linear curve failing while the wider reciprocal passes is
+// free-win chaos (2-4 self-destruction events, trajectory-sensitive), which is
+// what the gate's slack is for. Lethality is preserved within seed noise.
 export const AI_AIM_SPREAD = data.ai.aimSpread;
 // How often (in ticks) the jitter offset is re-rolled. ~0.33s at 60Hz. A constant offset
 // per tank would just be a fixed miss the AI could never correct for; re-rolling this

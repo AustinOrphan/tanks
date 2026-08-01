@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { AI_AIM_SPREAD, TICK_HZ } from '../constants';
+import { TICK_HZ } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -60,7 +60,7 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
       // Jitter only the live firing solution (see brown.ts's comment for why the
       // held/passthrough angle below must stay untouched).
       turretAngle = aimLead(tank.pos, player.pos, targetVel, weapon.speed)
-        + aimJitter(world, tank, AI_AIM_SPREAD);
+        + aimJitter(world, tank, profileAimSpread(cfg));
       // lineOfSight only tests WALLS, but resolveBulletHits kills any non-owner tank the
       // shell touches. Keep tracking the player with the turret either way -- only the
       // trigger is held, so the shot goes off the moment the teammate clears the lane.

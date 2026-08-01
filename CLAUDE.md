@@ -68,8 +68,11 @@ the signs of `directShotWeight`/`bankShotWeight`/`minePlacementChance`, and the
 movement band — `preferredDistance`/`minimumDistance`/`retreatChance` (magnitude
 included) drive `seekMove`, the mobile decisions' baseline move (approach beyond
 preferred, seeded retreat draw inside minimum, wander in the band; tuned by
-sweep, see `SEEK_APPROACH_BIAS`). Still carried-but-unread: `aimAccuracy`,
-`reactionTime`, and the `minePlacementChance` magnitude — and the
+sweep, see `SEEK_APPROACH_BIAS`) — and `aimAccuracy`: per-profile jitter is
+`AI_AIM_SPREAD / aimAccuracy` (`profileAimSpread`), the anchor being a
+perfect-accuracy profile's spread; curve chosen by sweep, see the anchor's
+comment in constants.ts. Still carried-but-unread: `reactionTime` and the
+`minePlacementChance` magnitude — and the
 STATIONARY behaviour implementation reads neither shot weight, so a profile
 like RICOCHET_SNIPER's bank preference is authored intent awaiting an
 implementation. The 9-type Wii taxonomy in `config/reference/` is reference
