@@ -21,3 +21,4 @@ export { GAME_BALANCE } from './balance';
 export { GAME_TANK_DEFS, configFor, hasAbility } from './roster';
 export { createCatalog, type EntityCatalog } from './catalog';
 export { GAME_WALL_DEFS, wallConfigFor, type WallDefinition } from './walls';
+export { TANK_KINDS, validateTankDefinitions, validateAiProfiles } from './validate';

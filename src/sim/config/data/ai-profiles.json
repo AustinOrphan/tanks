@@ -1,0 +1,94 @@
+{
+  "STATIC_BASIC": {
+    "behavior": "STATIONARY",
+    "aimAccuracy": 0.55,
+    "reactionTime": 0.8,
+    "aggression": 0.35,
+    "preferredDistance": 10,
+    "minimumDistance": 0,
+    "retreatChance": 0,
+    "directShotWeight": 1,
+    "bankShotWeight": 0
+  },
+  "DEFENSIVE_BASIC": {
+    "behavior": "DEFENSIVE",
+    "aimAccuracy": 0.6,
+    "reactionTime": 0.7,
+    "aggression": 0.25,
+    "preferredDistance": 9,
+    "minimumDistance": 6,
+    "retreatChance": 0.75,
+    "directShotWeight": 0.9,
+    "bankShotWeight": 0.1,
+    "minePlacementChance": 0.3
+  },
+  "DEFENSIVE_ROCKET": {
+    "behavior": "DEFENSIVE",
+    "aimAccuracy": 0.65,
+    "reactionTime": 0.65,
+    "aggression": 0.3,
+    "preferredDistance": 10,
+    "minimumDistance": 7,
+    "retreatChance": 0.8,
+    "directShotWeight": 1,
+    "bankShotWeight": 0
+  },
+  "MOBILE_MINE_LAYER": {
+    "behavior": "TACTICAL",
+    "aimAccuracy": 0.65,
+    "reactionTime": 0.6,
+    "aggression": 0.5,
+    "preferredDistance": 7.5,
+    "minimumDistance": 4,
+    "retreatChance": 0.4,
+    "directShotWeight": 0.85,
+    "bankShotWeight": 0.15,
+    "minePlacementChance": 0.3
+  },
+  "OFFENSIVE_ASSAULT": {
+    "behavior": "OFFENSIVE",
+    "aimAccuracy": 0.7,
+    "reactionTime": 0.5,
+    "aggression": 0.8,
+    "preferredDistance": 5.5,
+    "minimumDistance": 2.5,
+    "retreatChance": 0.15,
+    "directShotWeight": 0.8,
+    "bankShotWeight": 0.2
+  },
+  "RICOCHET_SNIPER": {
+    "behavior": "STATIONARY",
+    "aimAccuracy": 0.95,
+    "reactionTime": 0.35,
+    "aggression": 0.75,
+    "preferredDistance": 12,
+    "minimumDistance": 0,
+    "retreatChance": 0,
+    "directShotWeight": 0.45,
+    "bankShotWeight": 0.55
+  },
+  "OFFENSIVE_ELITE": {
+    "behavior": "OFFENSIVE",
+    "aimAccuracy": 0.78,
+    "reactionTime": 0.35,
+    "aggression": 0.9,
+    "preferredDistance": 5,
+    "minimumDistance": 2,
+    "retreatChance": 0.1,
+    "directShotWeight": 0.7,
+    "bankShotWeight": 0.3,
+    "minePlacementChance": 0.35
+  },
+  "BERSERKER_ROCKET": {
+    "behavior": "BERSERKER",
+    "aimAccuracy": 0.82,
+    "reactionTime": 0.25,
+    "aggression": 1,
+    "preferredDistance": 2.5,
+    "minimumDistance": 0.5,
+    "retreatChance": 0,
+    "directShotWeight": 1,
+    "bankShotWeight": 0,
+    "minePlacementChance": 0.4
+  }
+}

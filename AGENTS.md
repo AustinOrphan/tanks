@@ -45,17 +45,22 @@ screen) and `game/loop.ts`. If you change an event's shape, check all five.
 what it is given.
 
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
-`TankDefinition` (roster.ts) + `BalanceConstants` (balance.ts) →
-`resolveTankConfig` → `ResolvedTankConfig`, read via `configFor(kind)`; gameplay
-code never branches on a kind literal **to pick stats or behaviour** (identity
-checks like `kind === 'player'` and the render's per-kind texture choice
-remain). Walls are the second family on the same catalog machinery (`walls.ts`,
-`wallConfigFor`); new families (power-ups, turrets, bosses) should ride
-`createCatalog` rather than invent parallel plumbing. The **authoritative
-balance scalars live in `config/data/balance.json`**; `constants.ts` derives
-from it and stays the sim's one import site, so retuning is a two-file edit —
-the JSON entry and its literal pin in `constants.test.ts` (every balance.json
-value is pinned; `SHELL_SPAWN_FORWARD` stays a TS literal, render-coupled).
+`TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
+AI profiles come from `data/ai-profiles.json`) → `resolveTankConfig` →
+`ResolvedTankConfig`, read via `configFor(kind)`; gameplay code never branches
+on a kind literal **to pick stats or behaviour** (identity checks like
+`kind === 'player'` and the render's per-kind texture choice remain). The JSON
+is validated at module load by `validate.ts` — a bad edit is a boot failure
+naming the exact path, and the validator's own tests carry negative controls.
+Adding a `TankKind` member is a compile error until `TANK_KINDS` (validate.ts)
+lists it, which is what forces the JSON entry. Walls are the second family on
+the same catalog machinery (`walls.ts`, `wallConfigFor`); new families
+(power-ups, turrets, bosses) should ride `createCatalog` rather than invent
+parallel plumbing. The **authoritative balance scalars live in
+`config/data/balance.json`**; `constants.ts` derives from it and stays the
+sim's one import site, so retuning is a two-file edit — the JSON entry and its
+literal pin in `constants.test.ts` (every balance.json value is pinned;
+`SHELL_SPAWN_FORWARD` stays a TS literal, render-coupled).
 `decideAi` routes by the resolved profile's `behavior`; grey's dodge patience is
 `(1 − aggression) · TICK_HZ`, rounded, pinned equal to `DODGE_PATIENCE_TICKS` in
 `config/roster.test.ts`. Profile fields consumed today: `behavior`, `aggression`,
