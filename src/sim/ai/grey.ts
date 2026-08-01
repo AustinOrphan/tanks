@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, wanderMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { AI_AIM_SPREAD, TICK_HZ } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
@@ -17,7 +17,10 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // dangerAvoidMove now vets its own direction against walls and armed mines (see
   // targeting.ts), so this can be trusted directly: a dodge into a wall used to net zero
   // displacement and pin Grey inside the danger corridor while it held fire.
-  const move = avoid ?? wanderMove(world, tank);
+  // The baseline move is the distance-band seek (targeting.ts seekMove): approach
+  // beyond ai.preferredDistance, retreat-by-draw inside ai.minimumDistance, wander
+  // in the band. Dodging still overrides it entirely.
+  const move = avoid ?? seekMove(world, tank, cfg);
 
   // Cautious (swapped from Teal): Grey holds fire while dodging, but only for a bounded
   // run of consecutive ticks (tracked via aiTimer/nextTimer). The patience span is

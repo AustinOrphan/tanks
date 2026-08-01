@@ -64,9 +64,12 @@ literal pin in `constants.test.ts` (every balance.json value is pinned;
 `decideAi` routes by the resolved profile's `behavior`; grey's dodge patience is
 `(1 − aggression) · TICK_HZ`, rounded, pinned equal to `DODGE_PATIENCE_TICKS` in
 `config/roster.test.ts`. Profile fields consumed today: `behavior`, `aggression`,
-the signs of `directShotWeight`/`bankShotWeight`/`minePlacementChance`; still
-carried-but-unread: `aimAccuracy`, `reactionTime`, `preferredDistance`,
-`minimumDistance`, `retreatChance`, and every chance magnitude — and the
+the signs of `directShotWeight`/`bankShotWeight`/`minePlacementChance`, and the
+movement band — `preferredDistance`/`minimumDistance`/`retreatChance` (magnitude
+included) drive `seekMove`, the mobile decisions' baseline move (approach beyond
+preferred, seeded retreat draw inside minimum, wander in the band; tuned by
+sweep, see `SEEK_APPROACH_BIAS`). Still carried-but-unread: `aimAccuracy`,
+`reactionTime`, and the `minePlacementChance` magnitude — and the
 STATIONARY behaviour implementation reads neither shot weight, so a profile
 like RICOCHET_SNIPER's bank preference is authored intent awaiting an
 implementation. The 9-type Wii taxonomy in `config/reference/` is reference
