@@ -286,6 +286,19 @@ describe('validateArenas', () => {
     expect(validateArenas(withLane)[0].claims).toEqual([laneClaim]);
   });
 
+  it('rejects a lane claim whose "from" and "to" are the same cell -- it could never fail', () => {
+    // Before this guard, {from:[0,0],to:[0,0]} validated and shipped: a cell is
+    // always in line of sight of itself, so the claim reads "open" in both wall
+    // phases forever regardless of the arena's geometry. CLAUDE.md: every
+    // assertion must be able to fail.
+    const vacuous = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'lane', from: [0, 0], to: [0, 0], intact: 'blocked', breached: 'open', why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(vacuous)).toThrow(/arenas\[0\]\.claims\[0\].*identical "from" and "to"/);
+  });
+
   it('rejects a non-boolean "sees" on a sightline claim', () => {
     const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
       ((c.arenas as Mutable[])[0] as Mutable).claims = [
@@ -366,6 +379,28 @@ describe('validateArenas', () => {
       ];
     });
     expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.from.*\[col, row\] pair/);
+  });
+
+  it('rejects a claim cell coordinate that is negative or fractional (cell()\'s own nonNegInt check)', () => {
+    // A negative control cell() lacked entirely: swapping its nonNegInt calls for
+    // the plain num() check left the full suite green (verified by hand -- a
+    // check nothing exercises is a check that cannot fail, which CLAUDE.md
+    // forbids). GOOD_ARENA's B spawn is at [1, 0]; picking THAT cell's row/col
+    // off by a negative or fractional amount proves nonNegInt's two branches
+    // (non-integer, and negative) without also tripping the in-bounds check
+    // cell() runs afterward, which a wildly out-of-range value would confound.
+    const negative = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [-1, 0], sees: true, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(negative)).toThrow(/arenas\[0\]\.claims\[0\]\.from\[0\].*non-negative integer/);
+    const fractional = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'sightlineAfterBreach', from: [0.5, 0], sees: true, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(fractional)).toThrow(/arenas\[0\]\.claims\[0\]\.from\[0\].*non-negative integer/);
   });
 
   it('rejects an arena entry that is not an object', () => {

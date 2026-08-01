@@ -297,11 +297,20 @@ function validateClaim(file: string, path: string, v: unknown, shape: ArenaShape
     case 'sightlineAfterBreach':
       return { type, from: enemySpawnCell(file, `${path}.from`, v.from, shape),
         sees: bool(file, `${path}.sees`, v.sees), why };
-    case 'lane':
-      return { type, from: cell(file, `${path}.from`, v.from, shape),
-        to: cell(file, `${path}.to`, v.to, shape),
+    case 'lane': {
+      const from = cell(file, `${path}.from`, v.from, shape);
+      const to = cell(file, `${path}.to`, v.to, shape);
+      // A vacuous lane (from === to) reads "open" in both phases forever: the same
+      // cell is always in line of sight of itself, whatever the walls do. Reject it
+      // at load rather than ship a claim that can never fail (CLAUDE.md: every
+      // assertion must be able to fail).
+      if (from[0] === to[0] && from[1] === to[1]) {
+        fail(file, path, `has identical "from" and "to" [${from}] -- a lane like that is always "open" and can never fail`);
+      }
+      return { type, from, to,
         intact: oneOf(file, `${path}.intact`, v.intact, BLOCK_STATES, 'block state'),
         breached: oneOf(file, `${path}.breached`, v.breached, BLOCK_STATES, 'block state'), why };
+    }
     case 'spawnBlockRobust': {
       const nudge = num(file, `${path}.nudge`, v.nudge);
       if (nudge <= 0) fail(file, `${path}.nudge`, 'must be greater than zero');
