@@ -23,7 +23,7 @@
       ],
       "claims": [
         { "type": "spawnBlockRobust", "nudge": 0.1,
-          "why": "The row-5 cell exists for exactly this: with the row-4 block alone, Brown's and Grey's lines to the player spawn were tangent to its corners, and a 0.1-unit nudge opened a clear lane. Measured to hold with both cells in place." }
+          "why": "The row-5 cell exists for exactly this: with the row-4 block alone, Brown's and Grey's lines to the player spawn were tangent to its corners, and a 0.1-unit nudge opened a clear lane. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the row-5 cell in place." }
       ]
     },
     {
@@ -89,7 +89,7 @@
         { "type": "sightlineAfterBreach", "from": [5, 2], "sees": false, "why": "Trio grey: same pillar." },
         { "type": "sightlineAfterBreach", "from": [6, 2], "sees": false, "why": "Trio brown, mirrored." },
         { "type": "spawnBlockRobust", "nudge": 0.1,
-          "why": "Guards the INTACT-geometry block: at spawn, no enemy's line to the player is a corner-tangency that a 0.1-unit nudge would open. NOTE: spawnBlockRobust evaluates intact walls only. It does NOT re-verify the specific defect the row-5 chord-maker was built to fix (both browns' POST-breach lines being tangent-only) -- that property has no claim type today; see task-4-report.md for the measured gap." }
+          "why": "The row-5 chord-maker exists for this: with row 4 alone, both browns' post-breach blocks were a single-point corner tangency that a 0.1-unit player nudge opened into a full lane. Found by slab math in review. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the chord-maker in place." }
       ]
     }
   ]

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { claimFailures, renderBoard, structuralFailures } from './arena-claims';
 import { arenaById } from './config/arenas';
+import type { Arena } from './arena';
+import { ARENA_01 } from './arena';
 import type { ArenaClaim } from './config/arena-types';
 
 // A guard is worth what its own tests prove: the purity guard passed four of five
@@ -81,6 +83,69 @@ describe('claimFailures reports a false claim of each type', () => {
 
   it('an arena with no claims reports nothing', () => {
     expect(claimFailures(A03, [])).toEqual([]);
+  });
+});
+
+// spawnBlockRobust's original (Task 3) implementation checked the INTACT wall set
+// only. ARENA_03's own history is the reason that was wrong: its shipped defect
+// (both browns' post-BREACH lines going tangent-only, fixed by the row-5
+// chord-maker) is invisible to an intact-only check, and a claims migration built
+// on that check silently lost the coverage the deleted bespoke test had. Fixed by
+// checking BOTH wall phases and tagging each failure with which one it came from.
+// These two fixtures are built to discriminate the phases from each other -- each
+// dies if its own phase is removed from the runner, and survives if the other is.
+// Neither mutates the shipped arenas.json; both are inline Arena literals so this
+// meta-test can see geometry the shipped grids don't (and shouldn't) contain.
+describe('spawnBlockRobust checks both wall phases, independently provable', () => {
+  it('breached-only defect: fails via (breached), passes via (intact) -- ARENA_03 minus its row-5 chord-maker', () => {
+    // Row 5's only occupied cell (col 5) is SOLID, not destructible -- removing it
+    // from the fixture (not breaching it; it can't be breached) reproduces the
+    // pre-chord-maker geometry ARENA_03's notes describe: the row-4 pillar alone.
+    // Intact, the row-6 peek ('x', destructible) still blocks outright, so the
+    // nudge is robustly blocked. Breached, the peek is gone and only the pillar's
+    // corner remains -- an exact tangency a 0.1-unit nudge opens.
+    const fixture: Arena = {
+      ...A03,
+      grid: A03.grid.map((row, r) => (r === 5 ? '.'.repeat(row.length) : row)),
+    };
+    const failures = claimFailures(fixture, [
+      { type: 'spawnBlockRobust', nudge: 0.1, why: 'discriminates the breached phase' },
+    ]);
+    // Population: 2 olives + 3 trio = 5 enemies x 4 cardinal offsets = 20 checks.
+    // Measured: exactly 4 fail (brown at (9,5) and (13,5), 2 offsets each), all
+    // tagged (breached). If the runner's breached-phase check were removed, this
+    // becomes 0 and the length assertion dies; a runner that checked intact only
+    // (Task 3's original) would report this arena as ROBUST, which is the bug.
+    expect(failures).toHaveLength(4);
+    expect(failures.every((f) => f.includes('spawnBlockRobust (breached)'))).toBe(true);
+    expect(failures.some((f) => f.includes('spawnBlockRobust (intact)'))).toBe(false);
+  });
+
+  it('intact defect unaffected by breach: fails via BOTH tags -- ARENA_01 minus its row-5 chord-maker', () => {
+    // ARENA_01's row-5 chord-maker (col 5) is also solid, and nothing destructible
+    // sits anywhere near it (ARENA_01's only destructibles are the far flank
+    // shields at col 2 / col 8), so breaching changes nothing at this cell: intact
+    // and breached geometry are IDENTICAL here. A defect at this spot must appear
+    // under BOTH phases, tagged separately -- proving the intact loop runs at all
+    // (a breached-only runner would still catch this given the codebase's
+    // breach()-only-removes-walls semantics, but it could never produce an
+    // (intact)-tagged message, which is what this asserts).
+    const fixture: Arena = {
+      ...ARENA_01,
+      grid: ARENA_01.grid.map((row, r) =>
+        r === 5 ? row.slice(0, 5) + '.' + row.slice(6) : row),
+    };
+    const failures = claimFailures(fixture, [
+      { type: 'spawnBlockRobust', nudge: 0.1, why: 'discriminates the intact phase' },
+    ]);
+    // Population: 3 enemies (brown, grey, teal) x 4 offsets = 12 checks. Measured:
+    // 8 fail (brown at (9,5), grey at (13,5), 2 offsets each), EACH duplicated as
+    // an (intact) and a (breached) failure since the geometry doesn't move. If the
+    // runner's intact-phase check were removed, the 4 (intact)-tagged messages
+    // vanish, length drops to 4, and this assertion dies.
+    expect(failures).toHaveLength(8);
+    expect(failures.some((f) => f.includes('spawnBlockRobust (intact)'))).toBe(true);
+    expect(failures.some((f) => f.includes('spawnBlockRobust (breached)'))).toBe(true);
   });
 });
 

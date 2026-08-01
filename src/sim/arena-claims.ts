@@ -146,15 +146,27 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
           { x: claim.nudge, y: 0 }, { x: -claim.nudge, y: 0 },
           { x: 0, y: claim.nudge }, { x: 0, y: -claim.nudge },
         ];
+        // Both wall phases, not just intact: the defect this claim exists to catch
+        // (arena-03's original corner-tangency) was a POST-breach tangency -- with
+        // the centre peek destroyed, both browns' lines were blocked only by a
+        // single-point tangency that a 0.1-unit nudge opened. Checking intact alone
+        // is silently blind to that; checking both is strictly stronger than the
+        // bespoke test this claim type replaced, which only checked breached.
+        const phases = [
+          { name: 'intact', walls } as const,
+          { name: 'breached', walls: breached } as const,
+        ];
         for (const enemy of spawns.filter((s) => s.kind !== 'player')) {
           for (const off of offsets) {
             const target = { x: player.pos.x + off.x, y: player.pos.y + off.y };
-            if (lineOfSight(enemy.pos, target, walls)) {
-              failures.push(
-                `spawnBlockRobust: ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the player ` +
-                `nudged by (${off.x}, ${off.y}) -- the block is a tangency, not a chord\n` +
-                `  why: ${claim.why}\n${renderBoard(arena, [])}`,
-              );
+            for (const phase of phases) {
+              if (lineOfSight(enemy.pos, target, phase.walls)) {
+                failures.push(
+                  `spawnBlockRobust (${phase.name}): ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the ` +
+                  `player nudged by (${off.x}, ${off.y}) -- the block is a tangency, not a chord\n` +
+                  `  why: ${claim.why}\n${renderBoard(arena, [])}`,
+                );
+              }
             }
           }
         }
