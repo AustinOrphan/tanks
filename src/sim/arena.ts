@@ -1,6 +1,8 @@
 import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger } from './types';
 import { createWorld, type World } from './world';
 import { LIVES } from './constants';
+import { ARENA_DEFS, arenaById } from './config/arenas';
+import { SPAWN_LETTERS } from './config/arena-types';
 
 export interface Arena {
   cols: number;
@@ -10,120 +12,13 @@ export interface Arena {
   legend: Record<string, WallKind>;
 }
 
-// Hand-designed slice arena. Player at the bottom (row 7), a Brown + Grey + Teal
-// across the top (rows 2-3). The center solid block at (col 5, row 4) sits directly
-// on the Teal->player line, so Teal must bank a ricochet off a side wall. Flanking
-// destructibles ('x') can be blown open by mines to create new lines of fire.
-// The solid cell at (col 8, row 5) is the bank-shot reflector: it sits just past
-// the center block's east edge and just north of the col-8 side walls, so a shell
-// from Teal (11,7) can clear the center block through the (12,16) gap at row 4,
-// bank off that cell's west face at (16,11), and reach the player (11,15) through
-// the same gap at rows 6-7 without touching any other wall. See
-// arena.test.ts's "affords Teal a real single-bounce bank shot" test.
-//
-// Cover depth (col 5, row 5): Brown (9,5) and Grey (13,5) sit symmetrically about the
-// player's x=11, and the row-4 block alone (x:[10,12], y:[8,10]) put both of their direct
-// lines to the player spawn (11,15) exactly tangent to its corners -- (10,10) for Brown,
-// (12,10) for Grey -- a single-point knife edge where a 0.1-unit nudge in either x
-// direction gave ONE of them a fully clear 10-unit lane (see task-balance-report.md).
-// Stacking a second solid cell directly below it at (col 5, row 5) extends the block to
-// y:[8,12], turning that corner-graze into a real chord through the box for both lines
-// (verified by direct search over player-position perturbations, not by hand-argued
-// geometry -- see the coverOk check in the report). It does not touch column 6/7 at
-// row 4 or row 5, so Teal's bank-shot corridor (through the row-4 gap, off the (8,5)
-// reflector, back down through rows 6-7) is untouched.
-//        col: 0123456789A   (A = 10)
-export const ARENA_01: Arena = {
-  cols: 11,
-  rows: 9,
-  cellSize: 2,
-  legend: { '#': 'solid', x: 'destructible' },
-  grid: [
-    '...........', // 0
-    '..#.....#..', // 1
-    '..#.B.G.#..', // 2  Brown, Grey
-    '.....T.....', // 3  Teal
-    '..x..#..x..', // 4  center cover + flanking destructibles
-    '.....#..#..', // 5  cover depth (col 5) + bank-shot reflector (col 8)
-    '..#.....#..', // 6
-    '..#..P..#..', // 7  Player
-    '...........', // 8
-  ],
-};
-
-// Level 2, reshaped in the 2026-07-31 balance pass: row 4 is a FULL destructible
-// barrier with solid anchors (cols 1, 5, 9), so the enemy half and the player half
-// START sealed off from each other -- tanks cannot cross and shells cannot pass until
-// someone blasts a hole. Breaching the bar IS the level. Every enemy's straight line
-// to the player spawn is blocked while the bar stands (arena-validation.test.ts checks
-// that with the sim's own lineOfSight); with every 'x' destroyed, exactly the two
-// UPPER lanes (Brown row 2, Grey row 2) open, and the lower pair (Teal and Brown,
-// row 3) stays shielded by the solid anchors -- measured, not argued, see the
-// "destructible trade" test. Four enemies against level 1's three.
-export const ARENA_02: Arena = {
-  cols: 11,
-  rows: 9,
-  cellSize: 2,
-  legend: { '#': 'solid', x: 'destructible' },
-  grid: [
-    '...........', // 0
-    '...........', // 1
-    '.B...#...G.', // 2
-    '.T...#...B.', // 3
-    'x#xxx#xxx#x', // 4  bars: solid outer ends, destructible inner ends
-    '.....#.....', // 5
-    '..#.....#..', // 6  the player's flank guards, as in level 1
-    '.....P.....', // 7
-    '...........', // 8
-  ],
-};
-
-// Level 3: the rocket debut. Two Olives -- the first DEFENSIVE_ROCKET tanks, firing
-// the sim's 'fast' shell (12 u/s, no bounces) one-at-a-time -- flank high behind
-// DESTRUCTIBLE shields ('x', row 2, cols 1/9), with a brown-grey-brown trio behind
-// solid cover in the middle. Measured with the sim's own lineOfSight (see the
-// flank-lane test in arena-validation.test.ts):
-//   - at spawn, no enemy sees the player spawn (the generic rule);
-//   - each flank column (1 and 9) is open floor top-to-bottom EXCEPT the olive's
-//     shield, so blasting a shield opens that vertical lane end-to-end, both ways:
-//     the player can hunt the olive up its column, and the olive's rockets command
-//     the same column down. The shield is the level's trade, one per flank.
-//   - breaching every destructible opens NO spawn-to-spawn sightline (0 of 5) --
-//     unlike level 2, the trade here is lanes for MOBILE tanks, not spawn lines.
-// The row-3/row-4 anchors deny the olives any diagonal into the player's half. The
-// browns' spawn lines are shut by a REAL CHORD through the row-4/row-5 centre
-// pillar -- the row-5 cell exists for exactly ARENA_01's reason (see its comment):
-// with row 4 alone, a breached centre peek left both brown lines blocked only by a
-// single-point corner tangency, where a 0.1-unit player nudge opened a full lane.
-// Found in review by slab math, fixed the way ARENA_01 fixed it, and pinned with
-// nudged-player probes in the design test. The centre peek 'x' (row 6) is NOT a
-// spawn-line blocker after that fix: it is breachable mid-field cover on the
-// centre axis, and destroying it opens one more passage cell through row 6.
-export const ARENA_03: Arena = {
-  cols: 11,
-  rows: 9,
-  cellSize: 2,
-  legend: { '#': 'solid', x: 'destructible' },
-  grid: [
-    '...........', // 0
-    '.O.......O.', // 1  olives flank high
-    '.x..BGB..x.', // 2  destructible olive shields; the trio's own row
-    '...#...#...', // 3  anchors: deny diagonals into the player half
-    '..#..#..#..', // 4  mid-field teeth
-    '.....#.....', // 5  chord-maker under the centre tooth (see comment above)
-    '..#..x..#..', // 6  the player's flank guards + a centre peek 'x'
-    '.....P.....', // 7
-    '...........', // 8
-  ],
-};
-
-/**
- * The shipped sequence, in play order. The game layer walks this list; the sim never
- * knows a level number. Every entry is structurally validated by
- * arena-validation.test.ts (connectivity, spawn sightlines, dimensions), so adding a
- * level here is what makes it real -- and what makes it checked.
- */
-export const ARENAS: Arena[] = [ARENA_01, ARENA_02, ARENA_03];
+// Grids, notes and design claims live in config/data/arenas.json, validated at load
+// (config/validate.ts). These named exports stay so every consumer -- levels.ts, the
+// gl harness, the gallery, dozens of tests -- is untouched by the move.
+export const ARENA_01: Arena = arenaById('arena-01');
+export const ARENA_02: Arena = arenaById('arena-02');
+export const ARENA_03: Arena = arenaById('arena-03');
+export const ARENAS: Arena[] = ARENA_DEFS;
 
 /**
  * The playable area, in world units. Derived from the same `cols * cellSize`
@@ -138,14 +33,6 @@ export const ARENAS: Arena[] = [ARENA_01, ARENA_02, ARENA_03];
 export function arenaBounds(arena: Arena): { width: number; height: number } {
   return { width: arena.cols * arena.cellSize, height: arena.rows * arena.cellSize };
 }
-
-const SPAWN_KINDS: Record<string, TankKind> = {
-  P: 'player',
-  B: 'brown',
-  G: 'grey',
-  T: 'teal',
-  O: 'olive',
-};
 
 function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, angle: number): Tank {
   return {
@@ -185,7 +72,7 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
     const row = grid[r];
     for (let c = 0; c < cols; c++) {
       const ch = row[c];
-      if (ch !== '.' && !legend[ch] && !SPAWN_KINDS[ch]) {
+      if (ch !== '.' && !legend[ch] && !SPAWN_LETTERS[ch]) {
         throw new Error(`Unrecognized character '${ch}' at (row ${r}, col ${c})`);
       }
     }
@@ -213,8 +100,8 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
           kind: wallKind,
           destroyed: false,
         });
-      } else if (SPAWN_KINDS[ch]) {
-        const kind = SPAWN_KINDS[ch];
+      } else if (SPAWN_LETTERS[ch]) {
+        const kind = SPAWN_LETTERS[ch];
         const pos = { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
         const angle = 0;
         spawns.push({ kind, pos: { ...pos }, angle });

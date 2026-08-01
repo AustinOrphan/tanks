@@ -3,54 +3,11 @@
 // spawn sightline is invisible until a player dies to it three seconds into a level.
 // New arenas added to ARENAS get all of this for free -- that is the point of the file.
 import { describe, it, expect } from 'vitest';
-import { ARENAS, ARENA_01, loadArena } from './arena';
-import type { Arena } from './arena';
-import { lineOfSight } from './ai/targeting';
-
-/**
- * A cell a tank could EVER stand on: open now, or openable by demolition. The
- * 2026-07-31 balance pass made ARENA_02's middle bar a full destructible barrier --
- * the halves START sealed and the level is about breaching it -- so plain-open
- * connectivity is a design choice, not an invariant. Solid-sealed pockets remain
- * forbidden: no amount of play opens those.
- */
-function isBreachable(arena: Arena, r: number, c: number): boolean {
-  const kind = arena.legend[arena.grid[r][c]];
-  return !kind || kind === 'destructible';
-}
-
-/** 4-neighbour flood fill from the first open cell; returns the number reached. */
-function reachableOpenCells(arena: Arena): { open: number; reached: number } {
-  const { rows, cols } = arena;
-  const seen = Array.from({ length: rows }, () => Array(cols).fill(false));
-  let open = 0;
-  let start: [number, number] | null = null;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (isBreachable(arena, r, c)) {
-        open++;
-        if (!start) start = [r, c];
-      }
-    }
-  }
-  if (!start) return { open, reached: 0 };
-  const stack = [start];
-  seen[start[0]][start[1]] = true;
-  let reached = 0;
-  while (stack.length) {
-    const [r, c] = stack.pop()!;
-    reached++;
-    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-      if (seen[nr][nc] || !isBreachable(arena, nr, nc)) continue;
-      seen[nr][nc] = true;
-      stack.push([nr, nc]);
-    }
-  }
-  return { open, reached };
-}
+import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
+import { structuralFailures, claimFailures } from './arena-claims';
+import { ARENA_DEFS } from './config/arenas';
+import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
+import type { ArenaClaim } from './config/arena-types';
 
 describe('the shipped arena sequence', () => {
   it('starts at ARENA_01, the arena the game has always shipped', () => {
@@ -65,94 +22,122 @@ describe('the shipped arena sequence', () => {
       expect(tanks.filter((t) => t.kind !== 'player').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('has every breachable cell reachable from every other (no SOLID-sealed pockets)', () => {
-      // Destructibles count as passable-eventually: a region behind them is gameplay
-      // (ARENA_02's sealed halves), a region behind solids is a dead zone forever.
-      const { open, reached } = reachableOpenCells(a);
-      expect(reached).toBe(open);
-    });
-
-    it('denies every enemy a straight line to the player spawn', () => {
-      // Level 1 was DESIGNED around this (see ARENA_01's comment: Teal must bank a
-      // ricochet). Brown never moves, so an enemy spawn with direct line of sight to
-      // the player spawn is a death sentence three seconds into the level. The check
-      // uses the sim's own lineOfSight, so it means exactly what the AI means by it.
-      const { walls, spawns } = loadArena(a);
-      const player = spawns.find((s) => s.kind === 'player')!;
-      for (const s of spawns) {
-        if (s.kind === 'player') continue;
-        expect(lineOfSight(s.pos, player.pos, walls), `${s.kind} sees the player spawn`).toBe(false);
-      }
+    it('obeys every universal structural rule', () => {
+      expect(structuralFailures(a).join('\n')).toBe('');
     });
   });
 });
 
-describe("ARENA_02's destructible trade", () => {
-  // The design comment claims blowing the bars' destructible ends opens the UPPER
-  // pair's lanes and nothing else. The generic sightline test above cannot see WHAT
-  // does the blocking -- it went green while the comment overclaimed the trade for
-  // all four enemies. Measured here instead: this fails if a grid edit either opens
-  // a lower lane (a solid outer end went missing) or seals an upper one (the trade
-  // the level is built around stopped existing).
-  it('opens exactly the two upper lanes when every destructible is gone', () => {
-    const { walls, spawns } = loadArena(ARENAS[1]);
-    for (const w of walls) if (w.kind === 'destructible') w.destroyed = true;
-    const player = spawns.find((s) => s.kind === 'player')!;
-    const open = spawns
-      .filter((s) => s.kind !== 'player')
-      .map((s) => ({ kind: s.kind, y: s.pos.y, sees: lineOfSight(s.pos, player.pos, walls) }));
-    // Population: all 4 enemy spawns. Upper row (y = 5) opens; lower row (y = 7) stays shut.
-    expect(open.filter((o) => o.y === 5).map((o) => o.sees)).toEqual([true, true]);
-    expect(open.filter((o) => o.y === 7).map((o) => o.sees)).toEqual([false, false]);
-    expect(open).toHaveLength(4);
+// Design intent lives WITH the data now (config/data/arenas.json `claims`), verified
+// here by one generic runner. The two hand-written describe blocks this replaces --
+// ARENA_02's destructible trade and ARENA_03's flank lanes -- are re-expressed as
+// claims, which is the migration's own proof: same properties, no bespoke geometry.
+describe.each(ARENA_DEFS.map((a) => ({ id: a.id, arena: a })))('$id claims', ({ arena }) => {
+  it('every declared design claim holds', () => {
+    expect(claimFailures(arena, arena.claims).join('\n\n')).toBe('');
   });
 });
 
-describe("ARENA_03's flank-lane trade", () => {
-  // The design comment claims each olive's destructible shield is the ONLY wall on
-  // its vertical flank column, and that breaching opens that lane end-to-end --
-  // measured here with the sim's own lineOfSight, exactly as it was designed
-  // (intact=false, breached=true on both flanks; see the arena comment). Also pins
-  // the negative: breaching every destructible opens NO spawn-to-spawn sightline,
-  // which is what distinguishes this level's trade from ARENA_02's.
-  it('a breached shield opens its vertical lane, both flanks; intact blocks both', () => {
-    const { walls, spawns } = loadArena(ARENAS[2]);
-    // Lanes are DERIVED from the olive spawns (review: hardcoded coordinates keep
-    // checking an empty cell if a spawn moves a row). The foot of each lane is the
-    // same column at the player's row.
-    const player = spawns.find((s) => s.kind === 'player')!;
-    const lanes = spawns
-      .filter((s) => s.kind === 'olive')
-      .map((s) => ({ olive: s.pos, foot: { x: s.pos.x, y: player.pos.y } }));
-    expect(lanes).toHaveLength(2);
-    for (const lane of lanes) {
-      expect(lineOfSight(lane.olive, lane.foot, walls)).toBe(false);
-    }
-    for (const w of walls) if (w.kind === 'destructible') w.destroyed = true;
-    for (const lane of lanes) {
-      expect(lineOfSight(lane.olive, lane.foot, walls)).toBe(true);
-    }
+// Per-arena claim inventory, read from the shipped data (config/data/arenas.json) as of
+// this writing -- NOT a formula, deliberately. Claim mix is a design decision, not
+// something derivable: ARENA_01 legitimately has zero sightline claims (it only claims
+// spawnBlockRobust), and lanes are not one-per-enemy by definition (ARENA_03 has 2 lanes
+// for 5 enemies). Pinning the exact table makes changing an arena's claims a deliberate
+// two-file edit -- config/data/arenas.json AND this table -- the same contract
+// constants.test.ts uses to pin each balance value individually rather than with a range.
+const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>>> = {
+  'arena-01': { spawnBlockRobust: 1 },
+  'arena-02': { sightlineAfterBreach: 4 },
+  'arena-03': { lane: 2, sightlineAfterBreach: 5, spawnBlockRobust: 1 },
+};
+
+it('each shipped arena declares its claim inventory exactly, per this table', () => {
+  // Replaces two guards that were each independently bypassable:
+  //  - `claimed.length >= 2` (deleted): passed as long as ANY two arenas had ANY claims
+  //    at all, so an arena could drop every claim of one type, or lose the `lane` pin
+  //    entirely (the deleted bespoke block's `expect(lanes).toHaveLength(2)` was never
+  //    re-pinned by anything else), without the count ever moving.
+  //  - the enemy-count check (deleted): `if (sightlineClaims.length === 0) continue`
+  //    let an arena exempt itself from its own population check by deleting every
+  //    sightlineAfterBreach claim it had -- the exact silent-bypass hole this replaces.
+  //
+  // The table's key set is checked against the shipped arena ids first, so a new arena
+  // cannot ship without declaring an inventory for review to compare against the design.
+  expect(new Set(ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED_CLAIMS)));
+
+  for (const arena of ARENA_DEFS) {
+    const counts: Partial<Record<ArenaClaim['type'], number>> = {};
+    for (const claim of arena.claims) counts[claim.type] = (counts[claim.type] ?? 0) + 1;
+    expect(counts, arena.id).toEqual(EXPECTED_CLAIMS[arena.id]);
+  }
+});
+
+it('a sightlineAfterBreach claim names every enemy CELL, not just the right count of them', () => {
+  // Strictly stronger than the inventory table above: a claim's `from` moved from one
+  // enemy's cell to another's keeps every count in EXPECTED_CLAIMS unchanged (same
+  // arena, same claim type, same total), but changes WHICH enemy is actually covered.
+  // Set equality (not cardinality) is what catches that.
+  for (const arena of ARENA_DEFS) {
+    const sightlineClaims = arena.claims.filter((c) => c.type === 'sightlineAfterBreach');
+    if (sightlineClaims.length === 0) continue; // ARENA_01: no claims of this type to check
+    const { spawns } = loadArena(arena);
+    const cellOf = (x: number) => Math.round(x / arena.cellSize - 0.5); // inverse of loadArena's (c+0.5)*cellSize
+    const enemyCells = new Set(
+      spawns
+        .filter((s) => s.kind !== 'player')
+        .map((s) => `${cellOf(s.pos.x)},${cellOf(s.pos.y)}`),
+    );
+    const claimCells = new Set(sightlineClaims.map((c) => `${c.from[0]},${c.from[1]}`));
+    expect(claimCells, arena.id).toEqual(enemyCells);
+  }
+});
+
+describe('variable arena dimensions', () => {
+  it('a 15x11 arena loads, validates, and is NOT the shipped size', () => {
+    expect(WIDE_ARENA.cols).toBe(15);
+    expect(WIDE_ARENA.rows).toBe(11);
+    expect(arenaBounds(WIDE_ARENA)).toEqual({ width: 30, height: 22 });
+    // The point of the fixture: it differs from every shipped arena.
+    for (const a of ARENA_DEFS) expect(arenaBounds(a)).not.toEqual(arenaBounds(WIDE_ARENA));
   });
 
-  it('breaching everything still opens no spawn-to-spawn sightline (0 of 5 enemies)', () => {
-    const { walls, spawns } = loadArena(ARENAS[2]);
-    for (const w of walls) if (w.kind === 'destructible') w.destroyed = true;
-    const player = spawns.find((s) => s.kind === 'player')!;
-    const enemies = spawns.filter((s) => s.kind !== 'player');
-    expect(enemies).toHaveLength(5); // 2 olive + 2 brown + 1 grey; the level-3 roster
-    for (const s of enemies) {
-      expect(lineOfSight(s.pos, player.pos, walls), `${s.kind} at (${s.pos.x},${s.pos.y})`).toBe(false);
-    }
-    // NOT a knife edge: review found that with row 4 alone, both browns' post-breach
-    // lines were blocked only by an exact corner tangency (raySegmentVsAABB counts
-    // tmin === tmax as a hit) that a 0.1-unit player nudge opened into a full lane.
-    // The row-5 chord-maker fixes that; these probes pin the fix -- they FAIL on the
-    // tangent-only geometry.
-    for (const dx of [-0.1, 0.1]) {
-      const nudged = { x: player.pos.x + dx, y: player.pos.y };
-      for (const s of enemies) {
-        expect(lineOfSight(s.pos, nudged, walls), `${s.kind} vs player nudged ${dx}`).toBe(false);
-      }
-    }
+  it('the structural rules and the claim runner both handle it', () => {
+    // structuralFailures, not the old local flood-fill helper: Task 3 extracted
+    // and deleted that. Size-generic by construction -- it reads cols/rows off
+    // the arena it is given.
+    expect(structuralFailures(WIDE_ARENA)).toEqual([]);
+    expect(claimFailures(WIDE_ARENA, WIDE_ARENA.claims)).toEqual([]);
+  });
+
+  it('loads into a world with the spawns its grid declares', () => {
+    const { spawns } = loadArena(WIDE_ARENA);
+    expect(spawns.filter((s) => s.kind === 'player')).toHaveLength(1);
+    expect(spawns.filter((s) => s.kind !== 'player')).toHaveLength(2);
+  });
+
+  it('is never in the shipped sequence', () => {
+    expect(ARENA_DEFS.map((a) => a.id)).not.toContain('fixture-wide');
+  });
+});
+
+describe('the universal rules have negative controls', () => {
+  // Without these, structuralFailures could return [] unconditionally and every
+  // shipped arena would still look validated. The spec requires one bad fixture
+  // per universal rule (population: both geometry rules; the spawn-count rule is
+  // controlled at the validator level in validate.test.ts).
+  it('a solid-sealed pocket is reported, and ONLY that rule', () => {
+    // Length pinned at 1, not just [0]'s content: this fixture must isolate the
+    // sealed-pocket rule, so a future edit that also opened a spawn sightline
+    // would still need to be caught here, not hidden behind an index that only
+    // ever reads the first (sealed-pocket-always-pushed-first) message.
+    const failures = structuralFailures(SEALED_POCKET_ARENA);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/sealed pocket/);
+  });
+
+  it('an enemy with a straight line to the player spawn is reported, and ONLY that rule', () => {
+    const failures = structuralFailures(OPEN_SIGHTLINE_ARENA);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/spawn sightline/);
   });
 });

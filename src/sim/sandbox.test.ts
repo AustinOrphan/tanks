@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { sandboxArena, createSandboxWorld, SANDBOX_ENEMY_ANCHORS } from './sandbox';
 import { arenaBounds, ARENA_01, loadArena } from './arena';
+import { validateArenaShape } from './config/validate';
 
 describe('sandboxArena', () => {
   it('defaults to an open floor at the shipped dimensions', () => {
@@ -90,4 +91,11 @@ describe('createSandboxWorld', () => {
   it('threads the seed into the world, so AI draws are reproducible too', () => {
     expect(createSandboxWorld({ seed: 77 }).seed).toBe(77);
   });
+});
+
+it('the generated sandbox passes the same structural validator as a shipped arena', () => {
+  // The sandbox is programmatic (query-parameterised, so it can never be a static
+  // file), but it must clear the same bar: one player, an enemy, a legal grid.
+  const arena = sandboxArena({ tanks: ['brown', 'grey', 'teal'], walls: 4, seed: 7 });
+  expect(() => validateArenaShape(arena, 'sandbox', 'sandbox')).not.toThrow();
 });
