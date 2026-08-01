@@ -4,53 +4,8 @@
 // New arenas added to ARENAS get all of this for free -- that is the point of the file.
 import { describe, it, expect } from 'vitest';
 import { ARENAS, ARENA_01, loadArena } from './arena';
-import type { Arena } from './arena';
 import { lineOfSight } from './ai/targeting';
-
-/**
- * A cell a tank could EVER stand on: open now, or openable by demolition. The
- * 2026-07-31 balance pass made ARENA_02's middle bar a full destructible barrier --
- * the halves START sealed and the level is about breaching it -- so plain-open
- * connectivity is a design choice, not an invariant. Solid-sealed pockets remain
- * forbidden: no amount of play opens those.
- */
-function isBreachable(arena: Arena, r: number, c: number): boolean {
-  const kind = arena.legend[arena.grid[r][c]];
-  return !kind || kind === 'destructible';
-}
-
-/** 4-neighbour flood fill from the first open cell; returns the number reached. */
-function reachableOpenCells(arena: Arena): { open: number; reached: number } {
-  const { rows, cols } = arena;
-  const seen = Array.from({ length: rows }, () => Array(cols).fill(false));
-  let open = 0;
-  let start: [number, number] | null = null;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (isBreachable(arena, r, c)) {
-        open++;
-        if (!start) start = [r, c];
-      }
-    }
-  }
-  if (!start) return { open, reached: 0 };
-  const stack = [start];
-  seen[start[0]][start[1]] = true;
-  let reached = 0;
-  while (stack.length) {
-    const [r, c] = stack.pop()!;
-    reached++;
-    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-      if (seen[nr][nc] || !isBreachable(arena, nr, nc)) continue;
-      seen[nr][nc] = true;
-      stack.push([nr, nc]);
-    }
-  }
-  return { open, reached };
-}
+import { structuralFailures } from './arena-claims';
 
 describe('the shipped arena sequence', () => {
   it('starts at ARENA_01, the arena the game has always shipped', () => {
@@ -65,24 +20,8 @@ describe('the shipped arena sequence', () => {
       expect(tanks.filter((t) => t.kind !== 'player').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('has every breachable cell reachable from every other (no SOLID-sealed pockets)', () => {
-      // Destructibles count as passable-eventually: a region behind them is gameplay
-      // (ARENA_02's sealed halves), a region behind solids is a dead zone forever.
-      const { open, reached } = reachableOpenCells(a);
-      expect(reached).toBe(open);
-    });
-
-    it('denies every enemy a straight line to the player spawn', () => {
-      // Level 1 was DESIGNED around this (see ARENA_01's comment: Teal must bank a
-      // ricochet). Brown never moves, so an enemy spawn with direct line of sight to
-      // the player spawn is a death sentence three seconds into the level. The check
-      // uses the sim's own lineOfSight, so it means exactly what the AI means by it.
-      const { walls, spawns } = loadArena(a);
-      const player = spawns.find((s) => s.kind === 'player')!;
-      for (const s of spawns) {
-        if (s.kind === 'player') continue;
-        expect(lineOfSight(s.pos, player.pos, walls), `${s.kind} sees the player spawn`).toBe(false);
-      }
+    it('obeys every universal structural rule', () => {
+      expect(structuralFailures(a).join('\n')).toBe('');
     });
   });
 });
