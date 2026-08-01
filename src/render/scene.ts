@@ -25,6 +25,13 @@ export interface SceneContext {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   resize(w: number, h: number): void;
+  /**
+   * Re-aim everything dimensional at a new board: ground plane, camera fit, light
+   * rig, shadow camera, felt tiling. IN PLACE -- the GL context, the entity views
+   * and the borrowed TextureSet all survive, so a level switch is arithmetic, not
+   * a teardown.
+   */
+  refit(worldWidth: number, worldHeight: number, boundary: number): void;
   dispose(): void;
 }
 
@@ -99,24 +106,23 @@ export function createScene(
   grad.dispose();
   pmrem.dispose();
 
-  // Arena center in world/three space (ground = XZ plane).
-  const cx = worldWidth / 2;
-  const cz = worldHeight / 2;
-
   // Single fixed camera tilted ~50deg down, framing the whole board (no scrolling).
   const BASE_FOV = 50;
   const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1000);
-  const span = Math.max(worldWidth, worldHeight);
 
+  // Everything below here is DIMENSIONAL state, owned by fit() so a level switch can
+  // re-aim it at a new board. Initialised by the fit() call at the bottom.
+  let cx = worldWidth / 2;
+  let cz = worldHeight / 2;
+  let span = Math.max(worldWidth, worldHeight);
   // What the framing must contain: the playable area plus the boundary ring.
   // See framing.ts -- the fit itself lives there so it can be tested without a
   // GL context, which is why this file previously had no test at all.
-  const framed = framedBounds(worldWidth, worldHeight, boundary);
+  let framed = framedBounds(worldWidth, worldHeight, boundary);
   const target = new THREE.Vector3(cx, 0, cz);
 
   // Directional 'sun' casting soft shadows across the whole arena.
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  sun.position.set(cx - worldWidth * 0.6, span * 1.6, cz - worldHeight * 0.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   // The felt is one large flat receiver, the classic shadow-acne surface -- but the bias
@@ -133,17 +139,6 @@ export function createScene(
   sun.shadow.normalBias = 0.008;
   sun.shadow.bias = -0.0001;
   const shadowCam = sun.shadow.camera as THREE.OrthographicCamera;
-  // Half-extents of the framed board, plus a margin so a caster right on the boundary
-  // still has its shadow inside the map.
-  const shadowHalf = Math.max(framed.width, framed.height) / 2 + boundary;
-  shadowCam.left = -shadowHalf;
-  shadowCam.right = shadowHalf;
-  shadowCam.top = shadowHalf;
-  shadowCam.bottom = -shadowHalf;
-  shadowCam.near = 0.5;
-  shadowCam.far = span * 4;
-  shadowCam.updateProjectionMatrix();
-  sun.target.position.set(cx, 0, cz);
   scene.add(sun);
   scene.add(sun.target);
 
@@ -152,8 +147,6 @@ export function createScene(
   // were one dead tone. This gives them a gradient without pretending to be a second sun:
   // no shadows, low intensity, and tinted toward sky blue so it reads as bounce.
   const fill = new THREE.DirectionalLight(0xbcd0ff, 0.55);
-  fill.position.set(cx + worldWidth * 0.7, span * 0.6, cz + worldHeight * 0.5);
-  fill.target.position.set(cx, 0, cz);
   scene.add(fill);
   scene.add(fill.target);
 
@@ -161,8 +154,6 @@ export function createScene(
   // the dark background. Almost horizontal on purpose -- it should catch edges, not
   // light faces.
   const rim = new THREE.DirectionalLight(0xffd9a8, 0.4);
-  rim.position.set(cx, span * 0.18, cz - worldHeight * 1.1);
-  rim.target.position.set(cx, 0, cz);
   scene.add(rim);
   scene.add(rim.target);
 
@@ -177,10 +168,13 @@ export function createScene(
   // clear colour. It must not reach further either: the shipped build used a 10%
   // margin (2.2) against a 2.0-thick ring, and that 0.2 of overhang showed as a
   // sliver of felt detached from the arena along the near edge.
-  const groundGeo = new THREE.PlaneGeometry(framed.width, framed.height);
+  let groundGeo = new THREE.PlaneGeometry(framed.width, framed.height);
   // Tile the fibre grain roughly once per two world units. Any coarser and the felt
   // reads as fabric print; any finer and it aliases into shimmer at this camera height.
-  const textures = createTextures(Math.max(2, Math.round(Math.max(worldWidth, worldHeight) / 2)));
+  // fit() keeps this density on refit by mutating texture.repeat -- the texture OBJECT
+  // must survive, because entities.ts borrows the same TextureSet.
+  const feltRepeatFor = (w: number, h: number): number => Math.max(2, Math.round(Math.max(w, h) / 2));
+  const textures = createTextures(feltRepeatFor(worldWidth, worldHeight));
 
   const groundMat = new THREE.MeshStandardMaterial({
     color: 0x2f6d4f,
@@ -193,11 +187,54 @@ export function createScene(
   });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.set(cx, 0, cz);
   ground.receiveShadow = true;
   scene.add(ground);
 
+  // The one owner of every dimensional decision: called at construction and by refit().
+  function fit(w: number, h: number, ring: number): void {
+    cx = w / 2;
+    cz = h / 2;
+    span = Math.max(w, h);
+    framed = framedBounds(w, h, ring);
+    target.set(cx, 0, cz);
+
+    groundGeo.dispose();
+    groundGeo = new THREE.PlaneGeometry(framed.width, framed.height);
+    ground.geometry = groundGeo;
+    ground.position.set(cx, 0, cz);
+    const rep = feltRepeatFor(w, h);
+    textures.feltNormal.repeat.set(rep, rep);
+
+    sun.position.set(cx - w * 0.6, span * 1.6, cz - h * 0.6);
+    sun.target.position.set(cx, 0, cz);
+    // Half-extents of the framed board, plus a margin so a caster right on the
+    // boundary still has its shadow inside the map. Texel density is the shadow
+    // fidelity knob (see normalBias above), so the shadow camera must track the
+    // board or big arenas regrow the acne/detachment trade-off.
+    const shadowHalf = Math.max(framed.width, framed.height) / 2 + ring;
+    shadowCam.left = -shadowHalf;
+    shadowCam.right = shadowHalf;
+    shadowCam.top = shadowHalf;
+    shadowCam.bottom = -shadowHalf;
+    shadowCam.near = 0.5;
+    shadowCam.far = span * 4;
+    shadowCam.updateProjectionMatrix();
+
+    fill.position.set(cx + w * 0.7, span * 0.6, cz + h * 0.5);
+    fill.target.position.set(cx, 0, cz);
+    rim.position.set(cx, span * 0.18, cz - h * 1.1);
+    rim.target.position.set(cx, 0, cz);
+  }
+  fit(worldWidth, worldHeight, boundary);
+
+  // The viewport size last seen, so refit() can re-run the camera fit without
+  // being handed the canvas size again.
+  let lastW = 0;
+  let lastH = 0;
+
   function resize(w: number, h: number): void {
+    lastW = w;
+    lastH = h;
     // Re-read the pixel ratio: browser zoom mutates devicePixelRatio, and
     // dragging the window between a HiDPI and a 1x monitor changes it too.
     // Setting it once at construction left the drawing buffer stale.
@@ -218,6 +255,11 @@ export function createScene(
     canvas.clientWidth || window.innerWidth,
     canvas.clientHeight || window.innerHeight,
   );
+
+  function refit(w: number, h: number, ring: number): void {
+    fit(w, h, ring);
+    resize(lastW, lastH);
+  }
 
   function dispose(): void {
     // main.ts now wires this to pagehide, so it is a live path rather than
@@ -245,5 +287,5 @@ export function createScene(
     renderer.forceContextLoss();
   }
 
-  return { scene, camera, renderer, textures, resize, dispose };
+  return { scene, camera, renderer, textures, resize, refit, dispose };
 }

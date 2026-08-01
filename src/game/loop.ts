@@ -1,4 +1,3 @@
-import { CURRENT_ARENA, arenaBounds } from '../sim/arena';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
@@ -219,7 +218,10 @@ export function startGameWith(
   uiRoot: HTMLElement,
   deps: GameDeps,
 ): GameHandle {
-  const { width, height } = arenaBounds(CURRENT_ARENA);
+  // The STARTING level's board, not a fixed arena: a dev-flag jump may open on a
+  // different-sized level, and the renderer must be born fitting it.
+  let shownBounds = deps.levels.bounds(deps.levels.start);
+  const { width, height } = shownBounds;
 
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
@@ -248,7 +250,7 @@ export function startGameWith(
   // try/catch to render a "this browser has no WebGL" page, and that only
   // works if the renderer throws out of HERE rather than out of a later
   // start(). Deferring construction breaks an error path nothing tests.
-  const renderer = deps.createRenderer(canvas, width, height, CURRENT_ARENA.cellSize, {
+  const renderer = deps.createRenderer(canvas, width, height, shownBounds.cellSize, {
     aimRay: deps.devFlags.aimRay,
     mineReach: deps.devFlags.mineReach,
     mineTimer: deps.devFlags.mineTimer,
@@ -338,21 +340,37 @@ export function startGameWith(
       // lives (levels.start, not 0: a dev who jumped to level 2 retries level 2).
       const advancing = sm.state === 'win' && level + 1 < deps.levels.count;
       const carried = advancing ? driver.world.lives : undefined;
-      level = advancing ? level + 1 : deps.levels.start;
-      world = buildWorld(level, carried);
-      playerId = world.tanks.find((t) => t.kind === 'player')?.id;
-      director.setPlayerId(playerId ?? -1);
-      // A FRESH world's roundStartTick can equal the old one's (both start at the same
-      // tick), so without this reset the round tracker would not count the new level's
-      // opening round and the teaching banner would re-show -- the "once per page load"
-      // rule below depends on every round being SEEN, including this one.
-      lastRoundStartTick = null;
-      hud.setLevel(level + 1, deps.levels.count);
-      driver.reset(world);
-      refreshStats(world);
+      switchTo(advancing ? level + 1 : deps.levels.start, carried);
       sm.restart();
     }
   });
+
+  /**
+   * Land on a level: build its world, rebind everything the old world owned, and
+   * refit the renderer if the BOARD changed size. One path for advance, quit and
+   * level pick -- their parity was reviewed line-by-line three times before it
+   * became structural.
+   */
+  function switchTo(newLevel: number, lives?: number): void {
+    level = newLevel;
+    world = buildWorld(level, lives);
+    playerId = world.tanks.find((t) => t.kind === 'player')?.id;
+    director.setPlayerId(playerId ?? -1);
+    // A FRESH world's roundStartTick can equal the old one's (both start at the same
+    // tick), so without this reset the round tracker would not count the new level's
+    // opening round and the teaching banner would re-show.
+    lastRoundStartTick = null;
+    const b = deps.levels.bounds(level);
+    if (b.width !== shownBounds.width || b.height !== shownBounds.height || b.cellSize !== shownBounds.cellSize) {
+      // Guarded: a same-size rebuild (retry, quit on the same board) must not
+      // reallocate ground geometry on every click.
+      renderer.refit(b.width, b.height, b.cellSize);
+      shownBounds = b;
+    }
+    hud.setLevel(level + 1, deps.levels.count);
+    driver.reset(world);
+    refreshStats(world);
+  }
 
   /** How many levels are pickable: everything cleared plus the next one, capped. */
   const unlockedLevels = (): number =>
@@ -364,14 +382,7 @@ export function startGameWith(
     // undefined, and a handler that rebuilds the world does not get to crash on it.
     if (sm.state !== 'title') return;
     if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.count) return;
-    level = picked;
-    world = buildWorld(level);
-    playerId = world.tanks.find((t) => t.kind === 'player')?.id;
-    director.setPlayerId(playerId ?? -1);
-    lastRoundStartTick = null;
-    hud.setLevel(level + 1, deps.levels.count);
-    driver.reset(world);
-    refreshStats(world);
+    switchTo(picked);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.
     audio.unlock();
@@ -385,14 +396,7 @@ export function startGameWith(
     // Like the game-over path: the next Start begins a FRESH run at the session's
     // starting level with fresh lives. Rebuilt NOW rather than lazily on Start, so
     // the title screen renders over the new arena, not the abandoned game.
-    level = deps.levels.start;
-    world = buildWorld(level);
-    playerId = world.tanks.find((t) => t.kind === 'player')?.id;
-    director.setPlayerId(playerId ?? -1);
-    lastRoundStartTick = null;
-    hud.setLevel(level + 1, deps.levels.count);
-    driver.reset(world);
-    refreshStats(world);
+    switchTo(deps.levels.start);
     sm.toTitle();
   });
 

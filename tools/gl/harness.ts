@@ -220,6 +220,90 @@ check('screenToGround maps the canvas centre to the arena centre', () => {
   return null;
 });
 
+check('refit re-aims ground, camera and screenToGround at a NEW board size', () => {
+  // The constraint this retires: every arena had to be 11x9 because the scene sized
+  // its ground plane, camera and shadow rig ONCE at construction. A refit to a wider
+  // board must move all of it -- and the GL context must survive (in-place, not a
+  // rebuild).
+  const c = placedCanvas(800, 500, 0, 0, 800, 500);
+  const r = createRenderer(c, W, H, BOUNDARY);
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+
+  const W2 = 34; // a 17-column board at cellSize 2 -- half again wider than shipped
+  const H2 = 18;
+  r.refit(W2, H2, BOUNDARY);
+
+  // The centre pixel must now map to the NEW arena centre.
+  const p = r.screenToGround(400, 250);
+  const framed2 = framedBounds(W2, H2, BOUNDARY);
+  const dx = Math.abs(p.x - W2 / 2);
+  const dy = Math.abs(p.y - H2 / 2);
+  if (dx > BOUNDARY || dy > BOUNDARY) {
+    r.dispose();
+    c.remove();
+    return `after refit, centre pixel mapped to (${p.x.toFixed(2)}, ${p.y.toFixed(2)}), want near (${W2 / 2}, ${H2 / 2})`;
+  }
+  if (gl.isContextLost()) {
+    r.dispose();
+    c.remove();
+    return 'refit lost the GL context -- it must be in-place, not a rebuild';
+  }
+  r.dispose();
+  c.remove();
+  void framed2;
+  return null;
+});
+
+check('refit resizes the ground plane to the new framed bounds, both directions', () => {
+  const ctx = fresh();
+  const wider = framedBounds(34, 18, BOUNDARY);
+  ctx.refit(34, 18, BOUNDARY);
+  const g1 = groundOf(ctx);
+  const p1 = g1?.geometry.parameters;
+  if (!p1 || Math.abs(p1.width - wider.width) > 1e-6 || Math.abs(p1.height - wider.height) > 1e-6) {
+    ctx.dispose();
+    return `after widening, ground is ${p1?.width}x${p1?.height}, want ${wider.width}x${wider.height}`;
+  }
+  const centre1 = g1.position;
+  if (Math.abs(centre1.x - 17) > 1e-6 || Math.abs(centre1.z - 9) > 1e-6) {
+    ctx.dispose();
+    return `after widening, ground centred at (${centre1.x}, ${centre1.z}), want (17, 9)`;
+  }
+  // And back down: refit is not a one-way door.
+  ctx.refit(W, H, BOUNDARY);
+  const p2 = groundOf(ctx)?.geometry.parameters;
+  ctx.dispose();
+  if (!p2 || Math.abs(p2.width - framed.width) > 1e-6 || Math.abs(p2.height - framed.height) > 1e-6) {
+    return `after refitting back, ground is ${p2?.width}x${p2?.height}, want ${framed.width}x${framed.height}`;
+  }
+  return null;
+});
+
+check('refit moves the shadow camera with the board, keeping texel density', () => {
+  // The shadow lesson (texel density first, bias second) has to survive refit: a
+  // wider board with the OLD shadow extents regrows the acne/detachment trade-off.
+  const ctx = fresh();
+  ctx.refit(34, 18, BOUNDARY);
+  let sun: THREE.DirectionalLight | null = null;
+  ctx.scene.traverse((o) => {
+    if ((o as THREE.DirectionalLight).isDirectionalLight && (o as THREE.DirectionalLight).castShadow) {
+      sun = o as THREE.DirectionalLight;
+    }
+  });
+  if (!sun) {
+    ctx.dispose();
+    return 'no shadow-casting sun found';
+  }
+  const cam = (sun as THREE.DirectionalLight).shadow.camera as THREE.OrthographicCamera;
+  const wider = framedBounds(34, 18, BOUNDARY);
+  const wantHalf = Math.max(wider.width, wider.height) / 2 + BOUNDARY;
+  ctx.dispose();
+  if (Math.abs(cam.right - wantHalf) > 1e-6) {
+    return `shadow half-extent ${cam.right}, want ${wantHalf}`;
+  }
+  return null;
+});
+
 check('screenToGround subtracts the canvas page offset', () => {
   // The canvas is not at the page origin, so a handler that uses clientX
   // directly instead of clientX - rect.left aims at the wrong place. Nothing

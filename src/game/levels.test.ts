@@ -10,7 +10,7 @@ import { DEV_FLAGS_OFF } from './devflags';
 function progressAt(highest: number): ProgressStore {
   return { highestCleared: () => highest, recordCleared: () => {} };
 }
-import { ARENAS, createWorldFor } from '../sim/arena';
+import { ARENAS, arenaBounds, createWorldFor } from '../sim/arena';
 import { LIVES } from '../sim/constants';
 
 describe('createLevelSystem: the shipped sequence', () => {
@@ -118,5 +118,19 @@ describe('createLevelSystem: start is live, not a boot-time snapshot', () => {
   it('a dev-flag jump stays pinned regardless of progress', () => {
     const sys = createLevelSystem({ ...DEV_FLAGS_OFF, level: 1 }, progressAt(1));
     expect(sys.start).toBe(0); // the flag said level 1; the save says level 2
+  });
+});
+
+describe('createLevelSystem: per-level bounds', () => {
+  it('reports each arena\'s own board size, from cols/rows not walls', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, progressAt(0));
+    for (let i = 0; i < sys.count; i++) {
+      expect(sys.bounds(i)).toEqual({ ...arenaBounds(ARENAS[i]), cellSize: ARENAS[i].cellSize });
+    }
+  });
+
+  it('the sandbox reports the standard board', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, level: 'sandbox' as const }, progressAt(0));
+    expect(sys.bounds(0)).toEqual({ ...arenaBounds(ARENAS[0]), cellSize: ARENAS[0].cellSize });
   });
 });

@@ -1,6 +1,6 @@
 import type { UnarmedTrigger } from '../sim/types';
 import type { World } from '../sim/world';
-import { ARENAS, createWorldFor } from '../sim/arena';
+import { ARENAS, arenaBounds, createWorldFor } from '../sim/arena';
 import { createSandboxWorld } from '../sim/sandbox';
 import type { DevFlags } from './devflags';
 import type { ProgressStore } from './progress';
@@ -20,6 +20,11 @@ export interface LevelSystem {
   readonly tracksProgress: boolean;
   /** Build the world for a level. `lives` carries a cleared level's remainder forward. */
   world(level: number, seed: number, unarmedTrigger?: UnarmedTrigger, lives?: number): World;
+  /**
+   * The level's board size, for the renderer's per-level refit. From the arena's own
+   * cols/rows -- walls are deliberately NOT measurable (the boundary ring overhangs).
+   */
+  bounds(level: number): { width: number; height: number; cellSize: number };
 }
 
 export function createLevelSystem(flags: DevFlags, progress: ProgressStore): LevelSystem {
@@ -30,6 +35,8 @@ export function createLevelSystem(flags: DevFlags, progress: ProgressStore): Lev
       count: 1,
       start: 0,
       tracksProgress: false,
+      // The sandbox is built on the standard board (see sandboxArena).
+      bounds: () => ({ ...arenaBounds(ARENAS[0]), cellSize: ARENAS[0].cellSize }),
       world: (_level, seed, unarmedTrigger) =>
         createSandboxWorld(
           {
@@ -63,5 +70,6 @@ export function createLevelSystem(flags: DevFlags, progress: ProgressStore): Lev
     tracksProgress: true,
     world: (level, seed, unarmedTrigger, lives) =>
       createWorldFor(ARENAS[level], seed, unarmedTrigger, lives),
+    bounds: (level) => ({ ...arenaBounds(ARENAS[level]), cellSize: ARENAS[level].cellSize }),
   };
 }
