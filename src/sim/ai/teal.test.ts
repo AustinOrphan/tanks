@@ -30,6 +30,16 @@ function world(over: Partial<World>): World {
   };
 }
 
+// Mine-DRAW isolation: since the minePlacementChance magnitude became a per-bucket
+// draw (mineInclination), EVERY fixture that tests one of the OTHER mine gates --
+// true side (cap available, roaming, cooldown ready) AND false side (!avoid,
+// cooldown held, at cap) -- injects chance 1, so the draw can neither grant nor
+// mask the gate under test. This file's seed-3 draw (0.5521) sits above teal's
+// shipped 0.3: without MINE_SURE the false-side tests passed via the DRAW's
+// short-circuit and deleting the gate under test left them green (review, PR #58).
+// The draw itself is tested in profile.test.ts, where the chance is the variable.
+const MINE_SURE = { ...configFor('teal'), ai: { ...configFor('teal').ai, minePlacementChance: 1 } };
+
 describe('tealDecision', () => {
   // ---- Brief tests (4, with corrections A/B/C/F applied; updated for the Fix Round 1
   // patience/alternation/mobile changes) ----
@@ -38,7 +48,7 @@ describe('tealDecision', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const w = world({ tanks: [teal, player] });
-    const d = tealDecision(w, teal);
+    const d = tealDecision(w, teal, MINE_SURE);
     expect(d.fire).toBe(true);
     expect(d.fireType).toBe('ricochet');
     // B: player is stationary (desiredMove {0,0}) -> driveVelocity is (0,0) -> aimLead
@@ -57,7 +67,7 @@ describe('tealDecision', () => {
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)]; // blocker + top bounce wall
     const w = world({ tanks: [teal, player], walls });
-    const d = tealDecision(w, teal);
+    const d = tealDecision(w, teal, MINE_SURE);
     expect(d.fire).toBe(true);
     expect(d.fireType).toBe('ricochet');
     // C: the bounce point is (2,2), so the firing angle from (0,0) is exactly pi/4 (plus
@@ -87,7 +97,7 @@ describe('tealDecision', () => {
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)];
     const w = world({ tanks: [teal, player], walls });
-    const d = tealDecision(w, teal);
+    const d = tealDecision(w, teal, MINE_SURE);
     const unjittered = bankShot(teal.pos, player.pos, walls, RICOCHET_BOUNCES);
     expect(unjittered).not.toBeNull();
     expect(d.turretAngle).not.toBe(unjittered);
@@ -98,7 +108,7 @@ describe('tealDecision', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(1, 1.5, -1, 2.5, 1)]; // only the blocker, no bounce surface
-    const d = tealDecision(world({ tanks: [teal, player], walls }), teal);
+    const d = tealDecision(world({ tanks: [teal, player], walls }), teal, MINE_SURE);
     expect(d.fire).toBe(false);
     expect(d.nextState).toBe('reposition');
     // G: reposition wander is a unit vector, and fireType stays 'ricochet' even off the
@@ -115,7 +125,7 @@ describe('tealDecision', () => {
     const teal = tank(1, 'teal', { x: 3, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear line-of-sight, no walls
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at teal
-    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
+    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal, MINE_SURE);
     // Teal is aggressive now: dodging does NOT hold fire, even with a threat present.
     expect(d.fire).toBe(true);
     // A: pin the dodge SIDE, not just that x ~ 0.
@@ -132,7 +142,7 @@ describe('tealDecision', () => {
 
   it('D1: no player tank at all -> no fire, but Teal still WANDERS (mobile, spec §7)', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { turretAngle: 1.234 });
-    const d = tealDecision(world({ tanks: [teal] }), teal);
+    const d = tealDecision(world({ tanks: [teal] }), teal, MINE_SURE);
     expect(d.fire).toBe(false);
     // Freezing solid at {0,0} made Teal a stationary target between rounds and while the
     // player was respawning; Grey wanders in the same situation and so must Teal.
@@ -146,7 +156,7 @@ describe('tealDecision', () => {
   it('D2: player exists but is not alive -> no fire, but Teal still wanders', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { turretAngle: 1.234 });
     const deadPlayer = tank(2, 'player', { x: 5, y: 0 }, { alive: false });
-    const d = tealDecision(world({ tanks: [teal, deadPlayer] }), teal);
+    const d = tealDecision(world({ tanks: [teal, deadPlayer] }), teal, MINE_SURE);
     expect(d.fire).toBe(false);
     expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
     expect(d.nextState).toBe('idle');
@@ -323,7 +333,7 @@ describe('tealDecision', () => {
     // vscale({1,1}, 3) = (3,3). See report for the full hand-derived intercept arithmetic.
     const player = tank(2, 'player', { x: 5, y: 0 }, { desiredMove: { x: 1, y: 1 } });
     const w = world({ tanks: [teal, player] });
-    const d = tealDecision(w, teal);
+    const d = tealDecision(w, teal, MINE_SURE);
     expect(d.fire).toBe(true);
     // Closed-form intercept, rederived for the 2026-07-31 ricochet speed of 4:
     // a = |v|^2 - s^2 = 9 - 16, b = 2(rel.v) = 30/sqrt2, c = |rel|^2 = 25;
@@ -339,21 +349,21 @@ describe('tealDecision', () => {
   it('roaming, cooldown ready, no active mines -> mine is true', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 }); // not dodging
-    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    const d = tealDecision(world({ tanks: [teal, player] }), teal, MINE_SURE);
     expect(d.mine).toBe(true);
   });
 
   it('mineCooldown > 0 -> mine is false', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { mineCooldown: 0.3 });
     const player = tank(2, 'player', { x: 5, y: 0 });
-    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    const d = tealDecision(world({ tanks: [teal, player] }), teal, MINE_SURE);
     expect(d.mine).toBe(false);
   });
 
   it('at MINE_CAP -> mine is false', () => {
     const teal = tank(1, 'teal', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // length 2 == MINE_CAP
     const player = tank(2, 'player', { x: 5, y: 0 });
-    const d = tealDecision(world({ tanks: [teal, player] }), teal);
+    const d = tealDecision(world({ tanks: [teal, player] }), teal, MINE_SURE);
     expect(d.mine).toBe(false);
   });
 
@@ -361,7 +371,7 @@ describe('tealDecision', () => {
     const teal = tank(1, 'teal', { x: 3, y: 0 });
     const player = tank(2, 'player', { x: 5, y: 0 });
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at teal -> dangerAvoidMove is non-null
-    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal);
+    const d = tealDecision(world({ tanks: [teal, player], bullets: [b] }), teal, MINE_SURE);
     expect(d.mine).toBe(false);
     // Sanity check that this fixture really is a dodge, so this isn't a false-negative test.
     expect(Math.abs(d.desiredMove.y)).toBeCloseTo(1, 6);
@@ -372,7 +382,7 @@ describe('tealDecision', () => {
     const at = tank(1, 'teal', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // 2 == MINE_CAP(2)
     const playerBelow = tank(2, 'player', { x: 5, y: 0 });
     const playerAt = tank(2, 'player', { x: 5, y: 0 });
-    expect(tealDecision(world({ tanks: [below, playerBelow] }), below).mine).toBe(true);
-    expect(tealDecision(world({ tanks: [at, playerAt] }), at).mine).toBe(false);
+    expect(tealDecision(world({ tanks: [below, playerBelow] }), below, MINE_SURE).mine).toBe(true);
+    expect(tealDecision(world({ tanks: [at, playerAt] }), at, MINE_SURE).mine).toBe(false);
   });
 });

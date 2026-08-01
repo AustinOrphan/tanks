@@ -115,9 +115,11 @@ describe('shot-type weights gate what teal attempts (tealDecision)', () => {
   });
 });
 
-describe('minePlacementChance sign gates mine proposals', () => {
+describe('minePlacementChance gates mine proposals -- by MAGNITUDE since the draw', () => {
   // The player inside tactical mine range, no dodge, cooldown ready: the shipped
-  // grey profile proposes a mine here (control), a chance-less profile must not.
+  // grey profile proposes a mine here (control -- the fixture's draw, seed 5 id 1
+  // bucket 0 = 0.0444, passes every shipped chance), a chance-less profile must
+  // not. The magnitude's rate is pinned separately below.
   const fixture = () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 });
     const player = tank(2, 'player', { x: 3, y: 0 });
@@ -196,5 +198,55 @@ describe('aimAccuracy scales the jitter from the AI_AIM_SPREAD anchor', () => {
     expect(maxDev(1)).toBeLessThanOrEqual(AI_AIM_SPREAD + 1e-12);
     expect(maxDev(0.4)).toBeGreaterThan(AI_AIM_SPREAD * 1.5); // 2.5x spread; max draw comfortably exceeds 1.5x
     expect(maxDev(0.4)).toBeLessThanOrEqual(AI_AIM_SPREAD / 0.4 + 1e-12);
+  });
+});
+
+describe("minePlacementChance's MAGNITUDE is the proposal rate per draw bucket", () => {
+  it('proposal fraction tracks the chance across 400 draw buckets (0.3 and 0.8)', () => {
+    // The assertion that separates the draw from the old sign gate: a sign gate
+    // proposes in 100% of eligible windows regardless of magnitude and lands far
+    // outside these bounds -- proven by mutation (reverting grey's gate to
+    // `(chance ?? 0) > 0` fails this at fraction 1.0).
+    for (const chance of [0.3, 0.8]) {
+      let proposals = 0;
+      const windows = 400;
+      for (let i = 0; i < windows; i++) {
+        const grey = tank(1, 'grey', { x: 0, y: 0 });
+        const player = tank(2, 'player', { x: 3, y: 0 });
+        const w = world({ tanks: [grey, player], tick: i * 30 }); // WANDER_TICKS windows
+        const d = greyDecision(w, grey, withAi(configFor('grey'), { minePlacementChance: chance }));
+        if (d.mine) proposals++;
+      }
+      expect(proposals / windows).toBeGreaterThan(chance - 0.12);
+      expect(proposals / windows).toBeLessThan(chance + 0.12);
+    }
+  });
+
+  it("teal's draw is pinned too: fraction tracks the chance through tealDecision", () => {
+    // Review: with the rate pinned only through greyDecision, reverting TEAL's
+    // gate to sign-only left the whole suite green. Same loop, teal's decision.
+    let proposals = 0;
+    const windows = 400;
+    for (let i = 0; i < windows; i++) {
+      const teal = tank(1, 'teal', { x: 0, y: 0 });
+      const player = tank(2, 'player', { x: 3, y: 0 });
+      const w = world({ tanks: [teal, player], tick: i * 30 });
+      if (tealDecision(w, teal, withAi(configFor('teal'), { minePlacementChance: 0.3 })).mine) proposals++;
+    }
+    expect(proposals / windows).toBeGreaterThan(0.3 - 0.12);
+    expect(proposals / windows).toBeLessThan(0.3 + 0.12);
+  });
+
+  it('chance 1 proposes in every eligible bucket; chance 0 in none', () => {
+    let always = 0, never = 0;
+    for (let i = 0; i < 50; i++) {
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const player = tank(2, 'player', { x: 3, y: 0 });
+      const w = world({ tanks: [grey, player], tick: i * 30 });
+      if (greyDecision(w, grey, withAi(configFor('grey'), { minePlacementChance: 1 })).mine) always++;
+      if (greyDecision(w, grey, withAi(configFor('grey'), { minePlacementChance: 0 })).mine) never++;
+    }
+    expect(always).toBe(50);
+    expect(never).toBe(0);
   });
 });

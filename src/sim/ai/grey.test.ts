@@ -33,6 +33,11 @@ function world(over: Partial<World>): World {
   };
 }
 
+// Mine-draw isolation, as in teal.test.ts: gate-focused fixtures inject chance 1.
+// This file's seed-7 draw is 0.2616 -- only 0.038 below grey's shipped 0.3, so
+// leaving these on the shipped cfg made them retune-fragile (review, PR #58).
+const MINE_SURE = { ...configFor('grey'), ai: { ...configFor('grey').ai, minePlacementChance: 1 } };
+
 describe('greyDecision', () => {
   // ---- Brief tests (4, with correction A on the dodge test) ----
 
@@ -165,7 +170,7 @@ describe('greyDecision', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 });
     const player = tank(9, 'player', { x: 3, y: 0 }); // inside AI_MINE_TACTICAL_RADIUS
     const w = world({ tanks: [grey, player] }); // no bullets/mines -> not dodging
-    const d = greyDecision(w, grey);
+    const d = greyDecision(w, grey, MINE_SURE);
     expect(d.mine).toBe(true);
   });
 
@@ -206,14 +211,14 @@ describe('greyDecision', () => {
   it('H2: mineCooldown > 0 -> mine is false', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 }, { mineCooldown: 0.3 });
     const w = world({ tanks: [grey] });
-    const d = greyDecision(w, grey);
+    const d = greyDecision(w, grey, MINE_SURE);
     expect(d.mine).toBe(false);
   });
 
   it('H3: at MINE_CAP -> mine is false', () => {
     const grey = tank(1, 'grey', { x: 0, y: 0 }, { activeMineIds: [70, 71] }); // length 2 == MINE_CAP
     const w = world({ tanks: [grey] });
-    const d = greyDecision(w, grey);
+    const d = greyDecision(w, grey, MINE_SURE);
     expect(d.mine).toBe(false);
   });
 
@@ -221,7 +226,7 @@ describe('greyDecision', () => {
     const grey = tank(1, 'grey', { x: 3, y: 0 });
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // straight at grey -> dangerAvoidMove is non-null
     const w = world({ tanks: [grey], bullets: [b] });
-    const d = greyDecision(w, grey);
+    const d = greyDecision(w, grey, MINE_SURE);
     expect(d.mine).toBe(false);
     // Sanity check that this fixture really is a dodge (would be a false-negative
     // test otherwise): if this fails, H4 above isn't exercising the !avoid branch.
@@ -261,7 +266,7 @@ describe('greyDecision', () => {
     const player = tank(2, 'player', { x: 5, y: 0 }); // clear LOS, no walls, stationary
     const b = bullet(50, 99, { x: 0, y: 0 }, { x: 6, y: 0 }); // still an active threat
     const w = world({ tanks: [grey, player], bullets: [b] });
-    const d = greyDecision(w, grey);
+    const d = greyDecision(w, grey, MINE_SURE);
     expect(d.fire).toBe(true);
     // direct shot, player stationary, plus this tank/tick's seeded aim jitter
     expect(d.turretAngle).toBeCloseTo(aimJitter(w, grey, GREY_SPREAD), 6);
