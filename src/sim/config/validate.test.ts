@@ -153,6 +153,11 @@ describe('validateAiProfiles', () => {
     expect(() => validateAiProfiles(badW)).toThrow(/RICOCHET_SNIPER\.bankShotWeight.*\[0, 1\]/);
   });
 
+  it('rejects aimAccuracy 0 (profileAimSpread divides by it)', () => {
+    const bad = corrupt(aiProfilesJson, (c) => { (c.STATIC_BASIC as Mutable).aimAccuracy = 0; });
+    expect(() => validateAiProfiles(bad)).toThrow(/STATIC_BASIC\.aimAccuracy.*strictly positive/);
+  });
+
   it('keeps minePlacementChance optional: profiles without it validate', () => {
     // STATIC_BASIC ships without the field; reaching here on the shipped file
     // (first test) already proves it, but pin the field's absence explicitly so

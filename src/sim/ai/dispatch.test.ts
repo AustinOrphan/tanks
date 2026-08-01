@@ -262,7 +262,7 @@ describe('stepAi', () => {
       expect(w.mines.length).toBe(0);
       // Turret still tracks the target during countdown (orientation is the point of it),
       // but it only SLEWS: the desired angle (pi/2 + jitter, jitter bounded by
-      // AI_AIM_SPREAD=0.08) is far more than one tick's turn budget away from the
+      // profileAimSpread(grey) ~= 0.133) is far more than one tick's turn budget away from the
       // starting angle of 0, so after one stepAi call the turret has only advanced by
       // AI_TURRET_TURN_RATE*DT -- the exact desired angle (and its jitter) is not yet
       // visible in a single tick's result.
@@ -307,8 +307,8 @@ describe('stepAi', () => {
   describe('turret slew', () => {
     // Bearing 150deg from the origin, at radius 11.5546...: tan(30deg) =
     // 5.7735026918962575/10, and with dx<0, dy>0 the bearing is 180-30 = 150deg =
-    // 5*pi/6 ~= 2.61799 rad. Chosen so that even after AI_AIM_SPREAD's jitter (bounded
-    // +/-0.08 rad) is added, the desired angle stays safely inside (0, pi) -- nowhere
+    // 5*pi/6 ~= 2.61799 rad. Chosen so that even after grey's profile-derived jitter (bounded
+    // +/-profileAimSpread(grey) ~= 0.133 rad) is added, the desired angle stays safely inside (0, pi) -- nowhere
     // near the 0 or +/-pi wrap boundaries -- so the FIRST tick's slew direction and
     // magnitude are fully determined without needing to also compute the jitter by hand.
     const BEHIND_PLAYER_POS = { x: -10, y: 5.7735026918962575 };
