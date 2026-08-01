@@ -86,6 +86,9 @@ describe('hud.css is syntactically whole', () => {
       // stats: without the hidden rules the page covers everything from load
       '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
       '.hud-danger', '.hud-danger--armed', '.hud-run-summary', '.hud-run-summary--hidden',
+      // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
+      '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
+      '.hud-swatch', '.hud-swatch--selected',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

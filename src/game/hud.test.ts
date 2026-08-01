@@ -663,3 +663,49 @@ describe('hud: the stats page', () => {
     expect((root.querySelector('.hud-run-summary') as HTMLElement).textContent).toContain('4 kills');
   });
 });
+
+describe('hud: the paint shop', () => {
+  const pane = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-customize') as HTMLElement;
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-customize-open') as HTMLButtonElement;
+  const swatches = (root: HTMLElement): HTMLButtonElement[] =>
+    Array.from(root.querySelectorAll('.hud-swatch'));
+
+  it('opens from the title with one swatch per palette entry, current one marked', () => {
+    const { hud: h, root } = mount();
+    h.setHullColor('red');
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(pane(root).classList.contains('hud-customize--hidden')).toBe(false);
+    expect(swatches(root).length).toBeGreaterThanOrEqual(6);
+    const selected = swatches(root).filter((b) => b.classList.contains('hud-swatch--selected'));
+    expect(selected).toHaveLength(1);
+    expect(selected[0].dataset.hull).toBe('red');
+  });
+
+  it('reports a pick by id and re-marks the selection', () => {
+    const { hud: h, root } = mount();
+    const picks: string[] = [];
+    h.onPickHullColor((id) => picks.push(id));
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const purple = swatches(root).find((b) => b.dataset.hull === 'purple')!;
+    purple.dispatchEvent(new MouseEvent('click'));
+    expect(picks).toEqual(['purple']);
+    h.setHullColor('purple'); // the loop echoes the accepted pick back
+    expect(purple.classList.contains('hud-swatch--selected')).toBe(true);
+  });
+
+  it('is a title-screen affair: hidden everywhere else, closed by any state change', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing');
+    expect(pane(root).classList.contains('hud-customize--hidden')).toBe(true);
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(openBtn(root).classList.contains('hud-customize-open--hidden'), s).toBe(true);
+    }
+  });
+});

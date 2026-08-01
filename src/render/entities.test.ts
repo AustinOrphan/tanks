@@ -710,3 +710,49 @@ describe('world replacement (level switch)', () => {
     refViews.dispose();
   });
 });
+
+describe('the paint shop (player colour override)', () => {
+  it('repaints the PLAYER live on the next sync, and never the enemies', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+    views.sync(w, w, 0);
+
+    views.setPlayerColor('#d64545');
+    views.sync(w, w, 0);
+
+    const partColor = (x: number, name: string): number => {
+      let c = -1;
+      scene.traverse((o) => {
+        if (o.name === name) {
+          let g: THREE.Object3D | null = o;
+          while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+          if (g && (g as THREE.Group).position.x === x) {
+            c = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+          }
+        }
+      });
+      return c;
+    };
+    // The WHOLE tank repaints, not just the hull: review found a hull-only assertion
+    // would pass a player wearing an enemy-coloured turret. Tracks are the shaded
+    // derivative of the hull colour, so they prove the derivation follows too.
+    expect(partColor(3, 'hull')).toBe(0xd64545);
+    expect(partColor(3, 'turret')).toBe(0xd64545);
+    expect(partColor(3, 'track')).toBe(new THREE.Color(0xd64545).multiplyScalar(TRACK_SHADE).getHex());
+    expect(partColor(7, 'hull')).not.toBe(0xd64545); // brown keeps its identity
+
+    // And back to the roster default.
+    views.setPlayerColor(null);
+    views.sync(w, w, 0);
+    let restored = -1;
+    scene.traverse((o) => {
+      if (o.name === 'hull' && (o.parent as THREE.Group).position.x === 3) {
+        restored = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+      }
+    });
+    expect(restored).toBe(0x3d7bd6); // the roster's player blue
+    views.dispose();
+  });
+});

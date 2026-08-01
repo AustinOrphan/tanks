@@ -14,6 +14,8 @@ export interface Renderer3D {
   resize(w: number, h: number): void;
   /** Re-aim the scene at a new board size. In place: the GL context survives. */
   refit(worldWidth: number, worldHeight: number, boundary: number): void;
+  /** The paint shop: repaint the player live. Null restores the roster default. */
+  setPlayerColor(hex: string | null): void;
   dispose(): void;
 }
 
@@ -27,6 +29,8 @@ export interface RendererOptions {
   readonly mineReach?: boolean;
   /** Dev overlay: print each mine's remaining fuse beside it. */
   readonly mineTimer?: boolean;
+  /** The paint shop's saved hull colour, applied from the first frame. */
+  readonly playerColor?: string;
 }
 
 export function createRenderer(
@@ -41,6 +45,7 @@ export function createRenderer(
   let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
   const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
+  if (options.playerColor) entities.setPlayerColor(options.playerColor);
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =
@@ -96,5 +101,12 @@ export function createRenderer(
     ctx.dispose();
   }
 
-  return { render, screenToGround, resize, refit, dispose };
+  return {
+    render,
+    screenToGround,
+    resize,
+    refit,
+    setPlayerColor: (hex) => entities.setPlayerColor(hex),
+    dispose,
+  };
 }

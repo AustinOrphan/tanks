@@ -1,5 +1,6 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
+import { PALETTE, type HullColorId } from './customization';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import './hud.css';
@@ -69,6 +70,10 @@ export interface Hud {
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
   onResetProgress(cb: () => void): void;
+  /** The paint shop's current swatch, echoed back by the loop after an accepted pick. */
+  setHullColor(id: HullColorId): void;
+  /** Fired with the swatch id when the player clicks one. */
+  onPickHullColor(cb: (id: HullColorId) => void): void;
   dispose(): void;
 }
 
@@ -97,6 +102,12 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <div class="hud-customize hud-customize--hidden">
+      <h1>Customize</h1>
+      <p>Hull colour — repaints the tank behind this menu.</p>
+      <div class="hud-swatches"></div>
+      <button class="hud-customize-back" type="button">Back</button>
+    </div>
     <div class="hud-stats hud-stats--hidden">
       <h1>Stats</h1>
       <table class="hud-stats-table"></table>
@@ -113,6 +124,7 @@ export function createHud(root: HTMLElement): Hud {
       <p class="hud-run-summary hud-run-summary--hidden"></p>
       <button class="hud-action" type="button"></button>
       <button class="hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
+      <button class="hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
@@ -149,6 +161,10 @@ export function createHud(root: HTMLElement): Hud {
   const resetStatsBtn = el.querySelector('.hud-reset-stats') as HTMLButtonElement;
   const resetProgressBtn = el.querySelector('.hud-reset-progress') as HTMLButtonElement;
   const statsBackBtn = el.querySelector('.hud-stats-back') as HTMLButtonElement;
+  const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
+  const customizeView = el.querySelector('.hud-customize') as HTMLElement;
+  const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
+  const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
   const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
@@ -161,6 +177,32 @@ export function createHud(root: HTMLElement): Hud {
   const quitCbs: Array<() => void> = [];
   const resetStatsCbs: Array<() => void> = [];
   const resetProgressCbs: Array<() => void> = [];
+  const pickHullCbs: Array<(id: HullColorId) => void> = [];
+  let currentHull: HullColorId = PALETTE[0].id;
+
+  // One button per palette entry, built once: the palette is a frozen constant.
+  // Their click closures are deliberately NOT in dispose()'s removeEventListener
+  // list: nothing outside this subtree holds them, so el.remove() reclaims all of
+  // it -- the explicit removals elsewhere cover elements tests re-dispatch into.
+  for (const swatch of PALETTE) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hud-swatch';
+    b.dataset.hull = swatch.id;
+    b.title = swatch.label;
+    b.style.background = swatch.hex;
+    b.addEventListener('click', (e) => {
+      for (const cb of pickHullCbs) cb(swatch.id);
+      if ((e as MouseEvent).detail > 0) b.blur();
+    });
+    swatchesRow.appendChild(b);
+  }
+
+  function renderSwatchSelection(): void {
+    for (const b of Array.from(swatchesRow.children) as HTMLButtonElement[]) {
+      b.classList.toggle('hud-swatch--selected', b.dataset.hull === currentHull);
+    }
+  }
 
   let statsData: { lifetime: StatCounts; run: StatCounts } | null = null;
 
@@ -237,6 +279,12 @@ export function createHud(root: HTMLElement): Hud {
     if (show) renderStatsTable();
   }
 
+  function showCustomize(show: boolean): void {
+    customizeView.classList.toggle('hud-customize--hidden', !show);
+    panel.classList.toggle('hud-panel--hidden', show);
+    if (show) renderSwatchSelection();
+  }
+
   const handleMute = (): void => {
     for (const cb of muteCbs) cb();
   };
@@ -287,6 +335,15 @@ export function createHud(root: HTMLElement): Hud {
   };
   const handleResetStats = (): void => handleDangerClick(resetStatsBtn, resetStatsCbs);
   const handleResetProgress = (): void => handleDangerClick(resetProgressBtn, resetProgressCbs);
+  const handleCustomizeOpen = (): void => showCustomize(true);
+  const handleCustomizeBack = (): void => {
+    showCustomize(false);
+    setState('title');
+  };
+  customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
+  customizeOpenBtn.addEventListener('click', blurIfPointer);
+  customizeBackBtn.addEventListener('click', handleCustomizeBack);
+  customizeBackBtn.addEventListener('click', blurIfPointer);
   statsOpenBtn.addEventListener('click', handleStatsOpen);
   statsOpenBtn.addEventListener('click', blurIfPointer);
   statsBackBtn.addEventListener('click', handleStatsBack);
@@ -311,6 +368,12 @@ export function createHud(root: HTMLElement): Hud {
   const levelSelectCbs: Array<(level: number) => void> = [];
 
   function setState(s: GameState): void {
+    // Any state change closes the stats and customize pages FIRST -- including the
+    // playing early-return below, or an overlay opened on the title screen would
+    // sit over the live game. They are title-screen affairs.
+    statsView.classList.add('hud-stats--hidden');
+    customizeView.classList.add('hud-customize--hidden');
+    disarmReset();
     if (s === 'playing') {
       panel.classList.add('hud-panel--hidden');
       return;
@@ -321,11 +384,8 @@ export function createHud(root: HTMLElement): Hud {
     // title (the main menu) and pause; win/lose stay verdict-only. Level select is a
     // menu affair -- and only when there is a choice to make (see setLevelSelect).
     shownState = s;
-    // Any state change closes the stats page: it is a title-screen affair, and a
-    // win/lose/pause panel must never render underneath it.
-    statsView.classList.add('hud-stats--hidden');
-    disarmReset();
     statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
+    customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
     levelsRow.classList.toggle('hud-levels--hidden', s !== 'title' || !levelChoice);
@@ -490,8 +550,19 @@ export function createHud(root: HTMLElement): Hud {
     onResetProgress(cb: () => void): void {
       resetProgressCbs.push(cb);
     },
+    setHullColor(id: HullColorId): void {
+      currentHull = id;
+      renderSwatchSelection();
+    },
+    onPickHullColor(cb: (id: HullColorId) => void): void {
+      pickHullCbs.push(cb);
+    },
     dispose(): void {
       disarmReset(); // a pending confirm timer must not outlive the HUD
+      customizeOpenBtn.removeEventListener('click', handleCustomizeOpen);
+      customizeOpenBtn.removeEventListener('click', blurIfPointer);
+      customizeBackBtn.removeEventListener('click', handleCustomizeBack);
+      customizeBackBtn.removeEventListener('click', blurIfPointer);
       statsOpenBtn.removeEventListener('click', handleStatsOpen);
       statsOpenBtn.removeEventListener('click', blurIfPointer);
       statsBackBtn.removeEventListener('click', handleStatsBack);
