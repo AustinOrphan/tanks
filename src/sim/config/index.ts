@@ -9,9 +9,11 @@
 // pipeline generalises beyond the shipped roster.
 //
 // Tanks are ONE FAMILY on the generic catalog machinery (catalog.ts); walls are
-// the second (walls.ts, read via wallConfigFor). Arenas are already plain data
-// (arena.ts grids). New families -- power-ups, turrets, bosses, destructibles --
-// should ride createCatalog the same way rather than inventing parallel plumbing.
+// the second (walls.ts, read via wallConfigFor); arenas are the third
+// (config/arenas.ts, read via ARENA_DEFS/arenaById) -- validated JSON in
+// config/data/arenas.json, not TypeScript literals. New families -- power-ups,
+// turrets, bosses, destructibles -- should ride createCatalog the same way
+// rather than inventing parallel plumbing.
 // The authoritative balance scalars live in data/balance.json; constants.ts
 // derives from it (see the note at the top of that file).
 export * from './enums';

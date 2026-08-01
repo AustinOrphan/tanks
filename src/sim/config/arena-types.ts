@@ -36,8 +36,32 @@ export interface ArenaShape {
  * cell in a failure message.
  */
 export type ArenaClaim =
-  | { type: 'sightlineAfterBreach'; from: [number, number]; sees: boolean; why: string }
   | {
+      /**
+       * ALL-OR-NOTHING PER ARENA: declaring one `sightlineAfterBreach` claim commits
+       * the arena to declaring one for EVERY enemy spawn. arena-validation.test.ts
+       * checks this by SET EQUALITY between the claimed `from` cells and the arena's
+       * actual enemy-spawn cells, in both directions, so an arena's claims of this
+       * type are a COMPLETE statement of its post-breach spawn lines, never a
+       * sample -- restoring a population pin the JSON migration had dropped. An
+       * arena may still declare zero of them (arena-01 does).
+       */
+      type: 'sightlineAfterBreach';
+      from: [number, number];
+      sees: boolean;
+      why: string;
+    }
+  | {
+      /**
+       * A line between two points, checked in both wall phases. HAZARD: `from`/`to`
+       * are LITERAL grid cells, routed through the plain `cell()` validator rather
+       * than `enemySpawnCell()` -- nothing ties an endpoint to a spawn. Moving a
+       * spawn away from an endpoint does not invalidate the claim: the lane keeps
+       * measuring the same two cells (now possibly empty floor) and keeps passing.
+       * Co-locate a `sightlineAfterBreach` claim at the same cell -- that variant
+       * DOES require a live spawn there, so it catches the move at load time -- or
+       * re-check the lane by hand after moving any spawn it references.
+       */
       type: 'lane';
       from: [number, number];
       to: [number, number];

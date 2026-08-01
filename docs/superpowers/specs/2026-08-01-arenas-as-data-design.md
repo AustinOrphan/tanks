@@ -61,8 +61,7 @@ problem with three instances of it.
 
 ## Claim vocabulary
 
-Points are named as an author thinks: a grid cell `[col, row]`, or `"player"` resolving to
-the player spawn.
+Points are named as a grid cell `[col, row]`.
 
 **`sightlineAfterBreach`** — with every destructible destroyed, whether an enemy spawn can
 see the player spawn. `from` must be a cell holding an enemy spawn (the validator checks
@@ -96,8 +95,12 @@ instead of a lesson someone has to remember.
 
 Universal rules stay universal and un-claimed: loads clean, exactly one player spawn, at
 least one enemy, every breachable cell mutually reachable, and no enemy sightline to the
-player spawn at spawn. Claims are only the per-arena extras. An arena with no claims is
-valid.
+player spawn at spawn. Claims are the per-arena extras, with one exception:
+`sightlineAfterBreach` is all-or-nothing per arena -- declaring one commits the arena to
+declaring one for every enemy spawn (checked by set equality between claimed cells and
+actual spawn cells, both directions), so that claim type's set is a complete statement of
+an arena's post-breach spawn lines, not a sample. An arena with no claims at all is valid
+(arena-01 declares no `sightlineAfterBreach` claims, for instance).
 
 ## Validation split
 
@@ -112,10 +115,13 @@ probes. These need `lineOfSight`, so they live in the test layer — dragging th
 into `config/` to save milliseconds at boot would be a bad trade, and the purity guard
 watches that boundary.
 
-On failure the runner prints the annotated board: the offending line drawn across the grid,
-spawns marked, the claim's `why` quoted. A red test says which cell betrayed the design,
-not merely that a boolean flipped. `npx vitest watch` on that one file is the authoring
-loop.
+On failure the runner prints the board with the claim's own cells marked `*`
+(`renderBoard`) and the claim's `why` quoted -- not a drawn line or marked spawns:
+`sightlineAfterBreach` and `lane` mark their `from`/`to` cell(s), but `spawnBlockRobust`
+and the structural (sealed-pocket) message pass no cells at all, so those render an
+entirely unmarked board and the message text carries the detail instead. A red test says
+which claim failed and why, and for `sightlineAfterBreach`/`lane` also at which cell.
+`npx vitest watch` on that one file is the authoring loop.
 
 ## Testing
 
