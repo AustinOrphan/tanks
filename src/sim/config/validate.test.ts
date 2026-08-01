@@ -295,13 +295,28 @@ describe('validateArenas', () => {
     expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.sees.*boolean/);
   });
 
-  it('rejects a lane claim whose intact/breached state is not "blocked" or "open"', () => {
+  it('rejects a lane claim whose "intact" state is not "blocked" or "open"', () => {
+    // breached is left VALID here: object-literal fields evaluate left to
+    // right, so if it were also invalid this would only ever prove intact's
+    // guard, never breached's -- the two get separate tests for that reason.
     const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
       ((c.arenas as Mutable[])[0] as Mutable).claims = [
         { type: 'lane', from: [0, 0], to: [3, 2], intact: 'ajar', breached: 'open', why: 'x' },
       ];
     });
     expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.intact.*"ajar"/);
+  });
+
+  it('rejects a lane claim whose "breached" state is not "blocked" or "open"', () => {
+    // intact is left VALID here, mirroring the control above -- this is the
+    // only way to reach breached's oneOf() at all, since it is evaluated
+    // after intact's in the object literal.
+    const bad = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'lane', from: [0, 0], to: [3, 2], intact: 'blocked', breached: 'ajar', why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(bad)).toThrow(/arenas\[0\]\.claims\[0\]\.breached.*"ajar"/);
   });
 
   it('rejects a claim that is not an object', () => {
@@ -336,6 +351,12 @@ describe('validateArenas', () => {
       ];
     });
     expect(() => validateArenas(zero)).toThrow(/arenas\[0\]\.claims\[0\]\.nudge.*greater than zero/);
+    const negative = corrupt({ arenas: [GOOD_ARENA] }, (c) => {
+      ((c.arenas as Mutable[])[0] as Mutable).claims = [
+        { type: 'spawnBlockRobust', nudge: -1, why: 'x' },
+      ];
+    });
+    expect(() => validateArenas(negative)).toThrow(/arenas\[0\]\.claims\[0\]\.nudge.*greater than zero/);
   });
 
   it('rejects a claim cell that is not a [col, row] pair', () => {
@@ -408,6 +429,8 @@ describe('validateArenaShape', () => {
     const { id, notes, claims, ...shape } = GOOD_ARENA;
     void id; void notes; void claims;
     expect(() => validateArenaShape({ ...shape, cellSize: 0 }, 'sandbox', 'sandbox'))
+      .toThrow(/sandbox\.cellSize.*greater than zero/);
+    expect(() => validateArenaShape({ ...shape, cellSize: -1 }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.cellSize.*greater than zero/);
   });
 
