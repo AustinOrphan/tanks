@@ -21,10 +21,18 @@ untouched.
 - Reset-to-default is a plain single click: unlike the stats/progress resets it
   destroys nothing a click cannot restore.
 
-## Later (noted with the user, not in this pass)
+## v2: skins (approved 2026-08-01)
 
-- **Skins/textures**: the texture pipeline is procedural (createTextures) -- camo,
-  stripes, two-tone hull maps are mintable without assets. v2.
+Five skins, all procedural, tinted from the CHOSEN hull colour so paint and skin
+compose: solid (default, no map), stripes, camo, checker, and flow -- the animated
+debut, scrolling slowly. Coverage: hull + turret; tracks stay their solid shade
+(grounding, and the least pattern-friendly UVs). Animation speed is a PER-SKIN data
+field (user: "we will end up with both [subtle and bold] eventually"), so a fast
+variant later is a data entry. Skin ids and labels live in game/customization.ts
+beside the palette; texture GENERATION lives in render/skins.ts (it needs THREE).
+Stored beside the hull colour in tanks.custom.v1.
+
+## Later (noted with the user, not in this pass)
 - **Animations**: idle turret sway, spawn drop-in, victory spin -- render-layer,
   driven from the existing per-frame sync. v3.
 - **Emotes** (user, 2026-08-01: "emotes could even be a thing lol"): popup
