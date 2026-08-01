@@ -171,8 +171,10 @@ export function createScene(
   let groundGeo = new THREE.PlaneGeometry(framed.width, framed.height);
   // Tile the fibre grain roughly once per two world units. Any coarser and the felt
   // reads as fabric print; any finer and it aliases into shimmer at this camera height.
-  // fit() keeps this density on refit by mutating texture.repeat -- the texture OBJECT
-  // must survive, because entities.ts borrows the same TextureSet.
+  // fit() keeps this density on refit by mutating texture.repeat. The TextureSet as a
+  // whole must survive refit -- entities.ts borrows concreteNormal and timberNormal
+  // from it -- so recreating the set is off the table, and mutating feltNormal's
+  // repeat is the cheap, safe alternative.
   const feltRepeatFor = (w: number, h: number): number => Math.max(2, Math.round(Math.max(w, h) / 2));
   const textures = createTextures(feltRepeatFor(worldWidth, worldHeight));
 

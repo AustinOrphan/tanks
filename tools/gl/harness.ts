@@ -235,7 +235,6 @@ check('refit re-aims ground, camera and screenToGround at a NEW board size', () 
 
   // The centre pixel must now map to the NEW arena centre.
   const p = r.screenToGround(400, 250);
-  const framed2 = framedBounds(W2, H2, BOUNDARY);
   const dx = Math.abs(p.x - W2 / 2);
   const dy = Math.abs(p.y - H2 / 2);
   if (dx > BOUNDARY || dy > BOUNDARY) {
@@ -250,7 +249,6 @@ check('refit re-aims ground, camera and screenToGround at a NEW board size', () 
   }
   r.dispose();
   c.remove();
-  void framed2;
   return null;
 });
 
@@ -279,9 +277,12 @@ check('refit resizes the ground plane to the new framed bounds, both directions'
   return null;
 });
 
-check('refit moves the shadow camera with the board, keeping texel density', () => {
-  // The shadow lesson (texel density first, bias second) has to survive refit: a
-  // wider board with the OLD shadow extents regrows the acne/detachment trade-off.
+check('refit moves the shadow camera with the board, no wasted margin', () => {
+  // The shadow lesson (extents fitted to the board, bias second) has to survive
+  // refit: a wider board with the OLD extents clips casters at the edges, and OLD
+  // extents kept oversized waste texels. Note the map stays 2048^2, so a larger
+  // board still means fewer texels per unit -- that is physics, not a defect; this
+  // asserts the margin discipline only.
   const ctx = fresh();
   ctx.refit(34, 18, BOUNDARY);
   let sun: THREE.DirectionalLight | null = null;
