@@ -18,10 +18,17 @@ describe('parseDevFlags', () => {
     expect(parseDevFlags('?dev=1')).toEqual(DEV_FLAGS_OFF);
   });
 
-  it('turns roundPhaseHud on only with both keys', () => {
-    expect(parseDevFlags('?roundPhaseHud=1').roundPhaseHud).toBe(false);
-    expect(parseDevFlags('?dev=1').roundPhaseHud).toBe(false);
-    expect(parseDevFlags('?dev=1&roundPhaseHud=1').roundPhaseHud).toBe(true);
+  it('turns aimRay on only with both keys', () => {
+    expect(parseDevFlags('?aimRay=1').aimRay).toBe(false);
+    expect(parseDevFlags('?dev=1').aimRay).toBe(false);
+    expect(parseDevFlags('?dev=1&aimRay=1').aimRay).toBe(true);
+  });
+
+  it('no longer knows roundPhaseHud: the countdown HUD shipped, so the flag is gone', () => {
+    // A retired flag must not linger as an accepted-but-ignored key, or a shared
+    // ?dev=1&roundPhaseHud=1 link reads as still meaning something.
+    expect('roundPhaseHud' in DEV_FLAGS_OFF).toBe(false);
+    expect(parseDevFlags('?dev=1&roundPhaseHud=1')).toEqual(DEV_FLAGS_OFF);
   });
 
   it('leaves every other flag alone when one is set', () => {
@@ -178,11 +185,10 @@ describe('parseDevFlags: invincibility and the playtest bundle', () => {
 
   it('playtest=1 switches on the whole playtest kit in one flag', () => {
     const f = parseDevFlags('?dev=1&playtest=1');
-    // Population: the five flags the bundle covers. Not a DevFlags field itself --
+    // Population: the four flags the bundle covers. Not a DevFlags field itself --
     // it EXPANDS at parse time, so the one-flag-flips-one-field derivation test
-    // above keeps its meaning.
+    // above keeps its meaning. (roundPhaseHud left the bundle when it shipped.)
     expect(f.invincible).toBe(true);
-    expect(f.roundPhaseHud).toBe(true);
     expect(f.shellCount).toBe(true);
     expect(f.mineReach).toBe(true);
     expect(f.mineTimer).toBe(true);

@@ -38,7 +38,8 @@ export interface Hud {
    * Round-start phase feedback. `null` hides it. `prominent` picks the centred
    * banner over the topbar chip; the caller decides which, not the HUD.
    *
-   * Only reached when the roundPhaseHud dev flag is on -- see devflags.ts.
+   * Shipped on: the round opens with 3.0s in which nothing moves, and without
+   * this the player presses a direction and the game appears broken.
    */
   setRoundPhase(info: RoundPhaseInfo | null): void;
   /**

@@ -10,6 +10,8 @@ import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
 import type { AchievementContext, AchievementId } from './achievements';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
+import { roundPhase } from '../sim/round';
+import { COUNTDOWN_TICKS } from '../sim/constants';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
@@ -1044,27 +1046,20 @@ describe('startGameWith: the mine-trigger policy reaches the world', () => {
   });
 });
 
-describe('startGameWith: round-phase HUD (dev flag)', () => {
-  function withFlag(on: boolean): ReturnType<typeof makeDeps> {
+describe('startGameWith: round-phase HUD', () => {
+  function inCountdown(): ReturnType<typeof makeDeps> {
     // A world that starts in countdown: roundStartTick equal to tick.
     const base = createArenaWorld(1);
     return makeDeps({
       world: { ...base, tick: 0, roundStartTick: 0 },
-      devFlags: { roundPhaseHud: on, aimRay: false, shellCount: false },
     });
   }
 
-  it('says NOTHING to the HUD when the flag is off', () => {
-    // Default-off must be byte-identical to not having the feature.
-    const h = boot(withFlag(false));
-    h.setState('playing');
-    h.fireFrame(100);
-    expect(h.rec.roundPhases).toHaveLength(0);
-    h.handle.dispose();
-  });
-
-  it('drives the HUD when the flag is on', () => {
-    const h = boot(withFlag(true));
+  it('drives the HUD with NO flag needed: the countdown is shipped behaviour', () => {
+    // The round opens with COUNTDOWN_TICKS in which movement is blocked. Without
+    // this the player presses a direction, nothing happens for three seconds, and
+    // the game reads as broken -- which is what it did while this sat behind a flag.
+    const h = boot(inCountdown());
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.roundPhases.length).toBeGreaterThan(0);
@@ -1074,8 +1069,47 @@ describe('startGameWith: round-phase HUD (dev flag)', () => {
     h.handle.dispose();
   });
 
+  it('stops announcing EXACTLY when movement unblocks, not a tick before', () => {
+    // ~17ms per frame is one tick at TICK_HZ, so every tick of the countdown gets
+    // its own frame and the final one is genuinely exercised. Coarser frames skip
+    // ~6 ticks each and a countdown that went quiet one tick early slipped through.
+    const h = boot(inCountdown());
+    h.setState('playing');
+    for (let i = 1; i <= COUNTDOWN_TICKS + 20; i++) h.fireFrame(i * 17);
+    // Per-frame push and per-frame render, so index i is the same frame in both.
+    expect(h.rec.roundPhases.length).toBe(h.rec.renders.length);
+    const firstSilent = h.rec.roundPhases.findIndex((p) => p === null);
+    expect(firstSilent).toBeGreaterThan(0); // it announced before it stopped
+    // BOTH edges. Too early: a countdown frame with no announcement is a frozen
+    // tank the player has no explanation for. Too late: the frame before must
+    // still have been countdown, or the chip outstays the block it explains.
+    // Asserting only the first left a "goes quiet one tick LATE" mutant alive.
+    expect(roundPhase(h.rec.renders[firstSilent].curr)).not.toBe('countdown');
+    expect(roundPhase(h.rec.renders[firstSilent - 1].curr)).toBe('countdown');
+    h.handle.dispose();
+  });
+
+  it('clears the indicator when play stops, so no frozen chip is left behind', () => {
+    // refreshRoundPhase only runs from onSimulated, which the driver calls ONLY
+    // while playing. Pause during the 3s countdown and the last push is whatever
+    // was on screen -- and quitting to title leaves it there indefinitely, since
+    // switchTo rebuilds the world without simulating a frame. The chip lives in
+    // the topbar (z-index 1) and paints ABOVE the panel, so it is not subtle.
+    const h = boot(inCountdown());
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.roundPhases.at(-1)).not.toBeNull(); // it is announcing
+
+    h.setState('paused');
+    expect(h.rec.roundPhases.at(-1)).toBeNull(); // ... and stops when play does
+
+    h.setState('title');
+    expect(h.rec.roundPhases.at(-1)).toBeNull();
+    h.handle.dispose();
+  });
+
   it('makes the FIRST round of the page load prominent', () => {
-    const h = boot(withFlag(true));
+    const h = boot(inCountdown());
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.roundPhases[0]?.prominent).toBe(true);
@@ -1085,7 +1119,7 @@ describe('startGameWith: round-phase HUD (dev flag)', () => {
   it('drops to the quiet chip on the next round', () => {
     // Rounds restart on every respawn, not just a new game -- resetArena moves
     // roundStartTick -- so the second round must not re-teach.
-    const h = boot(withFlag(true));
+    const h = boot(inCountdown());
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.roundPhases[0]?.prominent).toBe(true);
@@ -1105,8 +1139,7 @@ describe('startGameWith: round-phase HUD (dev flag)', () => {
       makeDeps({
         // Far past COUNTDOWN_TICKS + GRACE_TICKS.
         world: { ...base, tick: 5000, roundStartTick: 0 },
-        devFlags: { roundPhaseHud: true, aimRay: false, shellCount: false },
-      }),
+        }),
     );
     h.setState('playing');
     h.fireFrame(100);
@@ -1157,7 +1190,6 @@ describe('startGameWith: level progression', () => {
     const h = boot(makeDeps({
       levelCount: 2,
       staticRoundStart: true,
-      devFlags: { roundPhaseHud: true },
     }));
     h.setState('playing');
     h.fireFrame(16);

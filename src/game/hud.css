@@ -532,7 +532,7 @@
   display: none;
 }
 
-/* ---- Round-start phase feedback (dev flag: roundPhaseHud) ---------------- */
+/* ---- Round-start phase feedback ------------------------------------------- */
 
 /* Topbar chip: the quiet form, used on every round after the first. */
 .hud-phase {

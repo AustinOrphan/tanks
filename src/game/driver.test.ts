@@ -221,7 +221,7 @@ describe('driver: event routing', () => {
     h: ReturnType<typeof harness>;
     playerId: number;
   } {
-    // The round opens with 180 countdown ticks then 120 grace ticks, and
+    // The round opens with 180 countdown ticks (GRACE_TICKS is 0, so no grace span), and
     // `canAct` is false through both, so a fresh world cannot fire on tick 1.
     // Back-dating roundStartTick starts the fixture 'live' -- pumping the real
     // 5 seconds instead would hand the AI 300 ticks to destroy the player and

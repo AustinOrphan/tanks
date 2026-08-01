@@ -2,8 +2,8 @@
  * Opt-in switches for work that is finished but not shipped.
  *
  * Nothing here is on unless `dev` is present in the query string, so a stray
- * `?roundPhaseHud=1` in a shared link does nothing on its own. Flipping a flag
- * needs both: `?dev=1&roundPhaseHud=1`.
+ * `?aimRay=1` in a shared link does nothing on its own. Flipping a flag
+ * needs both: `?dev=1&aimRay=1`.
  *
  * Parsing a string rather than reading `location` directly keeps this a pure
  * function, so the whole table is assertable without a browser.
@@ -12,13 +12,6 @@ import type { TankKind, UnarmedTrigger } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 
 export interface DevFlags {
-  /**
-   * Round-start phase feedback in the HUD: a banner on the first round of the
-   * page load, a topbar chip on every round after it. The round opens with 3.0s
-   * where nothing moves and 2.0s where nothing fires, applied to the AI too,
-   * and the HUD says nothing about either.
-   */
-  roundPhaseHud: boolean;
   /**
    * Draw the player's computed aim: a ray along the turret and a marker where
    * screenToGround says the cursor lands.
@@ -97,7 +90,6 @@ export interface DevFlags {
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
-  roundPhaseHud: false,
   aimRay: false,
   shellCount: false,
   seed: null,
@@ -182,7 +174,6 @@ export function parseDevFlags(search: string): DevFlags {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   if (!isOn(params, 'dev')) return DEV_FLAGS_OFF;
   const flags: DevFlags = {
-    roundPhaseHud: isOn(params, 'roundPhaseHud'),
     aimRay: isOn(params, 'aimRay'),
     shellCount: isOn(params, 'shellCount'),
     seed: asSeed(params, 'seed'),
@@ -201,7 +192,6 @@ export function parseDevFlags(search: string): DevFlags {
   // its meaning. OR semantics -- individual flags can add to the kit, not veto it.
   if (isOn(params, 'playtest')) {
     flags.invincible = true;
-    flags.roundPhaseHud = true;
     flags.shellCount = true;
     flags.mineReach = true;
     flags.mineTimer = true;
