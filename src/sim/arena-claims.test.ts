@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { claimFailures, renderBoard, structuralFailures } from './arena-claims';
+import { claimFailures, renderBoard, structuralFailures, cellOf } from './arena-claims';
 import { SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import { arenaById } from './config/arenas';
-import type { Arena } from './arena';
-import { ARENA_01 } from './arena';
+import { ARENA_01, loadArena, type Arena } from './arena';
 import type { ArenaClaim } from './config/arena-types';
 
 // A guard is worth what its own tests prove: the purity guard passed four of five
@@ -193,11 +192,34 @@ describe('failure boards point at the thing that failed', () => {
     expect(board.join('').split('*')).toHaveLength(2); // exactly one mark
   });
 
-  it('a spawn-sightline board distinguishes the enemy from the player', () => {
+  it('a spawn-sightline board marks E at the enemy and P at the player', () => {
+    // POSITIONAL, not merely present: re-review noted that asserting `toContain('E')`
+    // and `toContain('P')` cannot catch the two glyphs being swapped, because this
+    // fixture's grid already holds a literal 'P' at the player's own cell whatever
+    // the marking does. Assert the cells.
     const [failure] = structuralFailures(OPEN_SIGHTLINE_ARENA);
-    const board = failure.split('\n').slice(1).join('\n');
-    expect(board).toContain('E');
-    expect(board).toContain('P');
+    const board = failure.split('\n').slice(1);
+    const { spawns } = loadArena(OPEN_SIGHTLINE_ARENA);
+    const enemy = spawns.find((sp) => sp.kind !== 'player')!;
+    const player = spawns.find((sp) => sp.kind === 'player')!;
+    const [ec, er] = cellOf(OPEN_SIGHTLINE_ARENA, enemy.pos);
+    const [pc, pr] = cellOf(OPEN_SIGHTLINE_ARENA, player.pos);
+    expect(board[er][ec]).toBe('E');
+    expect(board[pr][pc]).toBe('P');
+  });
+
+  it('an arena with no player spawn is diagnosed, not crashed on', () => {
+    // reachable()'s flood fill anchors on the player; this exercises the fallback.
+    // validateArenas would reject such an arena, but structuralFailures is called
+    // on hand-built fixtures too, so the branch is real and was untested.
+    const noPlayer: Arena = {
+      cols: 5, rows: 3, cellSize: 2,
+      legend: { '#': 'solid' },
+      grid: ['B#...', '#....', '.....'],
+    };
+    const failures = structuralFailures(noPlayer);
+    expect(() => structuralFailures(noPlayer)).not.toThrow();
+    expect(failures).toContain('no player spawn');
   });
 
   it('renderBoard reports an out-of-grid mark instead of throwing', () => {
