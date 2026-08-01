@@ -27,6 +27,13 @@ export interface ArenaShape {
  * A machine-checkable statement of design intent, verified by the runner in
  * src/sim/arena-claims.ts. Every claim carries `why`: the rationale travels with
  * the property it protects, so porting a grid cannot strand it.
+ *
+ * Every coordinate pair below (`from`, `to`) is `[col, row]` -- matching the
+ * order `loadArena` walks the grid in (`for (r) for (c) ... grid[r][c]`) and the
+ * order the array literal is written in a `for (const [c, r] of ...)` destructure.
+ * The runner and its tests both trust this order; a transposition compiles fine
+ * (both are `[number, number]`) and only shows up as a misdrawn board or a wrong
+ * cell in a failure message.
  */
 export type ArenaClaim =
   | { type: 'sightlineAfterBreach'; from: [number, number]; sees: boolean; why: string }

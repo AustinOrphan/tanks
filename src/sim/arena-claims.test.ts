@@ -20,6 +20,27 @@ describe('claimFailures reports a false claim of each type', () => {
     expect(claimFailures(A03, [truth])).toEqual([]);
     expect(claimFailures(A03, [lie])).toHaveLength(1);
     expect(claimFailures(A03, [lie])[0]).toMatch(/sightlineAfterBreach/);
+
+    // [1,1] alone cannot tell breach() from a no-op: its line to the player reads
+    // false under BOTH the intact and the breached wall sets, so a mutant that
+    // checks `walls` instead of `breached` in the runner still passes every
+    // assertion above. A cell whose reading actually CHANGES after breach is
+    // needed. Measured (bare cell centres, `from` -> the player spawn, all 99
+    // grid cells of arena-03): 9 of 99 read intact=false, breached=true --
+    // [3,4], [7,4], [3,5], [4,5], [6,5], [7,5], [4,6], [5,6], [6,6]. [3,4] is
+    // used below. These are hand-built inline fixtures for this meta-test, so
+    // they bypass validateArenas' requirement that a real claim's `from` sit on
+    // an enemy spawn -- do not "fix" this by moving the coordinate onto a spawn:
+    // [1,1] above IS a real spawn (an olive), and it's exactly the
+    // non-discriminating cell this second pair exists to avoid repeating.
+    const truthBreach: ArenaClaim = {
+      type: 'sightlineAfterBreach', from: [3, 4], sees: true,
+      why: 'measured, discriminates breach() from a no-op (intact=false, breached=true)',
+    };
+    const lieBreach: ArenaClaim = { ...truthBreach, sees: false };
+    expect(claimFailures(A03, [truthBreach])).toEqual([]);
+    expect(claimFailures(A03, [lieBreach])).toHaveLength(1);
+    expect(claimFailures(A03, [lieBreach])[0]).toMatch(/sightlineAfterBreach/);
   });
 
   it('lane: the true expectation passes, the inverted one fails', () => {
@@ -73,10 +94,15 @@ describe('structuralFailures covers the universal rules', () => {
 
 describe('renderBoard', () => {
   it('marks the requested cells and preserves the grid otherwise', () => {
-    const board = renderBoard(A03, [[1, 1]]);
+    // [3, 1] is deliberately OFF the diagonal: a mark at [1, 1] cannot tell a
+    // correct rows[r][c] write from a transposed rows[c][r] one, since row and
+    // col are interchangeable there. Coordinate order is [col, row] throughout
+    // ArenaClaim (see arena-types.ts), matching loadArena's (c, r) grid walk.
+    const board = renderBoard(A03, [[3, 1]]);
     const lines = board.trim().split('\n');
     expect(lines).toHaveLength(A03.rows);
-    expect(lines[1][1]).toBe('*');
+    expect(lines[1][3]).toBe('*'); // row 1, col 3 -- the marked cell
+    expect(lines[3][1]).toBe('.'); // row 3, col 1 -- untouched; a transposed write lands here instead
     expect(lines[7]).toContain('P'); // untouched rows still read as the grid
   });
 });
