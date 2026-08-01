@@ -226,8 +226,23 @@ export function startGameWith(
   // for a before/after comparison.
   const nextSeed = (): number => deps.devFlags.seed ?? deriveSeed(deps.wallMs());
 
+  /**
+   * The ONE place worlds are built: boot, level advance, quit-to-title and level pick
+   * all pass through here, so seed, mine policy, lives carry and the dev
+   * invincibility flag cannot drift apart between them -- their parity used to be
+   * checked line-by-line in review instead of being structural.
+   */
+  function buildWorld(atLevel: number, lives?: number): World {
+    const w = deps.levels.world(atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives);
+    if (deps.devFlags.invincible) {
+      const p = w.tanks.find((t) => t.kind === 'player');
+      if (p) p.invincible = true;
+    }
+    return w;
+  }
+
   let level = deps.levels.start;
-  let world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+  let world = buildWorld(level);
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
   // try/catch to render a "this browser has no WebGL" page, and that only
@@ -324,7 +339,7 @@ export function startGameWith(
       const advancing = sm.state === 'win' && level + 1 < deps.levels.count;
       const carried = advancing ? driver.world.lives : undefined;
       level = advancing ? level + 1 : deps.levels.start;
-      world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined, carried);
+      world = buildWorld(level, carried);
       playerId = world.tanks.find((t) => t.kind === 'player')?.id;
       director.setPlayerId(playerId ?? -1);
       // A FRESH world's roundStartTick can equal the old one's (both start at the same
@@ -350,7 +365,7 @@ export function startGameWith(
     if (sm.state !== 'title') return;
     if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.count) return;
     level = picked;
-    world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+    world = buildWorld(level);
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     lastRoundStartTick = null;
@@ -371,7 +386,7 @@ export function startGameWith(
     // starting level with fresh lives. Rebuilt NOW rather than lazily on Start, so
     // the title screen renders over the new arena, not the abandoned game.
     level = deps.levels.start;
-    world = deps.levels.world(level, nextSeed(), deps.devFlags.mineTrigger ?? undefined);
+    world = buildWorld(level);
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     lastRoundStartTick = null;

@@ -168,3 +168,40 @@ describe('parseDevFlags: sandbox knobs', () => {
     }
   });
 });
+
+describe('parseDevFlags: invincibility and the playtest bundle', () => {
+  it('invincible needs dev, like everything else', () => {
+    expect(parseDevFlags('?invincible=1').invincible).toBe(false);
+    expect(parseDevFlags('?dev=1&invincible=1').invincible).toBe(true);
+  });
+
+  it('playtest=1 switches on the whole playtest kit in one flag', () => {
+    const f = parseDevFlags('?dev=1&playtest=1');
+    // Population: the five flags the bundle covers. Not a DevFlags field itself --
+    // it EXPANDS at parse time, so the one-flag-flips-one-field derivation test
+    // above keeps its meaning.
+    expect(f.invincible).toBe(true);
+    expect(f.roundPhaseHud).toBe(true);
+    expect(f.shellCount).toBe(true);
+    expect(f.mineReach).toBe(true);
+    expect(f.mineTimer).toBe(true);
+    // And nothing else: seed stays unset, the sandbox knobs stay default.
+    expect(f.seed).toBeNull();
+    expect(f.level).toBeNull();
+  });
+
+  it('playtest without dev does nothing, and playtest=0 is off', () => {
+    expect(parseDevFlags('?playtest=1')).toEqual(DEV_FLAGS_OFF);
+    expect(parseDevFlags('?dev=1&playtest=0')).toEqual(DEV_FLAGS_OFF);
+  });
+});
+
+describe('parseDevFlags: playtest is additive, never a veto', () => {
+  it('an explicit =0 on a bundled flag loses to the bundle, by documented OR semantics', () => {
+    // The one surprising interaction: playtest=1&mineTimer=0 keeps mineTimer ON.
+    // Individual flags can ADD to the kit, not subtract from it -- anyone wanting
+    // the kit minus a piece lists the pieces instead of using the bundle.
+    expect(parseDevFlags('?dev=1&playtest=1&mineTimer=0').mineTimer).toBe(true);
+    expect(parseDevFlags('?dev=1&playtest=1&invincible=0').invincible).toBe(true);
+  });
+});
