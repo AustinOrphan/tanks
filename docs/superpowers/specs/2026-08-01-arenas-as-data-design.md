@@ -46,8 +46,9 @@ third family, in a **single ordered file**.
 ```
 
 The `grid` carries BOTH wall characters (mapped by `legend`) and spawn letters (`P`, `B`,
-`G`, `T`, `O`), exactly as today: `loadArena` resolves spawn letters through its own
-`SPAWN_KINDS` table, and `legend` covers walls only. `.` is open floor.
+`G`, `T`, `O`), exactly as today: `loadArena` resolves spawn letters through the shared
+`SPAWN_LETTERS` table (`config/arena-types.ts`), the same one the validator uses, and
+`legend` covers walls only. `.` is open floor.
 
 `notes` is deliberate. The roster port lost a load-bearing comment (BANK_SHOT_AIM is
 descriptive, not a gate) and review had to catch it. Arena rationale is longer and
