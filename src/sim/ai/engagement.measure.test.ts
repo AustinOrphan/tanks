@@ -39,7 +39,7 @@ const SEEDS = 60;
 function run(arenaIdx: number): string {
   const samples = new Map<string, number[]>();
   const gameTicks: number[] = [];
-  let losses = 0, timeouts = 0, freeWins = 0;
+  let losses = 0, timeouts = 0, freeWins = 0, mines = 0;
   for (let seed = 1; seed <= SEEDS; seed++) {
     let w = createWorldFor(ARENAS[arenaIdx], seed);
     const rnd = mulberry(seed * 7919 + 13);
@@ -48,7 +48,9 @@ function run(arenaIdx: number): string {
     while (w.status === 'playing' && ticks < TICK_CAP) {
       if (ticks % 45 === 0) heading += (rnd() - 0.5) * 2.4;
       const dir = { x: Math.cos(heading), y: Math.sin(heading) };
-      w = step(w, { move: dir, aim: dir, fire: false, mine: false }).world;
+      const r = step(w, { move: dir, aim: dir, fire: false, mine: false });
+      w = r.world;
+      mines += r.events.filter((e) => e.type === 'mine-dropped').length;
       const player = w.tanks.find((t) => t.kind === 'player');
       if (player?.alive && ticks % 10 === 0) {
         for (const t of w.tanks) {
@@ -69,7 +71,7 @@ function run(arenaIdx: number): string {
     `${k}: median=${q(v, 0.5).toFixed(2)} p25=${q(v, 0.25).toFixed(2)} p75=${q(v, 0.75).toFixed(2)} n=${v.length}`);
   // Median game length = the lethality axis (added for the aimAccuracy sweep):
   // more AI jitter -> slower kills -> longer games. Population: all SEEDS games.
-  return `arena${arenaIdx + 1}: losses=${losses}/${SEEDS} freeWins=${freeWins} timeouts=${timeouts} medianTicks=${q(gameTicks, 0.5)}\n  ${rows.join('\n  ')}`;
+  return `arena${arenaIdx + 1}: losses=${losses}/${SEEDS} freeWins=${freeWins} timeouts=${timeouts} medianTicks=${q(gameTicks, 0.5)} minesPerGame=${(mines / SEEDS).toFixed(2)}\n  ${rows.join('\n  ')}`;
 }
 
 describe.skip('engagement-distance measurement (flip skip off to run locally)', () => {

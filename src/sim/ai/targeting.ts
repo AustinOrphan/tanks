@@ -323,6 +323,32 @@ export function wanderMove(world: World, tank: Tank): Vec2 {
 }
 
 /**
+ * The mine-inclination draw: minePlacementChance consumed by MAGNITUDE. In each
+ * WANDER_TICKS window an eligible tank passes with probability equal to its
+ * profile's chance (grey/teal 0.3: mines go down in ~30% of the windows where
+ * every tactical gate already said yes), instead of the old sign-only gate that
+ * laid one every eligible window.
+ *
+ * Measured on the 60-seed harness before shipping (engagement.measure.test.ts,
+ * which gained its minesPerGame column for exactly this):
+ *   sign gate (old): 3.43 / 3.45 mines per game (a1/a3), free-win gate 3/60
+ *   draw (shipped):  1.93 / 1.65,                        free-win gate 2/60
+ * Lethality flat (medianTicks 1497->1496 / 1730->1750): shells kill the
+ * pacifist player, not mines. Fewer mines = fewer AI self-kills, so the draw
+ * BUYS BACK the gate headroom the aimAccuracy pass spent. Same pure-hash recipe as the other draws --
+ * fresh prime 6101, so no stream collides (wander 1000, retreat 4243, jitter
+ * 7919) -- and the fixture-critical draw (seed 5, id 1, bucket 0) is 0.0444,
+ * below every shipped chance, which is why the pre-existing mine fixtures pass
+ * unchanged.
+ */
+export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfig): boolean {
+  const chance = cfg.ai.minePlacementChance ?? 0;
+  if (chance <= 0) return false;
+  const bucket = Math.floor(world.tick / WANDER_TICKS);
+  return nextRng(world.seed + tank.id * 6101 + bucket).value < chance;
+}
+
+/**
  * Per-profile aim spread, derived from the global anchor: AI_AIM_SPREAD is the
  * jitter of a PERFECT-accuracy profile (aimAccuracy 1.0), and lower accuracy
  * widens it -- Austin's framing: the anchor is maximal accuracy, profiles

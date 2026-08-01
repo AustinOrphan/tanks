@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { TICK_HZ } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
@@ -79,10 +79,9 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // And gated on the player being close enough for the mine to threaten anything at all --
   // dropping merely because the cooldown allowed it made own mines the largest single cause
   // of AI deaths, with the tank littering ground nobody was contesting.
-  // Profile-gated inclination: only a profile with a positive minePlacementChance
   // proposes mines at all (the MAGNITUDE is not consumed -- mine timing here is
   // deterministic, gated on tactics, never on a random draw).
-  const mine = (cfg.ai.minePlacementChance ?? 0) > 0
+  const mine = mineInclination(world, tank, cfg)
     && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
     && mineThreatensPlayer(world, tank);
 

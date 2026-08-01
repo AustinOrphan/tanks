@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, mineInclination, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { BANK_PREFER_TICKS } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
@@ -84,9 +84,9 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // here avoids burning tank.mineCooldown on a request dropMine would refuse anyway.
   // Also gated on the player being near enough for the mine to matter -- see
   // mineThreatensPlayer. Availability is not a reason to lay ordnance.
-  // Profile-gated inclination, as in grey.ts: only a profile with a positive
-  // minePlacementChance proposes mines (the magnitude is not consumed).
-  const mine = (cfg.ai.minePlacementChance ?? 0) > 0
+  // Profile-drawn inclination, as in grey.ts: the chance's magnitude is the
+  // per-window probability of proposing.
+  const mine = mineInclination(world, tank, cfg)
     && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
     && mineThreatensPlayer(world, tank);
 
