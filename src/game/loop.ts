@@ -3,6 +3,7 @@ import type { SimEvent } from '../sim/events';
 import type { Vec2 } from '../sim/types';
 import { createLevelSystem, type LevelSystem } from './levels';
 import { createProgressStore, type ProgressStore } from './progress';
+import { createStatsStore, type StatsStore } from './stats';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -80,6 +81,8 @@ export interface GameDeps {
   readonly levels: LevelSystem;
   /** Saved progress: which levels are cleared. Drives level select and Start's level. */
   readonly progress: ProgressStore;
+  /** The lifetime and per-run tallies, fed from the attributed event stream. */
+  readonly stats: StatsStore;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -189,6 +192,7 @@ function browserStorage(): Storage {
 export function createBrowserDeps(): GameDeps {
   const devFlags = parseDevFlags(globalThis.location?.search ?? '');
   const progress = createProgressStore(browserStorage());
+  const stats = createStatsStore(browserStorage());
   return {
     createRenderer,
     createInput: createInputController,
@@ -198,6 +202,7 @@ export function createBrowserDeps(): GameDeps {
     createHud,
     levels: createLevelSystem(devFlags, progress),
     progress,
+    stats,
     now: () => performance.now(),
     wallMs: () => Date.now(),
     raf: {
@@ -314,6 +319,13 @@ export function startGameWith(
     // CLAUDE.md warns about. Discriminate on kind.
     onFrameEvents(events): void {
       if (isPlayerDeath(events)) hud.signalPlayerDeath();
+      // Attributed against the CURRENT world's player: ids are arena-dependent, and
+      // a stale id would misfile every stat from level 2 onward.
+      deps.stats.record(events, playerId ?? -1);
+      // Keep the HUD's copy fresh: the stats page re-renders only while visible, and
+      // the win/lose run-summary line updates a beat after the state flips -- the
+      // winning kill is in THIS batch, not the one before the panel opened.
+      hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
     },
   });
 
@@ -370,6 +382,9 @@ export function startGameWith(
     hud.setLevel(level + 1, deps.levels.count);
     driver.reset(world);
     refreshStats(world);
+    // A switch is a new run: the per-run tally starts over, the lifetime rolls on.
+    deps.stats.startRun();
+    hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   }
 
   /** How many levels are pickable: everything cleared plus the next one, capped. */
@@ -400,6 +415,18 @@ export function startGameWith(
     sm.toTitle();
   });
 
+  hud.onResetStats(() => {
+    deps.stats.resetLifetime();
+    hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
+  });
+
+  hud.onResetProgress(() => {
+    deps.progress.reset();
+    // Levels re-lock immediately: the select the player is looking at must not keep
+    // offering a level the save no longer justifies.
+    hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+  });
+
   sm.onChange((s) => {
     hud.setState(s);
     // startMusic is idempotent (engine checks music.playing()), so a resume passing
@@ -423,6 +450,8 @@ export function startGameWith(
   hud.setState(sm.state); // initial title panel
   hud.setLevel(level + 1, deps.levels.count);
   hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+  deps.stats.startRun();
+  hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   refreshStats(world);
 
   const onKey = (e: KeyboardEvent): void => {

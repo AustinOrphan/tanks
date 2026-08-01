@@ -1,0 +1,152 @@
+import type { SimEvent } from '../sim/events';
+
+/**
+ * The lifetime tally and the per-run tally, fed by the attributed event stream.
+ *
+ * Game layer only, like progress.ts, and paranoid the same way: one localStorage key,
+ * corrupt data reads as zeros, a throwing storage (Safari private mode) degrades to
+ * in-memory for the session. The sim never reads any of this.
+ */
+export const STATS_KEY = 'tanks.stats.v1';
+
+export interface StatCounts {
+  shotsFired: number;
+  shellKills: number;
+  mineKills: number;
+  deaths: number;
+  selfKills: number;
+  friendlyFireKills: number;
+  minesLaid: number;
+  wallsDestroyed: number;
+  ricochets: number;
+}
+
+export const ZERO_STATS: StatCounts = Object.freeze({
+  shotsFired: 0,
+  shellKills: 0,
+  mineKills: 0,
+  deaths: 0,
+  selfKills: 0,
+  friendlyFireKills: 0,
+  minesLaid: 0,
+  wallsDestroyed: 0,
+  ricochets: 0,
+});
+
+export interface StatsStore {
+  lifetime(): StatCounts;
+  run(): StatCounts;
+  /** Fold one frame's events in, attributed against the CURRENT world's player id. */
+  record(events: SimEvent[], playerId: number): void;
+  /** A new run begins (level switch, quit, retry): zero the run tally only. */
+  startRun(): void;
+  /** The two-click-confirmed reset. Lifetime only; the run tally is already ephemeral. */
+  resetLifetime(): void;
+}
+
+function read(storage: Storage): StatCounts {
+  let raw: string | null = null;
+  try {
+    raw = storage.getItem(STATS_KEY);
+  } catch {
+    return { ...ZERO_STATS };
+  }
+  if (raw === null || raw === '') return { ...ZERO_STATS };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return { ...ZERO_STATS };
+    }
+    const out = { ...ZERO_STATS };
+    for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {
+      const v = (parsed as Record<string, unknown>)[key];
+      // Each counter individually validated: one corrupt field must not poison the
+      // rest, and "many" is not a number of shots.
+      if (typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v) && v >= 0) {
+        out[key] = v;
+      }
+    }
+    return out;
+  } catch {
+    return { ...ZERO_STATS };
+  }
+}
+
+export function createStatsStore(storage: Storage): StatsStore {
+  const life = read(storage);
+  let run: StatCounts = { ...ZERO_STATS };
+
+  function persist(): void {
+    try {
+      storage.setItem(STATS_KEY, JSON.stringify(life));
+    } catch {
+      // Private mode or quota: the in-memory tally carries the session.
+    }
+  }
+
+  function bump(key: keyof StatCounts): void {
+    life[key] += 1;
+    run[key] += 1;
+  }
+
+  return {
+    lifetime: () => ({ ...life }),
+    run: () => ({ ...run }),
+    startRun(): void {
+      run = { ...ZERO_STATS };
+    },
+    resetLifetime(): void {
+      for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) life[key] = 0;
+      persist();
+    },
+    record(events: SimEvent[], playerId: number): void {
+      let changed = false;
+      for (const e of events) {
+        switch (e.type) {
+          case 'fire':
+            if (e.ownerId === playerId) {
+              bump('shotsFired');
+              changed = true;
+            }
+            break;
+          case 'ricochet':
+            if (e.ownerId === playerId) {
+              bump('ricochets');
+              changed = true;
+            }
+            break;
+          case 'mine-dropped':
+            if (e.ownerId === playerId) {
+              bump('minesLaid');
+              changed = true;
+            }
+            break;
+          case 'wall-destroyed':
+            if (e.ownerId === playerId) {
+              bump('wallsDestroyed');
+              changed = true;
+            }
+            break;
+          case 'tank-destroyed':
+            if (e.kind === 'player') {
+              bump('deaths');
+              // Dying to your OWN ricochet or mine is additionally a self kill.
+              if (e.by.ownerId === playerId) bump('selfKills');
+              changed = true;
+            } else if (e.by.ownerId === playerId) {
+              bump(e.by.source === 'shell' ? 'shellKills' : 'mineKills');
+              changed = true;
+            } else {
+              // An enemy destroyed by a non-player owner: the AI shot its own side.
+              bump('friendlyFireKills');
+              changed = true;
+            }
+            break;
+          default:
+            break;
+        }
+      }
+      if (changed) persist();
+    },
+  };
+}

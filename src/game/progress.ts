@@ -16,6 +16,8 @@ export interface ProgressStore {
   highestCleared(): number;
   /** Record a clear. Keeps the maximum: replaying level 1 cannot re-lock level 3. */
   recordCleared(level: number): void;
+  /** The two-click-confirmed reset: everything re-locks, persisted. */
+  reset(): void;
 }
 
 export function createProgressStore(storage: Storage): ProgressStore {
@@ -50,6 +52,14 @@ export function createProgressStore(storage: Storage): ProgressStore {
         storage.setItem(PROGRESS_KEY, String(shadow));
       } catch {
         // Private mode or quota: the shadow carries the session; nothing persists.
+      }
+    },
+    reset(): void {
+      shadow = 0;
+      try {
+        storage.setItem(PROGRESS_KEY, '0');
+      } catch {
+        // Same degradation as recordCleared: the session forgets, storage may not.
       }
     },
   };

@@ -8,7 +8,7 @@ import { DEV_FLAGS_OFF } from './devflags';
 
 /** A progress store at a fixed high-water mark; recording is a test-visible no-op. */
 function progressAt(highest: number): ProgressStore {
-  return { highestCleared: () => highest, recordCleared: () => {} };
+  return { highestCleared: () => highest, recordCleared: () => {}, reset: () => {} };
 }
 import { ARENAS, arenaBounds, createWorldFor } from '../sim/arena';
 import { LIVES } from '../sim/constants';
@@ -107,6 +107,9 @@ describe('createLevelSystem: start is live, not a boot-time snapshot', () => {
       highestCleared: () => cleared,
       recordCleared: (l) => {
         cleared = Math.max(cleared, l);
+      },
+      reset: () => {
+        cleared = 0;
       },
     };
     const sys = createLevelSystem(DEV_FLAGS_OFF, live);

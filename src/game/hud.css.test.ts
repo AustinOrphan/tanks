@@ -83,6 +83,9 @@ describe('hud.css is syntactically whole', () => {
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling
       '.hud-levels', '.hud-levels--hidden', '.hud-level-btn', '.hud-level-btn--locked', // level select
+      // stats: without the hidden rules the page covers everything from load
+      '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
+      '.hud-danger', '.hud-danger--armed', '.hud-run-summary', '.hud-run-summary--hidden',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

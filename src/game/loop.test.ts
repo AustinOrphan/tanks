@@ -5,6 +5,7 @@
 // around. frame.test.ts and driver.test.ts deliberately do NOT use jsdom.
 import { describe, it, expect } from 'vitest';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
+import { ZERO_STATS } from './stats';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
@@ -43,6 +44,11 @@ interface Recorder {
   deathSignals: number;
   inputClears: number;
   cleared: number[];
+  progressResets: number;
+  statBatches: Array<{ count: number; playerId: number }>;
+  statRunStarts: number;
+  statResets: number;
+  statPushes: number;
   levelSelects: Array<[number, number]>;
   builtWorlds: World[];
   volumes: number[];
@@ -68,6 +74,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     startRestart(): void;
     quitToTitle(): void;
     pickLevel(i: number): void;
+    resetStats(): void;
+    resetProgress(): void;
   };
   setState(s: GameState): void;
   getState(): GameState;
@@ -96,6 +104,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     deathSignals: 0,
     inputClears: 0,
     cleared: [],
+    progressResets: 0,
+    statBatches: [],
+    statRunStarts: 0,
+    statResets: 0,
+    statPushes: 0,
     levelSelects: [],
     builtWorlds: [],
     volumes: [],
@@ -117,6 +130,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onVolume = (_v: number): void => {};
   let onStartRestart = (): void => {};
   let onQuit = (): void => {};
+  let onResetStats = (): void => {};
+  let onResetProgress = (): void => {};
   let onPickLevel = (_i: number): void => {};
 
   function emit(): void {
@@ -262,6 +277,15 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onQuitToTitle: (cb: () => void) => {
           onQuit = cb;
         },
+        setStats: () => {
+          rec.statPushes += 1;
+        },
+        onResetStats: (cb: () => void) => {
+          onResetStats = cb;
+        },
+        onResetProgress: (cb: () => void) => {
+          onResetProgress = cb;
+        },
         setLevelSelect: (u: number, t: number) => rec.levelSelects.push([u, t]),
         onLevelSelect: (cb: (i: number) => void) => {
           onPickLevel = cb;
@@ -269,12 +293,35 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         dispose: () => rec.disposed.push('hud'),
       };
     },
-    progress: {
-      highestCleared: () => Math.max(opts.progressHighest ?? 0, ...rec.cleared, 0),
-      recordCleared: (level: number) => {
-        rec.cleared.push(level);
+    stats: {
+      lifetime: () => ({ ...ZERO_STATS }),
+      run: () => ({ ...ZERO_STATS }),
+      record: (events: SimEvent[], playerId: number) => {
+        rec.statBatches.push({ count: events.length, playerId });
+      },
+      startRun: () => {
+        rec.statRunStarts += 1;
+      },
+      resetLifetime: () => {
+        rec.statResets += 1;
       },
     },
+    progress: (() => {
+      // Mutable base so reset() models the real store: everything re-locks,
+      // including clears that predate this session.
+      let base = opts.progressHighest ?? 0;
+      return {
+        highestCleared: () => Math.max(base, ...rec.cleared, 0),
+        recordCleared: (level: number) => {
+          rec.cleared.push(level);
+        },
+        reset: () => {
+          rec.progressResets += 1;
+          rec.cleared.length = 0;
+          base = 0;
+        },
+      };
+    })(),
     levels: {
       // Defaults to a ONE-level sequence: every pre-progression test in this file was
       // written against "restart rebuilds the same arena", which is exactly what a
@@ -345,6 +392,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       startRestart: () => onStartRestart(),
       quitToTitle: () => onQuit(),
       pickLevel: (i) => onPickLevel(i),
+      resetStats: () => onResetStats(),
+      resetProgress: () => onResetProgress(),
     },
     setState: (s) => {
       state = s;
@@ -1257,6 +1306,49 @@ describe('startGameWith: per-level renderer refit', () => {
     h.setState('lose');
     h.hud.startRestart(); // retry the same level
     expect(h.rec.refits).toEqual([]);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: stats wiring', () => {
+  it('feeds every frame\'s events to the store, attributed to the CURRENT player id', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.fireFrame(100); // the countdown tick emits nothing, but eventful frames do
+    // Whatever batches arrived, each must carry the real player id, never a stale one.
+    const player = createArenaWorld(1).tanks.find((t) => t.kind === 'player')!;
+    for (const b of h.rec.statBatches) expect(b.playerId).toBe(player.id);
+    h.handle.dispose();
+  });
+
+  it('starts a fresh run tally at boot and on every level switch', () => {
+    const h = boot(makeDeps({ levelCount: 2 }));
+    expect(h.rec.statRunStarts).toBe(1); // boot
+    h.setState('win');
+    h.hud.startRestart(); // advance
+    expect(h.rec.statRunStarts).toBe(2);
+    h.setState('playing');
+    h.keydown({ key: 'Escape' });
+    h.hud.quitToTitle(); // quit rebuild
+    expect(h.rec.statRunStarts).toBe(3);
+    h.handle.dispose();
+  });
+
+  it('Reset stats zeroes the lifetime and refreshes the page', () => {
+    const h = boot(makeDeps());
+    const pushesBefore = h.rec.statPushes;
+    h.hud.resetStats();
+    expect(h.rec.statResets).toBe(1);
+    expect(h.rec.statPushes).toBeGreaterThan(pushesBefore);
+    h.handle.dispose();
+  });
+
+  it('Reset progress re-locks levels and refreshes the level select', () => {
+    const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
+    expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]); // level 2 open at boot
+    h.hud.resetProgress();
+    expect(h.rec.progressResets).toBe(1);
+    expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]); // re-locked
     h.handle.dispose();
   });
 });
