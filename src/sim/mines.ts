@@ -132,7 +132,7 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
       blastReaches(world.walls, blast.pos, t.pos)
     ) {
       t.alive = false
-      events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { source: 'blast', ownerId: blast.ownerId }, pos: { x: t.pos.x, y: t.pos.y } })
+      events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { ...blast.credit }, pos: { x: t.pos.x, y: t.pos.y } })
       events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
     }
   }
@@ -145,7 +145,7 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
       w.destroyed = true
       const cx = (w.aabb.minX + w.aabb.maxX) / 2
       const cy = (w.aabb.minY + w.aabb.maxY) / 2
-      events.push({ type: 'wall-destroyed', wallId: w.id, ownerId: blast.ownerId, pos: { x: cx, y: cy } })
+      events.push({ type: 'wall-destroyed', wallId: w.id, ownerId: blast.credit.ownerId, pos: { x: cx, y: cy } })
     }
   }
 }
@@ -169,7 +169,13 @@ export function stepBlasts(world: World, events: SimEvent[]): void {
  * Set a mine off. The kill is no longer instantaneous: this applies the blast at
  * its smallest radius and leaves a Blast behind for stepBlasts to grow.
  */
-export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void {
+export function detonateMine(
+  world: World,
+  mine: Mine,
+  events: SimEvent[],
+  /** Present when something OTHER than the mine's own logic set it off -- a shell. */
+  credit?: Blast['credit'],
+): void {
   if (mine.detonated) return
   mine.detonated = true
   events.push({ type: 'mine-detonate', mineId: mine.id, ownerId: mine.ownerId, pos: { x: mine.pos.x, y: mine.pos.y } })
@@ -177,6 +183,7 @@ export function detonateMine(world: World, mine: Mine, events: SimEvent[]): void
   const blast: Blast = {
     id: world.nextId++,
     ownerId: mine.ownerId,
+    credit: credit ?? { source: 'blast', ownerId: mine.ownerId },
     pos: { x: mine.pos.x, y: mine.pos.y },
     age: 0,
   }

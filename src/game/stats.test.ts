@@ -112,3 +112,47 @@ describe('createStatsStore: storage paranoia', () => {
     expect(s.lifetime().shotsFired).toBe(1);
   });
 });
+
+describe('the shot-an-enemy-mine scenario (found in review)', () => {
+  it('files the kill as the player\'s SHELL kill: a hit, not AI friendly fire', () => {
+    // The sim now credits a shell-triggered blast to the shooter, so the page
+    // stops calling a player kill "AI friendly fire" and stops scoring the
+    // killing shot as a miss.
+    const s = createStatsStore(localStorage);
+    s.record([fire(P), killed('brown', 'shell', P)], P);
+    expect(s.lifetime().shellKills).toBe(1);
+    expect(s.lifetime().friendlyFireKills).toBe(0);
+  });
+});
+
+describe('two stores over one storage (the second-tab case)', () => {
+  it('never erases another instance\'s counts: persist max-merges per field', () => {
+    // Found in review, same clobber class as the progress store but with a far
+    // larger window (stats persist on every eventful frame).
+    const tabA = createStatsStore(localStorage);
+    const tabB = createStatsStore(localStorage);
+    tabA.record([fire(P), fire(P)], P);
+    tabB.record([mineDropped(P)], P);
+    const reloaded = createStatsStore(localStorage).lifetime();
+    expect(reloaded.shotsFired).toBe(2); // tabB's write did not erase tabA's shots
+    expect(reloaded.minesLaid).toBe(1);
+  });
+
+  it('reset does NOT max-merge, or it would resurrect what it just erased', () => {
+    const s = createStatsStore(localStorage);
+    s.record([fire(P)], P);
+    s.resetLifetime();
+    expect(createStatsStore(localStorage).lifetime()).toEqual(ZERO_STATS);
+  });
+});
+
+describe('per-field validation (found in review: was only tested with whole-object junk)', () => {
+  it('drops the corrupt fields and keeps the valid siblings', () => {
+    localStorage.setItem(STATS_KEY, '{"shotsFired":-5,"deaths":3,"shellKills":2.7,"ricochets":4}');
+    const life = createStatsStore(localStorage).lifetime();
+    expect(life.shotsFired).toBe(0); // negative dropped
+    expect(life.shellKills).toBe(0); // float dropped
+    expect(life.deaths).toBe(3); // valid sibling survives
+    expect(life.ricochets).toBe(4);
+  });
+});

@@ -276,7 +276,7 @@ describe('shell geometry', () => {
 describe('blast views', () => {
   function withBlast(age: number): World {
     const w = makeWorld();
-    w.blasts.push({ id: 900, ownerId: 1, pos: { x: 4, y: 6 }, age });
+    w.blasts.push({ id: 900, ownerId: 1, credit: { source: 'blast', ownerId: 1 }, pos: { x: 4, y: 6 }, age });
     return w;
   }
 

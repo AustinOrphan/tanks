@@ -1312,11 +1312,17 @@ describe('startGameWith: per-level renderer refit', () => {
 
 describe('startGameWith: stats wiring', () => {
   it('feeds every frame\'s events to the store, attributed to the CURRENT player id', () => {
-    const h = boot(makeDeps());
+    // The world is LIVE with an armed mine whose fuse expires within the first tick,
+    // so the frame is guaranteed eventful. Review found the first version of this
+    // test fired a COUNTDOWN frame: the driver only calls onFrameEvents on eventful
+    // frames, so the assertion loop ran zero times and proved nothing.
+    const world = { ...createArenaWorld(1), roundStartTick: -100000 };
+    world.mines.push({ id: 500, ownerId: 99, pos: { x: 1, y: 1 }, timer: 0.001, armed: true, detonated: false });
+    const h = boot(makeDeps({ world }));
     h.setState('playing');
-    h.fireFrame(100); // the countdown tick emits nothing, but eventful frames do
-    // Whatever batches arrived, each must carry the real player id, never a stale one.
-    const player = createArenaWorld(1).tanks.find((t) => t.kind === 'player')!;
+    h.fireFrame(100);
+    expect(h.rec.statBatches.length).toBeGreaterThan(0); // the frame really was eventful
+    const player = world.tanks.find((t) => t.kind === 'player')!;
     for (const b of h.rec.statBatches) expect(b.playerId).toBe(player.id);
     h.handle.dispose();
   });
@@ -1339,7 +1345,7 @@ describe('startGameWith: stats wiring', () => {
     const pushesBefore = h.rec.statPushes;
     h.hud.resetStats();
     expect(h.rec.statResets).toBe(1);
-    expect(h.rec.statPushes).toBeGreaterThan(pushesBefore);
+    expect(h.rec.statPushes).toBe(pushesBefore + 1); // exactly one refresh per reset
     h.handle.dispose();
   });
 

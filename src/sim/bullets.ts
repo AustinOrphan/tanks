@@ -173,7 +173,9 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
       if (!circleVsCircle(b.pos, BULLET_RADIUS, m.pos, MINE_TRIGGER_RADIUS).hit) continue
       if (!shellMayDetonate(world, m)) continue
       b.alive = false
-      detonateMine(world, m, events)
+      // The SHOOTER gets credit for whatever this blast destroys: detonating a mine
+      // with a shell is a skill shot, whoever owns the mine.
+      detonateMine(world, m, events, { source: 'shell', ownerId: b.ownerId })
       break
     }
   }

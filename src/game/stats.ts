@@ -77,6 +77,16 @@ export function createStatsStore(storage: Storage): StatsStore {
   let run: StatCounts = { ...ZERO_STATS };
 
   function persist(): void {
+    // Max-merge against CURRENT storage before writing: a second tab persists too,
+    // and a blind write of this tab's copy erased whatever the other tab had counted
+    // since we booted (found in review -- the progress store had the same clobber).
+    // Max is the no-loss choice for monotonic counters, not exact cross-tab addition;
+    // KNOWN RESIDUAL: a tab still open across a Reset stats can resurrect pre-reset
+    // numbers with its next write. Accepted for a local single-player tally.
+    const stored = read(storage);
+    for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {
+      life[key] = Math.max(life[key], stored[key]);
+    }
     try {
       storage.setItem(STATS_KEY, JSON.stringify(life));
     } catch {
@@ -97,7 +107,13 @@ export function createStatsStore(storage: Storage): StatsStore {
     },
     resetLifetime(): void {
       for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) life[key] = 0;
-      persist();
+      // A direct write, NOT persist(): the max-merge would instantly resurrect the
+      // numbers the player just asked to erase.
+      try {
+        storage.setItem(STATS_KEY, JSON.stringify(life));
+      } catch {
+        // The in-memory zeros still hold for this session.
+      }
     },
     record(events: SimEvent[], playerId: number): void {
       let changed = false;

@@ -596,3 +596,34 @@ describe('blasts and invincible tanks (dev playtest mode)', () => {
     expect(events.filter((e) => e.type === 'tank-destroyed').map((e) => (e as { tankId: number }).tankId)).toEqual([3])
   })
 })
+
+describe('blast credit: who set it off, not just whose mine it was', () => {
+  it('a shell detonating an ENEMY mine credits the SHOOTER for the kills', () => {
+    // The skill shot: the player shoots enemy 9's armed mine, and the blast kills
+    // enemy 2 standing beside it. Before credit existed, the kill was filed under
+    // the mine's owner -- the stats page called a player kill "AI friendly fire"
+    // and scored the killing shot as a miss.
+    const victim = mkTank({ id: 2, kind: 'brown', pos: { x: 1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [victim], spawns: [], lives: 3 })
+    world.mines.push({ id: 50, ownerId: 9, pos: { x: 0, y: 0 }, timer: 100, armed: true, detonated: false })
+    world.bullets.push({ id: 60, ownerId: 1, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events) // the shell overlaps the mine's trigger radius
+    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
+    const death = events.find((e) => e.type === 'tank-destroyed')
+    expect(death).toMatchObject({ tankId: 2, by: { source: 'shell', ownerId: 1 } })
+  })
+
+  it('a fuse or proximity detonation still credits the mine\'s owner as a blast', () => {
+    // The discriminating partner: without a triggering shell, nothing changed.
+    const victim = mkTank({ id: 2, kind: 'brown', pos: { x: 1, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [victim], spawns: [], lives: 3 })
+    const mine: Mine = { id: 50, ownerId: 9, pos: { x: 0, y: 0 }, timer: 0, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+    detonateMine(world, mine, events)
+    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
+    const death = events.find((e) => e.type === 'tank-destroyed')
+    expect(death).toMatchObject({ tankId: 2, by: { source: 'blast', ownerId: 9 } })
+  })
+})

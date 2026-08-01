@@ -92,8 +92,16 @@ export interface Bullet {
  */
 export interface Blast {
   id: number;
-  /** The mine that produced it, for attribution. */
+  /** The mine that produced it. */
   ownerId: number;
+  /**
+   * Who gets CREDIT for what this blast destroys, and by what instrument. Usually the
+   * mine's owner via 'blast' -- but a mine detonated by a SHELL credits the shooter
+   * via 'shell': shooting an enemy's mine to kill the tank beside it is a skill shot,
+   * and filing it as the mine-owner's kill made the stats page call a player kill
+   * "AI friendly fire" and score the killing shot as a miss.
+   */
+  credit: { source: 'shell' | 'blast'; ownerId: number };
   pos: Vec2;
   /** Ticks since detonation; 0 on the tick it was created. */
   age: number;
