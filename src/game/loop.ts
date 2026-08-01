@@ -4,7 +4,7 @@ import type { Vec2 } from '../sim/types';
 import { createLevelSystem, type LevelSystem } from './levels';
 import { createProgressStore, type ProgressStore } from './progress';
 import { createStatsStore, type StatsStore } from './stats';
-import { createCustomizationStore, type CustomizationStore } from './customization';
+import { createCustomizationStore, type CustomizationStore, type SkinId } from './customization';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -57,7 +57,13 @@ export interface GameDeps {
     worldWidth: number,
     worldHeight: number,
     boundary: number,
-    options?: { aimRay?: boolean; mineReach?: boolean; mineTimer?: boolean; playerColor?: string },
+    options?: {
+      aimRay?: boolean;
+      mineReach?: boolean;
+      mineTimer?: boolean;
+      playerColor?: string;
+      playerSkin?: SkinId;
+    },
   ) => Renderer3D;
   readonly createInput: (
     target: HTMLElement,
@@ -264,8 +270,9 @@ export function startGameWith(
     aimRay: deps.devFlags.aimRay,
     mineReach: deps.devFlags.mineReach,
     mineTimer: deps.devFlags.mineTimer,
-    // The paint shop's saved colour, applied from the first frame.
+    // The paint shop's saved colour and skin, applied from the first frame.
     playerColor: deps.customization.hexFor(deps.customization.hull()),
+    playerSkin: deps.customization.skin(),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
   const audio = deps.createAudio();
@@ -422,12 +429,27 @@ export function startGameWith(
     sm.toTitle();
   });
 
+  // Hull and skin restyle through ONE renderer call: the style is a pair, and
+  // sending half of it would reset the other half to a default.
+  function restyle(): void {
+    renderer.setPlayerStyle(
+      deps.customization.hexFor(deps.customization.hull()),
+      deps.customization.skin(),
+    );
+  }
+
   hud.onPickHullColor((id) => {
     deps.customization.setHull(id);
     // Echo the ACCEPTED value back: the store refuses off-palette ids, and the
     // swatch ring must show what was stored, not what was clicked.
     hud.setHullColor(deps.customization.hull());
-    renderer.setPlayerColor(deps.customization.hexFor(deps.customization.hull()));
+    restyle();
+  });
+
+  hud.onPickSkin((id) => {
+    deps.customization.setSkin(id);
+    hud.setSkin(deps.customization.skin());
+    restyle();
   });
 
   hud.onResetStats(() => {
@@ -468,6 +490,7 @@ export function startGameWith(
   deps.stats.startRun();
   hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   hud.setHullColor(deps.customization.hull());
+  hud.setSkin(deps.customization.skin());
   refreshStats(world);
 
   const onKey = (e: KeyboardEvent): void => {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest';
 import { createHud, type Hud } from './hud';
+import { SKINS } from './customization';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 
 let hud: Hud | null = null;
@@ -695,6 +696,29 @@ describe('hud: the paint shop', () => {
     expect(picks).toEqual(['purple']);
     h.setHullColor('purple'); // the loop echoes the accepted pick back
     expect(purple.classList.contains('hud-swatch--selected')).toBe(true);
+  });
+
+  it('offers one skin button per SKINS entry, current one marked, and reports picks', () => {
+    const { hud: h, root } = mount();
+    const skins = (): HTMLButtonElement[] => Array.from(root.querySelectorAll('.hud-skin'));
+    const picks: string[] = [];
+    h.onPickSkin((id) => picks.push(id));
+    h.setSkin('camo');
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    // One button per entry in the REAL skin list, labelled from it.
+    expect(skins().map((b) => b.dataset.skin)).toEqual(SKINS.map((sk) => sk.id));
+    expect(skins().map((b) => b.textContent)).toEqual(SKINS.map((sk) => sk.label));
+    const selected = skins().filter((b) => b.classList.contains('hud-skin--selected'));
+    expect(selected).toHaveLength(1);
+    expect(selected[0].dataset.skin).toBe('camo');
+
+    const checker = skins().find((b) => b.dataset.skin === 'checker')!;
+    checker.dispatchEvent(new MouseEvent('click'));
+    expect(picks).toEqual(['checker']);
+    h.setSkin('checker'); // the loop echoes the accepted pick back
+    expect(checker.classList.contains('hud-skin--selected')).toBe(true);
+    expect(skins().filter((b) => b.classList.contains('hud-skin--selected'))).toHaveLength(1);
   });
 
   it('is a title-screen affair: hidden everywhere else, closed by any state change', () => {

@@ -3,7 +3,7 @@
 // corrupt values read as the default -- a save must never paint the player an enemy
 // colour, and the palette deliberately contains none.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createCustomizationStore, PALETTE, DEFAULT_HULL, CUSTOM_KEY } from './customization';
+import { createCustomizationStore, PALETTE, SKINS, DEFAULT_HULL, DEFAULT_SKIN, CUSTOM_KEY } from './customization';
 import { GAME_TANK_DEFS } from '../sim/config/roster';
 
 beforeEach(() => localStorage.clear());
@@ -77,5 +77,37 @@ describe('createCustomizationStore', () => {
     s.setHull('purple'); // must not throw; carried in-memory
     expect(s.hull()).toBe('purple');
     expect(s.hexFor('purple')).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+});
+
+describe('skins', () => {
+  it('offers the approved five, solid first as the default', () => {
+    expect(SKINS.map((s) => s.id)).toEqual(['solid', 'stripes', 'camo', 'checker', 'flow']);
+    expect(SKINS[0].id).toBe(DEFAULT_SKIN);
+  });
+
+  it('flow is the animated one, and slow: speed is per-skin DATA', () => {
+    // The user wants a bold variant eventually; that must be a data entry, not new
+    // machinery -- which is exactly what this field being data proves.
+    const flow = SKINS.find((s) => s.id === 'flow')!;
+    expect(flow.scroll).toBeDefined();
+    expect(Math.hypot(flow.scroll!.u, flow.scroll!.v)).toBeLessThan(0.2); // repeats/second
+    for (const s of SKINS.filter((x) => x.id !== 'flow')) expect(s.scroll).toBeUndefined();
+  });
+
+  it('persists a skin pick beside the hull colour, and validates it the same way', () => {
+    const a = createCustomizationStore(localStorage);
+    a.setSkin('camo');
+    a.setHull('red');
+    const b = createCustomizationStore(localStorage);
+    expect(b.skin()).toBe('camo');
+    expect(b.hull()).toBe('red'); // the two fields do not clobber each other
+    localStorage.setItem(CUSTOM_KEY, '{"hull":"red","skin":"zebra"}');
+    const junkSkin = createCustomizationStore(localStorage);
+    expect(junkSkin.skin()).toBe(DEFAULT_SKIN);
+    expect(junkSkin.hull()).toBe('red'); // a junk skin must NOT reset the hull
+    const c = createCustomizationStore(localStorage);
+    c.setSkin('zebra' as never);
+    expect(c.skin()).toBe(DEFAULT_SKIN);
   });
 });
