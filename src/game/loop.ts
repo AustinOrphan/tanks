@@ -521,6 +521,12 @@ export function startGameWith(
     // startMusic is idempotent (engine checks music.playing()), so a resume passing
     // back through 'playing' does not double-start anything.
     if (s === 'playing') audio.startMusic();
+    // ... and stop it everywhere else. This was harmless while music was always
+    // silent: nothing ever called stopMusic, so the track "played" through pause,
+    // the win panel and the title screen after a quit. With a GENERATED bed that
+    // is audible synthesis running forever, and muting only zeroes its gain --
+    // the oscillators keep churning.
+    else audio.stopMusic();
     // Progress is recorded AT the win, not at the Next Level click: quitting after a
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
     // unlock real levels.

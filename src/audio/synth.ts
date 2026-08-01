@@ -102,6 +102,7 @@ function noiseVoice(
     to: number;
     q?: number;
   },
+  rate = 1,
 ): Built | null {
   const buf = noiseBuffer(ctx);
   if (!buf || typeof ctx.createBufferSource !== 'function') return null;
@@ -110,17 +111,19 @@ function noiseVoice(
   // A random-ish but deterministic offset per call site would need state; the
   // start offset is derived from `when` instead, so successive shots do not
   // replay the identical slice and comb-filter against each other.
-  const offset = (when * 7.3) % Math.max(0.001, buf.duration - opts.duration - 0.01);
+  // Playback rate, as it means for a sample: brighter AND shorter.
+  const dur = opts.duration / rate;
+  const offset = (when * 7.3) % Math.max(0.001, buf.duration - dur - 0.01);
   const filter = ctx.createBiquadFilter();
   filter.type = opts.type;
-  filter.frequency.setValueAtTime(opts.from, when);
-  filter.frequency.exponentialRampToValueAtTime(Math.max(opts.to, 1), when + opts.duration);
+  filter.frequency.setValueAtTime(opts.from * rate, when);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(opts.to * rate, 1), when + dur);
   if (opts.q !== undefined) filter.Q.value = opts.q;
   const gain = ctx.createGain();
-  envelope(gain, when, opts.peak, 0.004, opts.duration);
+  envelope(gain, when, opts.peak, 0.004, dur);
   src.connect(filter).connect(gain);
-  src.start(when, Math.max(0, offset), opts.duration + 0.02);
-  return { nodes: [src, filter, gain], stops: [src], endsAt: when + opts.duration + 0.03 };
+  src.start(when, Math.max(0, offset), dur + 0.02);
+  return { nodes: [src, filter, gain], stops: [src], endsAt: when + dur + 0.03 };
 }
 
 function toneVoice(
@@ -134,73 +137,78 @@ function toneVoice(
     type?: OscillatorType;
     attack?: number;
   },
+  rate = 1,
 ): Built {
+  const dur = opts.duration / rate;
   const osc = ctx.createOscillator();
   osc.type = opts.type ?? 'sine';
-  osc.frequency.setValueAtTime(opts.from, when);
+  osc.frequency.setValueAtTime(opts.from * rate, when);
   if (opts.to !== undefined && typeof osc.frequency.exponentialRampToValueAtTime === 'function') {
-    osc.frequency.exponentialRampToValueAtTime(Math.max(opts.to, 1), when + opts.duration);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(opts.to * rate, 1), when + dur);
   }
   const gain = ctx.createGain();
-  envelope(gain, when, opts.peak, opts.attack ?? 0.005, opts.duration);
+  envelope(gain, when, opts.peak, (opts.attack ?? 0.005) / rate, dur);
   osc.connect(gain);
   osc.start(when);
-  osc.stop(when + opts.duration + 0.02);
-  return { nodes: [osc, gain], stops: [osc], endsAt: when + opts.duration + 0.03 };
+  osc.stop(when + dur + 0.02);
+  return { nodes: [osc, gain], stops: [osc], endsAt: when + dur + 0.03 };
 }
 
 /** The recipes. Each returns the layers that make up one sound. */
-const RECIPES: Record<SfxKey, (ctx: BaseAudioContext, when: number) => Array<Built | null>> = {
+const RECIPES: Record<
+  SfxKey,
+  (ctx: BaseAudioContext, when: number, rate: number) => Array<Built | null>
+> = {
   // A crack of air, then the weight of the charge. The pitch drop is what makes
   // it read as a cannon rather than a rifle.
-  cannon: (c, t) => [
-    noiseVoice(c, t, { duration: 0.09, peak: 0.5, type: 'bandpass', from: 1800, to: 300, q: 0.9 }),
-    toneVoice(c, t, { from: 190, to: 55, duration: 0.16, peak: 0.42, type: 'triangle' }),
+  cannon: (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.09, peak: 0.5, type: 'bandpass', from: 1800, to: 300, q: 0.9 }, r),
+    toneVoice(c, t, { from: 190, to: 55, duration: 0.16, peak: 0.42, type: 'triangle' }, r),
   ],
   // Same shape, duller and quieter: the player must be able to tell their own
   // cannon from an enemy's without looking.
-  'cannon-enemy': (c, t) => [
-    noiseVoice(c, t, { duration: 0.08, peak: 0.3, type: 'lowpass', from: 1100, to: 240, q: 0.7 }),
-    toneVoice(c, t, { from: 150, to: 48, duration: 0.14, peak: 0.3, type: 'triangle' }),
+  'cannon-enemy': (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.08, peak: 0.3, type: 'lowpass', from: 1100, to: 240, q: 0.7 }, r),
+    toneVoice(c, t, { from: 150, to: 48, duration: 0.14, peak: 0.3, type: 'triangle' }, r),
   ],
   // Ricochet: two detuned partials so it rings metallic rather than pure, plus a
   // tick of noise for the impact itself.
-  ping: (c, t) => [
-    noiseVoice(c, t, { duration: 0.03, peak: 0.22, type: 'highpass', from: 3000, to: 2000 }),
-    toneVoice(c, t, { from: 1850, to: 1500, duration: 0.16, peak: 0.16 }),
-    toneVoice(c, t, { from: 2470, to: 2100, duration: 0.11, peak: 0.09 }),
+  ping: (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.03, peak: 0.22, type: 'highpass', from: 3000, to: 2000 }, r),
+    toneVoice(c, t, { from: 1850, to: 1500, duration: 0.16, peak: 0.16 }, r),
+    toneVoice(c, t, { from: 2470, to: 2100, duration: 0.11, peak: 0.09 }, r),
   ],
   // Body of noise falling away, with a low thump underneath it.
-  explosion: (c, t) => [
-    noiseVoice(c, t, { duration: 0.55, peak: 0.62, type: 'lowpass', from: 2200, to: 130, q: 0.6 }),
-    toneVoice(c, t, { from: 120, to: 40, duration: 0.42, peak: 0.5, type: 'sine' }),
+  explosion: (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.55, peak: 0.62, type: 'lowpass', from: 2200, to: 130, q: 0.6 }, r),
+    toneVoice(c, t, { from: 120, to: 40, duration: 0.42, peak: 0.5, type: 'sine' }, r),
   ],
   // Small, close, mechanical -- it must not compete with a shot.
-  'mine-drop': (c, t) => [
-    noiseVoice(c, t, { duration: 0.04, peak: 0.18, type: 'bandpass', from: 900, to: 500, q: 2 }),
-    toneVoice(c, t, { from: 320, to: 190, duration: 0.09, peak: 0.2, type: 'square' }),
+  'mine-drop': (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.04, peak: 0.18, type: 'bandpass', from: 900, to: 500, q: 2 }, r),
+    toneVoice(c, t, { from: 320, to: 190, duration: 0.09, peak: 0.2, type: 'square' }, r),
   ],
   // A rising pair: "armed" should sound like a state change, not an impact.
-  'mine-arm': (c, t) => [
-    toneVoice(c, t, { from: 620, duration: 0.07, peak: 0.16, type: 'square' }),
-    toneVoice(c, t + 0.08, { from: 930, duration: 0.09, peak: 0.16, type: 'square' }),
+  'mine-arm': (c, t, r) => [
+    toneVoice(c, t, { from: 620, duration: 0.07, peak: 0.16, type: 'square' }, r),
+    toneVoice(c, t + 0.08 / r, { from: 930, duration: 0.09, peak: 0.16, type: 'square' }, r),
   ],
   // The biggest sound in the game: lower, longer and wider than a shell hit.
-  'mine-boom': (c, t) => [
-    noiseVoice(c, t, { duration: 0.8, peak: 0.72, type: 'lowpass', from: 1800, to: 80, q: 0.5 }),
-    toneVoice(c, t, { from: 95, to: 32, duration: 0.6, peak: 0.6, type: 'sine' }),
-    toneVoice(c, t + 0.02, { from: 60, to: 28, duration: 0.5, peak: 0.35, type: 'triangle' }),
+  'mine-boom': (c, t, r) => [
+    noiseVoice(c, t, { duration: 0.8, peak: 0.72, type: 'lowpass', from: 1800, to: 80, q: 0.5 }, r),
+    toneVoice(c, t, { from: 95, to: 32, duration: 0.6, peak: 0.6, type: 'sine' }, r),
+    toneVoice(c, t + 0.02 / r, { from: 60, to: 28, duration: 0.5, peak: 0.35, type: 'triangle' }, r),
   ],
   // A rising third; short, because it plays under a panel appearing.
-  victory: (c, t) => [
-    toneVoice(c, t, { from: 523.25, duration: 0.16, peak: 0.28, type: 'triangle' }),
-    toneVoice(c, t + 0.13, { from: 659.25, duration: 0.16, peak: 0.28, type: 'triangle' }),
-    toneVoice(c, t + 0.26, { from: 783.99, duration: 0.3, peak: 0.3, type: 'triangle' }),
+  victory: (c, t, r) => [
+    toneVoice(c, t, { from: 523.25, duration: 0.16, peak: 0.28, type: 'triangle' }, r),
+    toneVoice(c, t + 0.13 / r, { from: 659.25, duration: 0.16, peak: 0.28, type: 'triangle' }, r),
+    toneVoice(c, t + 0.26 / r, { from: 783.99, duration: 0.3, peak: 0.3, type: 'triangle' }, r),
   ],
   // The mirror of victory: falling, and it lands on a flattened note.
-  defeat: (c, t) => [
-    toneVoice(c, t, { from: 392, duration: 0.2, peak: 0.28, type: 'triangle' }),
-    toneVoice(c, t + 0.17, { from: 311.13, duration: 0.42, peak: 0.3, type: 'triangle' }),
+  defeat: (c, t, r) => [
+    toneVoice(c, t, { from: 392, duration: 0.2, peak: 0.28, type: 'triangle' }, r),
+    toneVoice(c, t + 0.17 / r, { from: 311.13, duration: 0.42, peak: 0.3, type: 'triangle' }, r),
   ],
 };
 
@@ -260,11 +268,16 @@ export function synthVoice(
 ): Voice | null {
   if (!isSfxKey(key)) return null;
   if (!canSynthesise(ctx)) return null;
+  // Rate is applied INSIDE the recipes (frequencies up, durations down), which
+  // is what the audio director's ricochet ladder depends on: each bounce plays
+  // the same ping a step higher. Scaling only the reported end time, as an
+  // earlier version did, made every bounce sound identical.
+  const rate = opts?.rate ?? 1;
   const bus = ctx.createGain();
   bus.gain.value = opts?.volume ?? 1;
   bus.connect(dest);
 
-  const layers = RECIPES[key](ctx, when).filter((l): l is Built => l !== null);
+  const layers = RECIPES[key](ctx, when, rate).filter((l): l is Built => l !== null);
   if (layers.length === 0) {
     bus.disconnect();
     return null;
@@ -277,10 +290,6 @@ export function synthVoice(
     nodes.push(...layer.nodes);
     endsAt = Math.max(endsAt, layer.endsAt);
   }
-  // A rate above 1 shortens the sound; below 1 lengthens it. Applied to the
-  // reported end time only -- the schedule above is already absolute.
-  const rate = opts?.rate ?? 1;
-  if (rate !== 1) endsAt = when + (endsAt - when) / rate;
 
   let released = false;
   return {

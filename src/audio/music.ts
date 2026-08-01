@@ -85,7 +85,9 @@ export function createMusicBed(
   let disposed = false;
   // Live voices, so stop() can silence notes already scheduled into the future.
   let voices: Array<{ osc: OscillatorNode; gain: GainNode }> = [];
-  let rng = deps.seed ?? 0x5eed;
+  // `|| 0x5eed`, not `?? 0x5eed`: xorshift on 0 stays 0 forever, so a seed of 0
+  // would fire the drone on every step and always pick the same partial.
+  let rng = deps.seed || 0x5eed;
 
   function nextRandom(): number {
     rng ^= rng << 13;

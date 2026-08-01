@@ -266,6 +266,29 @@ describe('synthVoice: housekeeping', () => {
     expect(ctx.disconnects).toBe(total);
   });
 
+  it('RAISES pitch with rate: the director\'s ricochet ladder depends on it', () => {
+    // director.ts plays 'ping' at rate 1 + bounceIndex * RICOCHET_RATE_STEP, so
+    // each bounce is a step higher. An earlier version applied rate only to the
+    // reported end time, so every bounce sounded identical -- an audible feature
+    // silently deleted, with the whole suite green.
+    const at = (rate: number): number[] =>
+      build('ping', 0, { rate }).ctx.oscillators.map((o) => o.frequency.sets[0][0]);
+    const base = at(1);
+    const up = at(1.15);
+    expect(up).toHaveLength(base.length);
+    for (let i = 0; i < base.length; i++) expect(up[i], `partial ${i}`).toBeGreaterThan(base[i]);
+    // Proportional, not merely different: the ladder must stay in tune with itself.
+    expect(up[0] / base[0]).toBeCloseTo(1.15, 6);
+  });
+
+  it('shortens the sound as rate rises, so a faster voice is not also longer', () => {
+    // Playback rate means brighter AND shorter. If duration did not scale, a
+    // sped-up voice would ring past its own teardown deadline and be cut off.
+    const slow = build('ping', 0, { rate: 1 }).voice!.endsAt;
+    const fast = build('ping', 0, { rate: 1.5 }).voice!.endsAt;
+    expect(fast).toBeLessThan(slow);
+  });
+
   it('applies volume ONCE, on a single voice bus', () => {
     // Per-layer application would multiply: a two-layer sound at 0.25 would come
     // out at 0.0625 and the engine's volume slider would be badly non-linear.

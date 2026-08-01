@@ -152,6 +152,23 @@ describe('the generated music bed', () => {
     bed.stop();
   });
 
+  it('ADVANCES the bass pattern: the only melodic content in the module', () => {
+    // Freezing the step counter makes every bass note the same pitch forever --
+    // the bed becomes one droning note -- and the determinism test above does not
+    // notice, because the drone still varies by seed.
+    const { ctx, t, bed } = make();
+    bed.start();
+    for (let i = 1; i <= 12; i++) {
+      ctx.currentTime = i * 1.5;
+      t.tick();
+    }
+    // The bass is the lowest voice; take the distinct pitches it has played.
+    const lows = ctx.notes.map((n) => n.freq).filter((f) => f < 100);
+    expect(lows.length).toBeGreaterThan(4);
+    expect(new Set(lows).size).toBeGreaterThan(1);
+    bed.stop();
+  });
+
   it('is deterministic per seed, and different seeds differ', () => {
     const a = make(11);
     const b = make(11);

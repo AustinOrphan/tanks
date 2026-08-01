@@ -477,13 +477,33 @@ for (const key of SFX_KEYS) {
   });
 }
 
-await checkAsync('synth volume 0 renders true silence', async () => {
-  const peak = await renderPeak((ctx) => {
-    synthVoice(ctx, ctx.destination, 'explosion', 0, { volume: 0 });
+await checkAsync('the SAME voice is loud at volume 1 and silent at volume 0', async () => {
+  // The real negative control. An earlier version rendered only the volume-0
+  // case, which passes when synthVoice returns null and NOTHING is built --
+  // exactly the failure it was meant to exclude. Comparing the same graph at two
+  // volumes proves the measurement is reading the voice.
+  const loud = await renderPeak((ctx) => {
+    if (!synthVoice(ctx, ctx.destination, 'explosion', 0, { volume: 1 })) {
+      throw new Error('synthVoice returned null');
+    }
   });
-  // The negative control for the checks above: if THIS also came out loud, the
-  // peak measurement would be reading something other than the voice.
-  return peak < 1e-3 ? null : `muted voice still peaked at ${peak.toExponential(2)}`;
+  const silent = await renderPeak((ctx) => {
+    if (!synthVoice(ctx, ctx.destination, 'explosion', 0, { volume: 0 })) {
+      throw new Error('synthVoice returned null');
+    }
+  });
+  if (!(loud > 0.01)) return `volume 1 peaked at ${loud.toExponential(2)}, not audible`;
+  if (!(silent < 1e-3)) return `volume 0 still peaked at ${silent.toExponential(2)}`;
+  return null;
+});
+
+check('every SFX key is actually covered by an audio check', () => {
+  // Without this, degrading isSfxKey silently drops the nine render checks and
+  // the runner still reports success -- proven in review: 9 checks vanished and
+  // it printed "all 20 GL checks passed".
+  const rendered = results.filter((r) => r.name.startsWith('synth renders audible samples')).length;
+  if (SFX_KEYS.length !== 9) return `SFX_KEYS has ${SFX_KEYS.length} entries, expected 9`;
+  return rendered === 9 ? null : `only ${rendered} of 9 sfx render checks ran`;
 });
 
 await checkAsync('the generated music bed renders audible samples', async () => {

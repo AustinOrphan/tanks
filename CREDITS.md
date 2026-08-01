@@ -8,17 +8,18 @@ Because no assets exist, the audio engine (`src/audio/engine.ts`) attempts to
 load each manifest key via Howler and every one of them fails. What happens
 next differs between sound effects and music, and the difference matters:
 
-- **Sound effects fall back.** `play(key)` finds no Howl and calls `beep(key)`,
-  a short decaying Web Audio tone (`engine.ts`, the `beep` function). This is
-  the live path for every effect in the game today — a procedural tone, not a
-  sample.
-- **Music does not.** `music` is set to `null` in its `loaderror` handler, and
-  `startMusic()` is guarded on `if (music && …)`, so it silently does nothing.
-  There is no procedural fallback for the music key. **Today the game plays no
-  music at all** — not a synthesised substitute, nothing.
+- **Sound effects are SYNTHESISED.** `play(key)` finds no Howl and builds the
+  sound in `src/audio/synth.ts`: filtered noise bursts, pitched bodies with
+  falling envelopes, and short transients, layered per key. This is the live
+  path for every effect in the game today. (`engine.ts`'s one-oscillator `beep`
+  remains below it as a floor for any context that cannot support the graph.)
+- **Music is GENERATED.** `music` is still `null` after its `loaderror`, so
+  `startMusic()` falls through to `src/audio/music.ts`: a slow seeded bass pulse
+  under a sparse drone, scheduled on the audio clock. Until that existed, music
+  was the one thing with no fallback of any kind and the game was simply silent.
 
-This file previously said every sound you hear is a procedural tone. That is
-true of the effects and false of the music.
+Both are authored as code, which is a deliberate consequence of the policy
+below: nothing to licence, nothing to verify, and no AI-generated audio.
 
 ## Licensing policy for future assets
 
