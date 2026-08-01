@@ -6,7 +6,7 @@ import { configFor } from '../config';
 import type { ResolvedTankConfig } from '../config';
 import { WANDER_TICKS } from '../constants';
 import type { Tank, Vec2, Wall } from '../types';
-import { nextRng, vdot, vlen, vnorm, vsub } from '../types';
+import { vdot, vlen, vnorm, vsub } from '../types';
 import type { World } from '../world';
 
 // ---------------------------------------------------------------------------
@@ -126,13 +126,34 @@ describe('seekMove geometry', () => {
     expect(seekMove(w, grey, GREY)).toEqual(seekMove(w, grey, GREY));
   });
 
-  it('the retreat draw is uncorrelated with the wander heading (fresh prime)', () => {
-    // Same recipe check aimJitter documents: a different multiplier on tank.id.
-    // If the draw reused wanderMove's stream, retreat windows would correlate
-    // with heading buckets. Assert the two streams differ for the same inputs.
-    const w = world([tank(1, 'grey', { x: 0, y: 0 })]);
-    const bucket = Math.floor(w.tick / WANDER_TICKS);
-    expect(nextRng(w.seed + 1 * 4243 + bucket).value).not.toBe(nextRng(w.seed + 1 * 1000 + bucket).value);
+  it('the retreat draw is uncorrelated with the wander heading, OBSERVED through seekMove', () => {
+    // Review killed the first version of this test: it restated the recipe on
+    // literals without calling seekMove, so reverting the draw's prime to the
+    // wander stream's (* 1000) left it green -- the exact correlation it warned
+    // about. This version observes the property through the public function: if
+    // the draw reused the wander stream, then at chance 0.5 "retreated this
+    // window" would EQUAL "wander heading in the lower half-circle" for every
+    // window (both are `value < 0.5` of the same rng), agreement 1.0. With the
+    // fresh prime the measured agreement over these 400 seeded windows is
+    // 0.5175. The 0.75 ceiling fails the collision and passes the real stream
+    // with wide margin; the 0.25 floor kills a hypothetical anti-correlated
+    // stream too.
+    let agree = 0;
+    const windows = 400;
+    for (let i = 0; i < windows; i++) {
+      const grey = tank(1, 'grey', { x: 0, y: 0 });
+      const player = tank(2, 'player', { x: 3, y: 0 });
+      const w = world([grey, player], { tick: i * WANDER_TICKS });
+      const dir = seekMove(w, grey, withAi(GREY, { retreatChance: 0.5 }));
+      const held = wanderMove(w, grey);
+      const retreated = dir.x !== held.x || dir.y !== held.y;
+      // wander value < 0.5 <=> its heading's atan2 >= 0 (verified numerically
+      // for this exact stream while writing the test).
+      const headingLow = Math.atan2(held.y, held.x) >= 0;
+      if (retreated === headingLow) agree++;
+    }
+    expect(agree / windows).toBeLessThan(0.75);
+    expect(agree / windows).toBeGreaterThan(0.25);
   });
 });
 
@@ -166,6 +187,18 @@ describe('the decisions consume the band through their cfg', () => {
     expect(towardness(far.desiredMove, grey.pos, player.pos)).toBeGreaterThan(0);
     const crowded = greyDecision(w, grey, withAi(GREY, { preferredDistance: 30, minimumDistance: 29, retreatChance: 1 }));
     expect(towardness(crowded.desiredMove, grey.pos, player.pos)).toBeLessThan(0);
+  });
+
+  it("the DEFAULT cfg is the tank's own kind: grey holds in ITS band where teal's would approach", () => {
+    // d = 8 sits inside grey's band (9/6, wander) but beyond teal's preferred
+    // (7.5, approach) -- the one region where the two kinds' bands disagree on
+    // this axis. Review: without this, swapping greyDecision's default to
+    // configFor('teal') survived every seek test (both default-cfg fixtures sat
+    // where ALL bands approach).
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 8, y: 0 });
+    const w = world([grey, player]);
+    expect(greyDecision(w, grey).desiredMove).toEqual(wanderMove(w, grey));
   });
 
   it('dodging still outranks seeking: a threat bullet overrides the approach', () => {

@@ -371,8 +371,13 @@ export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec
     }
   }
 
+  // vnorm returns a unit vector or exactly {0,0}, so this guard is an exact-zero
+  // check; the cancellation needs equal blend weights, i.e. it is live only while
+  // SEEK_APPROACH_BIAS is exactly 0.5 (review).
   if (dir === null || vlen(dir) < VEC_EPS) return wander;
-  return wallBlocksStep(world, tank, dir) ? wander : dir;
+  // The probe must test the INJECTED cfg's speed, not the kind's -- the two can
+  // differ under test injection, and the probe exists to predict moveTank's step.
+  return wallBlocksStep(world, tank, dir, cfg.movementSpeed) ? wander : dir;
 }
 
 /**
@@ -407,8 +412,7 @@ export function aimJitter(world: World, tank: Tank, spread: number): number {
  * the tank's own resolved config, the same source moveTank uses -- so this asks precisely
  * the question that matters.
  */
-function wallBlocksStep(world: World, tank: Tank, dir: Vec2): boolean {
-  const speed = configFor(tank.kind).movementSpeed;
+function wallBlocksStep(world: World, tank: Tank, dir: Vec2, speed = configFor(tank.kind).movementSpeed): boolean {
   const probe = {
     x: tank.pos.x + dir.x * speed * DT,
     y: tank.pos.y + dir.y * speed * DT,

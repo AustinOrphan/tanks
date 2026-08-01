@@ -218,13 +218,18 @@ export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5
 // straight line.
 //
 // Chosen by SWEEP, not taste (60 fixed pacifist seeds per arena, engagement
-// distance sampled at 6Hz; free-win gate = pacifist.test.ts at its 5-minute cap):
-//   bias 0.35: gate 2/60 pass; grey p75 11.2, teal med 8.05, olive p25 13.4
-//   bias 0.50: gate 2/60 pass; grey p75 10.2, teal med 8.00, olive p25 12.3  <- here
-//   bias 0.65: gate 4/60 FAIL; band adherence barely better than 0.50
+// distance sampled at 6Hz; free-win gate = pacifist.test.ts at its 5-minute
+// cap; the harness ships as engagement.measure.test.ts, skipped in CI, so a
+// future sweep re-measures with the same method):
+//   bias 0    : gate 3/60 pass; grey p75 13.35, teal med 9.25, olive p25 14.0  (pre-seek wander)
+//   bias 0.35 : gate 2/60 pass; grey p75 11.24, teal med 8.05, olive p25 13.4
+//   bias 0.50 : gate 2/60 pass; grey p75 10.20, teal med 8.00, olive p25 12.3  <- here
+//   bias 0.65 : gate 4/60 FAIL; grey/teal flat vs 0.50, olive p25 11.3
 // 0.65's failure is the harness earning its keep: harder approach clusters the
-// AI into its own ordnance. 0.50 beats the pre-seek baseline on BOTH axes
-// (free wins 2 vs 3; every mobile kind's spread pulled toward its band).
+// AI into its own ordnance (its one gain, olive's extra unit of approach, is
+// not worth a breached gate). 0.50 beats the pre-seek baseline on BOTH axes
+// (free wins 2 vs 3; every mobile kind's spread pulled toward its band). The
+// whole table was independently re-measured in review to within +/-0.05.
 export const SEEK_APPROACH_BIAS = 0.5;
 
 // ---- AI aim jitter (aimJitter) ----
