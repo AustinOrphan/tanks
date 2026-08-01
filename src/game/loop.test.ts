@@ -76,6 +76,7 @@ interface Recorder {
   removed: Array<[string, (e: never) => void]>;
   disposed: string[];
   musicStarts: number;
+  musicStops: number;
   unlocks: number;
   samples: number;
   hudRoots: HTMLElement[];
@@ -147,6 +148,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     removed: [],
     disposed: [],
     musicStarts: 0,
+    musicStops: 0,
     unlocks: 0,
     samples: 0,
     hudRoots: [],
@@ -224,7 +226,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       startMusic: () => {
         rec.musicStarts += 1;
       },
-      stopMusic: () => {},
+      stopMusic: () => {
+        rec.musicStops += 1;
+      },
       setMuted: () => {},
       toggleMute: () => true,
       isMuted: () => false,
@@ -717,6 +721,21 @@ describe('startGameWith: HUD wiring', () => {
     expect(h.rec.musicStarts).toBe(0);
     h.setState('playing');
     expect(h.rec.musicStarts).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('STOPS the music whenever play stops, so the bed does not run forever', () => {
+    // Nothing called stopMusic before: harmless while music was always silent,
+    // but the generated bed is live synthesis, and mute only zeroes its gain --
+    // the oscillators keep churning through pause, the win panel and the title.
+    const h = boot();
+    h.setState('playing');
+    expect(h.rec.musicStops).toBe(0);
+    for (const s of ['paused', 'win', 'lose', 'title'] as const) {
+      const before = h.rec.musicStops;
+      h.setState(s);
+      expect(h.rec.musicStops, s).toBe(before + 1);
+    }
     h.handle.dispose();
   });
 
