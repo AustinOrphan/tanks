@@ -1,6 +1,7 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
 import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
+import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import './hud.css';
@@ -76,10 +77,20 @@ export interface Hud {
   onPickHullColor(cb: (id: HullColorId) => void): void;
   /** The paint shop's current skin, echoed back by the loop after an accepted pick. */
   setSkin(id: SkinId): void;
+  /** The earned set, pushed by the loop whenever it changes. Re-renders if open. */
+  setAchievements(earned: ReadonlySet<AchievementId>): void;
+  /**
+   * Announce newly earned achievements. One toast each, self-expiring; several
+   * landing together stack rather than replacing one another.
+   */
+  showAchievementToasts(defs: readonly AchievementDef[]): void;
   /** Fired with the skin id when the player clicks one. */
   onPickSkin(cb: (id: SkinId) => void): void;
   dispose(): void;
 }
+
+/** How long an unlock toast sits on screen. Feel, not measurement. */
+const TOAST_MS = 3200;
 
 export function createHud(root: HTMLElement): Hud {
   const el = document.createElement('div');
@@ -106,6 +117,13 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <div class="hud-toasts" aria-live="polite"></div>
+    <div class="hud-achievements hud-achievements--hidden">
+      <h1>Achievements</h1>
+      <p class="hud-achievements-count"></p>
+      <div class="hud-achievement-list"></div>
+      <button class="hud-achievements-back" type="button">Back</button>
+    </div>
     <div class="hud-customize hud-customize--hidden">
       <h1>Customize</h1>
       <p>Hull colour — repaints the tank behind this menu.</p>
@@ -130,6 +148,7 @@ export function createHud(root: HTMLElement): Hud {
       <p class="hud-run-summary hud-run-summary--hidden"></p>
       <button class="hud-action" type="button"></button>
       <button class="hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
+      <button class="hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
       <button class="hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
@@ -171,6 +190,12 @@ export function createHud(root: HTMLElement): Hud {
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
   const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
   const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
+  const achOpenBtn = el.querySelector('.hud-achievements-open') as HTMLButtonElement;
+  const achView = el.querySelector('.hud-achievements') as HTMLElement;
+  const achListEl = el.querySelector('.hud-achievement-list') as HTMLElement;
+  const achCountEl = el.querySelector('.hud-achievements-count') as HTMLElement;
+  const achBackBtn = el.querySelector('.hud-achievements-back') as HTMLButtonElement;
+  const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
   const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
@@ -212,6 +237,7 @@ export function createHud(root: HTMLElement): Hud {
 
   const skinsRow = el.querySelector('.hud-skins') as HTMLElement;
   const pickSkinCbs: Array<(id: SkinId) => void> = [];
+  let earnedIds: ReadonlySet<AchievementId> = new Set();
   let currentSkin: SkinId = SKINS[0].id;
 
   // One button per skin, built once, like the swatches above -- and like them,
@@ -319,6 +345,40 @@ export function createHud(root: HTMLElement): Hud {
     }
   }
 
+  // Rebuilt on open rather than once: the earned set changes DURING a session, and
+  // a list built at construction would show every row locked forever.
+  function renderAchievements(): void {
+    achListEl.replaceChildren();
+    for (const a of ACHIEVEMENTS) {
+      const got = earnedIds.has(a.id);
+      const row = document.createElement('div');
+      row.className = got ? 'hud-achievement hud-achievement--earned' : 'hud-achievement';
+      row.dataset.achievement = a.id;
+      const name = document.createElement('span');
+      name.className = 'hud-achievement-label';
+      name.textContent = a.label;
+      const desc = document.createElement('span');
+      desc.className = 'hud-achievement-desc';
+      // Locked entries keep their criteria visible: the list doubles as the
+      // to-do, and later as the place unlock gating is explained.
+      desc.textContent = a.description;
+      row.append(name, desc);
+      achListEl.appendChild(row);
+    }
+    achCountEl.textContent = `${earnedIds.size} of ${ACHIEVEMENTS.length} earned`;
+  }
+
+  function showAchievements(show: boolean): void {
+    achView.classList.toggle('hud-achievements--hidden', !show);
+    panel.classList.toggle('hud-panel--hidden', show);
+    if (show) renderAchievements();
+  }
+
+  // Each toast owns its own timer, so several landing at once stack and expire
+  // independently. Timers are tracked to be cleared in dispose(): a pending
+  // callback firing into a removed DOM is the classic teardown leak.
+  const toastTimers = new Set<ReturnType<typeof setTimeout>>();
+
   const handleMute = (): void => {
     for (const cb of muteCbs) cb();
   };
@@ -374,6 +434,15 @@ export function createHud(root: HTMLElement): Hud {
     showCustomize(false);
     setState('title');
   };
+  const handleAchOpen = (): void => showAchievements(true);
+  const handleAchBack = (): void => {
+    showAchievements(false);
+    setState('title');
+  };
+  achOpenBtn.addEventListener('click', handleAchOpen);
+  achOpenBtn.addEventListener('click', blurIfPointer);
+  achBackBtn.addEventListener('click', handleAchBack);
+  achBackBtn.addEventListener('click', blurIfPointer);
   customizeOpenBtn.addEventListener('click', handleCustomizeOpen);
   customizeOpenBtn.addEventListener('click', blurIfPointer);
   customizeBackBtn.addEventListener('click', handleCustomizeBack);
@@ -407,6 +476,7 @@ export function createHud(root: HTMLElement): Hud {
     // sit over the live game. They are title-screen affairs.
     statsView.classList.add('hud-stats--hidden');
     customizeView.classList.add('hud-customize--hidden');
+    achView.classList.add('hud-achievements--hidden');
     disarmReset();
     if (s === 'playing') {
       panel.classList.add('hud-panel--hidden');
@@ -420,6 +490,7 @@ export function createHud(root: HTMLElement): Hud {
     shownState = s;
     statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
     customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
+    achOpenBtn.classList.toggle('hud-achievements-open--hidden', s !== 'title');
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
     levelsRow.classList.toggle('hud-levels--hidden', s !== 'title' || !levelChoice);
@@ -598,8 +669,40 @@ export function createHud(root: HTMLElement): Hud {
     onPickSkin(cb: (id: SkinId) => void): void {
       pickSkinCbs.push(cb);
     },
+    setAchievements(earned: ReadonlySet<AchievementId>): void {
+      earnedIds = earned;
+      // Only if the page is open: rebuilding a hidden list every frame-batch is
+      // wasted work, and the open path already rebuilds on show.
+      if (!achView.classList.contains('hud-achievements--hidden')) renderAchievements();
+    },
+    showAchievementToasts(defs: readonly AchievementDef[]): void {
+      for (const d of defs) {
+        const t = document.createElement('div');
+        t.className = 'hud-toast';
+        t.dataset.achievement = d.id;
+        const head = document.createElement('span');
+        head.className = 'hud-toast-head';
+        head.textContent = 'Achievement unlocked';
+        const name = document.createElement('span');
+        name.className = 'hud-toast-label';
+        name.textContent = d.label;
+        t.append(head, name);
+        toastsEl.appendChild(t);
+        const timer = setTimeout(() => {
+          t.remove();
+          toastTimers.delete(timer);
+        }, TOAST_MS);
+        toastTimers.add(timer);
+      }
+    },
     dispose(): void {
       disarmReset(); // a pending confirm timer must not outlive the HUD
+      for (const t of toastTimers) clearTimeout(t);
+      toastTimers.clear();
+      achOpenBtn.removeEventListener('click', handleAchOpen);
+      achOpenBtn.removeEventListener('click', blurIfPointer);
+      achBackBtn.removeEventListener('click', handleAchBack);
+      achBackBtn.removeEventListener('click', blurIfPointer);
       customizeOpenBtn.removeEventListener('click', handleCustomizeOpen);
       customizeOpenBtn.removeEventListener('click', blurIfPointer);
       customizeBackBtn.removeEventListener('click', handleCustomizeBack);

@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { ZERO_STATS } from './stats';
 import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
+import type { AchievementContext, AchievementId } from './achievements';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import type { World } from '../sim/world';
@@ -60,6 +61,10 @@ interface Recorder {
   hullEchoes: string[];
   skinSets: string[];
   skinEchoes: string[];
+  toasts: string[][];
+  achPushes: string[][];
+  achChecks: Array<{ clearedLevel: number | null; livesLeft: number; highestCleared: number }>;
+  achResets: number;
   listeners: Array<[string, (e: never) => void]>;
   removed: Array<[string, (e: never) => void]>;
   disposed: string[];
@@ -69,7 +74,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }> } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -127,6 +132,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     hullEchoes: [],
     skinSets: [],
     skinEchoes: [],
+    toasts: [],
+    achPushes: [],
+    achChecks: [],
+    achResets: 0,
     listeners: [],
     removed: [],
     disposed: [],
@@ -310,6 +319,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onPickSkin: (cb: (id: SkinId) => void) => {
           onPickSkin = cb;
         },
+        setAchievements: (earned: ReadonlySet<string>) => {
+          rec.achPushes.push([...earned]);
+        },
+        showAchievementToasts: (defs: ReadonlyArray<{ id: string }>) => {
+          rec.toasts.push(defs.map((d) => d.id));
+        },
         onResetStats: (cb: () => void) => {
           onResetStats = cb;
         },
@@ -340,6 +355,36 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setSkin: (id: SkinId) => {
           if (VALID_SKINS.has(id)) skin = id;
           rec.skinSets.push(id);
+        },
+      };
+    })(),
+    achievements: (() => {
+      const earned = new Set<AchievementId>();
+      return {
+        earned: () => earned,
+        // Deliberately NOT the real catalog: this harness pins the loop's WIRING
+        // (when it evaluates, with what context), and achievements.test.ts pins the
+        // catalog. A fake that re-implemented predicates would test itself.
+        check: (ctx: AchievementContext) => {
+          rec.achChecks.push({
+            clearedLevel: ctx.clearedLevel,
+            livesLeft: ctx.livesLeft,
+            highestCleared: ctx.highestCleared,
+          });
+          const due = (opts.earnsOn ?? []).filter(
+            (e) => e.when(ctx) && !earned.has(e.id as AchievementId),
+          );
+          for (const e of due) earned.add(e.id as AchievementId);
+          return due.map((e) => ({
+            id: e.id as AchievementId,
+            label: e.id,
+            description: '',
+            earned: () => true,
+          }));
+        },
+        reset: () => {
+          earned.clear();
+          rec.achResets += 1;
         },
       };
     })(),
@@ -1407,6 +1452,89 @@ describe('startGameWith: stats wiring', () => {
     h.hud.resetProgress();
     expect(h.rec.progressResets).toBe(1);
     expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]); // re-locked
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: achievements wiring', () => {
+  it('seeds the HUD with the earned set at boot', () => {
+    const h = boot(makeDeps());
+    expect(h.rec.achPushes.length).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it('evaluates per frame-batch with NO clearedLevel, so run feats stay dormant', () => {
+    // Same fixture as the stats test, for the same reason: the driver only calls
+    // onFrameEvents on EVENTFUL frames, so a countdown frame would leave the
+    // assertion below vacuous. The mine's fuse expires within the first tick.
+    const world = { ...createArenaWorld(1), roundStartTick: -100000 };
+    world.mines.push({ id: 501, ownerId: 99, pos: { x: 1, y: 1 }, timer: 0.001, armed: true, detonated: false });
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(100);
+    // The mid-play checks must all carry a null clearedLevel; a non-null one here
+    // would credit run feats on a level still being played.
+    expect(h.rec.achChecks.length).toBeGreaterThan(0);
+    expect(h.rec.achChecks.every((c) => c.clearedLevel === null)).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('evaluates at the win with the cleared level and the lives that survived', () => {
+    // lives: 2, NOT the fixture default of 3 -- against a 3-life world a hardcoded
+    // `livesLeft: 3` passes, which is the tautology that hid here first time round.
+    const world = { ...createArenaWorld(1), lives: 2 };
+    const h = boot(makeDeps({ levelStart: 1, world }));
+    h.setState('win');
+    const atWin = h.rec.achChecks.filter((c) => c.clearedLevel !== null);
+    expect(atWin).toHaveLength(1);
+    // 1-based level number, matching progress.recordCleared, not the 0-based index.
+    expect(atWin[0].clearedLevel).toBe(2);
+    expect(atWin[0].livesLeft).toBe(2);
+    h.handle.dispose();
+  });
+
+  it('checks the win AFTER the clear is recorded, so level milestones see it', () => {
+    // Ordering is the whole point: evaluating first would make Campaigner need a
+    // SECOND win to notice the one that finished the game.
+    const h = boot(makeDeps({ levelCount: 1, progressHighest: 0 }));
+    h.setState('win');
+    const atWin = h.rec.achChecks.filter((c) => c.clearedLevel !== null);
+    expect(atWin).toHaveLength(1);
+    expect(atWin[0].highestCleared).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('toasts newly earned achievements and pushes the fresh set to the HUD', () => {
+    const h = boot(
+      makeDeps({ earnsOn: [{ id: 'boots-on-ground', when: (c) => c.clearedLevel !== null }] }),
+    );
+    const pushesBefore = h.rec.achPushes.length;
+    h.setState('win');
+    expect(h.rec.toasts).toEqual([['boots-on-ground']]);
+    expect(h.rec.achPushes.length).toBe(pushesBefore + 1);
+    expect(h.rec.achPushes.at(-1)).toEqual(['boots-on-ground']);
+    h.handle.dispose();
+  });
+
+  it('does not toast when nothing new was earned', () => {
+    const world = { ...createArenaWorld(1), roundStartTick: -100000 };
+    world.mines.push({ id: 502, ownerId: 99, pos: { x: 1, y: 1 }, timer: 0.001, armed: true, detonated: false });
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.achChecks.length).toBeGreaterThan(0); // evaluations really happened
+    h.setState('win');
+    expect(h.rec.toasts).toEqual([]); // a toast per evaluation would spam every frame
+    h.handle.dispose();
+  });
+
+  it('Reset progress clears achievements; Reset stats deliberately does not', () => {
+    const h = boot(makeDeps());
+    h.hud.resetStats();
+    expect(h.rec.achResets).toBe(0); // statistics reset, the record of events stands
+    h.hud.resetProgress();
+    expect(h.rec.achResets).toBe(1);
+    expect(h.rec.achPushes.at(-1)).toEqual([]); // and the HUD is told
     h.handle.dispose();
   });
 });

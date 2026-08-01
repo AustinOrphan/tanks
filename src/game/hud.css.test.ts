@@ -91,6 +91,9 @@ describe('hud.css is syntactically whole', () => {
       '.hud-swatch', '.hud-swatch--selected',
       // skins: the border is the pane's only current-skin signal
       '.hud-skin', '.hud-skin--selected',
+      // achievements: hidden rules, the earned/locked contrast, and the toast rail
+      '.hud-achievements', '.hud-achievements--hidden', '.hud-achievements-open--hidden',
+      '.hud-achievement', '.hud-achievement--earned', '.hud-toasts', '.hud-toast',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }

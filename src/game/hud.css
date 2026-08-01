@@ -339,6 +339,123 @@
   color: #d8dde6;
 }
 
+.hud-achievements-open--hidden {
+  display: none;
+}
+
+/* The page is a full overlay like stats; without the hidden rule it covers the
+ * game from load. */
+.hud-achievements {
+  pointer-events: auto;
+  position: absolute;
+  /* Below the topbar, like .hud-stats: review caught that overlay painting OVER
+   * the topbar and eating mute/volume clicks. Same shape, same guard. */
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(11, 14, 20, 0.86);
+  color: #d8dde6;
+  text-align: center;
+}
+
+.hud-achievements--hidden {
+  display: none;
+}
+
+.hud-achievement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 58vh;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+.hud-achievement {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border-left: 3px solid rgba(216, 221, 230, 0.25);
+  padding: 4px 12px;
+  opacity: 0.45; /* locked */
+}
+
+/* Earned rows are the ONLY visual difference from locked ones; without this rule
+ * the page reads as nothing ever being earned. */
+.hud-achievement--earned {
+  opacity: 1;
+  border-left-color: #e0c04a;
+}
+
+.hud-achievement-label {
+  font-weight: 700;
+}
+
+.hud-achievement-desc {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.hud-achievements-back {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 20px;
+  font-weight: 700;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
+
+/* ---- Unlock toasts -------------------------------------------------------------- */
+
+.hud-toasts {
+  position: absolute;
+  top: 64px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.hud-toast {
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid #e0c04a;
+  border-radius: 8px;
+  padding: 8px 14px;
+  background: rgba(11, 14, 20, 0.9);
+  color: #d8dde6;
+  animation: hud-toast-in 220ms ease-out;
+}
+
+.hud-toast-head {
+  font-size: 0.75em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.hud-toast-label {
+  font-weight: 700;
+}
+
+@keyframes hud-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---- Main menu: level select ---------------------------------------------------- */
 
 .hud-levels {

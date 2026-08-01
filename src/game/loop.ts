@@ -5,6 +5,11 @@ import { createLevelSystem, type LevelSystem } from './levels';
 import { createProgressStore, type ProgressStore } from './progress';
 import { createStatsStore, type StatsStore } from './stats';
 import { createCustomizationStore, type CustomizationStore, type SkinId } from './customization';
+import {
+  createAchievementsStore,
+  type AchievementsStore,
+  type AchievementContext,
+} from './achievements';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -92,6 +97,7 @@ export interface GameDeps {
   readonly stats: StatsStore;
   /** The paint shop's saved choice. Render-only downstream. */
   readonly customization: CustomizationStore;
+  readonly achievements: AchievementsStore;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -203,6 +209,7 @@ export function createBrowserDeps(): GameDeps {
   const progress = createProgressStore(browserStorage());
   const stats = createStatsStore(browserStorage());
   const customization = createCustomizationStore(browserStorage());
+  const achievements = createAchievementsStore(browserStorage());
   return {
     createRenderer,
     createInput: createInputController,
@@ -214,6 +221,7 @@ export function createBrowserDeps(): GameDeps {
     progress,
     stats,
     customization,
+    achievements,
     now: () => performance.now(),
     wallMs: () => Date.now(),
     raf: {
@@ -284,6 +292,26 @@ export function startGameWith(
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
 
+  /**
+   * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
+   * has just landed, which is what stops a run feat firing mid-round on a tally that
+   * happens to qualify. Newly earned entries come back and become toasts.
+   */
+  function checkAchievements(clearedLevel: number | null): void {
+    const ctx: AchievementContext = {
+      lifetime: deps.stats.lifetime(),
+      run: deps.stats.run(),
+      highestCleared: deps.progress.highestCleared(),
+      totalLevels: deps.levels.count,
+      clearedLevel,
+      livesLeft: driver.world.lives,
+    };
+    const fresh = deps.achievements.check(ctx);
+    if (fresh.length === 0) return;
+    hud.showAchievementToasts(fresh);
+    hud.setAchievements(deps.achievements.earned());
+  }
+
   function refreshStats(w: World): void {
     hud.setLives(w.lives);
     hud.setEnemiesRemaining(countEnemies(w));
@@ -336,6 +364,7 @@ export function startGameWith(
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
+      checkAchievements(null);
       // Keep the HUD's copy fresh: the stats page re-renders only while visible, and
       // the win/lose run-summary line updates a beat after the state flips -- the
       // winning kill is in THIS batch, not the one before the panel opened.
@@ -449,6 +478,7 @@ export function startGameWith(
   hud.onPickSkin((id) => {
     deps.customization.setSkin(id);
     hud.setSkin(deps.customization.skin());
+  hud.setAchievements(deps.achievements.earned());
     restyle();
   });
 
@@ -459,6 +489,10 @@ export function startGameWith(
 
   hud.onResetProgress(() => {
     deps.progress.reset();
+    // Achievements are progress, not statistics: this is the one reset that clears
+    // them, and Reset stats deliberately leaves them alone.
+    deps.achievements.reset();
+    hud.setAchievements(deps.achievements.earned());
     // Levels re-lock immediately: the select the player is looking at must not keep
     // offering a level the save no longer justifies.
     hud.setLevelSelect(unlockedLevels(), deps.levels.count);
@@ -476,6 +510,10 @@ export function startGameWith(
       deps.progress.recordCleared(level + 1);
       hud.setLevelSelect(unlockedLevels(), deps.levels.count);
     }
+    // AFTER recordCleared, so the level milestones see the clear they just earned.
+    // Outside the tracksProgress guard on purpose: the sandbox unlocks no levels but
+    // a feat performed there is still a feat.
+    if (s === 'win') checkAchievements(level + 1);
     // The driver stops sampling while paused and only sample() resets the fire/mine
     // latches, so a Space pressed around or during a pause would mine on the first
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger
@@ -491,6 +529,7 @@ export function startGameWith(
   hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
+  hud.setAchievements(deps.achievements.earned());
   refreshStats(world);
 
   const onKey = (e: KeyboardEvent): void => {
