@@ -382,6 +382,80 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('a QUEUED track cannot hijack a suite change: the new suite plays a full cycle first', () => {
+    // Review reproduced this exactly: the pickup made the wrap one bar later
+    // read as a cycle boundary, so changeSuite(B) + queueTrack(Q) played B for
+    // its pickup bar only, then Q took over. B must play its pickup AND a full
+    // cycle before any queued switch fires.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    const q = mk('q', 'E2');
+    const { ctx, t, bed } = withTrack(a);
+    bed.start();
+    bed.changeSuite(b);
+    bed.queueTrack(q);
+    for (let i = 1; i <= 20; i++) { ctx.currentTime = i; t.tick(); }
+    const c2 = Math.round(noteToHz('C2')!);
+    const bCount = ctx.notes.filter((n) => Math.round(n.freq) === c2).length;
+    // b's pickup (2 steps) plus its full cycle (4 steps) = at least 6 sounding
+    // steps before q may enter. The hijack gave exactly 2.
+    expect(bCount, `b played only ${bCount} steps before being replaced`).toBeGreaterThanOrEqual(6);
+    expect(bed.currentTrackId()).toBe('q'); // ...and q does arrive, eventually
+    bed.stop();
+  });
+
+  it('a single-bar-cycle suite is not clobbered in the same step it arrives', () => {
+    // startAtStep is 0 when the incoming cycle is one bar long, which used to
+    // satisfy the queued check in the SAME step: the incoming suite never
+    // sounded a note while the ramp described a transition to a discarded track.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const single: MusicTrackDef = {
+      id: 'single', stepSeconds: 0.5, barSteps: 2, chords: ['E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('B1'), noteToHz('B1')], generate: null, intensity: 0 }],
+    };
+    const q: MusicTrackDef = {
+      id: 'q', stepSeconds: 0.5, barSteps: 2, chords: ['E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(single);
+    bed.queueTrack(q);
+    for (let i = 1; i <= 24; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const b1 = Math.round(noteToHz('B1')!);
+    expect(
+      ctx.notes.filter((n) => Math.round(n.freq) === b1).length,
+      'the incoming suite never sounded',
+    ).toBeGreaterThanOrEqual(4); // pickup + its full (one-bar) cycle
+    bed.stop();
+  });
+
+  it('stop() mid-transition clears it: no stale ramp survives into a restart', () => {
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: Array.from({ length: 16 }, () => noteToHz('A1')), generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = { ...from, id: 'to', stepSeconds: 0.5 };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    expect(bed.inTransition(), 'a committed change is a transition in flight').toBe(true);
+    for (let i = 1; i <= 18; i++) { ctx.currentTime = i; t.tick(); } // into the ramp
+    bed.stop();
+    expect(bed.inTransition(), 'stop() left the transition alive').toBe(false);
+    // And a restart does not resume a stale ramp against a new clock.
+    bed.start();
+    expect(bed.inTransition()).toBe(false);
+    bed.stop();
+  });
+
   it('RAMPS the tempo across the pickup bar rather than switching instantly', () => {
     // The ramp spans the incoming piece's pickup bar, so its resolution IS the
     // bar length: 2-step fixture bars gave only the two endpoints, which is why

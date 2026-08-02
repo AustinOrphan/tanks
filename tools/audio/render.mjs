@@ -179,9 +179,7 @@ try {
       const picks = suites.map((s, i) => membersOf(s)[i % membersOf(s).length]);
       // A full bar of pivot. Eight steps (~1.2s) was too short for the ear to
       // register the dominant as a gesture before everything changed.
-      // The pickup bar's length, for the timeline estimate only: the bed itself
-      // decides everything now.
-      const TRANS_STEPS = 16;
+
       let seconds = 2;
       for (let i = 0; i < picks.length; i++) {
         seconds += cycleOf(picks[i]) * picks[i].stepSeconds;
@@ -202,7 +200,8 @@ try {
       let elapsed = cycleOf(picks[0]) * picks[0].stepSeconds;
       for (let i = 1; i < picks.length; i++) {
         marks.push({ at: elapsed, id: `${suites[i].id} (via its own final bar)` });
-        elapsed += TRANS_STEPS * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
+        // The pickup bar's span, for the timeline estimate only.
+        elapsed += picks[i].barSteps * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
         elapsed += cycleOf(picks[i]) * picks[i].stepSeconds;
       }
       let next = 1;
@@ -232,6 +231,17 @@ try {
         const gcd = (a, b) => (b ? gcd(b, a % b) : a);
         return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
       };
+      // The boundary switch is only clean when members share the interchange
+      // contract; real suites are validated, but this flag takes arbitrary ids.
+      // Preview flexibility is kept -- with the mismatch SAID, not silent.
+      const first = chosen[0];
+      for (const t of chosen.slice(1)) {
+        if (t.stepSeconds !== first.stepSeconds || t.chords.join() !== first.chords.join()) {
+          console.error(
+            `WARNING: "${t.id}" does not share ${first.id}'s tempo/progression -- this join will jar (that may be what you are testing)`,
+          );
+        }
+      }
       const seconds = chosen.reduce((acc, t) => acc + cycleOf(t) * t.stepSeconds, 0) + 2;
       const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
       let pump = null;
@@ -286,17 +296,14 @@ try {
     );
     const loopSteps = steps.reduce(lcm, 1);
     const loopSeconds = loopSteps * track.stepSeconds;
-    // --loop renders EXACTLY one cycle and folds the ring-out back over the
-    // start, so the file itself loops seamlessly. Without that the tail is
-    // simply cut and repeating the file clicks -- the in-game bed never
-    // restarts, so this is an artefact of rendering, not of the music.
-    // Long enough for the longest ring-out to finish, derived rather than
-    // guessed: a hold of 8 steps at 0.5s/step needs 4s on its own, and a fixed
-    // budget silently truncated it.
-    const { VOICES } = await import('/src/audio/music-data.ts');
-    const longestHold = Math.max(...track.tracks.map((l) => VOICES[l.voice].hold));
-    const TAIL = longestHold * track.stepSeconds + 0.5;
-    const seconds = opts.loop ? loopSeconds + TAIL : (opts.seconds ?? 30);
+    // --loop renders TWO cycles and keeps the SECOND: its head already carries
+    // the previous cycle's ring-out, exactly as continuous playback sounds.
+    // Review killed the previous fold approach twice over -- first it discarded
+    // tail energy, then (fixed with a modulo) it ADDED next-cycle onsets on top
+    // of the head, running the first ~2s of every loop +2.7dB hot while the
+    // seam check printed "seamless". Steady-state extraction has neither
+    // problem, because nothing is synthesised or summed at all.
+    const seconds = opts.loop ? loopSeconds * 2 + 0.5 : (opts.seconds ?? 30);
     const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
     let pump = null;
     const bed = createMusicBed(ctx, ctx.destination, {
@@ -317,23 +324,18 @@ try {
     const rendered = await ctx.startRendering();
     if (!opts.loop) return { wav: toWav(rendered), label: `track-${track.id}${opts.intensity !== null ? `-i${opts.intensity}` : ''}` };
 
-    // Fold: everything past one cycle is the tail of notes that started inside
-    // it, which is exactly what would be sounding as the loop comes round again.
+    // Steady state: skip the first cycle, keep the second.
     const rate = rendered.sampleRate;
     const loopFrames = Math.round(loopSeconds * rate);
     const src = rendered.getChannelData(0);
     const out = new Float32Array(loopFrames);
-    out.set(src.subarray(0, loopFrames));
-    // Modulo accumulate, not a single wrap: the old `i < loopFrames` bound threw
-    // away everything past 2x the loop. On a short loop with a long pad that was
-    // 61% of the tail's energy, at full amplitude -- and the tool then blamed
-    // the music for the click its own arithmetic had created.
-    for (let i = loopFrames; i < src.length; i++) out[i % loopFrames] += src[i];
+    out.set(src.subarray(loopFrames, loopFrames * 2));
     const looped = new OfflineAudioContext(1, loopFrames, rate).createBuffer(1, loopFrames, rate);
     looped.getChannelData(0).set(out);
-    // Report the seam: the step across the wrap point, in the same units as the
-    // signal. A perfect loop has a discontinuity no larger than the waveform's
-    // own sample-to-sample motion.
+    // The seam: the step from the loop's end back to its own head. For authored
+    // tracks steady-state cycles are identical so this is near-zero; a track
+    // with GENERATED layers varies per cycle, so its "loop" is one snapshot and
+    // the seam is reported honestly rather than assumed.
     const seam = Math.abs(out[0] - out[loopFrames - 1]);
     let typical = 0;
     for (let i = 1; i < Math.min(4000, loopFrames); i++) typical = Math.max(typical, Math.abs(out[i] - out[i - 1]));
@@ -359,7 +361,12 @@ try {
       console.log(`  switches at: ${result.marks.map((m) => `${m.at.toFixed(2)}s -> ${m.id}`).join(', ')}`);
     }
     if (result.seam !== undefined) {
-      const verdict = result.seam <= result.typical ? 'seamless' : 'AUDIBLE STEP';
+      // An absolute floor as well as the relative one: a generated track's loop
+      // is one snapshot of a varying piece, so its wrap differs from its head by
+      // a few parts in ten thousand -- around -74dBFS, far below audibility --
+      // while the local "typical step" in a quiet head is smaller still. The
+      // relative test alone called that an AUDIBLE STEP, which is false.
+      const verdict = result.seam <= Math.max(result.typical, 1e-3) ? 'seamless' : 'AUDIBLE STEP';
       console.log(
         `  loop ${result.loopSeconds.toFixed(2)}s  seam ${result.seam.toExponential(2)} ` +
           `vs typical sample step ${result.typical.toExponential(2)}  -> ${verdict}`,

@@ -168,6 +168,17 @@ export function createMusicBed(
   let intensity = 1;
   let stepsIntoCycle = 0;
   let pendingSuite: { next: MusicTrackDef } | null = null;
+  /**
+   * Steps until another switch may fire. Review proved the pickup created a
+   * PREMATURE boundary: it set stepsIntoCycle to the final bar, so the wrap one
+   * bar later read as "cycle complete" and a queued track hijacked the suite
+   * change -- the incoming suite played exactly its pickup bar and vanished. In
+   * the single-bar-cycle case the clobber happened in the SAME step, so the
+   * incoming suite never sounded at all while the ramp described a transition
+   * to a track that had already been discarded. A switch now waits out the
+   * pickup plus one full cycle of the track it delivered.
+   */
+  let switchLock = 0;
 
   function regenerate(layerIndex: number): void {
     if (!track) return;
@@ -268,7 +279,7 @@ export function createMusicBed(
     // A suite change happens at the boundary, like any track switch -- but the
     // incoming track starts at its FINAL bar, its own dominant, as a pickup.
     // Real material from the incoming section; nothing composed in between.
-    if (track && pendingSuite && stepsIntoCycle === 0) {
+    if (track && pendingSuite && stepsIntoCycle === 0 && switchLock <= 0) {
       const next = pendingSuite.next;
       const pickupSteps = next.barSteps;
       const startAtStep = Math.max(0, cycleSteps(next) - pickupSteps);
@@ -300,9 +311,10 @@ export function createMusicBed(
       generated = track.tracks.map(() => null);
       chords = track.chords.map((c) => parseChord(c)).filter((c): c is Chord => !!c);
       stepsIntoCycle = startAtStep;
+      switchLock = pickupSteps + cycleSteps(next);
       pendingSuite = null;
     }
-    if (track && queued && stepsIntoCycle === 0) adoptQueued();
+    if (track && queued && stepsIntoCycle === 0 && switchLock <= 0) adoptQueued();
     if (track) {
       scheduleComposed(at);
       // The overlap: the outgoing melody's last bar rides over the pickup,
@@ -319,6 +331,7 @@ export function createMusicBed(
         if (o.played >= o.steps) overlay = null;
       }
       stepsIntoCycle = (stepsIntoCycle + 1) % cycleSteps(track);
+      if (switchLock > 0) switchLock -= 1;
       if (ramp) {
         ramp.played += 1;
         if (ramp.played >= ramp.steps) ramp = null;
@@ -408,6 +421,15 @@ export function createMusicBed(
         clearIv(timer);
         timer = null;
       }
+      // A transition must not survive a stop: the ramp is anchored to a clock
+      // that stops meaning anything, the overlay's moment has passed, and a
+      // queued switch belongs to the session that queued it. Review found
+      // inTransition() reporting true indefinitely after a mid-ramp stop.
+      ramp = null;
+      overlay = null;
+      pendingSuite = null;
+      queued = null;
+      switchLock = 0;
       // Notes are scheduled AHEAD of now, so stopping the timer is not enough --
       // without this, up to LOOKAHEAD_SECONDS of music plays after "stop".
       for (const v of voices) {
@@ -440,7 +462,10 @@ export function createMusicBed(
       pendingSuite = { next };
     },
     inTransition(): boolean {
-      return ramp !== null;
+      // pendingSuite too: between changeSuite() and the boundary the change is
+      // committed but not yet audible, and callers asking "is a change in
+      // flight" mean that window as well.
+      return ramp !== null || pendingSuite !== null;
     },
     currentTrackId(): string | null {
       return track?.id ?? null;

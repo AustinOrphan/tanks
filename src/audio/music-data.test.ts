@@ -186,6 +186,25 @@ describe('the validator refuses bad data, naming the path', () => {
     }
   });
 
+  it('rejects pitches outside the audible band, naming the path', () => {
+    // The range guard's negative control, which review found missing -- the one
+    // check in this file whose failure mode was untested, against the module's
+    // own stated contract. 'A44' is the realistic fat-finger; 'C-2' is below
+    // hearing.
+    for (const [note, why] of [['A44', 'a typo for A4'], ['C-2', 'subsonic']] as const) {
+      const bad = [{ id: 'x', stepSeconds: 1, tracks: [{ voice: 'bass', notes: [note] }] }];
+      let message = '';
+      try {
+        parseAll(bad);
+        throw new Error('SHOULD HAVE THROWN');
+      } catch (e) {
+        message = String(e);
+      }
+      expect(message, why).toContain('outside the audible');
+      expect(message, why).toContain('[0].tracks[0].notes[0]');
+    }
+  });
+
   it('rejects duplicate ids, which would make trackById silently ambiguous', () => {
     const dup = [...good(), ...good()];
     expect(() => parseAll(dup)).toThrow(/duplicate id/);

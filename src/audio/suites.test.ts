@@ -147,6 +147,22 @@ describe('rankCandidates / pickNextSuite', () => {
     expect(pickNextSuite(from, [from, mk('far', 'Ebm', 0.15), mk('slow', 'Am', 0.5)], () => 0.5)).toBeNull();
   });
 
+  it('pins the CONSTRUCTION, not just the last chord: i-VI-VII-V and I-vi-IV-V', () => {
+    // Review found the internal chords unpinned: the validator checks only the
+    // final dominant, so a generated set with a wrong VI or VII (Em-C#-D-B)
+    // would load and pass every test. Four of the six sets came from a script,
+    // so a systematic error would be replicated four times -- this is the sweep
+    // that catches it. Population: every shipped suite.
+    for (const s of SUITES) {
+      const home = parseChord(s.key)!;
+      const isMinor = (home.pitchClasses[1] - home.root + 12) % 12 === 3;
+      const roots = membersOf(s)[0].chords.map((c) => parseChord(c)!.root);
+      const offsets = roots.map((r) => (r - home.root + 12) % 12);
+      const want = isMinor ? [0, 8, 10, 7] : [0, 9, 5, 7];
+      expect(offsets, `${s.id} (${s.key}) plays ${membersOf(s)[0].chords.join('-')}`).toEqual(want);
+    }
+  });
+
   it('the shipped suites form a CONNECTED graph under the compatibility rules', () => {
     // "A lot more sets" only works if every set is reachable from every other
     // through legal joins -- an island suite would strand the playlist there
