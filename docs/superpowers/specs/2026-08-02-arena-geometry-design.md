@@ -116,31 +116,45 @@ does not reflect, producing shots that miss for no visible reason.
   here, since it walks cells without regard to tank width. If it is not enough, that gap is
   reported rather than papered over.
 
-## Considered and deferred: the one-way ledge
+## The one-way ledge
 
-A drop a tank can cross downhill but not back. Deferred, not rejected — it is a good idea
-that needs one design decision this spec should not make in passing, because of what was
-measured while considering it:
+A drop that any tank can cross downhill and none can cross back — **side-dependent, not
+entity-dependent**. Enemies use it exactly as the player does; what decides the outcome is
+which side you are standing on.
 
-**The AI has no pathfinding.** `grep -rlniE "pathfind|navmesh|a-?star|bfs|dijkstra" src/sim`
-returns nothing; `seekMove` is reactive steering — wander plus a distance band relative to
-the player. An enemy that chases the player over a one-way ledge can never come back. That
-fails in both directions: the enemy strands itself out of the fight and the level goes
-trivial, or it strands itself somewhere it can still shoot the player but cannot be reached
-and the level goes unwinnable. No test catches this; it is emergent from reactive steering
-meeting irreversible geometry.
+The obvious objection, measured: **the AI has no pathfinding.**
+`grep -rlniE "pathfind|navmesh|a-?star|bfs|dijkstra" src/sim` returns nothing, and
+`seekMove` is reactive steering — wander plus a distance band relative to the player. An
+enemy that chases the player over an irreversible drop cannot deliberately find its way
+back.
 
-**The sim is strictly 2D** — there is no elevation in world state. High and low would be a
-render fiction plus a traversal rule, which is workable, but in a top-down view the
-DIRECTION of a drop has to be unmistakable or the rule reads as a wall that is broken.
+**That is a level-design constraint, not a blocker, and it has a checkable form.** The risk
+only exists where a ledge is the ONLY route into an area. If every region below a ledge has
+another way out — the long way round — then no tank of any kind is ever permanently
+stranded; it wanders out eventually, and the ledge reads as a shortcut rather than a
+trapdoor. So:
 
-**The resolution, if it is built:** make ledges impassable to ENEMIES entirely — they treat
-one as solid — and one-way for the player. The stranding problem disappears, no AI change is
-needed, and the feature becomes sharper than a gate: a player-only escape hatch. Drop down
-to break contact and the pursuit has to go the long way round. Directional collision is
-still a change to `moveTank`, which is among the most delicate code in the repo (see the
-escape-bug and retroreflecting-seam notes in CLAUDE.md), so it wants its own spec and its
-own review rather than riding along with the resolution change.
+> **Every arena's traversal graph must be strongly connected**: from every cell, every
+> other cell is reachable, respecting one-way edges.
+
+This is a real upgrade to `structuralFailures`, not a restatement. `reachable()` today is an
+undirected 4-neighbour flood fill (`arena-claims.ts`), which assumes every edge works both
+ways — precisely the assumption a ledge breaks. It becomes a directed check: a flood fill
+FROM the player's cell proves everything is reachable, and a second fill on the reversed
+graph proves everything can get back. Both must cover the same set. An arena with a
+one-way pocket fails at load with the pocket drawn on the board, exactly as a sealed pocket
+does today.
+
+That rule also makes the feature safe for the AI without teaching the AI anything, which is
+the right trade: reactive steering stays reactive, and the geometry guarantees it cannot
+paint itself into a corner.
+
+**Still needs its own spec and review before building.** Directional collision is a change
+to `moveTank`, among the most delicate code in the repo — see the escape-bug and
+retroreflecting-seam notes in CLAUDE.md — and the sim is strictly 2D, so "higher" and
+"lower" are a render fiction plus a traversal rule. In a top-down view the direction of a
+drop has to be unmistakable, or the rule reads as a wall that is broken. Sequenced after the
+resolution change and the barrier, both of which it composes with cleanly.
 
 ## Out of scope
 
