@@ -173,6 +173,23 @@ export function isPlayerDeath(events: SimEvent[]): boolean {
   return events.some((e) => e.type === 'tank-destroyed' && e.kind === 'player');
 }
 
+/**
+ * The music's arrangement density, from how much of the arena is left.
+ *
+ * Rises as enemies are destroyed, so the round BUILDS: the opening is bass and
+ * pads, the stabs join partway, and the melody arrives for the last tank.
+ *
+ * The denominator is `total - 1` on purpose. Dividing by `total` would only
+ * reach 1.0 once every enemy is dead -- i.e. the fullest arrangement would play
+ * for the instant the round ends and never during a fight. Pure and exported so
+ * the mapping is testable without a game, like round.ts's phaseAt.
+ */
+export function musicIntensity(remaining: number, total: number): number {
+  if (total <= 1) return 1;
+  const destroyed = Math.max(0, total - remaining);
+  return Math.max(0, Math.min(1, destroyed / (total - 1)));
+}
+
 function countEnemies(world: World): number {
   let n = 0;
   for (const t of world.tanks) {
@@ -337,6 +354,9 @@ export function startGameWith(
   // three times. The banner teaches once per page load; every round after it
   // gets the quiet chip.
   let lastRoundStartTick: number | null = null;
+  // The denominator for musical intensity. Re-read on every world rebuild, since
+  // arenas differ in enemy count.
+  let enemiesAtRoundStart = countEnemies(world);
   let roundsSeen = 0;
   function refreshRoundPhase(w: World): void {
     if (w.roundStartTick !== lastRoundStartTick) {
@@ -366,6 +386,7 @@ export function startGameWith(
     onSimulated(w): void {
       refreshStats(w);
       refreshRoundPhase(w);
+      audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
@@ -428,6 +449,7 @@ export function startGameWith(
     // tick), so without this reset the round tracker would not count the new level's
     // opening round and the teaching banner would re-show.
     lastRoundStartTick = null;
+    enemiesAtRoundStart = countEnemies(world);
     const b = deps.levels.bounds(level);
     if (b.width !== shownBounds.width || b.height !== shownBounds.height || b.cellSize !== shownBounds.cellSize) {
       // Guarded: a same-size rebuild (retry, quit on the same board) must not

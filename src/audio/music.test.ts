@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { createMusicBed } from './music';
 import { noteToHz, trackById, type MusicTrackDef } from './music-data';
 import { MUSIC_TRACK_ID } from './engine';
+import { parseChord } from './chords';
 
 interface Sched {
   freq: number;
@@ -107,9 +108,11 @@ describe('composed tracks', () => {
   const twoLayers: MusicTrackDef = {
     id: 'test',
     stepSeconds: 1,
+    barSteps: 0,
+    chords: [],
     tracks: [
-      { voice: 'bass', notes: [noteToHz('A1'), noteToHz('B1')] },
-      { voice: 'drone', notes: [noteToHz('E3'), null, noteToHz('C4')] },
+      { voice: 'bass', notes: [noteToHz('A1'), noteToHz('B1')], generate: null, intensity: 0 },
+      { voice: 'drone', notes: [noteToHz('E3'), null, noteToHz('C4')], generate: null, intensity: 0 },
     ],
   };
 
@@ -215,7 +218,7 @@ describe('composed tracks', () => {
     }
     // And the bass alternates without interruption across its wrap.
     const bass = ctx.notes.filter((n) => n.freq < 100).map((n) => Math.round(n.freq));
-    const period = twoLayers.tracks[0].notes.length;
+    const period = twoLayers.tracks[0].notes!.length;
     for (let i = period; i < bass.length; i++) {
       expect(bass[i], `bass step ${i} should repeat step ${i - period}`).toBe(bass[i - period]);
     }
@@ -231,15 +234,22 @@ describe('composed tracks', () => {
     expect(arena, `engine plays "${MUSIC_TRACK_ID}" but no such track exists`).not.toBeNull();
     const { ctx, bed } = withTrack(arena!);
     bed.start();
-    // And it plays THAT track: every scheduled pitch belongs to it.
+    // And it plays THAT track. A pitch is legitimate if it was authored, or --
+    // for a generated layer -- if it belongs to one of the track's declared
+    // chords. That second clause is the safety property generation rests on:
+    // nothing can sound that is not in the harmony.
     const authored = new Set(
-      arena!.tracks.flatMap((l) => l.notes).filter((n): n is number => n !== null).map((n) => Math.round(n)),
+      arena!.tracks.flatMap((l) => l.notes ?? []).filter((n): n is number => n !== null).map((n) => Math.round(n)),
+    );
+    const harmony = new Set(
+      arena!.chords.flatMap((c) => parseChord(c)?.pitchClasses ?? []),
     );
     expect(ctx.notes.length).toBeGreaterThan(0);
     for (const n of ctx.notes) {
-      expect(authored, `scheduled ${Math.round(n.freq)}Hz, not in the track`).toContain(
-        Math.round(n.freq),
-      );
+      const hz = Math.round(n.freq);
+      if (authored.has(hz)) continue;
+      const pc = ((Math.round(12 * Math.log2(n.freq / 440)) + 9) % 12 + 12) % 12;
+      expect(harmony, `scheduled ${hz}Hz: neither authored nor in the harmony`).toContain(pc);
     }
     bed.stop();
   });

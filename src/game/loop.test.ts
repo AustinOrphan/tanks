@@ -22,6 +22,7 @@ import {
   startGameWith,
   deriveSeed,
   isMuteHotkey,
+  musicIntensity,
   isPauseHotkey,
   type GameDeps,
   type HostWindow,
@@ -77,12 +78,13 @@ interface Recorder {
   disposed: string[];
   musicStarts: number;
   musicStops: number;
+  musicIntensities: number[];
   unlocks: number;
   samples: number;
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[] } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -149,6 +151,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     disposed: [],
     musicStarts: 0,
     musicStops: 0,
+    musicIntensities: [],
     unlocks: 0,
     samples: 0,
     hudRoots: [],
@@ -238,6 +241,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       getVolume: () => 1,
       unlock: () => {
         rec.unlocks += 1;
+      },
+      setMusicIntensity: (v: number) => {
+        rec.musicIntensities.push(v);
       },
       dispose: () => {
         rec.disposed.push('audio');
@@ -483,8 +489,17 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // Each level's player gets a DIFFERENT id, as loadArena's grid-scan numbering
         // really does (16 in ARENA_01, 15 in ARENA_02) -- a fake where every level's
         // player id matches let a stale-id bug pass the rebind test.
-        const tanks = level === 0 ? base.tanks
+        let tanks = level === 0 ? base.tanks
           : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + level } : t));
+        // Real arenas differ in enemy count (ARENA_01 has 3, ARENA_03 more), and
+        // anything computed from "how many did this round start with" is wrong if
+        // the fake keeps every level the same size.
+        const want = opts.enemiesByLevel?.[level];
+        if (want !== undefined) {
+          const player = tanks.filter((t) => t.kind === 'player');
+          const foes = tanks.filter((t) => t.kind !== 'player').slice(0, want);
+          tanks = [...player, ...foes];
+        }
         const built = {
           ...base,
           tanks,
@@ -721,6 +736,67 @@ describe('startGameWith: HUD wiring', () => {
     expect(h.rec.musicStarts).toBe(0);
     h.setState('playing');
     expect(h.rec.musicStarts).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('BUILDS the music as the arena empties, reaching full on the last tank', () => {
+    // The mapping is pure, so it is tested directly rather than by engineering
+    // deaths through the sim. Population: a 4-enemy round, every count.
+    expect(musicIntensity(4, 4), 'a full arena is the sparsest mix').toBe(0);
+    expect(musicIntensity(3, 4)).toBeCloseTo(1 / 3, 9);
+    expect(musicIntensity(2, 4)).toBeCloseTo(2 / 3, 9);
+    expect(musicIntensity(1, 4), 'the final duel is the fullest mix').toBe(1);
+    // Monotonic across every size the arenas use.
+    for (const total of [1, 2, 3, 4, 5, 6]) {
+      let previous = -1;
+      for (let remaining = total; remaining >= 1; remaining--) {
+        const v = musicIntensity(remaining, total);
+        expect(v, `total ${total}, remaining ${remaining}`).toBeGreaterThanOrEqual(previous);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+        previous = v;
+      }
+    }
+    // Degenerate rounds must not divide by zero or go negative.
+    expect(musicIntensity(1, 1)).toBe(1);
+    expect(musicIntensity(0, 0)).toBe(1);
+    expect(musicIntensity(9, 4)).toBe(0); // more alive than started: clamped
+  });
+
+  it('re-reads the enemy count when the LEVEL changes, not just at boot', () => {
+    // Levels differ in size. Keeping the first level's count as the denominator
+    // makes the build wrong for every later level -- on a smaller level the mix
+    // would jump to full immediately, on a larger one never arrive.
+    const h = boot(
+      makeDeps({ levelCount: 2, enemiesByLevel: [3, 2], world: { ...createArenaWorld(1), roundStartTick: -100000 } }),
+    );
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.musicIntensities.at(-1), 'level 1 starts sparse').toBe(musicIntensity(3, 3));
+
+    h.setState('win');
+    h.hud.startRestart(); // advance to level 2, which has 2 enemies
+    h.setState('playing');
+    h.fireFrame(60);
+    // With 2 enemies both alive, intensity is 0 against the CORRECT denominator.
+    // Against the stale denominator of 3 it would read 1/2 -- already half built
+    // before a shot is fired.
+    expect(h.rec.musicIntensities.at(-1), 'level 2 must use its own count').toBe(
+      musicIntensity(2, 2),
+    );
+    h.handle.dispose();
+  });
+
+  it('pushes the intensity to the audio engine every simulated frame', () => {
+    // The wiring, separately from the mapping: without this the layer gating is
+    // inert and the mix runs flat, which is what review found.
+    const world = { ...createArenaWorld(1), roundStartTick: -100000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.musicIntensities.length).toBeGreaterThan(0);
+    const enemies = world.tanks.filter((t) => t.kind !== 'player').length;
+    expect(h.rec.musicIntensities.at(-1)).toBe(musicIntensity(enemies, enemies));
     h.handle.dispose();
   });
 
