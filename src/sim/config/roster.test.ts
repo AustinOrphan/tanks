@@ -15,7 +15,7 @@ import { AIBehavior, TankAbility } from './enums';
 
 // The shipped kinds. `player` is included because the player is now resolved through
 // the same pipeline (its weapon/movement/mine-capacity all come from configFor).
-const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive'];
+const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive', 'green'];
 
 // The colours the renderer shipped before this refactor (entities.ts TANK_COLORS, as
 // 0x hex). config.color must reproduce them exactly, or the tanks change colour.
@@ -25,6 +25,7 @@ const SHIPPED_COLORS: Record<TankKind, string> = {
   grey: '#8890a0',
   teal: '#2bb0a6',
   olive: '#7a8f3c', // new with the kind itself: no prior render literal to reproduce
+  green: '#3D9A50', // likewise new; taken from config/reference/tank-types.json GREEN
 };
 
 describe('game roster resolves to the shipped tunables (behaviour-preservation pins)', () => {
