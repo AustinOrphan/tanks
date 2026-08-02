@@ -214,3 +214,203 @@ Identical: same 6 failing files, same 14 failing tests, same 1208 passing. `npx 
 ```
 git commit -m "arenas: remap old-resolution coordinates in notes prose to the 3x grid"
 ```
+
+---
+
+# Addendum: `claims[].why` coordinate fix (scope extension)
+
+The coordinator confirmed concern #1 above was a real scoping gap ("notes only" should
+have been "notes and claims[].why") and extended the task. This addendum covers that
+follow-up work: fixing the same stale-coordinate defect in every claim's `why` field,
+across all four arenas, base commit still `bb1523e`.
+
+## A0. Population
+
+The coordinator's stated population — every match of
+`\(\d+,\s*\d+\)|columns? \d+(-\d+)?|rows? \d+(-\d+)?` in every claim's `why` across all
+four arenas — is **23** matches, all in arena-03 (1) and arena-04 (22), matching the
+coordinator's own breakdown exactly. I re-ran that exact regex against the base commit
+before editing and got the same 23, distributed as they listed: arena-03 claims[7] (1);
+arena-04 claims[0] (2), [1] (1), [2] (2), [3] (1), [4] (1), [5] (1), [7] (1), [9] (3),
+[10] (2), [11] (5), [12] (2), [13] (1).
+
+As with the notes work, that regex **undercounts the true population** because it
+requires a literal space between the word and the digit and is case-sensitive. Hand-scan
+with a broader pattern (`column-\d+`, `row-\d+`, bare `not \d+` following an established
+column reference, and case-insensitive `COLUMN`) found **8 additional stale tokens** the
+given regex misses, spanning **3 more claims not in the coordinator's list**:
+
+- arena-01 claims[0] (the single spawnBlockRobust claim): "row-5" (x2), "row-4" (x1) —
+  hyphenated, no space
+- arena-04 claims[6] (spawnBlockRobust): "column-11" — hyphenated, no space
+- arena-04 claims[8] (lane, teal-high/centre): "row-5" — hyphenated, no space
+- arena-04 claims[9]: "COLUMN 8" (uppercase) — case-sensitive regex miss (the two
+  lowercase "column 7"/"column 8" tokens in the same claim WERE caught by the given
+  regex, so this is a 4th token in an already-counted claim, not a new claim)
+- arena-04 claims[11]: "not 4" (bare, referring back to "column 4" earlier in the same
+  sentence) — no "column" prefix on this token
+
+Total population I actually fixed: the 23 given by the coordinator, plus 7 additional
+tokens across 3 additional claims (arena-01 claims[0], arena-04 claims[6], arena-04
+claims[8]) — **30 stale tokens across 16 distinct claims** (13 from the coordinator's
+list + 3 more found by hand-scan). I did not keep a running tally while rewriting (some
+tokens were dropped via feature-naming rather than converted 1:1), so "30" is a count of
+what the before/after diff shows changed, not a script output — treat the regex-based "23"
+as the verified floor and "30" as the hand-scan total.
+
+## A1. Before / after table (all 16 changed claims)
+
+| Arena | Claim | `from`/`to` | Before (why, coordinate portion) | After |
+|---|---|---|---|---|
+| arena-01 | [0] spawnBlockRobust | n/a | "The row-5 cell exists ... with the row-4 block alone ... the row-5 cell in place" | "The centre pillar's lower tier exists ... with the upper tier alone ... the lower tier in place" |
+| arena-03 | [7] spawnBlockRobust | n/a | "The row-5 chord-maker exists for this: with row 4 alone ... the chord-maker in place" | "The centre pillar's lower tier -- the chord-maker -- exists for this: with the upper tier alone ... the chord-maker in place" |
+| arena-04 | [0] sightlineAfterBreach (green) | from `[10,4]` | "column 3 stands on its direct line ... Column 3 is where green survives BOTH; column 4 did not" | "column 10 stands on its direct line ... Column 10 is where green survives BOTH; column 13 did not" |
+| arena-04 | [1] sightlineAfterBreach (grey) | from `[22,4]` | "column 7, straight up the player's own column" | "column 22, straight up the player's own column" |
+| arena-04 | [2] sightlineAfterBreach (brown) | from `[31,4]` | "column 9. Breaching column 10 ..." | "column 28. Breaching column 31 ..." |
+| arena-04 | [3] sightlineAfterBreach (teal hi) | from `[40,13]` | "the column-11 wall at row 6" | "the east wall at rows 18-20" |
+| arena-04 | [4] sightlineAfterBreach (olive) | from `[40,19]` | "the column-11 wall at row 7" | "the east wall at rows 21-23" |
+| arena-04 | [5] sightlineAfterBreach (teal lo) | from `[40,25]` | "the column-11 wall at row 8" | "the east wall at rows 24-26" |
+| arena-04 | [6] spawnBlockRobust | n/a | "solid bar cells or solid column-11 cells" | "solid bar cells or solid east wall cells" |
+| arena-04 | [7] lane (north centre) | to `[22,22]` | "cannot touch (7, 7) in either phase -- the row-4 bar shadows it" | "cannot touch (22, 22) in either phase -- the bar shadows it" |
+| arena-04 | [8] lane (east teal x north) | to `[22,22]` | "along the row-5 corridor" | "along the corridor below the bar" |
+| arena-04 | [9] lane (inversion) | from `[22,4]` to `[28,22]` | "down COLUMN 8's gap ... not column 7 ... Widening column 7 ... column 8 is already open floor" | "down COLUMN 25's gap ... not column 22 ... Widening column 22 ... column 25 is already open floor" |
+| arena-04 | [10] lane (east teal x east) | to `[28,22]` | "shut out by the column-11 wall. (7, 7) and (9, 7) are exact opposites" | "shut out by the east wall. (22, 22) and (28, 22) are exact opposites" |
+| arena-04 | [11] lane (west breach) | from `[13,4]` to `[13,22]` | "column 4 is otherwise clear from row 1 to row 7 ... green sits at column 3, not 4 ... the destructible at (4, 4)" | "column 13 is otherwise clear from row 4 to row 22 ... green sits at column 10, not 13 ... the destructible at (13, 13)" |
+| arena-04 | [12] lane (east breach) | from `[31,4]` to `[31,28]` | "column 10 is clear top to bottom ... down to row 9" | "column 31 is clear top to bottom ... down to row 28" |
+| arena-04 | [13] lane (mid-field cover) | to `[16,22]` | "the mid-field cover at (6, 6)" | "the mid-field cover at (19, 19)" |
+
+Every load-bearing coordinate was kept and corrected (single cell `k -> 3k+1`, range
+`a-b -> 3a` through `3b+2`). "column-11 wall" / "row-4 bar" (now-false identifiers — the
+grid has no wall at column 11, per §2 below) were renamed to "the east wall" / "the bar",
+matching the vocabulary already introduced in the notes fix, so notes and claims now use
+consistent names for the same features. One reasoning fix beyond pure coordinates: claims[9]
+"two cells east" in the corresponding NOTE (already fixed in the base task) was correct
+there; here in claims[11] I corrected "column 4 is otherwise clear from row 1 to row 7" to
+"row 4 to row 22" because those y-values are literally the claim's own `from`/`to` fields
+(4 and 22) — leaving old values there would have made the why text contradict its own
+claim data, which is exactly failure mode #1 the coordinator flagged.
+
+## A2. Grid lookups proving the new coordinates (6+, spanning arena-01, arena-03, arena-04)
+
+```
+$ python3 -c "
+import json
+d = json.load(open('src/sim/config/data/arenas.json'))
+g = {a['id']: a['grid'] for a in d['arenas']}
+checks = [
+  ('arena-01', 13, 16, 'centre pillar upper tier (claims[0] lower/upper tier reasoning) -> solid'),
+  ('arena-01', 16, 16, 'centre pillar lower tier -> solid'),
+  ('arena-03', 13, 16, 'centre pillar upper tier (claims[7]) -> solid'),
+  ('arena-03', 16, 16, 'centre pillar lower tier (claims[7]) -> solid'),
+  ('arena-04', 12, 10, 'bar solid cell at new col 10 (claims[0], green blocker) -> solid'),
+  ('arena-04', 12, 22, 'bar solid cell at new col 22 (claims[1], grey blocker) -> solid'),
+  ('arena-04', 12, 28, 'bar solid cell at new col 28 (claims[2], brown blocker) -> solid'),
+  ('arena-04', 19, 34, 'east wall at row 19, within rows 18-20 (claims[3]) -> solid'),
+  ('arena-04', 12, 25, 'bar gap at new col 25 (claims[9]) -> open floor'),
+  ('arena-04', 13, 13, 'destructible breach cell (claims[11]) -> destructible'),
+]
+for id_,r,c,label in checks:
+    print(id_, f'grid[{r}][{c}] =', repr(g[id_][r][c]), '--', label)
+"
+arena-01 grid[13][16] = '#' -- centre pillar upper tier (claims[0] lower/upper tier reasoning) -> solid
+arena-01 grid[16][16] = '#' -- centre pillar lower tier -> solid
+arena-03 grid[13][16] = '#' -- centre pillar upper tier (claims[7]) -> solid
+arena-03 grid[16][16] = '#' -- centre pillar lower tier (claims[7]) -> solid
+arena-04 grid[12][10] = '#' -- bar solid cell at new col 10 (claims[0], green blocker) -> solid
+arena-04 grid[12][22] = '#' -- bar solid cell at new col 22 (claims[1], grey blocker) -> solid
+arena-04 grid[12][28] = '#' -- bar solid cell at new col 28 (claims[2], brown blocker) -> solid
+arena-04 grid[19][34] = '#' -- east wall at row 19, within rows 18-20 (claims[3]) -> solid
+arena-04 grid[12][25] = '.' -- bar gap at new col 25 (claims[9]) -> open floor
+arena-04 grid[13][13] = 'x' -- destructible breach cell (claims[11]) -> destructible
+```
+
+10 lookups shown, spanning arena-01, arena-03 and arena-04 (3 arenas, exceeding the
+"at least three different arenas" requirement). The `(13, 13)` lookup for claims[11] is
+the one place I initially risked an error: the sentence names both a spawn-row range
+("row 1 to row 7", old) and, separately, the breach cell "(4, 4)" (old) — and those two
+"4"s belong to *different* old-resolution row systems (row 1 = the spawn row; the bar
+itself sits at old row 4). Reading `grid[13][13]` before writing confirmed the breach
+cell maps to `(13, 13)`, not `(13, 4)` as a naive same-sentence copy would have produced.
+
+## A3. Feature-naming vs. load-bearing decisions
+
+Renamed to a feature name (not load-bearing, or the old identifier had become false):
+
+- **"column-11 wall" / "row-4 bar" -> "the east wall" / "the bar"**, throughout arena-04
+  claims[3]-[6], [7]-[10]. This wasn't optional polish: `grid[20][11]` is now `'.'` (open
+  floor) in the new grid — a reader who trusted "column-11 wall" literally would look in
+  the wrong place entirely. Matches the naming already used in the notes fix, so notes
+  and claims are now internally consistent with each other for the first time.
+- **arena-01 claims[0] / arena-03 claims[7]: "row-5 cell"/"row-4 block" ->
+  "centre pillar['s] lower/upper tier"**. Same pillar the notes fix already renamed;
+  kept the identical vocabulary so a reader moving between a note and its claim sees one
+  name for one structure, not two both partially fixed.
+
+Kept as corrected coordinates (load-bearing — each one identifies which of several
+similar features, or is asserted to equal the claim's own `from`/`to`):
+
+- All spawn/blocker/breach columns in arena-04 claims[0], [1], [2], [9], [11], [12] —
+  these single out one of five solid segments in the bar or one of two breach points, and
+  several are asserted to equal the claim's own numeric fields.
+- The three east-wall row ranges in claims[3]-[5] — each distinguishes a different
+  vertical segment (high/mid/low) that a different spawn's diagonal line crosses.
+- All four `(x, y)` cell references in claims[7], [10], [13], [11] — these are the exact
+  cells the corresponding `lane` claims check, so the coordinate IS the content.
+
+## A4. Grid, claims-fields and cellSize confirmed byte-identical outside `notes`/`why`
+
+```
+$ python3 -c "
+import json
+before = json.load(open('/tmp/before.json'))   # git show bb1523e:...
+after = json.load(open('src/sim/config/data/arenas.json'))
+for ba, aa in zip(before['arenas'], after['arenas']):
+    assert ba['grid'] == aa['grid']
+    assert ba['cellSize'] == aa['cellSize']
+    assert ba['cols'] == aa['cols'] and ba['rows'] == aa['rows']
+    for b, a in zip(ba['claims'], aa['claims']):
+        for key in b:
+            if key != 'why':
+                assert b[key] == a.get(key)
+print('Structural check passed: grid, cols, rows, cellSize, legend, and every claim',
+      'field except why are byte-identical.')
+"
+Structural check passed: grid, cols, rows, cellSize, legend, and every claim field except why are byte-identical.
+```
+
+This is a field-by-field structural comparison (not a textual `git diff`), so it can't be
+fooled by incidental JSON formatting differences. It also confirms `git diff bb1523e --
+src/sim/config/data/arenas.json` shows changes only inside `notes` strings and
+`claims[].why` strings: 15 `notes` entries changed (from the base task) + 16 `why` entries
+changed (this addendum) = 31 total, matching `git diff --stat`'s "31 insertions(+), 31
+deletions(-)" reported below.
+
+## A5. Test failure count, before and after this addendum
+
+Before (same baseline, `bb1523e`):
+```
+Test Files  6 failed | 64 passed | 1 skipped (71)
+     Tests  14 failed | 1208 passed | 1 skipped (1223)
+```
+
+After (notes fix + claims[].why fix both applied):
+```
+Test Files  6 failed | 64 passed | 1 skipped (71)
+     Tests  14 failed | 1208 passed | 1 skipped (1223)
+```
+
+Unchanged: same 14 failing tests. `npx tsc --noEmit` exits 0.
+
+## A6. Explicitly NOT touched (per the coordinator's routing)
+
+arena-04 notes[2] and notes[7]'s coverage statistics ("29 cells", "44 cells", "35 of
+151", and the three ratios) remain untouched, as the coordinator routed those to Task 4
+by name. They are measurements requiring re-simulation, not coordinates I can verify by
+reading `grid[row][col]`.
+
+## Addendum commit
+
+```
+git add src/sim/config/data/arenas.json
+git commit -m "arenas: remap old-resolution coordinates in claims[].why prose to the 3x grid"
+```
