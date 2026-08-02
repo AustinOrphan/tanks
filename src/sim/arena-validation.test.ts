@@ -3,10 +3,11 @@
 // spawn sightline is invisible until a player dies to it three seconds into a level.
 // New arenas added to ARENAS get all of this for free -- that is the point of the file.
 import { describe, it, expect } from 'vitest';
-import { lineOfSight } from './ai/targeting';
+import { bankShot, lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
 import { structuralFailures, claimFailures, cellOf, breach } from './arena-claims';
 import { ARENA_DEFS, arenaById } from './config/arenas';
+import { configFor } from './config';
 import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import type { ArenaClaim } from './config/arena-types';
 
@@ -225,5 +226,53 @@ describe('the STATIONARY-banker spawn rule, which green is the reason for', () =
     // so only its bankShotWeight of 0 keeps it quiet here -- which is exactly the gate
     // that makes brown's behaviour unchanged by the bank work in brown.ts.
     expect(structuralFailures(at('B'))).toEqual([]);
+  });
+});
+
+describe("green's bank reach, which is why it is in level 4", () => {
+  // arena-04's notes claim the sniper "answers the board's one weakness": its ricochets
+  // reach 44 cells it has no direct line to, including the bottom-left pocket that no
+  // enemy can see from its spawn. Prose again, next to a grid anyone may edit -- so it
+  // is recomputed here, exactly like the cover ratios above.
+  it('reaches 44 cells by ricochet that it cannot see directly, including the safe corner', () => {
+    const arena = arenaById('arena-04');
+    const { walls, spawns } = loadArena(arena);
+    const green = spawns.find((s) => s.kind === 'green');
+    expect(green, 'arena-04 must still contain the green sniper').toBeDefined();
+    const cfg = configFor('green');
+    // Non-vacuity: if the profile ever stopped banking, every count below would go to
+    // zero and "0 of 151" would still be a number. Pin the premise.
+    expect(cfg.ai.bankShotWeight).toBeGreaterThan(0);
+
+    let open = 0;
+    let bankOnly = 0;
+    const bankOnlyCells: Array<[number, number]> = [];
+    for (let r = 0; r < arena.rows; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        if (arena.legend[arena.grid[r][c]] !== undefined) continue;
+        open++;
+        const p = cellCentre(arena, [c, r]);
+        if (lineOfSight(green!.pos, p, walls)) continue;
+        if (bankShot(green!.pos, p, walls, cfg.weapon.ricochetCount) !== null) {
+          bankOnly++;
+          bankOnlyCells.push([c, r]);
+        }
+      }
+    }
+    expect({ bankOnly, open }).toEqual({ bankOnly: 44, open: 151 });
+
+    // The claim that actually justifies the placement: the reach covers cells that NO
+    // enemy has a direct line to. A count alone would survive the reach moving somewhere
+    // useless, so assert the overlap with the unseen set, not just its size.
+    const enemies = spawns.filter((s) => s.kind !== 'player');
+    const unseenAndBanked = bankOnlyCells.filter(([c, r]) => {
+      const p = cellCentre(arena, [c, r]);
+      return !enemies.some((e) => lineOfSight(e.pos, p, walls));
+    });
+    expect(unseenAndBanked.length).toBeGreaterThan(0);
+    // The bottom-left pocket specifically: rows 8-10, columns 0-5.
+    const corner = unseenAndBanked.filter(([c, r]) => r >= 8 && c <= 5);
+    expect(corner.length, `bank-only cells in the bottom-left pocket: ${JSON.stringify(corner)}`)
+      .toBeGreaterThanOrEqual(8);
   });
 });

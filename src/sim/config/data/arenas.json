@@ -215,7 +215,7 @@
       },
       "grid": [
         "...............",
-        "....B..G..B....",
+        "....N..G..B....",
         "...............",
         "...............",
         "...#x#.#.#x#.T.",
@@ -228,7 +228,8 @@
       ],
       "notes": [
         "The crossfire debut, and the FIRST shipped board that is not 11x9: 15x11, so the extra space is what makes two simultaneous fronts readable instead of merely crowded.",
-        "Six enemies in two fronts at ninety degrees to each other. NORTH is the suppressing front -- brown, grey, brown across row 1, behind the row-4 bar. EAST is the mobile front -- teal, olive, teal down column 13, inside the player's own half, behind the solid column-11 wall.",
+        "Six enemies in two fronts at ninety degrees to each other. NORTH is the suppressing front -- GREEN, grey, brown across row 1, behind the row-4 bar. EAST is the mobile front -- teal, olive, teal down column 13, inside the player's own half, behind the solid column-11 wall.",
+        "The green at (4, 1) is the RICOCHET_SNIPER debut, and it is here because it answers the board's one weakness. Measured on the same probe as the cover ratio below: 43 of the 151 open cells are seen by no enemy from its spawn, and the largest such pocket is the bottom-left corner. Green's bank shots reach 44 cells it has NO direct line to -- including that corner. It is stationary like a brown, so the north front keeps its character; it simply does not accept the row-4 bar as cover. Pinned by arena-validation.test.ts, since a grid edit could quietly take the reach away.",
         "The two fronts want opposite cover, and that IS the level. Cell (7, 7) sits in the row-4 bar's shadow -- shut to the north, wide open to the teal at (13, 4) shooting along the row-5 corridor. Cell (9, 7), two cells east, is the exact inverse: shut to every east tank by the column-11 wall, open to the grey straight up column 7's gap. Breaking one front's line steps you into the other's. Four lane claims pin both cells in both wall phases.",
         "The two walls are deliberately different KINDS of problem. The row-4 bar is porous (open at columns 0-2, 6, 8, 12-14) and breachable at columns 4 and 10; the column-11 wall is solid throughout and must be FLANKED, above through row 5 or below through rows 9-10. Level 2 taught breaching; level 4 says not every wall answers to it.",
         "Blowing the bar at column 10 opens that column top-to-bottom, giving the brown at (10, 1) a line down to row 9 -- alongside the player spawn, never onto it: the spawn's own blockers are the bar's solid cells at columns 5, 7 and 9, which no breach touches. That is why spawnBlockRobust holds here and all six sightlineAfterBreach claims read false, unlike level 2 where breaching is meant to open spawn lines.",
@@ -243,7 +244,7 @@
             1
           ],
           "sees": false,
-          "why": "North-west brown: the bar's solid cell at column 5 stands on its line to the player spawn and no breach touches it."
+          "why": "North-west GREEN, the ricochet sniper: the bar's solid cell at column 5 stands on its direct line and no breach touches it. Its BANK paths onto the spawn are checked separately -- structuralFailures forbids a stationary banker any ricochet onto the player spawn, which no sightline claim can express."
         },
         {
           "type": "sightlineAfterBreach",
@@ -363,7 +364,7 @@
           ],
           "intact": "blocked",
           "breached": "open",
-          "why": "The bar's west breach: column 4 is otherwise clear from row 1 to row 7, so blowing that cell trades a shot at the north-west brown for its shot back."
+          "why": "The bar's west breach: column 4 is otherwise clear from row 1 to row 7, so blowing that cell trades a DIRECT shot at the green sniper for its direct shot back. Its ricochets do not need the hole; that is the point of it."
         },
         {
           "type": "lane",
