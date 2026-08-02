@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
-import { structuralFailures, claimFailures, cellOf, breach } from './arena-claims';
+import { structuralFailures, claimFailures, cellCentre, cellOf, breach } from './arena-claims';
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { configFor } from './config';
 import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA } from './config/arena-fixtures';
@@ -193,6 +193,56 @@ describe("arena-02's spawnBlockRobust figures, which no claim can protect", () =
   });
 });
 
+describe('the cover ratio each arena quotes in its notes', () => {
+  // arena-04's notes carry five numbers comparing all four boards on one probe: how
+  // many open cells no enemy can see from its spawn, walls intact. Exactly the
+  // situation the arena-02 block above exists for -- prose measured once by hand,
+  // recomputed by nothing, sitting next to a grid anyone may edit. `notes` are
+  // validated only as strings, so the validator cannot help.
+  //
+  // Destructible cells are NOT counted as open: they are walls until destroyed, and
+  // counting them changes arena-04 to 46 of 154 (the ranking is unaffected, but the
+  // quoted numbers are the excluding ones and the note now says so).
+  const EXPECTED: Record<string, { unseen: number; open: number }> = {
+    'arena-01': { unseen: 35, open: 86 },
+    'arena-02': { unseen: 41, open: 83 },
+    'arena-03': { unseen: 30, open: 88 },
+    'arena-04': { unseen: 43, open: 151 },
+  };
+
+  it('recomputes every quoted count, and the ranking the note claims', () => {
+    // Symmetric with EXPECTED_CLAIMS above: set equality both ways, so adding a
+    // fifth arena cannot leave this table quietly covering four of five.
+    expect(new Set(ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED)));
+
+    const ratio: Record<string, number> = {};
+    for (const arena of ARENA_DEFS) {
+      const { walls, spawns } = loadArena(arena);
+      const enemies = spawns.filter((s) => s.kind !== 'player');
+      let open = 0;
+      let unseen = 0;
+      for (let r = 0; r < arena.rows; r++) {
+        for (let c = 0; c < arena.cols; c++) {
+          if (arena.legend[arena.grid[r][c]] !== undefined) continue; // a wall of any kind
+          open++;
+          const p = cellCentre(arena, [c, r]);
+          if (!enemies.some((e) => lineOfSight(e.pos, p, walls))) unseen++;
+        }
+      }
+      expect({ unseen, open }, arena.id).toEqual(EXPECTED[arena.id]);
+      ratio[arena.id] = unseen / open;
+    }
+
+    // The note's actual claim is comparative -- "the tightest of the four". Pinned as
+    // an ordering, not just four independent counts: a grid edit that made arena-04
+    // roomier than arena-03 would satisfy every count above if they were updated to
+    // match, and still falsify the sentence.
+    const tightest = Object.entries(ratio).sort((a, b) => a[1] - b[1])[0][0];
+    expect(tightest).toBe('arena-04');
+    expect(ratio['arena-04']).toBeLessThan(ratio['arena-03']);
+  });
+});
+
 describe('the STATIONARY-banker spawn rule, which green is the reason for', () => {
   // One geometry, three kinds. The board is identical in all three -- green at (1, 1),
   // player at (5, 1), a solid at (3, 1) killing the direct line, boundary ring available
@@ -234,42 +284,37 @@ describe("green's bank reach, which is why it is in level 4", () => {
   // reach 44 cells it has no direct line to, including the bottom-left pocket that no
   // enemy can see from its spawn. Prose again, next to a grid anyone may edit -- so it
   // is recomputed here, exactly like the cover ratios above.
-  it('reaches 44 cells by ricochet that it cannot see directly, including the safe corner', () => {
+  it('reaches 44 cells by ricochet it cannot see directly, including the safe corner', () => {
     const arena = arenaById('arena-04');
     const { walls, spawns } = loadArena(arena);
     const green = spawns.find((s) => s.kind === 'green');
     expect(green, 'arena-04 must still contain the green sniper').toBeDefined();
     const cfg = configFor('green');
-    // Non-vacuity: if the profile ever stopped banking, every count below would go to
-    // zero and "0 of 151" would still be a number. Pin the premise.
+    // Non-vacuity: if the profile stopped banking, every count below would go to zero and
+    // "0 of 151" would still read as a number. Pin the premise the numbers depend on.
     expect(cfg.ai.bankShotWeight).toBeGreaterThan(0);
 
     let open = 0;
-    let bankOnly = 0;
-    const bankOnlyCells: Array<[number, number]> = [];
+    const bankOnly: Array<[number, number]> = [];
     for (let r = 0; r < arena.rows; r++) {
       for (let c = 0; c < arena.cols; c++) {
         if (arena.legend[arena.grid[r][c]] !== undefined) continue;
         open++;
         const p = cellCentre(arena, [c, r]);
         if (lineOfSight(green!.pos, p, walls)) continue;
-        if (bankShot(green!.pos, p, walls, cfg.weapon.ricochetCount) !== null) {
-          bankOnly++;
-          bankOnlyCells.push([c, r]);
-        }
+        if (bankShot(green!.pos, p, walls, cfg.weapon.ricochetCount) !== null) bankOnly.push([c, r]);
       }
     }
-    expect({ bankOnly, open }).toEqual({ bankOnly: 44, open: 151 });
+    expect({ bankOnly: bankOnly.length, open }).toEqual({ bankOnly: 44, open: 151 });
 
-    // The claim that actually justifies the placement: the reach covers cells that NO
-    // enemy has a direct line to. A count alone would survive the reach moving somewhere
-    // useless, so assert the overlap with the unseen set, not just its size.
+    // The claim that actually justifies the placement. A count alone would survive the
+    // reach moving somewhere useless, so assert the OVERLAP with the unseen set: cells
+    // green can hit by ricochet that no enemy has a direct line to at all.
     const enemies = spawns.filter((s) => s.kind !== 'player');
-    const unseenAndBanked = bankOnlyCells.filter(([c, r]) => {
+    const unseenAndBanked = bankOnly.filter(([c, r]) => {
       const p = cellCentre(arena, [c, r]);
       return !enemies.some((e) => lineOfSight(e.pos, p, walls));
     });
-    expect(unseenAndBanked.length).toBeGreaterThan(0);
     // The bottom-left pocket specifically: rows 8-10, columns 0-5.
     const corner = unseenAndBanked.filter(([c, r]) => r >= 8 && c <= 5);
     expect(corner.length, `bank-only cells in the bottom-left pocket: ${JSON.stringify(corner)}`)

@@ -136,10 +136,20 @@ per-level render refit is now exercised by a level players actually reach rather
 than only by a fixture. `WIDE_ARENA` moved 15x11 -> 17x13 when it landed, because
 `arena-validation.test.ts` asserts the fixture differs from every shipped arena
 and a fixture whose whole job is to be an unshipped size gives way to production
-data. Three distinct board sizes are now covered. Anything asserting a board is
-11x9, or counting cells or spawns across all arenas, is a population pin that
-must move with a new level — `cell-mapping.test.ts` (683 cells, 25 spawns) and
-`EXPECTED_CLAIMS` in `arena-validation.test.ts` are the two that did.
+data. Three distinct board sizes are now covered.
+
+**Adding a level moves more pins than the level file.** Five places moved when
+arena-04 landed, and the list is the checklist for the next one:
+`cell-mapping.test.ts`'s cell and spawn totals (683 / 25); `EXPECTED_CLAIMS` in
+`arena-validation.test.ts` (the claim mix, not a count); that file's `variable
+arena dimensions` block (fixture dimensions and bounds); its cover-ratio
+`EXPECTED` table; and three size labels in `tools/gl/harness.ts`. The harness
+labels are prose, so nothing failed when one of them was missed — review caught
+it. Any number a `notes` string quotes is likewise unpinned by construction:
+`notes` are validated as strings only. Two blocks in `arena-validation.test.ts`
+exist purely to recompute quoted prose — arena-02's `12 of 16` and arena-04's
+cover ratios — because both were measured once by hand and nothing checked them
+again. Quote a measurement in `notes` and you owe it a recomputing test.
 
 ## Testing conventions, learned the hard way
 
