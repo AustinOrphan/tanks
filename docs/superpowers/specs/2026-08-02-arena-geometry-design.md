@@ -32,39 +32,58 @@ which re-baselines everything seeded. Cheap now, dearer the more levels exist.
 
 ### The gap taxonomy
 
-At `cellSize 2/3`, gap widths quantise to multiples of 0.667, and each width MEANS
-something different against a 1.0-diameter tank and the ~1.5-tank corridor minimum:
+**The corridor minimum is 1.3 tank-widths (1.3 world units).** At `cellSize 2/3` that
+lands the taxonomy on a clean boundary — every gap is either a slit or a legal corridor,
+with no ambiguous band:
 
-| gap | width | meaning |
-|---|---|---|
-| 1 cell | 0.667 | **slit** — shells (radius 0.1) and blast rays pass; no tank ever does |
-| 2 cells | 1.333 | **outlawed** — see below |
-| 3+ cells | 2.0+ | **corridor** — meets the 1.5-tank minimum |
+| gap | width | vs 1.3 minimum | meaning |
+|---|---|---|---|
+| 1 cell | 0.667 | under | **slit** — shells (radius 0.1) and blast rays pass; no tank ever does |
+| 2 cells | 1.333 | over by 0.033 | **minimum corridor** |
+| 3 cells | 2.0 | comfortable | corridor — today's standard width |
 
-**Slits are legal authoring, and deliberately so.** A sub-tank gap is a firing
-embrasure: shells cross it, `blastReaches`'s ray crosses it when the geometry lines up,
-tanks never do. The traversability check below must NOT count them passable — that is
-the point of them.
+An earlier draft set the minimum at 1.5 and had to OUTLAW the 2-cell band as ambiguous
+(a tank physically fits 1.333 but the rule forbade it, splitting "where tanks can be"
+from "where tanks may be"). 1.3 dissolves that: the 2-cell gap becomes the minimum legal
+corridor and the outlawed band disappears. That is the main reason to prefer 1.3.
 
-**Two-cell gaps (1.333) are a validation error.** A 1.0 tank physically fits through
-1.333, but 1.333 is under the 1.5-tank minimum — so the band is ambiguous: passable by
-physics, sub-standard by rule, and an AI tank could wander through a gap the validator
-does not consider traversable, splitting "where tanks can be" from "where the rules say
-tanks can be". Outlawing the band keeps those two the same thing. Every gap is either a
-slit or a corridor; nothing in between.
+**Slits are legal authoring, deliberately.** A sub-tank gap is a firing embrasure: shells
+cross it, `blastReaches`'s ray crosses it when the angle lines up, tanks never do. The
+traversability check must NOT count them passable — that is the point of them.
 
-### Traversability is clearance, not adjacency
+**The minimum corridor is genuinely tight, and this is the spec's biggest playtest risk.**
+A 1.0-diameter tank in a 1.333 corridor has **0.167 clearance per side**, against 0.5 in
+today's 2.0 corridors — three times tighter. Enemy tanks steer reactively with no
+pathfinding (`seekMove` is a wander heading plus a distance band), so a tank driving a
+minimum-width corridor will scrape it constantly, and `wallBlocksStep`'s one-step probe
+is what stands between that and a jam. Nothing in this spec proves that feels acceptable.
+Author minimum-width corridors sparingly until it has been played, and prefer 3 cells
+where a level does not specifically want a squeeze.
+
+### Traversability is clearance, sampled SUB-CELL
 
 The old flood fill walks cell-to-cell and assumes anything open is passable — false the
 moment sub-tank gaps exist. It is replaced for tank purposes by a clearance check:
 
-> A cell is **traversable** iff its centre is at least 0.75 world units (half of
-> 1.5 tank-diameters) from every wall AABB. Tank connectivity is flood-filled over
-> traversable cells only.
+> A point is **free** iff it is at least 0.65 world units (half the 1.3 minimum) from
+> every wall AABB. Tank connectivity is flood-filled over free points on a lattice at
+> most `cellSize / 2` fine, and a grid cell is traversable iff it contains a free point
+> in the player's component.
 
-A 2.0-wide corridor passes (centre line clears 1.0 ≥ 0.75); a slit never does. This
-also closes the hole flagged earlier: at fine resolutions the old check would validate a
-board that is physically impassable.
+**The lattice must be finer than the authoring grid, and that is not a detail.** Testing
+cell CENTRES fails: in a 1.333 corridor at `cellSize 2/3` the two cell centres sit 0.333
+from the walls, under the 0.65 required, so a centre-sampled check rejects every minimum
+corridor — the legal band is the middle strip, which straddles the cell boundary. Measured
+before writing this rule, not assumed. A half-cell lattice (0.333) samples the gap's exact
+centre, where clearance is 0.667 and the check passes by 0.017.
+
+That 0.017 is the whole margin at minimum width, so the lattice may be refined but never
+coarsened, and the comparison needs a tolerance no larger than 1e-6 — far below the margin,
+far above float noise on `2/3`.
+
+A 2.0 corridor passes comfortably; a 0.667 slit never does. This also closes the hole
+flagged earlier: at fine resolutions the old check would validate a board that is
+physically impassable.
 
 ### Sealed sections are LEGAL — the rule is killability, not connectivity
 
@@ -146,9 +165,10 @@ does not reflect, producing shots that miss for no visible reason.
   assert tile-for-tile wall coverage identity, assert every spawn's world position is
   BYTE-identical, and assert a seeded trace hash is unchanged. At an odd upscale all
   three should hold exactly; any drift is a bug in the transform, not a number to re-pin.
-- **Clearance-rule negative controls**: a fixture with a 2.0 corridor passes; a fixture
-  whose only route is a slit fails with the slit named; a fixture with a 1.333 gap fails
-  as outlawed. Each control removed from the validator must un-fail its fixture.
+- **Clearance-rule negative controls**: a 2.0 corridor passes; a 1.333 corridor passes
+  (the minimum — and it FAILS under a cell-centre-sampled check, so this fixture is also
+  the regression test for the sampling bug); a route through a 0.667 slit fails with the
+  slit named. Each control removed from the validator must un-fail its fixture.
 - **Killability negative controls, one per clause**: an enemy killable only by bank shot
   through a slit passes (b); only by mine ray passes (c); only after a breach passes (d);
   a genuinely unkillable enemy fails with all four clauses reported false. A guard is
