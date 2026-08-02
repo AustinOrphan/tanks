@@ -1,5 +1,4 @@
-import { chordTones, type Chord } from './chords';
-import { noteToHz } from './notes';
+import { chordTones, pitchClassOf, type Chord } from './chords';
 
 /**
  * A melody, generated over a declared progression.
@@ -35,7 +34,7 @@ export interface MelodySpec {
 }
 
 /** Rhythm templates over one bar, as step offsets. Chosen per bar. */
-const RHYTHMS: number[][] = [
+export const RHYTHMS: number[][] = [
   [0, 4, 8, 12], // four on the floor: the plainest, most grounded
   [0, 3, 6, 8, 11, 14], // syncopated
   [0, 2, 4, 8, 10, 12], // busy front half, space at the end
@@ -45,10 +44,17 @@ const RHYTHMS: number[][] = [
 
 /**
  * Scramble before use. The caller's seed is a COUNTER (cycle number plus a layer
- * index), and raw xorshift32 from adjacent seeds produces visibly correlated
- * early output -- measured as two cycles of generated melody correlating at 0.90
- * when they should have been unrelated, which is loop fatigue coming back in a
- * new form. A multiplicative hash decorrelates them.
+ * index), and raw xorshift32 is strongly autocorrelated across consecutive
+ * seeds: measured over seeds 0..63, the lag-1 autocorrelation of the first draw
+ * is -0.18 unscrambled and 0.014 scrambled.
+ *
+ * HONEST LIMIT, corrected after review: an earlier version of this comment
+ * claimed two cycles of melody correlating at 0.90 without the scramble. That
+ * number is not reproducible -- the worst consecutive-cycle melody similarity
+ * measured over 2000 pairs is 0.667 unscrambled and 0.700 scrambled, i.e. the
+ * scramble does not measurably improve the end-to-end melody metric. It is kept
+ * because a counter feeding a raw PRNG is a latent trap, not because it fixed an
+ * observed musical problem.
  */
 function scramble(seed: number): number {
   let x = (seed | 0) ^ 0x9e3779b9;
@@ -113,19 +119,28 @@ export function generateMelody(
     }
   });
 
-  // Resolve: the last sounding note becomes the root, so the cycle lands rather
-  // than stopping. Without this the line ends wherever the walk left it, which
-  // is the single clearest tell that a melody was generated.
+  // Resolve: the last sounding note becomes the root of ITS OWN bar, so the
+  // cycle lands rather than stopping.
+  //
+  // "Its own bar" is the whole correctness of this step. An earlier version used
+  // the LAST chord's root regardless of where the note fell, and when the final
+  // bar drew no hits it stamped that root over an earlier bar -- a note that
+  // clashes with the chord underneath it. Measured before the fix: 190 clashing
+  // notes across 20,000 seeds, and 8% of cycles on the shipped pluck layer,
+  // which is roughly once every two minutes of play. The whole safety argument
+  // for generated melody is that a note cannot clash with its bar, and this was
+  // the one place that could violate it.
   for (let i = notes.length - 1; i >= 0; i--) {
     if (notes[i] === '-') continue;
-    const last = chords[chords.length - 1];
-    const palette = chordTones(last, spec.lowOctave, spec.highOctave);
-    const roots = palette.filter((n) => {
-      const hz = noteToHz(n);
-      return hz !== null && !Number.isNaN(hz);
-    });
-    const rootName = roots.find((n) => n.startsWith(noteNameOfClass(last.root)));
+    const bar = Math.min(Math.floor(i / barSteps), chords.length - 1);
+    const chord = chords[bar];
+    const palette = chordTones(chord, spec.lowOctave, spec.highOctave);
+    const wanted = noteNameOfClass(chord.root);
+    // Exact pitch-class match, not startsWith: 'C' prefix-matches 'C#4', which
+    // only failed to bite because chordTones happens to emit naturals first.
+    const rootName = palette.find((n) => pitchClassOf(n) === chord.root);
     if (rootName) notes[i] = rootName;
+    void wanted;
     break;
   }
   return notes;

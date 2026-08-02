@@ -164,6 +164,28 @@ describe('the validator refuses bad data, naming the path', () => {
     });
   }
 
+  it('rejects NaN intensity, which validated and then played always', () => {
+    // NaN is a number and fails both range comparisons, so it slipped through --
+    // and at runtime `NaN > intensity` is false, so the layer sounded on every
+    // step regardless of the mix.
+    const bad = [{ id: 'x', stepSeconds: 1, tracks: [{ voice: 'bass', notes: ['A1'], intensity: NaN }] }];
+    expect(() => parseAll(bad)).toThrow(/intensity/);
+  });
+
+  it('freezes the WHOLE track, including chords and generate specs', () => {
+    // A shallow freeze let one test mutate shipped data in place and leak it to
+    // every other file through the module cache.
+    const t = MUSIC_TRACKS[0];
+    expect(Object.isFrozen(t)).toBe(true);
+    expect(Object.isFrozen(t.tracks)).toBe(true);
+    expect(Object.isFrozen(t.chords), 'chords[]').toBe(true);
+    for (const layer of t.tracks) {
+      expect(Object.isFrozen(layer)).toBe(true);
+      if (layer.notes) expect(Object.isFrozen(layer.notes), 'notes[]').toBe(true);
+      if (layer.generate) expect(Object.isFrozen(layer.generate), 'generate{}').toBe(true);
+    }
+  });
+
   it('rejects duplicate ids, which would make trackById silently ambiguous', () => {
     const dup = [...good(), ...good()];
     expect(() => parseAll(dup)).toThrow(/duplicate id/);

@@ -169,7 +169,10 @@ function parseTrack(raw: unknown, index: number): MusicTrackDef {
       return hz;
     });
     const intensity = t.intensity ?? 0;
-    if (typeof intensity !== 'number' || intensity < 0 || intensity > 1) {
+    // Number.isFinite, not just typeof: NaN is a number and fails BOTH `< 0` and
+    // `> 1`, so it validated and then silently made the layer always audible
+    // (every `NaN > intensity` comparison is false).
+    if (typeof intensity !== 'number' || !Number.isFinite(intensity) || intensity < 0 || intensity > 1) {
       fail(`${tAt}.intensity`, `must be within [0, 1], got ${JSON.stringify(intensity)}`);
     }
     return { voice: voice as VoiceName, notes, generate, intensity: intensity as number };
@@ -215,8 +218,13 @@ function deepFreeze(tracks: MusicTrackDef[]): readonly MusicTrackDef[] {
   for (const t of tracks) {
     for (const layer of t.tracks) {
       if (layer.notes) Object.freeze(layer.notes);
+      // generate{} too: review found this function reintroduced exactly the bug
+      // its own comment documents, leaving the spec object and the chord list
+      // mutable across the module cache.
+      if (layer.generate) Object.freeze(layer.generate);
       Object.freeze(layer);
     }
+    Object.freeze(t.chords);
     Object.freeze(t.tracks);
     Object.freeze(t);
   }
