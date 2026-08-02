@@ -142,6 +142,8 @@ export function createMusicBed(
     fromStep: number;
     toStep: number;
     next: MusicTrackDef;
+    /** The outgoing bass line, whose RHYTHM the passage keeps. */
+    bassPattern: Array<number | null>;
   } | null = null;
   // Per-layer cursors: layers advance INDEPENDENTLY, so a 8-step bass under an
   // 11-step drone gives an 88-step combined cycle without authoring one.
@@ -155,8 +157,6 @@ export function createMusicBed(
   let intensity = 1;
   let stepsIntoCycle = 0;
   let pendingSuite: { next: MusicTrackDef; chord: Chord; steps: number } | null = null;
-  // True only while scheduling the outgoing skeleton inside a transition.
-  let inTransitionBreakdown = false;
 
   function regenerate(layerIndex: number): void {
     if (!track) return;
@@ -235,8 +235,7 @@ export function createMusicBed(
       // Intensity gates the ARRANGEMENT. The cursor still advances while a layer
       // is silent, so one coming back in lands where the phrase is rather than
       // restarting mid-figure.
-      const ceiling = inTransitionBreakdown ? 0 : intensity;
-      if (layer.intensity > ceiling) return;
+      if (layer.intensity > intensity) return;
       const v = VOICES[layer.voice];
       note(hz, at, t.stepSeconds * v.hold, v.peak, v.type);
     });
@@ -270,6 +269,7 @@ export function createMusicBed(
         fromStep: track.stepSeconds,
         toStep: pendingSuite.next.stepSeconds,
         next: pendingSuite.next,
+        bassPattern: track.tracks.find((l) => l.voice === 'bass' && l.notes)?.notes ?? [],
       };
       pendingSuite = null;
       scheduleTransition(at);
@@ -323,32 +323,42 @@ export function createMusicBed(
   /**
    * One step of the transition passage.
    *
-   * The first version played ONLY a bass pulse and a held dominant: the full mix
-   * collapsed to a skeleton at the exact moment key and tempo also changed, and
-   * Austin heard it as the music breaking before a different piece started. Four
-   * simultaneous changes is the jar; so the OUTGOING track keeps playing through
-   * the passage -- its always-on layers only, a deliberate breakdown -- while
-   * the dominant sounds over it. Texture then survives the join, and the only
-   * things changing at the switch itself are the things the dominant has already
-   * prepared the ear for.
+   * Third design, each correcting a heard fault. The first collapsed the mix to
+   * a bare pulse (heard as the music breaking). The second kept the outgoing
+   * skeleton and dropped a HELD TRIAD PAD over it -- Austin: "sloppy and
+   * sudden" -- and it was: the pad was a texture nothing in these pieces uses,
+   * and the outgoing pads went on playing the OLD harmony underneath it, two
+   * keys at once.
+   *
+   * Now the passage speaks the music's own vocabulary and one harmony only:
+   * the outgoing bass RHYTHM continues, repitched onto the dominant root with
+   * its octave contour preserved, and the dominant is ARPEGGIATED in the pluck
+   * voice -- motion, not a slab. Nothing else sounds: pulse continuity without
+   * harmonic mush.
    */
   function scheduleTransition(at: number): void {
     const t = transition;
     if (!t) return;
     const len = stepLength();
-    // The outgoing skeleton: its own composed step, gated to the always-on
-    // layers (intensity 0). Continuity of pulse is what makes this a passage
-    // rather than a dropout.
-    inTransitionBreakdown = true;
-    scheduleComposed(at);
-    inTransitionBreakdown = false;
     const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    if (t.played === 0) {
-      for (const pc of t.chord.pitchClasses) {
-        const hz = noteToHz(`${NAMES[pc]}3`);
-        if (hz !== null) note(hz, at, len * t.steps, VOICES.pad.peak * 1.6, VOICES.pad.type);
+    // The outgoing bass rhythm on the NEW root: same steps sound, same octave
+    // jumps, different pitch. Rhythm is identity; pitch is direction.
+    if (t.bassPattern.length > 0) {
+      const src = t.bassPattern[t.played % t.bassPattern.length];
+      if (src !== null) {
+        const root0 = noteToHz(`${NAMES[t.chord.root]}0`);
+        if (root0 !== null) {
+          const octave = Math.max(0, Math.round(Math.log2(src / root0)));
+          const hz = noteToHz(`${NAMES[t.chord.root]}${octave}`);
+          if (hz !== null) note(hz, at, len * VOICES.bass.hold, VOICES.bass.peak, VOICES.bass.type);
+        }
       }
     }
+    // The dominant as an arpeggio -- root, third, fifth cycling upward -- in a
+    // voice the music already speaks.
+    const pc = t.chord.pitchClasses[t.played % t.chord.pitchClasses.length];
+    const arp = noteToHz(`${NAMES[pc]}3`);
+    if (arp !== null) note(arp, at, len * VOICES.pluck.hold, VOICES.pluck.peak, VOICES.pluck.type);
     t.played += 1;
     if (t.played >= t.steps) {
       // The passage is done: the incoming track starts its own cycle here.

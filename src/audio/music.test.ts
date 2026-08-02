@@ -299,10 +299,16 @@ describe('composed tracks', () => {
     for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
 
     const freqs = ctx.notes.map((n) => Math.round(n.freq));
-    // The dominant's triad sounded: A, C#, E in octave 3.
+    // The dominant arrives as an ARPEGGIO -- root, third, fifth in octave 3 --
+    // in the pluck voice, not as a held block chord. Same three pitches, spread
+    // in time: motion instead of a slab.
     for (const n of ['A3', 'C#3', 'E3']) {
       expect(freqs, `transition should sound ${n}`).toContain(Math.round(noteToHz(n)!));
     }
+    const arpTimes = ctx.notes
+      .filter((n) => ['A3', 'C#3', 'E3'].some((x) => Math.round(n.freq) === Math.round(noteToHz(x)!)))
+      .map((n) => n.startedAt);
+    expect(new Set(arpTimes).size, 'the triad landed all at once: that is the slab').toBeGreaterThan(1);
     // And the destination arrived.
     expect(freqs).toContain(Math.round(noteToHz('D1')!));
     expect(bed.currentTrackId()).toBe('to');
@@ -319,16 +325,20 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
-  it('keeps the OUTGOING pulse alive through the transition', () => {
-    // The first transition collapsed the whole mix to a bare chord, and it was
-    // heard as the music breaking before a different piece started. The outgoing
-    // track's always-on layers must keep sounding through the passage; its
-    // gated layers must NOT -- the thinning is the signal a change is coming.
+  it('keeps the outgoing RHYTHM but speaks ONE harmony through the passage', () => {
+    // Austin heard the held-triad version as "sloppy and sudden", and the mush
+    // was real: the outgoing pads kept their old key under a block chord in a
+    // texture nothing else uses. The passage now keeps the outgoing bass RHYTHM
+    // -- same steps sound, including its rests -- repitched onto the dominant,
+    // with the dominant arpeggiated rather than held. The old pitches must NOT
+    // sound: one harmony at a time is the whole point.
     const from: MusicTrackDef = {
       id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'Gm'],
       tracks: [
-        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('D1'), noteToHz('D1')], generate: null, intensity: 0 },
-        { voice: 'lead', notes: [noteToHz('D5'), noteToHz('D5'), noteToHz('D5'), noteToHz('D5')], generate: null, intensity: 0.5 },
+        // A rest in the pattern, so rhythm preservation is testable: a version
+        // that pulses every step regardless would fill it in.
+        { voice: 'bass', notes: [noteToHz('D1'), null, noteToHz('D2'), null], generate: null, intensity: 0 },
+        { voice: 'pad', notes: [noteToHz('F3'), noteToHz('F3'), noteToHz('F3'), noteToHz('F3')], generate: null, intensity: 0 },
       ],
     };
     const to: MusicTrackDef = {
@@ -336,24 +346,25 @@ describe('composed tracks', () => {
       tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('A2'), noteToHz('A2')], generate: null, intensity: 0 }],
     };
     const { ctx, t, bed } = withTrack(from);
-    bed.setIntensity(1); // the lead is audible in normal play...
     bed.start();
-    bed.changeSuite(to, parseChord('E')!, 4);
-    const before = ctx.notes.length;
+    bed.changeSuite(to, parseChord('E')!, 4); // E major pulls into Am
     for (let i = 1; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
-    const after = ctx.notes.slice(before);
-    const d1 = Math.round(noteToHz('D1')!);
-    const d5 = Math.round(noteToHz('D5')!);
-    const inPassage = after.filter((n) => {
-      const f = Math.round(n.freq);
-      return f === d1 || f === d5;
-    });
-    // The bass carried on; the lead was gated out by the breakdown.
-    expect(inPassage.some((n) => Math.round(n.freq) === d1), 'outgoing bass fell silent').toBe(true);
-    const leadDuringPassage = after
-      .filter((n) => Math.round(n.freq) === d5)
-      .filter((n) => n.startedAt >= 4); // the transition begins at the boundary, step 4
-    expect(leadDuringPassage, '...but gated layers must thin out').toHaveLength(0);
+
+    // The passage spans steps 4..7 (times 4..7s). Gather what sounded there.
+    const passage = ctx.notes.filter((n) => n.startedAt >= 4 && n.startedAt < 8);
+    const hz = (name: string): number => Math.round(noteToHz(name)!);
+    const freqs = passage.map((n) => Math.round(n.freq));
+    // Bass: dominant root at the outgoing contour -- E1 where D1 was, E2 where
+    // D2 was -- and NOTHING on the rest steps.
+    // Times carry the bed's 0.08s start offset; strip it before taking steps.
+    const bassSteps = passage.filter((n) => n.freq < 100).map((n) => Math.round((n.startedAt - 0.08) % 4));
+    expect(freqs).toContain(hz('E1'));
+    expect(freqs).toContain(hz('E2'));
+    expect(new Set(bassSteps), 'bass sounded on a rest step').toEqual(new Set([0, 2]));
+    // One harmony: the outgoing D roots and F pad are gone from the passage.
+    for (const old of ['D1', 'D2', 'F3']) {
+      expect(freqs, `outgoing ${old} bled through the pivot`).not.toContain(hz(old));
+    }
     bed.stop();
   });
 
