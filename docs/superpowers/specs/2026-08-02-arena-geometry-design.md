@@ -16,47 +16,90 @@ That is why boards read as blocky rooms rather than mazes.
 is superseded: it authors two 9x7 boards at `cellSize: 2`, which would be re-authored
 immediately after this lands. New levels are authored once, at the final resolution.
 
-## Change 1: `cellSize` 2 -> 1
+## Change 1: `cellSize` 2 -> 2/3 — walls two-thirds of a tank
 
-A wall becomes 1.0 — exactly tank width. Arenas are authored at twice the resolution in
-each axis, so today's 11x9 boards become 22x18 covering the identical play area.
+**Decided 2026-08-02: walls are 0.667 of a tank's width.** `cellSize` becomes `2/3`
+(the JSON carries `0.6666666666666666`; the validator requires only a positive number,
+and both the sim and the per-level render refit were demonstrated running this value
+unchanged — real screenshots, real renderer).
 
-**A corridor still needs 2 cells.** At `cellSize 1` a one-cell gap is 1.0 against a
-1.0-diameter tank: zero clearance, which collision resolution will jam on. The authoring
-rule is walls at 1 cell, passages at 2 or more. That is the whole point — wall thickness
-and passage width stop being the same number.
+**The 1.0 option stays in the back pocket.** Both were rendered side by side in the real
+game before choosing. What switching later would cost: 2/3 is an ODD upscale of the old
+grid (3x), so every existing spawn keeps its exact world position and every seeded
+baseline — pacifist rate, determinism fingerprints, cover ratios — is preserved, not
+re-measured. Moving to 1.0 later is an even ratio and shifts every spawn by half a cell,
+which re-baselines everything seeded. Cheap now, dearer the more levels exist.
 
-### The migration is mechanical, but it is NOT a no-op
+### The gap taxonomy
 
-Each old cell becomes a 2x2 block of new cells covering the same world span, so interior
-wall surfaces land in exactly the same place. Two things still move, both measured:
+At `cellSize 2/3`, gap widths quantise to multiples of 0.667, and each width MEANS
+something different against a 1.0-diameter tank and the ~1.5-tank corridor minimum:
 
-1. **Spawns shift by (0.5, 0.5).** An old cell `c` at `cellSize 2` spans `[2c, 2c+2]` with
-   centre `2c+1`. The new cells `2c` and `2c+1` at `cellSize 1` have centres `2c+0.5` and
-   `2c+1.5` — the old centre is the *boundary* between them. No even upscale can preserve a
-   cell centre. (An odd one can: 3x at `cellSize 0.667` puts a centre exactly on `2c+1`, but
-   yields walls two-thirds of a tank wide, which is thinner than asked for. Rejected.)
-2. **The boundary ring halves in thickness**, since it is one `cellSize` thick. Only its
-   inner face is reachable by tanks or shells, so this is invisible in play — but it does
-   mean a naive volume comparison of old and new wall sets reports a difference, which is
-   expected and not a defect.
+| gap | width | meaning |
+|---|---|---|
+| 1 cell | 0.667 | **slit** — shells (radius 0.1) and blast rays pass; no tank ever does |
+| 2 cells | 1.333 | **outlawed** — see below |
+| 3+ cells | 2.0+ | **corridor** — meets the 1.5-tank minimum |
 
-**Consequence: every seeded baseline is re-measured, not preserved.** The pacifist suite's
-free-win rate, the determinism fingerprints, and each arena's cover ratio all move because
-tanks start half a unit away from where they used to. This is the real cost of the change
-and must be reported as a before/after table, not quietly re-pinned. The pacifist metric is
-a threshold (<= 5% free wins), so a re-baseline is legitimate; a *silent* re-pin is not.
+**Slits are legal authoring, and deliberately so.** A sub-tank gap is a firing
+embrasure: shells cross it, `blastReaches`'s ray crosses it when the geometry lines up,
+tanks never do. The traversability check below must NOT count them passable — that is
+the point of them.
 
-### Existing boards are upscaled, not redesigned
+**Two-cell gaps (1.333) are a validation error.** A 1.0 tank physically fits through
+1.333, but 1.333 is under the 1.5-tank minimum — so the band is ambiguous: passable by
+physics, sub-standard by rule, and an AI tank could wander through a gap the validator
+does not consider traversable, splitting "where tanks can be" from "where the rules say
+tanks can be". Outlawing the band keeps those two the same thing. Every gap is either a
+slit or a corridor; nothing in between.
 
-All four ship as 2x upscales of their current grids, preserving their designs exactly.
-Thinning individual walls to 1 cell is a per-level design decision made afterwards, level by
-level, not a bulk transform. Separating the two is what keeps the resolution change
-reviewable: one commit that changes no geometry but the spawn offset, then deliberate
-design edits on top.
+### Traversability is clearance, not adjacency
 
-The upscale must not duplicate spawn letters — one tank per spawn. A spawn cell maps to its
-top-left sub-cell, with the other three as floor.
+The old flood fill walks cell-to-cell and assumes anything open is passable — false the
+moment sub-tank gaps exist. It is replaced for tank purposes by a clearance check:
+
+> A cell is **traversable** iff its centre is at least 0.75 world units (half of
+> 1.5 tank-diameters) from every wall AABB. Tank connectivity is flood-filled over
+> traversable cells only.
+
+A 2.0-wide corridor passes (centre line clears 1.0 ≥ 0.75); a slit never does. This
+also closes the hole flagged earlier: at fine resolutions the old check would validate a
+board that is physically impassable.
+
+### Sealed sections are LEGAL — the rule is killability, not connectivity
+
+Decided with the user: fully walled-off regions are acceptable, including large
+inaccessible stretches of map (legal, though not the norm). The sealed-pocket rule as a
+universal law is REPLACED by:
+
+> **Every enemy must be killable.** For each enemy spawn, at least one must hold:
+> (a) it sits in the player's traversable component;
+> (b) some player-traversable cell has a direct line or a ricochet path to it, within
+>     the PLAYER's bounce budget (`ricochetCount: 1`);
+> (c) a mine laid at some player-traversable cell reaches it — `blastReaches` ray
+>     within `MINE_BLAST_RADIUS` (2.0);
+> (d) destroying destructible walls makes (a), (b) or (c) true.
+
+An enemy in a sealed nest that can only be killed by a bank shot through a slit is not a
+defect — it is a level design, and it composes directly with the green sniper: a turret
+nest the player must out-angle rather than out-drive. An EMPTY sealed region needs no
+check at all. The player's spawn must sit in the traversable component that contains at
+least one route to satisfying every enemy's condition — trivially true when (a) holds
+for all, checked explicitly otherwise.
+
+The old sealed-pocket failure message survives as a WARNING-grade note in the validator
+output for empty sealed regions (they are legal but "not the norm"), so an accidental
+pocket is still visible without being fatal.
+
+### Existing boards are upscaled 3x, not redesigned
+
+Each old cell becomes a 3x3 block of new cells covering the identical world span; the
+centre sub-cell inherits a spawn letter, the rest floor. Interior wall surfaces land in
+exactly the same world position and every spawn keeps its exact coordinates — which is
+what makes this migration provable as a no-op: the transform test asserts tile-for-tile
+wall coverage identity AND byte-identical seeded baselines. Thinning any specific wall
+to 1 cell (0.667) afterwards is a per-level design edit, made deliberately, level by
+level.
 
 ## Change 2: a fire-through barrier
 
@@ -83,7 +126,7 @@ additive. The semantics live in four places, and getting each right is the subst
 | shell collision | **passes** | `bullets.ts` must exclude it |
 | line of sight | **passes** | `ai/targeting.ts:50` filters `!w.destroyed` with no kind test |
 | bank shots | **not a reflector** | `bankShot` must not bounce off it |
-| mine blast | **passes**, and is not destroyed | it is indestructible by definition |
+| mine blast | **passes**, and is not destroyed | `blastReaches` (mines.ts) must skip it, exactly as it skips destructibles when the pass-through rule is on |
 | render | a line of holes in the ground | `render/` — visibly not a wall, and visibly not a shell-stopper |
 
 `lineOfSight` passing through a barrier is load-bearing and has a consequence worth stating:
@@ -99,22 +142,22 @@ does not reflect, producing shots that miss for no visible reason.
 
 ## Testing
 
-- **The upscale is proven by transform, not by eye**: a test that upscales each shipped
-  arena and asserts interior wall coverage is identical tile-for-tile, and that the only
-  spawn difference is the uniform (0.5, 0.5) offset. That test is what makes "the migration
-  changed no geometry" a checked claim.
-- **Before/after baseline table** for the pacifist free-win rate, per-arena cover ratios and
-  a seeded trace hash, reported in the PR. Numbers move; the point is that they move
-  *predictably* and are re-pinned deliberately.
-- **Barrier negative controls, one per system**: a fixture where a shell crosses a barrier
-  and hits, a tank is stopped by one, `lineOfSight` returns true across one, and `bankShot`
-  declines to bounce off one. Each must fail if its filter is removed — a guard is worth
-  what its own tests prove, and this feature is four independent filters.
-- **A corridor-width guard**: at `cellSize 1` a one-cell passage is impassable. A test
-  asserting every shipped arena's open regions remain reachable already exists
-  (`structuralFailures`); it must be checked that flood-fill connectivity is *not* enough
-  here, since it walks cells without regard to tank width. If it is not enough, that gap is
-  reported rather than papered over.
+- **The 3x upscale is proven by transform, not by eye**: upscale each shipped arena,
+  assert tile-for-tile wall coverage identity, assert every spawn's world position is
+  BYTE-identical, and assert a seeded trace hash is unchanged. At an odd upscale all
+  three should hold exactly; any drift is a bug in the transform, not a number to re-pin.
+- **Clearance-rule negative controls**: a fixture with a 2.0 corridor passes; a fixture
+  whose only route is a slit fails with the slit named; a fixture with a 1.333 gap fails
+  as outlawed. Each control removed from the validator must un-fail its fixture.
+- **Killability negative controls, one per clause**: an enemy killable only by bank shot
+  through a slit passes (b); only by mine ray passes (c); only after a breach passes (d);
+  a genuinely unkillable enemy fails with all four clauses reported false. A guard is
+  worth what its own tests prove, and this rule is four independent clauses.
+- **Barrier negative controls, one per system**: a shell crosses a barrier and hits, a
+  tank is stopped by one, `lineOfSight` returns true across one, `bankShot` declines to
+  bounce off one, and `blastReaches` passes one. Each must fail if its filter is removed.
+- **Slit semantics**: a shell (radius 0.1) passes a 0.667 slit; a tank does not; a blast
+  ray through a slit kills a tank aligned behind it and spares one off-axis.
 
 ## The one-way ledge
 
