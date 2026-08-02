@@ -328,8 +328,8 @@ describe('composed tracks', () => {
     // A ROAM change is a musical decision and still belongs at the cycle
     // boundary. A CONTEXT change is a response to the player and belongs at the
     // next bar. Both are asserted here, so the fix cannot be "switch instantly".
-    const spec = (id: string): MusicTrackDef => ({
-      id, stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'F', 'C', 'G'],
+    const spec = (id: string, barSteps = 2): MusicTrackDef => ({
+      id, stepSeconds: 0.5, barSteps, chords: ['Am', 'F', 'C', 'G'],
       tracks: [{
         voice: 'bass',
         notes: [noteToHz('A1'), noteToHz('F1'), noteToHz('C2'), noteToHz('G1'),
@@ -338,25 +338,48 @@ describe('composed tracks', () => {
       }],
     });
     // cycleSteps = 8 (the one layer is 8 notes), barSteps = 2 -> bars at 0,2,4,6.
-    const landing = (at?: 'bar' | 'cycle'): number => {
+    const landing = (at?: 'bar' | 'cycle', warm = 0, toBar = 4): number => {
       const { ctx, t, bed } = withTrack(spec('from'));
       bed.start();
-      bed.changeSuite(spec('to'), at ? { at } : undefined);
-      for (let i = 1; i <= 24; i++) {
+      let i = 0;
+      // Advance the clock BEFORE asking, so the call lands mid-bar as often as
+      // on a bar line. Without this the request always arrives at step 0, where
+      // "the next bar" and "the very next step" are the same index.
+      for (let w = 0; w < warm; w++) { i += 1; ctx.currentTime = i * 0.5; t.tick(); }
+      bed.changeSuite(spec('to', toBar), at ? { at } : undefined);
+      for (let k = 1; k <= 24; k++) {
+        i += 1;
         ctx.currentTime = i * 0.5;
         t.tick();
-        if (bed.currentTrackId() === 'to') { bed.stop(); return i; }
+        if (bed.currentTrackId() === 'to') { bed.stop(); return k; }
       }
       bed.stop();
       return -1;
     };
     // Exact indices: the fake clock is deterministic (0.5s steps, 0.6s
     // lookahead, so scheduling runs one step ahead of the tick count).
-    expect(landing(), 'a roam change stopped waiting for the cycle').toBe(7);
-    expect(landing('cycle'), 'the explicit default disagreed with the implicit one').toBe(7);
-    const bar = landing('bar');
-    expect(bar, 'the context change never landed at all').toBeGreaterThan(0);
-    expect(bar, 'a context change still waited for the cycle boundary').toBeLessThan(7);
+    //
+    // Swept across the whole outgoing bar rather than asserted at one offset.
+    // A single sample taken at warm=0 CANNOT discriminate this fix from
+    // "switch on the very next step": at step 0 the next bar IS the next step,
+    // so both land at 1. The alternation below is the discriminator -- ask
+    // mid-bar (odd offsets) and a correct implementation waits one extra step.
+    const WARMS = [0, 1, 2, 3, 4, 5, 6, 7];
+    const bars = WARMS.map((w) => landing('bar', w));
+    expect(bars, 'a context change did not land on the outgoing track\'s bar line').toEqual(
+      [1, 2, 1, 2, 1, 2, 1, 2],
+    );
+    // The incoming track's bar is deliberately 4 while the outgoing track's is
+    // 2 (`landing`'s toBar default), so the two fixtures are not interchangeable:
+    // the boundary that matters is the one the LISTENER is currently hearing.
+    // Reading the bar off the incoming track instead moves this sweep to
+    // [3,2,1,4,3,2,1,4] (measured), so the pin above is what catches that swap.
+    //
+    // A roam change still counts down to the cycle boundary and wraps.
+    expect(WARMS.map((w) => landing('cycle', w)), 'a roam change stopped waiting for the cycle')
+      .toEqual([7, 6, 5, 4, 3, 2, 1, 8]);
+    expect(WARMS.map((w) => landing(undefined, w)), 'the implicit default disagreed with the explicit one')
+      .toEqual([7, 6, 5, 4, 3, 2, 1, 8]);
   });
 
   it("enters through the incoming piece's OWN final bar -- its dominant -- first", () => {
@@ -740,6 +763,62 @@ describe('composed tracks', () => {
     );
     expect(toNotes.length, 'the incoming member was cut to its pickup').toBeGreaterThanOrEqual(4);
     bed.stop();
+  });
+
+  it("a DIRECTOR-driven suite change takes the cycle boundary, not the next bar", () => {
+    // The roam path assigns its own `at`, on a different line from the public
+    // changeSuite() default. Pinning the default therefore does NOT pin this:
+    // flipping line ~399 to 'bar' left the whole suite green before this test
+    // existed, so a musical decision would have started jumping in on a bar.
+    //
+    // barSteps 2 against a cycle of 8 is what discriminates the two: a bar
+    // landing arrives within 2 steps of the decision, a cycle landing waits
+    // out the rest of the cycle.
+    const layer = (f: string) => [{
+      voice: 'bass' as const,
+      notes: [noteToHz(f), noteToHz(f), noteToHz(f), noteToHz(f),
+              noteToHz(f), noteToHz(f), noteToHz(f), noteToHz(f)],
+      generate: null, intensity: 0,
+    }];
+    const a: MusicTrackDef = { id: 'a', stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'F', 'C', 'G'], tracks: layer('A1') };
+    const b: MusicTrackDef = { ...a, id: 'b', tracks: layer('D2') };
+    let handed = false;
+    const director = {
+      first: () => a,
+      next: () => {
+        if (handed) return { kind: 'stay' } as const;
+        handed = true;
+        return { kind: 'suite', track: b } as const;
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    // A PAUSE is what makes the two arms distinguishable at all. stop() zeroes
+    // stepsSinceConsult but deliberately leaves stepsIntoCycle where it was, so
+    // after a resume the consult fires MID-cycle instead of on the boundary.
+    // Without this the director is only ever consulted at stepsIntoCycle === 0,
+    // where `% barSteps === 0` is also true and 'bar' and 'cycle' coincide --
+    // which is why a version of this test without the pause could not fail.
+    let i = 0;
+    bed.start();
+    for (let k = 0; k < 3; k++) { i += 1; ctx.currentTime = i * 0.5; t.tick(); }
+    bed.stop();
+    bed.start();
+    let landedAt = -1;
+    for (let k = 1; k <= 40 && landedAt < 0; k++) {
+      i += 1;
+      ctx.currentTime = i * 0.5;
+      t.tick();
+      if (bed.currentTrackId() === 'b') landedAt = k;
+    }
+    bed.stop();
+    // 10 measured; routing the roam decision through the bar arm gives 8.
+    expect(landedAt, 'a roam suite change stopped waiting for the cycle boundary').toBe(10);
   });
 
   it('never becomes a per-STEP callback, even for a degenerate one-step cycle', () => {

@@ -172,6 +172,32 @@ describe('the validator refuses bad data, naming the path', () => {
     expect(() => parseAll(bad)).toThrow(/intensity/);
   });
 
+  it('rejects a layer that is not a whole number of bars, and accepts one that is', () => {
+    // The bar-aligned context change reduces to `stepsIntoCycle % barSteps === 0`,
+    // which only names a downbeat if the bar divides every authored layer. This
+    // held for 31 of 31 shipped tracks by authoring habit and nothing checked it,
+    // so a new track could send every screen change off the downbeat silently.
+    const ragged = [{
+      id: 'ragged', stepSeconds: 0.5, barSteps: 3, chords: ['Am'],
+      tracks: [{ voice: 'bass', notes: ['A1', 'A1', 'A1', 'A1', 'A1', 'A1', 'A1', 'A1'], intensity: 0 }],
+    }];
+    expect(() => parseAll(ragged)).toThrow(/whole number of 3-step bars/);
+    // The negative control: the SAME track with a bar that does divide 8 must
+    // parse, so the rule is rejecting raggedness and not simply everything.
+    const even = [{ ...ragged[0], barSteps: 4 }];
+    expect(() => parseAll(even)).not.toThrow();
+  });
+
+  it('accepts every shipped track under the bar-divides-layer rule', () => {
+    // Recomputed rather than asserted as prose: this is the invariant the bar
+    // predicate in music.ts depends on, over the whole shipped population.
+    const offenders = MUSIC_TRACKS.filter((t) =>
+      t.barSteps > 0 && t.tracks.some((l) => l.notes && l.notes.length % t.barSteps !== 0),
+    ).map((t) => t.id);
+    expect(offenders, 'a shipped track is not a whole number of bars').toEqual([]);
+    expect(MUSIC_TRACKS.length, 'the shipped track population changed').toBe(31);
+  });
+
   it('freezes the WHOLE track, including chords and generate specs', () => {
     // A shallow freeze let one test mutate shipped data in place and leak it to
     // every other file through the module cache.
