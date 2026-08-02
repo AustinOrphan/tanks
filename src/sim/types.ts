@@ -37,7 +37,7 @@ export type BulletType = 'normal' | 'fast' | 'ricochet';
  */
 export type UnarmedTrigger = 'none' | 'proximity' | 'bullet' | 'both';
 
-export type TankKind = 'player' | 'brown' | 'grey' | 'teal' | 'olive';
+export type TankKind = 'player' | 'brown' | 'grey' | 'teal' | 'olive' | 'green';
 export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
 
 export interface Spawn {

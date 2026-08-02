@@ -3,11 +3,12 @@
 // spawn sightline is invisible until a player dies to it three seconds into a level.
 // New arenas added to ARENAS get all of this for free -- that is the point of the file.
 import { describe, it, expect } from 'vitest';
-import { lineOfSight } from './ai/targeting';
+import { bankShot, lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
 import { structuralFailures, claimFailures, cellCentre, cellOf, breach } from './arena-claims';
 import { ARENA_DEFS, arenaById } from './config/arenas';
-import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
+import { configFor } from './config';
+import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import type { ArenaClaim } from './config/arena-types';
 
 describe('the shipped arena sequence', () => {
@@ -129,7 +130,8 @@ describe('variable arena dimensions', () => {
 describe('the universal rules have negative controls', () => {
   // Without these, structuralFailures could return [] unconditionally and every
   // shipped arena would still look validated. The spec requires one bad fixture
-  // per universal rule (population: both geometry rules; the spawn-count rule is
+  // per universal rule (population: all three geometry rules -- sealed pocket, spawn
+  // sightline, and the stationary-banker spawn rule below; the spawn-count rule is
   // controlled at the validator level in validate.test.ts).
   it('a solid-sealed pocket is reported, and ONLY that rule', () => {
     // Length pinned at 1, not just [0]'s content: this fixture must isolate the
@@ -200,13 +202,13 @@ describe('the cover ratio each arena quotes in its notes', () => {
   // validated only as strings, so the validator cannot help.
   //
   // Destructible cells are NOT counted as open: they are walls until destroyed, and
-  // counting them changes arena-04 to 46 of 154 (the ranking is unaffected, but the
+  // counting them changes arena-04 to 38 of 154 (the ranking is unaffected, but the
   // quoted numbers are the excluding ones and the note now says so).
   const EXPECTED: Record<string, { unseen: number; open: number }> = {
     'arena-01': { unseen: 35, open: 86 },
     'arena-02': { unseen: 41, open: 83 },
     'arena-03': { unseen: 30, open: 88 },
-    'arena-04': { unseen: 43, open: 151 },
+    'arena-04': { unseen: 35, open: 151 },
   };
 
   it('recomputes every quoted count, and the ranking the note claims', () => {
@@ -239,5 +241,81 @@ describe('the cover ratio each arena quotes in its notes', () => {
     const tightest = Object.entries(ratio).sort((a, b) => a[1] - b[1])[0][0];
     expect(tightest).toBe('arena-04');
     expect(ratio['arena-04']).toBeLessThan(ratio['arena-03']);
+  });
+});
+
+describe('the STATIONARY-banker spawn rule, which green is the reason for', () => {
+  // One geometry, three kinds. The board is identical in all three -- green at (1, 1),
+  // player at (5, 1), a solid at (3, 1) killing the direct line, boundary ring available
+  // to bounce off -- so the ONLY variable is which enemy stands there. That is what makes
+  // each gate's control meaningful rather than three unrelated boards.
+  const at = (letter: string) => ({
+    ...BANK_SIGHTLINE_ARENA,
+    grid: BANK_SIGHTLINE_ARENA.grid.map((row) => row.replace('N', letter)),
+  });
+
+  it('reports a stationary banker that can ricochet onto the player spawn', () => {
+    const failures = structuralFailures(BANK_SIGHTLINE_ARENA);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/spawn BANK line: green/);
+    // Isolation: this fixture must exercise the BANK rule specifically. If the solid at
+    // (3, 1) ever stopped blocking, the direct rule would fire and this fixture would be
+    // re-testing what OPEN_SIGHTLINE_ARENA already covers while looking like it passed.
+    expect(failures[0]).not.toMatch(/spawn sightline/);
+  });
+
+  it('does NOT report a MOBILE banker on the same board', () => {
+    // The behaviour gate. Teal banks (weight 0.15) and would trip a rule that only
+    // checked the weight -- as an earlier draft of this rule did, which failed shipped
+    // arena-01 (grey at (13, 5) off 1 wall, teal at (11, 7) off 2) and arena-04. A tank
+    // that drives away at tick 1 does not hold the line the rule is about.
+    expect(structuralFailures(at('T'))).toEqual([]);
+  });
+
+  it('does NOT report a stationary NON-banker on the same board', () => {
+    // The weight gate. Brown is stationary and its shell ricochets (ricochetCount 1),
+    // so only its bankShotWeight of 0 keeps it quiet here -- which is exactly the gate
+    // that makes brown's behaviour unchanged by the bank work in brown.ts.
+    expect(structuralFailures(at('B'))).toEqual([]);
+  });
+});
+
+describe("green's bank reach, which is why it is in level 4", () => {
+  // arena-04's notes claim the sniper "answers the board's own weakness": 35 of the 151
+  // open cells are seen by no enemy from its spawn, and green's ricochets cover 20 of
+  // those 35. Prose next to a grid anyone may edit, so it is recomputed here.
+  it('reaches 29 cells by ricochet it cannot see, covering 20 of the 35 nothing else sees', () => {
+    const arena = arenaById('arena-04');
+    const { walls, spawns } = loadArena(arena);
+    const green = spawns.find((s) => s.kind === 'green');
+    expect(green, 'arena-04 must still contain the green sniper').toBeDefined();
+    const cfg = configFor('green');
+    // Non-vacuity: if the profile stopped banking, every count below would go to zero
+    // and "0 of 151" would still read as a number. Pin the premise they depend on.
+    expect(cfg.ai.bankShotWeight).toBeGreaterThan(0);
+
+    const enemies = spawns.filter((s) => s.kind !== 'player');
+    const key = (c: number, r: number) => `${c},${r}`;
+    const unseen = new Set<string>();
+    const bankOnly: Array<[number, number]> = [];
+    let open = 0;
+    for (let r = 0; r < arena.rows; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        if (arena.legend[arena.grid[r][c]] !== undefined) continue;
+        open++;
+        const p = cellCentre(arena, [c, r]);
+        if (!enemies.some((e) => lineOfSight(e.pos, p, walls))) unseen.add(key(c, r));
+        if (lineOfSight(green!.pos, p, walls)) continue;
+        if (bankShot(green!.pos, p, walls, cfg.weapon.ricochetCount) !== null) bankOnly.push([c, r]);
+      }
+    }
+    expect({ bankOnly: bankOnly.length, open }).toEqual({ bankOnly: 29, open: 151 });
+
+    // The assertion that actually justifies the placement, and the reason it is an
+    // OVERLAP rather than a count: 29 bank-only cells aimed at ground three other
+    // enemies already cover would be worth nothing. What matters is how much of the
+    // unseen region green alone can reach.
+    const covered = bankOnly.filter(([c, r]) => unseen.has(key(c, r)));
+    expect({ covered: covered.length, unseen: unseen.size }).toEqual({ covered: 20, unseen: 35 });
   });
 });

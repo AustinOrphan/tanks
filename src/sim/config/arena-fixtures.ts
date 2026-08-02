@@ -82,6 +82,28 @@ export const SEALED_POCKET_ARENA: ArenaDefinition = validateArenas(
   'arena-fixtures.ts',
 )[0];
 
+/**
+ * Negative control for the STATIONARY-banker spawn rule. Green at (1, 1) has NO direct
+ * line to the player at (5, 1) -- the solid at (3, 1) sits squarely between them -- but
+ * can ricochet off the boundary ring and land on the spawn anyway. That is the whole
+ * point of the rule: satisfying "no spawn sightline" is not the same as being safe once
+ * an enemy can shoot round corners, and this fixture is a board that passes the old rule
+ * and fails the new one.
+ */
+export const BANK_SIGHTLINE_ARENA: ArenaDefinition = validateArenas(
+  {
+    arenas: [{
+      id: 'fixture-bank-sightline',
+      cols: 7, rows: 7, cellSize: 2,
+      legend: { '#': 'solid' },
+      grid: ['.......', '.N.#.P.', '.......', '.......', '.......', '.......', '.......'],
+      notes: ['Negative control: a stationary banker with a ricochet path onto the player spawn.'],
+      claims: [],
+    }],
+  },
+  'arena-fixtures.ts',
+)[0];
+
 export const OPEN_SIGHTLINE_ARENA: ArenaDefinition = validateArenas(
   {
     arenas: [{

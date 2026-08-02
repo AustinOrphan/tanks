@@ -1,7 +1,8 @@
 import type { Arena } from './arena';
 import { loadArena } from './arena';
 import type { Vec2, Wall } from './types';
-import { lineOfSight } from './ai/targeting';
+import { bankShot, lineOfSight } from './ai/targeting';
+import { AIBehavior, configFor } from './config';
 import type { ArenaClaim } from './config/arena-types';
 import { SPAWN_LETTERS } from './config/arena-types';
 
@@ -133,9 +134,10 @@ function reachable(arena: Arena): { open: number; reached: number; unreached: Ar
 }
 
 /**
- * The rules EVERY arena obeys, whatever it claims: no solid-sealed pockets, and no
- * enemy holding a straight line to the player spawn at spawn (Brown never moves, so
- * such a line is a death sentence three seconds into the level).
+ * The rules EVERY arena obeys, whatever it claims: no solid-sealed pockets, no enemy
+ * holding a straight line to the player spawn at spawn (Brown never moves, so such a
+ * line is a death sentence three seconds into the level), and -- since green shipped --
+ * no STATIONARY banking enemy holding a RICOCHET path to it either.
  *
  * Extracted from arena-validation.test.ts so a deliberately broken fixture can be
  * fed to it -- inline rules in a describe.each can only ever see arenas that exist.
@@ -156,6 +158,41 @@ export function structuralFailures(arena: Arena): string[] {
     if (lineOfSight(enemy.pos, player.pos, walls)) {
       failures.push(
         `spawn sightline: ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) sees the player spawn\n` +
+        renderBoard(arena, [
+          [...cellOf(arena, enemy.pos), 'E'] as const,
+          [...cellOf(arena, player.pos), 'P'] as const,
+        ]),
+      );
+    }
+    // A BANKING enemy defeats the rule above by going round the wall that satisfies it.
+    // Before green shipped, every enemy's only path to the spawn was the straight line
+    // lineOfSight tests, so "no spawn sightline" and "no spawn shot" were the same
+    // statement. They are not any more: RICOCHET_SNIPER is stationary, holds a 0.55 bank
+    // weight and a 0.35s reaction, so a bank path onto the spawn is the same death
+    // sentence the direct rule exists to prevent -- and on every respawn, not just once.
+    //
+    // STATIONARY bankers only, and that restriction is measured, not assumed. Applied to
+    // every banking profile it fails two SHIPPED arenas: on arena-01 the grey at (13, 5)
+    // banks onto the spawn off 1 wall and the teal at (11, 7) off 2, and arena-04's two
+    // teals do the same. arena-01 is the oldest level in the game and plays fine, because
+    // grey and teal are MOBILE -- they leave the spawn geometry within about a second, so
+    // the line they hold at tick 0 is a curiosity. A stationary gunner never leaves, so it
+    // holds that line for the whole level and on every respawn. That difference is the
+    // whole rule; widening it to mobile tanks would reject levels the game has shipped.
+    //
+    // Also gated on the weight, so it costs nothing for kinds that never bank. INTACT
+    // walls only, matching the direct rule immediately above: arena-02 deliberately opens
+    // direct spawn lines once its barrier is breached, so a post-breach rule would
+    // contradict a shipped level's design. An arena wanting the post-breach guarantee
+    // declares spawnBlockRobust, which checks both phases AND, since review found
+    // this sentence promising a guarantee the code did not implement, banks too.
+    const cfg = configFor(enemy.kind);
+    if (cfg.behavior === AIBehavior.STATIONARY
+        && cfg.ai.bankShotWeight > 0
+        && bankShot(enemy.pos, player.pos, walls, cfg.weapon.ricochetCount) !== null) {
+      failures.push(
+        `spawn BANK line: ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) can bank onto the ` +
+        `player spawn off ${cfg.weapon.ricochetCount} wall(s), with no direct line needed\n` +
         renderBoard(arena, [
           [...cellOf(arena, enemy.pos), 'E'] as const,
           [...cellOf(arena, player.pos), 'P'] as const,
@@ -230,7 +267,20 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
           { name: 'intact', walls } as const,
           { name: 'breached', walls: breached } as const,
         ];
+        // A STATIONARY banker is checked for a RICOCHET onto the nudged spawn as well as
+        // a straight line. structuralFailures forbids it a bank onto the spawn with walls
+        // INTACT; this is the post-breach half, and the reason it lives here rather than
+        // there is the same reason the direct rule stops at intact -- arena-02 opens spawn
+        // lines on purpose when its barrier goes, so a universal post-breach rule would
+        // reject a shipped level. Declaring spawnBlockRobust is how an arena opts in to
+        // the stronger guarantee. Written after review found the comment here promising
+        // exactly this escape hatch while the code checked lineOfSight only, so an arena
+        // could declare the claim and still hand green a post-breach ricochet onto the
+        // respawn point. Costs nothing for the four kinds that never bank and for every
+        // mobile one.
         for (const enemy of spawns.filter((s) => s.kind !== 'player')) {
+          const cfg = configFor(enemy.kind);
+          const banks = cfg.behavior === AIBehavior.STATIONARY && cfg.ai.bankShotWeight > 0;
           for (const off of offsets) {
             const target = { x: player.pos.x + off.x, y: player.pos.y + off.y };
             for (const phase of phases) {
@@ -240,6 +290,18 @@ export function claimFailures(arena: Arena, claims: ArenaClaim[]): string[] {
                   `player nudged by (${off.x}, ${off.y}) -- the block is a tangency, not a chord\n` +
                   `  why: ${claim.why}\n` +
                   `  (E = the enemy that sees, P = the player spawn)\n` +
+                  renderBoard(arena, [
+                    [...cellOf(arena, enemy.pos), 'E'] as const,
+                    [...cellOf(arena, player.pos), 'P'] as const,
+                  ]),
+                );
+              }
+              if (banks && bankShot(enemy.pos, target, phase.walls, cfg.weapon.ricochetCount) !== null) {
+                failures.push(
+                  `spawnBlockRobust (${phase.name}, BANK): ${enemy.kind} at (${enemy.pos.x}, ${enemy.pos.y}) can ` +
+                  `ricochet onto the player nudged by (${off.x}, ${off.y}) -- no direct line needed\n` +
+                  `  why: ${claim.why}\n` +
+                  `  (E = the enemy that banks, P = the player spawn)\n` +
                   renderBoard(arena, [
                     [...cellOf(arena, enemy.pos), 'E'] as const,
                     [...cellOf(arena, player.pos), 'P'] as const,

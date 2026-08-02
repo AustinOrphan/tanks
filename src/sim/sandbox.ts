@@ -39,6 +39,10 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   grey: 'G',
   teal: 'T',
   olive: 'O',
+  // 'N' because grey already holds 'G'. Re-lettering grey would rewrite every
+  // shipped grid, so the newcomer takes the free letter -- see SPAWN_LETTERS,
+  // which this table must agree with.
+  green: 'N',
 };
 
 /** Chebyshev-adjacent to any spawn cell: walls may not crowd a tank at birth. */

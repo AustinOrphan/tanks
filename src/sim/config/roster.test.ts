@@ -15,7 +15,7 @@ import { AIBehavior, TankAbility } from './enums';
 
 // The shipped kinds. `player` is included because the player is now resolved through
 // the same pipeline (its weapon/movement/mine-capacity all come from configFor).
-const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive'];
+const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive', 'green'];
 
 // The colours the renderer shipped before this refactor (entities.ts TANK_COLORS, as
 // 0x hex). config.color must reproduce them exactly, or the tanks change colour.
@@ -25,6 +25,13 @@ const SHIPPED_COLORS: Record<TankKind, string> = {
   grey: '#8890a0',
   teal: '#2bb0a6',
   olive: '#7a8f3c', // new with the kind itself: no prior render literal to reproduce
+  // Deliberately NOT the reference taxonomy's GREEN (#3D9A50). That is 11.0 deltaE76
+  // from the player's own green swatch (#4fae52), and customization.test.ts requires
+  // every swatch to clear every enemy identity by 20 -- an enemy the player can dress
+  // up as is a legibility bug, not a palette preference. #0A6E42 is 32.9 from the
+  // nearest of all ten shipped colours, so it leaves the palette's existing worst
+  // pair (27.7, green swatch vs olive) as the minimum instead of becoming the new one.
+  green: '#0A6E42',
 };
 
 describe('game roster resolves to the shipped tunables (behaviour-preservation pins)', () => {
@@ -63,15 +70,23 @@ describe('game roster resolves to the shipped tunables (behaviour-preservation p
   });
 
   it('shell cap and mine capacity: SHELL_CAP/MINE_CAP everywhere except olive', () => {
-    for (const k of ['player', 'brown', 'grey', 'teal'] as const) {
-      expect(configFor(k).weapon.maxActiveProjectiles).toBe(SHELL_CAP);
-      expect(configFor(k).mineCapacity).toBe(MINE_CAP);
+    // DERIVED from KINDS with an explicit exception table, not a hand-written subset.
+    // Review found green's mineCapacity unpinned: the old loop listed player/brown/
+    // grey/teal by hand, olive was handled separately, and green fell through the gap
+    // entirely -- changing it 2 -> 0 passed all 1218 tests. Written this way, a sixth
+    // kind is pinned to the defaults the day it exists, or must declare itself an
+    // exception here.
+    const PER_TANK: Partial<Record<TankKind, { shells: number; mines: number }>> = {
+      // Olive is the first kind with a genuinely PER-TANK cap: one rocket in flight at
+      // a time (its whole rhythm -- a slow, telegraphed lance), and no mines at all.
+      // Raising either is a gameplay change, not a tidy-up.
+      olive: { shells: 1, mines: 0 },
+    };
+    for (const k of KINDS) {
+      const want = PER_TANK[k] ?? { shells: SHELL_CAP, mines: MINE_CAP };
+      expect(configFor(k).weapon.maxActiveProjectiles, k).toBe(want.shells);
+      expect(configFor(k).mineCapacity, k).toBe(want.mines);
     }
-    // Olive is the first kind with a genuinely PER-TANK cap: one rocket in
-    // flight at a time (its whole rhythm -- a slow, telegraphed lance), and no
-    // mines at all. Raising either is a gameplay change, not a tidy-up.
-    expect(configFor('olive').weapon.maxActiveProjectiles).toBe(1);
-    expect(configFor('olive').mineCapacity).toBe(0);
   });
 
   it('projectile speed/bounces mirror the sim bulletConfig for the resolved bullet type', () => {
@@ -112,6 +127,7 @@ describe('per-kind identity comes from config, not code branches', () => {
     expect(configFor('grey').behavior).toBe(AIBehavior.DEFENSIVE);
     expect(configFor('teal').behavior).toBe(AIBehavior.TACTICAL);
     expect(configFor('olive').behavior).toBe(AIBehavior.DEFENSIVE);
+    expect(configFor('green').behavior).toBe(AIBehavior.STATIONARY);
   });
 
   it("grey's profile-derived dodge patience equals the tuned DODGE_PATIENCE_TICKS", () => {
@@ -152,6 +168,35 @@ describe('per-kind identity comes from config, not code branches', () => {
     expect(o.weapon.fireCooldown).toBe(38); // SLOW, same tick count pinned for brown
     expect(hasAbility('olive', TankAbility.MINE_LAYER)).toBe(false);
     expect(o.ai.minePlacementChance ?? 0).toBe(0);
+  });
+
+  it("green, the ricochet sniper: every stat its level-4 placement depends on", () => {
+    // Review found green shipped with NOTHING pinning its chassis or weapon: fireRate
+    // SLOW->FAST, maxActiveProjectiles 5->1, mineCapacity 2->0 and rotationSpeed
+    // SLOW->FAST could all be changed at once and 1164 tests still passed. Each line
+    // below is a design decision the level-4 numbers were measured against.
+    const g = configFor('green');
+    expect(g.behavior).toBe(AIBehavior.STATIONARY);
+    // The whole point of the kind: it is the only STATIONARY profile that banks, and
+    // brown.ts gates its bank path on exactly this being > 0. At 0 green becomes a
+    // brown with a different colour, and its 29-cell reach in arena-04 goes to zero.
+    expect(g.ai.bankShotWeight).toBeGreaterThan(0);
+    expect(g.ai.directShotWeight).toBeGreaterThan(0); // still takes the direct shot first
+    // A ricochet shell, not a straight one -- bankShot is handed this bounce budget,
+    // and arena-validation.test.ts's reach figures are computed with it.
+    expect(g.weapon.bulletType).toBe('ricochet');
+    expect(g.weapon.ricochetCount).toBe(bulletConfig.ricochet.bounces);
+    expect(g.weapon.speed).toBe(bulletConfig.ricochet.speed);
+    expect(g.weapon.fireCooldown).toBe(38); // SLOW: a sniper, not a machine gun
+    expect(g.weapon.maxActiveProjectiles).toBe(SHELL_CAP);
+    expect(g.rotationSpeed).toBeCloseTo(TANK_TURN_RATE * 0.6, 9); // SLOW turret traverse
+    // Stationary and mineless, like brown: the north front keeps its character.
+    expect(hasAbility('green', TankAbility.MINE_LAYER)).toBe(false);
+    expect(g.ai.minePlacementChance ?? 0).toBe(0);
+    // Descriptive, matching teal, the other banker. BANK_SHOT_AIM is documentation --
+    // no gameplay code reads it (see the note on abilities in resolve.ts) -- but the
+    // dedicated bank tank lacking the descriptor its lesser banker carries is wrong.
+    expect(hasAbility('green', TankAbility.BANK_SHOT_AIM)).toBe(true);
   });
 
   it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {

@@ -90,5 +90,24 @@
     },
     "mineCapacity": 0,
     "abilities": []
+  },
+  "green": {
+    "displayName": "Green",
+    "color": "#0A6E42",
+    "firstMission": 12,
+    "singlePlayerOnly": false,
+    "movementSpeed": "MEDIUM",
+    "rotationSpeed": "SLOW",
+    "aiProfile": "RICOCHET_SNIPER",
+    "weapon": {
+      "projectileType": "RICOCHET_ROCKET",
+      "fireRate": "SLOW",
+      "maxActiveProjectiles": 5,
+      "ricochetCount": 2
+    },
+    "mineCapacity": 2,
+    "abilities": [
+      "BANK_SHOT_AIM"
+    ]
   }
 }

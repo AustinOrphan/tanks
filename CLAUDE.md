@@ -75,10 +75,39 @@ comment in constants.ts — and `minePlacementChance` in full: its magnitude is
 the per-bucket mine-proposal probability (`mineInclination`) — and
 `reactionTime`: the dispatcher holds every AI shot until the solution has been
 HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
-span; cover resets the clock. **Every profile field is now consumed.** And the
-STATIONARY behaviour implementation reads neither shot weight, so a profile
-like RICOCHET_SNIPER's bank preference is authored intent awaiting an
-implementation. The 9-type Wii taxonomy in `config/reference/` is reference
+span; cover resets the clock. **Every profile field is now consumed**, including
+both shot weights in BOTH mobile and stationary implementations — `brown.ts`
+gained bank shots gated on `bankShotWeight > 0`, which is what makes
+RICOCHET_SNIPER (the **green** tank, level 4) a real enemy rather than authored
+intent. It prefers the DIRECT shot and falls back to the bank, where `teal.ts`
+alternates: a turret that can already see you has no reason to take the longer
+path. Brown is unaffected because STATIC_BASIC carries `bankShotWeight` 0 — proven
+by an identical trace hash over 4 arenas × 6 seeds × 2500 ticks, with a control
+showing the probe moves when banking is switched on.
+
+**A green tank changed what `structuralFailures` has to check.** "No enemy sees
+the player spawn" tested `lineOfSight` only, which was the same as "no enemy can
+SHOOT the player spawn" for exactly as long as no stationary enemy could bank.
+There is now a second rule: no STATIONARY banking enemy may hold a ricochet path
+onto the spawn. Restricted to stationary bankers on evidence, not taste — applied
+to every banking profile it rejects shipped arena-01 (grey banks onto the spawn
+off 1 wall, teal off 2) and arena-04's teals. Mobile tanks leave that geometry
+within a second; a turret never does. `BANK_SIGHTLINE_ARENA` is the negative
+control, and swapping its one spawn letter for `T` and `B` controls the
+behaviour gate and the weight gate separately.
+
+**`determinism.test.ts` does not catch AI behaviour changes**, which is easy to
+assume it does. It asserts self-consistency — same seed, same result — and that
+is invariant under behaviour changes: giving brown a 0.5 `bankShotWeight` leaves
+all 7 of its tests passing while a trace probe moves. When that mutation was first
+run it passed the WHOLE suite (1155 tests); it now fails 5 tests in 2 files,
+because green's arrival added tests that watch the bank path — so the hole is
+narrower than it was, and the general point stands. Any claim that an AI edit is
+behaviour-preserving needs a golden trace comparison, not a green suite.
+
+STATIONARY still ignores `preferredDistance`/`minimumDistance`/`retreatChance`,
+and always will: they are a distance band for a tank that moves. "Every profile
+field is consumed" means consumed by the implementations it applies to. The 9-type Wii taxonomy in `config/reference/` is reference
 data only — nothing in the game reads it.
 
 **Arenas are data too.** Grids, design rationale (`notes`) and machine-checkable
@@ -86,7 +115,8 @@ design `claims` live in `config/data/arenas.json`, validated at load by
 `validateArenas` — a bad edit is a boot failure naming the exact path (e.g.
 `arenas[2].grid[4]`). `arena.ts` keeps every export it always had; `SPAWN_LETTERS`
 (`config/arena-types.ts`) is the single source of the spawn-letter map for the
-validator and `loadArena` — `src/sim/sandbox.ts` keeps its own `KIND_LETTER`
+validator and `loadArena` — green is `N`, because grey already holds `G` and
+re-lettering grey would rewrite every shipped grid — `src/sim/sandbox.ts` keeps its own `KIND_LETTER`
 table (plus a hardcoded `'P'`) for grid GENERATION, so re-lettering a kind in
 `SPAWN_LETTERS` without also updating `sandbox.ts` would leave the dev sandbox
 emitting a character `loadArena` rejects. Three claim types —

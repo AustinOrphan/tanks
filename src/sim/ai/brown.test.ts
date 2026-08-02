@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { brownDecision } from './brown';
-import { aimJitter, aimLead, profileAimSpread } from './targeting';
+import { aimJitter, aimLead, bankShot, lineOfSight, profileAimSpread } from './targeting';
 import { bulletConfig } from '../constants';
 import type { Tank, Vec2, Wall } from '../types';
 import type { World } from '../world';
@@ -201,5 +201,80 @@ describe('brownDecision', () => {
     expect(d.turretAngle).toBe(1.234);
     expect(d.mine).toBe(false);
     expect(d.nextTimer).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bank shots from the STATIONARY implementation.
+//
+// RICOCHET_SNIPER (bankShotWeight 0.55) routes here, and until this existed its
+// defining trait did nothing: bankShotWeight was read only in teal.ts. These
+// probe the capability through the INJECTED cfg rather than a shipped kind, so
+// they test the gate itself and stay true whatever the roster does later.
+// ---------------------------------------------------------------------------
+describe('brownDecision bank shots', () => {
+  const BROWN = configFor('brown');
+  /** brown's own config with the two shot weights overridden. */
+  const withWeights = (direct: number, bank: number) => ({
+    ...BROWN,
+    ai: { ...BROWN.ai, directShotWeight: direct, bankShotWeight: bank },
+  });
+
+  // Gunner and player on opposite sides of a blocking pillar, with a long wall
+  // below to bank off. The pillar spans the whole direct line; the floor does not.
+  const blocked = () => {
+    const gunner = tank(1, 'brown', { x: -4, y: 0 }, { aiState: 'aim', turretAngle: 1.234 });
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const walls = [wall(1, -1, -1.5, 1, 1.5), wall(2, -12, -6, 12, -4)];
+    return { gunner, player, w: world([gunner, player], walls) };
+  };
+
+  it('has no solution at all without the pillar in the way -- fixture sanity', () => {
+    // Guards the fixture itself: if the pillar stopped blocking, every test below
+    // would be measuring a DIRECT shot while claiming to measure a bank.
+    const { gunner, player } = blocked();
+    expect(lineOfSight(gunner.pos, player.pos, blocked().w.walls)).toBe(false);
+    // ...and with the pillar removed it is a clear line, so the pillar is what blocks.
+    const open = world([gunner, player], [wall(2, -12, -6, 12, -4)]);
+    expect(lineOfSight(gunner.pos, player.pos, open.walls)).toBe(true);
+  });
+
+  it('finds a bank when the direct line is blocked and the profile banks', () => {
+    const { gunner, w } = blocked();
+    const d = brownDecision(w, gunner, withWeights(0.45, 0.55));
+    expect(d.hasSolution).toBe(true);
+    expect(d.turretAngle).not.toBe(1.234); // not the held angle: it aimed at something
+  });
+
+  it('finds NOTHING in the same geometry when the profile does not bank', () => {
+    // The negative control, and the whole regression argument for shipped brown:
+    // STATIC_BASIC carries bankShotWeight 0, so this is brown's real behaviour.
+    const { gunner, w } = blocked();
+    const d = brownDecision(w, gunner, withWeights(1, 0));
+    expect(d.hasSolution).toBe(false);
+    expect(d.turretAngle).toBe(1.234); // holds its aim, exactly as before banking existed
+    expect(d.fire).toBe(false);
+    // Same call through the SHIPPED brown config, to prove the override above is
+    // not the only thing keeping brown quiet here.
+    expect(brownDecision(w, gunner).hasSolution).toBe(false);
+  });
+
+  it('prefers the DIRECT shot when it has both', () => {
+    // Open field plus the same bank wall: a direct line exists AND a bank exists.
+    const gunner = tank(1, 'brown', { x: -4, y: 0 }, { aiState: 'aim', turretAngle: 1.234 });
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const w = world([gunner, player], [wall(2, -12, -6, 12, -4)]);
+    const cfg = withWeights(0.45, 0.55);
+
+    // Non-vacuity: assert a bank solution genuinely EXISTS here, so "it chose the
+    // direct angle" is a real preference and not just the only option available.
+    const banked = bankShot(gunner.pos, player.pos, w.walls, cfg.weapon.ricochetCount);
+    expect(banked).not.toBeNull();
+
+    const d = brownDecision(w, gunner, cfg);
+    const direct = aimLead(gunner.pos, player.pos, { x: 0, y: 0 }, cfg.weapon.speed)
+      + aimJitter(w, gunner, profileAimSpread(cfg));
+    expect(d.turretAngle).toBeCloseTo(direct, 9);
+    expect(d.turretAngle).not.toBeCloseTo(banked! + aimJitter(w, gunner, profileAimSpread(cfg)), 6);
   });
 });
