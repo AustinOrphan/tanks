@@ -354,11 +354,25 @@ export function createMusicBed(
         }
       }
     }
-    // The dominant as an arpeggio -- root, third, fifth cycling upward -- in a
-    // voice the music already speaks.
-    const pc = t.chord.pitchClasses[t.played % t.chord.pitchClasses.length];
-    const arp = noteToHz(`${NAMES[pc]}3`);
-    if (arp !== null) note(arp, at, len * VOICES.pluck.hold, VOICES.pluck.peak, VOICES.pluck.type);
+    // The dominant assembles as a ROLLED chord: one tone enters every few
+    // steps, each a soft sine swell sustained to the end of the passage.
+    //
+    // Fourth iteration, again from a heard fault: cycling the tones as short
+    // pluck notes was "sudden and stark" (Austin) -- square is the harshest
+    // voice in the palette and it was exposed against a thinned texture. Rolled
+    // entries in sine build the same harmony with none of the plink: the
+    // envelope's slow attack over a long duration makes each entry a swell,
+    // and by the end of the passage the full chord is simply THERE.
+    const spread = Math.max(1, Math.floor(t.steps / t.chord.pitchClasses.length));
+    if (t.played % spread === 0) {
+      const idx = t.played / spread;
+      if (idx < t.chord.pitchClasses.length) {
+        const pc = t.chord.pitchClasses[idx];
+        const hz = noteToHz(`${NAMES[pc]}3`);
+        const remaining = (t.steps - t.played) * len;
+        if (hz !== null) note(hz, at, remaining + len, VOICES.drone.peak * 1.4, 'sine');
+      }
+    }
     t.played += 1;
     if (t.played >= t.steps) {
       // The passage is done: the incoming track starts its own cycle here.

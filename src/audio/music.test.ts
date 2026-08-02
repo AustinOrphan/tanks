@@ -299,16 +299,25 @@ describe('composed tracks', () => {
     for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
 
     const freqs = ctx.notes.map((n) => Math.round(n.freq));
-    // The dominant arrives as an ARPEGGIO -- root, third, fifth in octave 3 --
-    // in the pluck voice, not as a held block chord. Same three pitches, spread
-    // in time: motion instead of a slab.
-    for (const n of ['A3', 'C#3', 'E3']) {
-      expect(freqs, `transition should sound ${n}`).toContain(Math.round(noteToHz(n)!));
+    // The dominant assembles as a ROLLED chord: root, third, fifth entering at
+    // staggered times, each SUSTAINED to the end of the passage. Three heard
+    // faults excluded at once: the slab (all notes at once), the plink (short
+    // stark notes with a rhythm of their own -- Austin heard both the timbre
+    // and the rhythm as wrong), and absence.
+    const wanted = ['A3', 'C#3', 'E3'].map((x) => Math.round(noteToHz(x)!));
+    const domTones = ctx.notes.filter((n) => wanted.includes(Math.round(n.freq)));
+    expect(domTones.length).toBeGreaterThanOrEqual(3);
+    const entries = domTones.map((n) => n.startedAt);
+    expect(new Set(entries).size, 'the triad landed all at once: that is the slab').toBeGreaterThan(1);
+    // Sustained, not plinked: each tone rings for several steps, so the layer
+    // has no rhythmic figure to fight the bass pulse.
+    for (const n of domTones) {
+      expect(n.stoppedAt, `tone at ${n.startedAt} never got a stop time`).not.toBeNull();
+      expect(n.stoppedAt! - n.startedAt, `tone at ${n.startedAt} plinked`).toBeGreaterThan(1.5);
     }
-    const arpTimes = ctx.notes
-      .filter((n) => ['A3', 'C#3', 'E3'].some((x) => Math.round(n.freq) === Math.round(noteToHz(x)!)))
-      .map((n) => n.startedAt);
-    expect(new Set(arpTimes).size, 'the triad landed all at once: that is the slab').toBeGreaterThan(1);
+    // And the dominant layer enters FEWER times than the passage has steps:
+    // one note per step is a competing rhythm, which was the juxtaposition jar.
+    expect(domTones.length).toBeLessThan(4);
     // And the destination arrived.
     expect(freqs).toContain(Math.round(noteToHz('D1')!));
     expect(bed.currentTrackId()).toBe('to');
