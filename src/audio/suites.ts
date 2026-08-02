@@ -127,6 +127,73 @@ export function membersOf(suite: SuiteDef): MusicTrackDef[] {
  * at rather than cut to. Major even in a minor key -- the raised third is the
  * leading tone, and it is what does the pulling; a minor v has no such pull.
  */
+/**
+ * How related two KEYS are, for choosing the next suite.
+ *
+ * Austin: "probably weight same keys higher and then related keys." The tiers:
+ *
+ *   4 -- the same key: no harmonic distance at all.
+ *   2 -- relative major/minor (Am and C share every note), or a fifth apart in
+ *        the same mode (Am to Em or Dm): one accidental of distance.
+ *   1 -- parallel major/minor (Am and A): same tonic, different colour.
+ *   0 -- anything else: excluded from selection outright, because a join the
+ *        dominant has to drag across three accidentals is a jar no transition
+ *        machinery hides.
+ */
+export function keyAffinity(a: string, b: string): number {
+  const ca = parseChord(a);
+  const cb = parseChord(b);
+  if (!ca || !cb) return 0;
+  const minor = (c: Chord): boolean => (c.pitchClasses[1] - c.root + 12) % 12 === 3;
+  const sameMode = minor(ca) === minor(cb);
+  const interval = (cb.root - ca.root + 12) % 12;
+  if (interval === 0 && sameMode) return 4;
+  // Relative pair: minor root sits 3 below its relative major.
+  if (!sameMode && ((minor(ca) && interval === 3) || (minor(cb) && interval === 9))) return 2;
+  if (sameMode && (interval === 5 || interval === 7)) return 2;
+  if (interval === 0) return 1; // parallel
+  return 0;
+}
+
+/** Within 20% tempo, per Austin: beyond that a ramp reads as a gear change. */
+export const TEMPO_RATIO_LIMIT = 1.2;
+
+export interface RankedSuite {
+  suite: SuiteDef;
+  weight: number;
+}
+
+/**
+ * The suites that may follow `from`, weighted. Pure, so the policy is testable
+ * without randomness: tempo outside the limit excludes outright, then key
+ * affinity is the weight. An empty result means `from` has no musical neighbour
+ * and should simply keep cycling its own members.
+ */
+export function rankCandidates(from: SuiteDef, all: readonly SuiteDef[]): RankedSuite[] {
+  return all
+    .filter((s) => s.id !== from.id)
+    .map((s) => {
+      const ratio = Math.max(s.stepSeconds, from.stepSeconds) / Math.min(s.stepSeconds, from.stepSeconds);
+      const weight = ratio > TEMPO_RATIO_LIMIT ? 0 : keyAffinity(from.key, s.key);
+      return { suite: s, weight };
+    })
+    .filter((r) => r.weight > 0)
+    .sort((x, y) => y.weight - x.weight);
+}
+
+/** Weighted draw over rankCandidates. `rnd` in [0,1), injected for determinism. */
+export function pickNextSuite(from: SuiteDef, all: readonly SuiteDef[], rnd: () => number): SuiteDef | null {
+  const ranked = rankCandidates(from, all);
+  if (ranked.length === 0) return null;
+  const total = ranked.reduce((acc, r) => acc + r.weight, 0);
+  let draw = rnd() * total;
+  for (const r of ranked) {
+    draw -= r.weight;
+    if (draw < 0) return r.suite;
+  }
+  return ranked[ranked.length - 1].suite;
+}
+
 export function dominantOf(suite: SuiteDef): Chord {
   const home = parseChord(suite.key);
   if (!home) fail(`[${suite.id}].key`, `is not a chord name: ${JSON.stringify(suite.key)}`);

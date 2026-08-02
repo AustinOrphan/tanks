@@ -12,12 +12,15 @@
     ]
   },
   {
-    "id": "siege-set",
+    "id": "vanguard",
     "key": "Dm",
-    "stepSeconds": 0.22,
+    "stepSeconds": 0.16,
     "transition": "dominant",
     "members": [
-      "siege"
+      "vanguard",
+      "vanguard-push",
+      "vanguard-lull",
+      "vanguard-charge"
     ]
   }
 ]

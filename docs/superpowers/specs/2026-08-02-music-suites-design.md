@@ -88,6 +88,33 @@ tempo, bar length and progression — a member that disagrees cannot join
 seamlessly, and that should be a boot failure naming the path, like every other
 data error in this repo.
 
+## Compatibility rules (added 2026-08-02, after the siege join jarred)
+
+Austin heard the assault-to-siege join as "suddenly and pretty jarringly"
+transformed, and the diagnosis was contrast, not machinery: 47% tempo gap, on
+top of a key and texture change. Rules, per his direction "within 20% tempo and
+related keys, probably weight same keys higher and then related keys":
+
+- **Tempo is a hard limit**: adjacent suites must be within 20% (`TEMPO_RATIO_LIMIT`).
+  Beyond that a ramp reads as a gear change no matter what the harmony does.
+- **Key is a weight** (`keyAffinity`): same key 4, relative major/minor or a
+  fifth apart in the same mode 2, parallel major/minor 1, anything else 0 --
+  excluded outright.
+- `pickNextSuite` draws in proportion to those weights; `rankCandidates` is the
+  pure policy underneath it, testable without randomness.
+
+## The through line
+
+Austin: "maybe there needs to be a reasonably consistent through line in sets?
+Not monotonous but clearly related." Made structural rather than hoped for:
+sibling suites share **construction**, not material. The vanguard family is the
+arena family's shape in another key -- the same progression *skeleton*
+(i-VI-VII-V, the V major for its leading tone), the same 16-step bars, the same
+rhythmic cells (octave-jump bass, backbeat stabs), the same four textures
+(base / push / lull / charge) -- with its own pitches, pulse and generated
+lines. Clearly siblings; not the same piece. New suites should follow the same
+recipe: copy the construction, change the material.
+
 ## Selection
 
 A shuffle-bag over members, not independent draws: uniform random repeats a

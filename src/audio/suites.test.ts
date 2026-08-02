@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { SUITES, suiteById, membersOf, dominantOf } from './suites';
+import {
+  SUITES,
+  suiteById,
+  membersOf,
+  dominantOf,
+  keyAffinity,
+  rankCandidates,
+  pickNextSuite,
+  type SuiteDef,
+} from './suites';
 import { parseChord } from './chords';
 import { MUSIC_TRACKS } from './music-data';
 
@@ -69,6 +78,78 @@ describe('dominantOf', () => {
     const assault = suiteById('assault')!;
     expect(assault.key).toBe('Am');
     expect(dominantOf(assault).root).toBe(parseChord('E')!.root);
+  });
+});
+
+describe('keyAffinity', () => {
+  it('tiers keys the way the selection policy needs', () => {
+    // Table-driven over the relations that matter; each row names its tier.
+    const cases: Array<[string, string, number, string]> = [
+      ['Am', 'Am', 4, 'same key'],
+      ['C', 'C', 4, 'same key, major'],
+      ['Am', 'C', 2, 'relative major'],
+      ['C', 'Am', 2, 'relative minor'],
+      ['Am', 'Em', 2, 'dominant minor'],
+      ['Am', 'Dm', 2, 'subdominant minor'],
+      ['C', 'G', 2, 'dominant major'],
+      ['Am', 'A', 1, 'parallel major'],
+      ['A', 'Am', 1, 'parallel minor'],
+      ['Am', 'Ebm', 0, 'a tritone away: excluded'],
+      ['Am', 'Bm', 0, 'a tone away: excluded'],
+      ['C', 'F#', 0, 'tritone major: excluded'],
+    ];
+    for (const [a, b, want, label] of cases) {
+      expect(keyAffinity(a, b), `${a} -> ${b} (${label})`).toBe(want);
+    }
+  });
+});
+
+describe('rankCandidates / pickNextSuite', () => {
+  const mk = (id: string, key: string, stepSeconds: number): SuiteDef => ({
+    id, key, stepSeconds, transition: 'dominant', members: [],
+  });
+
+  it('excludes a tempo gap beyond 20% no matter how related the key', () => {
+    // The lesson of the siege join: 47% slower in the SAME related key still
+    // jarred. Tempo is a hard limit, not a weight.
+    const from = mk('a', 'Am', 0.15);
+    const ranked = rankCandidates(from, [from, mk('slow', 'Am', 0.22), mk('ok', 'Dm', 0.16)]);
+    expect(ranked.map((r) => r.suite.id)).toEqual(['ok']);
+  });
+
+  it('weights the same key above related keys', () => {
+    const from = mk('a', 'Am', 0.15);
+    const ranked = rankCandidates(from, [from, mk('rel', 'Dm', 0.15), mk('same', 'Am', 0.16)]);
+    expect(ranked[0].suite.id).toBe('same');
+    expect(ranked[0].weight).toBeGreaterThan(ranked[1].weight);
+  });
+
+  it('draws in proportion to weight, deterministically under an injected rnd', () => {
+    const from = mk('a', 'Am', 0.15);
+    const all = [from, mk('same', 'Am', 0.15), mk('rel', 'C', 0.15)];
+    // Weights 4 and 2: a draw below 4/6 picks 'same', above it picks 'rel'.
+    expect(pickNextSuite(from, all, () => 0.0)!.id).toBe('same');
+    expect(pickNextSuite(from, all, () => 0.65)!.id).toBe('same');
+    expect(pickNextSuite(from, all, () => 0.7)!.id).toBe('rel');
+    // And over a seeded run, BOTH appear -- weighted, not winner-takes-all.
+    let x = 42;
+    const rnd = (): number => {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+      return ((x >>> 0) % 1000) / 1000;
+    };
+    const picks = new Set(Array.from({ length: 60 }, () => pickNextSuite(from, all, rnd)!.id));
+    expect(picks).toEqual(new Set(['same', 'rel']));
+  });
+
+  it('returns null when nothing is compatible, rather than forcing a jar', () => {
+    const from = mk('a', 'Am', 0.15);
+    expect(pickNextSuite(from, [from, mk('far', 'Ebm', 0.15), mk('slow', 'Am', 0.5)], () => 0.5)).toBeNull();
+  });
+
+  it('the SHIPPED suites give assault at least one legal neighbour', () => {
+    const assault = suiteById('assault')!;
+    const ranked = rankCandidates(assault, SUITES);
+    expect(ranked.length, 'assault has no compatible neighbour to chain into').toBeGreaterThan(0);
   });
 });
 
