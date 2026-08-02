@@ -46,14 +46,14 @@ import { makeTank } from './arena';
 const COARSE = {
   id: 'coarse', cols: 6, rows: 6, cellSize: 2,
   legend: { '#': 'solid' as const, x: 'destructible' as const },
-  grid: ['......', '.#....', '......', '...xx.', '...xx.', '......'],
+  grid: ['......', '.##...', '......', '...xx.', '...xx.', '......'],
 } as never;
 const FINE = {
   id: 'fine', cols: 12, rows: 12, cellSize: 1,
   legend: { '#': 'solid' as const, x: 'destructible' as const },
   grid: [
     '............', '............',
-    '..##........', '..##........',
+    '..####......', '..####......',
     '............', '............',
     '......xxxx..', '......xxxx..',
     '......xxxx..', '......xxxx..',
@@ -74,6 +74,21 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
       w.map((x) => `${x.aabb.minX},${x.aabb.minY},${x.aabb.maxX},${x.aabb.maxY}`).sort().join('|');
     expect(a.length).not.toBe(b.length);
     expect(shape(a)).not.toBe(shape(b));
+
+    // The CANONICAL half of the same claim, direct rather than comparative: the fixture's
+    // one contiguous 2-cell solid run must merge to exactly ONE rectangle at EITHER cell
+    // size, matching mergeSolidRuns's own docstring ("the same region yields the same
+    // rectangles whatever cell size expressed it"). This is what "stop merging solid cells
+    // (emit one box per cell)" breaks -- LOS/bankShot/resolveWalls all stayed
+    // decomposition-invariant for every EXTERIOR point probed under that mutation (measured;
+    // see task-5-report.md), because headingIntoBox absorbs ray seam-grazes and Task 4's
+    // deepest-overlap resolveWalls absorbs circle seam-grazes -- so only a structural count
+    // on the wall list itself catches it. Boundary walls (always solid, always 4) are
+    // excluded by bounding the search to the interior.
+    const interiorSolid = (w: typeof a) =>
+      w.filter((x) => x.kind === 'solid' && x.aabb.minX >= 0 && x.aabb.maxX <= 12 && x.aabb.minY >= 0 && x.aabb.maxY <= 12);
+    expect(interiorSolid(a).length).toBe(1);
+    expect(interiorSolid(b).length).toBe(1);
   });
   const pts: { x: number; y: number }[] = [];
   for (let x = 0.35; x < 12; x += 0.37) for (let y = 0.35; y < 12; y += 0.37) pts.push({ x, y });
@@ -88,9 +103,9 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
   const exteriorPts = pts.filter((p) => !inside(p, a) && !inside(p, b));
 
   it('resolves every hull position identically', () => {
-    // Population: 878 of the 1024 swept points (146 excluded as starting inside a wall
+    // Population: 848 of the 1024 swept points (176 excluded as starting inside a wall
     // in one decomposition or the other).
-    expect(exteriorPts.length).toBe(878);
+    expect(exteriorPts.length).toBe(848);
     let moved = 0;
     for (const p of exteriorPts) {
       const ta = makeTank(1, 'player', { ...p }, 0);
@@ -118,5 +133,62 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
       if (x === null || y === null) expect(y, `${m.x},${m.y} -> ${t.x},${t.y}`).toBe(x);
       else expect(y, `${m.x},${m.y} -> ${t.x},${t.y}`).toBeCloseTo(x, 9);
     }
+
+    // Neither of the two checks above reaches bankShot's internal selection logic: the main
+    // sweep's destructible cluster is convex and isolated enough that only ONE candidate
+    // per face survives raySegmentVsAABB's own bounds check regardless of decomposition, so
+    // "first valid" and "shortest valid" coincide there by construction (measured: 0
+    // mismatches over 2.2M swept exterior pairs against three different fixture shapes,
+    // including an L-shaped destructible mass, under the first-valid mutation -- see
+    // task-5-report.md). A flat multi-cell destructible ROW does expose headingIntoBox
+    // (below), but not first-vs-shortest, for the same reason. Two targeted checks close
+    // that gap.
+
+    // (1) headingIntoBox: a flat 3-coarse-cell / 6-fine-cell destructible row, muzzle/target
+    // symmetric above it so the bounce lands exactly on a seam for interior x values --
+    // mirrors the proven pattern in ai/targeting.test.ts's "returns the same bank shot
+    // however the reflector is sliced" (solid there; destructible, which actually differs
+    // between COARSE and FINE, here).
+    const ROW_COARSE = {
+      id: 'row-coarse', cols: 8, rows: 6, cellSize: 2,
+      legend: { x: 'destructible' as const },
+      grid: ['........', '........', '........', '..xxx...', '........', '........'],
+    } as never;
+    const ROW_FINE = {
+      id: 'row-fine', cols: 16, rows: 12, cellSize: 1,
+      legend: { x: 'destructible' as const },
+      grid: [
+        '................', '................', '................', '................',
+        '................', '................', '....xxxxxx......', '....xxxxxx......',
+        '................', '................', '................', '................',
+      ],
+    } as never;
+    const rowA = loadArena(ROW_COARSE).walls;
+    const rowB = loadArena(ROW_FINE).walls;
+    let rowCompared = 0;
+    for (let mx = 4.5; mx < 10; mx += 0.5) for (let tx = 4.5; tx < 10; tx += 0.5) {
+      const m = { x: mx, y: 4 };
+      const t = { x: tx, y: 2 };
+      rowCompared++;
+      const x = bankShot(m, t, rowA, 1);
+      const y = bankShot(m, t, rowB, 1);
+      if (x === null || y === null) expect(y, `row ${mx}->${tx}`).toBe(x);
+      else expect(y, `row ${mx}->${tx}`).toBeCloseTo(x, 9);
+    }
+    expect(rowCompared).toBe(121); // population: 11 muzzle x 11 target x-positions
+
+    // (2) first-vs-shortest: two NON-collinear reflectors so neither blocks the other's
+    // path, listed FAR-then-NEAR so array order and length order disagree. Not a
+    // coarse/fine comparison (that pair never diverges here either, per the note above) --
+    // a direct correctness check against the analytically shorter path.
+    const far = { id: 101, kind: 'solid' as const, destroyed: false, aabb: { minX: 20, minY: -10, maxX: 21, maxY: 10 } };
+    const near = { id: 102, kind: 'solid' as const, destroyed: false, aabb: { minX: -10, minY: 5, maxX: 20, maxY: 6 } };
+    const muzzle = { x: 0, y: 0 };
+    const target = { x: 3, y: 0 };
+    // Mirroring target(3,0) across near's top face (y=5) and intersecting the line from
+    // muzzle gives the analytic bounce (1.5, 5); off far's left face (x=20) gives (20, 0).
+    // near's round trip (2*sqrt(1.5^2+5^2) ~ 10.44) is far shorter than far's (2*20 = 40).
+    const expectedAngle = Math.atan2(5, 1.5);
+    expect(bankShot(muzzle, target, [far, near], 1)).toBeCloseTo(expectedAngle, 9);
   });
 });
