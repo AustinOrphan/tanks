@@ -65,12 +65,18 @@ npx vitest run src/sim/ai/pacifist.test.ts --reporter=basic 2>&1 | grep -E "Test
 
 - [ ] **Step 2: Record a trace fingerprint over all four arenas**
 
-Create `src/sim/zz-baseline.test.ts` (temporary — deleted in Step 4):
+Create `tools/baseline/trace.test.ts` (temporary — deleted in Task 5).
+
+**It must live under `tools/`, NOT `src/sim/`.** `purity.test.ts` scans every file under
+`src/sim/` and rejects `node:crypto` twice over — "reaches a Node builtin" and "forbidden
+non-determinism". Verified: the identical probe fails 2 purity tests in `src/sim/` and
+passes under `tools/`. Vitest picks up `tools/**` tests already (`tools/gallery/args.test.ts`
+runs today).
 
 ```typescript
 import { describe, it } from 'vitest';
-import { ARENAS, createWorldFor } from './arena';
-import { step } from './world';
+import { ARENAS, createWorldFor } from '../../src/sim/arena';
+import { step } from '../../src/sim/world';
 import { createHash } from 'node:crypto';
 
 describe('baseline', () => {
@@ -98,26 +104,31 @@ describe('baseline', () => {
 Run it and record the full hash in the report:
 
 ```bash
-npx vitest run src/sim/zz-baseline.test.ts --reporter=basic 2>&1 | grep BASELINE
+npx vitest run tools/baseline/trace.test.ts --reporter=basic 2>&1 | grep BASELINE
 ```
 
 - [ ] **Step 3: Record per-arena geometry**
 
 ```bash
 npx vitest run src/sim/arena-validation.test.ts -t "recomputes every quoted count" --reporter=basic 2>&1 | tail -3
-node -e "
-const { execSync } = require('node:child_process');
-" ; python3 -c "
+python3 -c "
 import json
 d=json.load(open('src/sim/config/data/arenas.json'))
 for a in d['arenas']:
     print(a['id'], a['cols'], 'x', a['rows'], '@', a['cellSize'], ' claims', len(a['claims']))"
 ```
 
-- [ ] **Step 4: Keep the probe, do not commit it**
+- [ ] **Step 4: Commit the probe as WIP**
 
-Leave `zz-baseline.test.ts` in the working tree for now — Task 5 re-runs it. It is deleted
-before the final commit. Record in the report that it exists and must not ship.
+It is committed deliberately, not left dirty: the Global Constraints require a commit before
+any mutation experiment, and Task 2 runs a transform over the same tree. Task 5 re-runs the
+probe and then deletes it, so it never reaches the final branch. Record its path and the
+baseline hash in the report.
+
+```bash
+git add tools/baseline/trace.test.ts
+git commit -m "wip: baseline trace probe, deleted once the upscale is verified"
+```
 
 ---
 
@@ -245,7 +256,7 @@ than lucky.
 - [ ] **Step 4: Apply the transform**
 
 ```bash
-git add -A && git commit -m "wip: baseline probe and resolution pins before the upscale"
+git add -A && git commit -m "wip: resolution pins before the upscale"
 node tools/upscale-arenas.mjs
 ```
 
@@ -362,12 +373,12 @@ git add -A && git commit -m "tests: move the population pins the finer grid legi
 
 ### Task 5: Prove nothing observable changed
 
-**Files:** delete `src/sim/zz-baseline.test.ts` at the end.
+**Files:** delete `tools/baseline/trace.test.ts` at the end.
 
 - [ ] **Step 1: Re-run the fingerprint**
 
 ```bash
-npx vitest run src/sim/zz-baseline.test.ts --reporter=basic 2>&1 | grep BASELINE
+npx vitest run tools/baseline/trace.test.ts --reporter=basic 2>&1 | grep BASELINE
 ```
 
 Expected: **byte-identical** to Task 1's hash. This is the plan's headline claim. If it
@@ -412,7 +423,7 @@ node /home/dev/.claude/jobs/34bc5380/tmp/shoot.mjs 5231 '?dev=1&level=1&seed=7' 
 - [ ] **Step 5: Delete the probe and commit**
 
 ```bash
-rm src/sim/zz-baseline.test.ts
+rm -r tools/baseline
 git add -A && git commit -m "verify: the upscale reproduces every seeded baseline exactly"
 ```
 
