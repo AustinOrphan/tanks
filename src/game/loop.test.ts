@@ -77,8 +77,16 @@ interface Recorder {
   removed: Array<[string, (e: never) => void]>;
   disposed: string[];
   musicStarts: number;
+  /**
+   * Every music call in ORDER, on one log. Three independent counters cannot
+   * see sequence: review swapped startMusic and setMusicContext in loop.ts and
+   * the whole 1268-test suite stayed green.
+   */
+  audioCalls: string[];
   musicStops: number;
   musicIntensities: number[];
+  musicContexts: string[];
+  musicDucks: boolean[];
   unlocks: number;
   samples: number;
   hudRoots: HTMLElement[];
@@ -150,8 +158,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     removed: [],
     disposed: [],
     musicStarts: 0,
+    audioCalls: [],
     musicStops: 0,
     musicIntensities: [],
+    musicContexts: [],
+    musicDucks: [],
     unlocks: 0,
     samples: 0,
     hudRoots: [],
@@ -228,6 +239,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       play: () => {},
       startMusic: () => {
         rec.musicStarts += 1;
+        rec.audioCalls.push('start');
       },
       stopMusic: () => {
         rec.musicStops += 1;
@@ -244,6 +256,14 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       setMusicIntensity: (v: number) => {
         rec.musicIntensities.push(v);
+      },
+      setMusicContext: (c: string) => {
+        rec.musicContexts.push(c);
+        rec.audioCalls.push(`context:${c}`);
+      },
+      duckMusic: (d: boolean) => {
+        rec.musicDucks.push(d);
+        rec.audioCalls.push(`duck:${d}`);
       },
       dispose: () => {
         rec.disposed.push('audio');
@@ -731,11 +751,26 @@ describe('startGameWith: HUD wiring', () => {
     h.handle.dispose();
   });
 
-  it('starts the music when, and only when, play begins', () => {
-    const h = boot();
-    expect(h.rec.musicStarts).toBe(0);
-    h.setState('playing');
-    expect(h.rec.musicStarts).toBe(1);
+  it('starts the music AT BOOT, on the title screen', () => {
+    // This REPLACES "starts the music when, and only when, play begins". The
+    // title screen used to be silent -- music existed only during play, so the
+    // menu piece was written and never heard. Boot matters specifically because
+    // the initial title panel is pushed straight to the HUD without going
+    // through the state machine, so hanging the music off onChange alone left
+    // this path silent; a browser probe caught it after the unit tests passed.
+    const h = boot(makeDeps());
+    // The exact SEQUENCE, not three independent counters. Review swapped
+    // startMusic and setMusicContext in loop.ts and all 1268 tests stayed
+    // green; it also doubled the startMusic call and nothing noticed. Both
+    // were lost power from the deleted test, which pinned `musicStarts` at
+    // exactly 1. (Neither is a live defect -- the engine stores the context
+    // whether or not the bed exists yet, and startMusic is idempotent -- but
+    // an ordering the tests cannot see is one this repo has been bitten by.)
+    expect(h.rec.audioCalls, 'boot left the title screen silent').toEqual([
+      'start',
+      'context:menu',
+      'duck:false',
+    ]);
     h.handle.dispose();
   });
 
@@ -800,19 +835,62 @@ describe('startGameWith: HUD wiring', () => {
     h.handle.dispose();
   });
 
-  it('STOPS the music whenever play stops, so the bed does not run forever', () => {
-    // Nothing called stopMusic before: harmless while music was always silent,
-    // but the generated bed is live synthesis, and mute only zeroes its gain --
-    // the oscillators keep churning through pause, the win panel and the title.
-    const h = boot();
-    h.setState('playing');
-    expect(h.rec.musicStops).toBe(0);
-    for (const s of ['paused', 'win', 'lose', 'title'] as const) {
-      const before = h.rec.musicStops;
+  it('MOVES the music to the world each state belongs to', () => {
+    // The title screen was silent before this: music played only while playing,
+    // so the menu piece existed and was never heard in the game.
+    const h = boot(makeDeps());
+    const seen = (s: GameState): string => {
       h.setState(s);
-      expect(h.rec.musicStops, s).toBe(before + 1);
-    }
+      return h.rec.musicContexts.at(-1)!;
+    };
+    expect(seen('title')).toBe('menu');
+    expect(seen('playing')).toBe('arena');
+    expect(seen('win')).toBe('victory');
+    expect(seen('lose')).toBe('defeat');
+    // Pause stays in the ARENA world: the round is still there behind the
+    // panel, and moving the music would make a pause feel like leaving.
+    h.setState('playing');
+    expect(seen('paused')).toBe('arena');
     h.handle.dispose();
+  });
+
+  it('DUCKS on pause instead of stopping, and unducks on resume', () => {
+    // Stopping discards the playlist's committed decisions and leaves the
+    // scheduler at an ambiguous position -- both blockers in the suite-wiring
+    // review came from that path. Ducking touches only the gain.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    expect(h.rec.musicDucks.at(-1)).toBe(false);
+    h.setState('paused');
+    expect(h.rec.musicDucks.at(-1), 'pause did not duck').toBe(true);
+    h.setState('playing');
+    expect(h.rec.musicDucks.at(-1), 'resume did not unduck').toBe(false);
+    // And the music was never stopped along the way.
+    expect(h.rec.musicStops, 'pause stopped the music instead of ducking').toBe(0);
+    h.handle.dispose();
+  });
+
+  it('keeps the music running on every screen, not only while playing', () => {
+    const h = boot(makeDeps());
+    for (const s of ['title', 'playing', 'paused', 'win', 'lose'] as const) h.setState(s);
+    expect(h.rec.musicStops).toBe(0);
+    expect(h.rec.musicStarts).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it('the bed still cannot outlive the game: dispose tears it down', () => {
+    // This REPLACES "stops the music whenever play stops". That property was
+    // right when music existed only during play; now every screen has its own
+    // context and stopping between them would defeat the handled joins. The
+    // concern underneath it -- a bed synthesising forever -- is now dispose's
+    // job, so that is what gets pinned.
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.setState('paused');
+    h.setState('title');
+    expect(h.rec.musicStops, 'a state change stopped the music').toBe(0);
+    h.handle.dispose();
+    expect(h.rec.disposed, 'dispose did not tear down the audio engine').toContain('audio');
   });
 
   it('shows the initial state and stats before any frame runs', () => {

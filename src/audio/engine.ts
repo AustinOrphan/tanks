@@ -3,8 +3,8 @@ import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
 import { synthVoice } from './synth';
 import { createMusicBed, type MusicBed } from './music';
 import { trackById } from './music-data';
-import { SUITES } from './suites';
-import { defaultDirector } from './playlist';
+import { SUITES, type SuiteContext } from './suites';
+import { defaultDirector, type MusicDirector } from './playlist';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -22,6 +22,18 @@ export interface AudioEngine {
    */
   setMusicIntensity(v: number): void;
   /**
+   * Which part of the game is on screen. Changing it moves the music to that
+   * world through the same handled join as any suite change.
+   */
+  setMusicContext(context: SuiteContext): void;
+  /**
+   * Duck the music instead of stopping it -- for pause. Stopping and restarting
+   * is what produced both blockers in the suite-wiring review: it discards
+   * committed policy and leaves the scheduler at an ambiguous position. Ducking
+   * touches only the gain, so a resume is genuinely seamless.
+   */
+  duckMusic(ducked: boolean): void;
+  /**
    * Open the audio context from inside a user-gesture handler (the Start
    * button). Safari/iOS will not start a context resumed from anywhere else,
    * and the sim's sounds are emitted from the rAF loop, which is never a
@@ -38,6 +50,8 @@ const MUSIC_VOLUME = 0.25;
  * no matching entry falls through to the generated bed rather than going silent.
  */
 export const MUSIC_TRACK_ID = 'arena';
+/** How far the music drops while paused. Quiet enough to recede, not silent. */
+export const DUCK_FACTOR = 0.25;
 
 // Cap on simultaneous procedural voices. A mine chain-reaction can emit a
 // dozen SFX on one tick; identical tones started at the same currentTime sum
@@ -69,6 +83,9 @@ const FALLBACK_FREQ: Record<string, number> = {
 export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   const sounds: Record<string, Howl | null> = {};
   let music: Howl | null = null;
+  // Whether the game currently WANTS music, as opposed to whether any is
+  // sounding. The two differ while a load is in flight.
+  let musicWanted = false;
   let muted = false;
   let masterVolume = DEFAULT_VOLUME;
   let ctx: AudioContext | null = null;
@@ -83,6 +100,19 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   // Remembered, so an intensity set before the bed exists is not lost -- the
   // loop pushes it every round, and the bed is built lazily on first play.
   let musicIntensity = 0;
+  let musicContext: SuiteContext = 'menu';
+  let musicDucked = false;
+  let director: MusicDirector | null = null;
+  /** One place decides the bed's level, so mute, volume and duck cannot fight. */
+  function applyMusicVolume(): void {
+    const duck = musicDucked ? DUCK_FACTOR : 1;
+    bed?.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume * duck);
+    // The Howl path needs the duck too, or pause would behave differently
+    // depending on whether the asset happened to load. Only the duck: Howler
+    // applies masterVolume globally (Howler.volume) and mute globally
+    // (Howler.mute), so folding either in here would apply it twice.
+    music?.volume(MUSIC_VOLUME * duck);
+  }
 
   // Push the default through immediately. Howler's own default is 1.0, so
   // deferring this until the first slider drag leaves the HUD showing
@@ -107,6 +137,11 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     music = new Howl({ src: [manifest.music], loop: true, volume: MUSIC_VOLUME, preload: true });
     music.on('loaderror', () => {
       music = null;
+      // The failure arrives ASYNCHRONOUSLY, and the game now asks for music at
+      // boot -- inside the window where this Howl still looks playable, so
+      // startMusic took the Howl branch and returned. Nothing else would ever
+      // retry, and the screen that asked would stay silent for its whole life.
+      if (musicWanted) beginMusic();
     });
   } catch {
     music = null;
@@ -263,6 +298,60 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     osc.stop(audio.currentTime + 0.2);
   }
 
+  /**
+   * Named, not inline, because the music Howl's `loaderror` has to be able to
+   * call it: the load fails after the game has already asked for music.
+   */
+  function beginMusic(): void {
+    musicWanted = true;
+    if (music && !music.playing()) {
+      music.play();
+      return;
+    }
+    // No track loaded: generate one. Music was the ONE thing with no fallback
+    // -- a failed load left the game silent with nothing able to retry -- so
+    // this is the path that actually runs today.
+    if (music) return;
+    const audio = ensureCtx();
+    if (!audio) return;
+    // The playlist walks the suite graph -- shuffle bag inside a set, weighted
+    // neighbour selection across sets -- with the generated bed still the
+    // floor for degenerate data. This is the line that makes everything in
+    // suites.ts reachable from the game.
+    if (!bed) {
+      // Seeded, not Math.random: synth.ts and music.ts both sit either side of
+      // this line and explicitly reject Math.random, and an unrepeatable walk
+      // means "that join sounded awful" can never be reproduced. The seed is
+      // taken once from the clock, so sessions still differ.
+      let rngState = (Date.now() & 0x7fffffff) || 1;
+      const rnd = (): number => {
+        rngState ^= rngState << 13;
+        rngState ^= rngState >>> 17;
+        rngState ^= rngState << 5;
+        return ((rngState >>> 0) % 100000) / 100000;
+      };
+      director = defaultDirector(SUITES, rnd);
+      // Enter the context BEFORE the bed exists, so the screen OPENS on its own
+      // track. Building on the start suite and then changing suite would be a
+      // handled join out of music that never sounded: the title screen's first
+      // bar would carry a tempo ramp and an overlay of an arena track's final
+      // lead bar, generated fresh for a piece the player has not heard.
+      // defaultDirector only returns null when 'arena' is missing too, so the
+      // MUSIC_TRACK_ID fallback here is unreachable with shipped data.
+      const opening =
+        director?.enterContext(musicContext) ?? director?.first() ?? trackById(MUSIC_TRACK_ID);
+      bed = createMusicBed(audio, ensureBus(audio), { track: opening, director });
+    } else {
+      // The bed already exists, so moving worlds IS a change of suite, and gets
+      // the same handled join any suite change does.
+      const entry = director?.enterContext(musicContext);
+      if (entry) bed.changeSuite(entry);
+    }
+    applyMusicVolume();
+    bed.setIntensity(musicIntensity);
+    bed.start();
+  }
+
   return {
     play(key, opts) {
       const howl = sounds[key];
@@ -274,46 +363,9 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
         beep(key, opts);
       }
     },
-    startMusic() {
-      if (music && !music.playing()) {
-        music.play();
-        return;
-      }
-      // No track loaded: generate one. Music was the ONE thing with no fallback
-      // -- a failed load left the game silent with nothing able to retry -- so
-      // this is the path that actually runs today.
-      if (music) return;
-      const audio = ensureCtx();
-      if (!audio) return;
-      // The playlist walks the suite graph -- shuffle bag inside a set, weighted
-      // neighbour selection across sets -- with the generated bed still the
-      // floor for degenerate data. This is the line that makes everything in
-      // suites.ts reachable from the game.
-      if (!bed) {
-        // Seeded, not Math.random: synth.ts and music.ts both sit either side of
-        // this line and explicitly reject Math.random, and an unrepeatable walk
-        // means "that join sounded awful" can never be reproduced. The seed is
-        // taken once from the clock, so sessions still differ.
-        let rngState = (Date.now() & 0x7fffffff) || 1;
-        const rnd = (): number => {
-          rngState ^= rngState << 13;
-          rngState ^= rngState >>> 17;
-          rngState ^= rngState << 5;
-          return ((rngState >>> 0) % 100000) / 100000;
-        };
-        const director = defaultDirector(SUITES, rnd);
-        // defaultDirector only returns null when 'arena' is missing too, so the
-        // old MUSIC_TRACK_ID fallback here was unreachable.
-        bed = createMusicBed(audio, ensureBus(audio), {
-          track: director?.first() ?? trackById(MUSIC_TRACK_ID),
-          director,
-        });
-      }
-      bed.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
-      bed.setIntensity(musicIntensity);
-      bed.start();
-    },
+    startMusic: () => beginMusic(),
     stopMusic() {
+      musicWanted = false;
       if (music) music.stop();
       bed?.stop();
     },
@@ -321,12 +373,12 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       muted = m;
       Howler.mute(m);
       // Howler.mute does not reach the generated bed: it is our own graph.
-      bed?.setVolume(m ? 0 : MUSIC_VOLUME * masterVolume);
+      applyMusicVolume();
     },
     toggleMute() {
       muted = !muted;
       Howler.mute(muted);
-      bed?.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
+      applyMusicVolume();
       return muted;
     },
     isMuted() {
@@ -337,7 +389,7 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       Howler.volume(masterVolume);
       // Same reason as setMuted: Howler.volume does not touch our own graph, so
       // the slider would move the SFX and leave the bed at its old level.
-      bed?.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
+      applyMusicVolume();
     },
     getVolume() {
       return masterVolume;
@@ -345,6 +397,15 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     setMusicIntensity(v) {
       musicIntensity = Math.max(0, Math.min(1, v));
       bed?.setIntensity(musicIntensity);
+    },
+    setMusicContext(context) {
+      musicContext = context;
+      const track = director?.enterContext(context);
+      if (track) bed?.changeSuite(track);
+    },
+    duckMusic(ducked) {
+      musicDucked = ducked;
+      applyMusicVolume();
     },
     unlock() {
       ensureCtx(true);
@@ -360,6 +421,13 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       }
       bed?.dispose();
       bed = null;
+      // A late `loaderror` can still arrive after this, and it calls back into
+      // beginMusic when the game wants music. That is harmless TODAY only
+      // because ensureCtx() returns null once `disposed` -- one refactor of
+      // that guard away from resurrecting audio on a torn-down engine. Disarm
+      // it here so the safety does not rest on a single unrelated line.
+      musicWanted = false;
+      director = null;
       for (const t of voiceTimers) clearTimeout(t);
       voiceTimers.clear();
       for (const k of Object.keys(sounds)) sounds[k]?.unload();

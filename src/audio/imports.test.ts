@@ -76,3 +76,40 @@ describe('the audio module graph stays acyclic', () => {
     }
   });
 });
+
+/** Source with `//` and block comments removed, so a mention is not a call. */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
+describe('src/audio is deterministic by construction', () => {
+  it('calls Math.random NOWHERE -- every source of chance is a seeded rng', () => {
+    // music.ts and synth.ts reject Math.random in their own comments, and
+    // engine.ts seeds the director from the clock precisely so that "that join
+    // sounded awful" can be reproduced. All three claims were COMMENTS: review
+    // replaced engine.ts's seeded xorshift with Math.random at the call site
+    // and the whole 1268-test suite stayed green, because the shuffle inside
+    // playlist.ts (which IS pinned) was untouched. This scans the wiring.
+    // Population: every non-test module in src/audio -- 11 files at this commit
+    // (`ls src/audio/*.ts | grep -v '\.test\.ts' | wc -l`).
+    const offenders = MODULES.filter((f) => /Math\s*\.\s*random/.test(stripComments(sources[f])));
+    expect(offenders, `Math.random in: ${offenders.join(', ')}`).toEqual([]);
+    // Not pinned to 11: adding a module must not fail this. The floor only
+    // catches a glob that silently matched nothing, which would report a
+    // clean sweep over zero files.
+    expect(MODULES.length, 'the glob matched nothing -- a vacuous sweep').toBeGreaterThan(5);
+  });
+
+  it('...and the scan can actually tell a call from a mention', () => {
+    // The negative controls. A guard is worth what its own tests prove: without
+    // these, a stripComments that returned '' would report a clean sweep.
+    const detect = (src: string): boolean => /Math\s*\.\s*random/.test(stripComments(src));
+    expect(detect('const r = Math.random();'), 'missed a plain call').toBe(true);
+    expect(detect('const r = Math . random ();'), 'missed a spaced call').toBe(true);
+    expect(detect('// never use Math.random here'), 'flagged a line comment').toBe(false);
+    expect(detect('/* seeded, not Math.random */'), 'flagged a block comment').toBe(false);
+    expect(detect('/* a\n * Math.random mention\n */\nconst x = 1;'), 'flagged a multi-line comment').toBe(
+      false,
+    );
+  });
+});

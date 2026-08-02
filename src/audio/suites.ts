@@ -21,8 +21,20 @@ const FILE = 'music-suites.json';
 /** How a suite is entered from whatever was playing before it. */
 export type TransitionKind = 'dominant' | 'outro' | 'bridge';
 
+/** Where in the game a suite belongs. */
+export type SuiteContext = 'menu' | 'arena' | 'victory' | 'defeat';
+
+export const SUITE_CONTEXTS: SuiteContext[] = ['menu', 'arena', 'victory', 'defeat'];
+
 export interface SuiteDef {
   id: string;
+  /**
+   * The game state this suite scores. The roam only ever considers suites in
+   * the CURRENT context, which is why a menu suite may sit far outside the
+   * tempo rules that govern arena-to-arena joins: a scene change is a
+   * legitimate place for a bigger jump, and it never happens mid-roam.
+   */
+  context: SuiteContext;
   /** The suite's home chord. The dominant transition is derived from this. */
   key: string;
   stepSeconds: number;
@@ -48,6 +60,10 @@ function parseSuite(raw: unknown, i: number): SuiteDef {
   const key = raw.key;
   if (typeof key !== 'string' || !parseChord(key)) {
     fail(`${at}.key`, `must be a chord name, got ${JSON.stringify(key)}`);
+  }
+  const context = raw.context ?? 'arena';
+  if (typeof context !== 'string' || !SUITE_CONTEXTS.includes(context as SuiteContext)) {
+    fail(`${at}.context`, `must be one of ${SUITE_CONTEXTS.join(', ')}, got ${JSON.stringify(context)}`);
   }
   const stepSeconds = raw.stepSeconds;
   if (typeof stepSeconds !== 'number' || !Number.isFinite(stepSeconds) || stepSeconds <= 0) {
@@ -102,7 +118,7 @@ function parseSuite(raw: unknown, i: number): SuiteDef {
       `"${first.id}" ends on ${first.chords[first.chords.length - 1]}, not the dominant of ${key} -- the pickup entry needs the final bar to be the V`,
     );
   }
-  return { id, key, stepSeconds, transition: transition as TransitionKind, members };
+  return { id, key, context: context as SuiteContext, stepSeconds, transition: transition as TransitionKind, members };
 }
 
 function parseAll(raw: unknown): SuiteDef[] {
@@ -122,6 +138,10 @@ export const __parseAllForTests = parseAll;
 export const SUITES: readonly SuiteDef[] = Object.freeze(
   parseAll(suitesJson).map((s) => Object.freeze({ ...s, members: Object.freeze([...s.members]) as string[] })),
 );
+
+export function suitesFor(context: SuiteContext): SuiteDef[] {
+  return SUITES.filter((s) => s.context === context);
+}
 
 export function suiteById(id: string): SuiteDef | null {
   return SUITES.find((s) => s.id === id) ?? null;
@@ -186,7 +206,9 @@ export interface RankedSuite {
  */
 export function rankCandidates(from: SuiteDef, all: readonly SuiteDef[]): RankedSuite[] {
   return all
-    .filter((s) => s.id !== from.id)
+    // Same context only: the roam stays inside the world it is scoring, and a
+    // menu suite is never a candidate to follow an arena one.
+    .filter((s) => s.id !== from.id && s.context === from.context)
     .map((s) => {
       const ratio = Math.max(s.stepSeconds, from.stepSeconds) / Math.min(s.stepSeconds, from.stepSeconds);
       const weight = ratio > TEMPO_RATIO_LIMIT ? 0 : keyAffinity(from.key, s.key);
