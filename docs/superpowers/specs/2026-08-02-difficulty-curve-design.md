@@ -99,28 +99,28 @@ its debut. Only the debut itself is pinned.
 
 The player's own entry (`firstMission: 0`) is exempt from both checks — it is in every level.
 
-## The one new claim type
+## No new claim type — `bankOnly` was tried and withdrawn
 
-**`bankOnly`** — the named enemy has no direct line of sight from *any* open cell on the
-board, so the only shot is a ricochet.
+An earlier draft of this spec added a `bankOnly` claim: the named enemy has no direct line
+from any open cell, so the only shot is a ricochet. **It is geometrically impossible, and
+the measurements are worth keeping.**
 
-```json
-{ "type": "bankOnly", "enemy": [9, 3],
-  "why": "Level 2's whole lesson. If any cell could see this brown directly, the level would
-          teach nothing: the player would shoot it the old way and never learn to bank." }
-```
+- **Zero direct lines requires full enclosure**, which trips the sealed-pocket rule. A brown
+  walled on all four sides measures `1/59` cells with a direct line (its own) and
+  `sealed pocket: 58 of 59 breachable cells reachable`. The two conditions cannot both hold.
+- **Weakening it to "few direct lines" fails on the player's ricochet budget.** The player's
+  shell bounces exactly ONCE, so a bank is straight -> one wall -> straight. Every geometry
+  tried that pushed the direct-line count down to 16-25 of ~58 also measured
+  `bank=false` from the player spawn: the same walls that deny the direct line deny the
+  final leg. Four candidate layouts, all four the same result.
+- **The surviving weak form does not discriminate.** "No direct line from the player spawn
+  but a bank path exists" is true of level 1's board as well as level 2's, so it would
+  certify a level that teaches nothing about banking.
 
-Verified by the runner in `arena-claims.ts`: sweep every open cell, assert `lineOfSight`
-to the enemy is false from all of them, and additionally assert `bankShot` from at least
-one of them is non-null — otherwise the level is not merely bank-only but unwinnable.
-The failure message names how many cells could see it, and draws the board.
-
-`enemy` is validated as an enemy-spawn cell at load (`enemySpawnCell()`, the same helper
-`sightlineAfterBreach` uses), so a claim pointing at floor is a boot failure.
-
-Deliberately not added: a claim for "this level requires cover" or "this level requires
-mines". Neither has a crisp geometric statement, and a claim that cannot be checked
-precisely is worse than none — it advertises coverage that does not exist.
+So level 2's lesson is carried by design judgement and validated by playing, exactly like
+the difficulty ordering above. This spec adds NO claim type. Recorded rather than deleted
+because the next person to reach for a "this level requires mechanic X" claim should see
+that it was tried, and why the ricochet budget is what stops it.
 
 ## Decoupling the test arena from level 1
 
@@ -149,9 +149,8 @@ the other during implementation; the split is the substance of that task, not a 
 - **Validator negative controls**, one per new check, against corrupted copies of the
   shipped file: a tank before its floor, and a `firstMission` naming a level that does not
   contain the tank. The repo's existing validators all carry these.
-- **The `bankOnly` runner needs a meta-test**: a fixture declaring `bankOnly` on an enemy
-  that IS directly visible must fail, and one on an enemy no shot can reach at all must
-  also fail. A guard is worth what its own tests prove.
+- **No claim-runner work**: this spec adds no claim type (see above), so `arena-claims.ts`
+  is untouched and its meta-tests are unchanged.
 - **`EXPECTED_CLAIMS`** in `arena-validation.test.ts` gains a row per new arena.
 - **Population pins move**: `cell-mapping.test.ts`'s cell and spawn totals, and the
   cover-ratio `EXPECTED` table, both of which are per-arena and grow with the sequence.
@@ -161,6 +160,15 @@ the other during implementation; the split is the substance of that task, not a 
 - **A playability probe per new level**, matching the one used for arena-04: 40 seeded
   pacifist games reporting free wins, player deaths, timeouts and median time-to-kill. A
   teaching level that a wandering player clears without firing is not teaching.
+
+## Build order
+
+The first stretch is the enabling work plus levels 1-2 only, not 1-5. Reason: with the
+difficulty probes demoted to a floor check and the teaching claim withdrawn, nothing
+automated can tell us whether the opening works. Levels 3-5 are built after levels 1-2 have
+been PLAYED. Until the 9-10 stretch exists the sequence is nine levels, so arena-04 sits at
+slot 9 and green's `firstMission` is 9; adding that stretch later moves it to 11, and the
+debut-is-real check fails loudly if the retune is forgotten.
 
 ## Out of scope
 
