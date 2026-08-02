@@ -35,7 +35,7 @@ export function arenaBounds(arena: Arena): { width: number; height: number } {
   return { width: arena.cols * arena.cellSize, height: arena.rows * arena.cellSize };
 }
 
-function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, angle: number): Tank {
+export function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, angle: number): Tank {
   return {
     id,
     kind,

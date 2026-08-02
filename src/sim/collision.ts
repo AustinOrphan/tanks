@@ -293,12 +293,44 @@ export function driveVelocity(tank: Tank): Vec2 {
   return vscale(driveDirection(tank.desiredMove), configFor(tank.kind).movementSpeed);
 }
 
-/** Push a tank out of every non-destroyed wall it overlaps. */
+/**
+ * Push a tank out of the walls it overlaps, resolving the DEEPEST overlap at a time
+ * until it is clear.
+ *
+ * It used to apply a push for EVERY overlapping wall in array order, which made the
+ * result a function of how the level data was sliced rather than of its geometry: a
+ * hull straddling three sub-cells of one flat run took three compounding pushes, and
+ * each interior seam offered the circle-vs-box nearest-feature test a CORNER where the
+ * real surface is flat.
+ *
+ * Taking only the deepest overlap fixes that, because the deepest penetration is a
+ * property of the UNION: for a hull over a flat run, the sub-cell beneath the centre
+ * offers a face push that is strictly deeper than its neighbours' corner pushes, which
+ * is exactly what the unsliced wall would have offered. Ties are broken on the push
+ * VECTOR, not array position, so the tiebreak is geometric too.
+ *
+ * Iterating is what keeps concave corners correct -- clearing the deepest wall can
+ * leave the hull inside a perpendicular one, so it goes round again. Bounded by
+ * SWEEP_MAX_ITERATIONS; a gap narrower than the hull cannot be resolved by any
+ * displacement and simply exhausts the budget rather than looping forever.
+ */
 export function resolveWalls(tank: Tank, walls: Wall[]): void {
-  for (const wall of walls) {
-    if (wall.destroyed) continue;
-    const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
-    if (hit.hit) tank.pos = vadd(tank.pos, hit.push);
+  for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
+    let best: Vec2 | null = null;
+    let bestDepth = 0;
+    for (const wall of walls) {
+      if (wall.destroyed) continue;
+      const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
+      if (!hit.hit) continue;
+      const depth = Math.hypot(hit.push.x, hit.push.y);
+      if (depth > bestDepth || (depth === bestDepth && best !== null &&
+          (hit.push.x > best.x || (hit.push.x === best.x && hit.push.y > best.y)))) {
+        bestDepth = depth;
+        best = hit.push;
+      }
+    }
+    if (best === null || bestDepth <= SWEEP_EPS) return;
+    tank.pos = vadd(tank.pos, best);
   }
 }
 

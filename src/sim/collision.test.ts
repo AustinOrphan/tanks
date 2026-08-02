@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { circleVsAABB, circleVsCircle, raySegmentVsAABB, reflectSweep } from './collision';
-import type { AABB } from './types';
+import { circleVsAABB, circleVsCircle, raySegmentVsAABB, reflectSweep, resolveWalls } from './collision';
+import type { AABB, Wall } from './types';
 import { vdist } from './types';
+import { makeTank } from './arena';
+import { TANK_RADIUS } from './constants';
 
 const BOX: AABB = { minX: 0, minY: 0, maxX: 2, maxY: 2 };
 
@@ -244,5 +246,60 @@ describe('reflectSweep does not leak shells out of the arena', () => {
     // stop, expire -- it must not come out at x < -2 on the other side of a 2-unit wall.
     const r = reflectSweep({ x: 0, y: 0 }, { x: -0.5, y: -0.5 }, [left, top], 3);
     expect(r.end.x).toBeGreaterThanOrEqual(-2);
+  });
+});
+
+describe('resolveWalls', () => {
+  it('resolves a hull the same way however the wall is sliced', () => {
+    const one: Wall[] = [
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 6, maxY: 2 } },
+    ];
+    const three: Wall[] = [0, 2, 4].map((x, i) => ({
+      id: i + 1, kind: 'solid' as const, destroyed: false,
+      aabb: { minX: x, minY: 0, maxX: x + 2, maxY: 2 },
+    }));
+    // A hull overlapping the seam at x=2 must land in the same place either way.
+    for (const x of [1.9, 2.0, 2.1, 3.0]) {
+      const a = { ...makeTank(1, 'player', { x, y: 2.3 }, 0) };
+      const b = { ...makeTank(1, 'player', { x, y: 2.3 }, 0) };
+      resolveWalls(a, one);
+      resolveWalls(b, three);
+      expect(b.pos.x, `x=${x}`).toBeCloseTo(a.pos.x, 9);
+      expect(b.pos.y, `x=${x}`).toBeCloseTo(a.pos.y, 9);
+    }
+  });
+
+  it('pushes a hull clear of a concave corner', () => {
+    const walls: Wall[] = [
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 4, maxY: 2 } },
+      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 2, maxX: 2, maxY: 6 } },
+    ];
+    const t = makeTank(1, 'player', { x: 2.3, y: 2.3 }, 0);
+    resolveWalls(t, walls);
+    for (const w of walls) expect(circleVsAABB(t.pos, TANK_RADIUS, w.aabb).hit, `wall ${w.id}`).toBe(false);
+  });
+
+  it('does not escape or NaN in a gap narrower than the hull', () => {
+    // Two walls 0.6 apart -- narrower than the 1.0 (2 * TANK_RADIUS) hull diameter, so no
+    // displacement can clear both at once. Traced by hand: each iteration's deepest-push
+    // pick alternates between the two walls (0.2 push right at x=2.3, then a full 0.4 push
+    // left at x=2.5, then 0.4 right at x=2.1, ...), so the tank oscillates between x=2.1
+    // and x=2.5 rather than converging. The iteration budget (SWEEP_MAX_ITERATIONS = 16,
+    // even) exhausts instead of looping forever, landing on x=2.1 for THIS geometry -- the
+    // exact resting value depends on the budget's parity, which is why this only pins
+    // "stays finite and in the gap's neighbourhood", not the specific resting x.
+    const walls: Wall[] = [
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } },
+      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 2.6, minY: 0, maxX: 4.6, maxY: 2 } },
+    ];
+    const t = makeTank(1, 'player', { x: 2.3, y: 1 }, 0);
+    resolveWalls(t, walls);
+    expect(Number.isFinite(t.pos.x)).toBe(true);
+    expect(Number.isFinite(t.pos.y)).toBe(true);
+    // Stays in the neighbourhood of the gap -- not flung far outside either wall.
+    expect(t.pos.x).toBeGreaterThan(-2);
+    expect(t.pos.x).toBeLessThan(6.6);
+    expect(t.pos.y).toBeGreaterThan(-2);
+    expect(t.pos.y).toBeLessThan(4);
   });
 });
