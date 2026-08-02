@@ -287,7 +287,12 @@ describe('composed tracks', () => {
     // of the two tracks' own note lists. There is no third thing.
     const from: MusicTrackDef = {
       id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
-      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('F1'), noteToHz('A1'), noteToHz('C#2')], generate: null, intensity: 0 }],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('F1'), noteToHz('A1'), noteToHz('C#2')], generate: null, intensity: 0 },
+        // A lead too, so the OVERLAP path is inside this sweep: its notes are
+        // legal material, and anything else the overlap emitted would fail.
+        { voice: 'lead', notes: [noteToHz('D4'), noteToHz('F4'), noteToHz('A4'), noteToHz('E4')], generate: null, intensity: 0 },
+      ],
     };
     const to: MusicTrackDef = {
       id: 'to', stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'E'],
@@ -298,7 +303,7 @@ describe('composed tracks', () => {
     bed.changeSuite(to);
     for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
     const legal = new Set(
-      [...from.tracks[0].notes!, ...to.tracks[0].notes!]
+      [...from.tracks.flatMap((l) => l.notes ?? []), ...to.tracks.flatMap((l) => l.notes ?? [])]
         .filter((n): n is number => n !== null)
         .map((n) => Math.round(n)),
     );
@@ -337,6 +342,43 @@ describe('composed tracks', () => {
     const a2 = Math.round(noteToHz('A2')!);
     expect(incoming.slice(0, 2), 'the pickup bar was skipped').toEqual([e2, gs2]);
     expect(incoming.slice(2, 4), 'the cycle proper did not follow').toEqual([a2, a2]);
+    bed.stop();
+  });
+
+  it('carries the OUTGOING melody over the pickup, fading, then gone', () => {
+    // The overlap Austin asked for, bounded by the no-invented-material law:
+    // the overlapping notes are the outgoing track's own last-bar lead line.
+    // It must sound DURING the pickup and be silent once the cycle proper
+    // starts -- an overlap that lingers is two melodies fighting.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 },
+        // The lead's LAST BAR is C#5/E5 -- distinct pitches, so presence in the
+        // pickup window is attributable.
+        { voice: 'lead', notes: [noteToHz('D5'), noteToHz('F5'), noteToHz('C#5'), noteToHz('E5')], generate: null, intensity: 0 },
+      ],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+
+    const cs5 = Math.round(noteToHz('C#5')!);
+    const e5 = Math.round(noteToHz('E5')!);
+    // The pickup spans steps 4..5 (the incoming 2-step final bar). The outgoing
+    // lead's final-bar notes ride over exactly that window.
+    const outgoingLeadTimes = ctx.notes
+      .filter((n) => [cs5, e5].includes(Math.round(n.freq)))
+      .map((n) => Math.round(n.startedAt - 0.08));
+    const inPickup = outgoingLeadTimes.filter((x) => x === 4 || x === 5);
+    const after = outgoingLeadTimes.filter((x) => x > 5);
+    expect(inPickup.length, 'no overlap sounded in the pickup').toBeGreaterThan(0);
+    expect(after, 'the overlap lingered past the pickup').toEqual([]);
     bed.stop();
   });
 

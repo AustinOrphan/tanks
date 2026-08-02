@@ -18,7 +18,7 @@
  * when the notes themselves were placed on a sample-accurate clock.
  */
 
-import { VOICES, type MusicTrackDef } from './music-data';
+import { VOICES, type MusicTrackDef, type VoiceName } from './music-data';
 import { noteToHz } from './notes';
 import { parseChord, type Chord } from './chords';
 import { generateMelody } from './melody';
@@ -147,6 +147,15 @@ export function createMusicBed(
    * across it is the tempo interpolation.
    */
   let ramp: { played: number; steps: number; fromStep: number; toStep: number } | null = null;
+  /**
+   * The OUTGOING section's melody, carried over the incoming pickup bar and
+   * fading as it goes -- Austin: "maybe we can have an overlap of the two sound
+   * types for melody". The overlap material is the outgoing track's own last-bar
+   * lead line, so the no-invented-material law holds. Harmonically it is safe by
+   * construction: the outgoing final bar is its V, the incoming pickup is ITS V,
+   * and V-of-old into V-of-new into new-tonic is a falling-fifths chain.
+   */
+  let overlay: { notes: Array<number | null>; voice: VoiceName; played: number; steps: number } | null = null;
   // Per-layer cursors: layers advance INDEPENDENTLY, so a 8-step bass under an
   // 11-step drone gives an 88-step combined cycle without authoring one.
   let cursors = track ? track.tracks.map(() => 0) : [];
@@ -269,6 +278,23 @@ export function createMusicBed(
         fromStep: track.stepSeconds,
         toStep: next.stepSeconds,
       };
+      // Capture the outgoing melody's final bar BEFORE the track is replaced:
+      // an audible lead layer, its last outgoingBarSteps entries.
+      overlay = null;
+      const outgoingBar = track.barSteps > 0 ? track.barSteps : pickupSteps;
+      for (let i = 0; i < track.tracks.length; i++) {
+        const layer = track.tracks[i];
+        if (layer.voice !== 'lead' || layer.intensity > intensity) continue;
+        const notes = notesOf(i);
+        if (notes.length < outgoingBar) continue;
+        overlay = {
+          notes: notes.slice(notes.length - outgoingBar),
+          voice: layer.voice,
+          played: 0,
+          steps: pickupSteps,
+        };
+        break;
+      }
       track = next;
       cursors = track.tracks.map(() => startAtStep);
       generated = track.tracks.map(() => null);
@@ -279,6 +305,19 @@ export function createMusicBed(
     if (track && queued && stepsIntoCycle === 0) adoptQueued();
     if (track) {
       scheduleComposed(at);
+      // The overlap: the outgoing melody's last bar rides over the pickup,
+      // fading linearly, and is gone by the time the cycle proper starts.
+      if (overlay) {
+        const o = overlay;
+        const hz = o.notes[o.played % o.notes.length];
+        if (hz !== null) {
+          const v = VOICES[o.voice];
+          const fade = 1 - o.played / o.steps;
+          note(hz, at, stepLength() * v.hold, v.peak * fade, v.type);
+        }
+        o.played += 1;
+        if (o.played >= o.steps) overlay = null;
+      }
       stepsIntoCycle = (stepsIntoCycle + 1) % cycleSteps(track);
       if (ramp) {
         ramp.played += 1;
