@@ -302,4 +302,39 @@ describe('resolveWalls', () => {
     expect(t.pos.y).toBeGreaterThan(-2);
     expect(t.pos.y).toBeLessThan(4);
   });
+
+  it('breaks a tie on the push vector, not wall array order', () => {
+    // Two walls placed diagonally, corners 0.25 apart from a tank centred exactly on
+    // their bisector -- all coordinates are dyadic (integers and .25/.5 fractions), so
+    // the two circleVsAABB pushes are bit-identical in magnitude and exactly opposite in
+    // sign (verified: hA.push.x === -hB.push.x). That is a genuinely reachable tie, not a
+    // contrived float coincidence -- an instrumented build hit an equivalent one on a
+    // diagonal corner-touch pair. Reducing the selection to `depth > bestDepth` (dropping
+    // the vector tiebreak) makes whichever wall is scanned first keep its push, so [A, B]
+    // and [B, A] resolve to different positions; the current code must not.
+    const A: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
+    const B: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 2.5, minY: 2.5, maxX: 4.5, maxY: 4.5 } };
+    const ab = makeTank(1, 'player', { x: 2.25, y: 2.25 }, 0);
+    const ba = makeTank(1, 'player', { x: 2.25, y: 2.25 }, 0);
+    resolveWalls(ab, [A, B]);
+    resolveWalls(ba, [B, A]);
+    expect(ba.pos.x).toBe(ab.pos.x);
+    expect(ba.pos.y).toBe(ab.pos.y);
+  });
+
+  it('does not apply a push for an overlap at or below SWEEP_EPS', () => {
+    // A depth of 5e-8 is below SWEEP_EPS (1e-7) but the circle genuinely overlaps
+    // (distSq < radius^2), so `hit.hit` is true and `best` is non-null -- this is the
+    // one case that tells `bestDepth <= SWEEP_EPS` apart from a bare `best === null`
+    // check. With the epsilon clause, the loop returns on iteration 1 without ever
+    // calling vadd, so the position is untouched (exact object-level equality, not
+    // merely close). Without it, that sub-epsilon push gets applied, moving the tank
+    // measurably (to x=2.5 exactly, verified by hand).
+    const wall: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
+    const startX = 2 + TANK_RADIUS - 5e-8;
+    const t = makeTank(1, 'player', { x: startX, y: 1 }, 0);
+    resolveWalls(t, [wall]);
+    expect(t.pos.x).toBe(startX);
+    expect(t.pos.y).toBe(1);
+  });
 });

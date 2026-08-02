@@ -301,13 +301,26 @@ export function driveVelocity(tank: Tank): Vec2 {
  * result a function of how the level data was sliced rather than of its geometry: a
  * hull straddling three sub-cells of one flat run took three compounding pushes, and
  * each interior seam offered the circle-vs-box nearest-feature test a CORNER where the
- * real surface is flat.
+ * real surface is flat. Measured on arena-01: before this change, 8,846 of 48,207
+ * reachable wall-touching hull positions resolved to a different place after a 3x
+ * re-slice of the same geometry, worst delta 0.481 against a TANK_RADIUS of 0.5; after,
+ * 0 of 48,207, worst delta 0.000000. An independent re-measurement across all 4 shipped
+ * arenas (3,356 reachable one-tick penetrations, both original and reversed wall array
+ * order) also found 0 divergences, worst delta 0.000000000.
  *
  * Taking only the deepest overlap fixes that, because the deepest penetration is a
  * property of the UNION: for a hull over a flat run, the sub-cell beneath the centre
- * offers a face push that is strictly deeper than its neighbours' corner pushes, which
- * is exactly what the unsliced wall would have offered. Ties are broken on the push
- * VECTOR, not array position, so the tiebreak is geometric too.
+ * offers a face push AT LEAST as deep as its neighbours' corner pushes, which is exactly
+ * what the unsliced wall would have offered. At most seam positions it is strictly
+ * deeper; at an exact seam boundary the two adjacent sub-cells return an identical
+ * corner push (same nearest point, same depth) and the union just needs either one of
+ * them, which is where the paragraph below applies.
+ *
+ * Ties are broken on the push VECTOR, not array position, so the tiebreak is geometric
+ * too: this matters even when the tied pushes are NOT identical, e.g. a tank centred on
+ * the bisector of two diagonally-touching walls, where the tied depth is reached by two
+ * opposite-direction pushes and picking "whichever wall came first" would make the
+ * result order-dependent again.
  *
  * Iterating is what keeps concave corners correct -- clearing the deepest wall can
  * leave the hull inside a perpendicular one, so it goes round again. Bounded by
