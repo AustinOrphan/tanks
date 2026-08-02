@@ -215,6 +215,22 @@ describe('loadArena', () => {
     expect(() => loadArena(ARENA_01)).not.toThrow();
   });
 
+  it('numbers tanks independently of how many wall cells precede them', () => {
+    // Same spawns, same order, different wall counts. A tank's id must not move.
+    const base = {
+      cols: 5, rows: 3, cellSize: 2,
+      legend: { '#': 'solid' as const },
+      grid: ['.....', '..P..', '.....'],
+    };
+    const walled = { ...base, grid: ['#####', '#.P..', '.....'] };
+    const a = loadArena({ id: 'a', ...base } as never);
+    const b = loadArena({ id: 'b', ...walled } as never);
+    expect(a.tanks.map((t) => t.id)).toEqual(b.tanks.map((t) => t.id));
+    // ...and ids are still globally unique, which createWorld's nextId relies on.
+    const all = [...b.tanks.map((t) => t.id), ...b.walls.map((w) => w.id)];
+    expect(new Set(all).size).toBe(all.length);
+  });
+
   it('throws when grid.length does not match arena.rows', () => {
     const badArena = {
       cols: 3,

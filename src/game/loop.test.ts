@@ -937,8 +937,12 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
     const h = boot(makeDeps({ world }));
     h.setState('playing');
     // Several frames: AI tanks act, so events appear without needing the player
-    // to fire through the fake input.
-    for (let i = 1; i <= 12; i++) h.fireFrame(i * 100);
+    // to fire through the fake input. 30, not 12: tank ids now come from spawn
+    // order alone (arena.ts no longer shares a counter with walls), which reseeds
+    // every AI's per-tank RNG streams (ai/targeting.ts) and pushed ARENA_01's
+    // first AI shot at this seed from tick ~35 to tick ~95 -- 12 frames (~72
+    // ticks) stopped reaching a shot at all.
+    for (let i = 1; i <= 30; i++) h.fireFrame(i * 100);
     expect(h.rec.directed.length).toBeGreaterThan(0);
     expect(h.rec.machineSaw.length).toBe(h.rec.directed.length);
     expect(h.rec.directed.flat().length).toBe(h.rec.machineSaw.flat().length);

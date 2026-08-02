@@ -82,32 +82,38 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
   const walls: Wall[] = [];
   const tanks: Tank[] = [];
   const spawns: Spawn[] = [];
-  let id = 1;
 
+  // PASS 1 — spawns. Tank ids must be a function of the SPAWN ORDER alone. They used
+  // to share a counter with walls, which made every tank's id a function of how many
+  // wall cells preceded it -- and tank.id seeds all four per-tank RNG streams in
+  // ai/targeting.ts (wanderMove, aimJitter, mineInclination, seekMove's retreat draw),
+  // so re-slicing the grid silently rerolled every enemy's behaviour for the whole game.
+  let id = 1;
   for (let r = 0; r < rows; r++) {
-    const row = grid[r];
     for (let c = 0; c < cols; c++) {
-      const ch = row[c];
-      const wallKind = legend[ch];
-      if (wallKind) {
-        walls.push({
-          id: id++,
-          aabb: {
-            minX: c * cellSize,
-            minY: r * cellSize,
-            maxX: (c + 1) * cellSize,
-            maxY: (r + 1) * cellSize,
-          },
-          kind: wallKind,
-          destroyed: false,
-        });
-      } else if (SPAWN_LETTERS[ch]) {
-        const kind = SPAWN_LETTERS[ch];
-        const pos = { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
-        const angle = 0;
-        spawns.push({ kind, pos: { ...pos }, angle });
-        tanks.push(makeTank(id++, kind, pos, angle));
-      }
+      const kind = SPAWN_LETTERS[grid[r][c]];
+      if (!kind) continue;
+      const pos = { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
+      spawns.push({ kind, pos: { ...pos }, angle: 0 });
+      tanks.push(makeTank(id++, kind, pos, 0));
+    }
+  }
+
+  // PASS 2 — walls, numbered after the tanks so every id in the world stays unique
+  // (createWorld derives nextId from the maximum of both).
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const wallKind = legend[grid[r][c]];
+      if (!wallKind) continue;
+      walls.push({
+        id: id++,
+        aabb: {
+          minX: c * cellSize, minY: r * cellSize,
+          maxX: (c + 1) * cellSize, maxY: (r + 1) * cellSize,
+        },
+        kind: wallKind,
+        destroyed: false,
+      });
     }
   }
 
