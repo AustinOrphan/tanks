@@ -34,15 +34,33 @@ import { makeTank } from './arena';
  *  often a buried internal seam rather than the mass's true outer edge -- the
  *  collision-side twin of the retroreflecting-seam residual this repo already
  *  accepts for rays, and the reason solid cells are merged at all (destructible
- *  cells never merge, so it is structurally still open there). It is not
- *  gameplay-reachable: resolveWalls only ever sees hulls that arrived by
- *  ~0.05-unit/tick incremental movement, never teleported a hull-radius deep
- *  into a wall, so `moveTank`'s per-tick resolution never enters that branch
- *  from rest. The position test below therefore sweeps only hull centres that
- *  start OUTSIDE every wall in both decompositions -- the exterior,
- *  `circleVsAABB`'s closest-point branch, which is exactly the gameplay-
- *  reachable regime and, empirically, decomposition-invariant. See
- *  task-5-report.md for the full mutation table and both residuals. */
+ *  cells never merge, so it is structurally still open there).
+ *
+ *  This is NOT merely a synthetic-position artifact -- the inside branch IS
+ *  gameplay-reachable. `world.ts:98-104` documents `separateTanks` (tank-vs-tank
+ *  shoving) driving a hull "0.375 units inside a solid block", and
+ *  `stepMovement` calls `resolveWalls` immediately after every `separateTanks`
+ *  pass (`world.ts:112-118`) -- so a shoved tank's centre can start a
+ *  `resolveWalls` call already inside a wall, not just arrive at one from
+ *  outside. Reviewer-probed with the real `moveTank`, legal non-overlapping
+ *  starts, and the actual 3-pass alternation (4 tanks x 120 ticks): a FLAT
+ *  destructible face saw 0 of 300 seeds reach the inside branch and 0 diverge
+ *  (this fixture's regime, and the position test below stays scoped to it on
+ *  purpose); a CONCAVE destructible pocket saw 147 of 300 seeds call
+ *  `resolveWalls` with a centre already inside the mass, and 168 of 300 seeds
+ *  end at decomposition-dependent positions (21 of those with no inside event
+ *  at all -- the already-accepted oscillation class above). Both figures are
+ *  from a synthetic pocket fixture built to demonstrate reachability, not a
+ *  shipped arena -- but `config/data/arenas.json` ships 3x3 destructible
+ *  blocks, and a 3x3 block becomes concave the moment a mine blast destroys
+ *  one interior cell, which shipped mines do. The position test below
+ *  therefore sweeps only hull centres that start OUTSIDE every wall in both
+ *  decompositions -- not because the inside branch is unreachable, but because
+ *  it is a separate, already-identified defect (raised as its own decision,
+ *  not fixed here) and mixing it into this test would make a failure here
+ *  ambiguous between "decomposition leaked into a NEW mechanism" and "the
+ *  known inside-branch defect fired again". See task-5-report.md for the full
+ *  mutation table and all residuals. */
 const COARSE = {
   id: 'coarse', cols: 6, rows: 6, cellSize: 2,
   legend: { '#': 'solid' as const, x: 'destructible' as const },
@@ -94,10 +112,12 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
   for (let x = 0.35; x < 12; x += 0.37) for (let y = 0.35; y < 12; y += 0.37) pts.push({ x, y });
 
   // circleVsAABB's `inside` branch (centre already inside a box) is not decomposition-
-  // invariant -- see the fixture comment's third residual. resolveWalls only ever meets
-  // hulls arriving from OUTSIDE a wall (moveTank steps ~0.05 units/tick), so the position
-  // test restricts its sweep to centres outside every wall in BOTH decompositions, which
-  // is both the gameplay-reachable regime and, empirically, the invariant one.
+  // invariant -- see the fixture comment's third residual, including WHY it is scoped out
+  // here despite being reachable (via separateTanks, not just "arriving from outside").
+  // The position test restricts its sweep to centres outside every wall in BOTH
+  // decompositions -- the regime this fixture's flat destructible face is in, empirically
+  // invariant (0 of 300 reviewer-probed seeds diverged), and distinct from the concave-
+  // pocket inside-branch defect that is out of scope for this test.
   const inside = (p: { x: number; y: number }, walls: { aabb: { minX: number; minY: number; maxX: number; maxY: number } }[]) =>
     walls.some((w) => p.x >= w.aabb.minX && p.x <= w.aabb.maxX && p.y >= w.aabb.minY && p.y <= w.aabb.maxY);
   const exteriorPts = pts.filter((p) => !inside(p, a) && !inside(p, b));
@@ -133,26 +153,31 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
       if (x === null || y === null) expect(y, `${m.x},${m.y} -> ${t.x},${t.y}`).toBe(x);
       else expect(y, `${m.x},${m.y} -> ${t.x},${t.y}`).toBeCloseTo(x, 9);
     }
+  });
 
-    // Neither of the two checks above reaches bankShot's internal selection logic: the main
-    // sweep's destructible cluster is convex and isolated enough that only ONE candidate
-    // per face survives raySegmentVsAABB's own bounds check regardless of decomposition, so
-    // "first valid" and "shortest valid" coincide there by construction (measured: 0
-    // mismatches over 2.2M swept exterior pairs against three different fixture shapes,
-    // including an L-shaped destructible mass, under the first-valid mutation -- see
-    // task-5-report.md). A flat multi-cell destructible ROW does expose headingIntoBox
-    // (below), but not first-vs-shortest, for the same reason. Two targeted checks close
-    // that gap.
+  // The sweep above doesn't reach bankShot's internal selection logic: its destructible
+  // cluster is convex and isolated enough that only ONE candidate per face survives
+  // raySegmentVsAABB's own bounds check regardless of decomposition, so "first valid" and
+  // "shortest valid" coincide there by construction (measured: 0 mismatches over 2.2M
+  // swept exterior pairs against three different fixture shapes, including an L-shaped
+  // destructible mass, under the first-valid mutation -- see task-5-report.md). A flat
+  // multi-cell destructible ROW does expose headingIntoBox, but not first-vs-shortest, for
+  // the same reason. Two targeted checks below close that gap -- each is the SOLE killer
+  // of its mutation (see task-5-report.md's mutation table), so each gets its own `it`
+  // with a distinguishing name/label: sharing one block with the ~23s sweep above would
+  // both bury an unlabelled failure and let an earlier failure abort the run before these
+  // execute at all.
 
-    // (1) headingIntoBox: a flat 3-coarse-cell / 6-fine-cell destructible row, muzzle/target
-    // symmetric above it so the bounce lands exactly on a seam for interior x values --
-    // mirrors the proven pattern in ai/targeting.test.ts's "returns the same bank shot
-    // however the reflector is sliced" (solid there; destructible, which actually differs
-    // between COARSE and FINE, here). The grid is generously padded (10x10 / 20x20, not
-    // sized to the row) so the boundary ring -- itself one cell thick, hence a DIFFERENT
-    // absolute thickness at each cellSize -- sits far enough away that it never becomes a
-    // competing bank candidate and confounds the measurement; a tighter grid tried first
-    // did exactly that and read as a false negative (0 of 121) for this same mutation.
+  it('agrees on the bank shot across a destructible row seam (headingIntoBox)', () => {
+    // A flat 3-coarse-cell / 6-fine-cell destructible row, muzzle/target symmetric above it
+    // so the bounce lands exactly on a seam for interior x values -- mirrors the proven
+    // pattern in ai/targeting.test.ts's "returns the same bank shot however the reflector
+    // is sliced" (solid there; destructible, which actually differs between COARSE and
+    // FINE, here). The grid is generously padded (10x10 / 20x20, not sized to the row) so
+    // the boundary ring -- itself one cell thick, hence a DIFFERENT absolute thickness at
+    // each cellSize -- sits far enough away that it never becomes a competing bank
+    // candidate and confounds the measurement; a tighter grid tried first did exactly that
+    // and read as a false negative (0 of 121) for this same mutation.
     const ROW_COARSE = {
       id: 'row-coarse', cols: 10, rows: 10, cellSize: 2,
       legend: { x: 'destructible' as const },
@@ -176,21 +201,33 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
     const rowA = loadArena(ROW_COARSE).walls;
     const rowB = loadArena(ROW_FINE).walls;
     let rowCompared = 0;
+    let nonNullA = 0;
+    let nonNullB = 0;
     for (let mx = 4.5; mx < 10; mx += 0.5) for (let tx = 4.5; tx < 10; tx += 0.5) {
       const m = { x: mx, y: 6 };
       const t = { x: tx, y: 4 };
       rowCompared++;
       const x = bankShot(m, t, rowA, 1);
       const y = bankShot(m, t, rowB, 1);
+      if (x !== null) nonNullA++;
+      if (y !== null) nonNullB++;
       if (x === null || y === null) expect(y, `row ${mx}->${tx}`).toBe(x);
       else expect(y, `row ${mx}->${tx}`).toBeCloseTo(x, 9);
     }
     expect(rowCompared).toBe(121); // population: 11 muzzle x 11 target x-positions
+    // Guard against a vacuous pass: `x === null && y === null` satisfies the comparison
+    // above trivially, so a future fixture edit that made every candidate invalid on both
+    // sides would still read green. Today all 121 of 121 pairs resolve a bank shot on
+    // both sides.
+    expect(nonNullA).toBe(121);
+    expect(nonNullB).toBe(121);
+  });
 
-    // (2) first-vs-shortest: two NON-collinear reflectors so neither blocks the other's
-    // path, listed FAR-then-NEAR so array order and length order disagree. Not a
-    // coarse/fine comparison (that pair never diverges here either, per the note above) --
-    // a direct correctness check against the analytically shorter path.
+  it('picks the shorter of two non-collinear bank reflectors (first-vs-shortest)', () => {
+    // Two NON-collinear reflectors so neither blocks the other's path, listed FAR-then-NEAR
+    // so array order and length order disagree. Not a coarse/fine comparison (that pair
+    // never diverges here either, per the note above) -- a direct correctness check
+    // against the analytically shorter path.
     const far = { id: 101, kind: 'solid' as const, destroyed: false, aabb: { minX: 20, minY: -10, maxX: 21, maxY: 10 } };
     const near = { id: 102, kind: 'solid' as const, destroyed: false, aabb: { minX: -10, minY: 5, maxX: 20, maxY: 6 } };
     const muzzle = { x: 0, y: 0 };
