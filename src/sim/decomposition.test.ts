@@ -148,27 +148,37 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
     // symmetric above it so the bounce lands exactly on a seam for interior x values --
     // mirrors the proven pattern in ai/targeting.test.ts's "returns the same bank shot
     // however the reflector is sliced" (solid there; destructible, which actually differs
-    // between COARSE and FINE, here).
+    // between COARSE and FINE, here). The grid is generously padded (10x10 / 20x20, not
+    // sized to the row) so the boundary ring -- itself one cell thick, hence a DIFFERENT
+    // absolute thickness at each cellSize -- sits far enough away that it never becomes a
+    // competing bank candidate and confounds the measurement; a tighter grid tried first
+    // did exactly that and read as a false negative (0 of 121) for this same mutation.
     const ROW_COARSE = {
-      id: 'row-coarse', cols: 8, rows: 6, cellSize: 2,
-      legend: { x: 'destructible' as const },
-      grid: ['........', '........', '........', '..xxx...', '........', '........'],
-    } as never;
-    const ROW_FINE = {
-      id: 'row-fine', cols: 16, rows: 12, cellSize: 1,
+      id: 'row-coarse', cols: 10, rows: 10, cellSize: 2,
       legend: { x: 'destructible' as const },
       grid: [
-        '................', '................', '................', '................',
-        '................', '................', '....xxxxxx......', '....xxxxxx......',
-        '................', '................', '................', '................',
+        '..........', '..........', '..........', '..........',
+        '..xxx.....', '..........', '..........', '..........',
+        '..........', '..........',
+      ],
+    } as never;
+    const ROW_FINE = {
+      id: 'row-fine', cols: 20, rows: 20, cellSize: 1,
+      legend: { x: 'destructible' as const },
+      grid: [
+        '....................', '....................', '....................', '....................',
+        '....................', '....................', '....................', '....................',
+        '....xxxxxx..........', '....xxxxxx..........', '....................', '....................',
+        '....................', '....................', '....................', '....................',
+        '....................', '....................', '....................', '....................',
       ],
     } as never;
     const rowA = loadArena(ROW_COARSE).walls;
     const rowB = loadArena(ROW_FINE).walls;
     let rowCompared = 0;
     for (let mx = 4.5; mx < 10; mx += 0.5) for (let tx = 4.5; tx < 10; tx += 0.5) {
-      const m = { x: mx, y: 4 };
-      const t = { x: tx, y: 2 };
+      const m = { x: mx, y: 6 };
+      const t = { x: tx, y: 4 };
       rowCompared++;
       const x = bankShot(m, t, rowA, 1);
       const y = bankShot(m, t, rowB, 1);
