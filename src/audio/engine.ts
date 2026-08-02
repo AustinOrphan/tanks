@@ -2,6 +2,7 @@ import { Howl, Howler } from 'howler';
 import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
 import { synthVoice } from './synth';
 import { createMusicBed, type MusicBed } from './music';
+import { trackById } from './music-data';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -13,6 +14,12 @@ export interface AudioEngine {
   setVolume(v: number): void;
   getVolume(): number;
   /**
+   * 0..1 arrangement density for the generated/composed music. Layers whose own
+   * threshold exceeds this stay silent, so the game can build the mix from
+   * state. No-op until music is playing.
+   */
+  setMusicIntensity(v: number): void;
+  /**
    * Open the audio context from inside a user-gesture handler (the Start
    * button). Safari/iOS will not start a context resumed from anywhere else,
    * and the sim's sounds are emitted from the rAF loop, which is never a
@@ -23,6 +30,12 @@ export interface AudioEngine {
 }
 
 const MUSIC_VOLUME = 0.25;
+/**
+ * The track the game plays. One at a time for now -- per-context routing (menu
+ * theme, per-level pieces) is explicitly deferred in the design doc. An id with
+ * no matching entry falls through to the generated bed rather than going silent.
+ */
+export const MUSIC_TRACK_ID = 'arena';
 
 // Cap on simultaneous procedural voices. A mine chain-reaction can emit a
 // dozen SFX on one tick; identical tones started at the same currentTime sum
@@ -65,6 +78,9 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   const voiceTimers = new Set<ReturnType<typeof setTimeout>>();
   // The generated bed, built lazily on the first startMusic with no track.
   let bed: MusicBed | null = null;
+  // Remembered, so an intensity set before the bed exists is not lost -- the
+  // loop pushes it every round, and the bed is built lazily on first play.
+  let musicIntensity = 0;
 
   // Push the default through immediately. Howler's own default is 1.0, so
   // deferring this until the first slider drag leaves the HUD showing
@@ -267,8 +283,12 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       if (music) return;
       const audio = ensureCtx();
       if (!audio) return;
-      if (!bed) bed = createMusicBed(audio, ensureBus(audio));
+      // A composed track if one is authored, else the generated bed. Same
+      // relationship the synth has with samples: authored content wins, and the
+      // generator covers whatever has not been written yet.
+      if (!bed) bed = createMusicBed(audio, ensureBus(audio), { track: trackById(MUSIC_TRACK_ID) });
       bed.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
+      bed.setIntensity(musicIntensity);
       bed.start();
     },
     stopMusic() {
@@ -299,6 +319,10 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     },
     getVolume() {
       return masterVolume;
+    },
+    setMusicIntensity(v) {
+      musicIntensity = Math.max(0, Math.min(1, v));
+      bed?.setIntensity(musicIntensity);
     },
     unlock() {
       ensureCtx(true);

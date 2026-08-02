@@ -13,7 +13,8 @@
     "test": "tsc --noEmit && vitest run",
     "visual": "node tools/visual/verify.mjs dist --check",
     "test:gl": "node tools/gl/run.mjs",
-    "gallery": "node tools/gallery/run.mjs"
+    "gallery": "node tools/gallery/run.mjs",
+    "audio": "node tools/audio/render.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
