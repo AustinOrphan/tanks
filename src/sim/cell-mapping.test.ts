@@ -19,9 +19,10 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 3 shipped arenas (11x9 each) plus the 15x11
-    // fixture = 297 + 165 = 462 cells. The fixture matters here: a formula that
-    // confused cols with rows would round-trip fine on a square-ish board.
+    // Population: all cells of all 4 shipped arenas -- three at 11x9 and arena-04
+    // at 15x11 -- plus the 17x13 fixture = 297 + 165 + 221 = 683 cells. The
+    // non-square boards matter here: a formula that confused cols with rows would
+    // round-trip fine on a square-ish board.
     let checked = 0;
     for (const arena of ARENAS_UNDER_TEST) {
       for (let r = 0; r < arena.rows; r++) {
@@ -32,7 +33,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(462);
+    expect(checked).toBe(683);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {
@@ -71,9 +72,9 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
         spawnsChecked++;
       }
     }
-    // 4 + 5 + 6 shipped (each count INCLUDES that arena's player spawn) + 3
-    // fixture = 18. Written as 17 first; the test caught the arithmetic, which is
-    // the denominator discipline working on its own author.
-    expect(spawnsChecked).toBe(18);
+    // 4 + 5 + 6 + 7 shipped (each count INCLUDES that arena's player spawn) + 3
+    // fixture = 25. Written as 17 first when the total was 18; the test caught the
+    // arithmetic, which is the denominator discipline working on its own author.
+    expect(spawnsChecked).toBe(25);
   });
 });

@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
-import { structuralFailures, claimFailures, cellOf, breach } from './arena-claims';
+import { structuralFailures, claimFailures, cellCentre, cellOf, breach } from './arena-claims';
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import type { ArenaClaim } from './config/arena-types';
@@ -53,6 +53,7 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   'arena-01': { spawnBlockRobust: 1 },
   'arena-02': { sightlineAfterBreach: 4 },
   'arena-03': { lane: 2, sightlineAfterBreach: 5, spawnBlockRobust: 1 },
+  'arena-04': { lane: 7, sightlineAfterBreach: 6, spawnBlockRobust: 1 },
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {
@@ -98,10 +99,10 @@ it('a sightlineAfterBreach claim names every enemy CELL, not just the right coun
 });
 
 describe('variable arena dimensions', () => {
-  it('a 15x11 arena loads, validates, and is NOT the shipped size', () => {
-    expect(WIDE_ARENA.cols).toBe(15);
-    expect(WIDE_ARENA.rows).toBe(11);
-    expect(arenaBounds(WIDE_ARENA)).toEqual({ width: 30, height: 22 });
+  it('a 17x13 arena loads, validates, and is NOT any shipped size', () => {
+    expect(WIDE_ARENA.cols).toBe(17);
+    expect(WIDE_ARENA.rows).toBe(13);
+    expect(arenaBounds(WIDE_ARENA)).toEqual({ width: 34, height: 26 });
     // The point of the fixture: it differs from every shipped arena.
     for (const a of ARENA_DEFS) expect(arenaBounds(a)).not.toEqual(arenaBounds(WIDE_ARENA));
   });
@@ -188,5 +189,55 @@ describe("arena-02's spawnBlockRobust figures, which no claim can protect", () =
 
     expect(count(walls)).toBe(0);       // intact: the barrier seals both halves
     expect(count(breached)).toBe(12);   // breached: the trade the level is built on
+  });
+});
+
+describe('the cover ratio each arena quotes in its notes', () => {
+  // arena-04's notes carry five numbers comparing all four boards on one probe: how
+  // many open cells no enemy can see from its spawn, walls intact. Exactly the
+  // situation the arena-02 block above exists for -- prose measured once by hand,
+  // recomputed by nothing, sitting next to a grid anyone may edit. `notes` are
+  // validated only as strings, so the validator cannot help.
+  //
+  // Destructible cells are NOT counted as open: they are walls until destroyed, and
+  // counting them changes arena-04 to 46 of 154 (the ranking is unaffected, but the
+  // quoted numbers are the excluding ones and the note now says so).
+  const EXPECTED: Record<string, { unseen: number; open: number }> = {
+    'arena-01': { unseen: 35, open: 86 },
+    'arena-02': { unseen: 41, open: 83 },
+    'arena-03': { unseen: 30, open: 88 },
+    'arena-04': { unseen: 43, open: 151 },
+  };
+
+  it('recomputes every quoted count, and the ranking the note claims', () => {
+    // Symmetric with EXPECTED_CLAIMS above: set equality both ways, so adding a
+    // fifth arena cannot leave this table quietly covering four of five.
+    expect(new Set(ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED)));
+
+    const ratio: Record<string, number> = {};
+    for (const arena of ARENA_DEFS) {
+      const { walls, spawns } = loadArena(arena);
+      const enemies = spawns.filter((s) => s.kind !== 'player');
+      let open = 0;
+      let unseen = 0;
+      for (let r = 0; r < arena.rows; r++) {
+        for (let c = 0; c < arena.cols; c++) {
+          if (arena.legend[arena.grid[r][c]] !== undefined) continue; // a wall of any kind
+          open++;
+          const p = cellCentre(arena, [c, r]);
+          if (!enemies.some((e) => lineOfSight(e.pos, p, walls))) unseen++;
+        }
+      }
+      expect({ unseen, open }, arena.id).toEqual(EXPECTED[arena.id]);
+      ratio[arena.id] = unseen / open;
+    }
+
+    // The note's actual claim is comparative -- "the tightest of the four". Pinned as
+    // an ordering, not just four independent counts: a grid edit that made arena-04
+    // roomier than arena-03 would satisfy every count above if they were updated to
+    // match, and still falsify the sentence.
+    const tightest = Object.entries(ratio).sort((a, b) => a[1] - b[1])[0][0];
+    expect(tightest).toBe('arena-04');
+    expect(ratio['arena-04']).toBeLessThan(ratio['arena-03']);
   });
 });
