@@ -236,6 +236,102 @@ describe('bankShot', () => {
     expect(returned).toBeGreaterThan(200); // the fuzz must actually exercise the happy path
     expect(selfHits).toBe(0);
   });
+
+  it('returns the same bank shot however the reflector is sliced', () => {
+    const merged: Wall[] = [
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 6, maxY: 2 } },
+    ];
+    const three: Wall[] = [0, 2, 4].map((x, i) => ({
+      id: i + 1, kind: 'solid' as const, destroyed: false,
+      aabb: { minX: x, minY: 0, maxX: x + 2, maxY: 2 },
+    }));
+    let compared = 0;
+
+    // Pattern A: muzzle/target ABOVE the run (y outside its [0,2] band) -- reflects off
+    // the run's TOP face. The bounce point's x-coordinate coincides EXACTLY with a seam
+    // (x=2 or 4) for 8 of these 121 pairs, which is what originally exposed a losIgnoring
+    // boundary-touch bug: the muzzle->bounce / bounce->target legs graze the NEIGHBOURING
+    // sub-cell's corner at that exact x, and an unfixed losIgnoring reported that graze as
+    // a block. This sub-sweep is a regression test for that fix specifically -- reverting
+    // it (temporarily, by hand, during development) reintroduced mismatches here.
+    for (let mx = 0.5; mx < 6; mx += 0.5) {
+      for (let tx = 0.5; tx < 6; tx += 0.5) {
+        const m = { x: mx, y: 4 };
+        const t = { x: tx, y: 6 };
+        const a = bankShot(m, t, merged, 1);
+        const b = bankShot(m, t, three, 1);
+        compared++;
+        if (a === null || b === null) expect(b, `A ${mx}->${tx}`).toBe(a);
+        else expect(b, `A ${mx}->${tx}`).toBeCloseTo(a, 9);
+      }
+    }
+
+    // Pattern B: muzzle/target to the LEFT of the run, y WITHIN its own [0,2] band. Unlike
+    // Pattern A, this makes a VERTICAL seam face itself (not just its x-coordinate)
+    // geometrically reachable: a ray toward a sub-cell's own left face genuinely crosses
+    // that cell's y-range as a raw raySegmentVsAABB candidate with a matching normal, so
+    // the interior seams at x=2 and x=4 are actually OFFERED as candidate reflectors here,
+    // not merely coincided with. `merged` vs `three` staying equal proves those seam
+    // candidates are rejected the same way (via a genuine losIgnoring block through the
+    // neighbouring sub-cell) regardless of how the reflector was sliced.
+    for (let my = 0.25; my < 2; my += 0.25) {
+      for (let ty = 0.25; ty < 2; ty += 0.25) {
+        const m = { x: -6, y: my };
+        const t = { x: -1, y: ty };
+        const a = bankShot(m, t, merged, 1);
+        const b = bankShot(m, t, three, 1);
+        compared++;
+        if (a === null || b === null) expect(b, `B ${my}->${ty}`).toBe(a);
+        else expect(b, `B ${my}->${ty}`).toBeCloseTo(a, 9);
+      }
+    }
+
+    expect(compared).toBe(170); // population: pattern A 11x11=121 + pattern B 7x7=49
+  });
+
+  it('picks the shortest of several competing reflectors, not the first in array order', () => {
+    // A boxed room: muzzle and target sit near the LEFT wall, so LEFT is both listed
+    // first below and would be the first candidate found in wall/face iteration order --
+    // but the actual shortest bank path is off the TOP wall instead, proving the
+    // selection is made by path length, not by position in the array.
+    const left: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1, maxX: 0, maxY: 11 } };
+    const right: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 10, minY: -1, maxX: 11, maxY: 11 } };
+    const bottom: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1, maxX: 11, maxY: 0 } };
+    const top: Wall = { id: 4, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: 10, maxX: 11, maxY: 11 } };
+    const m = { x: 1, y: 5 };
+    const t = { x: 5, y: 9 };
+
+    // Each wall alone gives a valid, genuinely different candidate -- confirms they
+    // actually compete rather than one being degenerate or unreachable.
+    const soloLeft = bankShot(m, t, [left], 1);
+    const soloTop = bankShot(m, t, [top], 1);
+    expect(soloLeft).not.toBeNull();
+    expect(soloTop).not.toBeNull();
+    expect(soloLeft).not.toBeCloseTo(soloTop as number, 6);
+
+    // left is listed FIRST; a first-valid implementation returns soloLeft's angle for this
+    // exact array (verified directly against a first-valid build during development).
+    // The real implementation must return soloTop's angle -- the shorter path -- instead.
+    const combined = bankShot(m, t, [left, right, bottom, top], 1);
+    expect(combined).toBeCloseTo(soloTop as number, 9);
+    expect(combined).not.toBeCloseTo(soloLeft as number, 6);
+
+    // Array order must not matter: every ordering of the same 4 walls gives the same
+    // shortest answer.
+    const permutations: Wall[][] = [
+      [left, right, bottom, top],
+      [top, bottom, right, left],
+      [right, left, top, bottom],
+      [bottom, top, left, right],
+    ];
+    for (const walls of permutations) {
+      expect(bankShot(m, t, walls, 1)).toBeCloseTo(soloTop as number, 9);
+    }
+    // population: 4 of the 24 possible orderings of these 4 walls (4! = 24) -- a
+    // hand-picked sample (original order plus 3 rotations/swaps), not an exhaustive
+    // sweep of the full permutation group.
+    expect(permutations.length).toBe(4);
+  });
 });
 
 describe('shotHitsOwnSide', () => {

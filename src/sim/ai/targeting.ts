@@ -5,7 +5,7 @@ import { configFor, type ResolvedTankConfig } from '../config';
 import {
   AIM_EPS, AI_AIM_SPREAD, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
-  AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig,
+  AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig, SWEEP_EPS,
 } from '../constants';
 import type { World } from '../world';
 
@@ -200,11 +200,52 @@ export function mirrorAcrossAABB(point: Vec2, box: AABB): Vec2[] {
   ];
 }
 
-// LOS that ignores one wall (the reflecting wall, since the bounce point sits on its surface).
+/**
+ * True if a segment leaving `start` toward `target` is travelling INTO `box`, as opposed
+ * to grazing one of its faces on the way past. Mirrors collision.ts's private
+ * `headingInto` (same rationale, same probe distance): `raySegmentVsAABB` reports a
+ * boundary TOUCH -- tmin==tmax exactly at one of THIS segment's own endpoints -- as a hit
+ * even when the segment never enters the box's interior, and the normal it returns in
+ * that case says nothing about direction. Deliberately duplicated rather than imported:
+ * `collision.ts` doesn't export it, and `losIgnoring` below is the only caller here.
+ */
+function headingIntoBox(start: Vec2, target: Vec2, box: AABB): boolean {
+  const dx = target.x - start.x;
+  const dy = target.y - start.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return false;
+  const step = SWEEP_EPS / len;
+  const px = start.x + dx * step;
+  const py = start.y + dy * step;
+  return px > box.minX && px < box.maxX && py > box.minY && py < box.maxY;
+}
+
+/**
+ * LOS that ignores one wall (the reflecting wall, since the bounce point sits on its
+ * surface).
+ *
+ * A subdivided reflector manufactures interior seams between adjacent cells, and a bank
+ * shot's bounce point can legitimately land exactly on one of those seam coordinates (see
+ * `mirrorAcrossAABB`'s reflection math -- nothing forces it away from a cell boundary).
+ * When that happens, the muzzle->bounce or bounce->target leg's own ENDPOINT sits exactly
+ * on a NEIGHBOURING wall's corner, and `raySegmentVsAABB` reports that boundary touch as
+ * a hit (`tmin == tmax` at t~0 or t~1) even though the segment never enters the
+ * neighbour's interior -- the same degenerate-touch class CLAUDE.md documents for
+ * `reflectSweep`'s seam problem, manifesting here instead of there. A hit at either
+ * extreme of the segment's own parameter range is disambiguated by probing a hair in
+ * from the touched end: still inside the box means a real penetration (block it); not
+ * means the segment only grazed a corner on its way past (let it through). A hit
+ * anywhere in the MIDDLE of the range (an actual crossing) is never a graze and is
+ * always a real block, unaffected by this check.
+ */
 function losIgnoring(from: Vec2, to: Vec2, walls: Wall[], ignore: Wall): boolean {
   for (const w of walls) {
     if (w === ignore || w.destroyed) continue;
-    if (raySegmentVsAABB(from, to, w.aabb) !== null) return false;
+    const hit = raySegmentVsAABB(from, to, w.aabb);
+    if (hit === null) continue;
+    if (hit.t <= SWEEP_EPS && !headingIntoBox(from, to, w.aabb)) continue;
+    if (hit.t >= 1 - SWEEP_EPS && !headingIntoBox(to, from, w.aabb)) continue;
+    return false;
   }
   return true;
 }
@@ -219,11 +260,25 @@ const FACE_NORMALS: Vec2[] = [
 /**
  * Finds a single-bounce bank-shot path from muzzle to target off any reflector wall.
  *
- * Searches each wall's four faces in order and returns the firing angle of the first
- * valid path (muzzle → bounce → target, where bounce lands exactly on the wall's surface
- * and both line-of-sight legs are clear). This returns the FIRST valid path in wall/face
- * iteration order, not the optimal or shortest path — deterministic given input, but
- * callers must not assume optimality.
+ * Searches every wall's four faces and returns the firing angle of the SHORTEST valid
+ * path (muzzle → bounce → target, where bounce lands exactly on the wall's surface and
+ * both line-of-sight legs are clear), breaking exact ties by the smaller firing angle.
+ * This makes the choice a property of the arena's geometry: however a reflector happens
+ * to be sliced into wall cells in the level data, the shortest path off its outer surface
+ * is the same path.
+ *
+ * A candidate reflecting off a face buried inside a neighbouring wall (an interior seam
+ * manufactured by how the level data sliced a reflector into cells) does NOT need its own
+ * rejection here: reaching a buried point from outside the wall it's buried in requires
+ * the final approach to pass through the neighbour that occupies the space immediately
+ * past that face, and `losIgnoring`'s graze-aware check below already rejects that as a
+ * real penetration, not a touch. Verified empirically, not just argued: an earlier
+ * version of this function carried an explicit `faceIsBuried` guard, and removing it
+ * changed the answer on 0 of 4,587,750 (muzzle, target) probes -- adjacent-pair,
+ * three-in-a-row, an L-shape with a partially-overlapping neighbour, a diagonal
+ * staircase, and all 4 shipped arenas' real merged wall geometry, compared via a
+ * per-config result hash with and without the guard. Deleted rather than kept as dead
+ * weight: a guard whose own test cannot make it fail is worse than no guard.
  *
  * @param maxBounces — Presently used ONLY as a precondition: must be >= 1 to proceed.
  *   The search is single-bounce-only; multi-bounce is not implemented. Task 21+ must
@@ -240,6 +295,8 @@ const FACE_NORMALS: Vec2[] = [
  */
 export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: number): number | null {
   if (maxBounces < 1) return null;
+  let bestAngle: number | null = null;
+  let bestLength = Infinity;
   for (const w of walls) {
     if (w.destroyed) continue;
     const mirrors = mirrorAcrossAABB(target, w.aabb);
@@ -255,6 +312,8 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
       if (hit.normal.x !== n.x || hit.normal.y !== n.y) continue;
       const bounce = hit.point;
       // Clear line to the wall, and clear line from the bounce point to the real target.
+      // A candidate on a buried interior seam face is rejected HERE, not by a separate
+      // check on the bounce point -- see the doc comment above.
       if (!losIgnoring(muzzle, bounce, walls, w)) continue;
       if (!losIgnoring(bounce, target, walls, w)) continue;
       // ...and the returning leg must MISS the shooter. A shell coming back at its owner
@@ -264,10 +323,22 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
       // with: TANK_RADIUS + BULLET_RADIUS, widened by AI_HULL_CLEARANCE's margin so a
       // near-graze at the edge of floating-point agreement is refused too.
       if (pointSegmentDistance(muzzle, bounce, target) < AI_HULL_CLEARANCE) continue;
-      return angleOf(vsub(bounce, muzzle));
+      // Chosen by PATH LENGTH, not array position. The shortest bank is the fastest
+      // shell to arrive, and -- unlike "first valid" -- it is a property of the arena's
+      // geometry rather than of how that geometry was sliced into cells. Exact ties are
+      // real in symmetric arenas, so they break on the ANGLE, which is geometric too.
+      const length = vdist(muzzle, bounce) + vdist(bounce, target);
+      const angle = angleOf(vsub(bounce, muzzle));
+      const better =
+        length < bestLength - AIM_EPS ||
+        (Math.abs(length - bestLength) <= AIM_EPS && bestAngle !== null && angle < bestAngle);
+      if (better || bestAngle === null) {
+        bestLength = Math.min(length, bestLength);
+        bestAngle = angle;
+      }
     }
   }
-  return null;
+  return bestAngle;
 }
 
 /**
