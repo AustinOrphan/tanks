@@ -237,7 +237,7 @@ arena-04 claims[0] (2), [1] (1), [2] (2), [3] (1), [4] (1), [5] (1), [7] (1), [9
 As with the notes work, that regex **undercounts the true population** because it
 requires a literal space between the word and the digit and is case-sensitive. Hand-scan
 with a broader pattern (`column-\d+`, `row-\d+`, bare `not \d+` following an established
-column reference, and case-insensitive `COLUMN`) found **8 additional stale tokens** the
+column reference, and case-insensitive `COLUMN`) found **7 additional stale tokens** the
 given regex misses, spanning **3 more claims not in the coordinator's list**:
 
 - arena-01 claims[0] (the single spawnBlockRobust claim): "row-5" (x2), "row-4" (x1) —
@@ -413,4 +413,192 @@ reading `grid[row][col]`.
 ```
 git add src/sim/config/data/arenas.json
 git commit -m "arenas: remap old-resolution coordinates in claims[].why prose to the 3x grid"
+```
+
+---
+
+# Second addendum: review findings fix
+
+Task 3 review came back SPEC PASS / QUALITY PASS with two Important findings and one
+Minor (report-only) finding. All three are fixed below.
+
+## B1. Finding 1 — arena-04 `claims[9].why` still said "two cells east"
+
+This was a **distance phrase**, not a coordinate, so it matched neither the coordinator's
+regex nor my own broader hand-scan pattern in the addendum above — both were built to
+catch `column N` / `row N` / `(x, y)` forms, not bare distance-in-cells language.
+
+`claims[9]` runs `from: [22, 4]` to `to: [28, 22]`. The sibling cell from `claims[7]` is
+`to: [22, 22]`. At the old resolution the two target cells were old columns 7 and 9 (2
+cells apart); after the 3x upscale the same two cells are new columns 22 and 28 — 6 cells
+apart, not 2. My own `notes[3]` (fixed in the base task) already says "six cells east"
+for this identical pair, so the file contradicted itself between one note and its
+adjoining claim. Fixed `claims[9].why` to also say "six cells east":
+
+```
+before: "CROSSFIRE, the inversion: two cells east, the grey's line is open down
+         COLUMN 25's gap in the bar ..."
+after:  "CROSSFIRE, the inversion: six cells east, the grey's line is open down
+         COLUMN 25's gap in the bar ..."
+```
+
+Verified by reading the grid rather than trusting the subtraction:
+
+```
+$ python3 -c "
+import json
+d = json.load(open('src/sim/config/data/arenas.json'))
+a4 = next(x for x in d['arenas'] if x['id']=='arena-04')
+print('claims[7] to:', a4['claims'][7]['to'])
+print('claims[9] from/to:', a4['claims'][9]['from'], a4['claims'][9]['to'])
+print('distance (to.x of claims9) - (to.x of claims7) =', a4['claims'][9]['to'][0] - a4['claims'][7]['to'][0])
+print('grid[22][22] =', repr(a4['grid'][22][22]))
+print('grid[22][28] =', repr(a4['grid'][22][28]))
+"
+claims[7] to: [22, 22]
+claims[9] from/to: [22, 4] [28, 22]
+distance (to.x of claims9) - (to.x of claims7) = 6
+grid[22][22] = '.'
+grid[22][28] = '.'
+```
+
+`28 - 22 = 6`, both cells are open floor as the "the two fronts want opposite cover"
+narrative requires (neither cell is itself a wall), and "six" now matches `notes[3]`
+verbatim.
+
+### Sweep for other stale non-coordinate quantities
+
+Requested scope: distance/count phrases in `notes`/`why` that carry old-resolution
+arithmetic but aren't plain `column N`/`row N`/`(x,y)` coordinates — "N cells wide", "N
+apart", spelled-out numbers, etc. Ran a pattern sweep across every `notes[]` and
+`claims[].why` string in the current file for: `<word> cells (east|west|north|south|
+apart|away|wide|tall|long)`, spelled-out number adjacent to "cell(s)", `N-cell`, `N-unit`,
+and `<number> ... (apart|away|wide|tall|long|deep|high)`. Full result:
+
+```
+arena-01 notes[3] [N-unit]: '0.1-unit'
+arena-01 notes[3] [N-unit]: '10-unit'
+arena-01 claims[0].why [N-unit]: '0.1-unit'
+arena-03 claims[7].why [N-unit]: '0.1-unit'
+arena-04 notes[3] [N cells <dir>]: 'six cells east'
+arena-04 notes[3] [spelled number + cell(s)]: 'six cells'
+arena-04 claims[9].why [N cells <dir>]: 'six cells east'
+arena-04 claims[9].why [spelled number + cell(s)]: 'six cells'
+arena-04 claims[9].why [spelled number + cell(s)]: 'one of the three solid cells'
+```
+
+Three categories, none newly stale:
+
+- **`0.1-unit` / `10-unit`** (arena-01 notes[3], arena-01 claims[0].why, arena-03
+  claims[7].why): world-space distances (the nudge-test tolerance and a lane width),
+  not cell counts. `cellSize` shrank from 2 to 2/3 while the grid tripled in each
+  dimension, so total world extent is unchanged (e.g. arena-01: 11 old cells x 2 =
+  33 new cells x 2/3 = 22 units, both before and after). A world-unit measurement does
+  not need to move under this transform, and I did not touch these.
+- **"six cells east" x2**: the two instances I already reconciled in this finding
+  (`notes[3]` and, as of this fix, `claims[9].why`) — the sweep pattern hits both
+  because both now use the same phrase.
+- **"one of the three solid cells"**: a feature *count* (the bar has three solid
+  anchor segments near the player spawn), not a distance — three anchors before the
+  upscale, three anchors after, only each is wider now. Not stale.
+
+No second instance of a wrong old-resolution distance was found beyond the one already
+fixed.
+
+## B2. Finding 2 — arena-04 `notes[4]` changed meaning, not just coordinates
+
+My feature-naming pass over-simplified the closing clause. Before my Task 3 edit it made
+a precise mechanical point (there's another gap in the east wall, but it's on the far
+side of the horizontal bar from the player); my rewrite said that region was "out of the
+play area", which the reviewer correctly identified as false — three enemies (green,
+grey, brown) spawn exactly there:
+
+```
+$ python3 -c "
+import json
+d = json.load(open('src/sim/config/data/arenas.json'))
+a4 = next(x for x in d['arenas'] if x['id']=='arena-04')
+print(\"grid[4][10] =\", repr(a4['grid'][4][10]))
+print(\"grid[4][22] =\", repr(a4['grid'][4][22]))
+print(\"grid[4][31] =\", repr(a4['grid'][4][31]))
+"
+grid[4][10] = 'N'
+grid[4][22] = 'G'
+grid[4][31] = 'B'
+```
+
+All three spawn letters confirmed present at row 4 — exactly the region my "out of the
+play area" phrasing implied was empty. A third of the level's fight (the whole NORTH
+front) happens there.
+
+Fixed to restore the original's mechanical claim, staying coordinate-free per the
+original instinct:
+
+```
+before (my Task 3 edit): "...it is open north of the bar too, but that is out of the
+                           play area."
+after:                    "...it is open north of the bar too, but the bar cuts that
+                           section off from the player's half."
+```
+
+This says what the pre-Task-3 text said ("those are north of the bar" = cut off from the
+player's south half by the bar) without reintroducing "rows 0-3" or claiming the region
+is unused.
+
+## B3. Finding 3 — report self-contradiction ("8" vs "7")
+
+§A0 above originally said "found **8 additional stale tokens**" in its lead sentence
+while its own bullet list (row-5 x2 + row-4 x1 + column-11 x1 + row-5 x1 + COLUMN 8 x1 +
+not-4 x1 = 7) and the paragraph immediately below it ("plus 7 additional tokens") both
+said 7. Corrected the lead sentence to say 7, matching the list and the total used
+throughout the rest of the addendum.
+
+## B4. Verification after this fix round
+
+Structural check (same field-by-field comparison against `bb1523e` as in §A4), re-run
+after this fix round:
+
+```
+$ python3 -c "
+import json
+before = json.load(open('/tmp/before.json'))
+after = json.load(open('src/sim/config/data/arenas.json'))
+for ba, aa in zip(before['arenas'], after['arenas']):
+    assert ba['grid'] == aa['grid']
+    assert ba['cellSize'] == aa['cellSize']
+    assert ba['cols'] == aa['cols'] and ba['rows'] == aa['rows']
+    for b, a in zip(ba['claims'], aa['claims']):
+        for key in b:
+            if key != 'why':
+                assert b[key] == a.get(key)
+print('Structural check passed: grid, cols, rows, cellSize, legend, and every claim',
+      'field except why are byte-identical.')
+n_notes = sum(1 for ba,aa in zip(before['arenas'], after['arenas']) for b,a in zip(ba['notes'], aa['notes']) if b != a)
+n_why = sum(1 for ba,aa in zip(before['arenas'], after['arenas']) for b,a in zip(ba['claims'], aa['claims']) if b['why'] != a['why'])
+print('notes strings changed total:', n_notes)
+print('why strings changed total:', n_why)
+"
+Structural check passed: grid, cols, rows, cellSize, legend, and every claim field except why are byte-identical.
+notes strings changed total: 15
+why strings changed total: 16
+```
+
+`notes` count stayed at 15 (finding 2 edited an already-changed string, not a new one);
+`why` count stayed at 16 (finding 1 likewise). No new strings were touched, no grid/claim
+field moved.
+
+Test suite, before this fix round and after (same baseline used throughout this report):
+
+```
+Test Files  6 failed | 64 passed | 1 skipped (71)
+     Tests  14 failed | 1208 passed | 1 skipped (1223)
+```
+
+Unchanged — same 14 pre-existing failures. `npx tsc --noEmit` exits 0.
+
+## Second addendum commit
+
+```
+git add src/sim/config/data/arenas.json
+git commit -m "arenas: fix cross-referenced distance and restore bar-blocks-north meaning"
 ```
