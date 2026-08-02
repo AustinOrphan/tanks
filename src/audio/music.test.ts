@@ -325,6 +325,12 @@ describe('composed tracks', () => {
     // cycle) -- so leaving the title screen played menu music several seconds
     // into the level, then changed suite while the round was underway.
     //
+    // Those absolutes MOVE with the sweep grid: the same measurement at 1.0s
+    // reads 0.85/6.85/11.85 and at 0.1s reads 0.68/7.08/13.38, because a finer
+    // grid catches calls closer to the boundary and the 0.6s lookahead bounds
+    // how late a change can still be recalled. The durable result is the
+    // CONTRAST between the two landings, not any one set of numbers.
+    //
     // A ROAM change is a musical decision and still belongs at the cycle
     // boundary. A CONTEXT change is a response to the player and belongs at the
     // next bar. Both are asserted here, so the fix cannot be "switch instantly".

@@ -104,7 +104,9 @@ describe('engine: a screen change is asked for PROMPTLY', () => {
     // Without `at: 'bar'` the bed defaults to the cycle boundary, which measured
     // min 0.35s / median 6.35s / max 11.85s of lag against the real modules
     // (24 of 24 calls, swept every 0.5s across one 12.8s menu cycle) -- the
-    // title screen's music playing seconds into the level.
+    // title screen's music playing seconds into the level. Those absolutes move
+    // with the sweep grid; see music.test.ts for the two other grids and why the
+    // contrast, not the number, is the durable result.
     const engine = createAudioEngine(AUDIO_MANIFEST);
     await flush();
     engine.startMusic(); // boots in the default 'menu' context
