@@ -3,6 +3,8 @@ import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
 import { synthVoice } from './synth';
 import { createMusicBed, type MusicBed } from './music';
 import { trackById } from './music-data';
+import { SUITES } from './suites';
+import { defaultDirector } from './playlist';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -283,10 +285,17 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       if (music) return;
       const audio = ensureCtx();
       if (!audio) return;
-      // A composed track if one is authored, else the generated bed. Same
-      // relationship the synth has with samples: authored content wins, and the
-      // generator covers whatever has not been written yet.
-      if (!bed) bed = createMusicBed(audio, ensureBus(audio), { track: trackById(MUSIC_TRACK_ID) });
+      // The playlist walks the suite graph -- shuffle bag inside a set, weighted
+      // neighbour selection across sets -- with the generated bed still the
+      // floor for degenerate data. This is the line that makes everything in
+      // suites.ts reachable from the game.
+      if (!bed) {
+        const director = defaultDirector(SUITES, Math.random);
+        bed = createMusicBed(audio, ensureBus(audio), {
+          track: director ? director.first() : trackById(MUSIC_TRACK_ID),
+          director,
+        });
+      }
       bed.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
       bed.setIntensity(musicIntensity);
       bed.start();

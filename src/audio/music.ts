@@ -68,6 +68,13 @@ export interface MusicBed {
 
 export interface MusicDeps {
   /**
+   * The playlist policy. Consulted at each COMPLETED full cycle (never at the
+   * pickup's early wrap -- the switch lock gates it), and its directive is
+   * applied through the same queueTrack/changeSuite paths a caller would use.
+   * Without one the bed simply loops its track, exactly as before.
+   */
+  director?: import('./playlist').MusicDirector | null;
+  /**
    * A composed track to play. Without one the bed generates, exactly as before:
    * the game is never silent while authoring is half-finished.
    */
@@ -332,6 +339,14 @@ export function createMusicBed(
       }
       stepsIntoCycle = (stepsIntoCycle + 1) % cycleSteps(track);
       if (switchLock > 0) switchLock -= 1;
+      // A genuine cycle completed: ask the director what plays next. The lock
+      // check matters -- the pickup's wrap is one bar in, and consulting there
+      // would advance the playlist before the member had actually played.
+      if (stepsIntoCycle === 0 && switchLock <= 0 && deps.director) {
+        const d = deps.director.next();
+        if (d.kind === 'queue') queued = d.track;
+        else if (d.kind === 'suite') pendingSuite = { next: d.track };
+      }
       if (ramp) {
         ramp.played += 1;
         if (ramp.played >= ramp.steps) ramp = null;
