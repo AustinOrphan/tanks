@@ -37,20 +37,25 @@ one and try out the others."* So the strategy is **data, per suite**, and the
 mechanism is chosen by name. All three are described here; only `dominant` ships
 in the first pass.
 
-### 1. `dominant` — generated (the default, and the one built first)
+### 1. `dominant` — the pickup entry (the shipped strategy, fifth design)
 
-Every key has one chord that sounds unfinished and pulls toward its home chord:
-the fifth degree. In A minor that is E; in D minor it is A. Before switching to
-a suite in key X, play one bar of **the dominant of X** at the outgoing tempo,
-then switch. The ear hears "this wants to resolve to X", and X arrives sounding
-intended rather than abrupt.
+Four earlier attempts each composed interstitial material — a held pad, then
+arpeggios, then rolled swells — and Austin rejected every one, finally naming
+the law they all broke: *"you're still using something that exists in neither
+section to bridge between the two and it's off."* **A bridge may use only
+material the sections themselves contain.**
 
-The arena track already uses this internally — its final bar is E, which is why
-the loop pulls back to A minor rather than merely stopping.
+The through-line construction supplies it. Every progression ends on its own
+dominant (arena's last bar is E pulling home to Am; vanguard's is A pulling to
+Dm), so the incoming piece's **own final bar is already the entry music**: it is
+played first, as a pickup, then the cycle starts from the top. The tempo ramp
+rides across that bar. Nothing is synthesised except the tempo interpolation.
 
-**Why this one first:** it is derived from the incoming suite's declared key, so
-N suites cost N declarations rather than N² bridges, and a newly written suite
-works with every existing one the day it is added.
+The validator enforces what the entry trusts: a suite whose members do not end
+on the dominant of its key is a boot failure, not a sour join found by ear.
+
+**Why this one:** zero authored bridges, zero invented material, and any new
+suite that follows the construction recipe works with every existing one.
 
 ### 2. `outro` — one authored exit phrase per suite
 

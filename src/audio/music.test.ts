@@ -279,117 +279,85 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
-  it('enters a new SUITE through its dominant, with the grid unbroken', () => {
-    // The handled join between two sets. Two things must hold: the dominant
-    // really sounds (that is what makes the new key arrive rather than cut), and
-    // the step grid survives the tempo ramp -- a ramp that drifted would
-    // desynchronise everything after it.
+  it('bridges with material from the SECTIONS THEMSELVES, nothing invented', () => {
+    // Austin, after four iterations of composed interstitial material: "you're
+    // still using something that exists in neither section to bridge between
+    // the two and it's off". This is that sentence as an assertion: every pitch
+    // scheduled across the whole run, transition included, must come from one
+    // of the two tracks' own note lists. There is no third thing.
     const from: MusicTrackDef = {
-      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
-      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('F1'), noteToHz('A1'), noteToHz('C#2')], generate: null, intensity: 0 }],
     };
     const to: MusicTrackDef = {
-      id: 'to', stepSeconds: 0.5, barSteps: 2, chords: ['Dm', 'Gm'],
+      id: 'to', stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('C3'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const legal = new Set(
+      [...from.tracks[0].notes!, ...to.tracks[0].notes!]
+        .filter((n): n is number => n !== null)
+        .map((n) => Math.round(n)),
+    );
+    expect(ctx.notes.length).toBeGreaterThan(8);
+    for (const n of ctx.notes) {
+      expect(legal, `scheduled ${Math.round(n.freq)}Hz: material from neither section`).toContain(
+        Math.round(n.freq),
+      );
+    }
+    expect(bed.currentTrackId()).toBe('to');
+    bed.stop();
+  });
+
+  it("enters through the incoming piece's OWN final bar -- its dominant -- first", () => {
+    // The through-line construction ends every progression on its dominant, so
+    // the incoming track's last bar IS the entry music. The first thing heard
+    // from the new section must be that final bar, then the cycle proper.
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
       tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('D1'), noteToHz('D1')], generate: null, intensity: 0 }],
     };
     const { ctx, t, bed } = withTrack(from);
     bed.start();
-    // Dm's dominant is A major -- that is the chord that pulls into D.
-    bed.changeSuite(to, parseChord('A')!, 4);
-    for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
-
-    const freqs = ctx.notes.map((n) => Math.round(n.freq));
-    // The dominant assembles as a ROLLED chord: root, third, fifth entering at
-    // staggered times, each SUSTAINED to the end of the passage. Three heard
-    // faults excluded at once: the slab (all notes at once), the plink (short
-    // stark notes with a rhythm of their own -- Austin heard both the timbre
-    // and the rhythm as wrong), and absence.
-    const wanted = ['A3', 'C#3', 'E3'].map((x) => Math.round(noteToHz(x)!));
-    const domTones = ctx.notes.filter((n) => wanted.includes(Math.round(n.freq)));
-    expect(domTones.length).toBeGreaterThanOrEqual(3);
-    const entries = domTones.map((n) => n.startedAt);
-    expect(new Set(entries).size, 'the triad landed all at once: that is the slab').toBeGreaterThan(1);
-    // Sustained, not plinked: each tone rings for several steps, so the layer
-    // has no rhythmic figure to fight the bass pulse.
-    for (const n of domTones) {
-      expect(n.stoppedAt, `tone at ${n.startedAt} never got a stop time`).not.toBeNull();
-      expect(n.stoppedAt! - n.startedAt, `tone at ${n.startedAt} plinked`).toBeGreaterThan(1.5);
-    }
-    // And the dominant layer enters FEWER times than the passage has steps:
-    // one note per step is a competing rhythm, which was the juxtaposition jar.
-    expect(domTones.length).toBeLessThan(4);
-    // And the destination arrived.
-    expect(freqs).toContain(Math.round(noteToHz('D1')!));
-    expect(bed.currentTrackId()).toBe('to');
-    expect(bed.inTransition()).toBe(false);
-
-    // The grid: every gap is a whole number of steps at SOME tempo in the range
-    // the ramp spans. A drifting ramp shows up as a gap outside that band.
-    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((a, b) => a - b);
-    for (let i = 1; i < starts.length; i++) {
-      const gap = starts[i] - starts[i - 1];
-      expect(gap, `gap ${i} is ${gap}s`).toBeGreaterThan(0);
-      expect(gap, `gap ${i} is ${gap}s, outside the ramp's tempo range`).toBeLessThanOrEqual(1 * 4 + 1e-9);
-    }
+    bed.changeSuite(to);
+    for (let i = 1; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+    const incoming = ctx.notes
+      .map((n) => Math.round(n.freq))
+      .filter((f) => f !== Math.round(noteToHz('D1')!));
+    // Final bar first (E2, G#2 -- the V bar), THEN the cycle from the top.
+    const e2 = Math.round(noteToHz('E2')!);
+    const gs2 = Math.round(noteToHz('G#2')!);
+    const a2 = Math.round(noteToHz('A2')!);
+    expect(incoming.slice(0, 2), 'the pickup bar was skipped').toEqual([e2, gs2]);
+    expect(incoming.slice(2, 4), 'the cycle proper did not follow').toEqual([a2, a2]);
     bed.stop();
   });
 
-  it('keeps the outgoing RHYTHM but speaks ONE harmony through the passage', () => {
-    // Austin heard the held-triad version as "sloppy and sudden", and the mush
-    // was real: the outgoing pads kept their old key under a block chord in a
-    // texture nothing else uses. The passage now keeps the outgoing bass RHYTHM
-    // -- same steps sound, including its rests -- repitched onto the dominant,
-    // with the dominant arpeggiated rather than held. The old pitches must NOT
-    // sound: one harmony at a time is the whole point.
+  it('RAMPS the tempo across the pickup bar rather than switching instantly', () => {
+    // The ramp spans the incoming piece's pickup bar, so its resolution IS the
+    // bar length: 2-step fixture bars gave only the two endpoints, which is why
+    // this fixture uses realistic 8-step bars.
+    const mkNotes = (name: string, n: number): Array<number | null> =>
+      Array.from({ length: n }, () => noteToHz(name));
     const from: MusicTrackDef = {
-      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'Gm'],
-      tracks: [
-        // A rest in the pattern, so rhythm preservation is testable: a version
-        // that pulses every step regardless would fill it in.
-        { voice: 'bass', notes: [noteToHz('D1'), null, noteToHz('D2'), null], generate: null, intensity: 0 },
-        { voice: 'pad', notes: [noteToHz('F3'), noteToHz('F3'), noteToHz('F3'), noteToHz('F3')], generate: null, intensity: 0 },
-      ],
+      id: 'slow', stepSeconds: 1, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: mkNotes('A1', 16), generate: null, intensity: 0 }],
     };
     const to: MusicTrackDef = {
-      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'Am'],
-      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('A2'), noteToHz('A2')], generate: null, intensity: 0 }],
+      id: 'fast', stepSeconds: 0.25, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: mkNotes('A1', 16), generate: null, intensity: 0 }],
     };
     const { ctx, t, bed } = withTrack(from);
     bed.start();
-    bed.changeSuite(to, parseChord('E')!, 4); // E major pulls into Am
-    for (let i = 1; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
-
-    // The passage spans steps 4..7 (times 4..7s). Gather what sounded there.
-    const passage = ctx.notes.filter((n) => n.startedAt >= 4 && n.startedAt < 8);
-    const hz = (name: string): number => Math.round(noteToHz(name)!);
-    const freqs = passage.map((n) => Math.round(n.freq));
-    // Bass: dominant root at the outgoing contour -- E1 where D1 was, E2 where
-    // D2 was -- and NOTHING on the rest steps.
-    // Times carry the bed's 0.08s start offset; strip it before taking steps.
-    const bassSteps = passage.filter((n) => n.freq < 100).map((n) => Math.round((n.startedAt - 0.08) % 4));
-    expect(freqs).toContain(hz('E1'));
-    expect(freqs).toContain(hz('E2'));
-    expect(new Set(bassSteps), 'bass sounded on a rest step').toEqual(new Set([0, 2]));
-    // One harmony: the outgoing D roots and F pad are gone from the passage.
-    for (const old of ['D1', 'D2', 'F3']) {
-      expect(freqs, `outgoing ${old} bled through the pivot`).not.toContain(hz(old));
-    }
-    bed.stop();
-  });
-
-  it('RAMPS the tempo across the transition rather than switching instantly', () => {
-    const from: MusicTrackDef = {
-      id: 'slow', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
-      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
-    };
-    const to: MusicTrackDef = {
-      id: 'fast', stepSeconds: 0.25, barSteps: 2, chords: ['Am', 'F'],
-      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
-    };
-    const { ctx, t, bed } = withTrack(from);
-    bed.start();
-    bed.changeSuite(to, parseChord('E')!, 8);
-    for (let i = 1; i <= 40; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    bed.changeSuite(to);
+    for (let i = 1; i <= 80; i++) { ctx.currentTime = i * 0.5; t.tick(); }
     const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((a, b) => a - b);
     const gaps = starts.slice(1).map((v, i) => v - starts[i]);
     // An instant switch would show only 1.0 and 0.25. A ramp visits values in

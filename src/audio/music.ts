@@ -44,7 +44,7 @@ export interface MusicBed {
    * incoming suite's dominant -- while the tempo ramps toward the incoming
    * track's, then start it. This is the handled join between two sets.
    */
-  changeSuite(next: MusicTrackDef, chord: Chord, steps: number): void;
+  changeSuite(next: MusicTrackDef): void;
   /** True while the transition passage is sounding. */
   inTransition(): boolean;
   /**
@@ -135,16 +135,18 @@ export function createMusicBed(
    * DOMINANT, during which the tempo ramps from the outgoing pulse to the
    * incoming one. See the suites design doc.
    */
-  let transition: {
-    chord: Chord;
-    steps: number;
-    played: number;
-    fromStep: number;
-    toStep: number;
-    next: MusicTrackDef;
-    /** The outgoing bass line, whose RHYTHM the passage keeps. */
-    bassPattern: Array<number | null>;
-  } | null = null;
+  /**
+   * A tempo ramp in progress, across the incoming piece's pickup bar. This is
+   * ALL that remains of the transition machinery: after four iterations of
+   * composing interstitial material (a held pad, then arpeggios, then rolled
+   * swells), Austin named the actual flaw -- "you're still using something that
+   * exists in neither section to bridge between the two". So nothing is
+   * invented any more. The through-line construction ends every progression on
+   * its own dominant, which means the incoming piece's FINAL BAR is already the
+   * entry music: it is played first, as a pickup, and the only thing synthesised
+   * across it is the tempo interpolation.
+   */
+  let ramp: { played: number; steps: number; fromStep: number; toStep: number } | null = null;
   // Per-layer cursors: layers advance INDEPENDENTLY, so a 8-step bass under an
   // 11-step drone gives an 88-step combined cycle without authoring one.
   let cursors = track ? track.tracks.map(() => 0) : [];
@@ -156,7 +158,7 @@ export function createMusicBed(
   let cycle = 0;
   let intensity = 1;
   let stepsIntoCycle = 0;
-  let pendingSuite: { next: MusicTrackDef; chord: Chord; steps: number } | null = null;
+  let pendingSuite: { next: MusicTrackDef } | null = null;
 
   function regenerate(layerIndex: number): void {
     if (!track) return;
@@ -254,31 +256,34 @@ export function createMusicBed(
   }
 
   function scheduleStep(at: number): void {
-    if (transition) {
-      scheduleTransition(at);
-      return;
-    }
-    // Check for a pending switch BEFORE scheduling: the boundary is the step at
-    // which the outgoing cycle has completed, and the incoming track should own
-    // that step rather than the one after it.
+    // A suite change happens at the boundary, like any track switch -- but the
+    // incoming track starts at its FINAL bar, its own dominant, as a pickup.
+    // Real material from the incoming section; nothing composed in between.
     if (track && pendingSuite && stepsIntoCycle === 0) {
-      transition = {
-        chord: pendingSuite.chord,
-        steps: pendingSuite.steps,
+      const next = pendingSuite.next;
+      const pickupSteps = next.barSteps;
+      const startAtStep = Math.max(0, cycleSteps(next) - pickupSteps);
+      ramp = {
         played: 0,
+        steps: pickupSteps,
         fromStep: track.stepSeconds,
-        toStep: pendingSuite.next.stepSeconds,
-        next: pendingSuite.next,
-        bassPattern: track.tracks.find((l) => l.voice === 'bass' && l.notes)?.notes ?? [],
+        toStep: next.stepSeconds,
       };
+      track = next;
+      cursors = track.tracks.map(() => startAtStep);
+      generated = track.tracks.map(() => null);
+      chords = track.chords.map((c) => parseChord(c)).filter((c): c is Chord => !!c);
+      stepsIntoCycle = startAtStep;
       pendingSuite = null;
-      scheduleTransition(at);
-      return;
     }
     if (track && queued && stepsIntoCycle === 0) adoptQueued();
     if (track) {
       scheduleComposed(at);
       stepsIntoCycle = (stepsIntoCycle + 1) % cycleSteps(track);
+      if (ramp) {
+        ramp.played += 1;
+        if (ramp.played >= ramp.steps) ramp = null;
+      }
     } else {
       scheduleGenerated(at);
     }
@@ -313,9 +318,9 @@ export function createMusicBed(
    * it stays a pure function of the step index and the grid cannot drift.
    */
   function stepLength(): number {
-    if (transition) {
-      const p = transition.steps <= 1 ? 1 : transition.played / (transition.steps - 1);
-      return transition.fromStep + (transition.toStep - transition.fromStep) * Math.min(1, p);
+    if (ramp) {
+      const p = ramp.steps <= 1 ? 1 : ramp.played / (ramp.steps - 1);
+      return ramp.fromStep + (ramp.toStep - ramp.fromStep) * Math.min(1, p);
     }
     return track ? track.stepSeconds : STEP_SECONDS;
   }
@@ -336,55 +341,6 @@ export function createMusicBed(
    * voice -- motion, not a slab. Nothing else sounds: pulse continuity without
    * harmonic mush.
    */
-  function scheduleTransition(at: number): void {
-    const t = transition;
-    if (!t) return;
-    const len = stepLength();
-    const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    // The outgoing bass rhythm on the NEW root: same steps sound, same octave
-    // jumps, different pitch. Rhythm is identity; pitch is direction.
-    if (t.bassPattern.length > 0) {
-      const src = t.bassPattern[t.played % t.bassPattern.length];
-      if (src !== null) {
-        const root0 = noteToHz(`${NAMES[t.chord.root]}0`);
-        if (root0 !== null) {
-          const octave = Math.max(0, Math.round(Math.log2(src / root0)));
-          const hz = noteToHz(`${NAMES[t.chord.root]}${octave}`);
-          if (hz !== null) note(hz, at, len * VOICES.bass.hold, VOICES.bass.peak, VOICES.bass.type);
-        }
-      }
-    }
-    // The dominant assembles as a ROLLED chord: one tone enters every few
-    // steps, each a soft sine swell sustained to the end of the passage.
-    //
-    // Fourth iteration, again from a heard fault: cycling the tones as short
-    // pluck notes was "sudden and stark" (Austin) -- square is the harshest
-    // voice in the palette and it was exposed against a thinned texture. Rolled
-    // entries in sine build the same harmony with none of the plink: the
-    // envelope's slow attack over a long duration makes each entry a swell,
-    // and by the end of the passage the full chord is simply THERE.
-    const spread = Math.max(1, Math.floor(t.steps / t.chord.pitchClasses.length));
-    if (t.played % spread === 0) {
-      const idx = t.played / spread;
-      if (idx < t.chord.pitchClasses.length) {
-        const pc = t.chord.pitchClasses[idx];
-        const hz = noteToHz(`${NAMES[pc]}3`);
-        const remaining = (t.steps - t.played) * len;
-        if (hz !== null) note(hz, at, remaining + len, VOICES.drone.peak * 1.4, 'sine');
-      }
-    }
-    t.played += 1;
-    if (t.played >= t.steps) {
-      // The passage is done: the incoming track starts its own cycle here.
-      track = t.next;
-      cursors = track.tracks.map(() => 0);
-      generated = track.tracks.map(() => null);
-      chords = track.chords.map((c) => parseChord(c)).filter((c): c is Chord => !!c);
-      stepsIntoCycle = 0;
-      transition = null;
-    }
-  }
-
   function pump(): void {
     if (!bus || disposed) return;
     const horizon = ctx.currentTime + LOOKAHEAD_SECONDS;
@@ -441,11 +397,11 @@ export function createMusicBed(
     queueTrack(next: MusicTrackDef): void {
       queued = next;
     },
-    changeSuite(next: MusicTrackDef, chord: Chord, steps: number): void {
-      pendingSuite = { next, chord, steps: Math.max(1, Math.floor(steps)) };
+    changeSuite(next: MusicTrackDef): void {
+      pendingSuite = { next };
     },
     inTransition(): boolean {
-      return transition !== null;
+      return ramp !== null;
     },
     currentTrackId(): string | null {
       return track?.id ?? null;

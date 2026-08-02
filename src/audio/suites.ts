@@ -90,6 +90,18 @@ function parseSuite(raw: unknown, i: number): SuiteDef {
       fail(`${at}.members[${mi}]`, `"${t.id}" plays ${t.chords.join('-')}, "${first.id}" plays ${first.chords.join('-')}`);
     }
   });
+  // The pickup entry -- a suite is ENTERED through its members' final bar -- only
+  // sounds right because that bar is the key's dominant. The through-line
+  // construction guarantees it (i-VI-VII-V); this makes the guarantee a boot
+  // failure instead of a sour join discovered by ear.
+  const home = parseChord(key);
+  const last = parseChord(first.chords[first.chords.length - 1] ?? '');
+  if (!home || !last || last.root !== (home.root + 7) % 12) {
+    fail(
+      `${at}.members`,
+      `"${first.id}" ends on ${first.chords[first.chords.length - 1]}, not the dominant of ${key} -- the pickup entry needs the final bar to be the V`,
+    );
+  }
   return { id, key, stepSeconds, transition: transition as TransitionKind, members };
 }
 
@@ -103,6 +115,9 @@ function parseAll(raw: unknown): SuiteDef[] {
   }
   return parsed;
 }
+
+/** Exposed for the validator's own negative controls. */
+export const __parseAllForTests = parseAll;
 
 export const SUITES: readonly SuiteDef[] = Object.freeze(
   parseAll(suitesJson).map((s) => Object.freeze({ ...s, members: Object.freeze([...s.members]) as string[] })),

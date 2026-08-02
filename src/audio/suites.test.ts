@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  __parseAllForTests,
   SUITES,
   suiteById,
   membersOf,
@@ -154,6 +155,16 @@ describe('rankCandidates / pickNextSuite', () => {
 });
 
 describe('the suite validator', () => {
+  it('rejects a suite whose members do not END on its dominant', () => {
+    // The pickup entry plays the final bar first, trusting it to be the V. The
+    // menu track ends on G, and G is not the dominant of A minor -- accepting
+    // this suite would make every entry into it land on the wrong chord, a sour
+    // join found by ear instead of at boot.
+    const bad = [{ id: 'bad', key: 'Am', stepSeconds: 0.4, transition: 'dominant', members: ['menu'] }];
+    expect(() => __parseAllForTests(bad)).toThrow(/dominant of Am/);
+  });
+
+
   it('every shipped member exists in the track catalog', () => {
     for (const s of SUITES) {
       for (const m of s.members) {

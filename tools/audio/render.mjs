@@ -166,7 +166,7 @@ try {
     // suite after the first through its dominant with the tempo ramping. The
     // cross-set join is the thing that has to be judged by ear.
     if (opts.chain) {
-      const { suiteById, membersOf, dominantOf } = await import('/src/audio/suites.ts');
+      const { suiteById, membersOf } = await import('/src/audio/suites.ts');
       const ids = opts.chain.split(',').map((x) => x.trim());
       const suites = ids.map(suiteById);
       const missing = ids.filter((id, i) => !suites[i]);
@@ -179,6 +179,8 @@ try {
       const picks = suites.map((s, i) => membersOf(s)[i % membersOf(s).length]);
       // A full bar of pivot. Eight steps (~1.2s) was too short for the ear to
       // register the dominant as a gesture before everything changed.
+      // The pickup bar's length, for the timeline estimate only: the bed itself
+      // decides everything now.
       const TRANS_STEPS = 16;
       let seconds = 2;
       for (let i = 0; i < picks.length; i++) {
@@ -199,7 +201,7 @@ try {
       const marks = [];
       let elapsed = cycleOf(picks[0]) * picks[0].stepSeconds;
       for (let i = 1; i < picks.length; i++) {
-        marks.push({ at: elapsed, id: `${suites[i].id} (via ${dominantOf(suites[i]).name})` });
+        marks.push({ at: elapsed, id: `${suites[i].id} (via its own final bar)` });
         elapsed += TRANS_STEPS * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
         elapsed += cycleOf(picks[i]) * picks[i].stepSeconds;
       }
@@ -207,7 +209,7 @@ try {
       for (let t = 0.4; t < seconds - 0.4; t += 0.4) {
         ctx.suspend(t).then(() => {
           if (next < picks.length && t >= marks[next - 1].at - 1.5) {
-            bed.changeSuite(picks[next], dominantOf(suites[next]), TRANS_STEPS);
+            bed.changeSuite(picks[next]);
             next += 1;
           }
           if (pump) pump();
