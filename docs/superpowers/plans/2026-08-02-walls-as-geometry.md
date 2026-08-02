@@ -667,7 +667,7 @@ If the point sweep makes the pair tests too slow, thin `pts` for those two only 
 npx vitest run src/sim/decomposition.test.ts 2>&1 | grep -E "Tests |×"
 ```
 
-Expected: PASS. If the bank-shot case fails, that is the honest outcome — `bankShot` still returns the first reflector in array order and merging only reduced the exposure. Record the failure, mark that test `it.fails` with a comment naming the residual, and raise it in the PR body rather than weakening the assertion.
+Expected: PASS on all three, including the bank shot — Task 3 closed that mechanism, and this is the independent check on it. **Do not weaken an assertion or mark a test `it.fails` to get green.** A failure here means a mechanism is still open: report it with the failing case and stop, because Task 6's re-baseline would otherwise enshrine the defect in the golden hash.
 
 - [ ] **Step 3: Prove each assertion can fail**
 
