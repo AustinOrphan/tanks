@@ -215,7 +215,7 @@
       },
       "grid": [
         "...............",
-        "....N..G..B....",
+        "...N...G..B....",
         "...............",
         "...............",
         "...#x#.#.#x#.T.",
@@ -229,22 +229,22 @@
       "notes": [
         "The crossfire debut, and the FIRST shipped board that is not 11x9: 15x11, so the extra space is what makes two simultaneous fronts readable instead of merely crowded.",
         "Six enemies in two fronts at ninety degrees to each other. NORTH is the suppressing front -- GREEN, grey, brown across row 1, behind the row-4 bar. EAST is the mobile front -- teal, olive, teal down column 13, inside the player's own half, behind the solid column-11 wall.",
-        "The green at (4, 1) is the RICOCHET_SNIPER debut, and it is here because it answers the board's one weakness. Measured on the same probe as the cover ratio below: 43 of the 151 open cells are seen by no enemy from its spawn, and the largest such pocket is the bottom-left corner. Green's bank shots reach 44 cells it has NO direct line to -- including that corner. It is stationary like a brown, so the north front keeps its character; it simply does not accept the row-4 bar as cover. Pinned by arena-validation.test.ts, since a grid edit could quietly take the reach away.",
+        "The green at (3, 1) is the RICOCHET_SNIPER debut, and it is here because it answers the board's own weakness. 35 of the 151 open cells are seen by no enemy from its spawn -- one broad region across columns 2-10, rows 5-10, NOT a tidy corner. Green's ricochets reach 29 cells it has no direct line to, and 20 of those are cells no enemy can otherwise see at all: it covers 20 of the 35. It is stationary like a brown, so the north front keeps its character; it simply does not accept the row-4 bar as cover. Column 3 and not 4: from column 4 its reach was larger (44 cells) but it could ricochet onto the nudged player spawn once the bar was breached, which this arena's spawnBlockRobust claim forbids. Both figures are recomputed by arena-validation.test.ts.",
         "The two fronts want opposite cover, and that IS the level. Cell (7, 7) sits in the row-4 bar's shadow -- shut to the north, wide open to the teal at (13, 4) shooting along the row-5 corridor. Cell (9, 7), two cells east, is the exact inverse: shut to every east tank by the column-11 wall, open to the grey down column 8's gap in the bar. Breaking one front's line steps you into the other's. Four lane claims pin both cells in both wall phases.",
         "The two walls are deliberately different KINDS of problem. The row-4 bar is porous (open at columns 0-2, 6, 8, 12-14) and breachable at columns 4 and 10; the column-11 wall is solid throughout (rows 4, 6, 7, 8) and must be FLANKED rather than blown. From the player's half that means row 5 above it or rows 9-10 below it; it is open at rows 0-3 too, but those are north of the bar. Level 2 taught breaching; level 4 says not every wall answers to it.",
         "Blowing the bar at column 10 opens that column top-to-bottom, giving the brown at (10, 1) a line down to row 9 -- alongside the player spawn, never onto it: the spawn's own blockers are the bar's solid cells at columns 5, 7 and 9, which no breach touches. That is why spawnBlockRobust holds here and all six sightlineAfterBreach claims read false, unlike level 2 where breaching is meant to open spawn lines.",
         "The destructible at (6, 6) is mid-field cover for the player's left-hand approach, not a spawn-line blocker: losing it hands the teal at (13, 4) a line onto (5, 7).",
-        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 43 of 151 = 28.5%, the tightest of the four, against arena-01 35/86 = 40.7%, arena-02 41/83 = 49.4%, arena-03 30/88 = 34.1%. The intended step up in pressure for the last level. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
+        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 35 of 151 = 23.2%, the tightest of the four, against arena-01 35/86 = 40.7%, arena-02 41/83 = 49.4%, arena-03 30/88 = 34.1%. The intended step up in pressure for the last level. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
       ],
       "claims": [
         {
           "type": "sightlineAfterBreach",
           "from": [
-            4,
+            3,
             1
           ],
           "sees": false,
-          "why": "North-west GREEN, the ricochet sniper: the bar's solid cell at column 5 stands on its direct line and no breach touches it. Its BANK paths onto the spawn are checked separately -- structuralFailures forbids a stationary banker any ricochet onto the player spawn, which no sightline claim can express."
+          "why": "North-west GREEN, the ricochet sniper: the bar's solid cell at column 3 stands on its direct line and no breach touches it. Its BANK paths are checked separately and in two places -- structuralFailures forbids a stationary banker any ricochet onto the spawn with walls intact, and this arena's spawnBlockRobust claim extends that to the breached phase under nudges. Column 3 is where green survives BOTH; column 4 did not."
         },
         {
           "type": "sightlineAfterBreach",
@@ -364,7 +364,7 @@
           ],
           "intact": "blocked",
           "breached": "open",
-          "why": "The bar's west breach: column 4 is otherwise clear from row 1 to row 7, so blowing that cell trades a DIRECT shot at the green sniper for its direct shot back. Its ricochets do not need the hole; that is the point of it."
+          "why": "The bar's west breach: column 4 is otherwise clear from row 1 to row 7, so blowing that cell opens a north-south lane into the player's half. NOTE both endpoints are plain floor -- green sits at column 3, not 4 -- so unlike this arena's other lanes nothing pins this one to a live spawn. It measures the destructible at (4, 4), which is the thing worth measuring."
         },
         {
           "type": "lane",

@@ -98,9 +98,16 @@ behaviour gate and the weight gate separately.
 
 **`determinism.test.ts` does not catch AI behaviour changes**, which is easy to
 assume it does. It asserts self-consistency — same seed, same result — and that
-is invariant under behaviour changes. Giving brown a 0.5 `bankShotWeight` passed
-all 1155 tests. Any claim that an AI edit is behaviour-preserving needs a golden
-trace comparison, not a green suite. The 9-type Wii taxonomy in `config/reference/` is reference
+is invariant under behaviour changes: giving brown a 0.5 `bankShotWeight` leaves
+all 7 of its tests passing while a trace probe moves. When that mutation was first
+run it passed the WHOLE suite (1155 tests); it now fails 5 tests in 2 files,
+because green's arrival added tests that watch the bank path — so the hole is
+narrower than it was, and the general point stands. Any claim that an AI edit is
+behaviour-preserving needs a golden trace comparison, not a green suite.
+
+STATIONARY still ignores `preferredDistance`/`minimumDistance`/`retreatChance`,
+and always will: they are a distance band for a tank that moves. "Every profile
+field is consumed" means consumed by the implementations it applies to. The 9-type Wii taxonomy in `config/reference/` is reference
 data only — nothing in the game reads it.
 
 **Arenas are data too.** Grids, design rationale (`notes`) and machine-checkable
@@ -109,7 +116,7 @@ design `claims` live in `config/data/arenas.json`, validated at load by
 `arenas[2].grid[4]`). `arena.ts` keeps every export it always had; `SPAWN_LETTERS`
 (`config/arena-types.ts`) is the single source of the spawn-letter map for the
 validator and `loadArena` — green is `N`, because grey already holds `G` and
-re-lettering grey would rewrite every shipped grid — — `src/sim/sandbox.ts` keeps its own `KIND_LETTER`
+re-lettering grey would rewrite every shipped grid — `src/sim/sandbox.ts` keeps its own `KIND_LETTER`
 table (plus a hardcoded `'P'`) for grid GENERATION, so re-lettering a kind in
 `SPAWN_LETTERS` without also updating `sandbox.ts` would leave the dev sandbox
 emitting a character `loadArena` rejects. Three claim types —

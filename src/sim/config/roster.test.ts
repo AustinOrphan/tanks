@@ -119,6 +119,7 @@ describe('per-kind identity comes from config, not code branches', () => {
     expect(configFor('grey').behavior).toBe(AIBehavior.DEFENSIVE);
     expect(configFor('teal').behavior).toBe(AIBehavior.TACTICAL);
     expect(configFor('olive').behavior).toBe(AIBehavior.DEFENSIVE);
+    expect(configFor('green').behavior).toBe(AIBehavior.STATIONARY);
   });
 
   it("grey's profile-derived dodge patience equals the tuned DODGE_PATIENCE_TICKS", () => {
@@ -159,6 +160,35 @@ describe('per-kind identity comes from config, not code branches', () => {
     expect(o.weapon.fireCooldown).toBe(38); // SLOW, same tick count pinned for brown
     expect(hasAbility('olive', TankAbility.MINE_LAYER)).toBe(false);
     expect(o.ai.minePlacementChance ?? 0).toBe(0);
+  });
+
+  it("green, the ricochet sniper: every stat its level-4 placement depends on", () => {
+    // Review found green shipped with NOTHING pinning its chassis or weapon: fireRate
+    // SLOW->FAST, maxActiveProjectiles 5->1, mineCapacity 2->0 and rotationSpeed
+    // SLOW->FAST could all be changed at once and 1164 tests still passed. Each line
+    // below is a design decision the level-4 numbers were measured against.
+    const g = configFor('green');
+    expect(g.behavior).toBe(AIBehavior.STATIONARY);
+    // The whole point of the kind: it is the only STATIONARY profile that banks, and
+    // brown.ts gates its bank path on exactly this being > 0. At 0 green becomes a
+    // brown with a different colour, and its 29-cell reach in arena-04 goes to zero.
+    expect(g.ai.bankShotWeight).toBeGreaterThan(0);
+    expect(g.ai.directShotWeight).toBeGreaterThan(0); // still takes the direct shot first
+    // A ricochet shell, not a straight one -- bankShot is handed this bounce budget,
+    // and arena-validation.test.ts's reach figures are computed with it.
+    expect(g.weapon.bulletType).toBe('ricochet');
+    expect(g.weapon.ricochetCount).toBe(bulletConfig.ricochet.bounces);
+    expect(g.weapon.speed).toBe(bulletConfig.ricochet.speed);
+    expect(g.weapon.fireCooldown).toBe(38); // SLOW: a sniper, not a machine gun
+    expect(g.weapon.maxActiveProjectiles).toBe(SHELL_CAP);
+    expect(g.rotationSpeed).toBeCloseTo(TANK_TURN_RATE * 0.6, 9); // SLOW turret traverse
+    // Stationary and mineless, like brown: the north front keeps its character.
+    expect(hasAbility('green', TankAbility.MINE_LAYER)).toBe(false);
+    expect(g.ai.minePlacementChance ?? 0).toBe(0);
+    // Descriptive, matching teal, the other banker. BANK_SHOT_AIM is documentation --
+    // no gameplay code reads it (see the note on abilities in resolve.ts) -- but the
+    // dedicated bank tank lacking the descriptor its lesser banker carries is wrong.
+    expect(hasAbility('green', TankAbility.BANK_SHOT_AIM)).toBe(true);
   });
 
   it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {

@@ -106,6 +106,8 @@
       "ricochetCount": 2
     },
     "mineCapacity": 2,
-    "abilities": []
+    "abilities": [
+      "BANK_SHOT_AIM"
+    ]
   }
 }

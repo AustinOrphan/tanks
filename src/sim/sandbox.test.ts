@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { sandboxArena, createSandboxWorld, SANDBOX_ENEMY_ANCHORS } from './sandbox';
 import { arenaBounds, ARENA_01, loadArena } from './arena';
+import { TANK_KINDS } from './config';
 import { validateArenaShape } from './config/validate';
 
 describe('sandboxArena', () => {
@@ -98,4 +99,23 @@ it('the generated sandbox passes the same structural validator as a shipped aren
   // file), but it must clear the same bar: one player, an enemy, a legal grid.
   const arena = sandboxArena({ tanks: ['brown', 'grey', 'teal'], walls: 4, seed: 7 });
   expect(() => validateArenaShape(arena, 'sandbox', 'sandbox')).not.toThrow();
+});
+
+it('round-trips EVERY enemy kind, so the two spawn-letter tables cannot drift apart', () => {
+  // `sandbox.ts` keeps its own KIND_LETTER for grid GENERATION while `loadArena` reads
+  // SPAWN_LETTERS (config/arena-types.ts) to PARSE. CLAUDE.md names the hazard; nothing
+  // enforced it. Review demonstrated the hole by setting sandbox's green to 'Z': all
+  // 1165 tests still passed, while `sandboxArena({tanks:['green']})` threw
+  // "Unrecognized character 'Z'" the moment anyone actually used it.
+  //
+  // Derived from the canonical kind list, NOT a hand-written array -- that is what makes
+  // a sixth kind covered on the day it exists rather than the day someone remembers.
+  // The existing sandbox tests only ever used brown, grey and teal, so olive and green
+  // were both unexercised here.
+  const enemies = TANK_KINDS.filter((k) => k !== 'player');
+  expect(enemies.length).toBeGreaterThanOrEqual(4); // population guard: not an empty sweep
+  for (const kind of enemies) {
+    const { spawns } = loadArena(sandboxArena({ tanks: [kind] }));
+    expect(spawns.filter((s) => s.kind !== 'player').map((s) => s.kind), kind).toEqual([kind]);
+  }
 });
