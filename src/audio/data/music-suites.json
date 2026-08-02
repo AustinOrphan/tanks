@@ -1,0 +1,23 @@
+[
+  {
+    "id": "assault",
+    "key": "Am",
+    "stepSeconds": 0.15,
+    "transition": "dominant",
+    "members": [
+      "arena",
+      "arena-push",
+      "arena-lull",
+      "arena-charge"
+    ]
+  },
+  {
+    "id": "siege-set",
+    "key": "Dm",
+    "stepSeconds": 0.22,
+    "transition": "dominant",
+    "members": [
+      "siege"
+    ]
+  }
+]

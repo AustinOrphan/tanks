@@ -225,6 +225,122 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('SWITCHES tracks only at a cycle boundary, never mid-phrase', () => {
+    // The whole seamlessness argument. Queue a swap partway through a cycle and
+    // the outgoing track must finish it; the incoming one must start at ITS
+    // step 0, not wherever the old cursor happened to be.
+    const a: MusicTrackDef = {
+      id: 'a', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('C2'), noteToHz('E2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const b: MusicTrackDef = {
+      id: 'b', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D2'), noteToHz('D1'), noteToHz('D2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(a);
+    bed.start();
+    ctx.currentTime = 1; t.tick(); // 2 steps in: mid-cycle
+    bed.queueTrack(b);
+    expect(bed.currentTrackId(), 'a queued switch must not take effect at once').toBe('a');
+    for (let i = 2; i <= 9; i++) { ctx.currentTime = i; t.tick(); }
+
+    const played = ctx.notes.map((n) => Math.round(n.freq));
+    const aNotes = a.tracks[0].notes!.map((n) => Math.round(n!));
+    const bNotes = b.tracks[0].notes!.map((n) => Math.round(n!));
+    const switchAt = played.findIndex((f) => bNotes.includes(f) && !aNotes.includes(f));
+    expect(switchAt, 'the switch never happened').toBeGreaterThan(0);
+    // It landed on a multiple of the cycle length: 4 steps here.
+    expect(switchAt % 4, `switched at step ${switchAt}, not a cycle boundary`).toBe(0);
+    // Track a played WHOLE cycles up to that point -- no truncated phrase.
+    expect(played.slice(0, switchAt)).toEqual(
+      Array.from({ length: switchAt }, (_, i) => aNotes[i % aNotes.length]),
+    );
+    // And b starts at ITS beginning, not mid-pattern.
+    expect(played.slice(switchAt, switchAt + 4)).toEqual(bNotes);
+    expect(bed.currentTrackId()).toBe('b');
+    bed.stop();
+  });
+
+  it('keeps the STEP GRID unbroken across a switch', () => {
+    // A switch that dropped or doubled a step would be audible as a stumble even
+    // if the notes themselves were right.
+    const mk = (id: string, hz: number): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [hz, hz], generate: null, intensity: 0 }],
+    });
+    const { ctx, t, bed } = withTrack(mk('x', noteToHz('A1')!));
+    bed.start();
+    bed.queueTrack(mk('y', noteToHz('D1')!));
+    for (let i = 1; i <= 8; i++) { ctx.currentTime = i; t.tick(); }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((p, q) => p - q);
+    for (let i = 1; i < starts.length; i++) {
+      expect(starts[i] - starts[i - 1], `gap at ${i} spans the switch`).toBeCloseTo(1, 9);
+    }
+    bed.stop();
+  });
+
+  it('enters a new SUITE through its dominant, with the grid unbroken', () => {
+    // The handled join between two sets. Two things must hold: the dominant
+    // really sounds (that is what makes the new key arrive rather than cut), and
+    // the step grid survives the tempo ramp -- a ramp that drifted would
+    // desynchronise everything after it.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 0.5, barSteps: 2, chords: ['Dm', 'Gm'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('D1'), noteToHz('D1')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    // Dm's dominant is A major -- that is the chord that pulls into D.
+    bed.changeSuite(to, parseChord('A')!, 4);
+    for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+
+    const freqs = ctx.notes.map((n) => Math.round(n.freq));
+    // The dominant's triad sounded: A, C#, E in octave 3.
+    for (const n of ['A3', 'C#3', 'E3']) {
+      expect(freqs, `transition should sound ${n}`).toContain(Math.round(noteToHz(n)!));
+    }
+    // And the destination arrived.
+    expect(freqs).toContain(Math.round(noteToHz('D1')!));
+    expect(bed.currentTrackId()).toBe('to');
+    expect(bed.inTransition()).toBe(false);
+
+    // The grid: every gap is a whole number of steps at SOME tempo in the range
+    // the ramp spans. A drifting ramp shows up as a gap outside that band.
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((a, b) => a - b);
+    for (let i = 1; i < starts.length; i++) {
+      const gap = starts[i] - starts[i - 1];
+      expect(gap, `gap ${i} is ${gap}s`).toBeGreaterThan(0);
+      expect(gap, `gap ${i} is ${gap}s, outside the ramp's tempo range`).toBeLessThanOrEqual(1 * 4 + 1e-9);
+    }
+    bed.stop();
+  });
+
+  it('RAMPS the tempo across the transition rather than switching instantly', () => {
+    const from: MusicTrackDef = {
+      id: 'slow', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = {
+      id: 'fast', stepSeconds: 0.25, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to, parseChord('E')!, 8);
+    for (let i = 1; i <= 40; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((a, b) => a - b);
+    const gaps = starts.slice(1).map((v, i) => v - starts[i]);
+    // An instant switch would show only 1.0 and 0.25. A ramp visits values in
+    // between -- that is the whole point.
+    const between = gaps.filter((g) => g > 0.3 && g < 0.95);
+    expect(between.length, `gaps: ${gaps.map((g) => g.toFixed(2)).join(',')}`).toBeGreaterThan(0);
+    bed.stop();
+  });
+
   it('plays THE track the engine asks for, by id', () => {
     // Review proved the old version could not fail: `trackById('arena')!` yields
     // null when the id is absent, withTrack(null) silently takes the generated

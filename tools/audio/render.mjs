@@ -25,7 +25,7 @@ const PORT = Number(process.env.AUDIO_TOOL_PORT ?? 5210);
 const OUT_DIR = resolve(ROOT, 'audio-out');
 
 function parseArgs(argv) {
-  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null };
+  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null, suite: null, chain: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--list') args.list = true;
@@ -36,6 +36,8 @@ function parseArgs(argv) {
     else if (a === '--loop') args.loop = true;
     else if (a === '--intensity') args.intensity = Number(argv[++i]);
     else if (a === '--seed') args.seed = Number(argv[++i]);
+    else if (a === '--suite') args.suite = argv[++i];
+    else if (a === '--chain') args.chain = argv[++i];
   }
   return args;
 }
@@ -51,7 +53,7 @@ for (const [flag, value] of Object.entries(args)
     process.exit(2);
   }
 }
-if (!args.list && !args.track && !args.sfx) {
+if (!args.list && !args.track && !args.sfx && !args.suite && !args.chain) {
   console.error(
     'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--out file.wav]',
   );
@@ -160,6 +162,109 @@ try {
       return { wav: toWav(await ctx.startRendering()), label: `sfx-${opts.sfx}` };
     }
 
+    // --chain: play one track from each named SUITE in turn, entering every
+    // suite after the first through its dominant with the tempo ramping. The
+    // cross-set join is the thing that has to be judged by ear.
+    if (opts.chain) {
+      const { suiteById, membersOf, dominantOf } = await import('/src/audio/suites.ts');
+      const ids = opts.chain.split(',').map((x) => x.trim());
+      const suites = ids.map(suiteById);
+      const missing = ids.filter((id, i) => !suites[i]);
+      if (missing.length) return { error: `unknown suite(s): ${missing.join(', ')}` };
+      const cycleOf = (t) => {
+        const lens = t.tracks.map((l) => (l.notes ? l.notes.length : t.barSteps * t.chords.length));
+        const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
+      };
+      const picks = suites.map((s, i) => membersOf(s)[i % membersOf(s).length]);
+      const TRANS_STEPS = 8;
+      let seconds = 2;
+      for (let i = 0; i < picks.length; i++) {
+        seconds += cycleOf(picks[i]) * picks[i].stepSeconds;
+        if (i > 0) seconds += TRANS_STEPS * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
+      }
+      const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
+      let pump = null;
+      const bed = createMusicBed(ctx, ctx.destination, {
+        setInterval: (fn) => { pump = fn; return 0; },
+        clearInterval: () => {},
+        track: picks[0],
+        seed: opts.seed ?? undefined,
+      });
+      bed.setVolume(0.9);
+      if (opts.intensity !== null) bed.setIntensity(opts.intensity);
+      bed.start();
+      const marks = [];
+      let elapsed = cycleOf(picks[0]) * picks[0].stepSeconds;
+      for (let i = 1; i < picks.length; i++) {
+        marks.push({ at: elapsed, id: `${suites[i].id} (via ${dominantOf(suites[i]).name})` });
+        elapsed += TRANS_STEPS * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
+        elapsed += cycleOf(picks[i]) * picks[i].stepSeconds;
+      }
+      let next = 1;
+      for (let t = 0.4; t < seconds - 0.4; t += 0.4) {
+        ctx.suspend(t).then(() => {
+          if (next < picks.length && t >= marks[next - 1].at - 1.5) {
+            bed.changeSuite(picks[next], dominantOf(suites[next]), TRANS_STEPS);
+            next += 1;
+          }
+          if (pump) pump();
+          ctx.resume();
+        });
+      }
+      return { wav: toWav(await ctx.startRendering()), label: `chain-${ids.join('-')}`, marks };
+    }
+
+    // --suite: play several tracks back to back through the real bed, switching
+    // at cycle boundaries. This is the thing that has to be judged by ear, so
+    // the tool has to produce it rather than describe it.
+    if (opts.suite) {
+      const ids = opts.suite.split(',');
+      const chosen = ids.map((id) => trackById(id.trim()));
+      const missing = ids.filter((id, i) => !chosen[i]);
+      if (missing.length) return { error: `unknown track(s): ${missing.join(', ')}` };
+      const cycleOf = (t) => {
+        const lens = t.tracks.map((l) => (l.notes ? l.notes.length : t.barSteps * t.chords.length));
+        const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
+      };
+      const seconds = chosen.reduce((acc, t) => acc + cycleOf(t) * t.stepSeconds, 0) + 2;
+      const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
+      let pump = null;
+      const bed = createMusicBed(ctx, ctx.destination, {
+        setInterval: (fn) => { pump = fn; return 0; },
+        clearInterval: () => {},
+        track: chosen[0],
+        seed: opts.seed ?? undefined,
+      });
+      bed.setVolume(0.9);
+      if (opts.intensity !== null) bed.setIntensity(opts.intensity);
+      bed.start();
+      // Queue each next member; the bed adopts it at the boundary on its own.
+      const marks = [];
+      let elapsed = 0;
+      for (let i = 1; i < chosen.length; i++) {
+        elapsed += cycleOf(chosen[i - 1]) * chosen[i - 1].stepSeconds;
+        marks.push({ at: elapsed, id: chosen[i].id });
+      }
+      let next = 0;
+      for (let t = 0.4; t < seconds - 0.4; t += 0.4) {
+        ctx.suspend(t).then(() => {
+          while (next < marks.length && t >= marks[next].at - 1.2) {
+            bed.queueTrack(chosen[next + 1]);
+            next += 1;
+          }
+          if (pump) pump();
+          ctx.resume();
+        });
+      }
+      return {
+        wav: toWav(await ctx.startRendering()),
+        label: `suite-${ids.map((s) => s.trim()).join('-')}`,
+        marks,
+      };
+    }
+
     const track = trackById(opts.track);
     if (!track) {
       return { error: `unknown track "${opts.track}". known: ${MUSIC_TRACKS.map((t) => t.id).join(', ')}` };
@@ -246,6 +351,9 @@ try {
     // Peak is reported so silence is obvious without opening the file -- a
     // preview that quietly writes 30s of nothing is worse than an error.
     console.log(`wrote ${file}  (peak ${result.wav.peak.toFixed(3)})`);
+    if (result.marks) {
+      console.log(`  switches at: ${result.marks.map((m) => `${m.at.toFixed(2)}s -> ${m.id}`).join(', ')}`);
+    }
     if (result.seam !== undefined) {
       const verdict = result.seam <= result.typical ? 'seamless' : 'AUDIBLE STEP';
       console.log(
