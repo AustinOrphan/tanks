@@ -25,7 +25,7 @@ const PORT = Number(process.env.AUDIO_TOOL_PORT ?? 5210);
 const OUT_DIR = resolve(ROOT, 'audio-out');
 
 function parseArgs(argv) {
-  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false };
+  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--list') args.list = true;
@@ -34,6 +34,8 @@ function parseArgs(argv) {
     else if (a === '--seconds') args.seconds = Number(argv[++i]);
     else if (a === '--out') args.out = argv[++i];
     else if (a === '--loop') args.loop = true;
+    else if (a === '--intensity') args.intensity = Number(argv[++i]);
+    else if (a === '--seed') args.seed = Number(argv[++i]);
   }
   return args;
 }
@@ -114,7 +116,9 @@ try {
         list: MUSIC_TRACKS.map((t) => ({
           id: t.id,
           stepSeconds: t.stepSeconds,
-          layers: t.tracks.map((l) => `${l.voice}:${l.notes.length}`),
+          layers: t.tracks.map(
+            (l) => `${l.voice}:${l.notes ? l.notes.length : 'gen'}${l.intensity ? `@${l.intensity}` : ''}`,
+          ),
         })),
       };
     }
@@ -167,7 +171,10 @@ try {
     // called that "seamless", because each individual sample still lined up.
     const gcd = (a, b) => (b ? gcd(b, a % b) : a);
     const lcm = (a, b) => (a / gcd(a, b)) * b;
-    const steps = track.tracks.map((l) => l.notes.length);
+    // A GENERATED layer has no authored notes; its cycle is the progression.
+    const steps = track.tracks.map((l) =>
+      l.notes ? l.notes.length : track.barSteps * track.chords.length,
+    );
     const loopSteps = steps.reduce(lcm, 1);
     const loopSeconds = loopSteps * track.stepSeconds;
     // --loop renders EXACTLY one cycle and folds the ring-out back over the
@@ -187,8 +194,11 @@ try {
       setInterval: (fn) => { pump = fn; return 0; },
       clearInterval: () => {},
       track,
+      seed: opts.seed ?? undefined,
     });
     bed.setVolume(0.9);
+    // The arrangement the game would play at that moment: layers gate in and out.
+    if (opts.intensity !== null) bed.setIntensity(opts.intensity);
     bed.start();
     // Register every suspend BEFORE rendering: offline rendering outruns an
     // await-one-at-a-time loop and suspend() then rejects for a passed frame.
@@ -196,7 +206,7 @@ try {
       ctx.suspend(t).then(() => { if (pump) pump(); ctx.resume(); });
     }
     const rendered = await ctx.startRendering();
-    if (!opts.loop) return { wav: toWav(rendered), label: `track-${track.id}` };
+    if (!opts.loop) return { wav: toWav(rendered), label: `track-${track.id}${opts.intensity !== null ? `-i${opts.intensity}` : ''}` };
 
     // Fold: everything past one cycle is the tail of notes that started inside
     // it, which is exactly what would be sounding as the loop comes round again.
@@ -218,7 +228,7 @@ try {
     const seam = Math.abs(out[0] - out[loopFrames - 1]);
     let typical = 0;
     for (let i = 1; i < Math.min(4000, loopFrames); i++) typical = Math.max(typical, Math.abs(out[i] - out[i - 1]));
-    return { wav: toWav(looped), label: `track-${track.id}-loop`, seam, typical, loopSeconds };
+    return { wav: toWav(looped), label: `track-${track.id}${opts.intensity !== null ? `-i${opts.intensity}` : ''}-loop`, seam, typical, loopSeconds };
   }, args);
 
   if (result.error) {

@@ -1,4 +1,6 @@
 import tracksJson from './data/music-tracks.json';
+import { parseChord } from './chords';
+import { noteToHz, REST } from './notes';
 
 /**
  * Composed music, as data.
@@ -18,6 +20,8 @@ import tracksJson from './data/music-tracks.json';
  */
 
 const FILE = 'music-tracks.json';
+
+export { noteToHz, REST };
 
 /** Audible bounds. Outside these a "note" is either inaudible or a typo. */
 const MIN_HZ = 16;
@@ -47,45 +51,31 @@ export const VOICES = {
 
 export type VoiceName = keyof typeof VOICES;
 
+/** A layer either plays authored notes or generates them over the harmony. */
+export interface MusicLayerDef {
+  voice: VoiceName;
+  /** Authored: one entry per step, null being a rest. */
+  notes: Array<number | null> | null;
+  /** Generated: rebuilt each cycle from the track's chords, so it never repeats. */
+  generate: { density: number; lowOctave: number; highOctave: number; seedSalt: number } | null;
+  /**
+   * Plays only when the mix intensity is at least this. 0 means always. This is
+   * what lets the music thin out and build with the round instead of running
+   * flat, and it is why the arrangement can be sparse without being empty.
+   */
+  intensity: number;
+}
+
 export interface MusicTrackDef {
   id: string;
   stepSeconds: number;
-  tracks: Array<{ voice: VoiceName; notes: Array<number | null> }>;
+  /** Steps per bar. Required once a track declares chords. */
+  barSteps: number;
+  /** One chord name per bar, e.g. ["Am","F","G","E"]. Empty when unharmonised. */
+  chords: string[];
+  tracks: MusicLayerDef[];
 }
 
-/** A rest. Written as `-` in the JSON; parsed to null. */
-export const REST = '-';
-
-const SEMITONES: Record<string, number> = {
-  C: 0,
-  D: 2,
-  E: 4,
-  F: 5,
-  G: 7,
-  A: 9,
-  B: 11,
-};
-
-/**
- * Scientific pitch notation -> Hz. `A4` is 440 by definition, and MIDI note 69
- * is that A, which is the whole of the arithmetic below.
- *
- * Octave numbering is the trap: in this notation the octave increments at C, not
- * at A, so B3 and C4 are a semitone apart while A3 and A4 are twelve. An
- * implementation that increments at A puts every note below C in the wrong
- * octave -- which sounds plausible until a bass line is an octave out.
- */
-export function noteToHz(name: string): number | null {
-  if (name === REST) return null;
-  const m = /^([A-G])([#b]?)(-?\d+)$/.exec(name);
-  if (!m) return NaN;
-  const [, letter, accidental, octaveText] = m;
-  const octave = Number(octaveText);
-  const semitone = SEMITONES[letter] + (accidental === '#' ? 1 : accidental === 'b' ? -1 : 0);
-  // MIDI 69 = A4 = 440 Hz; MIDI 12 is C0, so C(n) is 12 * (n + 1).
-  const midi = 12 * (octave + 1) + semitone;
-  return 440 * Math.pow(2, (midi - 69) / 12);
-}
 
 function fail(path: string, message: string): never {
   throw new Error(`${FILE}: ${path} ${message}`);
@@ -120,10 +110,45 @@ function parseTrack(raw: unknown, index: number): MusicTrackDef {
     if (typeof voice !== 'string' || !Object.hasOwn(VOICES, voice)) {
       fail(`${tAt}.voice`, `must be one of ${Object.keys(VOICES).join(', ')}, got ${JSON.stringify(voice)}`);
     }
-    if (!Array.isArray(t.notes) || t.notes.length === 0) {
+    const hasNotes = t.notes !== undefined;
+    const hasGenerate = t.generate !== undefined;
+    if (hasNotes === hasGenerate) {
+      fail(tAt, 'must have exactly one of "notes" or "generate"');
+    }
+
+    let generate: MusicLayerDef['generate'] = null;
+    if (hasGenerate) {
+      const g = t.generate;
+      if (!isRecord(g)) fail(`${tAt}.generate`, 'must be an object');
+      const density = g.density;
+      if (typeof density !== 'number' || !(density > 0) || density > 1) {
+        fail(`${tAt}.generate.density`, `must be within (0, 1], got ${JSON.stringify(density)}`);
+      }
+      for (const k of ['lowOctave', 'highOctave'] as const) {
+        const v = g[k];
+        if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 8) {
+          fail(`${tAt}.generate.${k}`, `must be an integer octave 0-8, got ${JSON.stringify(v)}`);
+        }
+      }
+      if ((g.highOctave as number) < (g.lowOctave as number)) {
+        fail(`${tAt}.generate`, 'highOctave must not be below lowOctave');
+      }
+      const salt = g.seedSalt ?? 0;
+      if (typeof salt !== 'number' || !Number.isFinite(salt)) {
+        fail(`${tAt}.generate.seedSalt`, `must be a number, got ${JSON.stringify(salt)}`);
+      }
+      generate = {
+        density: density as number,
+        lowOctave: g.lowOctave as number,
+        highOctave: g.highOctave as number,
+        seedSalt: salt as number,
+      };
+    }
+
+    if (hasNotes && (!Array.isArray(t.notes) || t.notes.length === 0)) {
       fail(`${tAt}.notes`, 'must be a non-empty array');
     }
-    const notes = t.notes.map((n: unknown, ni: number) => {
+    const notes = !hasNotes ? null : (t.notes as unknown[]).map((n: unknown, ni: number) => {
       if (typeof n !== 'string') {
         fail(`${tAt}.notes[${ni}]`, `must be a string, got ${JSON.stringify(n)}`);
       }
@@ -143,9 +168,31 @@ function parseTrack(raw: unknown, index: number): MusicTrackDef {
       }
       return hz;
     });
-    return { voice: voice as VoiceName, notes };
+    const intensity = t.intensity ?? 0;
+    if (typeof intensity !== 'number' || intensity < 0 || intensity > 1) {
+      fail(`${tAt}.intensity`, `must be within [0, 1], got ${JSON.stringify(intensity)}`);
+    }
+    return { voice: voice as VoiceName, notes, generate, intensity: intensity as number };
   });
-  return { id, stepSeconds, tracks };
+  const chordsRaw = raw.chords ?? [];
+  if (!Array.isArray(chordsRaw)) fail(`${at}.chords`, 'must be an array of chord names');
+  const chords = chordsRaw.map((c: unknown, ci: number) => {
+    if (typeof c !== 'string' || !parseChord(c)) {
+      fail(`${at}.chords[${ci}]`, `is not a chord name, got ${JSON.stringify(c)}`);
+    }
+    return c as string;
+  });
+  const barSteps = raw.barSteps ?? 0;
+  if (typeof barSteps !== 'number' || !Number.isInteger(barSteps) || barSteps < 0) {
+    fail(`${at}.barSteps`, `must be a non-negative integer, got ${JSON.stringify(barSteps)}`);
+  }
+  // A generated layer cannot exist without harmony to follow, and harmony cannot
+  // be placed in time without a bar length. Caught here rather than surfacing as
+  // an empty melody at runtime.
+  if (tracks.some((t) => t.generate) && (chords.length === 0 || barSteps === 0)) {
+    fail(at, 'has a generated layer but no chords/barSteps to generate against');
+  }
+  return { id, stepSeconds, barSteps: barSteps as number, chords, tracks };
 }
 
 function parseAll(raw: unknown): MusicTrackDef[] {
@@ -167,7 +214,7 @@ function parseAll(raw: unknown): MusicTrackDef[] {
 function deepFreeze(tracks: MusicTrackDef[]): readonly MusicTrackDef[] {
   for (const t of tracks) {
     for (const layer of t.tracks) {
-      Object.freeze(layer.notes);
+      if (layer.notes) Object.freeze(layer.notes);
       Object.freeze(layer);
     }
     Object.freeze(t.tracks);

@@ -55,6 +55,9 @@ describe('the shipped track data', () => {
       expect(t.tracks.length, t.id).toBeGreaterThan(0);
       for (const layer of t.tracks) {
         expect(Object.keys(VOICES), `${t.id}/${layer.voice}`).toContain(layer.voice);
+        // Exactly one source of notes: authored or generated, never both.
+        expect(Boolean(layer.notes) !== Boolean(layer.generate), t.id).toBe(true);
+        if (!layer.notes) continue;
         expect(layer.notes.length).toBeGreaterThan(0);
         // Every entry is either a real frequency or a rest -- never NaN.
         for (const n of layer.notes) expect(n === null || Number.isFinite(n)).toBe(true);
@@ -76,6 +79,7 @@ describe('the shipped track data', () => {
     // cursor and produces nothing, and nothing else would ever report it.
     for (const t of MUSIC_TRACKS) {
       for (const [i, layer] of t.tracks.entries()) {
+        if (!layer.notes) continue; // generated layers have no authored notes
         const sounding = layer.notes.filter((n) => n !== null).length;
         expect(sounding, `${t.id}.tracks[${i}] (${layer.voice}) is all rests`).toBeGreaterThan(0);
       }
@@ -86,7 +90,10 @@ describe('the shipped track data', () => {
     // A misplaced decimal is the realistic failure: 0.015 instead of 0.15 makes
     // the piece a one-second chirp, and 15 makes each note last a quarter minute.
     for (const t of MUSIC_TRACKS) {
-      const longest = Math.max(...t.tracks.map((l) => l.notes.length));
+      const authored = t.tracks.filter((l) => l.notes);
+      const longest = Math.max(
+        ...(authored.length ? authored.map((l) => l.notes!.length) : [t.barSteps * t.chords.length]),
+      );
       const seconds = longest * t.stepSeconds;
       expect(seconds, `${t.id} loops in ${seconds}s`).toBeGreaterThan(2);
       expect(seconds, `${t.id} loops in ${seconds}s`).toBeLessThan(120);

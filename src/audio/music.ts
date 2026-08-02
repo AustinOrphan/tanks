@@ -19,6 +19,9 @@
  */
 
 import { VOICES, type MusicTrackDef } from './music-data';
+import { noteToHz } from './notes';
+import { parseChord, type Chord } from './chords';
+import { generateMelody } from './melody';
 
 /** Bass root notes, A minor, one octave apart from the drone. */
 const BASS_HZ = [55, 55, 61.74, 55, 65.41, 55, 49, 55];
@@ -38,6 +41,11 @@ export interface MusicBed {
   stop(): void;
   /** 0..1, applied to the whole bed. Safe to call while playing. */
   setVolume(v: number): void;
+  /**
+   * 0..1 arrangement density. Layers whose own `intensity` exceeds this stay
+   * silent, so the game can drive the mix from state (enemies remaining).
+   */
+  setIntensity(v: number): void;
   isPlaying(): boolean;
   dispose(): void;
 }
@@ -99,6 +107,34 @@ export function createMusicBed(
   // Per-layer cursors: layers advance INDEPENDENTLY, so a 8-step bass under an
   // 11-step drone gives an 88-step combined cycle without authoring one.
   const cursors = track ? track.tracks.map(() => 0) : [];
+  // Generated layers are rebuilt each time they wrap, so the "loop" is only a
+  // loop harmonically: the melody over it is new every cycle. That is the whole
+  // answer to loop fatigue -- the skeleton repeats, the surface does not.
+  const chords = track ? track.chords.map((c) => parseChord(c)).filter((c): c is Chord => !!c) : [];
+  const generated: Array<Array<number | null> | null> = track ? track.tracks.map(() => null) : [];
+  let cycle = 0;
+  let intensity = 1;
+
+  function regenerate(layerIndex: number): void {
+    if (!track) return;
+    const spec = track.tracks[layerIndex].generate;
+    if (!spec || chords.length === 0) return;
+    const names = generateMelody(
+      chords,
+      track.barSteps,
+      spec,
+      (deps.seed ?? 0x5eed) + cycle * 131 + layerIndex,
+    );
+    generated[layerIndex] = names.map((n) => noteToHz(n));
+  }
+
+  /** The notes a layer is currently playing: authored, or this cycle's melody. */
+  function notesOf(layerIndex: number): Array<number | null> {
+    const layer = track!.tracks[layerIndex];
+    if (layer.notes) return layer.notes;
+    if (!generated[layerIndex]) regenerate(layerIndex);
+    return generated[layerIndex] ?? [];
+  }
 
   function nextRandom(): number {
     rng ^= rng << 13;
@@ -139,9 +175,21 @@ export function createMusicBed(
   function scheduleComposed(at: number): void {
     if (!track) return;
     track.tracks.forEach((layer, i) => {
-      const hz = layer.notes[cursors[i] % layer.notes.length];
+      let notes = notesOf(i);
+      if (notes.length === 0) return;
+      // A generated layer gets a NEW melody each time it comes round.
+      if (cursors[i] > 0 && cursors[i] % notes.length === 0 && layer.generate) {
+        cycle += 1;
+        regenerate(i);
+        notes = notesOf(i);
+      }
+      const hz = notes[cursors[i] % notes.length];
       cursors[i] += 1;
       if (hz === null) return; // a rest: advance the cursor, sound nothing
+      // Intensity gates the ARRANGEMENT. The cursor still advances while a layer
+      // is silent, so one coming back in lands where the phrase is rather than
+      // restarting mid-figure.
+      if (layer.intensity > intensity) return;
       const v = VOICES[layer.voice];
       note(hz, at, track.stepSeconds * v.hold, v.peak, v.type);
     });
@@ -221,6 +269,9 @@ export function createMusicBed(
     setVolume(v: number): void {
       volume = Math.max(0, Math.min(1, v));
       if (bus) bus.gain.value = volume;
+    },
+    setIntensity(v: number): void {
+      intensity = Math.max(0, Math.min(1, v));
     },
     isPlaying(): boolean {
       return timer !== null;
