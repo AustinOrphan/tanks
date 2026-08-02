@@ -4,7 +4,7 @@
 
 **Goal:** Make the sim's answers depend on the arena's geometry rather than on how that geometry happens to be sliced into grid cells, so a resolution change is a data edit and not a behaviour change.
 
-**Architecture:** Three independent defects found in the Task 5 investigation of `2026-08-02-arena-resolution-upscale.md` (see `.superpowers/sdd/2026-08-02-arena-resolution-upscale/task-5-report-addendum.md` for the evidence). Tank ids are drawn from a counter shared with walls, so wall count reseeds every per-tank RNG stream; `resolveWalls` applies one push per overlapping wall, so a subdivided wall pushes several times and its interior seams present phantom corners; `bankShot` returns the first reflector in array order. Fixed by numbering tanks independently of walls, merging **solid** walls into maximal rectangles at load, and resolving collisions against the deepest single overlap iteratively.
+**Architecture:** Three independent defects found in the Task 5 investigation of `2026-08-02-arena-resolution-upscale.md` (see `.superpowers/sdd/2026-08-02-arena-resolution-upscale/task-5-report-addendum.md` for the evidence). Tank ids are drawn from a counter shared with walls, so wall count reseeds every per-tank RNG stream; `resolveWalls` applies one push per overlapping wall, so a subdivided wall pushes several times and its interior seams present phantom corners; `bankShot` returns the first reflector in array order. Fixed by numbering tanks independently of walls, merging **solid** walls into maximal rectangles at load, choosing the shortest bank path off a face that is not buried, and resolving collisions against the deepest single overlap iteratively. All three mechanisms are closed, not reduced.
 
 **Tech Stack:** TypeScript, vitest, JSON arena data validated at module load. No new dependencies.
 
@@ -26,6 +26,7 @@
 ## File Structure
 
 - `src/sim/arena.ts` — `loadArena` gains a tank pass separate from the wall pass, and a `mergeSolidRuns` step. This is the only file that turns data into entities, so both changes belong here.
+- `src/sim/ai/targeting.ts` — `bankShot` selects by path length instead of array position, and gains `faceIsBuried`. Its callers (`brown.ts`, `teal.ts`, `arena-claims.ts`) are unchanged.
 - `src/sim/collision.ts` — `resolveWalls` rewritten. Its callers (`world.ts:116`, `collision.ts:340`) are unchanged.
 - `src/sim/decomposition.test.ts` — **new.** The property this plan buys: an arena and a finer slicing of the same geometry must agree. Lives beside the sim it tests, not under `tools/`.
 - `tools/baseline/trace.test.ts` — **kept, not deleted.** Becomes a permanent pinned golden trace (the original plan deleted it; CLAUDE.md's own rule is that a behaviour-preserving claim needs a golden trace, so it should ship).
@@ -281,7 +282,7 @@ npx vitest run src/sim/arena.test.ts -t 'never merges destructible' # expect PAS
 npx tsc --noEmit && npx vitest run 2>&1 | grep -E "Tests |Test Files"
 ```
 
-`cell-mapping.test.ts` and any wall-count pin will fail; those move in Task 5. Note the failures, do not fix them yet.
+`cell-mapping.test.ts` and any wall-count pin will fail; those move in Task 6. Note the failures, do not fix them yet.
 
 - [ ] **Step 5: Prove the destructible guard can fail**
 
@@ -297,14 +298,178 @@ git commit -m "sim: solid walls load as maximal rectangles, not one box per cell
 
 ---
 
-### Task 3: `resolveWalls` resolves against the deepest overlap, iteratively
+### Task 3: `bankShot` picks a canonical reflector, not the first in the array
+
+**Files:**
+- Modify: `src/sim/ai/targeting.ts` (`bankShot`, ~line 241)
+- Test: `src/sim/ai/targeting.test.ts`
+
+**Interfaces:**
+- Consumes: Tasks 1–2.
+- Produces: `bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: number): number | null` — signature unchanged. It now returns the SHORTEST valid bank path rather than the first found, and rejects bounces on buried faces. Callers (`brown.ts`, `teal.ts`, `arena-claims.ts`'s `structuralFailures`) are unchanged.
+
+Merging (Task 2) removes interior seams inside solid runs but not between destructible cells — arena-02's centre barrier is 72 destructible cells — so the array-order dependence has to be closed in the function itself.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+it('returns the same bank shot however the reflector is sliced', () => {
+  const one: Wall[] = [
+    { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 6, maxY: 2 } },
+  ];
+  const three: Wall[] = [0, 2, 4].map((x, i) => ({
+    id: i + 1, kind: 'solid' as const, destroyed: false,
+    aabb: { minX: x, minY: 0, maxX: x + 2, maxY: 2 },
+  }));
+  let compared = 0;
+  for (let mx = 0.5; mx < 6; mx += 0.5) {
+    for (let tx = 0.5; tx < 6; tx += 0.5) {
+      const m = { x: mx, y: 4 };
+      const t = { x: tx, y: 6 };
+      const a = bankShot(m, t, one, 1);
+      const b = bankShot(m, t, three, 1);
+      compared++;
+      if (a === null || b === null) expect(b, `${mx}->${tx}`).toBe(a);
+      else expect(b, `${mx}->${tx}`).toBeCloseTo(a, 9);
+    }
+  }
+  expect(compared).toBe(121); // population: 11 muzzle x 11 target positions
+});
+
+it('never reflects off a face buried inside a neighbouring wall', () => {
+  // Two abutting boxes. The shared plane at x=2 is interior: nothing can bounce off it.
+  const walls: Wall[] = [
+    { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } },
+    { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 2, minY: 0, maxX: 4, maxY: 2 } },
+  ];
+  const merged: Wall[] = [
+    { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 4, maxY: 2 } },
+  ];
+  for (let mx = 0.25; mx < 4; mx += 0.25) {
+    const m = { x: mx, y: 3 };
+    const t = { x: 4 - mx, y: 3.5 };
+    const a = bankShot(m, t, merged, 1);
+    const b = bankShot(m, t, walls, 1);
+    if (a === null || b === null) expect(b, `mx=${mx}`).toBe(a);
+    else expect(b, `mx=${mx}`).toBeCloseTo(a, 9);
+  }
+});
+```
+
+- [ ] **Step 2: Run and watch it fail**
+
+```bash
+npx vitest run src/sim/ai/targeting.test.ts -t 'however the reflector is sliced'
+```
+
+Expected: FAIL. On the current code the three-box array offers interior seam faces at x=2 and x=4 as reflectors and returns whichever comes first.
+
+- [ ] **Step 3: Rewrite the selection**
+
+In `src/sim/ai/targeting.ts`, add `SWEEP_EPS` to the existing `../constants` import, then add above `bankShot`:
+
+```ts
+/**
+ * True if `point` lies on a face that is buried inside another wall — i.e. not a
+ * surface at all. Subdividing a wall manufactures one of these at every interior seam,
+ * which is how the level data's SLICING used to reach the AI's aim.
+ *
+ * Containment is tested with STRICT inequalities on purpose. A bounce point at a
+ * concave corner sits exactly on the abutting wall's boundary, and a `<=` test would
+ * call that legitimate surface buried and refuse a real shot -- the failure mode that
+ * got the equivalent fix reverted in reflectSweep (see CLAUDE.md).
+ */
+function faceIsBuried(point: Vec2, normal: Vec2, walls: Wall[], self: Wall): boolean {
+  const p = { x: point.x + normal.x * SWEEP_EPS, y: point.y + normal.y * SWEEP_EPS };
+  for (const w of walls) {
+    if (w === self || w.destroyed) continue;
+    const b = w.aabb;
+    if (p.x > b.minX && p.x < b.maxX && p.y > b.minY && p.y < b.maxY) return true;
+  }
+  return false;
+}
+```
+
+Then replace `bankShot`'s loop body's `return` with a shortest-path selection. The doc comment's "returns the FIRST valid path in wall/face iteration order" paragraph must be rewritten, not left stale:
+
+```ts
+export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: number): number | null {
+  if (maxBounces < 1) return null;
+  let bestAngle: number | null = null;
+  let bestLength = Infinity;
+  for (const w of walls) {
+    if (w.destroyed) continue;
+    const mirrors = mirrorAcrossAABB(target, w.aabb);
+    for (let face = 0; face < FACE_NORMALS.length; face++) {
+      const mirror = mirrors[face];
+      const hit = raySegmentVsAABB(muzzle, mirror, w.aabb);
+      if (!hit) continue;
+      const n = FACE_NORMALS[face];
+      if (hit.normal.x !== n.x || hit.normal.y !== n.y) continue;
+      const bounce = hit.point;
+      if (faceIsBuried(bounce, n, walls, w)) continue;
+      if (!losIgnoring(muzzle, bounce, walls, w)) continue;
+      if (!losIgnoring(bounce, target, walls, w)) continue;
+      if (pointSegmentDistance(muzzle, bounce, target) < AI_HULL_CLEARANCE) continue;
+      // Chosen by PATH LENGTH, not array position. The shortest bank is the fastest
+      // shell to arrive, and -- unlike "first valid" -- it is a property of the arena's
+      // geometry rather than of how that geometry was sliced into cells. Exact ties are
+      // real in symmetric arenas, so they break on the ANGLE, which is geometric too.
+      const length = vdist(muzzle, bounce) + vdist(bounce, target);
+      const angle = angleOf(vsub(bounce, muzzle));
+      const better =
+        length < bestLength - AIM_EPS ||
+        (Math.abs(length - bestLength) <= AIM_EPS && bestAngle !== null && angle < bestAngle);
+      if (better || bestAngle === null) {
+        bestLength = Math.min(length, bestLength);
+        bestAngle = angle;
+      }
+    }
+  }
+  return bestAngle;
+}
+```
+
+- [ ] **Step 4: Run both new tests, then the AI suite**
+
+```bash
+npx vitest run src/sim/ai/ 2>&1 | grep -E "Tests |×"
+```
+
+`teal.test.ts`, `brown.test.ts` and `arena-validation.test.ts`'s bank-sightline rule may move — `structuralFailures` forbids a stationary banker a ricochet onto the player spawn, and a shorter chosen path can change which spawns are reachable. Any arena that now FAILS that rule is a real finding about the level, not a test to relax: report it and stop.
+
+- [ ] **Step 5: Prove each guard can fail**
+
+Delete the `faceIsBuried` call, run `-t 'never reflects off a face buried'`, watch it FAIL, restore. Then change the selection back to returning on the first valid candidate, run `-t 'however the reflector is sliced'`, watch it FAIL, restore.
+
+- [ ] **Step 6: Check the cost**
+
+`bankShot` no longer early-returns, so it now scans every wall on every call. Time the AI-heaviest test before and after:
+
+```bash
+npx vitest run src/sim/step-integration.test.ts --reporter=basic 2>&1 | grep -E "step-integration|Duration"
+```
+
+If it has more than doubled, say so in the commit body — the merge in Task 2 cut arena-01 from 121 walls to 27, which is what makes the full scan affordable.
+
+- [ ] **Step 7: Record the hash and commit**
+
+```bash
+npx vitest run tools/baseline/trace.test.ts --reporter=basic 2>&1 | grep BASELINE
+git add src/sim/ai/targeting.ts src/sim/ai/targeting.test.ts
+git commit -m "ai: bank shots pick the shortest path, and never off a buried face"
+```
+
+---
+
+### Task 4: `resolveWalls` resolves against the deepest overlap, iteratively
 
 **Files:**
 - Modify: `src/sim/collision.ts:297`
 - Test: `src/sim/collision.test.ts`
 
 **Interfaces:**
-- Consumes: Tasks 1–2.
+- Consumes: Tasks 1–3.
 - Produces: `resolveWalls(tank: Tank, walls: Wall[]): void` — same signature, same callers (`world.ts:116`, `collision.ts:340`).
 
 - [ ] **Step 1: Write the failing test**
@@ -417,13 +582,13 @@ git commit -m "sim: resolve a hull against the deepest wall overlap, not every o
 
 ---
 
-### Task 4: The invariance property, as a shipping test
+### Task 5: The invariance property, as a shipping test
 
 **Files:**
 - Create: `src/sim/decomposition.test.ts`
 
 **Interfaces:**
-- Consumes: Tasks 1–3.
+- Consumes: Tasks 1–4.
 - Produces: nothing other tasks read.
 
 This is the test that would have caught all three defects before the upscale, and the reason the plan is worth doing. It asserts the property directly: **the same geometry, sliced two ways, must give the same answers.** Solid-only fixtures, because destructible granularity legitimately differs between resolutions.
@@ -517,7 +682,7 @@ git commit -m "test: the same geometry sliced two ways must give the same answer
 
 ---
 
-### Task 5: Move the pins that legitimately move, and re-baseline
+### Task 6: Move the pins that legitimately move, and re-baseline
 
 **Files:**
 - Modify: `src/sim/cell-mapping.test.ts`, `src/sim/arena-validation.test.ts`, `src/sim/arena.test.ts`
@@ -544,7 +709,7 @@ The upscale plan deleted `tools/baseline/trace.test.ts` at the end. Keep it inst
     // self-consistency, which is invariant under behaviour changes -- this is the pin
     // that actually moves when AI or collision behaviour moves. Changing it is a
     // deliberate act: re-record the value and say in the commit WHY it moved.
-    expect(hash).toBe('<paste the value printed after Task 3>');
+    expect(hash).toBe('<paste the value printed after Task 4>');
 ```
 
 - [ ] **Step 4: Confirm it fails when behaviour moves**
@@ -569,7 +734,7 @@ git commit -m "tests: move the wall-count denominators the merge shrinks, and pi
 
 ---
 
-### Task 6: Look at it, then document it
+### Task 7: Look at it, then document it
 
 **Files:**
 - Modify: `CLAUDE.md`, then `cp CLAUDE.md AGENTS.md`
@@ -621,10 +786,15 @@ git add CLAUDE.md AGENTS.md && git commit -m "docs: walls load as geometry, and 
 
 ## Self-Review
 
-**Spec coverage.** Mechanism 1 (tank ids) → Task 1. Mechanism 2 (`bankShot`) → reduced by Task 2, pinned by Task 4, explicitly left as a documented residual in Task 6; it is not fully closed and the plan says so rather than implying otherwise. Mechanism 3 (`resolveWalls`) → Task 3. Re-baseline → Task 5. The "is this the complete set?" caveat from the task-5 addendum is answered empirically by Task 4's invariance test rather than by assertion.
+**Spec coverage.** Mechanism 1 (tank ids) → Task 1. Mechanism 2 (`bankShot`) → exposure reduced by Task 2 and closed by Task 3. Mechanism 3 (`resolveWalls`) → Task 4. All three are pinned by Task 5's invariance test, which is also the empirical answer to the task-5 addendum's "is this the complete set?" caveat — it asserts the property rather than enumerating causes. Re-baseline → Task 6. Documentation → Task 7.
 
-**Placeholder scan.** The one deliberate blank is the golden hash in Task 5 Step 3, which cannot be known before Task 3 runs; the step says exactly where it comes from.
+**Placeholder scan.** The one deliberate blank is the golden hash in Task 6 Step 3, which cannot be known before Task 4 runs; the step says exactly where it comes from.
 
-**Type consistency.** `mergeSolidRuns(mask, cols, rows)` returns `[c0, r0, c1, r1]` with exclusive upper bounds, used only in Task 2. `resolveWalls(tank, walls): void` keeps its existing signature, so `world.ts:116` and `collision.ts:340` are untouched. `loadArena` keeps `{ walls, tanks, spawns }`.
+**Type consistency.** `mergeSolidRuns(mask, cols, rows)` returns `[c0, r0, c1, r1]` with exclusive upper bounds, used only in Task 2. `faceIsBuried(point, normal, walls, self): boolean` is used only inside `bankShot` (Task 3). `bankShot` and `resolveWalls` both keep their existing signatures, so every caller is untouched. `loadArena` keeps `{ walls, tanks, spawns }`.
 
-**Known risk.** Task 3 changes collision for the pre-upscale geometry too — adjacent solid cells exist in every shipped arena (6 orthogonally-adjacent pairs in arena-01), so `collision.test.ts` and `escape.test.ts` are expected to move. That is the task's real cost and Step 4 is written to make it a judgement rather than a sweep.
+**Known risks, in the order they will bite.**
+
+1. **Task 3 can fail an arena's bank-spawn rule.** `structuralFailures` forbids a stationary banker a ricochet onto the player spawn; picking the shortest path instead of the first can change which spawns are reachable. Step 4 says to stop and report rather than relax the rule, because that would be a real finding about a shipped level.
+2. **Task 4 changes collision for the pre-upscale geometry too** — every shipped arena has adjacent solid cells (6 orthogonally-adjacent pairs in arena-01) — so `collision.test.ts` and `escape.test.ts` are expected to move. Step 4 is written to make each one a judgement rather than a sweep.
+3. **`bankShot` loses its early return** (Task 3) and `resolveWalls` gains a loop (Task 4), both in per-tick AI paths. Task 3 Step 6 times it. Task 2's merge is what pays for this: arena-01 drops from 121 walls to 27.
+4. **The trace hash moves four times** (Tasks 1, 2, 3, 4). Each task records its own value, so a later surprise can be bisected to the task that caused it.
