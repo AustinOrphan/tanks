@@ -26,7 +26,7 @@
 ## File Structure
 
 - `src/sim/arena.ts` — `loadArena` gains a tank pass separate from the wall pass, and a `mergeSolidRuns` step. This is the only file that turns data into entities, so both changes belong here.
-- `src/sim/ai/targeting.ts` — `bankShot` selects by path length instead of array position, and gains `faceIsBuried`. Its callers (`brown.ts`, `teal.ts`, `arena-claims.ts`) are unchanged.
+- `src/sim/ai/targeting.ts` — `bankShot` selects by path length instead of array position, and `losIgnoring` gains a `headingIntoBox` graze probe. Its callers (`brown.ts`, `teal.ts`, `arena-claims.ts`) are unchanged.
 - `src/sim/collision.ts` — `resolveWalls` rewritten. Its callers (`world.ts:116`, `collision.ts:340`) are unchanged.
 - `src/sim/decomposition.test.ts` — **new.** The property this plan buys: an arena and a finer slicing of the same geometry must agree. Lives beside the sim it tests, not under `tools/`.
 - `tools/baseline/trace.test.ts` — **kept, not deleted.** Becomes a permanent pinned golden trace (the original plan deleted it; CLAUDE.md's own rule is that a behaviour-preserving claim needs a golden trace, so it should ship).
@@ -758,9 +758,28 @@ because three parts of the sim read the wall ARRAY rather than the arena's shape
 the 3x resolution upscale exposed all three: tank ids shared a counter with walls, so
 wall count reseeded every per-tank RNG stream in `ai/targeting.ts`; `resolveWalls`
 applied one push per overlapping wall, so a sliced wall pushed several times and its
-interior seams offered phantom corners; `bankShot` returns the first reflector in array
-order and still does — merging shrinks its exposure without closing it, which is a
-known residual.
+interior seams offered phantom corners; and `bankShot` chose the first reflector in
+wall-array order.
+
+**The bank-shot dependence turned out to live one function deeper**, which is worth
+knowing before anyone "simplifies" it. `bankShot` now picks the SHORTEST muzzle ->
+bounce -> target path, ties broken on the angle, so its answer is a property of the
+arena rather than of the array. But the defect a subdivided wall actually triggered was
+in `losIgnoring`: a bounce landing exactly on a seam put the segment's own ENDPOINT on
+the neighbouring box's corner, and `raySegmentVsAABB` counts a boundary touch as a hit,
+so a legitimate shot was reported blocked. `losIgnoring` now disambiguates with
+`headingIntoBox` — the same direction-probe form `reflectSweep` already ships, NOT the
+step-out-along-the-normal form this file records as tried and reverted. It is safe here
+for a structural reason: `losIgnoring` has exactly two callers, both inside `bankShot`,
+so it cannot reach `reflectSweep` and cannot reopen the escape bug.
+
+An explicit `faceIsBuried` guard was written first and then DELETED, because with the
+graze fix in place it changed nothing: 0 differences across 1,374,336 probes over
+T-junctions, partial overlaps, nested boxes, staircases, L-shapes and 300 randomised
+configurations, plus 0 buried candidates surviving `losIgnoring` in 776,160 probes of
+the shipped arenas. If a face is buried, the neighbour occupies the space outside it, so
+any ray reaching that face is already a real penetration of the neighbour. Do not
+re-add the guard without a fixture that fails when it is removed.
 
 **Destructible walls are never merged**, and that is a rule, not an oversight. A
 destructible cell is a destruction UNIT: mine blasts destroy by world-space radius
@@ -790,7 +809,7 @@ git add CLAUDE.md AGENTS.md && git commit -m "docs: walls load as geometry, and 
 
 **Placeholder scan.** The one deliberate blank is the golden hash in Task 6 Step 3, which cannot be known before Task 4 runs; the step says exactly where it comes from.
 
-**Type consistency.** `mergeSolidRuns(mask, cols, rows)` returns `[c0, r0, c1, r1]` with exclusive upper bounds, used only in Task 2. `faceIsBuried(point, normal, walls, self): boolean` is used only inside `bankShot` (Task 3). `bankShot` and `resolveWalls` both keep their existing signatures, so every caller is untouched. `loadArena` keeps `{ walls, tanks, spawns }`.
+**Type consistency.** `mergeSolidRuns(mask, cols, rows)` returns `[c0, r0, c1, r1]` with exclusive upper bounds, used only in Task 2. `headingIntoBox(start, target, box): boolean` is used only inside `losIgnoring` (Task 3), which in turn has only `bankShot` as a caller. `bankShot` and `resolveWalls` both keep their existing signatures, so every caller is untouched. `loadArena` keeps `{ walls, tanks, spawns }`.
 
 **Known risks, in the order they will bite.**
 
