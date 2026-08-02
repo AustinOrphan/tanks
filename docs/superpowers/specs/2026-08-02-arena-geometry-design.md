@@ -84,7 +84,7 @@ additive. The semantics live in four places, and getting each right is the subst
 | line of sight | **passes** | `ai/targeting.ts:50` filters `!w.destroyed` with no kind test |
 | bank shots | **not a reflector** | `bankShot` must not bounce off it |
 | mine blast | **passes**, and is not destroyed | it is indestructible by definition |
-| render | drawn low | `render/` — a rail, visibly not a wall |
+| render | a line of holes in the ground | `render/` — visibly not a wall, and visibly not a shell-stopper |
 
 `lineOfSight` passing through a barrier is load-bearing and has a consequence worth stating:
 the universal no-spawn-sightline rule and every `sightlineAfterBreach` claim will see
