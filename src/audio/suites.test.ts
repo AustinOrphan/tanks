@@ -147,6 +147,32 @@ describe('rankCandidates / pickNextSuite', () => {
     expect(pickNextSuite(from, [from, mk('far', 'Ebm', 0.15), mk('slow', 'Am', 0.5)], () => 0.5)).toBeNull();
   });
 
+  it('the shipped suites form a CONNECTED graph under the compatibility rules', () => {
+    // "A lot more sets" only works if every set is reachable from every other
+    // through legal joins -- an island suite would strand the playlist there
+    // forever. Population: all shipped suites, walked from the first.
+    const reachable = new Set<string>([SUITES[0].id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const s of SUITES) {
+        if (!reachable.has(s.id)) continue;
+        for (const r of rankCandidates(s, SUITES)) {
+          if (!reachable.has(r.suite.id)) {
+            reachable.add(r.suite.id);
+            grew = true;
+          }
+        }
+      }
+    }
+    const stranded = SUITES.map((s) => s.id).filter((id) => !reachable.has(id));
+    expect(stranded, `unreachable suites: ${stranded.join(', ')}`).toEqual([]);
+    // And no dead ends: every suite can also LEAVE.
+    for (const s of SUITES) {
+      expect(rankCandidates(s, SUITES).length, `${s.id} is a dead end`).toBeGreaterThan(0);
+    }
+  });
+
   it('the SHIPPED suites give assault at least one legal neighbour', () => {
     const assault = suiteById('assault')!;
     const ranked = rankCandidates(assault, SUITES);
