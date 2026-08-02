@@ -327,17 +327,20 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
       // shell to arrive, and -- unlike "first valid" -- it is a property of the arena's
       // geometry rather than of how that geometry was sliced into cells. Exact ties are
       // real in symmetric arenas, so they break on the ANGLE, which is geometric too.
-      // `bestLength` tracks the CHOSEN candidate's own length, not a running Math.min of
-      // every length seen -- the latter lets an epsilon chain drift: a candidate can be
-      // rejected as not `better` than the recorded minimum while that minimum belongs to
-      // a DIFFERENT (already-superseded) candidate, making the result order-dependent.
-      // First candidate always accepts: `length < Infinity - AIM_EPS` is unconditionally
-      // true, so no `bestAngle === null` fallback is needed.
+      //
+      // The comparison below is EXACT (no AIM_EPS band): "within epsilon counts as a tie"
+      // is not transitive -- A within epsilon of B, and B within epsilon of C, does not
+      // mean A is within epsilon of C -- so an epsilon-tolerant comparator is not a total
+      // order and can give a different winner depending on visitation order no matter how
+      // `bestLength`/`bestAngle` are bookkept. Plain `<` and `===` on IEEE 754 doubles ARE
+      // a total order, so this is order-independent BY CONSTRUCTION, not merely on data
+      // that happens not to probe the epsilon band. `bestLength` tracks the CHOSEN
+      // candidate's own length, not a running minimum over every length seen, so a later
+      // candidate is always compared against a real, still-current best.
       const length = vdist(muzzle, bounce) + vdist(bounce, target);
       const angle = angleOf(vsub(bounce, muzzle));
       const better =
-        length < bestLength - AIM_EPS ||
-        (Math.abs(length - bestLength) <= AIM_EPS && bestAngle !== null && angle < bestAngle);
+        bestAngle === null || length < bestLength || (length === bestLength && angle < bestAngle);
       if (better) {
         bestLength = length;
         bestAngle = angle;

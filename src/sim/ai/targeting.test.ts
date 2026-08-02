@@ -259,14 +259,20 @@ describe('bankShot', () => {
     // [0,2] band, to make a vertical seam face itself geometrically reachable rather than
     // merely coincided with). It reported 0 mismatches under every mutation tried --
     // dropping either LOS leg, dropping both, first-valid selection, reversed wall order,
-    // longest-path selection -- because on a flush, gap-free run the outer face is always
-    // STRICTLY closer than any interior seam behind it (reaching a seam from outside
-    // necessarily detours around/through the wall in front of it), so shortest-path
-    // selection picks the outer candidate regardless of whether the seam candidate was
-    // ever correctly rejected. That sub-sweep is deleted rather than kept as an inert
-    // "proof of nothing" -- see the two tests below for what replaced its actual job: a
-    // seam/buried candidate's own rejection now has fixtures where it demonstrably matters,
-    // and `faceIsBuried` (the guard the deleted sub-sweep was originally written to
+    // longest-path selection -- and was deleted rather than kept as an inert "proof of
+    // nothing". The narrow, measured reason: for endpoints OUTSIDE every wall -- the only
+    // muzzle/target positions the game can ever call bankShot with, since callers pass
+    // tank centres and resolveWalls guarantees a tank is never inside a wall -- merged and
+    // sliced agree at 0 differences across ~1.9M probes swept over 6 reflector shapes (a
+    // 3-cell row, a 3-cell column, a 3x3 square, an L-shape, a T-junction, two separated
+    // runs) at 2 grid alignments each. Disagreements DO exist, but only when an endpoint
+    // sits inside or exactly on a wall corner (48-192 mismatches per shape on a
+    // lattice-aligned grid, 0 on a non-aligned grid, always a muzzle sitting exactly on a
+    // wall corner) -- states resolveWalls never produces, so a "repaired Pattern B" built
+    // on them would assert behaviour at unreachable positions, which is worse than no
+    // test. See the two tests below for what replaced this sub-sweep's actual job: a
+    // seam/buried candidate's own rejection now has fixtures where it demonstrably
+    // matters, and `faceIsBuried` (the guard this sub-sweep was originally written to
     // control for) no longer exists to give it a control anyway.
     for (let mx = 0.5; mx < 6; mx += 0.5) {
       for (let tx = 0.5; tx < 6; tx += 0.5) {
