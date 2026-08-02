@@ -70,15 +70,23 @@ describe('game roster resolves to the shipped tunables (behaviour-preservation p
   });
 
   it('shell cap and mine capacity: SHELL_CAP/MINE_CAP everywhere except olive', () => {
-    for (const k of ['player', 'brown', 'grey', 'teal'] as const) {
-      expect(configFor(k).weapon.maxActiveProjectiles).toBe(SHELL_CAP);
-      expect(configFor(k).mineCapacity).toBe(MINE_CAP);
+    // DERIVED from KINDS with an explicit exception table, not a hand-written subset.
+    // Review found green's mineCapacity unpinned: the old loop listed player/brown/
+    // grey/teal by hand, olive was handled separately, and green fell through the gap
+    // entirely -- changing it 2 -> 0 passed all 1218 tests. Written this way, a sixth
+    // kind is pinned to the defaults the day it exists, or must declare itself an
+    // exception here.
+    const PER_TANK: Partial<Record<TankKind, { shells: number; mines: number }>> = {
+      // Olive is the first kind with a genuinely PER-TANK cap: one rocket in flight at
+      // a time (its whole rhythm -- a slow, telegraphed lance), and no mines at all.
+      // Raising either is a gameplay change, not a tidy-up.
+      olive: { shells: 1, mines: 0 },
+    };
+    for (const k of KINDS) {
+      const want = PER_TANK[k] ?? { shells: SHELL_CAP, mines: MINE_CAP };
+      expect(configFor(k).weapon.maxActiveProjectiles, k).toBe(want.shells);
+      expect(configFor(k).mineCapacity, k).toBe(want.mines);
     }
-    // Olive is the first kind with a genuinely PER-TANK cap: one rocket in
-    // flight at a time (its whole rhythm -- a slow, telegraphed lance), and no
-    // mines at all. Raising either is a gameplay change, not a tidy-up.
-    expect(configFor('olive').weapon.maxActiveProjectiles).toBe(1);
-    expect(configFor('olive').mineCapacity).toBe(0);
   });
 
   it('projectile speed/bounces mirror the sim bulletConfig for the resolved bullet type', () => {
