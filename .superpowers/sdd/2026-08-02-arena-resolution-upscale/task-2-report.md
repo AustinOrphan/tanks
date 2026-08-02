@@ -137,12 +137,29 @@ description ("cell counts, wall counts, cover-ratio table"):
   (expected 683, received 4379, matching the finer grid's total cell count).
 - `src/sim/arena-claims.test.ts` — 7 sub-failures (`claimFailures reports a false claim of
   each type` x3, `spawnBlockRobust tags both wall phases...` x2, `renderBoard` x1, `failure
-  boards point at the thing that failed` x1). These use small hand-built fixture grids and
-  hardcoded cell coordinates/rendered-board strings sized for an 11x9 board; the module
-  itself (`arena-claims.ts`) was not touched by this task, and CLAUDE.md's own "Known
-  holes" section already documents `arena-claims.ts` as test-layer-only, imported by
-  `arena-validation.test.ts`. Not individually decomposed further here — same class as the
-  two above, a literal built against the old grid.
+  boards point at the thing that failed` x1). Read directly, at least one (`renderBoard
+  reports an out-of-grid mark instead of throwing`) hardcodes an "11x9 grid" message
+  (`arena-claims.test.ts:231`) against a fixture arena literally sized 11x9 — a small
+  hand-built board, not one of the 4 shipped arenas. The remaining 6 were not read
+  individually line-by-line, so their exact mechanism inside this file is not independently
+  confirmed here.
+
+  What **is** confirmed, and is the stronger evidence for this class: `arena-claims.ts`
+  is the machinery this file unit-tests against small hand-built fixtures, while the same
+  machinery's behaviour on the 4 real, upscaled shipped arenas is checked by the generic
+  runner in `arena-validation.test.ts`. Running that file in isolation
+  (`npx vitest run src/sim/arena-validation.test.ts --reporter=verbose`) shows `every
+  declared design claim holds` passing for all 4 arenas (arena-01 through arena-04) — i.e.
+  every real `sightlineAfterBreach`, `lane`, and `spawnBlockRobust` claim in the shipped
+  data still holds after the upscale — and `arena-02's spawnBlockRobust figures, which no
+  claim can protect > recomputes 0 of 16 intact and 12 of 16 breached` passes with the
+  identical 0/16 and 12/16 figures CLAUDE.md documents for the pre-upscale grid. Of the 26
+  tests in `arena-validation.test.ts`, exactly 2 fail (the two Class A count-pins above);
+  every claim-holding assertion on the real arenas passes unchanged. That is direct
+  evidence the claim *behaviour* is preserved by the transform, which makes it far more
+  likely (though, for the 6 unread sub-failures, not individually proven) that
+  `arena-claims.test.ts`'s failures are confined to that file's own small fixtures sized
+  for the old grid, rather than a behavioural regression.
 
 ### Class B — stale literal offsets in fixtures/tests that assumed boundary thickness 2
 
@@ -218,8 +235,13 @@ equivalence is explicitly Task 5's job; this report does not check or claim it.
 1. `src/sim/arena-validation.test.ts` (2 failures) — re-pin `EXPECTED`/`bankOnly` tables to
    the finer grid's counts.
 2. `src/sim/cell-mapping.test.ts` (1 failure) — re-pin the 683-cell total.
-3. `src/sim/arena-claims.test.ts` (7 failures) — fixture grids/rendered-board strings sized
-   for the old resolution.
+3. `src/sim/arena-claims.test.ts` (7 failures) — at least one confirmed to be a fixture
+   grid/message sized for the old resolution (an "11x9" literal); the machinery this file
+   tests is confirmed behaviourally intact on the real upscaled arenas (all 4 arenas'
+   `every declared design claim holds` pass in `arena-validation.test.ts`, and
+   arena-02's spawnBlockRobust figures are byte-identical: 0/16 intact, 12/16 breached).
+   The remaining 6 sub-failures were not each read individually and so are inferred, not
+   proven, to be the same class.
 4. `src/game/loop.test.ts` (1 failure) — the test's own fake `levels.bounds()` fixture
    literal (`cellSize: 2`, `width: 22`, `height: 18`).
 5. `src/render/framing.test.ts` (2 failures) — one literal-pin (`W + 4` -> `W + BOUNDARY*2`)
