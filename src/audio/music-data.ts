@@ -195,6 +195,22 @@ function parseTrack(raw: unknown, index: number): MusicTrackDef {
   if (tracks.some((t) => t.generate) && (chords.length === 0 || barSteps === 0)) {
     fail(at, 'has a generated layer but no chords/barSteps to generate against');
   }
+  // A context change lands when `stepsIntoCycle % barSteps === 0`, which is only
+  // a real downbeat if the bar divides every authored layer -- the cycle is the
+  // LCM of the layer lengths, so a layer that is not a whole number of bars puts
+  // the last "bar" of the cycle short and lands the change inside it. Nothing
+  // else enforces this: it held for 31 of 31 shipped tracks by authoring habit
+  // alone, and a track that broke it would go off-downbeat silently, with no
+  // test able to see it. Zero means "no bar declared" and is checked above.
+  for (const t of tracks) {
+    if (barSteps > 0 && t.notes && t.notes.length % (barSteps as number) !== 0) {
+      fail(
+        `${at}.tracks`,
+        `has a layer of ${t.notes.length} notes, which is not a whole number of ` +
+          `${barSteps}-step bars -- a suite change would land off the downbeat`,
+      );
+    }
+  }
   return { id, stepSeconds, barSteps: barSteps as number, chords, tracks };
 }
 

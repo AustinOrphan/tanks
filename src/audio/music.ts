@@ -44,7 +44,7 @@ export interface MusicBed {
    * incoming suite's dominant -- while the tempo ramps toward the incoming
    * track's, then start it. This is the handled join between two sets.
    */
-  changeSuite(next: MusicTrackDef): void;
+  changeSuite(next: MusicTrackDef, opts?: { at?: 'bar' | 'cycle' }): void;
   /** True while the transition passage is sounding. */
   inTransition(): boolean;
   /**
@@ -174,7 +174,7 @@ export function createMusicBed(
   let cycle = 0;
   let intensity = 1;
   let stepsIntoCycle = 0;
-  let pendingSuite: { next: MusicTrackDef } | null = null;
+  let pendingSuite: { next: MusicTrackDef; at: 'bar' | 'cycle' } | null = null;
   /**
    * Steps until another switch may fire. Review proved the pickup created a
    * PREMATURE boundary: it set stepsIntoCycle to the final bar, so the wrap one
@@ -304,7 +304,29 @@ export function createMusicBed(
     // A suite change happens at the boundary, like any track switch -- but the
     // incoming track starts at its FINAL bar, its own dominant, as a pickup.
     // Real material from the incoming section; nothing composed in between.
-    if (track && pendingSuite && stepsIntoCycle === 0 && switchLock <= 0) {
+    // WHEN a suite change may land depends on WHY it was asked for.
+    //
+    // A roam decision is musical: it waits for the cycle boundary, the one
+    // instant the whole arrangement is between phrases, and it respects
+    // switchLock -- the incoming member owes a pickup bar and a full cycle
+    // before the playlist advances again.
+    //
+    // A CONTEXT change is the player changing screen, and waiting a cycle
+    // breaks the link between what they did and what they hear: measured
+    // against the real modules, it lagged by up to 11.85s, so the title
+    // screen's music played several seconds into the level and then changed
+    // suite mid-round. It lands on the next BAR instead, and waits only for an
+    // in-flight pickup -- switchLock is roam pacing, not musical integrity, and
+    // throttling the player's own screen change by it is what made a quick
+    // trip to the title screen inaudible.
+    const barOf = (t: MusicTrackDef): number => (t.barSteps > 0 ? t.barSteps : cycleSteps(t));
+    const suiteChangeDue =
+      track !== null &&
+      pendingSuite !== null &&
+      (pendingSuite.at === 'bar'
+        ? stepsIntoCycle % barOf(track) === 0 && ramp === null && overlay === null
+        : stepsIntoCycle === 0 && switchLock <= 0);
+    if (track && pendingSuite && suiteChangeDue) {
       const next = pendingSuite.next;
       const pickupSteps = next.barSteps;
       const startAtStep = Math.max(0, cycleSteps(next) - pickupSteps);
@@ -372,7 +394,9 @@ export function createMusicBed(
         stepsSinceConsult = 0;
         const d = deps.director.next();
         if (d.kind === 'queue') queued = d.track;
-        else if (d.kind === 'suite') pendingSuite = { next: d.track };
+        // A roam decision, so the cycle boundary: this one IS the musical
+        // choice, and nothing about it is waiting on the player.
+        else if (d.kind === 'suite') pendingSuite = { next: d.track, at: 'cycle' };
       }
       if (ramp) {
         ramp.played += 1;
@@ -507,8 +531,8 @@ export function createMusicBed(
     queueTrack(next: MusicTrackDef): void {
       queued = next;
     },
-    changeSuite(next: MusicTrackDef): void {
-      pendingSuite = { next };
+    changeSuite(next: MusicTrackDef, opts?: { at?: 'bar' | 'cycle' }): void {
+      pendingSuite = { next, at: opts?.at ?? 'cycle' };
     },
     inTransition(): boolean {
       // pendingSuite too: between changeSuite() and the boundary the change is
