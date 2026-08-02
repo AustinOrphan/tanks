@@ -89,7 +89,7 @@ check('the ground is centred on the arena, not on the origin', () => {
   return null;
 });
 
-check('the ground sizes to a NON-shipped board (15x11) at construction', () => {
+check('the ground sizes to a NON-shipped board (17x13) at construction', () => {
   // vitest cannot construct a WebGLRenderer, so per-level sizing can only be
   // proven in a real browser. Without this, "variable dimensions work" rests on
   // geometry tests that never build a scene.
@@ -113,7 +113,7 @@ check('the ground sizes to a NON-shipped board (15x11) at construction', () => {
   const centre = { x: g.position.x, z: g.position.z };
   ctx.dispose();
   if (p.width !== want.width || p.height !== want.height) {
-    return `ground is ${p.width}x${p.height}, framed area for 15x11 is ${want.width}x${want.height}`;
+    return `ground is ${p.width}x${p.height}, framed area for 17x13 is ${want.width}x${want.height}`;
   }
   if (Math.abs(centre.x - w / 2) > 1e-9 || Math.abs(centre.z - h / 2) > 1e-9) {
     return `ground centre (${centre.x}, ${centre.z}), arena centre (${w / 2}, ${h / 2})`;
