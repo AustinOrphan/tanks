@@ -591,7 +591,11 @@ git commit -m "sim: resolve a hull against the deepest wall overlap, not every o
 - Consumes: Tasks 1–4.
 - Produces: nothing other tasks read.
 
-This is the test that would have caught all three defects before the upscale, and the reason the plan is worth doing. It asserts the property directly: **the same geometry, sliced two ways, must give the same answers.** Solid-only fixtures, because destructible granularity legitimately differs between resolutions.
+This is the test that would have caught all three defects before the upscale, and the reason the plan is worth doing. It asserts the property directly: **the same geometry, sliced two ways, must give the same answers.**
+
+**The fixture MUST include destructible cells, and this is the whole subtlety of the task.** Task 2 merges solid cells into maximal rectangles, so a solid-only fixture expressed at two cell sizes loads into the *same* AABBs — the test would compare a wall list against itself and pass no matter what the production code did. Destructible cells are never merged, so they are the one family whose decomposition genuinely still differs between resolutions: one 2x2 box at `cellSize` 2 becomes four 1x1 boxes covering the same region at `cellSize` 1. That residual difference is exactly what the shipped game carries, and exactly what this test must guard.
+
+Step 1 therefore opens with a **non-vacuity assertion**: the two wall lists must not be identical. If that assertion ever starts failing, the fixture has stopped testing anything and the rest of the file is decoration.
 
 - [ ] **Step 1: Write the test**
 
@@ -602,21 +606,23 @@ import { resolveWalls } from './collision';
 import { lineOfSight, bankShot } from './ai/targeting';
 import { makeTank } from './arena';
 
-/** The same solid geometry at cellSize 2, and re-expressed at cellSize 1. */
+/** The same geometry at cellSize 2, and re-expressed at cellSize 1. `x` is
+ *  destructible and therefore never merged, which is what keeps the two wall
+ *  lists genuinely different decompositions of one region. */
 const COARSE = {
   id: 'coarse', cols: 6, rows: 6, cellSize: 2,
-  legend: { '#': 'solid' as const },
-  grid: ['......', '.###..', '.#....', '.#....', '......', '......'],
+  legend: { '#': 'solid' as const, x: 'destructible' as const },
+  grid: ['......', '.###..', '.#x...', '.#....', '..xx..', '......'],
 } as never;
 const FINE = {
   id: 'fine', cols: 12, rows: 12, cellSize: 1,
-  legend: { '#': 'solid' as const },
+  legend: { '#': 'solid' as const, x: 'destructible' as const },
   grid: [
     '............', '............',
     '..######....', '..######....',
+    '..##xx......', '..##xx......',
     '..##........', '..##........',
-    '..##........', '..##........',
-    '............', '............',
+    '....xxxx....', '....xxxx....',
     '............', '............',
   ],
 } as never;
@@ -624,6 +630,17 @@ const FINE = {
 describe('the sim reads geometry, not the grid that expressed it', () => {
   const a = loadArena(COARSE).walls;
   const b = loadArena(FINE).walls;
+
+  it('is not comparing a wall list against itself', () => {
+    // THE guard that keeps the rest of this file meaningful. Solid runs merge to the
+    // same rectangles at any cell size; only the unmerged destructible cells make these
+    // two lists genuinely different decompositions. If this ever fails, the fixture has
+    // stopped testing anything.
+    const shape = (w: { aabb: { minX: number; minY: number; maxX: number; maxY: number } }[]) =>
+      w.map((x) => `${x.aabb.minX},${x.aabb.minY},${x.aabb.maxX},${x.aabb.maxY}`).sort().join('|');
+    expect(a.length).not.toBe(b.length);
+    expect(shape(a)).not.toBe(shape(b));
+  });
   const pts = [];
   for (let x = 0.35; x < 12; x += 0.37) for (let y = 0.35; y < 12; y += 0.37) pts.push({ x, y });
 
