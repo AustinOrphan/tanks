@@ -137,12 +137,15 @@ description ("cell counts, wall counts, cover-ratio table"):
   (expected 683, received 4379, matching the finer grid's total cell count).
 - `src/sim/arena-claims.test.ts` — 7 sub-failures (`claimFailures reports a false claim of
   each type` x3, `spawnBlockRobust tags both wall phases...` x2, `renderBoard` x1, `failure
-  boards point at the thing that failed` x1). Read directly, at least one (`renderBoard
-  reports an out-of-grid mark instead of throwing`) hardcodes an "11x9 grid" message
-  (`arena-claims.test.ts:231`) against a fixture arena literally sized 11x9 — a small
-  hand-built board, not one of the 4 shipped arenas. The remaining 6 were not read
-  individually line-by-line, so their exact mechanism inside this file is not independently
-  confirmed here.
+  boards point at the thing that failed` x1). Read directly, one (`renderBoard reports an
+  out-of-grid mark instead of throwing`, `arena-claims.test.ts:228-231`) does
+  `const arena = arenaById('arena-01')` — **the real shipped arena-01, now upscaled to
+  33x27**, not a hand-built fixture — and then asserts a message hardcoded to the old
+  size: `expect(out).toMatch(/not drawn -- outside the 11x9 grid: \[99, 99\]/)`. The
+  mechanism is a stale dimension **string** baked into the expected message, not a
+  fixture built at the wrong resolution. The remaining 6 sub-failures were not read
+  individually line-by-line, so their exact mechanism inside this file is not
+  independently confirmed by this report.
 
   What **is** confirmed, and is the stronger evidence for this class: `arena-claims.ts`
   is the machinery this file unit-tests against small hand-built fixtures, while the same
@@ -235,13 +238,17 @@ equivalence is explicitly Task 5's job; this report does not check or claim it.
 1. `src/sim/arena-validation.test.ts` (2 failures) — re-pin `EXPECTED`/`bankOnly` tables to
    the finer grid's counts.
 2. `src/sim/cell-mapping.test.ts` (1 failure) — re-pin the 683-cell total.
-3. `src/sim/arena-claims.test.ts` (7 failures) — at least one confirmed to be a fixture
-   grid/message sized for the old resolution (an "11x9" literal); the machinery this file
-   tests is confirmed behaviourally intact on the real upscaled arenas (all 4 arenas'
-   `every declared design claim holds` pass in `arena-validation.test.ts`, and
-   arena-02's spawnBlockRobust figures are byte-identical: 0/16 intact, 12/16 breached).
-   The remaining 6 sub-failures were not each read individually and so are inferred, not
-   proven, to be the same class.
+3. `src/sim/arena-claims.test.ts` (7 failures) — at least one confirmed to be a stale
+   dimension string against the real arena-01 (`arenaById('arena-01')`, now 33x27,
+   compared against a hardcoded "11x9 grid" message — not a hand-built fixture at the
+   wrong resolution). The machinery this file tests is confirmed behaviourally intact on
+   the real upscaled arenas (all 4 arenas' `every declared design claim holds` pass in
+   `arena-validation.test.ts`, and arena-02's spawnBlockRobust figures are byte-identical:
+   0/16 intact, 12/16 breached). The remaining 6 sub-failures were not each read
+   individually by this report. *Update, post-review:* an independent reviewer remapped
+   the coordinates for all 7 and recovered the exact pre-transform failure counts (4 and
+   8), confirming all 7 are the same benign class this report classified from 1 of 7 read
+   directly plus the arena-validation.test.ts evidence above.
 4. `src/game/loop.test.ts` (1 failure) — the test's own fake `levels.bounds()` fixture
    literal (`cellSize: 2`, `width: 22`, `height: 18`).
 5. `src/render/framing.test.ts` (2 failures) — one literal-pin (`W + 4` -> `W + BOUNDARY*2`)
@@ -252,3 +259,61 @@ equivalence is explicitly Task 5's job; this report does not check or claim it.
    already pass unchanged.
 
 `npx tsc --noEmit` is clean. No test in this list was modified by this task.
+
+## Fix report (addressing review finding)
+
+**Review outcome:** SPEC PASS, QUALITY PASS. An independent reviewer re-derived the
+transform cell by cell (0 mismatches across 462 old cells, 22 spawn world positions, 33
+claim references — matching this report's 33-of-33 figure exactly), confirmed the 1-ULP
+diagnosis, and further established it does not reach collision: no production code
+re-derives AABB extents by subtraction the way `framing.test.ts`'s own assertion does, and
+`SWEEP_EPS` (`src/sim/constants.ts:133`, `1e-7`) is roughly 9 orders of magnitude larger
+than the ~4e-16 gap, confirmed by:
+
+```
+$ grep -n "SWEEP_EPS = " src/sim/constants.ts
+133:export const SWEEP_EPS = 1e-7;
+```
+
+**Finding:** the "Class A" passage above, in its original form, misdescribed the one
+`arena-claims.test.ts` failure it read directly — it said the test's `renderBoard` call ran
+against "a fixture arena literally sized 11x9 — a small hand-built board, not one of the 4
+shipped arenas." That is wrong. The reviewer read the actual line:
+
+```
+$ sed -n '220,235p' src/sim/arena-claims.test.ts
+    const failures = structuralFailures(noPlayer);
+    expect(() => structuralFailures(noPlayer)).not.toThrow();
+    expect(failures).toContain('no player spawn');
+  });
+
+  it('renderBoard reports an out-of-grid mark instead of throwing', () => {
+    // It runs on the failure path, so a raw TypeError here buries the failure it
+    // was called to explain. Before this, `rows[r][c] = '*'` threw.
+    const arena = arenaById('arena-01');
+    expect(() => renderBoard(arena, [[99, 99]])).not.toThrow();
+    const out = renderBoard(arena, [[99, 99], [1, 1]]);
+    expect(out).toMatch(/not drawn -- outside the 11x9 grid: \[99, 99\]/);
+    expect(out.split('\n')[1][1]).toBe('*'); // the in-range mark still drawn
+  });
+```
+
+`arena = arenaById('arena-01')` is the **real shipped arena-01**, now upscaled to 33x27 by
+this task's transform — not a hand-built fixture. The failure's actual mechanism is a
+stale dimension **string** hardcoded into the expected message (`/outside the 11x9 grid/`),
+compared against the real arena's now-current size. The overall classification (stale test
+literal, benign, not a geometry regression) was correct — the reviewer proved it
+independently for all 7 of the 7 failures in this file by remapping coordinates and
+recovering the exact pre-transform failure counts (4 and 8) — but the specific evidentiary
+description of what was read was wrong about which arena, and has been corrected in both
+the "Class A" passage and the "Summary for Task 4" list above to say: real `arena-01`
+(shipped, now 33x27), stale "11x9" string in the expected message, not a fixture built at
+the wrong size.
+
+**Verification the fix reads correctly:**
+
+```
+$ grep -n "arenaById('arena-01')" .superpowers/sdd/2026-08-02-arena-resolution-upscale/task-2-report.md
+```
+confirms the corrected passage now names the real arena and cites the same
+`arena-claims.test.ts:228-231` lines the review pointed at.
