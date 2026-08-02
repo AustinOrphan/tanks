@@ -45,9 +45,20 @@ export function createMusicDirector(
   opts: { startSuiteId?: string; tracksPerSuite?: number } = {},
 ): MusicDirector | null {
   const dwell = opts.tracksPerSuite ?? TRACKS_PER_SUITE;
-  let suite =
-    suites.find((s) => s.id === (opts.startSuiteId ?? '')) ?? suites[0] ?? null;
-  if (!suite) return null;
+  const wanted = opts.startSuiteId;
+  // A typo in the start id used to fall through to suites[0] in silence, while
+  // every other bad-data path in this area fails loudly and names the file.
+  if (wanted !== undefined && suites.length > 0 && !suites.some((s) => s.id === wanted)) {
+    throw new Error(`playlist: no suite named "${wanted}" (have: ${suites.map((s) => s.id).join(', ')})`);
+  }
+  const suite0 = suites.find((s) => s.id === wanted) ?? suites[0] ?? null;
+  if (!suite0) return null;
+  // membersOf can be empty if a suite names only unknown tracks; draw() would
+  // then pop undefined and crash with a message naming nothing.
+  if (membersOf(suite0).length === 0) {
+    throw new Error(`playlist: suite "${suite0.id}" has no playable members`);
+  }
+  let suite: SuiteDef | null = suite0;
 
   let bag: MusicTrackDef[] = [];
   let lastId: string | null = null;
@@ -75,6 +86,7 @@ export function createMusicDirector(
 
   const start = draw(suite);
   playedInSuite = 1;
+  const soloMember = membersOf(suite).length < 2;
 
   return {
     first: () => start,
@@ -91,6 +103,10 @@ export function createMusicDirector(
         // No legal neighbour (a one-suite install): stay home, keep shuffling.
         playedInSuite = 0;
       }
+      // A one-member suite cannot honour the no-repeat promise: re-queueing the
+      // same track every cycle would be a repeat dressed as a decision. Say
+      // nothing and let it loop, which is what the bed does anyway.
+      if (soloMember && suite === suite0) return { kind: 'stay' };
       playedInSuite += 1;
       return { kind: 'queue', track: draw(suite) };
     },

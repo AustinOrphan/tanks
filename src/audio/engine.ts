@@ -290,9 +290,22 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       // floor for degenerate data. This is the line that makes everything in
       // suites.ts reachable from the game.
       if (!bed) {
-        const director = defaultDirector(SUITES, Math.random);
+        // Seeded, not Math.random: synth.ts and music.ts both sit either side of
+        // this line and explicitly reject Math.random, and an unrepeatable walk
+        // means "that join sounded awful" can never be reproduced. The seed is
+        // taken once from the clock, so sessions still differ.
+        let rngState = (Date.now() & 0x7fffffff) || 1;
+        const rnd = (): number => {
+          rngState ^= rngState << 13;
+          rngState ^= rngState >>> 17;
+          rngState ^= rngState << 5;
+          return ((rngState >>> 0) % 100000) / 100000;
+        };
+        const director = defaultDirector(SUITES, rnd);
+        // defaultDirector only returns null when 'arena' is missing too, so the
+        // old MUSIC_TRACK_ID fallback here was unreachable.
         bed = createMusicBed(audio, ensureBus(audio), {
-          track: director ? director.first() : trackById(MUSIC_TRACK_ID),
+          track: director?.first() ?? trackById(MUSIC_TRACK_ID),
           director,
         });
       }

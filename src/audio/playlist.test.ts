@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createMusicDirector, defaultDirector, START_SUITE_ID } from './playlist';
-import { SUITES, suiteById } from './suites';
+import { createMusicDirector, defaultDirector, START_SUITE_ID, TRACKS_PER_SUITE } from './playlist';
+import { SUITES, suiteById, type SuiteDef } from './suites';
 
 const xorshift = (seed: number) => {
   let x = seed || 1;
@@ -56,9 +56,11 @@ describe('the music director', () => {
     const suiteOf = (trackId: string): string =>
       SUITES.find((s) => s.members.includes(trackId))!.id;
     const { ids, kinds } = walk(60, 5);
-    // Dwell of TRACKS_PER_SUITE: every TRACKS_PER_SUITEth directive is a suite change.
+    // EXACT, not "more than ten": review showed the loose bound passed for
+    // dwells of 1, 2, 4 and 5 alike, so TRACKS_PER_SUITE could be changed with
+    // the suite still green. 60 directives at a dwell of 3 is exactly 20.
     const changes = kinds.filter((k) => k === 'suite').length;
-    expect(changes).toBeGreaterThan(10);
+    expect(changes, `dwell of ${TRACKS_PER_SUITE} over 60 directives`).toBe(60 / TRACKS_PER_SUITE);
     // And each change lands on a suite that is a legal neighbour of the previous
     // track's suite -- the compatibility rules, observed end to end.
     let current = START_SUITE_ID;
@@ -117,6 +119,25 @@ describe('the music director', () => {
     const kinds = Array.from({ length: 12 }, () => d.next().kind);
     expect(kinds).not.toContain('suite'); // nowhere to go
     expect(kinds.filter((k) => k === 'queue').length).toBeGreaterThan(8);
+  });
+
+  it('a one-member suite says STAY rather than re-queueing itself', () => {
+    // The no-repeat promise cannot be honoured with one member; re-queueing the
+    // same track every cycle is a repeat dressed as a decision.
+    const solo: SuiteDef = { ...suiteById(START_SUITE_ID)!, id: 'solo', members: ['arena'] };
+    const d = createMusicDirector([solo], xorshift(4), { startSuiteId: 'solo' })!;
+    expect(d.first().id).toBe('arena');
+    expect(Array.from({ length: 8 }, () => d.next().kind)).toEqual(Array(8).fill('stay'));
+  });
+
+  it('fails LOUDLY on bad configuration rather than quietly picking something', () => {
+    expect(() => createMusicDirector(SUITES, xorshift(1), { startSuiteId: 'nope' })).toThrow(
+      /no suite named "nope"/,
+    );
+    const ghost: SuiteDef = { ...suiteById(START_SUITE_ID)!, id: 'ghost', members: ['no-such-track'] };
+    expect(() => createMusicDirector([ghost], xorshift(1), { startSuiteId: 'ghost' })).toThrow(
+      /no playable members/,
+    );
   });
 
   it('defaultDirector survives empty suite data by falling back to one track', () => {
