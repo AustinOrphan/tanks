@@ -215,6 +215,25 @@ describe('engine: the generated music bed', () => {
     engine.dispose();
   });
 
+  it('starts the bed even when startMusic beat the music load failure', async () => {
+    // Every other bed test in this file awaits flush() FIRST, so the Howl is
+    // already null by the time startMusic runs -- which is why none of them
+    // could see this. The game now starts the music at boot, inside the window
+    // where the Howl still exists and has not yet failed: measured in a real
+    // browser, the asset resolved at ~1354ms while boot called startMusic at
+    // ~380ms, and the title screen produced 0 bed voices against 8 after Start.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    engine.startMusic(); // BEFORE the flush: the Howl is alive and mute
+    await flush(); // ...and now it fails, as it always will in this repo
+    const c = ctxOf();
+    expect(c, 'no AudioContext at all -- the bed never ran').toBeDefined();
+    expect(
+      c.nodes.filter((n) => n.kind === 'osc').length,
+      'the load failure arrived after startMusic and nothing retried: silence',
+    ).toBeGreaterThan(0);
+    engine.dispose();
+  });
+
   it('does NOT play at full volume when the game is muted', async () => {
     // The bug this pins: Howler.mute() does not touch our own graph, so a bed
     // built while muted would sing over a silent game.

@@ -499,6 +499,8 @@ describe('composed tracks', () => {
         calls.push(1);
         return calls.length === 1 ? ({ kind: 'queue', track: b } as const) : ({ kind: 'stay' } as const);
       },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
     };
     const ctx = new FakeCtx();
     const t = fakeTimer();
@@ -539,6 +541,8 @@ describe('composed tracks', () => {
         sent = true;
         return { kind: 'suite', track: b } as const;
       },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
     };
     const ctx = new FakeCtx();
     const t = fakeTimer();
@@ -571,6 +575,8 @@ describe('composed tracks', () => {
         consulted += 1;
         return { kind: 'stay' } as const;
       },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
     };
     const ctx = new FakeCtx();
     const t = fakeTimer();
@@ -618,6 +624,8 @@ describe('composed tracks', () => {
         handed.push(track);
         return { kind: 'queue', track } as const;
       },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
     };
     const ctx = new FakeCtx();
     const t = fakeTimer();
@@ -666,7 +674,12 @@ describe('composed tracks', () => {
     // A track is ALREADY queued when the pause happens, so a stale cycle
     // position on resume would adopt it immediately and evict the incoming
     // member mid-pickup -- which is the shape of the original blocker.
-    const director = { first: () => from, next: () => ({ kind: 'stay' } as const) };
+    const director = {
+      first: () => from,
+      next: () => ({ kind: 'stay' } as const),
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
     const ctx = new FakeCtx();
     const t = fakeTimer();
     const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
@@ -702,6 +715,8 @@ describe('composed tracks', () => {
         consulted += 1;
         return { kind: 'stay' } as const;
       },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
     };
     const ctx = new FakeCtx();
     const t = fakeTimer();

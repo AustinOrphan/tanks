@@ -4,6 +4,7 @@ import {
   SUITES,
   suiteById,
   membersOf,
+  suitesFor,
   dominantOf,
   keyAffinity,
   rankCandidates,
@@ -58,7 +59,7 @@ describe('dominantOf', () => {
     for (let root = 0; root < 12; root++) {
       for (const quality of ['', 'm']) {
         const key = `${NAMES[root]}${quality}`;
-        const suite = { id: 't', key, stepSeconds: 1, transition: 'dominant' as const, members: [] };
+        const suite = { id: 't', key, context: 'arena' as const, stepSeconds: 1, transition: 'dominant' as const, members: [] };
         const dom = dominantOf(suite);
         expect(dom.root, `dominant of ${key}`).toBe((root + 7) % 12);
         // Major triad: root, +4, +7.
@@ -107,7 +108,7 @@ describe('keyAffinity', () => {
 
 describe('rankCandidates / pickNextSuite', () => {
   const mk = (id: string, key: string, stepSeconds: number): SuiteDef => ({
-    id, key, stepSeconds, transition: 'dominant', members: [],
+    id, key, context: 'arena', stepSeconds, transition: 'dominant', members: [],
   });
 
   it('excludes a tempo gap beyond 20% no matter how related the key', () => {
@@ -156,10 +157,19 @@ describe('rankCandidates / pickNextSuite', () => {
     for (const s of SUITES) {
       const home = parseChord(s.key)!;
       const isMinor = (home.pitchClasses[1] - home.root + 12) % 12 === 3;
-      const roots = membersOf(s)[0].chords.map((c) => parseChord(c)!.root);
+      const chords = membersOf(s)[0].chords;
+      const roots = chords.map((c) => parseChord(c)!.root);
       const offsets = roots.map((r) => (r - home.root + 12) % 12);
       const want = isMinor ? [0, 8, 10, 7] : [0, 9, 5, 7];
-      expect(offsets, `${s.id} (${s.key}) plays ${membersOf(s)[0].chords.join('-')}`).toEqual(want);
+      // The chord SET, plus a V ending -- not the exact order. A rotation of the
+      // same degrees is a legitimate variant (the hand-written menu piece is
+      // vi-IV-I-V, the relative-minor rotation of I-vi-IV-V), while the thing
+      // this pin exists to catch -- a generated set with a WRONG degree, e.g.
+      // Em-C#-D-B -- still fails, because C# is not in the set.
+      expect([...offsets].sort((a, b) => a - b), `${s.id} (${s.key}) plays ${chords.join('-')}`).toEqual(
+        [...want].sort((a, b) => a - b),
+      );
+      expect(offsets[offsets.length - 1], `${s.id} must end on its V`).toBe(7);
     }
   });
 
@@ -167,13 +177,16 @@ describe('rankCandidates / pickNextSuite', () => {
     // "A lot more sets" only works if every set is reachable from every other
     // through legal joins -- an island suite would strand the playlist there
     // forever. Population: all shipped suites, walked from the first.
-    const reachable = new Set<string>([SUITES[0].id]);
+    // Per CONTEXT: the roam never leaves the world it is scoring, so a menu
+    // suite being unreachable from an arena one is correct, not a stranding.
+    const arena = SUITES.filter((s) => s.context === 'arena');
+    const reachable = new Set<string>([arena[0].id]);
     let grew = true;
     while (grew) {
       grew = false;
-      for (const s of SUITES) {
+      for (const s of arena) {
         if (!reachable.has(s.id)) continue;
-        for (const r of rankCandidates(s, SUITES)) {
+        for (const r of rankCandidates(s, arena)) {
           if (!reachable.has(r.suite.id)) {
             reachable.add(r.suite.id);
             grew = true;
@@ -181,12 +194,31 @@ describe('rankCandidates / pickNextSuite', () => {
         }
       }
     }
-    const stranded = SUITES.map((s) => s.id).filter((id) => !reachable.has(id));
-    expect(stranded, `unreachable suites: ${stranded.join(', ')}`).toEqual([]);
-    // And no dead ends: every suite can also LEAVE.
-    for (const s of SUITES) {
-      expect(rankCandidates(s, SUITES).length, `${s.id} is a dead end`).toBeGreaterThan(0);
+    const stranded = arena.map((s) => s.id).filter((id) => !reachable.has(id));
+    expect(stranded, `unreachable arena suites: ${stranded.join(', ')}`).toEqual([]);
+    // And no dead ends within the arena world.
+    for (const s of arena) {
+      expect(rankCandidates(s, arena).length, `${s.id} is a dead end`).toBeGreaterThan(0);
     }
+  });
+
+  it('never offers a suite from ANOTHER context, even one otherwise compatible', () => {
+    // The shipped menu suite cannot discriminate this: it sits 2.7x outside the
+    // tempo rule, so it is excluded whether or not context is considered --
+    // which made the first version of this test pass with the context filter
+    // deleted. The fixture differs ONLY in context.
+    const arena: SuiteDef = { id: 'a', key: 'Am', context: 'arena', stepSeconds: 0.15, transition: 'dominant', members: [] };
+    const twin: SuiteDef = { ...arena, id: 'twin', context: 'menu' };
+    expect(rankCandidates(arena, [arena, twin]).map((r) => r.suite.id)).toEqual([]);
+    // Same suite in the same context IS offered, so the exclusion is context.
+    expect(rankCandidates(arena, [arena, { ...twin, context: 'arena' }]).map((r) => r.suite.id)).toEqual(['twin']);
+    // And the shipped data holds the property too.
+    for (const s of SUITES) {
+      for (const r of rankCandidates(s, SUITES)) {
+        expect(r.suite.context, `${s.id} (${s.context}) offered ${r.suite.id}`).toBe(s.context);
+      }
+    }
+    expect(suitesFor('menu').length).toBeGreaterThan(0);
   });
 
   it('the SHIPPED suites give assault at least one legal neighbour', () => {

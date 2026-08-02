@@ -9,7 +9,8 @@
       "arena-push",
       "arena-lull",
       "arena-charge"
-    ]
+    ],
+    "context": "arena"
   },
   {
     "id": "vanguard",
@@ -21,7 +22,8 @@
       "vanguard-push",
       "vanguard-lull",
       "vanguard-charge"
-    ]
+    ],
+    "context": "arena"
   },
   {
     "id": "pursuit",
@@ -33,7 +35,8 @@
       "pursuit-push",
       "pursuit-lull",
       "pursuit-charge"
-    ]
+    ],
+    "context": "arena"
   },
   {
     "id": "rally",
@@ -45,7 +48,8 @@
       "rally-push",
       "rally-lull",
       "rally-charge"
-    ]
+    ],
+    "context": "arena"
   },
   {
     "id": "undertow",
@@ -57,7 +61,8 @@
       "undertow-push",
       "undertow-lull",
       "undertow-charge"
-    ]
+    ],
+    "context": "arena"
   },
   {
     "id": "daybreak",
@@ -69,6 +74,17 @@
       "daybreak-push",
       "daybreak-lull",
       "daybreak-charge"
+    ],
+    "context": "arena"
+  },
+  {
+    "id": "title",
+    "key": "C",
+    "stepSeconds": 0.4,
+    "context": "menu",
+    "transition": "dominant",
+    "members": [
+      "menu"
     ]
   }
 ]

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createMusicDirector, defaultDirector, START_SUITE_ID, TRACKS_PER_SUITE } from './playlist';
-import { SUITES, suiteById, type SuiteDef } from './suites';
+import { SUITES, suiteById, suitesFor, type SuiteDef } from './suites';
 
 const xorshift = (seed: number) => {
   let x = seed || 1;
@@ -138,6 +138,41 @@ describe('the music director', () => {
     expect(() => createMusicDirector([ghost], xorshift(1), { startSuiteId: 'ghost' })).toThrow(
       /no playable members/,
     );
+  });
+
+  it('enterContext moves to that world and restarts the roam inside it', () => {
+    const d = createMusicDirector(SUITES, xorshift(3), { startSuiteId: START_SUITE_ID })!;
+    expect(d.currentContext()).toBe('arena');
+    const menuTrack = d.enterContext('menu');
+    expect(menuTrack, 'no menu track offered').not.toBeNull();
+    expect(suitesFor('menu').flatMap((s) => s.members)).toContain(menuTrack!.id);
+    expect(d.currentContext()).toBe('menu');
+    // The roam continues INSIDE the menu world -- it must not wander back into
+    // arena suites, which sit far outside menu's tempo.
+    const menuIds = new Set(suitesFor('menu').flatMap((s) => s.members));
+    for (let i = 0; i < 20; i++) {
+      const dir = d.next();
+      if (dir.kind !== 'stay') expect(menuIds, `left the menu world with ${dir.track.id}`).toContain(dir.track.id);
+    }
+    // And back again.
+    const back = d.enterContext('arena');
+    expect(back).not.toBeNull();
+    expect(d.currentContext()).toBe('arena');
+  });
+
+  it('entering the context it is already in is a no-op, not a restart', () => {
+    // loop.ts pushes the context on EVERY state change, including ones that do
+    // not change world (playing -> paused -> playing). Treating those as
+    // entries would restart the music on every pause.
+    const d = createMusicDirector(SUITES, xorshift(8), { startSuiteId: START_SUITE_ID })!;
+    expect(d.enterContext('arena')).toBeNull();
+    expect(d.enterContext('arena')).toBeNull();
+  });
+
+  it('a context with no suites leaves the music alone rather than silencing it', () => {
+    const d = createMusicDirector(SUITES, xorshift(2), { startSuiteId: START_SUITE_ID })!;
+    expect(d.enterContext('victory')).toBeNull(); // none authored yet
+    expect(d.currentContext(), 'an empty context stole the music').toBe('arena');
   });
 
   it('defaultDirector survives empty suite data by falling back to one track', () => {

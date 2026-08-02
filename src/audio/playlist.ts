@@ -1,4 +1,4 @@
-import { pickNextSuite, membersOf, type SuiteDef } from './suites';
+import { pickNextSuite, membersOf, type SuiteDef, type SuiteContext } from './suites';
 import { trackById, type MusicTrackDef } from './music-data';
 
 /**
@@ -34,6 +34,13 @@ export interface MusicDirector {
   first(): MusicTrackDef;
   /** Called by the bed at each completed cycle. */
   next(): Directive;
+  /**
+   * Move to another part of the game. Returns the track to change to, or null
+   * if the context has no suites (then the caller keeps what is playing rather
+   * than falling silent). The roam resumes inside the new context.
+   */
+  enterContext(context: SuiteContext): MusicTrackDef | null;
+  currentContext(): SuiteContext;
 }
 
 /** How many members play before the walk moves to a neighbouring suite. */
@@ -90,6 +97,20 @@ export function createMusicDirector(
 
   return {
     first: () => start,
+    currentContext: () => suite?.context ?? 'arena',
+    enterContext(context: SuiteContext): MusicTrackDef | null {
+      if (suite && suite.context === context) return null; // already there
+      const candidates = suites.filter((s) => s.context === context);
+      if (candidates.length === 0) return null;
+      // A fresh world: pick within it and reset the roam state, so the dwell
+      // and the bag belong to the context being entered.
+      const chosen = candidates[Math.floor(rnd() * candidates.length) % candidates.length];
+      suite = chosen;
+      bag = [];
+      lastId = null;
+      playedInSuite = 1;
+      return draw(chosen);
+    },
     next(): Directive {
       if (!suite) return { kind: 'stay' };
       if (playedInSuite >= dwell) {
@@ -126,5 +147,10 @@ export function defaultDirector(
   // Degenerate data: fall back to the old single-track behaviour.
   const track = trackById('arena');
   if (!track) return null;
-  return { first: () => track, next: () => ({ kind: 'stay' }) };
+  return {
+    first: () => track,
+    next: () => ({ kind: 'stay' }),
+    enterContext: () => null,
+    currentContext: () => 'arena',
+  };
 }
