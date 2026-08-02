@@ -48,7 +48,7 @@
         {
           "type": "spawnBlockRobust",
           "nudge": 0.1,
-          "why": "The row-5 cell exists for exactly this: with the row-4 block alone, Brown's and Grey's lines to the player spawn were tangent to its corners, and a 0.1-unit nudge opened a clear lane. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the row-5 cell in place."
+          "why": "The centre pillar's lower tier exists for exactly this: with the upper tier alone, Brown's and Grey's lines to the player spawn were tangent to its corners, and a 0.1-unit nudge opened a clear lane. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the lower tier in place."
         }
       ]
     },
@@ -254,7 +254,7 @@
         {
           "type": "spawnBlockRobust",
           "nudge": 0.1,
-          "why": "The row-5 chord-maker exists for this: with row 4 alone, both browns' post-breach blocks were a single-point corner tangency that a 0.1-unit player nudge opened into a full lane. Found by slab math in review. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the chord-maker in place."
+          "why": "The centre pillar's lower tier -- the chord-maker -- exists for this: with the upper tier alone, both browns' post-breach blocks were a single-point corner tangency that a 0.1-unit player nudge opened into a full lane. Found by slab math in review. spawnBlockRobust checks both intact and breached walls; measured to hold under both with the chord-maker in place."
         }
       ]
     },
@@ -320,7 +320,7 @@
             4
           ],
           "sees": false,
-          "why": "North-west GREEN, the ricochet sniper: the bar's solid cell at column 3 stands on its direct line and no breach touches it. Its BANK paths are checked separately and in two places -- structuralFailures forbids a stationary banker any ricochet onto the spawn with walls intact, and this arena's spawnBlockRobust claim extends that to the breached phase under nudges. Column 3 is where green survives BOTH; column 4 did not."
+          "why": "North-west GREEN, the ricochet sniper: the bar's solid cell at column 10 stands on its direct line and no breach touches it. Its BANK paths are checked separately and in two places -- structuralFailures forbids a stationary banker any ricochet onto the spawn with walls intact, and this arena's spawnBlockRobust claim extends that to the breached phase under nudges. Column 10 is where green survives BOTH; column 13 did not."
         },
         {
           "type": "sightlineAfterBreach",
@@ -329,7 +329,7 @@
             4
           ],
           "sees": false,
-          "why": "North-centre grey: blocked by the bar's solid cell at column 7, straight up the player's own column."
+          "why": "North-centre grey: blocked by the bar's solid cell at column 22, straight up the player's own column."
         },
         {
           "type": "sightlineAfterBreach",
@@ -338,7 +338,7 @@
             4
           ],
           "sees": false,
-          "why": "North-east brown: blocked by the bar's solid cell at column 9. Breaching column 10 opens the column beside the player, not the spawn itself -- the lane claim below is the other half of that statement."
+          "why": "North-east brown: blocked by the bar's solid cell at column 28. Breaching column 31 opens the column beside the player, not the spawn itself -- the lane claim below is the other half of that statement."
         },
         {
           "type": "sightlineAfterBreach",
@@ -347,7 +347,7 @@
             13
           ],
           "sees": false,
-          "why": "East teal, high: the column-11 wall at row 6 is solid and stays so."
+          "why": "East teal, high: the east wall at rows 18-20 is solid and stays so."
         },
         {
           "type": "sightlineAfterBreach",
@@ -356,7 +356,7 @@
             19
           ],
           "sees": false,
-          "why": "East olive: the column-11 wall at row 7. The rocket never gets a free line on a respawning player, which with six enemies on the board it must not."
+          "why": "East olive: the east wall at rows 21-23. The rocket never gets a free line on a respawning player, which with six enemies on the board it must not."
         },
         {
           "type": "sightlineAfterBreach",
@@ -365,12 +365,12 @@
             25
           ],
           "sees": false,
-          "why": "East teal, low: the column-11 wall at row 8."
+          "why": "East teal, low: the east wall at rows 24-26."
         },
         {
           "type": "spawnBlockRobust",
           "nudge": 0.1,
-          "why": "All six spawn blocks are solid bar cells or solid column-11 cells, so unlike level 2 the spawn survives a full breach. Measured 0 of 24 nudge probes open in BOTH wall phases; the claim is what keeps a future edit from turning one of those six blockers destructible without noticing."
+          "why": "All six spawn blocks are solid bar cells or solid east wall cells, so unlike level 2 the spawn survives a full breach. Measured 0 of 24 nudge probes open in BOTH wall phases; the claim is what keeps a future edit from turning one of those six blockers destructible without noticing."
         },
         {
           "type": "lane",
@@ -384,7 +384,7 @@
           ],
           "intact": "blocked",
           "breached": "blocked",
-          "why": "CROSSFIRE, half one of four: the north's centre gun cannot touch (7, 7) in either phase -- the row-4 bar shadows it."
+          "why": "CROSSFIRE, half one of four: the north's centre gun cannot touch (22, 22) in either phase -- the bar shadows it."
         },
         {
           "type": "lane",
@@ -398,7 +398,7 @@
           ],
           "intact": "open",
           "breached": "open",
-          "why": "CROSSFIRE: but the east teal owns that same cell along the row-5 corridor. Cover from the north is exposure to the east. Together with the pair below, this is the level's whole idea, stated so an edit cannot quietly undo it."
+          "why": "CROSSFIRE: but the east teal owns that same cell along the corridor below the bar. Cover from the north is exposure to the east. Together with the pair below, this is the level's whole idea, stated so an edit cannot quietly undo it."
         },
         {
           "type": "lane",
@@ -412,7 +412,7 @@
           ],
           "intact": "open",
           "breached": "open",
-          "why": "CROSSFIRE, the inversion: two cells east, the grey's line is open down COLUMN 8's gap in the bar -- not column 7, which is one of the three solid cells holding the grey off the player spawn. Widening column 7 would open that spawn line; column 8 is already open floor."
+          "why": "CROSSFIRE, the inversion: two cells east, the grey's line is open down COLUMN 25's gap in the bar -- not column 22, which is one of the three solid cells holding the grey off the player spawn. Widening column 22 would open that spawn line; column 25 is already open floor."
         },
         {
           "type": "lane",
@@ -426,7 +426,7 @@
           ],
           "intact": "blocked",
           "breached": "blocked",
-          "why": "CROSSFIRE: and the east teal is shut out by the column-11 wall. (7, 7) and (9, 7) are exact opposites, and stay so through a full breach."
+          "why": "CROSSFIRE: and the east teal is shut out by the east wall. (22, 22) and (28, 22) are exact opposites, and stay so through a full breach."
         },
         {
           "type": "lane",
@@ -440,7 +440,7 @@
           ],
           "intact": "blocked",
           "breached": "open",
-          "why": "The bar's west breach: column 4 is otherwise clear from row 1 to row 7, so blowing that cell opens a north-south lane into the player's half. NOTE both endpoints are plain floor -- green sits at column 3, not 4 -- so unlike this arena's other lanes nothing pins this one to a live spawn. It measures the destructible at (4, 4), which is the thing worth measuring."
+          "why": "The bar's west breach: column 13 is otherwise clear from row 4 to row 22, so blowing that cell opens a north-south lane into the player's half. NOTE both endpoints are plain floor -- green sits at column 10, not 13 -- so unlike this arena's other lanes nothing pins this one to a live spawn. It measures the destructible at (13, 13), which is the thing worth measuring."
         },
         {
           "type": "lane",
@@ -454,7 +454,7 @@
           ],
           "intact": "blocked",
           "breached": "open",
-          "why": "The bar's east breach, and the bigger trade: column 10 is clear top to bottom, so this one opens the full height of the board -- down to row 9, level with the player spawn but not onto it."
+          "why": "The bar's east breach, and the bigger trade: column 31 is clear top to bottom, so this one opens the full height of the board -- down to row 28, level with the player spawn but not onto it."
         },
         {
           "type": "lane",
@@ -468,7 +468,7 @@
           ],
           "intact": "blocked",
           "breached": "open",
-          "why": "Losing the mid-field cover at (6, 6) hands the east teal the player's left-hand approach. The cover is the player's, so this is a cost the PLAYER pays for a stray shot, not a trade they choose."
+          "why": "Losing the mid-field cover at (19, 19) hands the east teal the player's left-hand approach. The cover is the player's, so this is a cost the PLAYER pays for a stray shot, not a trade they choose."
         }
       ]
     }
