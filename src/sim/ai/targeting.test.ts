@@ -247,13 +247,27 @@ describe('bankShot', () => {
     }));
     let compared = 0;
 
-    // Pattern A: muzzle/target ABOVE the run (y outside its [0,2] band) -- reflects off
-    // the run's TOP face. The bounce point's x-coordinate coincides EXACTLY with a seam
-    // (x=2 or 4) for 8 of these 121 pairs, which is what originally exposed a losIgnoring
+    // Muzzle/target ABOVE the run (y outside its [0,2] band) -- reflects off the run's
+    // TOP face. The bounce point's x-coordinate coincides EXACTLY with a seam (x=2 or 4)
+    // for 8 of these 121 pairs, which is what originally exposed a losIgnoring
     // boundary-touch bug: the muzzle->bounce / bounce->target legs graze the NEIGHBOURING
     // sub-cell's corner at that exact x, and an unfixed losIgnoring reported that graze as
-    // a block. This sub-sweep is a regression test for that fix specifically -- reverting
-    // it (temporarily, by hand, during development) reintroduced mismatches here.
+    // a block. This is a regression test for that fix specifically -- reverting it
+    // (temporarily, by hand, during development) reintroduced mismatches here.
+    //
+    // A second sub-sweep used to run here too (muzzle/target beside the run, y WITHIN its
+    // [0,2] band, to make a vertical seam face itself geometrically reachable rather than
+    // merely coincided with). It reported 0 mismatches under every mutation tried --
+    // dropping either LOS leg, dropping both, first-valid selection, reversed wall order,
+    // longest-path selection -- because on a flush, gap-free run the outer face is always
+    // STRICTLY closer than any interior seam behind it (reaching a seam from outside
+    // necessarily detours around/through the wall in front of it), so shortest-path
+    // selection picks the outer candidate regardless of whether the seam candidate was
+    // ever correctly rejected. That sub-sweep is deleted rather than kept as an inert
+    // "proof of nothing" -- see the two tests below for what replaced its actual job: a
+    // seam/buried candidate's own rejection now has fixtures where it demonstrably matters,
+    // and `faceIsBuried` (the guard the deleted sub-sweep was originally written to
+    // control for) no longer exists to give it a control anyway.
     for (let mx = 0.5; mx < 6; mx += 0.5) {
       for (let tx = 0.5; tx < 6; tx += 0.5) {
         const m = { x: mx, y: 4 };
@@ -261,32 +275,66 @@ describe('bankShot', () => {
         const a = bankShot(m, t, merged, 1);
         const b = bankShot(m, t, three, 1);
         compared++;
-        if (a === null || b === null) expect(b, `A ${mx}->${tx}`).toBe(a);
-        else expect(b, `A ${mx}->${tx}`).toBeCloseTo(a, 9);
+        if (a === null || b === null) expect(b, `${mx}->${tx}`).toBe(a);
+        else expect(b, `${mx}->${tx}`).toBeCloseTo(a, 9);
       }
     }
 
-    // Pattern B: muzzle/target to the LEFT of the run, y WITHIN its own [0,2] band. Unlike
-    // Pattern A, this makes a VERTICAL seam face itself (not just its x-coordinate)
-    // geometrically reachable: a ray toward a sub-cell's own left face genuinely crosses
-    // that cell's y-range as a raw raySegmentVsAABB candidate with a matching normal, so
-    // the interior seams at x=2 and x=4 are actually OFFERED as candidate reflectors here,
-    // not merely coincided with. `merged` vs `three` staying equal proves those seam
-    // candidates are rejected the same way (via a genuine losIgnoring block through the
-    // neighbouring sub-cell) regardless of how the reflector was sliced.
-    for (let my = 0.25; my < 2; my += 0.25) {
-      for (let ty = 0.25; ty < 2; ty += 0.25) {
-        const m = { x: -6, y: my };
-        const t = { x: -1, y: ty };
-        const a = bankShot(m, t, merged, 1);
-        const b = bankShot(m, t, three, 1);
-        compared++;
-        if (a === null || b === null) expect(b, `B ${my}->${ty}`).toBe(a);
-        else expect(b, `B ${my}->${ty}`).toBeCloseTo(a, 9);
-      }
-    }
+    expect(compared).toBe(121); // population: 11 muzzle x 11 target positions
+  });
 
-    expect(compared).toBe(170); // population: pattern A 11x11=121 + pattern B 7x7=49
+  it('falls through to a farther reflector when the nearer one\'s reflected leg is blocked', () => {
+    // Two reflectors: NEAR (the shorter, and so normally-winning, path) and FAR (always
+    // clear, longer path). An obstacle sits between the NEAR bounce point and the target
+    // ONLY -- confirmed below not to touch the muzzle->bounce leg of either reflector, nor
+    // any of FAR's legs -- so this isolates the bounce->target LOS check specifically.
+    // Unlike a single-reflector "returns null" test, FAR being available and CORRECT
+    // means shortest-path selection cannot silently prefer NEAR anyway if the rejection
+    // is missing: a missing bounce->target check makes NEAR (wrongly) win over FAR, which
+    // is directly observable as the wrong angle, not just non-null vs null.
+    const near: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 0, maxX: 20, maxY: 2 } };
+    const far: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 20, maxX: 20, maxY: 22 } };
+    const obstacle: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: 7.5, minY: 3, maxX: 9, maxY: 5 } };
+    const m = { x: 5, y: 4 };
+    const t = { x: 10, y: 6 };
+
+    const soloNear = bankShot(m, t, [near], 1);
+    const soloFar = bankShot(m, t, [far], 1);
+    expect(soloNear).not.toBeNull();
+    expect(soloFar).not.toBeNull();
+    expect(soloNear).not.toBeCloseTo(soloFar as number, 6); // genuinely different candidates
+
+    // Without the obstacle, NEAR (shorter) wins -- confirms it really is the closer one.
+    expect(bankShot(m, t, [near, far], 1)).toBeCloseTo(soloNear as number, 9);
+
+    // With the obstacle blocking ONLY near's reflected leg, the answer must become FAR's,
+    // not near's (which would mean the rejection was skipped) and not null (which would
+    // mean FAR's own candidate was wrongly rejected too).
+    expect(bankShot(m, t, [near, far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+    // FAR's own candidate is unaffected by the obstacle in isolation, confirming the
+    // obstacle's placement doesn't leak into FAR's legs.
+    expect(bankShot(m, t, [far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+  });
+
+  it('falls through to a farther reflector when the nearer one\'s approach leg is blocked', () => {
+    // Mirror of the previous test: muzzle and target swapped, so the same obstacle now
+    // sits between NEAR's bounce point and the MUZZLE instead, isolating the
+    // muzzle->bounce LOS check.
+    const near: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 0, maxX: 20, maxY: 2 } };
+    const far: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 20, maxX: 20, maxY: 22 } };
+    const obstacle: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: 7.5, minY: 3, maxX: 9, maxY: 5 } };
+    const m = { x: 10, y: 6 };
+    const t = { x: 5, y: 4 };
+
+    const soloNear = bankShot(m, t, [near], 1);
+    const soloFar = bankShot(m, t, [far], 1);
+    expect(soloNear).not.toBeNull();
+    expect(soloFar).not.toBeNull();
+    expect(soloNear).not.toBeCloseTo(soloFar as number, 6);
+
+    expect(bankShot(m, t, [near, far], 1)).toBeCloseTo(soloNear as number, 9);
+    expect(bankShot(m, t, [near, far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+    expect(bankShot(m, t, [far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
   });
 
   it('picks the shortest of several competing reflectors, not the first in array order', () => {

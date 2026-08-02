@@ -327,13 +327,19 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
       // shell to arrive, and -- unlike "first valid" -- it is a property of the arena's
       // geometry rather than of how that geometry was sliced into cells. Exact ties are
       // real in symmetric arenas, so they break on the ANGLE, which is geometric too.
+      // `bestLength` tracks the CHOSEN candidate's own length, not a running Math.min of
+      // every length seen -- the latter lets an epsilon chain drift: a candidate can be
+      // rejected as not `better` than the recorded minimum while that minimum belongs to
+      // a DIFFERENT (already-superseded) candidate, making the result order-dependent.
+      // First candidate always accepts: `length < Infinity - AIM_EPS` is unconditionally
+      // true, so no `bestAngle === null` fallback is needed.
       const length = vdist(muzzle, bounce) + vdist(bounce, target);
       const angle = angleOf(vsub(bounce, muzzle));
       const better =
         length < bestLength - AIM_EPS ||
         (Math.abs(length - bestLength) <= AIM_EPS && bestAngle !== null && angle < bestAngle);
-      if (better || bestAngle === null) {
-        bestLength = Math.min(length, bestLength);
+      if (better) {
+        bestLength = length;
         bestAngle = angle;
       }
     }
