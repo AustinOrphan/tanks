@@ -93,7 +93,7 @@
   },
   "green": {
     "displayName": "Green",
-    "color": "#3D9A50",
+    "color": "#0A6E42",
     "firstMission": 12,
     "singlePlayerOnly": false,
     "movementSpeed": "MEDIUM",

@@ -7,7 +7,7 @@ import { lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
 import { structuralFailures, claimFailures, cellOf, breach } from './arena-claims';
 import { ARENA_DEFS, arenaById } from './config/arenas';
-import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA } from './config/arena-fixtures';
+import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import type { ArenaClaim } from './config/arena-types';
 
 describe('the shipped arena sequence', () => {
@@ -189,5 +189,41 @@ describe("arena-02's spawnBlockRobust figures, which no claim can protect", () =
 
     expect(count(walls)).toBe(0);       // intact: the barrier seals both halves
     expect(count(breached)).toBe(12);   // breached: the trade the level is built on
+  });
+});
+
+describe('the STATIONARY-banker spawn rule, which green is the reason for', () => {
+  // One geometry, three kinds. The board is identical in all three -- green at (1, 1),
+  // player at (5, 1), a solid at (3, 1) killing the direct line, boundary ring available
+  // to bounce off -- so the ONLY variable is which enemy stands there. That is what makes
+  // each gate's control meaningful rather than three unrelated boards.
+  const at = (letter: string) => ({
+    ...BANK_SIGHTLINE_ARENA,
+    grid: BANK_SIGHTLINE_ARENA.grid.map((row) => row.replace('N', letter)),
+  });
+
+  it('reports a stationary banker that can ricochet onto the player spawn', () => {
+    const failures = structuralFailures(BANK_SIGHTLINE_ARENA);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/spawn BANK line: green/);
+    // Isolation: this fixture must exercise the BANK rule specifically. If the solid at
+    // (3, 1) ever stopped blocking, the direct rule would fire and this fixture would be
+    // re-testing what OPEN_SIGHTLINE_ARENA already covers while looking like it passed.
+    expect(failures[0]).not.toMatch(/spawn sightline/);
+  });
+
+  it('does NOT report a MOBILE banker on the same board', () => {
+    // The behaviour gate. Teal banks (weight 0.15) and would trip a rule that only
+    // checked the weight -- as an earlier draft of this rule did, which failed shipped
+    // arena-01 (grey at (13, 5) off 1 wall, teal at (11, 7) off 2) and arena-04. A tank
+    // that drives away at tick 1 does not hold the line the rule is about.
+    expect(structuralFailures(at('T'))).toEqual([]);
+  });
+
+  it('does NOT report a stationary NON-banker on the same board', () => {
+    // The weight gate. Brown is stationary and its shell ricochets (ricochetCount 1),
+    // so only its bankShotWeight of 0 keeps it quiet here -- which is exactly the gate
+    // that makes brown's behaviour unchanged by the bank work in brown.ts.
+    expect(structuralFailures(at('B'))).toEqual([]);
   });
 });

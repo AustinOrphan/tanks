@@ -25,7 +25,13 @@ const SHIPPED_COLORS: Record<TankKind, string> = {
   grey: '#8890a0',
   teal: '#2bb0a6',
   olive: '#7a8f3c', // new with the kind itself: no prior render literal to reproduce
-  green: '#3D9A50', // likewise new; taken from config/reference/tank-types.json GREEN
+  // Deliberately NOT the reference taxonomy's GREEN (#3D9A50). That is 11.0 deltaE76
+  // from the player's own green swatch (#4fae52), and customization.test.ts requires
+  // every swatch to clear every enemy identity by 20 -- an enemy the player can dress
+  // up as is a legibility bug, not a palette preference. #0A6E42 is 32.9 from the
+  // nearest of all ten shipped colours, so it leaves the palette's existing worst
+  // pair (27.7, green swatch vs olive) as the minimum instead of becoming the new one.
+  green: '#0A6E42',
 };
 
 describe('game roster resolves to the shipped tunables (behaviour-preservation pins)', () => {
