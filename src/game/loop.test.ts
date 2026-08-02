@@ -77,6 +77,12 @@ interface Recorder {
   removed: Array<[string, (e: never) => void]>;
   disposed: string[];
   musicStarts: number;
+  /**
+   * Every music call in ORDER, on one log. Three independent counters cannot
+   * see sequence: review swapped startMusic and setMusicContext in loop.ts and
+   * the whole 1268-test suite stayed green.
+   */
+  audioCalls: string[];
   musicStops: number;
   musicIntensities: number[];
   musicContexts: string[];
@@ -152,6 +158,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     removed: [],
     disposed: [],
     musicStarts: 0,
+    audioCalls: [],
     musicStops: 0,
     musicIntensities: [],
     musicContexts: [],
@@ -232,6 +239,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       play: () => {},
       startMusic: () => {
         rec.musicStarts += 1;
+        rec.audioCalls.push('start');
       },
       stopMusic: () => {
         rec.musicStops += 1;
@@ -251,9 +259,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       setMusicContext: (c: string) => {
         rec.musicContexts.push(c);
+        rec.audioCalls.push(`context:${c}`);
       },
       duckMusic: (d: boolean) => {
         rec.musicDucks.push(d);
+        rec.audioCalls.push(`duck:${d}`);
       },
       dispose: () => {
         rec.disposed.push('audio');
@@ -749,8 +759,18 @@ describe('startGameWith: HUD wiring', () => {
     // through the state machine, so hanging the music off onChange alone left
     // this path silent; a browser probe caught it after the unit tests passed.
     const h = boot(makeDeps());
-    expect(h.rec.musicStarts, 'boot left the title screen silent').toBeGreaterThan(0);
-    expect(h.rec.musicContexts[0], 'boot did not put the music in the menu world').toBe('menu');
+    // The exact SEQUENCE, not three independent counters. Review swapped
+    // startMusic and setMusicContext in loop.ts and all 1268 tests stayed
+    // green; it also doubled the startMusic call and nothing noticed. Both
+    // were lost power from the deleted test, which pinned `musicStarts` at
+    // exactly 1. (Neither is a live defect -- the engine stores the context
+    // whether or not the bed exists yet, and startMusic is idempotent -- but
+    // an ordering the tests cannot see is one this repo has been bitten by.)
+    expect(h.rec.audioCalls, 'boot left the title screen silent').toEqual([
+      'start',
+      'context:menu',
+      'duck:false',
+    ]);
     h.handle.dispose();
   });
 

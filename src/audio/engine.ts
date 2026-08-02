@@ -51,7 +51,7 @@ const MUSIC_VOLUME = 0.25;
  */
 export const MUSIC_TRACK_ID = 'arena';
 /** How far the music drops while paused. Quiet enough to recede, not silent. */
-const DUCK_FACTOR = 0.25;
+export const DUCK_FACTOR = 0.25;
 
 // Cap on simultaneous procedural voices. A mine chain-reaction can emit a
 // dozen SFX on one tick; identical tones started at the same currentTime sum
@@ -326,17 +326,24 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
         return ((rngState >>> 0) % 100000) / 100000;
       };
       director = defaultDirector(SUITES, rnd);
+      // Enter the context BEFORE the bed exists, so the screen OPENS on its own
+      // track. Building on the start suite and then changing suite would be a
+      // handled join out of music that never sounded: the title screen's first
+      // bar would carry a tempo ramp and an overlay of an arena track's final
+      // lead bar, generated fresh for a piece the player has not heard.
       // defaultDirector only returns null when 'arena' is missing too, so the
-      // old MUSIC_TRACK_ID fallback here was unreachable.
-      bed = createMusicBed(audio, ensureBus(audio), {
-        track: director?.first() ?? trackById(MUSIC_TRACK_ID),
-        director,
-      });
+      // MUSIC_TRACK_ID fallback here is unreachable with shipped data.
+      const opening =
+        director?.enterContext(musicContext) ?? director?.first() ?? trackById(MUSIC_TRACK_ID);
+      bed = createMusicBed(audio, ensureBus(audio), { track: opening, director });
+    } else {
+      // The bed already exists, so moving worlds IS a change of suite, and gets
+      // the same handled join any suite change does.
+      const entry = director?.enterContext(musicContext);
+      if (entry) bed.changeSuite(entry);
     }
     applyMusicVolume();
     bed.setIntensity(musicIntensity);
-    const entry = director?.enterContext(musicContext);
-    if (entry) bed.changeSuite(entry);
     bed.start();
   }
 
@@ -409,6 +416,13 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       }
       bed?.dispose();
       bed = null;
+      // A late `loaderror` can still arrive after this, and it calls back into
+      // beginMusic when the game wants music. That is harmless TODAY only
+      // because ensureCtx() returns null once `disposed` -- one refactor of
+      // that guard away from resurrecting audio on a torn-down engine. Disarm
+      // it here so the safety does not rest on a single unrelated line.
+      musicWanted = false;
+      director = null;
       for (const t of voiceTimers) clearTimeout(t);
       voiceTimers.clear();
       for (const k of Object.keys(sounds)) sounds[k]?.unload();

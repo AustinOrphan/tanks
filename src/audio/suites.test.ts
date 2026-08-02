@@ -5,6 +5,7 @@ import {
   suiteById,
   membersOf,
   suitesFor,
+  SUITE_CONTEXTS,
   dominantOf,
   keyAffinity,
   rankCandidates,
@@ -169,7 +170,13 @@ describe('rankCandidates / pickNextSuite', () => {
       expect([...offsets].sort((a, b) => a - b), `${s.id} (${s.key}) plays ${chords.join('-')}`).toEqual(
         [...want].sort((a, b) => a - b),
       );
-      expect(offsets[offsets.length - 1], `${s.id} must end on its V`).toBe(7);
+      // No "must end on its V" assertion here: suites.ts:113 throws at MODULE
+      // LOAD on exactly that, so no suite reaching this test can violate it and
+      // the assertion could not fail. Review proved it -- deleting it left all
+      // 162 audio tests passing, while rotating a member to end on VII failed
+      // at import with "ends on D, not the dominant of Em". The loader is the
+      // pin; this is the SET pin, and it admits any of the 6 orderings with V
+      // last where the old ordered pin admitted 1.
     }
   });
 
@@ -200,6 +207,21 @@ describe('rankCandidates / pickNextSuite', () => {
     for (const s of arena) {
       expect(rankCandidates(s, arena).length, `${s.id} is a dead end`).toBeGreaterThan(0);
     }
+    // The same guarantee for EVERY context, stated so it survives a second
+    // suite being authored in one. Narrowing this to arena (which the first
+    // version did) means a new menu or victory world gets no connectivity
+    // check at all. A context with ONE suite is exempt: `title` has nowhere
+    // legal to go and that is correct, not a stranding.
+    for (const context of SUITE_CONTEXTS) {
+      const world = SUITES.filter((s) => s.context === context);
+      if (world.length < 2) continue;
+      for (const s of world) {
+        expect(
+          rankCandidates(s, world).length,
+          `${s.id} is a dead end inside the ${context} world`,
+        ).toBeGreaterThan(0);
+      }
+    }
   });
 
   it('never offers a suite from ANOTHER context, even one otherwise compatible', () => {
@@ -212,12 +234,10 @@ describe('rankCandidates / pickNextSuite', () => {
     expect(rankCandidates(arena, [arena, twin]).map((r) => r.suite.id)).toEqual([]);
     // Same suite in the same context IS offered, so the exclusion is context.
     expect(rankCandidates(arena, [arena, { ...twin, context: 'arena' }]).map((r) => r.suite.id)).toEqual(['twin']);
-    // And the shipped data holds the property too.
-    for (const s of SUITES) {
-      for (const r of rankCandidates(s, SUITES)) {
-        expect(r.suite.context, `${s.id} (${s.context}) offered ${r.suite.id}`).toBe(s.context);
-      }
-    }
+    // Deliberately NOT also looping over the shipped suites here: review showed
+    // that loop passes with the context filter deleted, because `title` is
+    // tempo-excluded from every arena suite anyway. The fixture above carries
+    // 100% of this test's discriminating power.
     expect(suitesFor('menu').length).toBeGreaterThan(0);
   });
 

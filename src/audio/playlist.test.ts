@@ -130,6 +130,28 @@ describe('the music director', () => {
     expect(Array.from({ length: 8 }, () => d.next().kind)).toEqual(Array(8).fill('stay'));
   });
 
+  it('a one-member suite ENTERED LATER also says stay, not just the starting one', () => {
+    // The guard above latched `membersOf(suite0).length < 2` once, at
+    // construction, and gated it on `suite === suite0`. Contexts made that
+    // stale: the director now MOVES between suites, so a one-member suite
+    // entered afterwards self-queued the same track every cycle -- the
+    // "repeat dressed as a decision" the other test exists to prevent.
+    // Not hypothetical: re-queueing resets the bed's cursors, which suppresses
+    // the wrap-regeneration, so a solo suite with a generated layer diverges
+    // audibly (measured: 1367 vs 1405 notes over 400 ticks on `arena`).
+    const home: SuiteDef = {
+      id: 'home', key: 'Am', context: 'arena', stepSeconds: 0.15,
+      transition: 'dominant', members: ['arena', 'arena-push'],
+    };
+    const solo: SuiteDef = {
+      id: 'solo', key: 'C', context: 'menu', stepSeconds: 0.4,
+      transition: 'dominant', members: ['menu'],
+    };
+    const d = createMusicDirector([home, solo], xorshift(6), { startSuiteId: 'home' })!;
+    expect(d.enterContext('menu')!.id).toBe('menu');
+    expect(Array.from({ length: 8 }, () => d.next().kind)).toEqual(Array(8).fill('stay'));
+  });
+
   it('fails LOUDLY on bad configuration rather than quietly picking something', () => {
     expect(() => createMusicDirector(SUITES, xorshift(1), { startSuiteId: 'nope' })).toThrow(
       /no suite named "nope"/,

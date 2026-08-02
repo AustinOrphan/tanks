@@ -207,8 +207,18 @@ export function musicContextFor(state: GameState): SuiteContext {
       return 'victory';
     case 'lose':
       return 'defeat';
-    default:
+    case 'playing':
+    case 'paused':
       return 'arena';
+    default: {
+      // Exhaustive by construction, the way TANK_KINDS forces a JSON entry: a
+      // new GameState is a COMPILE error here rather than silently inheriting
+      // arena's music. A `default: return 'arena'` compiled clean when a state
+      // was added, which is how a screen ends up scored as though it were a
+      // round in progress.
+      const unreachable: never = state;
+      return unreachable;
+    }
   }
 }
 
@@ -564,8 +574,11 @@ export function startGameWith(
    * caught it.
    */
   function followMusic(s: GameState): void {
-    // startMusic is idempotent (the engine checks whether music is playing), so
-    // a resume passing back through 'playing' does not double-start anything.
+    // startMusic is idempotent, so a resume passing back through 'playing' does
+    // not double-start anything -- but NOT via the `music.playing()` check,
+    // which guards the Howl branch the game never reaches. On the generated-bed
+    // path that actually runs, `if (!bed)` builds the bed once (engine.ts) and
+    // `bed.start()` returns early when its timer already exists (music.ts).
     // It runs for EVERY state now: title, endings and pause all have music, and
     // each is a context the director moves to through the same handled join a
     // suite change uses.

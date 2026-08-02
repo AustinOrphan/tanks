@@ -93,7 +93,6 @@ export function createMusicDirector(
 
   const start = draw(suite);
   playedInSuite = 1;
-  const soloMember = membersOf(suite).length < 2;
 
   return {
     first: () => start,
@@ -127,7 +126,12 @@ export function createMusicDirector(
       // A one-member suite cannot honour the no-repeat promise: re-queueing the
       // same track every cycle would be a repeat dressed as a decision. Say
       // nothing and let it loop, which is what the bed does anyway.
-      if (soloMember && suite === suite0) return { kind: 'stay' };
+      // Recomputed per call, not latched from the STARTING suite: contexts mean
+      // the director now moves between suites, so a guard pinned to suite0 lets
+      // a one-member suite entered later self-queue -- which diverges audibly
+      // once such a suite has a generated layer, because adoptQueued resets the
+      // cursors and the wrap-regeneration is then suppressed.
+      if (membersOf(suite).length < 2) return { kind: 'stay' };
       playedInSuite += 1;
       return { kind: 'queue', track: draw(suite) };
     },
