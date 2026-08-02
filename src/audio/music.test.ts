@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { createMusicBed } from './music';
 import { noteToHz, trackById, type MusicTrackDef } from './music-data';
+import { MUSIC_TRACK_ID } from './engine';
 
 interface Sched {
   freq: number;
@@ -142,15 +143,23 @@ describe('composed tracks', () => {
   it('honours a REST: the step passes silently and the cursor still advances', () => {
     const { ctx, t, bed } = withTrack(twoLayers);
     bed.start();
-    for (let i = 1; i <= 3; i++) {
+    // EXACTLY one cycle of the 3-step drone: start() schedules step 0 and each
+    // tick adds one more, so two ticks gives steps 0, 1, 2 and no wrap. Counting
+    // sounded notes only works if the number of steps is known precisely.
+    for (let i = 1; i <= 2; i++) {
       ctx.currentTime = i;
       t.tick();
     }
-    // The drone is E3, rest, C4. If a rest sounded, there would be a note
-    // between them; if it did not advance the cursor, C4 would never arrive.
+    // The drone is E3, rest, C4. Review proved the old version of this test
+    // could not fail: making rests sound a 1kHz tone left it green, because it
+    // only checked that the notes AROUND the rest were present. Assert the
+    // absence too -- the drone layer must have emitted exactly two notes, not
+    // three, over three steps.
     const highs = ctx.notes.filter((n) => n.freq > 100).map((n) => Math.round(n.freq));
     expect(highs).toContain(Math.round(noteToHz('C4')!));
-    expect(highs.filter((h) => h === Math.round(noteToHz('E3')!)).length).toBeGreaterThan(0);
+    expect(highs).toContain(Math.round(noteToHz('E3')!));
+    // Three steps, one of them a rest -> exactly two notes.
+    expect(highs, 'the rest sounded something').toHaveLength(2);
     bed.stop();
   });
 
@@ -195,10 +204,14 @@ describe('composed tracks', () => {
       (a, b) => a - b,
     );
     expect(starts.length).toBeGreaterThan(8);
-    // Every consecutive pair is exactly one step apart: a gap at the wrap would
-    // show up as a doubled interval, an overlap as a zero one.
+    // Every gap is a WHOLE NUMBER of steps. The stricter "exactly one step"
+    // held only because this fixture has no fully-resting step; on the shipped
+    // arena track 75 of its gaps span several steps, so that assertion was
+    // testing the fixture rather than the wrap.
     for (let i = 1; i < starts.length; i++) {
-      expect(starts[i] - starts[i - 1], `gap at index ${i}`).toBeCloseTo(twoLayers.stepSeconds, 9);
+      const steps = (starts[i] - starts[i - 1]) / twoLayers.stepSeconds;
+      expect(steps, `gap at index ${i} is ${steps} steps`).toBeCloseTo(Math.round(steps), 9);
+      expect(steps, `gap at index ${i}`).toBeGreaterThan(0);
     }
     // And the bass alternates without interruption across its wrap.
     const bass = ctx.notes.filter((n) => n.freq < 100).map((n) => Math.round(n.freq));
@@ -209,11 +222,25 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
-  it('plays a SHIPPED track from the data file end to end', () => {
-    const arena = trackById('arena')!;
-    const { ctx, bed } = withTrack(arena);
+  it('plays THE track the engine asks for, by id', () => {
+    // Review proved the old version could not fail: `trackById('arena')!` yields
+    // null when the id is absent, withTrack(null) silently takes the generated
+    // bed, and "some notes were scheduled" is satisfied by the generator. So
+    // renaming the one track the game plays kept the whole suite green.
+    const arena = trackById(MUSIC_TRACK_ID);
+    expect(arena, `engine plays "${MUSIC_TRACK_ID}" but no such track exists`).not.toBeNull();
+    const { ctx, bed } = withTrack(arena!);
     bed.start();
+    // And it plays THAT track: every scheduled pitch belongs to it.
+    const authored = new Set(
+      arena!.tracks.flatMap((l) => l.notes).filter((n): n is number => n !== null).map((n) => Math.round(n)),
+    );
     expect(ctx.notes.length).toBeGreaterThan(0);
+    for (const n of ctx.notes) {
+      expect(authored, `scheduled ${Math.round(n.freq)}Hz, not in the track`).toContain(
+        Math.round(n.freq),
+      );
+    }
     bed.stop();
   });
 });

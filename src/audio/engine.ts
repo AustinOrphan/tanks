@@ -29,7 +29,7 @@ const MUSIC_VOLUME = 0.25;
  * theme, per-level pieces) is explicitly deferred in the design doc. An id with
  * no matching entry falls through to the generated bed rather than going silent.
  */
-const MUSIC_TRACK_ID = 'arena';
+export const MUSIC_TRACK_ID = 'arena';
 
 // Cap on simultaneous procedural voices. A mine chain-reaction can emit a
 // dozen SFX on one tick; identical tones started at the same currentTime sum

@@ -39,6 +39,16 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+// Numeric flags: a missing or non-numeric value used to reach
+// OfflineAudioContext and surface as a stack trace about frame counts.
+for (const [flag, value] of Object.entries(args)
+  .filter(([k]) => ['seconds', 'intensity', 'seed'].includes(k))
+  .map(([k, v]) => [`--${k}`, v])) {
+  if (value !== null && value !== undefined && !Number.isFinite(value)) {
+    console.error(`${flag} needs a number, got ${JSON.stringify(value)}`);
+    process.exit(2);
+  }
+}
 if (!args.list && !args.track && !args.sfx) {
   console.error(
     'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--out file.wav]',
@@ -150,13 +160,26 @@ try {
     if (!track) {
       return { error: `unknown track "${opts.track}". known: ${MUSIC_TRACKS.map((t) => t.id).join(', ')}` };
     }
-    // One full cycle: the longest layer decides, since layers may differ.
-    const loopSeconds = Math.max(...track.tracks.map((l) => l.notes.length)) * track.stepSeconds;
+    // The true period is the LCM of the layer lengths, not the max. The
+    // scheduler deliberately lets layers differ (a 4-step bass under a 6-step
+    // lead repeats every 12, not every 6), so exporting `max` put the bass on
+    // the wrong half of its cycle on every repeat -- and the seam check happily
+    // called that "seamless", because each individual sample still lined up.
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const lcm = (a, b) => (a / gcd(a, b)) * b;
+    const steps = track.tracks.map((l) => l.notes.length);
+    const loopSteps = steps.reduce(lcm, 1);
+    const loopSeconds = loopSteps * track.stepSeconds;
     // --loop renders EXACTLY one cycle and folds the ring-out back over the
     // start, so the file itself loops seamlessly. Without that the tail is
     // simply cut and repeating the file clicks -- the in-game bed never
     // restarts, so this is an artefact of rendering, not of the music.
-    const TAIL = 4;
+    // Long enough for the longest ring-out to finish, derived rather than
+    // guessed: a hold of 8 steps at 0.5s/step needs 4s on its own, and a fixed
+    // budget silently truncated it.
+    const { VOICES } = await import('/src/audio/music-data.ts');
+    const longestHold = Math.max(...track.tracks.map((l) => VOICES[l.voice].hold));
+    const TAIL = longestHold * track.stepSeconds + 0.5;
     const seconds = opts.loop ? loopSeconds + TAIL : (opts.seconds ?? 30);
     const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
     let pump = null;
@@ -182,7 +205,11 @@ try {
     const src = rendered.getChannelData(0);
     const out = new Float32Array(loopFrames);
     out.set(src.subarray(0, loopFrames));
-    for (let i = 0; i + loopFrames < src.length && i < loopFrames; i++) out[i] += src[i + loopFrames];
+    // Modulo accumulate, not a single wrap: the old `i < loopFrames` bound threw
+    // away everything past 2x the loop. On a short loop with a long pad that was
+    // 61% of the tail's energy, at full amplitude -- and the tool then blamed
+    // the music for the click its own arithmetic had created.
+    for (let i = loopFrames; i < src.length; i++) out[i % loopFrames] += src[i];
     const looped = new OfflineAudioContext(1, loopFrames, rate).createBuffer(1, loopFrames, rate);
     looped.getChannelData(0).set(out);
     // Report the seam: the step across the wrap point, in the same units as the

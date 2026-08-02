@@ -19,6 +19,10 @@ import tracksJson from './data/music-tracks.json';
 
 const FILE = 'music-tracks.json';
 
+/** Audible bounds. Outside these a "note" is either inaudible or a typo. */
+const MIN_HZ = 16;
+const MAX_HZ = 12000;
+
 /** Timbres a track may name. Each maps to an oscillator type + envelope shape. */
 export const VOICES = {
   bass: { type: 'triangle' as OscillatorType, peak: 0.22, hold: 0.9 },
@@ -109,7 +113,11 @@ function parseTrack(raw: unknown, index: number): MusicTrackDef {
     const tAt = `${at}.tracks[${ti}]`;
     if (!isRecord(t)) fail(tAt, 'must be an object');
     const voice = t.voice;
-    if (typeof voice !== 'string' || !(voice in VOICES)) {
+    // hasOwn, NOT `in`: `in` walks the prototype chain, so "constructor",
+    // "toString", "valueOf" and "hasOwnProperty" all validated as voices and
+    // then threw a non-finite AudioParam error from inside the scheduler --
+    // exactly the "boot failure, not a runtime throw" contract this file claims.
+    if (typeof voice !== 'string' || !Object.hasOwn(VOICES, voice)) {
       fail(`${tAt}.voice`, `must be one of ${Object.keys(VOICES).join(', ')}, got ${JSON.stringify(voice)}`);
     }
     if (!Array.isArray(t.notes) || t.notes.length === 0) {
@@ -123,6 +131,15 @@ function parseTrack(raw: unknown, index: number): MusicTrackDef {
       // NaN, not null: null is a rest, which is legitimate.
       if (hz !== null && Number.isNaN(hz)) {
         fail(`${tAt}.notes[${ni}]`, `is not a note name or a rest, got ${JSON.stringify(n)}`);
+      }
+      // Every other field is range-checked; pitch was not. 'A44' is a plausible
+      // fat-finger for 'A4' and rendered as inaudible silence with no error at
+      // all; 'C9999' reached Infinity and threw from inside the scheduler.
+      if (hz !== null && (hz < MIN_HZ || hz > MAX_HZ)) {
+        fail(
+          `${tAt}.notes[${ni}]`,
+          `is ${hz.toFixed(2)}Hz, outside the audible ${MIN_HZ}-${MAX_HZ}Hz range (got ${JSON.stringify(n)})`,
+        );
       }
       return hz;
     });
@@ -143,7 +160,23 @@ function parseAll(raw: unknown): MusicTrackDef[] {
 }
 
 /** Validated at module load: a bad edit fails the boot, not a later note. */
-export const MUSIC_TRACKS: readonly MusicTrackDef[] = Object.freeze(parseAll(tracksJson));
+/**
+ * Deep: a shallow freeze left the note ARRAYS mutable, and the module cache
+ * means one test mutating them in place leaks into every other test file.
+ */
+function deepFreeze(tracks: MusicTrackDef[]): readonly MusicTrackDef[] {
+  for (const t of tracks) {
+    for (const layer of t.tracks) {
+      Object.freeze(layer.notes);
+      Object.freeze(layer);
+    }
+    Object.freeze(t.tracks);
+    Object.freeze(t);
+  }
+  return Object.freeze(tracks);
+}
+
+export const MUSIC_TRACKS: readonly MusicTrackDef[] = deepFreeze(parseAll(tracksJson));
 
 export function trackById(id: string): MusicTrackDef | null {
   return MUSIC_TRACKS.find((t) => t.id === id) ?? null;
