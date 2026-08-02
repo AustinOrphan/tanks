@@ -37,14 +37,33 @@ checked property, not a hope.
 | 10 | space changes the fight | 2 teal, 2 grey, olive, brown | 6 | **new** — first large board |
 | 11 | cover stops working ← **green** | existing **arena-04** | 6 | green, grey, brown, 2 teal, olive |
 
-The `n` column is the enemy count, and it is deliberately monotonic: 2, 2, 2, 3, 3, 3, 4,
-5, 5, 6, 6. Levels 9 and 10 were slots without rosters in the first draft, which put a dip
-at 2 and 3 immediately after level 8's 5 — a difficulty regression two thirds of the way
-through the game. Counts are not the whole of difficulty, but a drop of three enemies is
-not something the geometry can quietly make up for.
+The `n` column is the enemy count. It is **descriptive, not a difficulty ranking** — an
+earlier draft of this spec made it monotonic and called that a curve, which was wrong.
 
-Seven new boards — levels 1-5, 9 and 10 — five of them small. The existing four move
-slots untouched.
+Measured, 30 seeds per roster on an identical sandbox board, walls and seed set, against a
+fixed-competence bot that aims at the nearest enemy and fires whenever it has a line:
+
+| roster | player wins | roster | player wins |
+|---|---|---|---|
+| 1 brown | 29/30 | 1 teal | 20/30 |
+| 1 green | 28/30 | 1 grey | 13/30 |
+| 2 brown | 3/30 | 1 olive | 4/30 |
+| 4 brown | 0/30 | 2 grey | 3/30 |
+
+Count is not linear and not even close: one brown to two browns takes the player from
+winning 29 of 30 to 3 of 30, while four browns to six changes the pacifist median by a
+second. Kind dominates: a single olive is harder to defeat than two greys.
+
+**Neither probe is trusted as a difficulty ordering, and the spec does not derive one.**
+Both bots — the pacifist wanderer and the shooter above — ignore cover entirely. That
+biases them precisely against the enemies this curve is built around: green scores 28/30,
+apparently trivial, because green exists to punish a player who hides and the bot never
+hides. A metric blind to the mechanic a level teaches cannot rank that level.
+
+The probes are therefore used as a **floor check only**: a level whose enemies never kill a
+wandering pacifist in 30 seeds is not applying pressure and is mis-designed. Ordering the
+levels by difficulty is a design judgement, validated by playing them. That is stated again
+under Residual risk, because it is the load-bearing weakness of this whole spec.
 
 Mines are taught at 4 rather than earlier because the player's mine is a trap for something
 that chases, and browns never chase. Level 4 is also where enemy mines first appear, so the
