@@ -105,8 +105,13 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   let director: MusicDirector | null = null;
   /** One place decides the bed's level, so mute, volume and duck cannot fight. */
   function applyMusicVolume(): void {
-    const level = muted ? 0 : MUSIC_VOLUME * masterVolume * (musicDucked ? DUCK_FACTOR : 1);
-    bed?.setVolume(level);
+    const duck = musicDucked ? DUCK_FACTOR : 1;
+    bed?.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume * duck);
+    // The Howl path needs the duck too, or pause would behave differently
+    // depending on whether the asset happened to load. Only the duck: Howler
+    // applies masterVolume globally (Howler.volume) and mute globally
+    // (Howler.mute), so folding either in here would apply it twice.
+    music?.volume(MUSIC_VOLUME * duck);
   }
 
   // Push the default through immediately. Howler's own default is 1.0, so

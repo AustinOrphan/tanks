@@ -66,7 +66,7 @@ vi.mock('howler', () => {
   };
 });
 
-import { createAudioEngine } from './engine';
+import { createAudioEngine, DUCK_FACTOR } from './engine';
 import { AUDIO_MANIFEST, DEFAULT_VOLUME } from './manifest';
 
 /** The Howl the engine built for a given manifest SFX key. */
@@ -233,6 +233,25 @@ describe('createAudioEngine', () => {
 
     // Music must not be routed through an SFX Howl.
     expect(howlFor('cannon').play).not.toHaveBeenCalled();
+    engine.dispose();
+  });
+
+  it('ducks the LOADED track too, not only the generated bed', () => {
+    // Raised by review: duckMusic reached `bed` alone, so pause would behave
+    // differently depending on whether the asset happened to load. No asset
+    // ships today (public/audio holds only .gitkeep), so this path is latent
+    // -- but "latent" is why it needs a test rather than why it does not.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const music = musicHowl();
+    engine.startMusic();
+    music.volume.mockClear();
+    engine.duckMusic(true);
+    const ducked = music.volume.mock.calls.at(-1)?.[0] as number;
+    engine.duckMusic(false);
+    const open = music.volume.mock.calls.at(-1)?.[0] as number;
+    expect(ducked, 'the loaded track was never ducked').toBeDefined();
+    // Against the constant, not 0.25: retuning the duck must not rewrite this.
+    expect(ducked / open).toBeCloseTo(DUCK_FACTOR, 9);
     engine.dispose();
   });
 
