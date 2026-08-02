@@ -68,6 +68,13 @@ export interface MusicBed {
 
 export interface MusicDeps {
   /**
+   * The playlist policy. Consulted at each COMPLETED full cycle (never at the
+   * pickup's early wrap -- the switch lock gates it), and its directive is
+   * applied through the same queueTrack/changeSuite paths a caller would use.
+   * Without one the bed simply loops its track, exactly as before.
+   */
+  director?: import('./playlist').MusicDirector | null;
+  /**
    * A composed track to play. Without one the bed generates, exactly as before:
    * the game is never silent while authoring is half-finished.
    */
@@ -179,6 +186,24 @@ export function createMusicBed(
    * pickup plus one full cycle of the track it delivered.
    */
   let switchLock = 0;
+  /**
+   * Steps actually PLAYED since the director was last consulted.
+   *
+   * The consult used to trigger on `stepsIntoCycle === 0 && switchLock <= 0`,
+   * and review broke both halves with one Esc: stop() zeroed the lock without
+   * resetting the cycle position, so a pause landing inside a pickup made its
+   * premature wrap look like a real boundary -- the incoming member played its
+   * pickup bar and vanished, the exact regression the lock exists to prevent.
+   * Counting steps played is immune to where in a pattern a pause happened.
+   */
+  let stepsSinceConsult = 0;
+  /**
+   * Floor on the consult interval. cycleSteps can be 1 for a degenerate track,
+   * which turned the director into a per-step callback. Not reachable from the
+   * shipped data, but createMusicBed is a public factory and cycleSteps is
+   * derived rather than validated.
+   */
+  const MIN_CONSULT_STEPS = 4;
 
   function regenerate(layerIndex: number): void {
     if (!track) return;
@@ -312,9 +337,15 @@ export function createMusicBed(
       chords = track.chords.map((c) => parseChord(c)).filter((c): c is Chord => !!c);
       stepsIntoCycle = startAtStep;
       switchLock = pickupSteps + cycleSteps(next);
+      // The incoming member owes a pickup bar AND a full cycle before the
+      // playlist advances again.
+      stepsSinceConsult = -pickupSteps;
       pendingSuite = null;
     }
-    if (track && queued && stepsIntoCycle === 0 && switchLock <= 0) adoptQueued();
+    if (track && queued && stepsIntoCycle === 0 && switchLock <= 0) {
+      adoptQueued();
+      stepsSinceConsult = 0;
+    }
     if (track) {
       scheduleComposed(at);
       // The overlap: the outgoing melody's last bar rides over the pickup,
@@ -332,6 +363,17 @@ export function createMusicBed(
       }
       stepsIntoCycle = (stepsIntoCycle + 1) % cycleSteps(track);
       if (switchLock > 0) switchLock -= 1;
+      // A full cycle's worth of steps has actually PLAYED: ask the director what
+      // comes next. Counted rather than inferred from stepsIntoCycle, which a
+      // pause mid-pickup could leave at a false boundary.
+      stepsSinceConsult += 1;
+      const interval = Math.max(cycleSteps(track), MIN_CONSULT_STEPS);
+      if (stepsSinceConsult >= interval && deps.director && !queued && !pendingSuite) {
+        stepsSinceConsult = 0;
+        const d = deps.director.next();
+        if (d.kind === 'queue') queued = d.track;
+        else if (d.kind === 'suite') pendingSuite = { next: d.track };
+      }
       if (ramp) {
         ramp.played += 1;
         if (ramp.played >= ramp.steps) ramp = null;
@@ -421,15 +463,22 @@ export function createMusicBed(
         clearIv(timer);
         timer = null;
       }
-      // A transition must not survive a stop: the ramp is anchored to a clock
-      // that stops meaning anything, the overlay's moment has passed, and a
-      // queued switch belongs to the session that queued it. Review found
-      // inTransition() reporting true indefinitely after a mid-ramp stop.
+      // The ramp and overlay are anchored to a clock that stops meaning
+      // anything, so they go. A COMMITTED SWITCH DOES NOT: the director has
+      // already counted that member against its dwell and removed it from the
+      // bag, so dropping it desynchronised policy from playback -- review
+      // measured the next suite change then arriving through queueTrack, with
+      // no pickup bar and no tempo ramp, on 4 of 600 pause points.
       ramp = null;
       overlay = null;
-      pendingSuite = null;
-      queued = null;
-      switchLock = 0;
+      // A resume must not read its first step as a boundary. Zeroing the
+      // position was the WRONG way to achieve that -- it makes the resume look
+      // like a wrap, so a switch committed before the pause is adopted
+      // immediately and evicts whatever was mid-pickup. Instead the position is
+      // left alone and a full cycle of grace is imposed: nothing switches until
+      // a cycle's worth of steps has actually played after the resume.
+      stepsSinceConsult = 0;
+      switchLock = track ? cycleSteps(track) : 0;
       // Notes are scheduled AHEAD of now, so stopping the timer is not enough --
       // without this, up to LOOKAHEAD_SECONDS of music plays after "stop".
       for (const v of voices) {

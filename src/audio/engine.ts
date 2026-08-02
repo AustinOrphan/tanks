@@ -3,6 +3,8 @@ import { DEFAULT_VOLUME, type AudioManifest } from './manifest';
 import { synthVoice } from './synth';
 import { createMusicBed, type MusicBed } from './music';
 import { trackById } from './music-data';
+import { SUITES } from './suites';
+import { defaultDirector } from './playlist';
 
 export interface AudioEngine {
   play(key: string, opts?: { rate?: number; volume?: number }): void;
@@ -283,10 +285,30 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       if (music) return;
       const audio = ensureCtx();
       if (!audio) return;
-      // A composed track if one is authored, else the generated bed. Same
-      // relationship the synth has with samples: authored content wins, and the
-      // generator covers whatever has not been written yet.
-      if (!bed) bed = createMusicBed(audio, ensureBus(audio), { track: trackById(MUSIC_TRACK_ID) });
+      // The playlist walks the suite graph -- shuffle bag inside a set, weighted
+      // neighbour selection across sets -- with the generated bed still the
+      // floor for degenerate data. This is the line that makes everything in
+      // suites.ts reachable from the game.
+      if (!bed) {
+        // Seeded, not Math.random: synth.ts and music.ts both sit either side of
+        // this line and explicitly reject Math.random, and an unrepeatable walk
+        // means "that join sounded awful" can never be reproduced. The seed is
+        // taken once from the clock, so sessions still differ.
+        let rngState = (Date.now() & 0x7fffffff) || 1;
+        const rnd = (): number => {
+          rngState ^= rngState << 13;
+          rngState ^= rngState >>> 17;
+          rngState ^= rngState << 5;
+          return ((rngState >>> 0) % 100000) / 100000;
+        };
+        const director = defaultDirector(SUITES, rnd);
+        // defaultDirector only returns null when 'arena' is missing too, so the
+        // old MUSIC_TRACK_ID fallback here was unreachable.
+        bed = createMusicBed(audio, ensureBus(audio), {
+          track: director?.first() ?? trackById(MUSIC_TRACK_ID),
+          director,
+        });
+      }
       bed.setVolume(muted ? 0 : MUSIC_VOLUME * masterVolume);
       bed.setIntensity(musicIntensity);
       bed.start();

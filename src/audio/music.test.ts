@@ -483,6 +483,239 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('consults the DIRECTOR at each completed cycle, and applies its directives', () => {
+    // The wiring that makes the playlist real: a cycle completes, the director
+    // answers, the bed applies it through the same paths a caller would use.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    const calls: number[] = [];
+    const director = {
+      first: () => a,
+      next: () => {
+        calls.push(1);
+        return calls.length === 1 ? ({ kind: 'queue', track: b } as const) : ({ kind: 'stay' } as const);
+      },
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    for (let i = 1; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
+    // Consulted once per completed 4-step cycle, not per step.
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls.length).toBeLessThan(6);
+    // And the directive took effect: b plays after a's first full cycle.
+    const c2 = Math.round(noteToHz('C2')!);
+    expect(ctx.notes.filter((n) => Math.round(n.freq) === c2).length).toBeGreaterThan(0);
+    expect(bed.currentTrackId()).toBe('b');
+    bed.stop();
+  });
+
+  it("a 'suite' directive enters via the PICKUP; a 'queue' does not", () => {
+    // The two directives must map to their distinct mechanisms. Downgrading a
+    // suite change to a plain queue skips the pickup bar and the ramp -- the
+    // entire handled join -- and nothing used to notice.
+    const a: MusicTrackDef = {
+      id: 'a', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    // b's bars are distinct: bar 1 = D2, final bar = G2. Pickup entry plays G2
+    // FIRST; a queued entry would open on D2.
+    const b: MusicTrackDef = {
+      id: 'b', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D2'), noteToHz('D2'), noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    let sent = false;
+    const director = {
+      first: () => a,
+      next: () => {
+        if (sent) return { kind: 'stay' } as const;
+        sent = true;
+        return { kind: 'suite', track: b } as const;
+      },
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    for (let i = 1; i <= 14; i++) { ctx.currentTime = i; t.tick(); }
+    const bNotes = ctx.notes
+      .map((n) => Math.round(n.freq))
+      .filter((f) => f !== Math.round(noteToHz('A1')!));
+    expect(bNotes.length).toBeGreaterThan(3);
+    expect(bNotes[0], 'suite directive skipped the pickup bar').toBe(Math.round(noteToHz('G2')!));
+    bed.stop();
+  });
+
+  it('does NOT consult the director at the pickup wrap -- only at real cycles', () => {
+    // The pickup wraps stepsIntoCycle one bar in; consulting there would advance
+    // the playlist before the member had actually played.
+    const mk = (id: string, hz: string, step = 1): MusicTrackDef => ({
+      id, stepSeconds: step, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    let consulted = 0;
+    const director = {
+      first: () => a,
+      next: () => {
+        consulted += 1;
+        return { kind: 'stay' } as const;
+      },
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    bed.changeSuite(b);
+    // Phase 1: a's own cycle completes (4 steps) -- but a suite change is
+    // already committed, so there is nothing to ask: the director's previous
+    // answer has not landed yet.
+    for (let i = 1; i <= 4; i++) { ctx.currentTime = i; t.tick(); }
+    expect(consulted, 'consulted while a switch was already pending').toBe(0);
+    // Phase 2: b's pickup plays and WRAPS (2 steps). stepsIntoCycle hits 0 here,
+    // but the member has only played one bar -- no consult.
+    for (let i = 5; i <= 6; i++) { ctx.currentTime = i; t.tick(); }
+    expect(consulted, 'the pickup wrap consulted the director').toBe(0);
+    // Phase 3: b's full cycle finally completes -- now it is asked.
+    for (let i = 7; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
+    expect(consulted).toBe(1);
+    bed.stop();
+  });
+
+  it('a PAUSE does not desync the director from what actually plays', () => {
+    // The gap that let two blockers through: every director test ran one
+    // uninterrupted session, while loop.ts calls stopMusic() on EVERY non-
+    // playing state -- Esc included. A committed switch must survive the pause,
+    // or the director has counted a member against its dwell that never played.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    // DISTINCT tracks per call: a director that hands the same track every time
+    // makes a dropped directive invisible, because the next consult re-supplies
+    // it. Each handed track must actually sound.
+    const c = mk('c', 'E3');
+    const queue = [b, c];
+    const handed: MusicTrackDef[] = [];
+    const director = {
+      first: () => a,
+      next: () => {
+        const track = queue[handed.length] ?? c;
+        handed.push(track);
+        return { kind: 'queue', track } as const;
+      },
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    // Tick to the PRECISE window the blocker lives in: a directive handed out
+    // but not yet adopted. Stopping at a fixed tick missed it -- b had already
+    // been adopted, so the drop had nothing to drop.
+    let ticks = 0;
+    while (ticks < 20 && !(handed.length > 0 && bed.currentTrackId() === 'a')) {
+      ticks += 1;
+      ctx.currentTime = ticks;
+      t.tick();
+    }
+    expect(handed.length, 'never reached the committed-but-unadopted window').toBe(1);
+    expect(bed.currentTrackId()).toBe('a');
+    bed.stop();   // Esc, with b committed but not yet adopted
+    bed.start();  // resume
+    for (let i = ticks + 1; i <= ticks + 12; i++) { ctx.currentTime = i; t.tick(); }
+    // EVERY handed track must have sounded. Dropping the one committed at the
+    // pause leaves the director believing it played while the bed never did.
+    const played = new Set(ctx.notes.map((n) => Math.round(n.freq)));
+    for (const track of handed) {
+      const hz = Math.round(track.tracks[0].notes![0]!);
+      expect(played, `"${track.id}" was handed out but never sounded`).toContain(hz);
+    }
+    bed.stop();
+  });
+
+  it('a pause during a PICKUP does not cut the incoming member to one bar', () => {
+    // The second blocker: stop() zeroed the switch lock while leaving the cycle
+    // position mid-pickup, so the pickup's premature wrap read as a real
+    // boundary on resume and the incoming member vanished after one bar.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D2'), noteToHz('D2'), noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const other: MusicTrackDef = { ...from, id: 'other',
+      tracks: [{ voice: 'bass', notes: [noteToHz('E3'), noteToHz('E3'), noteToHz('E3'), noteToHz('E3')], generate: null, intensity: 0 }] };
+    // A track is ALREADY queued when the pause happens, so a stale cycle
+    // position on resume would adopt it immediately and evict the incoming
+    // member mid-pickup -- which is the shape of the original blocker.
+    const director = { first: () => from, next: () => ({ kind: 'stay' } as const) };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: from, director,
+    });
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 5; i++) { ctx.currentTime = i; t.tick(); } // into the pickup
+    bed.queueTrack(other);
+    bed.stop();
+    bed.start();
+    for (let i = 6; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+    // The incoming member must sound for more than its pickup bar.
+    const toNotes = ctx.notes.filter((n) =>
+      [Math.round(noteToHz('D2')!), Math.round(noteToHz('G2')!)].includes(Math.round(n.freq)),
+    );
+    expect(toNotes.length, 'the incoming member was cut to its pickup').toBeGreaterThanOrEqual(4);
+    bed.stop();
+  });
+
+  it('never becomes a per-STEP callback, even for a degenerate one-step cycle', () => {
+    // cycleSteps can be 1 for a track with a single-note layer. createMusicBed
+    // is a public factory and cycleSteps is derived, not validated, so the
+    // interval carries a floor.
+    const one: MusicTrackDef = {
+      id: 'one', stepSeconds: 1, barSteps: 1, chords: ['Am'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    let consulted = 0;
+    const director = {
+      first: () => one,
+      next: () => {
+        consulted += 1;
+        return { kind: 'stay' } as const;
+      },
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: one, director,
+    });
+    bed.start();
+    for (let i = 1; i <= 20; i++) { ctx.currentTime = i; t.tick(); }
+    const steps = ctx.notes.length;
+    expect(steps).toBeGreaterThan(15);
+    expect(consulted, `consulted ${consulted} times over ${steps} steps`).toBeLessThan(steps / 2);
+    bed.stop();
+  });
+
   it('plays THE track the engine asks for, by id', () => {
     // Review proved the old version could not fail: `trackById('arena')!` yields
     // null when the id is absent, withTrack(null) silently takes the generated
