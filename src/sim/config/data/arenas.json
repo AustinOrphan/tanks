@@ -229,11 +229,11 @@
       "notes": [
         "The crossfire debut, and the FIRST shipped board that is not 11x9: 15x11, so the extra space is what makes two simultaneous fronts readable instead of merely crowded.",
         "Six enemies in two fronts at ninety degrees to each other. NORTH is the suppressing front -- brown, grey, brown across row 1, behind the row-4 bar. EAST is the mobile front -- teal, olive, teal down column 13, inside the player's own half, behind the solid column-11 wall.",
-        "The two fronts want opposite cover, and that IS the level. Cell (7, 7) sits in the row-4 bar's shadow -- shut to the north, wide open to the teal at (13, 4) shooting along the row-5 corridor. Cell (9, 7), two cells east, is the exact inverse: shut to every east tank by the column-11 wall, open to the grey straight up column 7's gap. Breaking one front's line steps you into the other's. Four lane claims pin both cells in both wall phases.",
-        "The two walls are deliberately different KINDS of problem. The row-4 bar is porous (open at columns 0-2, 6, 8, 12-14) and breachable at columns 4 and 10; the column-11 wall is solid throughout and must be FLANKED, above through row 5 or below through rows 9-10. Level 2 taught breaching; level 4 says not every wall answers to it.",
+        "The two fronts want opposite cover, and that IS the level. Cell (7, 7) sits in the row-4 bar's shadow -- shut to the north, wide open to the teal at (13, 4) shooting along the row-5 corridor. Cell (9, 7), two cells east, is the exact inverse: shut to every east tank by the column-11 wall, open to the grey down column 8's gap in the bar. Breaking one front's line steps you into the other's. Four lane claims pin both cells in both wall phases.",
+        "The two walls are deliberately different KINDS of problem. The row-4 bar is porous (open at columns 0-2, 6, 8, 12-14) and breachable at columns 4 and 10; the column-11 wall is solid throughout (rows 4, 6, 7, 8) and must be FLANKED rather than blown. From the player's half that means row 5 above it or rows 9-10 below it; it is open at rows 0-3 too, but those are north of the bar. Level 2 taught breaching; level 4 says not every wall answers to it.",
         "Blowing the bar at column 10 opens that column top-to-bottom, giving the brown at (10, 1) a line down to row 9 -- alongside the player spawn, never onto it: the spawn's own blockers are the bar's solid cells at columns 5, 7 and 9, which no breach touches. That is why spawnBlockRobust holds here and all six sightlineAfterBreach claims read false, unlike level 2 where breaching is meant to open spawn lines.",
         "The destructible at (6, 6) is mid-field cover for the player's left-hand approach, not a spawn-line blocker: losing it hands the teal at (13, 4) a line onto (5, 7).",
-        "Measured against the shipped levels on the same probe: 43 of 151 open cells (28%) are seen by no enemy at spawn, the tightest of the four (arena-01 41%, arena-02 49%, arena-03 34%) -- the intended step up in pressure for the last level."
+        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 43 of 151 = 28.5%, the tightest of the four, against arena-01 35/86 = 40.7%, arena-02 41/83 = 49.4%, arena-03 30/88 = 34.1%. The intended step up in pressure for the last level. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
       ],
       "claims": [
         {
@@ -335,7 +335,7 @@
           ],
           "intact": "open",
           "breached": "open",
-          "why": "CROSSFIRE, the inversion: two cells east, the grey's line is open straight down column 7's gap in the bar."
+          "why": "CROSSFIRE, the inversion: two cells east, the grey's line is open down COLUMN 8's gap in the bar -- not column 7, which is one of the three solid cells holding the grey off the player spawn. Widening column 7 would open that spawn line; column 8 is already open floor."
         },
         {
           "type": "lane",
