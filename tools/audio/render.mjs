@@ -177,7 +177,9 @@ try {
         return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
       };
       const picks = suites.map((s, i) => membersOf(s)[i % membersOf(s).length]);
-      const TRANS_STEPS = 8;
+      // A full bar of pivot. Eight steps (~1.2s) was too short for the ear to
+      // register the dominant as a gesture before everything changed.
+      const TRANS_STEPS = 16;
       let seconds = 2;
       for (let i = 0; i < picks.length; i++) {
         seconds += cycleOf(picks[i]) * picks[i].stepSeconds;

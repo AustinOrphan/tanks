@@ -319,6 +319,44 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('keeps the OUTGOING pulse alive through the transition', () => {
+    // The first transition collapsed the whole mix to a bare chord, and it was
+    // heard as the music breaking before a different piece started. The outgoing
+    // track's always-on layers must keep sounding through the passage; its
+    // gated layers must NOT -- the thinning is the signal a change is coming.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'Gm'],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('D1'), noteToHz('D1')], generate: null, intensity: 0 },
+        { voice: 'lead', notes: [noteToHz('D5'), noteToHz('D5'), noteToHz('D5'), noteToHz('D5')], generate: null, intensity: 0.5 },
+      ],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'Am'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('A2'), noteToHz('A2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.setIntensity(1); // the lead is audible in normal play...
+    bed.start();
+    bed.changeSuite(to, parseChord('E')!, 4);
+    const before = ctx.notes.length;
+    for (let i = 1; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
+    const after = ctx.notes.slice(before);
+    const d1 = Math.round(noteToHz('D1')!);
+    const d5 = Math.round(noteToHz('D5')!);
+    const inPassage = after.filter((n) => {
+      const f = Math.round(n.freq);
+      return f === d1 || f === d5;
+    });
+    // The bass carried on; the lead was gated out by the breakdown.
+    expect(inPassage.some((n) => Math.round(n.freq) === d1), 'outgoing bass fell silent').toBe(true);
+    const leadDuringPassage = after
+      .filter((n) => Math.round(n.freq) === d5)
+      .filter((n) => n.startedAt >= 4); // the transition begins at the boundary, step 4
+    expect(leadDuringPassage, '...but gated layers must thin out').toHaveLength(0);
+    bed.stop();
+  });
+
   it('RAMPS the tempo across the transition rather than switching instantly', () => {
     const from: MusicTrackDef = {
       id: 'slow', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],

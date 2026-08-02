@@ -155,6 +155,8 @@ export function createMusicBed(
   let intensity = 1;
   let stepsIntoCycle = 0;
   let pendingSuite: { next: MusicTrackDef; chord: Chord; steps: number } | null = null;
+  // True only while scheduling the outgoing skeleton inside a transition.
+  let inTransitionBreakdown = false;
 
   function regenerate(layerIndex: number): void {
     if (!track) return;
@@ -233,7 +235,8 @@ export function createMusicBed(
       // Intensity gates the ARRANGEMENT. The cursor still advances while a layer
       // is silent, so one coming back in lands where the phrase is rather than
       // restarting mid-figure.
-      if (layer.intensity > intensity) return;
+      const ceiling = inTransitionBreakdown ? 0 : intensity;
+      if (layer.intensity > ceiling) return;
       const v = VOICES[layer.voice];
       note(hz, at, t.stepSeconds * v.hold, v.peak, v.type);
     });
@@ -317,22 +320,33 @@ export function createMusicBed(
     return track ? track.stepSeconds : STEP_SECONDS;
   }
 
-  /** One step of the transition passage: the dominant, sustained and pulsed. */
+  /**
+   * One step of the transition passage.
+   *
+   * The first version played ONLY a bass pulse and a held dominant: the full mix
+   * collapsed to a skeleton at the exact moment key and tempo also changed, and
+   * Austin heard it as the music breaking before a different piece started. Four
+   * simultaneous changes is the jar; so the OUTGOING track keeps playing through
+   * the passage -- its always-on layers only, a deliberate breakdown -- while
+   * the dominant sounds over it. Texture then survives the join, and the only
+   * things changing at the switch itself are the things the dominant has already
+   * prepared the ear for.
+   */
   function scheduleTransition(at: number): void {
     const t = transition;
     if (!t) return;
     const len = stepLength();
-    // Root on every other step keeps the pulse alive across the ramp; the triad
-    // enters once and sustains, so the chord reads as a single held gesture.
+    // The outgoing skeleton: its own composed step, gated to the always-on
+    // layers (intensity 0). Continuity of pulse is what makes this a passage
+    // rather than a dropout.
+    inTransitionBreakdown = true;
+    scheduleComposed(at);
+    inTransitionBreakdown = false;
     const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    if (t.played % 2 === 0) {
-      const rootHz = noteToHz(`${NAMES[t.chord.root]}1`);
-      if (rootHz !== null) note(rootHz, at, len * VOICES.bass.hold, VOICES.bass.peak, VOICES.bass.type);
-    }
     if (t.played === 0) {
       for (const pc of t.chord.pitchClasses) {
         const hz = noteToHz(`${NAMES[pc]}3`);
-        if (hz !== null) note(hz, at, len * t.steps, VOICES.pad.peak, VOICES.pad.type);
+        if (hz !== null) note(hz, at, len * t.steps, VOICES.pad.peak * 1.6, VOICES.pad.type);
       }
     }
     t.played += 1;
