@@ -269,6 +269,33 @@ describe('loadArena', () => {
       /Unrecognized character '\?' at \(row 1, col 1\)/,
     );
   });
+
+  it('emits one wall per maximal solid rectangle', () => {
+    const a = loadArena({
+      id: 'run', cols: 5, rows: 3, cellSize: 2,
+      legend: { '#': 'solid' as const },
+      grid: ['###..', '.....', '.....'],
+    } as never);
+    // 3 cells in a row -> ONE wall spanning them, plus the 4 boundary walls appended
+    // last (same convention as the 'maps legend chars' test below). A minX/minY >= 0
+    // filter looks equivalent but is not: the right boundary sits at minX = W (here
+    // 10), minY = 0 -- both non-negative -- so it leaks through and silently inflates
+    // this to 2 regardless of whether the merge is correct. slice(0, -4) has no such
+    // edge case.
+    const interior = a.walls.slice(0, -4);
+    expect(interior).toHaveLength(1);
+    expect(interior[0].aabb).toEqual({ minX: 0, minY: 0, maxX: 6, maxY: 2 });
+  });
+
+  it('never merges destructible cells, which are destruction units', () => {
+    const a = loadArena({
+      id: 'bar', cols: 5, rows: 3, cellSize: 2,
+      legend: { x: 'destructible' as const },
+      grid: ['xxx..', '.....', '.....'],
+    } as never);
+    const dest = a.walls.filter((w) => w.kind === 'destructible');
+    expect(dest).toHaveLength(3);
+  });
 });
 
 describe('createArenaWorld', () => {

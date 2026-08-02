@@ -52,6 +52,48 @@ function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, ang
   };
 }
 
+/**
+ * Maximal-rectangle decomposition of a solid-cell mask: horizontal runs per row, then
+ * runs with identical extent stacked vertically.
+ *
+ * CANONICAL — the same region yields the same rectangles whatever cell size expressed
+ * it, which is the whole point: resolveWalls and bankShot both read the wall ARRAY, so
+ * a wall's slicing was leaking into collision and aiming.
+ *
+ * Solid only. A destructible cell is a destruction unit -- mine blasts destroy by
+ * world-space radius, so finer cells mean finer breaching -- and arena-02's centre
+ * barrier is authored as adjacent 2.0 blocks that must stay separately destructible.
+ */
+function mergeSolidRuns(mask: boolean[][], cols: number, rows: number): [number, number, number, number][] {
+  const runs: { r: number; c0: number; c1: number }[] = [];
+  for (let r = 0; r < rows; r++) {
+    let c = 0;
+    while (c < cols) {
+      if (!mask[r][c]) { c++; continue; }
+      let c1 = c;
+      while (c1 + 1 < cols && mask[r][c1 + 1]) c1++;
+      runs.push({ r, c0: c, c1 });
+      c = c1 + 1;
+    }
+  }
+  const used = new Set<number>();
+  const rects: [number, number, number, number][] = [];
+  for (let i = 0; i < runs.length; i++) {
+    if (used.has(i)) continue;
+    used.add(i);
+    const a = runs[i];
+    let rEnd = a.r;
+    for (;;) {
+      const j = runs.findIndex((b, k) => !used.has(k) && b.r === rEnd + 1 && b.c0 === a.c0 && b.c1 === a.c1);
+      if (j < 0) break;
+      used.add(j);
+      rEnd++;
+    }
+    rects.push([a.c0, a.r, a.c1 + 1, rEnd + 1]);
+  }
+  return rects;
+}
+
 export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[] } {
   const { cols, rows, cellSize, grid, legend } = arena;
 
@@ -101,10 +143,27 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
 
   // PASS 2 — walls, numbered after the tanks so every id in the world stays unique
   // (createWorld derives nextId from the maximum of both).
+
+  // PASS 2a -- solid walls, merged into maximal rectangles.
+  const solid: boolean[][] = [];
+  for (let r = 0; r < rows; r++) {
+    solid.push([]);
+    for (let c = 0; c < cols; c++) solid[r].push(legend[grid[r][c]] === 'solid');
+  }
+  for (const [c0, r0, c1, r1] of mergeSolidRuns(solid, cols, rows)) {
+    walls.push({
+      id: id++,
+      aabb: { minX: c0 * cellSize, minY: r0 * cellSize, maxX: c1 * cellSize, maxY: r1 * cellSize },
+      kind: 'solid',
+      destroyed: false,
+    });
+  }
+
+  // PASS 2b -- destructible walls, one per cell, never merged.
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const wallKind = legend[grid[r][c]];
-      if (!wallKind) continue;
+      if (wallKind !== 'destructible') continue;
       walls.push({
         id: id++,
         aabb: {
