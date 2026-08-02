@@ -317,6 +317,48 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('a CONTEXT change lands on the next bar; a roam change still waits for the cycle', () => {
+    // The player-visible defect this fixes: every suite change waited for the
+    // playing track's next CYCLE boundary. Measured against the real modules,
+    // a context change therefore lagged the screen by min 0.35s / median 6.35s
+    // / max 11.85s (24 of 24 calls, swept every 0.5s across one 12.8s menu
+    // cycle) -- so leaving the title screen played menu music several seconds
+    // into the level, then changed suite while the round was underway.
+    //
+    // A ROAM change is a musical decision and still belongs at the cycle
+    // boundary. A CONTEXT change is a response to the player and belongs at the
+    // next bar. Both are asserted here, so the fix cannot be "switch instantly".
+    const spec = (id: string): MusicTrackDef => ({
+      id, stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'F', 'C', 'G'],
+      tracks: [{
+        voice: 'bass',
+        notes: [noteToHz('A1'), noteToHz('F1'), noteToHz('C2'), noteToHz('G1'),
+                noteToHz('A1'), noteToHz('F1'), noteToHz('C2'), noteToHz('G1')],
+        generate: null, intensity: 0,
+      }],
+    });
+    // cycleSteps = 8 (the one layer is 8 notes), barSteps = 2 -> bars at 0,2,4,6.
+    const landing = (at?: 'bar' | 'cycle'): number => {
+      const { ctx, t, bed } = withTrack(spec('from'));
+      bed.start();
+      bed.changeSuite(spec('to'), at ? { at } : undefined);
+      for (let i = 1; i <= 24; i++) {
+        ctx.currentTime = i * 0.5;
+        t.tick();
+        if (bed.currentTrackId() === 'to') { bed.stop(); return i; }
+      }
+      bed.stop();
+      return -1;
+    };
+    // Exact indices: the fake clock is deterministic (0.5s steps, 0.6s
+    // lookahead, so scheduling runs one step ahead of the tick count).
+    expect(landing(), 'a roam change stopped waiting for the cycle').toBe(7);
+    expect(landing('cycle'), 'the explicit default disagreed with the implicit one').toBe(7);
+    const bar = landing('bar');
+    expect(bar, 'the context change never landed at all').toBeGreaterThan(0);
+    expect(bar, 'a context change still waited for the cycle boundary').toBeLessThan(7);
+  });
+
   it("enters through the incoming piece's OWN final bar -- its dominant -- first", () => {
     // The through-line construction ends every progression on its dominant, so
     // the incoming track's last bar IS the entry music. The first thing heard

@@ -345,7 +345,7 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
       // The bed already exists, so moving worlds IS a change of suite, and gets
       // the same handled join any suite change does.
       const entry = director?.enterContext(musicContext);
-      if (entry) bed.changeSuite(entry);
+      if (entry) bed.changeSuite(entry, { at: 'bar' });
     }
     applyMusicVolume();
     bed.setIntensity(musicIntensity);
@@ -401,7 +401,10 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     setMusicContext(context) {
       musicContext = context;
       const track = director?.enterContext(context);
-      if (track) bed?.changeSuite(track);
+      // `at: 'bar'` -- a screen change must be heard promptly. The default
+      // waits for the cycle boundary, which measured up to 11.85s and put the
+      // title screen's music several seconds into the level.
+      if (track) bed?.changeSuite(track, { at: 'bar' });
     },
     duckMusic(ducked) {
       musicDucked = ducked;
