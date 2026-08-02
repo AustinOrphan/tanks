@@ -473,7 +473,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       tracksProgress: opts.tracksProgress ?? true,
       bounds: (level: number) =>
-        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 2 },
+        // width/height are world-space (arenaBounds(ARENA_01)) and unchanged by the
+        // resolution upscale; cellSize is ARENA_01.cellSize, which moved 2 -> 2/3.
+        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 2 / 3 },
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
         // The same reference the loop receives: post-build mutations (invincibility)

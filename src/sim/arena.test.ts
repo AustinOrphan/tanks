@@ -56,7 +56,9 @@ describe('loadArena', () => {
     const kinds = tanks.map((t) => t.kind).sort();
     expect(kinds).toEqual(['brown', 'grey', 'player', 'teal']);
 
-    // Teal spawn is at grid (col 5, row 3), cellSize 2 -> center (11, 7).
+    // Teal spawn is at grid (col 16, row 10), cellSize 2/3 -> center (11, 7). (Was
+    // (col 5, row 3), cellSize 2, pre-upscale -- same world-space centre either way,
+    // which is the invariant this assertion pins.)
     const teal = tanks.find((t) => t.kind === 'teal')!;
     expect(teal.pos).toEqual({ x: 11, y: 7 });
     expect(teal.alive).toBe(true);
@@ -151,23 +153,31 @@ describe('loadArena', () => {
     // Verify coverage: sample points walked along the outside perimeter (including exact
     // corners and edge midpoints) must each be contained by at least one boundary AABB.
     // This proves there are no gaps where a projectile could escape.
+    //
+    // The off-edge offset is t/2, not a literal 1: the boundary ring is only `t` thick
+    // (t = cellSize, now 2/3, was 2), so a sample point has to land strictly inside that
+    // ring to prove coverage. A hardcoded "1 unit out" happened to fit inside the old
+    // 2-unit ring but overshoots clean through the new 2/3-unit one, landing in open space
+    // beyond it and failing every one of these checks -- not because a wall moved, but
+    // because the probe distance was never derived from the ring it was measuring.
+    const off = t / 2;
     const samplePointsOnOutside = [
       // Top edge
-      { x: 0, y: -1 },
-      { x: W / 2, y: -1 },
-      { x: W, y: -1 },
+      { x: 0, y: -off },
+      { x: W / 2, y: -off },
+      { x: W, y: -off },
       // Bottom edge
-      { x: 0, y: H + 1 },
-      { x: W / 2, y: H + 1 },
-      { x: W, y: H + 1 },
+      { x: 0, y: H + off },
+      { x: W / 2, y: H + off },
+      { x: W, y: H + off },
       // Left edge
-      { x: -1, y: 0 },
-      { x: -1, y: H / 2 },
-      { x: -1, y: H },
+      { x: -off, y: 0 },
+      { x: -off, y: H / 2 },
+      { x: -off, y: H },
       // Right edge
-      { x: W + 1, y: 0 },
-      { x: W + 1, y: H / 2 },
-      { x: W + 1, y: H },
+      { x: W + off, y: 0 },
+      { x: W + off, y: H / 2 },
+      { x: W + off, y: H },
       // Exact corners
       { x: 0, y: 0 },
       { x: W, y: 0 },

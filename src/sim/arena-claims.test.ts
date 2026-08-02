@@ -15,28 +15,36 @@ const A03 = arenaById('arena-03');
 describe('claimFailures reports a false claim of each type', () => {
   it('sightlineAfterBreach: the true expectation passes, the inverted one fails', () => {
     // ARENA_03 opens NO spawn-to-spawn sightline when everything is breached.
+    // [1,1] (an old-resolution cell) remaps to [4,4] under k -> 3k+1: grid[4][4]
+    // is confirmed 'O' (an olive spawn) in the shipped 33x27 grid.
     const truth: ArenaClaim = {
-      type: 'sightlineAfterBreach', from: [1, 1], sees: false, why: 'measured',
+      type: 'sightlineAfterBreach', from: [4, 4], sees: false, why: 'measured',
     };
     const lie: ArenaClaim = { ...truth, sees: true };
     expect(claimFailures(A03, [truth])).toEqual([]);
     expect(claimFailures(A03, [lie])).toHaveLength(1);
     expect(claimFailures(A03, [lie])[0]).toMatch(/sightlineAfterBreach/);
 
-    // [1,1] alone cannot tell breach() from a no-op: its line to the player reads
+    // [4,4] alone cannot tell breach() from a no-op: its line to the player reads
     // false under BOTH the intact and the breached wall sets, so a mutant that
     // checks `walls` instead of `breached` in the runner still passes every
     // assertion above. A cell whose reading actually CHANGES after breach is
-    // needed. Measured (bare cell centres, `from` -> the player spawn, all 99
-    // grid cells of arena-03): 9 of 99 read intact=false, breached=true --
-    // [3,4], [7,4], [3,5], [4,5], [6,5], [7,5], [4,6], [5,6], [6,6]. [3,4] is
-    // used below. These are hand-built inline fixtures for this meta-test, so
-    // they bypass validateArenas' requirement that a real claim's `from` sit on
-    // an enemy spawn -- do not "fix" this by moving the coordinate onto a spawn:
-    // [1,1] above IS a real spawn (an olive), and it's exactly the
+    // needed. Measured (bare cell centres, `from` -> the player spawn, a full
+    // sweep of all 891 grid cells of arena-03, 33x27): 77 of 891 read
+    // intact=false, breached=true. The 9 discriminating cells the old 11x9 grid's
+    // equivalent sweep found -- [3,4], [7,4], [3,5], [4,5], [6,5], [7,5], [4,6],
+    // [5,6], [6,6] -- remap (k -> 3k+1) to [10,13], [22,13], [10,16], [13,16],
+    // [19,16], [22,16], [13,19], [16,19], [19,19], and re-measuring confirms all
+    // 9 are still discriminating: they are a sample of the 77, not the complete
+    // set any more (the finer grid has 9x the cells and each old discriminating
+    // cell became one of a larger discriminating region, not exactly 9 new ones).
+    // [10,13] is used below. These are hand-built inline fixtures for this
+    // meta-test, so they bypass validateArenas' requirement that a real claim's
+    // `from` sit on an enemy spawn -- do not "fix" this by moving the coordinate
+    // onto a spawn: [4,4] above IS a real spawn (an olive), and it's exactly the
     // non-discriminating cell this second pair exists to avoid repeating.
     const truthBreach: ArenaClaim = {
-      type: 'sightlineAfterBreach', from: [3, 4], sees: true,
+      type: 'sightlineAfterBreach', from: [10, 13], sees: true,
       why: 'measured, discriminates breach() from a no-op (intact=false, breached=true)',
     };
     const lieBreach: ArenaClaim = { ...truthBreach, sees: false };
@@ -47,8 +55,10 @@ describe('claimFailures reports a false claim of each type', () => {
 
   it('lane: the true expectation passes, the inverted one fails', () => {
     // The olive's flank column: blocked while the shield stands, open once breached.
+    // [1,1]/[1,7] remap to [4,4]/[4,22] (k -> 3k+1); re-measured on the shipped
+    // 33x27 grid: intact 'blocked', breached 'open', matching the claim below.
     const truth: ArenaClaim = {
-      type: 'lane', from: [1, 1], to: [1, 7],
+      type: 'lane', from: [4, 4], to: [4, 22],
       intact: 'blocked', breached: 'open', why: 'measured',
     };
     const lie: ArenaClaim = { ...truth, intact: 'open' };
@@ -72,8 +82,9 @@ describe('claimFailures reports a false claim of each type', () => {
   });
 
   it('quotes the claim\'s why and draws the board, so a failure says WHICH cell', () => {
+    // [1,1]/[1,7] remapped to [4,4]/[4,22] (k -> 3k+1), matching the lane test above.
     const lie: ArenaClaim = {
-      type: 'lane', from: [1, 1], to: [1, 7],
+      type: 'lane', from: [4, 4], to: [4, 22],
       intact: 'open', breached: 'open', why: 'the shield is the trade',
     };
     const [failure] = claimFailures(A03, [lie]);
@@ -101,51 +112,68 @@ describe('claimFailures reports a false claim of each type', () => {
 // meta-test can see geometry the shipped grids don't (and shouldn't) contain.
 describe('spawnBlockRobust tags both wall phases, each tag independently provable', () => {
   it('breached-only defect: fails via (breached), passes via (intact) -- ARENA_03 minus its row-5 chord-maker', () => {
-    // Row 5's only occupied cell (col 5) is SOLID, not destructible -- removing it
-    // from the fixture (not breaching it; it can't be breached) reproduces the
+    // Old row 5's only occupied cell (col 5) is SOLID, not destructible -- removing
+    // it from the fixture (not breaching it; it can't be breached) reproduces the
     // pre-chord-maker geometry ARENA_03's notes describe: the row-4 pillar alone.
     // Intact, the row-6 peek ('x', destructible) still blocks outright, so the
     // nudge is robustly blocked. Breached, the peek is gone and only the pillar's
     // corner remains -- an exact tangency a 0.1-unit nudge opens.
+    //
+    // Old row 5 (single row) remaps to new rows 15-17 (a -> 3a..3a+2, a = 5): the
+    // shipped grid confirms this 3x3 block is the ONLY occupied cell in that band
+    // (cols 15-17, same range), so blanking rows 15-17 entirely is the upscaled
+    // equivalent of blanking old row 5.
     const fixture: Arena = {
       ...A03,
-      grid: A03.grid.map((row, r) => (r === 5 ? '.'.repeat(row.length) : row)),
+      grid: A03.grid.map((row, r) => (r >= 15 && r <= 17 ? '.'.repeat(row.length) : row)),
     };
     const failures = claimFailures(fixture, [
       { type: 'spawnBlockRobust', nudge: 0.1, why: 'discriminates the breached phase' },
     ]);
     // Population: 2 olives + 3 trio = 5 enemies x 4 cardinal offsets = 20 checks.
-    // Measured: exactly 4 fail (brown at (9,5) and (13,5), 2 offsets each), all
+    // Measured: exactly 4 fail (brown at world (9,5) and (13,5) -- world-space tank
+    // positions, unaffected by the grid-resolution upscale -- 2 offsets each), all
     // tagged (breached). If the runner's breached-phase check were removed, this
     // becomes 0 and the length assertion dies; a runner that checked intact only
     // (Task 3's original) would report this arena as ROBUST, which is the bug.
+    // Re-measured at the new resolution: identical count (4) and identical tagging
+    // to the pre-upscale result, confirming the geometry this fixture removes is
+    // unchanged, only its grid coordinates moved.
     expect(failures).toHaveLength(4);
     expect(failures.every((f) => f.includes('spawnBlockRobust (breached)'))).toBe(true);
     expect(failures.some((f) => f.includes('spawnBlockRobust (intact)'))).toBe(false);
   });
 
   it('intact defect unaffected by breach: fails via BOTH tags -- ARENA_01 minus its row-5 chord-maker', () => {
-    // ARENA_01's row-5 chord-maker (col 5) is also solid, and nothing destructible
-    // sits anywhere near it (ARENA_01's only destructibles are the far flank
-    // shields at col 2 / col 8), so breaching changes nothing at this cell: intact
-    // and breached geometry are IDENTICAL here. A defect at this spot must appear
-    // under BOTH phases, tagged separately -- proving the intact loop runs at all
-    // (a breached-only runner would still catch this given the codebase's
-    // breach()-only-removes-walls semantics, but it could never produce an
-    // (intact)-tagged message, which is what this asserts).
+    // ARENA_01's old row-5 chord-maker (col 5) is also solid, and nothing
+    // destructible sits anywhere near it (ARENA_01's only destructibles are the
+    // far flank shields at col 2 / col 8), so breaching changes nothing at this
+    // cell: intact and breached geometry are IDENTICAL here. A defect at this spot
+    // must appear under BOTH phases, tagged separately -- proving the intact loop
+    // runs at all (a breached-only runner would still catch this given the
+    // codebase's breach()-only-removes-walls semantics, but it could never produce
+    // an (intact)-tagged message, which is what this asserts).
+    //
+    // Old row 5 / col 5 (a single cell) remaps to new rows 15-17 x cols 15-17 (a
+    // 3x3 block, a -> 3a..3a+2 on both axes); the shipped grid confirms this is
+    // the sole occupied region in that band, matching the old "row 5's only
+    // occupied cell" geometry one level up.
     const fixture: Arena = {
       ...ARENA_01,
       grid: ARENA_01.grid.map((row, r) =>
-        r === 5 ? row.slice(0, 5) + '.' + row.slice(6) : row),
+        (r >= 15 && r <= 17) ? row.slice(0, 15) + '...' + row.slice(18) : row),
     };
     const failures = claimFailures(fixture, [
       { type: 'spawnBlockRobust', nudge: 0.1, why: 'discriminates the intact phase' },
     ]);
     // Population: 3 enemies (brown, grey, teal) x 4 offsets = 12 checks. Measured:
-    // 8 fail (brown at (9,5), grey at (13,5), 2 offsets each), EACH duplicated as
-    // an (intact) and a (breached) failure since the geometry doesn't move. If the
-    // runner's intact-phase check were removed, the 4 (intact)-tagged messages
-    // vanish, length drops to 4, and this assertion dies.
+    // 8 fail (brown at world (9,5), grey at world (13,5) -- world-space tank
+    // positions, unaffected by the grid-resolution upscale -- 2 offsets each),
+    // EACH duplicated as an (intact) and a (breached) failure since the geometry
+    // doesn't move. If the runner's intact-phase check were removed, the 4
+    // (intact)-tagged messages vanish, length drops to 4, and this assertion dies.
+    // Re-measured at the new resolution: identical count (8) and identical
+    // tagging to the pre-upscale result.
     expect(failures).toHaveLength(8);
     expect(failures.some((f) => f.includes('spawnBlockRobust (intact)'))).toBe(true);
     expect(failures.some((f) => f.includes('spawnBlockRobust (breached)'))).toBe(true);
@@ -171,7 +199,8 @@ describe('renderBoard', () => {
     expect(lines).toHaveLength(A03.rows);
     expect(lines[1][3]).toBe('*'); // row 1, col 3 -- the marked cell
     expect(lines[3][1]).toBe('.'); // row 3, col 1 -- untouched; a transposed write lands here instead
-    expect(lines[7]).toContain('P'); // untouched rows still read as the grid
+    // Player row was 7 pre-upscale (k -> 3k+1 = 22); grid[22] confirmed to hold 'P'.
+    expect(lines[22]).toContain('P'); // untouched rows still read as the grid
   });
 });
 
@@ -228,7 +257,8 @@ describe('failure boards point at the thing that failed', () => {
     const arena = arenaById('arena-01');
     expect(() => renderBoard(arena, [[99, 99]])).not.toThrow();
     const out = renderBoard(arena, [[99, 99], [1, 1]]);
-    expect(out).toMatch(/not drawn -- outside the 11x9 grid: \[99, 99\]/);
+    // Message is `${arena.cols}x${arena.rows}`; arena-01 is 33x27 post-upscale (was 11x9).
+    expect(out).toMatch(/not drawn -- outside the 33x27 grid: \[99, 99\]/);
     expect(out.split('\n')[1][1]).toBe('*'); // the in-range mark still drawn
   });
 
