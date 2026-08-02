@@ -1,0 +1,74 @@
+[
+  {
+    "id": "assault",
+    "key": "Am",
+    "stepSeconds": 0.15,
+    "transition": "dominant",
+    "members": [
+      "arena",
+      "arena-push",
+      "arena-lull",
+      "arena-charge"
+    ]
+  },
+  {
+    "id": "vanguard",
+    "key": "Dm",
+    "stepSeconds": 0.16,
+    "transition": "dominant",
+    "members": [
+      "vanguard",
+      "vanguard-push",
+      "vanguard-lull",
+      "vanguard-charge"
+    ]
+  },
+  {
+    "id": "pursuit",
+    "key": "Em",
+    "stepSeconds": 0.14,
+    "transition": "dominant",
+    "members": [
+      "pursuit",
+      "pursuit-push",
+      "pursuit-lull",
+      "pursuit-charge"
+    ]
+  },
+  {
+    "id": "rally",
+    "key": "C",
+    "stepSeconds": 0.17,
+    "transition": "dominant",
+    "members": [
+      "rally",
+      "rally-push",
+      "rally-lull",
+      "rally-charge"
+    ]
+  },
+  {
+    "id": "undertow",
+    "key": "Gm",
+    "stepSeconds": 0.19,
+    "transition": "dominant",
+    "members": [
+      "undertow",
+      "undertow-push",
+      "undertow-lull",
+      "undertow-charge"
+    ]
+  },
+  {
+    "id": "daybreak",
+    "key": "F",
+    "stepSeconds": 0.18,
+    "transition": "dominant",
+    "members": [
+      "daybreak",
+      "daybreak-push",
+      "daybreak-lull",
+      "daybreak-charge"
+    ]
+  }
+]

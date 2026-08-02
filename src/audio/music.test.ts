@@ -225,6 +225,264 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('SWITCHES tracks only at a cycle boundary, never mid-phrase', () => {
+    // The whole seamlessness argument. Queue a swap partway through a cycle and
+    // the outgoing track must finish it; the incoming one must start at ITS
+    // step 0, not wherever the old cursor happened to be.
+    const a: MusicTrackDef = {
+      id: 'a', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('C2'), noteToHz('E2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const b: MusicTrackDef = {
+      id: 'b', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D2'), noteToHz('D1'), noteToHz('D2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(a);
+    bed.start();
+    ctx.currentTime = 1; t.tick(); // 2 steps in: mid-cycle
+    bed.queueTrack(b);
+    expect(bed.currentTrackId(), 'a queued switch must not take effect at once').toBe('a');
+    for (let i = 2; i <= 9; i++) { ctx.currentTime = i; t.tick(); }
+
+    const played = ctx.notes.map((n) => Math.round(n.freq));
+    const aNotes = a.tracks[0].notes!.map((n) => Math.round(n!));
+    const bNotes = b.tracks[0].notes!.map((n) => Math.round(n!));
+    const switchAt = played.findIndex((f) => bNotes.includes(f) && !aNotes.includes(f));
+    expect(switchAt, 'the switch never happened').toBeGreaterThan(0);
+    // It landed on a multiple of the cycle length: 4 steps here.
+    expect(switchAt % 4, `switched at step ${switchAt}, not a cycle boundary`).toBe(0);
+    // Track a played WHOLE cycles up to that point -- no truncated phrase.
+    expect(played.slice(0, switchAt)).toEqual(
+      Array.from({ length: switchAt }, (_, i) => aNotes[i % aNotes.length]),
+    );
+    // And b starts at ITS beginning, not mid-pattern.
+    expect(played.slice(switchAt, switchAt + 4)).toEqual(bNotes);
+    expect(bed.currentTrackId()).toBe('b');
+    bed.stop();
+  });
+
+  it('keeps the STEP GRID unbroken across a switch', () => {
+    // A switch that dropped or doubled a step would be audible as a stumble even
+    // if the notes themselves were right.
+    const mk = (id: string, hz: number): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [hz, hz], generate: null, intensity: 0 }],
+    });
+    const { ctx, t, bed } = withTrack(mk('x', noteToHz('A1')!));
+    bed.start();
+    bed.queueTrack(mk('y', noteToHz('D1')!));
+    for (let i = 1; i <= 8; i++) { ctx.currentTime = i; t.tick(); }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((p, q) => p - q);
+    for (let i = 1; i < starts.length; i++) {
+      expect(starts[i] - starts[i - 1], `gap at ${i} spans the switch`).toBeCloseTo(1, 9);
+    }
+    bed.stop();
+  });
+
+  it('bridges with material from the SECTIONS THEMSELVES, nothing invented', () => {
+    // Austin, after four iterations of composed interstitial material: "you're
+    // still using something that exists in neither section to bridge between
+    // the two and it's off". This is that sentence as an assertion: every pitch
+    // scheduled across the whole run, transition included, must come from one
+    // of the two tracks' own note lists. There is no third thing.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('F1'), noteToHz('A1'), noteToHz('C#2')], generate: null, intensity: 0 },
+        // A lead too, so the OVERLAP path is inside this sweep: its notes are
+        // legal material, and anything else the overlap emitted would fail.
+        { voice: 'lead', notes: [noteToHz('D4'), noteToHz('F4'), noteToHz('A4'), noteToHz('E4')], generate: null, intensity: 0 },
+      ],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('C3'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const legal = new Set(
+      [...from.tracks.flatMap((l) => l.notes ?? []), ...to.tracks.flatMap((l) => l.notes ?? [])]
+        .filter((n): n is number => n !== null)
+        .map((n) => Math.round(n)),
+    );
+    expect(ctx.notes.length).toBeGreaterThan(8);
+    for (const n of ctx.notes) {
+      expect(legal, `scheduled ${Math.round(n.freq)}Hz: material from neither section`).toContain(
+        Math.round(n.freq),
+      );
+    }
+    expect(bed.currentTrackId()).toBe('to');
+    bed.stop();
+  });
+
+  it("enters through the incoming piece's OWN final bar -- its dominant -- first", () => {
+    // The through-line construction ends every progression on its dominant, so
+    // the incoming track's last bar IS the entry music. The first thing heard
+    // from the new section must be that final bar, then the cycle proper.
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('D1'), noteToHz('D1')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+    const incoming = ctx.notes
+      .map((n) => Math.round(n.freq))
+      .filter((f) => f !== Math.round(noteToHz('D1')!));
+    // Final bar first (E2, G#2 -- the V bar), THEN the cycle from the top.
+    const e2 = Math.round(noteToHz('E2')!);
+    const gs2 = Math.round(noteToHz('G#2')!);
+    const a2 = Math.round(noteToHz('A2')!);
+    expect(incoming.slice(0, 2), 'the pickup bar was skipped').toEqual([e2, gs2]);
+    expect(incoming.slice(2, 4), 'the cycle proper did not follow').toEqual([a2, a2]);
+    bed.stop();
+  });
+
+  it('carries the OUTGOING melody over the pickup, fading, then gone', () => {
+    // The overlap Austin asked for, bounded by the no-invented-material law:
+    // the overlapping notes are the outgoing track's own last-bar lead line.
+    // It must sound DURING the pickup and be silent once the cycle proper
+    // starts -- an overlap that lingers is two melodies fighting.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 },
+        // The lead's LAST BAR is C#5/E5 -- distinct pitches, so presence in the
+        // pickup window is attributable.
+        { voice: 'lead', notes: [noteToHz('D5'), noteToHz('F5'), noteToHz('C#5'), noteToHz('E5')], generate: null, intensity: 0 },
+      ],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+
+    const cs5 = Math.round(noteToHz('C#5')!);
+    const e5 = Math.round(noteToHz('E5')!);
+    // The pickup spans steps 4..5 (the incoming 2-step final bar). The outgoing
+    // lead's final-bar notes ride over exactly that window.
+    const outgoingLeadTimes = ctx.notes
+      .filter((n) => [cs5, e5].includes(Math.round(n.freq)))
+      .map((n) => Math.round(n.startedAt - 0.08));
+    const inPickup = outgoingLeadTimes.filter((x) => x === 4 || x === 5);
+    const after = outgoingLeadTimes.filter((x) => x > 5);
+    expect(inPickup.length, 'no overlap sounded in the pickup').toBeGreaterThan(0);
+    expect(after, 'the overlap lingered past the pickup').toEqual([]);
+    bed.stop();
+  });
+
+  it('a QUEUED track cannot hijack a suite change: the new suite plays a full cycle first', () => {
+    // Review reproduced this exactly: the pickup made the wrap one bar later
+    // read as a cycle boundary, so changeSuite(B) + queueTrack(Q) played B for
+    // its pickup bar only, then Q took over. B must play its pickup AND a full
+    // cycle before any queued switch fires.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    const q = mk('q', 'E2');
+    const { ctx, t, bed } = withTrack(a);
+    bed.start();
+    bed.changeSuite(b);
+    bed.queueTrack(q);
+    for (let i = 1; i <= 20; i++) { ctx.currentTime = i; t.tick(); }
+    const c2 = Math.round(noteToHz('C2')!);
+    const bCount = ctx.notes.filter((n) => Math.round(n.freq) === c2).length;
+    // b's pickup (2 steps) plus its full cycle (4 steps) = at least 6 sounding
+    // steps before q may enter. The hijack gave exactly 2.
+    expect(bCount, `b played only ${bCount} steps before being replaced`).toBeGreaterThanOrEqual(6);
+    expect(bed.currentTrackId()).toBe('q'); // ...and q does arrive, eventually
+    bed.stop();
+  });
+
+  it('a single-bar-cycle suite is not clobbered in the same step it arrives', () => {
+    // startAtStep is 0 when the incoming cycle is one bar long, which used to
+    // satisfy the queued check in the SAME step: the incoming suite never
+    // sounded a note while the ramp described a transition to a discarded track.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const single: MusicTrackDef = {
+      id: 'single', stepSeconds: 0.5, barSteps: 2, chords: ['E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('B1'), noteToHz('B1')], generate: null, intensity: 0 }],
+    };
+    const q: MusicTrackDef = {
+      id: 'q', stepSeconds: 0.5, barSteps: 2, chords: ['E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(single);
+    bed.queueTrack(q);
+    for (let i = 1; i <= 24; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const b1 = Math.round(noteToHz('B1')!);
+    expect(
+      ctx.notes.filter((n) => Math.round(n.freq) === b1).length,
+      'the incoming suite never sounded',
+    ).toBeGreaterThanOrEqual(4); // pickup + its full (one-bar) cycle
+    bed.stop();
+  });
+
+  it('stop() mid-transition clears it: no stale ramp survives into a restart', () => {
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: Array.from({ length: 16 }, () => noteToHz('A1')), generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = { ...from, id: 'to', stepSeconds: 0.5 };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    expect(bed.inTransition(), 'a committed change is a transition in flight').toBe(true);
+    for (let i = 1; i <= 18; i++) { ctx.currentTime = i; t.tick(); } // into the ramp
+    bed.stop();
+    expect(bed.inTransition(), 'stop() left the transition alive').toBe(false);
+    // And a restart does not resume a stale ramp against a new clock.
+    bed.start();
+    expect(bed.inTransition()).toBe(false);
+    bed.stop();
+  });
+
+  it('RAMPS the tempo across the pickup bar rather than switching instantly', () => {
+    // The ramp spans the incoming piece's pickup bar, so its resolution IS the
+    // bar length: 2-step fixture bars gave only the two endpoints, which is why
+    // this fixture uses realistic 8-step bars.
+    const mkNotes = (name: string, n: number): Array<number | null> =>
+      Array.from({ length: n }, () => noteToHz(name));
+    const from: MusicTrackDef = {
+      id: 'slow', stepSeconds: 1, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: mkNotes('A1', 16), generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = {
+      id: 'fast', stepSeconds: 0.25, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: mkNotes('A1', 16), generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 80; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((a, b) => a - b);
+    const gaps = starts.slice(1).map((v, i) => v - starts[i]);
+    // An instant switch would show only 1.0 and 0.25. A ramp visits values in
+    // between -- that is the whole point.
+    const between = gaps.filter((g) => g > 0.3 && g < 0.95);
+    expect(between.length, `gaps: ${gaps.map((g) => g.toFixed(2)).join(',')}`).toBeGreaterThan(0);
+    bed.stop();
+  });
+
   it('plays THE track the engine asks for, by id', () => {
     // Review proved the old version could not fail: `trackById('arena')!` yields
     // null when the id is absent, withTrack(null) silently takes the generated

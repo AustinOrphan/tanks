@@ -25,7 +25,7 @@ const PORT = Number(process.env.AUDIO_TOOL_PORT ?? 5210);
 const OUT_DIR = resolve(ROOT, 'audio-out');
 
 function parseArgs(argv) {
-  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null };
+  const args = { seconds: null, track: null, sfx: null, list: false, out: null, loop: false, intensity: null, seed: null, suite: null, chain: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--list') args.list = true;
@@ -36,6 +36,8 @@ function parseArgs(argv) {
     else if (a === '--loop') args.loop = true;
     else if (a === '--intensity') args.intensity = Number(argv[++i]);
     else if (a === '--seed') args.seed = Number(argv[++i]);
+    else if (a === '--suite') args.suite = argv[++i];
+    else if (a === '--chain') args.chain = argv[++i];
   }
   return args;
 }
@@ -51,7 +53,7 @@ for (const [flag, value] of Object.entries(args)
     process.exit(2);
   }
 }
-if (!args.list && !args.track && !args.sfx) {
+if (!args.list && !args.track && !args.sfx && !args.suite && !args.chain) {
   console.error(
     'usage: npm run audio -- [--list] [--track <id> [--seconds N]] [--sfx <key|all>] [--out file.wav]',
   );
@@ -160,6 +162,123 @@ try {
       return { wav: toWav(await ctx.startRendering()), label: `sfx-${opts.sfx}` };
     }
 
+    // --chain: play one track from each named SUITE in turn, entering every
+    // suite after the first through its dominant with the tempo ramping. The
+    // cross-set join is the thing that has to be judged by ear.
+    if (opts.chain) {
+      const { suiteById, membersOf } = await import('/src/audio/suites.ts');
+      const ids = opts.chain.split(',').map((x) => x.trim());
+      const suites = ids.map(suiteById);
+      const missing = ids.filter((id, i) => !suites[i]);
+      if (missing.length) return { error: `unknown suite(s): ${missing.join(', ')}` };
+      const cycleOf = (t) => {
+        const lens = t.tracks.map((l) => (l.notes ? l.notes.length : t.barSteps * t.chords.length));
+        const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
+      };
+      const picks = suites.map((s, i) => membersOf(s)[i % membersOf(s).length]);
+      // A full bar of pivot. Eight steps (~1.2s) was too short for the ear to
+      // register the dominant as a gesture before everything changed.
+
+      let seconds = 2;
+      for (let i = 0; i < picks.length; i++) {
+        seconds += cycleOf(picks[i]) * picks[i].stepSeconds;
+        if (i > 0) seconds += TRANS_STEPS * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
+      }
+      const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
+      let pump = null;
+      const bed = createMusicBed(ctx, ctx.destination, {
+        setInterval: (fn) => { pump = fn; return 0; },
+        clearInterval: () => {},
+        track: picks[0],
+        seed: opts.seed ?? undefined,
+      });
+      bed.setVolume(0.9);
+      if (opts.intensity !== null) bed.setIntensity(opts.intensity);
+      bed.start();
+      const marks = [];
+      let elapsed = cycleOf(picks[0]) * picks[0].stepSeconds;
+      for (let i = 1; i < picks.length; i++) {
+        marks.push({ at: elapsed, id: `${suites[i].id} (via its own final bar)` });
+        // The pickup bar's span, for the timeline estimate only.
+        elapsed += picks[i].barSteps * ((picks[i - 1].stepSeconds + picks[i].stepSeconds) / 2);
+        elapsed += cycleOf(picks[i]) * picks[i].stepSeconds;
+      }
+      let next = 1;
+      for (let t = 0.4; t < seconds - 0.4; t += 0.4) {
+        ctx.suspend(t).then(() => {
+          if (next < picks.length && t >= marks[next - 1].at - 1.5) {
+            bed.changeSuite(picks[next]);
+            next += 1;
+          }
+          if (pump) pump();
+          ctx.resume();
+        });
+      }
+      return { wav: toWav(await ctx.startRendering()), label: `chain-${ids.join('-')}`, marks };
+    }
+
+    // --suite: play several tracks back to back through the real bed, switching
+    // at cycle boundaries. This is the thing that has to be judged by ear, so
+    // the tool has to produce it rather than describe it.
+    if (opts.suite) {
+      const ids = opts.suite.split(',');
+      const chosen = ids.map((id) => trackById(id.trim()));
+      const missing = ids.filter((id, i) => !chosen[i]);
+      if (missing.length) return { error: `unknown track(s): ${missing.join(', ')}` };
+      const cycleOf = (t) => {
+        const lens = t.tracks.map((l) => (l.notes ? l.notes.length : t.barSteps * t.chords.length));
+        const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+        return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
+      };
+      // The boundary switch is only clean when members share the interchange
+      // contract; real suites are validated, but this flag takes arbitrary ids.
+      // Preview flexibility is kept -- with the mismatch SAID, not silent.
+      const first = chosen[0];
+      for (const t of chosen.slice(1)) {
+        if (t.stepSeconds !== first.stepSeconds || t.chords.join() !== first.chords.join()) {
+          console.error(
+            `WARNING: "${t.id}" does not share ${first.id}'s tempo/progression -- this join will jar (that may be what you are testing)`,
+          );
+        }
+      }
+      const seconds = chosen.reduce((acc, t) => acc + cycleOf(t) * t.stepSeconds, 0) + 2;
+      const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
+      let pump = null;
+      const bed = createMusicBed(ctx, ctx.destination, {
+        setInterval: (fn) => { pump = fn; return 0; },
+        clearInterval: () => {},
+        track: chosen[0],
+        seed: opts.seed ?? undefined,
+      });
+      bed.setVolume(0.9);
+      if (opts.intensity !== null) bed.setIntensity(opts.intensity);
+      bed.start();
+      // Queue each next member; the bed adopts it at the boundary on its own.
+      const marks = [];
+      let elapsed = 0;
+      for (let i = 1; i < chosen.length; i++) {
+        elapsed += cycleOf(chosen[i - 1]) * chosen[i - 1].stepSeconds;
+        marks.push({ at: elapsed, id: chosen[i].id });
+      }
+      let next = 0;
+      for (let t = 0.4; t < seconds - 0.4; t += 0.4) {
+        ctx.suspend(t).then(() => {
+          while (next < marks.length && t >= marks[next].at - 1.2) {
+            bed.queueTrack(chosen[next + 1]);
+            next += 1;
+          }
+          if (pump) pump();
+          ctx.resume();
+        });
+      }
+      return {
+        wav: toWav(await ctx.startRendering()),
+        label: `suite-${ids.map((s) => s.trim()).join('-')}`,
+        marks,
+      };
+    }
+
     const track = trackById(opts.track);
     if (!track) {
       return { error: `unknown track "${opts.track}". known: ${MUSIC_TRACKS.map((t) => t.id).join(', ')}` };
@@ -177,17 +296,14 @@ try {
     );
     const loopSteps = steps.reduce(lcm, 1);
     const loopSeconds = loopSteps * track.stepSeconds;
-    // --loop renders EXACTLY one cycle and folds the ring-out back over the
-    // start, so the file itself loops seamlessly. Without that the tail is
-    // simply cut and repeating the file clicks -- the in-game bed never
-    // restarts, so this is an artefact of rendering, not of the music.
-    // Long enough for the longest ring-out to finish, derived rather than
-    // guessed: a hold of 8 steps at 0.5s/step needs 4s on its own, and a fixed
-    // budget silently truncated it.
-    const { VOICES } = await import('/src/audio/music-data.ts');
-    const longestHold = Math.max(...track.tracks.map((l) => VOICES[l.voice].hold));
-    const TAIL = longestHold * track.stepSeconds + 0.5;
-    const seconds = opts.loop ? loopSeconds + TAIL : (opts.seconds ?? 30);
+    // --loop renders TWO cycles and keeps the SECOND: its head already carries
+    // the previous cycle's ring-out, exactly as continuous playback sounds.
+    // Review killed the previous fold approach twice over -- first it discarded
+    // tail energy, then (fixed with a modulo) it ADDED next-cycle onsets on top
+    // of the head, running the first ~2s of every loop +2.7dB hot while the
+    // seam check printed "seamless". Steady-state extraction has neither
+    // problem, because nothing is synthesised or summed at all.
+    const seconds = opts.loop ? loopSeconds * 2 + 0.5 : (opts.seconds ?? 30);
     const ctx = new OfflineAudioContext(1, Math.floor(RATE * seconds), RATE);
     let pump = null;
     const bed = createMusicBed(ctx, ctx.destination, {
@@ -208,23 +324,18 @@ try {
     const rendered = await ctx.startRendering();
     if (!opts.loop) return { wav: toWav(rendered), label: `track-${track.id}${opts.intensity !== null ? `-i${opts.intensity}` : ''}` };
 
-    // Fold: everything past one cycle is the tail of notes that started inside
-    // it, which is exactly what would be sounding as the loop comes round again.
+    // Steady state: skip the first cycle, keep the second.
     const rate = rendered.sampleRate;
     const loopFrames = Math.round(loopSeconds * rate);
     const src = rendered.getChannelData(0);
     const out = new Float32Array(loopFrames);
-    out.set(src.subarray(0, loopFrames));
-    // Modulo accumulate, not a single wrap: the old `i < loopFrames` bound threw
-    // away everything past 2x the loop. On a short loop with a long pad that was
-    // 61% of the tail's energy, at full amplitude -- and the tool then blamed
-    // the music for the click its own arithmetic had created.
-    for (let i = loopFrames; i < src.length; i++) out[i % loopFrames] += src[i];
+    out.set(src.subarray(loopFrames, loopFrames * 2));
     const looped = new OfflineAudioContext(1, loopFrames, rate).createBuffer(1, loopFrames, rate);
     looped.getChannelData(0).set(out);
-    // Report the seam: the step across the wrap point, in the same units as the
-    // signal. A perfect loop has a discontinuity no larger than the waveform's
-    // own sample-to-sample motion.
+    // The seam: the step from the loop's end back to its own head. For authored
+    // tracks steady-state cycles are identical so this is near-zero; a track
+    // with GENERATED layers varies per cycle, so its "loop" is one snapshot and
+    // the seam is reported honestly rather than assumed.
     const seam = Math.abs(out[0] - out[loopFrames - 1]);
     let typical = 0;
     for (let i = 1; i < Math.min(4000, loopFrames); i++) typical = Math.max(typical, Math.abs(out[i] - out[i - 1]));
@@ -246,8 +357,16 @@ try {
     // Peak is reported so silence is obvious without opening the file -- a
     // preview that quietly writes 30s of nothing is worse than an error.
     console.log(`wrote ${file}  (peak ${result.wav.peak.toFixed(3)})`);
+    if (result.marks) {
+      console.log(`  switches at: ${result.marks.map((m) => `${m.at.toFixed(2)}s -> ${m.id}`).join(', ')}`);
+    }
     if (result.seam !== undefined) {
-      const verdict = result.seam <= result.typical ? 'seamless' : 'AUDIBLE STEP';
+      // An absolute floor as well as the relative one: a generated track's loop
+      // is one snapshot of a varying piece, so its wrap differs from its head by
+      // a few parts in ten thousand -- around -74dBFS, far below audibility --
+      // while the local "typical step" in a quiet head is smaller still. The
+      // relative test alone called that an AUDIBLE STEP, which is false.
+      const verdict = result.seam <= Math.max(result.typical, 1e-3) ? 'seamless' : 'AUDIBLE STEP';
       console.log(
         `  loop ${result.loopSeconds.toFixed(2)}s  seam ${result.seam.toExponential(2)} ` +
           `vs typical sample step ${result.typical.toExponential(2)}  -> ${verdict}`,
