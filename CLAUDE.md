@@ -442,7 +442,21 @@ Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anythi
 
 **Deferred work goes in `docs/superpowers/backlog.md`** — spikes carry what the question is
 and what would answer it; the ledger below them carries one-line pointers. A PR that defers
-something adds its entry in the same PR.
+something adds its entry in the same PR, **and a PR that closes something deletes its entry
+in the same PR.**
+
+The second half is the one that rots, and it is not a tidiness rule. Of the 147 deferred
+items harvested out of PR descriptions, **63 were already done** — 43% of what read as a
+backlog was work someone had finished and nobody had struck out. That is what makes a
+backlog worse than nothing: a reader cannot tell the live items from the dead ones without
+re-deriving all of them, which is the cost the file exists to remove. Deleting the line is
+part of the work, not follow-up to it.
+
+`tools/backlog.test.ts` makes the deletion cheap to get right rather than merely required:
+it recomputes the ledger's own section counts from the file, so removing a line fails the
+build until the header agrees. If you close something and the suite goes red on a count,
+that is the guard working. **If you close something and the suite stays green, you forgot
+the entry.**
 
 That file exists because the previous arrangement was "merged PR descriptions carry the
 detailed residual backlog". Over the 77 merged PRs, 20 bodies carry an ATX heading matching

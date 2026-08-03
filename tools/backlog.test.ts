@@ -18,6 +18,7 @@ import tracks from '../src/audio/data/music-tracks.json';
 import suitesJson from '../src/audio/data/music-suites.json';
 
 const BACKLOG = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url)), 'utf8');
+const CLAUDE_MD = readFileSync(fileURLToPath(new URL('../CLAUDE.md', import.meta.url)), 'utf8');
 
 /** Bullet counts per `###` subsection of the Ledger, in document order. */
 function ledgerSections(): { title: string; bullets: number }[] {
@@ -61,6 +62,27 @@ describe('backlog.md quotes numbers it can still justify', () => {
     expect(bullets.length - prose).toBe(75);
     expect(BACKLOG).toContain('**75** came from the');
     expect(BACKLOG).toContain('**9** from prose-only PRs');
+  });
+
+  it('states the same harvest figures in CLAUDE.md and backlog.md', () => {
+    // CLAUDE.md argues the delete-when-you-close rule from "147 harvested, 63 already
+    // done, 43%". backlog.md is where those came from. Two files quoting one measurement
+    // is how they drift -- and a stale 43% would be arguing from a number that no longer
+    // holds, in the file whose whole job is to be believed.
+    const enumerated = /(\d+) items were enumerated/.exec(BACKLOG)?.[1];
+    const closed = /(\d+) were already closed by later work/.exec(BACKLOG)?.[1];
+    expect(enumerated).toBe('147');
+    expect(closed).toBe('63');
+    // Both files hard-wrap their prose, so a sentence spans lines and an exact substring
+    // match breaks on re-wrapping rather than on a wrong number. Collapse whitespace first:
+    // the first draft of this test did not, and failed on the line break inside the very
+    // sentence it was checking.
+    const flat = CLAUDE_MD.replace(/\s+/g, ' ');
+    expect(flat).toContain(`${enumerated} deferred items harvested`);
+    expect(flat).toContain(`**${closed} were already done**`);
+    // And the percentage CLAUDE.md rounds to must be the one those two produce.
+    const pct = Math.round((Number(closed) / Number(enumerated)) * 100);
+    expect(flat).toContain(`${pct}% of what read as a backlog`);
   });
 
   it('recomputes "13 of 42" generated layers at density >= 0.5', () => {
