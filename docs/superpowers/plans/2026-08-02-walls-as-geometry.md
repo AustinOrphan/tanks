@@ -699,6 +699,124 @@ git commit -m "test: the same geometry sliced two ways must give the same answer
 
 ---
 
+### Task 5b: a hull INSIDE a wall escapes the mass, not the sub-cell
+
+**Files:**
+- Modify: `src/sim/collision.ts` (`resolveWalls`)
+- Test: `src/sim/collision.test.ts`, `src/sim/decomposition.test.ts`
+
+**Interfaces:**
+- Consumes: Tasks 1–5.
+- Produces: `resolveWalls(tank, walls): void` — signature unchanged, callers unchanged. `circleVsAABB` is **not** modified (bullets.ts uses it; changing it would ripple).
+
+**Why this exists.** Task 4 fixed the case where a hull *touches* walls — measured 8,846 → 0 divergences on arena-01. The case where the hull's CENTRE is already inside wall geometry is still decomposition-dependent, because `circleVsAABB`'s `inside` branch pushes out through the nearest face of the ONE box it is handed, and for a sub-cell that face is often a buried internal seam rather than the mass's outer edge. Task 5 measured 820 of 1,600 densely-swept interior points diverging for an isolated destructible mass, and the review showed it is reachable: `separateTanks` (`world.ts:99`) drives hulls up to 0.375 units into a block and `stepMovement` calls `resolveWalls` immediately after — 147 of 300 seeds reached it on a concave pocket, 0 of 300 on a flat face. Destructible cells cannot be merged (a destructible cell is a destruction unit), so this must be fixed in the resolver.
+
+- [ ] **Step 1: Write the failing test**
+
+In `src/sim/decomposition.test.ts`, add a test that sweeps hull centres INSIDE the destructible mass and asserts coarse and fine agree. Use the same `COARSE`/`FINE` fixtures already in the file, and sweep the interior points the existing position test excludes:
+
+```ts
+  it('resolves a hull whose centre is inside the mass identically', () => {
+    const interiorPts = pts.filter((p) => inside(p, a) && inside(p, b));
+    // Population pin: the complement of the exterior sweep, same 1024-point grid.
+    expect(interiorPts.length).toBeGreaterThan(20);
+    for (const p of interiorPts) {
+      const ta = makeTank(1, 'player', { ...p }, 0);
+      const tb = makeTank(1, 'player', { ...p }, 0);
+      resolveWalls(ta, a);
+      resolveWalls(tb, b);
+      expect(tb.pos.x, `x=${p.x} y=${p.y}`).toBeCloseTo(ta.pos.x, 9);
+      expect(tb.pos.y, `x=${p.x} y=${p.y}`).toBeCloseTo(ta.pos.y, 9);
+    }
+  });
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+```bash
+npx vitest run src/sim/decomposition.test.ts -t 'inside the mass'
+```
+
+Expected: FAIL. Record the first diverging point and both resolved positions.
+
+- [ ] **Step 3: Escape the union, not the box**
+
+In `resolveWalls`, handle the inside case BEFORE the deepest-overlap pass. The distance to leave the wall mass along each axis direction is a property of the union, so marching box-to-box along the ray gives the same answer at any cell size:
+
+```ts
+const AXES: Vec2[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+
+function containsPoint(b: AABB, p: Vec2): boolean {
+  return p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
+}
+
+/** How far from `p` along `dir` until the wall MASS ends. Marches box to box, so a run
+ *  of sub-cells gives the same answer as the single box covering the same span. */
+function unionExitDistance(p: Vec2, dir: Vec2, walls: Wall[]): number {
+  let dist = 0;
+  for (let step = 0; step <= walls.length; step++) {
+    const probe = { x: p.x + dir.x * (dist + SWEEP_EPS), y: p.y + dir.y * (dist + SWEEP_EPS) };
+    const w = walls.find((x) => !x.destroyed && containsPoint(x.aabb, probe));
+    if (!w) return dist;
+    dist = dir.x === 1 ? w.aabb.maxX - p.x
+      : dir.x === -1 ? p.x - w.aabb.minX
+      : dir.y === 1 ? w.aabb.maxY - p.y
+      : p.y - w.aabb.minY;
+  }
+  return dist;
+}
+```
+
+Then, at the top of each iteration of `resolveWalls`'s loop:
+
+```ts
+    // A centre INSIDE the mass escapes the mass. circleVsAABB's `inside` branch pushes
+    // out through the nearest face of the one box it is given, which for a sub-cell is
+    // usually a buried seam -- so the same hull in the same place resolved differently
+    // depending only on how the wall was sliced. Ties break on the push VECTOR, never
+    // on array or axis position, for the same reason the deepest-overlap pass does.
+    if (walls.some((w) => !w.destroyed && containsPoint(w.aabb, tank.pos))) {
+      let escape: Vec2 | null = null;
+      let escapeDist = Infinity;
+      for (const dir of AXES) {
+        const d = unionExitDistance(tank.pos, dir, walls);
+        const cand = { x: dir.x * (d + TANK_RADIUS), y: dir.y * (d + TANK_RADIUS) };
+        if (d < escapeDist || (d === escapeDist && escape !== null &&
+            (cand.x < escape.x || (cand.x === escape.x && cand.y < escape.y)))) {
+          escapeDist = d;
+          escape = cand;
+        }
+      }
+      if (escape !== null) { tank.pos = vadd(tank.pos, escape); continue; }
+    }
+```
+
+- [ ] **Step 4: Run the new test, then the whole suite**
+
+```bash
+npx vitest run src/sim/decomposition.test.ts   # the new test must PASS
+npx tsc --noEmit && npx vitest run 2>&1 | grep -E "Tests |Test Files"
+```
+
+`collision.test.ts`'s narrow-gap and concave-corner tests are the ones most likely to move. Judge each: does the old expectation encode the old per-box behaviour, or did you break something real? Do not blanket-update.
+
+- [ ] **Step 5: Prove it can fail, and that the single-box case is untouched**
+
+Delete the whole inside-case block, re-run `-t 'inside the mass'`, watch it FAIL, restore. Then confirm a hull inside a SINGLE box resolves exactly as before by adding a direct test with one wall and an analytically-known exit.
+
+- [ ] **Step 6: Drop Task 5's interior exclusion, which is now the real proof**
+
+The position test restricts its sweep to exterior centres and the fixture comment explains why. That restriction is now unnecessary. Widen the sweep to all 1,024 points, update the population pin, and rewrite the fixture comment's third-residual paragraph to say it was CLOSED here and how.
+
+- [ ] **Step 7: Record the hash and commit**
+
+```bash
+npx vitest run tools/baseline/trace.test.ts --reporter=basic 2>&1 | grep BASELINE
+git add -A && git commit -m "sim: a hull inside a wall escapes the mass, not the sub-cell it sits in"
+```
+
+---
+
 ### Task 6: Move the pins that legitimately move, and re-baseline
 
 **Files:**
