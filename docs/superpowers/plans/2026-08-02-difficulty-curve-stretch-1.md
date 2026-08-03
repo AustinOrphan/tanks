@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - `src/sim/` imports nothing from `three`, `howler`, or the DOM. `src/sim/purity.test.ts` scans raw text **including strings and test titles**.
-- `CLAUDE.md` and `AGENTS.md` must stay **byte-identical** (`cmp CLAUDE.md AGENTS.md`).
+- `AGENTS.md` is a **symlink** to `CLAUDE.md`; edit `CLAUDE.md` only, and never replace the link with a copy (`tools/instructions.test.ts` fails if you do).
 - No `Co-Authored-By` or tool-attribution trailers in commit messages.
 - Every new assertion must be able to fail. Before adding one, name the production change that breaks it, apply that change, watch it fail, revert.
 - **Commit before running any mutation experiment.** The revert step is `git checkout -- FILE`, which cannot distinguish your finished work from the deliberate breakage. This has destroyed real work three times in this repo.
@@ -476,7 +476,8 @@ before 3-5 are built.
 - [ ] **Step 2: Sync and verify byte-identical**
 
 ```bash
-cp CLAUDE.md AGENTS.md && cmp CLAUDE.md AGENTS.md && echo identical
+# AGENTS.md is a SYMLINK to CLAUDE.md -- editing CLAUDE.md is the whole job.
+git ls-files -s AGENTS.md   # expect mode 120000
 ```
 
 - [ ] **Step 3: Full gate**
