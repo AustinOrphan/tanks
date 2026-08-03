@@ -9,7 +9,7 @@
 // This file supplies a context capable enough for `canSynthesise()` to accept,
 // so the paths that actually run in a browser are the ones under test.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createAudioEngine } from './engine';
+import { createAudioEngine, DUCK_FACTOR } from './engine';
 import { AUDIO_MANIFEST, DEFAULT_VOLUME } from './manifest';
 
 vi.mock('howler', () => {
@@ -213,6 +213,145 @@ describe('engine: the generated music bed', () => {
     expect(c.nodes.filter((n) => n.kind === 'osc').length).toBeGreaterThan(0);
     engine.stopMusic();
     engine.dispose();
+  });
+
+  it('starts the bed even when startMusic beat the music load failure', async () => {
+    // Every other bed test in this file awaits flush() FIRST, so the Howl is
+    // already null by the time startMusic runs -- which is why none of them
+    // could see this. The game now starts the music at boot, inside the window
+    // where the Howl still exists and has not yet failed: measured in a real
+    // browser, the asset resolved at ~1354ms while boot called startMusic at
+    // ~380ms, and the title screen produced 0 bed voices against 8 after Start.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    engine.startMusic(); // BEFORE the flush: the Howl is alive and mute
+    await flush(); // ...and now it fails, as it always will in this repo
+    const c = ctxOf();
+    expect(c, 'no AudioContext at all -- the bed never ran').toBeDefined();
+    expect(
+      c.nodes.filter((n) => n.kind === 'osc').length,
+      'the load failure arrived after startMusic and nothing retried: silence',
+    ).toBeGreaterThan(0);
+    engine.dispose();
+  });
+
+
+  /** Every pitch the bed scheduled on `c`, as a set. */
+  const openingPitches = (c: CapableCtx): Set<number> =>
+    new Set(
+      c.nodes
+        .filter((n) => n.kind === 'osc')
+        .flatMap((o) => o.freqs)
+        .map((f) => Math.round(f)),
+    );
+
+  /** Start an engine already in `context` and return the pitches it opened on. */
+  const openIn = async (context: 'menu' | 'arena'): Promise<Set<number>> => {
+    CapableCtx.instances = [];
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    engine.setMusicContext(context);
+    engine.startMusic();
+    await flush();
+    const pitches = openingPitches(ctxOf());
+    engine.dispose();
+    return pitches;
+  };
+
+  it('OPENS on the music of the context it is in, not always the arena', async () => {
+    // The headline of this branch, at the engine seam. Review proved the two
+    // lines that enter the context could be deleted with all 476 tests in
+    // src/audio + src/game still passing: the bed would boot on the arena start
+    // suite and the title screen would play round music.
+    //
+    // Asserted as a CONTRAST rather than against hardcoded pitches, so retuning
+    // a track does not fail it: with the context entry gone, both contexts open
+    // on director.first() and these sets are identical. (Measured at this
+    // commit: menu opens on 55/220/262/330 -- a full Am voicing -- and arena on
+    // 55/110, bass octaves alone.)
+    const menu = await openIn('menu');
+    const arena = await openIn('arena');
+    expect(menu.size, 'the menu context scheduled nothing at all').toBeGreaterThan(0);
+    expect([...menu].sort(), 'both contexts opened on the SAME music').not.toEqual([...arena].sort());
+    // Determinism, at the wiring rather than inside playlist.ts: fake timers
+    // freeze Date.now(), so the seed is identical and a second engine in the
+    // same context must open identically. Math.random here would not.
+    expect([...(await openIn('arena'))].sort()).toEqual([...arena].sort());
+  });
+
+  it('DUCKS the bed to a fraction rather than muting or ignoring it', async () => {
+    // Review: gutting duckMusic to an empty body left all 1268 tests passing,
+    // and so did DUCK_FACTOR = 1. Both are pinned here.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    await flush();
+    engine.startMusic();
+    const c = ctxOf();
+    // The bed's own bus, identified by the exact level it is given -- the same
+    // handle the dispose test uses. "some gain changed" could not fail.
+    const full = 0.25 * DEFAULT_VOLUME;
+    expect(c.nodes.some((n) => n.kind === 'gain' && n.gainValue === full)).toBe(true);
+    engine.duckMusic(true);
+    expect(
+      c.nodes.some((n) => n.kind === 'gain' && n.gainValue === full * DUCK_FACTOR),
+      'duckMusic(true) did not move the bed bus',
+    ).toBe(true);
+    engine.duckMusic(false);
+    expect(
+      c.nodes.some((n) => n.kind === 'gain' && n.gainValue === full),
+      'unducking did not restore the level',
+    ).toBe(true);
+    // ...and the constant means what its name says. Written against the range,
+    // not the value, so retuning the duck does not rewrite the test -- but
+    // DUCK_FACTOR = 1 (no duck) or 0 (a mute, which is what pause used to be)
+    // both fail.
+    expect(DUCK_FACTOR, 'a duck of 1 is not a duck').toBeLessThan(1);
+    expect(DUCK_FACTOR, 'a duck of 0 is a mute -- pause must stay audible').toBeGreaterThan(0);
+    engine.dispose();
+  });
+
+  it('a duck survives the mute and volume paths rather than fighting them', async () => {
+    // applyMusicVolume exists so these three cannot disagree. Population: the
+    // 3 setters that touch the bed's level (setMuted, setVolume, duckMusic).
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    await flush();
+    engine.startMusic();
+    const c = ctxOf();
+    engine.duckMusic(true);
+    engine.setVolume(0.5);
+    expect(
+      c.nodes.some((n) => n.kind === 'gain' && n.gainValue === 0.25 * 0.5 * DUCK_FACTOR),
+      'the volume slider cleared the duck',
+    ).toBe(true);
+    engine.setMuted(true);
+    expect(c.nodes.some((n) => n.kind === 'gain' && n.gainValue === 0), 'mute lost to the duck').toBe(true);
+    engine.dispose();
+  });
+
+  it('a stop BEFORE the load failure stays stopped, and dispose disarms the retry', async () => {
+    // The retry is armed by startMusic and must be disarmed by both stopMusic
+    // and dispose -- otherwise a load failure arriving later resurrects audio
+    // the game has already turned off. Review verified this by probe; it is a
+    // test now. `musicWanted = false` in stopMusic was deletable with all 476
+    // tests in src/audio + src/game passing.
+    const stopped = createAudioEngine(AUDIO_MANIFEST);
+    CapableCtx.instances = [];
+    stopped.startMusic();
+    stopped.stopMusic();
+    await flush(); // the loaderror lands here, after the stop
+    expect(CapableCtx.instances, 'a late load failure restarted music the game stopped').toHaveLength(0);
+    stopped.dispose();
+
+    // The dispose half pins the CONJUNCTION, and says so rather than implying
+    // more: two independent guards stop a late failure resurrecting a disposed
+    // engine -- `musicWanted = false` in dispose, and ensureCtx's `if (disposed)
+    // return null`. Measured: removing either ALONE still passes (the other
+    // covers it); removing both fails here. So this proves a disposed engine
+    // never builds a context, NOT that the disarm in dispose is load-bearing
+    // today. It is belt-and-braces, and this is the belt.
+    const gone = createAudioEngine(AUDIO_MANIFEST);
+    CapableCtx.instances = [];
+    gone.startMusic();
+    gone.dispose();
+    await flush();
+    expect(CapableCtx.instances, 'a late load failure built a context on a disposed engine').toHaveLength(0);
   });
 
   it('does NOT play at full volume when the game is muted', async () => {

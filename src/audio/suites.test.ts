@@ -1,0 +1,269 @@
+import { describe, it, expect } from 'vitest';
+import {
+  __parseAllForTests,
+  SUITES,
+  suiteById,
+  membersOf,
+  suitesFor,
+  SUITE_CONTEXTS,
+  dominantOf,
+  keyAffinity,
+  rankCandidates,
+  pickNextSuite,
+  type SuiteDef,
+} from './suites';
+import { parseChord } from './chords';
+import { MUSIC_TRACKS } from './music-data';
+
+describe('the shipped suites', () => {
+  it('name real tracks that genuinely interchange', () => {
+    expect(SUITES.length).toBeGreaterThan(0);
+    for (const s of SUITES) {
+      const members = membersOf(s);
+      expect(members.length, s.id).toBe(s.members.length);
+      // Interchangeability is not a vibe: it is these three fields agreeing.
+      // Population: every member of every suite, against the first member.
+      const first = members[0];
+      for (const m of members) {
+        expect(m.stepSeconds, `${s.id}/${m.id} tempo`).toBe(first.stepSeconds);
+        expect(m.barSteps, `${s.id}/${m.id} bars`).toBe(first.barSteps);
+        expect(m.chords, `${s.id}/${m.id} progression`).toEqual(first.chords);
+      }
+    }
+  });
+
+  it('gives every member the same cycle length, so any order joins cleanly', () => {
+    // Differing cycle lengths would mean a switch either truncates a phrase or
+    // waits an unpredictable time -- the seam the whole design exists to avoid.
+    for (const s of SUITES) {
+      const cycles = membersOf(s).map((m) => {
+        const lens = m.tracks.map((l) => l.notes?.length ?? m.barSteps * m.chords.length);
+        const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+        return lens.reduce((a, b) => (a / gcd(a, b)) * b, 1);
+      });
+      expect(new Set(cycles).size, `${s.id} cycles: ${cycles.join(',')}`).toBe(1);
+    }
+  });
+
+  it('suiteById returns null for an unknown id rather than throwing', () => {
+    expect(suiteById('nope')).toBeNull();
+  });
+});
+
+describe('dominantOf', () => {
+  it('is the MAJOR triad a fifth above the key, for every key a suite could use', () => {
+    // The dominant is what makes a new key sound arrived at rather than cut to.
+    // Major even in a minor key: the raised third is the leading tone, and that
+    // is what does the pulling -- a minor v has no such pull.
+    // Population: all 12 roots, minor and major.
+    const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    for (let root = 0; root < 12; root++) {
+      for (const quality of ['', 'm']) {
+        const key = `${NAMES[root]}${quality}`;
+        const suite = { id: 't', key, context: 'arena' as const, stepSeconds: 1, transition: 'dominant' as const, members: [] };
+        const dom = dominantOf(suite);
+        expect(dom.root, `dominant of ${key}`).toBe((root + 7) % 12);
+        // Major triad: root, +4, +7.
+        expect(dom.pitchClasses, `quality of the dominant of ${key}`).toEqual([
+          (root + 7) % 12,
+          (root + 11) % 12,
+          (root + 2) % 12,
+        ]);
+        // And it contains the LEADING TONE of the key -- a semitone below home.
+        expect(dom.pitchClasses, `leading tone into ${key}`).toContain((root + 11) % 12);
+      }
+    }
+  });
+
+  it('gives A major for an A minor suite, which is E', () => {
+    // The concrete case, spelled out: the assault suite is in Am, so it is
+    // entered through E major.
+    const assault = suiteById('assault')!;
+    expect(assault.key).toBe('Am');
+    expect(dominantOf(assault).root).toBe(parseChord('E')!.root);
+  });
+});
+
+describe('keyAffinity', () => {
+  it('tiers keys the way the selection policy needs', () => {
+    // Table-driven over the relations that matter; each row names its tier.
+    const cases: Array<[string, string, number, string]> = [
+      ['Am', 'Am', 4, 'same key'],
+      ['C', 'C', 4, 'same key, major'],
+      ['Am', 'C', 2, 'relative major'],
+      ['C', 'Am', 2, 'relative minor'],
+      ['Am', 'Em', 2, 'dominant minor'],
+      ['Am', 'Dm', 2, 'subdominant minor'],
+      ['C', 'G', 2, 'dominant major'],
+      ['Am', 'A', 1, 'parallel major'],
+      ['A', 'Am', 1, 'parallel minor'],
+      ['Am', 'Ebm', 0, 'a tritone away: excluded'],
+      ['Am', 'Bm', 0, 'a tone away: excluded'],
+      ['C', 'F#', 0, 'tritone major: excluded'],
+    ];
+    for (const [a, b, want, label] of cases) {
+      expect(keyAffinity(a, b), `${a} -> ${b} (${label})`).toBe(want);
+    }
+  });
+});
+
+describe('rankCandidates / pickNextSuite', () => {
+  const mk = (id: string, key: string, stepSeconds: number): SuiteDef => ({
+    id, key, context: 'arena', stepSeconds, transition: 'dominant', members: [],
+  });
+
+  it('excludes a tempo gap beyond 20% no matter how related the key', () => {
+    // The lesson of the siege join: 47% slower in the SAME related key still
+    // jarred. Tempo is a hard limit, not a weight.
+    const from = mk('a', 'Am', 0.15);
+    const ranked = rankCandidates(from, [from, mk('slow', 'Am', 0.22), mk('ok', 'Dm', 0.16)]);
+    expect(ranked.map((r) => r.suite.id)).toEqual(['ok']);
+  });
+
+  it('weights the same key above related keys', () => {
+    const from = mk('a', 'Am', 0.15);
+    const ranked = rankCandidates(from, [from, mk('rel', 'Dm', 0.15), mk('same', 'Am', 0.16)]);
+    expect(ranked[0].suite.id).toBe('same');
+    expect(ranked[0].weight).toBeGreaterThan(ranked[1].weight);
+  });
+
+  it('draws in proportion to weight, deterministically under an injected rnd', () => {
+    const from = mk('a', 'Am', 0.15);
+    const all = [from, mk('same', 'Am', 0.15), mk('rel', 'C', 0.15)];
+    // Weights 4 and 2: a draw below 4/6 picks 'same', above it picks 'rel'.
+    expect(pickNextSuite(from, all, () => 0.0)!.id).toBe('same');
+    expect(pickNextSuite(from, all, () => 0.65)!.id).toBe('same');
+    expect(pickNextSuite(from, all, () => 0.7)!.id).toBe('rel');
+    // And over a seeded run, BOTH appear -- weighted, not winner-takes-all.
+    let x = 42;
+    const rnd = (): number => {
+      x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+      return ((x >>> 0) % 1000) / 1000;
+    };
+    const picks = new Set(Array.from({ length: 60 }, () => pickNextSuite(from, all, rnd)!.id));
+    expect(picks).toEqual(new Set(['same', 'rel']));
+  });
+
+  it('returns null when nothing is compatible, rather than forcing a jar', () => {
+    const from = mk('a', 'Am', 0.15);
+    expect(pickNextSuite(from, [from, mk('far', 'Ebm', 0.15), mk('slow', 'Am', 0.5)], () => 0.5)).toBeNull();
+  });
+
+  it('pins the CONSTRUCTION, not just the last chord: i-VI-VII-V and I-vi-IV-V', () => {
+    // Review found the internal chords unpinned: the validator checks only the
+    // final dominant, so a generated set with a wrong VI or VII (Em-C#-D-B)
+    // would load and pass every test. Four of the six sets came from a script,
+    // so a systematic error would be replicated four times -- this is the sweep
+    // that catches it. Population: every shipped suite.
+    for (const s of SUITES) {
+      const home = parseChord(s.key)!;
+      const isMinor = (home.pitchClasses[1] - home.root + 12) % 12 === 3;
+      const chords = membersOf(s)[0].chords;
+      const roots = chords.map((c) => parseChord(c)!.root);
+      const offsets = roots.map((r) => (r - home.root + 12) % 12);
+      const want = isMinor ? [0, 8, 10, 7] : [0, 9, 5, 7];
+      // The chord SET, plus a V ending -- not the exact order. A rotation of the
+      // same degrees is a legitimate variant (the hand-written menu piece is
+      // vi-IV-I-V, the relative-minor rotation of I-vi-IV-V), while the thing
+      // this pin exists to catch -- a generated set with a WRONG degree, e.g.
+      // Em-C#-D-B -- still fails, because C# is not in the set.
+      expect([...offsets].sort((a, b) => a - b), `${s.id} (${s.key}) plays ${chords.join('-')}`).toEqual(
+        [...want].sort((a, b) => a - b),
+      );
+      // No "must end on its V" assertion here: suites.ts:113 throws at MODULE
+      // LOAD on exactly that, so no suite reaching this test can violate it and
+      // the assertion could not fail. Review proved it -- deleting it left all
+      // 162 audio tests passing, while rotating a member to end on VII failed
+      // at import with "ends on D, not the dominant of Em". The loader is the
+      // pin; this is the SET pin, and it admits any of the 6 orderings with V
+      // last where the old ordered pin admitted 1.
+    }
+  });
+
+  it('the shipped suites form a CONNECTED graph under the compatibility rules', () => {
+    // "A lot more sets" only works if every set is reachable from every other
+    // through legal joins -- an island suite would strand the playlist there
+    // forever. Population: all shipped suites, walked from the first.
+    // Per CONTEXT: the roam never leaves the world it is scoring, so a menu
+    // suite being unreachable from an arena one is correct, not a stranding.
+    const arena = SUITES.filter((s) => s.context === 'arena');
+    const reachable = new Set<string>([arena[0].id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const s of arena) {
+        if (!reachable.has(s.id)) continue;
+        for (const r of rankCandidates(s, arena)) {
+          if (!reachable.has(r.suite.id)) {
+            reachable.add(r.suite.id);
+            grew = true;
+          }
+        }
+      }
+    }
+    const stranded = arena.map((s) => s.id).filter((id) => !reachable.has(id));
+    expect(stranded, `unreachable arena suites: ${stranded.join(', ')}`).toEqual([]);
+    // And no dead ends within the arena world.
+    for (const s of arena) {
+      expect(rankCandidates(s, arena).length, `${s.id} is a dead end`).toBeGreaterThan(0);
+    }
+    // The same guarantee for EVERY context, stated so it survives a second
+    // suite being authored in one. Narrowing this to arena (which the first
+    // version did) means a new menu or victory world gets no connectivity
+    // check at all. A context with ONE suite is exempt: `title` has nowhere
+    // legal to go and that is correct, not a stranding.
+    for (const context of SUITE_CONTEXTS) {
+      const world = SUITES.filter((s) => s.context === context);
+      if (world.length < 2) continue;
+      for (const s of world) {
+        expect(
+          rankCandidates(s, world).length,
+          `${s.id} is a dead end inside the ${context} world`,
+        ).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('never offers a suite from ANOTHER context, even one otherwise compatible', () => {
+    // The shipped menu suite cannot discriminate this: it sits 2.7x outside the
+    // tempo rule, so it is excluded whether or not context is considered --
+    // which made the first version of this test pass with the context filter
+    // deleted. The fixture differs ONLY in context.
+    const arena: SuiteDef = { id: 'a', key: 'Am', context: 'arena', stepSeconds: 0.15, transition: 'dominant', members: [] };
+    const twin: SuiteDef = { ...arena, id: 'twin', context: 'menu' };
+    expect(rankCandidates(arena, [arena, twin]).map((r) => r.suite.id)).toEqual([]);
+    // Same suite in the same context IS offered, so the exclusion is context.
+    expect(rankCandidates(arena, [arena, { ...twin, context: 'arena' }]).map((r) => r.suite.id)).toEqual(['twin']);
+    // Deliberately NOT also looping over the shipped suites here: review showed
+    // that loop passes with the context filter deleted, because `title` is
+    // tempo-excluded from every arena suite anyway. The fixture above carries
+    // 100% of this test's discriminating power.
+    expect(suitesFor('menu').length).toBeGreaterThan(0);
+  });
+
+  it('the SHIPPED suites give assault at least one legal neighbour', () => {
+    const assault = suiteById('assault')!;
+    const ranked = rankCandidates(assault, SUITES);
+    expect(ranked.length, 'assault has no compatible neighbour to chain into').toBeGreaterThan(0);
+  });
+});
+
+describe('the suite validator', () => {
+  it('rejects a suite whose members do not END on its dominant', () => {
+    // The pickup entry plays the final bar first, trusting it to be the V. The
+    // menu track ends on G, and G is not the dominant of A minor -- accepting
+    // this suite would make every entry into it land on the wrong chord, a sour
+    // join found by ear instead of at boot.
+    const bad = [{ id: 'bad', key: 'Am', stepSeconds: 0.4, transition: 'dominant', members: ['menu'] }];
+    expect(() => __parseAllForTests(bad)).toThrow(/dominant of Am/);
+  });
+
+
+  it('every shipped member exists in the track catalog', () => {
+    for (const s of SUITES) {
+      for (const m of s.members) {
+        expect(MUSIC_TRACKS.map((t) => t.id), `${s.id} names ${m}`).toContain(m);
+      }
+    }
+  });
+});

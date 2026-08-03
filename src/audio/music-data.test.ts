@@ -6,6 +6,7 @@ import {
   VOICES,
   __parseAllForTests as parseAll,
 } from './music-data';
+import { SUITES } from './suites';
 
 describe('noteToHz', () => {
   it('anchors on A4 = 440, the definition everything else derives from', () => {
@@ -105,6 +106,33 @@ describe('the shipped track data', () => {
   });
 });
 
+describe('the arrangement census the glide is justified by', () => {
+  it('recomputes the 72-of-120 figure quoted in music.ts and the commit', () => {
+    // music.ts's glide comment and PR #76 both quote "72 of 120 layers across
+    // the 24 arena-context suite members". CLAUDE.md: quote a measurement and
+    // you owe it a recomputing test -- otherwise an edit to music-tracks.json
+    // or music-suites.json silently falsifies the prose that justifies a
+    // feature. This is that test; it fails rather than lets the numbers rot.
+    const members = new Set<string>();
+    for (const s of SUITES) if (s.context === 'arena') for (const m of s.members) members.add(m);
+    const tracks = MUSIC_TRACKS.filter((t) => members.has(t.id));
+    const layers = tracks.flatMap((t) => t.tracks);
+    const silenced = layers.filter((l) => l.intensity > 0);
+    expect(members.size, 'the arena-context suite membership changed').toBe(24);
+    expect(layers.length, 'the arena-context layer population changed').toBe(120);
+    expect(silenced.length, 'the number of layers a 1.0 -> 0 drop silences changed').toBe(72);
+    // The SPLIT is the actual argument -- that what falls silent is every
+    // melodic and rhythmic voice, leaving only bass and pad. A census that
+    // matched 72 while moving a lead to threshold 0 would not.
+    const byVoice = (ls: typeof layers) =>
+      ls.reduce<Record<string, number>>((a, l) => ((a[l.voice] = (a[l.voice] ?? 0) + 1), a), {});
+    expect(byVoice(layers.filter((l) => l.intensity === 0)), 'the always-on voices changed')
+      .toEqual({ bass: 24, pad: 24 });
+    expect(byVoice(silenced), 'the silenced voices changed')
+      .toEqual({ stab: 36, lead: 22, pluck: 14 });
+  });
+});
+
 describe('the validator refuses bad data, naming the path', () => {
   const good = () => [
     { id: 'ok', stepSeconds: 1, tracks: [{ voice: 'bass', notes: ['A1', '-'] }] },
@@ -172,6 +200,32 @@ describe('the validator refuses bad data, naming the path', () => {
     expect(() => parseAll(bad)).toThrow(/intensity/);
   });
 
+  it('rejects a layer that is not a whole number of bars, and accepts one that is', () => {
+    // The bar-aligned context change reduces to `stepsIntoCycle % barSteps === 0`,
+    // which only names a downbeat if the bar divides every authored layer. This
+    // held for 31 of 31 shipped tracks by authoring habit and nothing checked it,
+    // so a new track could send every screen change off the downbeat silently.
+    const ragged = [{
+      id: 'ragged', stepSeconds: 0.5, barSteps: 3, chords: ['Am'],
+      tracks: [{ voice: 'bass', notes: ['A1', 'A1', 'A1', 'A1', 'A1', 'A1', 'A1', 'A1'], intensity: 0 }],
+    }];
+    expect(() => parseAll(ragged)).toThrow(/whole number of 3-step bars/);
+    // The negative control: the SAME track with a bar that does divide 8 must
+    // parse, so the rule is rejecting raggedness and not simply everything.
+    const even = [{ ...ragged[0], barSteps: 4 }];
+    expect(() => parseAll(even)).not.toThrow();
+  });
+
+  it('accepts every shipped track under the bar-divides-layer rule', () => {
+    // Recomputed rather than asserted as prose: this is the invariant the bar
+    // predicate in music.ts depends on, over the whole shipped population.
+    const offenders = MUSIC_TRACKS.filter((t) =>
+      t.barSteps > 0 && t.tracks.some((l) => l.notes && l.notes.length % t.barSteps !== 0),
+    ).map((t) => t.id);
+    expect(offenders, 'a shipped track is not a whole number of bars').toEqual([]);
+    expect(MUSIC_TRACKS.length, 'the shipped track population changed').toBe(31);
+  });
+
   it('freezes the WHOLE track, including chords and generate specs', () => {
     // A shallow freeze let one test mutate shipped data in place and leak it to
     // every other file through the module cache.
@@ -183,6 +237,25 @@ describe('the validator refuses bad data, naming the path', () => {
       expect(Object.isFrozen(layer)).toBe(true);
       if (layer.notes) expect(Object.isFrozen(layer.notes), 'notes[]').toBe(true);
       if (layer.generate) expect(Object.isFrozen(layer.generate), 'generate{}').toBe(true);
+    }
+  });
+
+  it('rejects pitches outside the audible band, naming the path', () => {
+    // The range guard's negative control, which review found missing -- the one
+    // check in this file whose failure mode was untested, against the module's
+    // own stated contract. 'A44' is the realistic fat-finger; 'C-2' is below
+    // hearing.
+    for (const [note, why] of [['A44', 'a typo for A4'], ['C-2', 'subsonic']] as const) {
+      const bad = [{ id: 'x', stepSeconds: 1, tracks: [{ voice: 'bass', notes: [note] }] }];
+      let message = '';
+      try {
+        parseAll(bad);
+        throw new Error('SHOULD HAVE THROWN');
+      } catch (e) {
+        message = String(e);
+      }
+      expect(message, why).toContain('outside the audible');
+      expect(message, why).toContain('[0].tracks[0].notes[0]');
     }
   });
 
