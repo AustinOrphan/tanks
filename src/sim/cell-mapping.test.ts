@@ -19,10 +19,11 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 4 shipped arenas -- three at 11x9 and arena-04
-    // at 15x11 -- plus the 17x13 fixture = 297 + 165 + 221 = 683 cells. The
-    // non-square boards matter here: a formula that confused cols with rows would
-    // round-trip fine on a square-ish board.
+    // Population: all cells of all 4 shipped arenas -- three at 33x27 and arena-04
+    // at 45x33 (each the old 11x9 / 15x11 board upscaled 3x) -- plus the 17x13
+    // fixture, untouched by the upscale = 891 + 891 + 891 + 1485 + 221 = 4379
+    // cells. The non-square boards matter here: a formula that confused cols with
+    // rows would round-trip fine on a square-ish board.
     let checked = 0;
     for (const arena of ARENAS_UNDER_TEST) {
       for (let r = 0; r < arena.rows; r++) {
@@ -33,7 +34,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(683);
+    expect(checked).toBe(4379);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {

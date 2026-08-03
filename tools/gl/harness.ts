@@ -263,7 +263,7 @@ check('screenToGround maps the canvas centre to the arena centre', () => {
 });
 
 check('refit re-aims ground, camera and screenToGround at a NEW board size', () => {
-  // The constraint this retires: every arena had to be 11x9 because the scene sized
+  // The constraint this retires: every arena had to be one fixed size because the scene sized
   // its ground plane, camera and shadow rig ONCE at construction. A refit to a wider
   // board must move all of it -- and the GL context must survive (in-place, not a
   // rebuild).
@@ -346,7 +346,7 @@ check('WIDE_ARENA (17x13) sizes correctly through refit, not just construction',
   return null;
 });
 
-check('refit moves the shadow camera with the board, no wasted margin', () => {
+check('the shadow map covers every corner of the framed board after a refit', () => {
   // The shadow lesson (extents fitted to the board, bias second) has to survive
   // refit: a wider board with the OLD extents clips casters at the edges, and OLD
   // extents kept oversized waste texels. Note the map stays 2048^2, so a larger
@@ -364,12 +364,33 @@ check('refit moves the shadow camera with the board, no wasted margin', () => {
     ctx.dispose();
     return 'no shadow-casting sun found';
   }
-  const cam = (sun as THREE.DirectionalLight).shadow.camera as THREE.OrthographicCamera;
+  // Assert the PROPERTY the shadow camera exists for -- every corner of the framed board
+  // projects inside the shadow map -- rather than restating scene.ts's own expression for
+  // it. The previous form recomputed `max(width,height)/2 + BOUNDARY` here and compared
+  // it to what scene.ts had just computed the same way, so it could only catch "the refit
+  // didn't move the camera"; a formula that stopped covering the board passed it. One
+  // did: sizing the square ortho to the longer SIDE clips the corners, because the ortho
+  // is oriented by the sun's azimuth and not by the board's axes.
+  const light = sun as THREE.DirectionalLight;
+  const cam = light.shadow.camera as THREE.OrthographicCamera;
+  light.updateMatrixWorld(true);
+  light.target.updateMatrixWorld(true);
+  light.shadow.updateMatrices(light);
+  const viewProj = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse);
   const wider = framedBounds(34, 18, BOUNDARY);
-  const wantHalf = Math.max(wider.width, wider.height) / 2 + BOUNDARY;
+  const outside: string[] = [];
+  const v = new THREE.Vector3();
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    v.set(34 / 2 + (sx * wider.width) / 2, 0, 18 / 2 + (sz * wider.height) / 2)
+      .applyMatrix4(viewProj);
+    if (Math.abs(v.x) > 1 || Math.abs(v.y) > 1) {
+      outside.push(`(${sx},${sz})->ndc ${v.x.toFixed(3)},${v.y.toFixed(3)}`);
+    }
+  }
+  const half = cam.right;
   ctx.dispose();
-  if (Math.abs(cam.right - wantHalf) > 1e-6) {
-    return `shadow half-extent ${cam.right}, want ${wantHalf}`;
+  if (outside.length > 0) {
+    return `${outside.length} of 4 framed corners fall outside the shadow map (half-extent ${half}): ${outside.join(' ')}`;
   }
   return null;
 });

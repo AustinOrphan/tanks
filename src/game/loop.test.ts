@@ -493,7 +493,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       tracksProgress: opts.tracksProgress ?? true,
       bounds: (level: number) =>
-        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 2 },
+        // Width/height are world-space (arenaBounds(ARENA_01)); cellSize is DELIBERATELY
+        // not ARENA_01.cellSize. While the fake echoed the shipped constant, the
+        // "sizes the renderer to the arena" assertion below could not tell "loop.ts
+        // passes shownBounds.cellSize through" from "loop.ts hardcodes the constant" --
+        // hardcoding it in loop.ts left all 142 tests in this file, levels.test.ts and
+        // framing.test.ts passing. An unshipped value makes the assertion discriminate.
+        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 1.5 },
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
         // The same reference the loop receives: post-build mutations (invincibility)
@@ -667,7 +673,8 @@ describe('startGameWith: construction', () => {
     const [, w, ht, boundary] = h.rec.rendererArgs[0];
     expect(w).toBe(width);
     expect(ht).toBe(height);
-    expect(boundary).toBe(CURRENT_ARENA.cellSize);
+    // The FAKE's cellSize, which is not CURRENT_ARENA.cellSize -- see the bounds fake.
+    expect(boundary).toBe(1.5);
     h.handle.dispose();
   });
 
@@ -1013,8 +1020,12 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
     const h = boot(makeDeps({ world }));
     h.setState('playing');
     // Several frames: AI tanks act, so events appear without needing the player
-    // to fire through the fake input.
-    for (let i = 1; i <= 12; i++) h.fireFrame(i * 100);
+    // to fire through the fake input. 30, not 12: tank ids now come from spawn
+    // order alone (arena.ts no longer shares a counter with walls), which reseeds
+    // every AI's per-tank RNG streams (ai/targeting.ts) and pushed ARENA_01's
+    // first AI shot at this seed from tick ~35 to tick ~95 -- 12 frames (~72
+    // ticks) stopped reaching a shot at all.
+    for (let i = 1; i <= 30; i++) h.fireFrame(i * 100);
     expect(h.rec.directed.length).toBeGreaterThan(0);
     expect(h.rec.machineSaw.length).toBe(h.rec.directed.length);
     expect(h.rec.directed.flat().length).toBe(h.rec.machineSaw.flat().length);
