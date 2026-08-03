@@ -253,12 +253,14 @@ but "some CI job already built this bundle" is not a thing anyone has shown.
 
 ## Ledger: deferred work harvested from PR descriptions
 
-**Compiled 2026-08-03, rebuilt after adversarial review.** Scope, stated exactly: the
-**21 of 77** merged PRs whose bodies carry an ATX heading matching `/residual/i`, plus #75
-while it was open. **PRs that record deferred work only in prose were NOT swept** — by the
-census in CLAUDE.md that is up to 15 more bodies, and spot-checks of four of them (#31,
-#45, #50, #74) all yielded open items, which are included below and marked. This is a
-floor on the backlog, not a sweep of history.
+**Compiled 2026-08-03, rebuilt after adversarial review.** Scope, stated exactly: the **20**
+PRs whose bodies carry an ATX heading matching `/residual/i` — #75 among them, still open
+when this was compiled, which an earlier draft double-counted as "21 plus #75". One of the
+20 (#58) is a false positive of that predicate: its heading is about *closing* a residual.
+**PRs that record deferred work only in prose were NOT swept** — roughly 15 more bodies, and
+spot-checks of four (#31, #45, #50, #74) all yielded open items, included below and marked.
+This is a floor on the backlog, not a sweep of history. Re-running the predicate today gives
+a different set: the merged population grows on every merge.
 
 **These lines are triage notes, not proven claims.** Each was checked once by grep against
 `a7b39ec`; none is pinned by a test unless it says so. Verify before acting. The three
@@ -379,7 +381,12 @@ Each needs a measurement, a browser, or a person.
 was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, since #73).
 8 remain unsettleable. 76 were still open.
 
-Those 76 became the **75** in-scope lines above, near enough one-to-one, with these
+The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the tree" — they
+are listed, not dropped, which an earlier draft's arithmetic missed by mapping the 76 onto
+all 75 in-scope lines including that section.
+
+The 76 open became the **67** in-scope lines of the first three groups, near enough
+one-to-one, with these
 adjustments: 4 are PR #75's residuals and live in the "Follow-ups from walls as geometry"
 spike; 1 is the intensity spike; 1 is a null item (no save system references tank ids);
 2 share the audio-assets line; 2 were one corner defect counted twice and are now one

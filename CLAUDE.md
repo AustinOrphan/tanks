@@ -442,7 +442,43 @@ Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anythi
 
 **Deferred work goes in `docs/superpowers/backlog.md`** — spikes carry what the question is
 and what would answer it; the ledger below them carries one-line pointers. A PR that defers
-something adds its entry in the same PR.
+something adds its entry in the same PR, **and a PR that closes something deletes its entry
+in the same PR.**
+
+The second half is the one that rots, and it is not a tidiness rule. When the previous
+arrangement was finally harvested, a one-pass triage of the 20 merged PR bodies carrying a
+`/residual/i` heading enumerated 147 items and found **63 already done** — roughly two in
+five. Read that as an order of magnitude rather than a rate: what counts as "one item" was
+a judgement call, not a command, and the ~15 PRs recording deferred work only in prose were
+never swept. `docs/superpowers/backlog.md` carries the breakdown.
+
+Two caveats on using it as evidence, since both cut against the rule. Nobody *could* have
+struck those out — a merged description is immutable, so the rot was structural rather than
+negligence. And `backlog.md` is days old, so its own rot rate is unmeasured. The number is
+the reason to expect the failure here, not proof it has happened. What it does establish is
+the cost: a reader who cannot separate live entries from dead ones has to re-derive them,
+which is the whole expense the file exists to remove. Deleting the line is part of the work,
+not follow-up to it.
+
+`tools/backlog.test.ts` makes the deletion cheap to get right rather than merely required:
+it cross-checks the ledger's stated counts against the list itself and pins no count literal
+of its own, so deleting a line and updating the `Counts:` paragraph is a **one-file edit that
+goes green**. It shipped with literals first, which made this sentence false — fixing the
+header left the build red until the TEST's expected values were edited too, and "repair the
+red build by changing what the test expects" is the habit that ends guards. If you find
+yourself editing an expected count in `backlog.test.ts`, stop: you are removing the guard,
+not satisfying it.
+
+**What it does not see: everything above the `## Ledger` heading.** The spikes and the
+numbered follow-up entries are unguarded, so closing one goes green either way — and closing
+a spike often strands ledger lines that cite the same PR, so grep for that PR number before
+calling it done. Green is not evidence you got this right; red is evidence you did not.
+
+Two cases the binary rule does not cover. If a line bundled several facts and only one is
+settled, **rewrite it down to what is still true** rather than deleting it, and say in the PR
+body which half closed. If you verify a line and find it **false rather than done**, delete
+it and itemise it under "Where the numbers went" — two lines already there were removed that
+way. A wrong entry costs a reader more than a missing one.
 
 That file exists because the previous arrangement was "merged PR descriptions carry the
 detailed residual backlog". Over the 77 merged PRs, 20 bodies carry an ATX heading matching
