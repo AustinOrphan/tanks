@@ -879,7 +879,7 @@ git commit -m "tests: move the wall-count denominators the merge shrinks, and pi
 Merged walls render as one `BoxGeometry` per rectangle instead of one per cell (`render/entities.ts:568`), and the solid material carries a **normal map** — tiling stretches over a larger box, so this needs eyes, not just a green `test:gl`.
 
 ```bash
-node /home/dev/.claude/jobs/34bc5380/tmp/shoot.mjs 5231 '?dev=1&level=1&seed=7' /tmp/after-1.png
+node /home/dev/.claude/jobs/17681316/tmp/shoot.mjs 5231 '?dev=1&level=1&seed=7' /tmp/after-1.png
 ```
 
 Compare each against the same shot before this branch. Geometry should be unchanged; report any seam or texture-scale difference rather than waving it through.
@@ -921,11 +921,26 @@ destructible cell is a destruction UNIT: mine blasts destroy by world-space radi
 (`mines.ts`), so a finer grid means finer breaching. arena-02's centre barrier is
 authored as adjacent blocks whose separate destruction is the level's design.
 
+**A hull INSIDE a wall escapes the mass, not the sub-cell.** `circleVsAABB`'s `inside`
+branch pushes out through the nearest face of the ONE box it is handed, which for a
+sub-cell is usually a buried internal seam — so the same hull in the same place resolved
+differently depending only on the slicing (measured: 780 of 1,681 interior centres on an
+isolated destructible mass). `resolveWalls` now marches box to box along each axis to
+find where the wall MASS ends, which is a property of the union. `circleVsAABB` itself is
+untouched, because `bullets.ts` depends on it. This was reachable, not theoretical:
+`separateTanks` drives hulls up to 0.375 units into a block and `stepMovement` calls
+`resolveWalls` immediately afterwards.
+
 `src/sim/decomposition.test.ts` pins the property directly — the same geometry
 expressed at two cell sizes must agree on `resolveWalls`, `lineOfSight` and `bankShot`.
 `tools/baseline/trace.test.ts` is a golden trace over 4 arenas x 6 seeds x 2500 ticks
 and is now ASSERTED, not merely printed: `determinism.test.ts` only proves
-self-consistency, which is invariant under behaviour changes.
+self-consistency, which is invariant under behaviour changes. **Know what it does not
+cover.** Across this work the hash moved for the tank-id and wall-merge changes and for
+the deepest-overlap resolver, but did NOT move for the bank-shot rewrite or the
+inside-wall escape — the seeded replay never drives a hull inside a wall and never
+depends on which reflector was chosen. It is a pin on arena and movement behaviour; the
+decomposition guarantees are held by `decomposition.test.ts`, not by this hash.
 ```
 
 - [ ] **Step 3: Sync and gate**
