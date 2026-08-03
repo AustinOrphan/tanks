@@ -231,8 +231,13 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
 
   it('resolves a hull whose centre is inside the mass identically', () => {
     const interiorPts = pts.filter((p) => inside(p, a) && inside(p, b));
-    // Population pin: the complement of the exterior sweep, same 1024-point grid.
-    expect(interiorPts.length).toBeGreaterThan(20);
+    // Population pin: 176 of the 1024 swept points -- the exact complement of the 848-point
+    // exterior sweep above. `interiorPts` requires inside BOTH decompositions (`&&`), which
+    // happens to equal the OR-complement (inside at least one) for this fixture: verified
+    // by measuring inside(a)||inside(b) separately, also 176 -- the destructible fine sub-
+    // cells partition their coarse cell without changing the union's footprint, so a point
+    // is never inside one decomposition's wall without being inside the other's too.
+    expect(interiorPts.length).toBe(176);
     for (const p of interiorPts) {
       const ta = makeTank(1, 'player', { ...p }, 0);
       const tb = makeTank(1, 'player', { ...p }, 0);

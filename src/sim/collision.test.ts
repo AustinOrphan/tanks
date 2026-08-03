@@ -340,10 +340,20 @@ describe('resolveWalls', () => {
 
   it('escapes a boundary-flush wall inward, never through the boundary ring', () => {
     // A cell flush against the LEFT boundary (its minX sits exactly on the boundary
-    // wall's maxX, the way any shipped arena's edge column does) -- the risk this guards
-    // is the escape march finding the boundary CONTIGUOUS with the cell and walking
-    // straight through it, landing the hull outside the play area with nothing left to
-    // contain it.
+    // wall's maxX) -- one cell deep in the boundary-normal direction, the SIMPLEST case
+    // of this shape. This test proves only that case, not that every shipped arena's edge
+    // geometry is safe: arena-02's rows 12-14 put a 3-cell-DEEP destructible run flush
+    // against each side boundary, and that geometry DOES let the escape march cross the
+    // boundary for some interior starts (measured: 544 of 20,000 swept points, deepest
+    // safe/shallowest divergent start 0.6767 units in -- deeper than the 0.375-unit shove
+    // `world.ts:98-101` documents, so judged unreachable but NOT proven safe by this test).
+    // See task-5b-report.md's "Boundary-flush behaviour" section for the full numbers and
+    // why a 1-cell-deep run (this fixture) and a 3-cell-deep run (arena-02) are genuinely
+    // different cases, not the same claim at two scales.
+    //
+    // The risk this test DOES guard: the escape march finding the boundary CONTIGUOUS with
+    // a 1-cell-deep wall and walking straight through it, landing the hull outside the play
+    // area with nothing left to contain it.
     //
     // Deliberately NOT symmetric, and deliberately blocking up/down far away: the tie-
     // break (push VECTOR, smallest x then smallest y -- see resolveWalls's own doc
@@ -375,6 +385,67 @@ describe('resolveWalls', () => {
     expect(t.pos.x).toBeGreaterThanOrEqual(0);
     expect(t.pos.x).toBeCloseTo(2.5, 9);
     expect(t.pos.y).toBeCloseTo(1, 9);
+  });
+
+  it('the escape march does not treat a DESTROYED wall as part of the mass', () => {
+    // Three walls in a row: wall1 [0,2], wall2 [2,4] DESTROYED (a mine-blasted gap), wall3
+    // [4,6]. Tank centre at (1.9, 1), just inside wall1's right edge. Up/down/left are
+    // blocked far away so right is the only competitive direction, isolating exactly the
+    // mechanism under test: does the march stop at the destroyed gap (correct, real
+    // distance 0.1 through the sliver of wall1 left of x=2) or keep going through wall2 as
+    // though it were solid (wrong, would add wall2's and wall3's spans: 0.1 + 2 + 2 = 4.1)?
+    const wall1: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
+    const wall2: Wall = { id: 2, kind: 'solid', destroyed: true, aabb: { minX: 2, minY: 0, maxX: 4, maxY: 2 } };
+    const wall3: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: 4, minY: 0, maxX: 6, maxY: 2 } };
+    const blockerL: Wall = { id: 4, kind: 'solid', destroyed: false, aabb: { minX: -100, minY: 0, maxX: 0, maxY: 2 } };
+    const blockerU: Wall = { id: 5, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: -100, maxX: 2, maxY: 0 } };
+    const blockerD: Wall = { id: 6, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 2, maxX: 2, maxY: 102 } };
+    const t = makeTank(1, 'player', { x: 1.9, y: 1 }, 0);
+    resolveWalls(t, [wall1, wall2, wall3, blockerL, blockerU, blockerD]);
+    // Correct: escapes right by 0.1 + TANK_RADIUS, landing at x=2.5. Verified this fails
+    // under the mutation (dropping `!x.destroyed` from unionExitDistance's `find`), landing
+    // at x=6.5 instead -- see task-5b-report.md.
+    expect(t.pos.x).toBeCloseTo(2.5, 9);
+    expect(t.pos.y).toBeCloseTo(1, 9);
+  });
+
+  it('escapes a symmetric box on the push-vector tie-break, matching the deepest-overlap pass', () => {
+    // A perfectly centred hull inside a 2x2 box: all four axis distances tie at exactly 1.
+    // resolveWalls's own doc comment claims ties break on the push VECTOR (smallest x, then
+    // smallest y) "for the same reason the deepest-overlap pass does" -- and the deepest-
+    // overlap pass has its own dedicated tie-break test above ("breaks a tie on the push
+    // vector, not wall array order"). This is that test's equivalent for the escape-march
+    // branch: with the vector tie-break, AXES processing order [right, left, down, up]
+    // lands on LEFT (candidate x=-1.5 beats right's +1.5, and beats down/up's x=0), giving
+    // a final position of (-0.5, 1).
+    const wall: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
+    const t = makeTank(1, 'player', { x: 1, y: 1 }, 0);
+    resolveWalls(t, [wall]);
+    // Verified this fails under the mutation (reducing the tie-break to a bare `d <
+    // escapeDist`, so the first-scanned direction keeps a tied result): the first-scanned
+    // axis is RIGHT, so the mutant lands at (2.5, 1) instead -- see task-5b-report.md.
+    expect(t.pos.x).toBeCloseTo(-0.5, 9);
+    expect(t.pos.y).toBeCloseTo(1, 9);
+  });
+
+  it('a centre exactly on the seam between two adjacent walls is recognised as inside', () => {
+    // containsPoint's bounds are inclusive (>=/<=). At the exact seam x=2 between wallA
+    // [0,2] and wallB [2,4], inclusive bounds mean BOTH walls claim the point as contained,
+    // so the outer "is the centre inside any wall" check fires and the union march runs
+    // (escaping via the shorter y-axis here: down/up both cost 1, versus left/right's 2
+    // each through a single wall -- tie-break picks up, landing at (2, -0.5)). A strict `>`/
+    // `<` bound would have NEITHER wall claim the seam point, skipping the march entirely
+    // and falling back to the old deepest-overlap `circleVsAABB` pass, which resolves the
+    // same seam differently (landing at (2.5, -0.5) -- verified by mutation, see
+    // task-5b-report.md). Dyadic coordinates are a real class of position this codebase
+    // already treats as reachable, not a contrived float coincidence -- see "breaks a tie
+    // on the push vector" above, which makes the identical argument for a diagonal corner.
+    const wallA: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
+    const wallB: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 2, minY: 0, maxX: 4, maxY: 2 } };
+    const t = makeTank(1, 'player', { x: 2, y: 1 }, 0);
+    resolveWalls(t, [wallA, wallB]);
+    expect(t.pos.x).toBeCloseTo(2, 9);
+    expect(t.pos.y).toBeCloseTo(-0.5, 9);
   });
 
   it('does not apply a push for an overlap at or below SWEEP_EPS', () => {
