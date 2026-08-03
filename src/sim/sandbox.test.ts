@@ -119,3 +119,51 @@ it('round-trips EVERY enemy kind, so the two spawn-letter tables cannot drift ap
     expect(spawns.filter((s) => s.kind !== 'player').map((s) => s.kind), kind).toEqual([kind]);
   }
 });
+
+it('places every tank at the WORLD position its anchor was authored for, at any cell size', () => {
+  // The sandbox borrows ARENA_01's cols/rows/cellSize but authors its anchors in cells of
+  // SANDBOX_AUTHORED_CELL. When the shipped arenas were re-expressed 3x finer, the board
+  // stayed 22x18 world units while these anchors, read as raw indices, collapsed into its
+  // top-left ninth -- every tank inside x<7.34, y<6.0, enemies ~3x closer to the player.
+  //
+  // The whole existing file passed throughout, because it pins grid characters and never
+  // world geometry. This asserts the world positions, which is the property that broke.
+  const { tanks } = loadArena(sandboxArena({ tanks: ['brown', 'grey', 'teal'] }));
+  const at = (kind: string) => tanks.find((t) => t.kind === kind)!.pos;
+
+  // The authored anchors, in world units: cell (c,r) of a 2.0 grid sits at (2c+1, 2r+1).
+  expect(at('player')).toEqual({ x: 11, y: 15 });
+  expect(at('brown')).toEqual({ x: 3, y: 5 });
+  expect(at('grey')).toEqual({ x: 19, y: 5 });
+  expect(at('teal')).toEqual({ x: 7, y: 3 });
+
+  // ...and they are spread across the board, not bunched in one corner. Both halves of
+  // each axis must be occupied; the collapse put every tank below the midpoint of both.
+  const { width, height } = arenaBounds(sandboxArena({ tanks: ['brown', 'grey', 'teal'] }));
+  expect(tanks.some((t) => t.pos.x > width / 2)).toBe(true);
+  expect(tanks.some((t) => t.pos.y > height / 2)).toBe(true);
+});
+
+it('scatters walls a tank cannot walk through, and keeps them clear of every spawn', () => {
+  // `walls=N` is meant to place N tank-sized blocks. At a 3x-finer cell size a single
+  // grid cell is 0.667 units against a 1.0 tank diameter, so the knob quietly started
+  // producing pillars. It also stopped clearing spawns: the "walls may not crowd a tank
+  // at birth" ring is a Chebyshev radius in CELLS, so its world reach shrank with them.
+  const arena = sandboxArena({ tanks: ['brown', 'grey', 'teal'], walls: 4, seed: 7 });
+  const { walls, tanks } = loadArena(arena);
+  const interior = walls.filter(
+    (w) => w.aabb.minX > 0 && w.aabb.minY > 0
+      && w.aabb.maxX < arena.cols * arena.cellSize && w.aabb.maxY < arena.rows * arena.cellSize,
+  );
+  expect(interior.length).toBeGreaterThan(0); // population guard: not a vacuous sweep
+  for (const w of interior) {
+    expect(w.aabb.maxX - w.aabb.minX).toBeCloseTo(2, 9);
+    expect(w.aabb.maxY - w.aabb.minY).toBeCloseTo(2, 9);
+    // No block may sit within a full authored block of any tank's centre.
+    for (const t of tanks) {
+      const dx = Math.max(w.aabb.minX - t.pos.x, 0, t.pos.x - w.aabb.maxX);
+      const dy = Math.max(w.aabb.minY - t.pos.y, 0, t.pos.y - w.aabb.maxY);
+      expect(Math.max(dx, dy), `${t.kind} vs wall ${w.id}`).toBeGreaterThan(0.5);
+    }
+  }
+});

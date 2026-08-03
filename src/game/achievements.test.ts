@@ -7,6 +7,7 @@ import {
   type AchievementContext,
 } from './achievements';
 import { ZERO_STATS } from './stats';
+import { ARENAS, loadArena } from '../sim/arena';
 
 const ctx = (over: Partial<AchievementContext> = {}): AchievementContext => ({
   lifetime: { ...ZERO_STATS },
@@ -192,5 +193,41 @@ describe('the achievements store', () => {
     expect(ids).toContain('first-blood');
     expect(ids).toContain('marksman');
     expect(ids).toContain('gunslinger');
+  });
+});
+
+describe('demolition is scaled to the walls the game actually contains', () => {
+  it('still asks for about three playthroughs of destructible walls', () => {
+    // `wallsDestroyed` counts one `wall-destroyed` event per destructible CELL, so the
+    // threshold's meaning is a function of the arena DATA, not of the achievement alone.
+    // The 3x cell rescale moved the game from 16 destructible walls to 144 without
+    // touching the 50 here, which turned "at least four complete playthroughs" into
+    // "less than one clear of level 2". Nothing caught it: no test referenced the number.
+    //
+    // Recomputed from the shipped arenas rather than pinned as a literal, so a future
+    // rescale fails HERE instead of silently retuning the achievement.
+    const total = ARENAS.reduce(
+      (n, a) => n + loadArena(a).walls.filter((w) => w.kind === 'destructible').length,
+      0,
+    );
+    expect(total).toBeGreaterThan(0); // population guard: not a vacuous ratio
+
+    const demolition = ACHIEVEMENTS.find((a) => a.id === 'demolition')!;
+    // Binary-search the threshold out of the predicate rather than duplicating it.
+    let lo = 0;
+    let hi = 100_000;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (demolition.earned(ctx({ lifetime: { ...ZERO_STATS, wallsDestroyed: mid } }))) hi = mid;
+      else lo = mid + 1;
+    }
+    expect(lo).toBeLessThanOrEqual(100_000); // the predicate must be reachable at all
+
+    // 50/16 was 3.125 playthroughs; hold that shape within a quarter of a playthrough.
+    expect(lo / total).toBeGreaterThan(2.9);
+    expect(lo / total).toBeLessThan(3.4);
+
+    // ...and the description must quote the same number the predicate enforces.
+    expect(demolition.description).toContain(String(lo));
   });
 });

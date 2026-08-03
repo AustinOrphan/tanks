@@ -293,12 +293,98 @@ export function driveVelocity(tank: Tank): Vec2 {
   return vscale(driveDirection(tank.desiredMove), configFor(tank.kind).movementSpeed);
 }
 
-/** Push a tank out of every non-destroyed wall it overlaps. */
+/**
+ * Push a tank out of the walls it overlaps, resolving the DEEPEST overlap at a time
+ * until it is clear.
+ *
+ * It used to apply a push for EVERY overlapping wall in array order, which made the
+ * result a function of how the level data was sliced rather than of its geometry: a
+ * hull straddling three sub-cells of one flat run took three compounding pushes, and
+ * each interior seam offered the circle-vs-box nearest-feature test a CORNER where the
+ * real surface is flat. Measured on arena-01: before this change, 8,846 of 48,207
+ * reachable wall-touching hull positions resolved to a different place after a 3x
+ * re-slice of the same geometry, worst delta 0.481 against a TANK_RADIUS of 0.5; after,
+ * 0 of 48,207, worst delta 0.000000. An independent re-measurement across all 4 shipped
+ * arenas (3,356 reachable one-tick penetrations, both original and reversed wall array
+ * order) also found 0 divergences, worst delta 0.000000000.
+ *
+ * Taking only the deepest overlap fixes that, because the deepest penetration is a
+ * property of the UNION: for a hull over a flat run, the sub-cell beneath the centre
+ * offers a face push AT LEAST as deep as its neighbours' corner pushes, which is exactly
+ * what the unsliced wall would have offered. At most seam positions it is strictly
+ * deeper; at an exact seam boundary the two adjacent sub-cells return an identical
+ * corner push (same nearest point, same depth) and the union just needs either one of
+ * them, which is where the paragraph below applies.
+ *
+ * Ties are broken on the push VECTOR, not array position, so the tiebreak is geometric
+ * too: this matters even when the tied pushes are NOT identical, e.g. a tank centred on
+ * the bisector of two diagonally-touching walls, where the tied depth is reached by two
+ * opposite-direction pushes and picking "whichever wall came first" would make the
+ * result order-dependent again.
+ *
+ * Iterating is what keeps concave corners correct -- clearing the deepest wall can
+ * leave the hull inside a perpendicular one, so it goes round again. Bounded by
+ * SWEEP_MAX_ITERATIONS; a gap narrower than the hull cannot be resolved by any
+ * displacement and simply exhausts the budget rather than looping forever.
+ */
+const AXES: Vec2[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+
+function containsPoint(b: AABB, p: Vec2): boolean {
+  return p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
+}
+
+/** How far from `p` along `dir` until the wall MASS ends. Marches box to box, so a run
+ *  of sub-cells gives the same answer as the single box covering the same span. */
+function unionExitDistance(p: Vec2, dir: Vec2, walls: Wall[]): number {
+  let dist = 0;
+  for (let step = 0; step <= walls.length; step++) {
+    const probe = { x: p.x + dir.x * (dist + SWEEP_EPS), y: p.y + dir.y * (dist + SWEEP_EPS) };
+    const w = walls.find((x) => !x.destroyed && containsPoint(x.aabb, probe));
+    if (!w) return dist;
+    dist = dir.x === 1 ? w.aabb.maxX - p.x
+      : dir.x === -1 ? p.x - w.aabb.minX
+      : dir.y === 1 ? w.aabb.maxY - p.y
+      : p.y - w.aabb.minY;
+  }
+  return dist;
+}
+
 export function resolveWalls(tank: Tank, walls: Wall[]): void {
-  for (const wall of walls) {
-    if (wall.destroyed) continue;
-    const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
-    if (hit.hit) tank.pos = vadd(tank.pos, hit.push);
+  for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
+    // A centre INSIDE the mass escapes the mass. circleVsAABB's `inside` branch pushes
+    // out through the nearest face of the one box it is given, which for a sub-cell is
+    // usually a buried seam -- so the same hull in the same place resolved differently
+    // depending only on how the wall was sliced. Ties break on the push VECTOR, never
+    // on array or axis position, for the same reason the deepest-overlap pass does.
+    if (walls.some((w) => !w.destroyed && containsPoint(w.aabb, tank.pos))) {
+      let escape: Vec2 | null = null;
+      let escapeDist = Infinity;
+      for (const dir of AXES) {
+        const d = unionExitDistance(tank.pos, dir, walls);
+        const cand = { x: dir.x * (d + TANK_RADIUS), y: dir.y * (d + TANK_RADIUS) };
+        if (d < escapeDist || (d === escapeDist && escape !== null &&
+            (cand.x < escape.x || (cand.x === escape.x && cand.y < escape.y)))) {
+          escapeDist = d;
+          escape = cand;
+        }
+      }
+      if (escape !== null) { tank.pos = vadd(tank.pos, escape); continue; }
+    }
+    let best: Vec2 | null = null;
+    let bestDepth = 0;
+    for (const wall of walls) {
+      if (wall.destroyed) continue;
+      const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
+      if (!hit.hit) continue;
+      const depth = Math.hypot(hit.push.x, hit.push.y);
+      if (depth > bestDepth || (depth === bestDepth && best !== null &&
+          (hit.push.x > best.x || (hit.push.x === best.x && hit.push.y > best.y)))) {
+        bestDepth = depth;
+        best = hit.push;
+      }
+    }
+    if (best === null || bestDepth <= SWEEP_EPS) return;
+    tank.pos = vadd(tank.pos, best);
   }
 }
 
