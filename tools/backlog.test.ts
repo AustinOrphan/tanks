@@ -162,7 +162,7 @@ describe('backlog.md quotes numbers it can still justify', () => {
     // looks like.
     const enumerated = figure(FLAT_BACKLOG, /(\d+) items were enumerated/, 'backlog enumerated');
     const closed = figure(FLAT_BACKLOG, /(\d+) were already closed by later work/, 'backlog closed');
-    const quoted = /enumerated (\d+) items and found \*\*(\d+) already done\*\*/.exec(FLAT_CLAUDE);
+    const quoted = /enumerated (\d+) items.{0,80}?found \*\*(\d+) already done\*\*/.exec(FLAT_CLAUDE);
     expect(quoted, "CLAUDE.md's harvest sentence must exist and keep its shape").not.toBeNull();
     expect(Number(quoted![1])).toBe(enumerated);
     expect(Number(quoted![2])).toBe(closed);

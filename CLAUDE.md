@@ -465,11 +465,12 @@ One collision worth knowing: a ledger line ends in `#N` meaning **the PR it came
 an issue is also `#N`. Write `issue #N` when you mean an issue.
 
 The second half is the one that rots, and it is not a tidiness rule. When the previous
-arrangement was finally harvested, a one-pass triage of the 20 merged PR bodies carrying a
-`/residual/i` heading enumerated 147 items and found **63 already done** — roughly two in
-five. Read that as an order of magnitude rather than a rate: what counts as "one item" was
-a judgement call, not a command, and the ~15 PRs recording deferred work only in prose were
-never swept. `docs/superpowers/backlog.md` carries the breakdown.
+arrangement was finally harvested, a one-pass triage enumerated 147 items across the PRs it
+swept and found **63 already done** — roughly two in five. Read that as an order of magnitude
+rather than a rate: what counts as "one item" was a judgement call, not a command; the swept
+set is enumerated in `backlog.md` rather than defined by a predicate (three drafts stated it
+as a PR count and all three were false); and the PRs recording deferred work only in prose
+were not swept. `docs/superpowers/backlog.md` carries the breakdown.
 
 Two caveats on using it as evidence, since both cut against the rule. Nobody *could* have
 struck those out — a merged description is immutable, so the rot was structural rather than
@@ -500,13 +501,14 @@ it and itemise it under "Where the numbers went" — two lines already there wer
 way. A wrong entry costs a reader more than a missing one.
 
 That file exists because the previous arrangement was "merged PR descriptions carry the
-detailed residual backlog". Over the 77 merged PRs, 20 bodies carry an ATX heading matching
-`/residual/i` and 35 mention deferred work anywhere (`/residual|backlog|defer|follow[- ]?up|
-future work|next step|out of scope|not doing/i`) — so finding an open item meant reading 77
-PR bodies and hoping. **Both numbers move on every merge; re-run the predicate rather than
-trusting them.** A first pass harvested the PRs with a heading; PRs that record deferred
-work only in prose have NOT been swept, so a merged PR body is still the only home for
-some of it.
+detailed residual backlog". Roughly a quarter of merged PR bodies carry an ATX heading
+matching `/residual/i` and about half mention deferred work anywhere
+(`/residual|backlog|defer|follow[- ]?up|future work|next step|out of scope|not doing/i`) — so
+finding an open item meant reading every PR body and hoping. **Deliberately no counts here:
+they move on every merge, and each time one was written down it was stale within the hour.
+Run the predicate if you need a number.** A first pass harvested most of the PRs with a
+heading; those recording deferred work only in prose have NOT been swept, so a merged PR body
+is still the only home for some of it.
 
 Most of this section is a landmine map rather than a task list: it records what has already
 been tried and must not be re-attempted, and that part stays here. The exception is the
