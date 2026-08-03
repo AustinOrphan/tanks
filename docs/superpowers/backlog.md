@@ -189,29 +189,37 @@ commit message.
 
 ## Ledger: deferred work harvested from PR descriptions
 
-**Compiled 2026-08-03**, by triaging every PR that records deferred work — 20 merged plus
-the open #75 — against the tree at `a81139e` (`origin/curve` at `951c3db` for #75's own
-items). **147 items were enumerated; 62 had already been closed by later work and are not
-listed here; 9 cannot be settled by reading the tree.**
+**Compiled 2026-08-03**, by triaging every PR that records deferred work — 20 merged, plus
+#75 while it was still open. **147 items were enumerated; 62 had already been closed by
+later work and are not listed here; 9 cannot be settled by reading the tree.** Compiled
+against `a81139e`, then re-verified against `a7b39ec` after #75 merged, since the arena
+resolution change rewrote wall geometry.
 
-The 76 that are still open resolve to the 74 lines below, and the arithmetic is meant to
-be checkable: 1 of the 76 is "the music does not vary by level", which is already the
-spike above rather than a ledger line, and 1 is the null item "no save system references
-tank ids, so save-compat is N/A" — true, with nothing to do about it. Two PRs raised the
-committed-audio-assets item independently (#1 and #64) and it is one line here. One line
-below came from this triage rather than from any PR body, and says so.
+The 76 that are still open resolve to the 70 lines below, and the arithmetic is meant to
+be checkable:
+
+- **4** are PR #75's own residuals, which are already the "Follow-ups from walls as
+  geometry" entry above — with numbers RE-MEASURED during that PR's final review. An
+  earlier draft of this ledger carried the pre-review figures (0.677 units, merged walls
+  only) beside the corrected ones in the same file. Deleted rather than reconciled: the
+  entry above is the record.
+- **1** is "the music does not vary by level", which is the intensity spike above.
+- **1** is the null item "no save system references tank ids, so save-compat is N/A" —
+  true, with nothing to do about it.
+- **2** PRs raised the committed-audio-assets item independently (#1 and #64), and it is
+  one line here.
+- **1** line below came from this triage rather than from any PR body, and says so.
 
 Ledger lines are one-liners on purpose. A spike above earns its length by having a
 measurement behind it; a ledger line is a pointer — enough to find the thing, not enough
 to skip re-deriving it. Promote a line to a spike when someone is about to act on it.
 
-Each line names the PR it came from. A line marked **(curve)** was judged against
-`origin/curve`, so it describes PR #75's tree rather than `main`'s.
+Each line names the PR it came from.
 
 ### Gaps with a reachability argument
 
-- Retroreflecting seams at wall cell boundaries; `collision.ts` retroreflects on `onX && onY`. See §Known holes in CLAUDE.md for the fix that was tried and reverted. #1 — **(curve changes the geometry: solid runs merge, so which faces carry it moves)**
-- `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:250` documents the divergence rather than closing it. #1
+- Retroreflecting seams at wall boundaries; `collision.ts:252` still retroreflects on `onX && onY`. #75 merged solid runs (`mergeSolidRuns`), which moves WHICH faces carry it but not the hazard in kind, and the measurement in §Known holes predates that merge. See CLAUDE.md for the fix that was tried and reverted. #1
+- `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:333` documents the divergence rather than closing it. #1
 - `bounceIndex` can repeat across ticks: a corner emits two ricochet events but decrements `bouncesLeft` once. #1
 - A corner charges one bounce for two reflections (`collision.ts`, the `if (corner)` branch). #1
 - `resolveBulletHits` skips dead tanks, so a shell whose target died earlier in the same tick is never consumed. #2
@@ -224,8 +232,6 @@ Each line names the PR it came from. A line marked **(curve)** was judged agains
 - arena-01's brown holds a geometric bank onto the player spawn, spared only by `STATIC_BASIC.bankShotWeight === 0`. Raising that one scalar re-arms the rule, and no test pins arena-01's geometry against it. #69
 - `fitCameraToArea`'s bisection bracket `hi = span * 8` is unvalidated; below aspect ~0.147 the fallback returns a cropping camera. Test aspects run 0.46–3.0. #5
 - `framedAreaFits` projects the ground plane only (`y = 0` is hardcoded), so wall tops sit outside the fit; the ring starts clipping at wall height ~1.55. #5
-- arena-02's boundary-flush destructible run can be escaped past the ring from ≥ 0.677 units deep; nothing samples depth *inside* the `separateTanks`/`resolveWalls` alternation. #75 **(curve)**
-- Merged solid walls tile the one shared `concreteNormal` at the wrong density — no clone, no size-dependent repeat. #75 **(curve)**
 
 ### Unpinned behaviour — no test would catch the regression
 
@@ -244,8 +250,6 @@ Each line names the PR it came from. A line marked **(curve)** was judged agains
 - `createBrowserDeps` is only partly reachable: two same-shaped `() => number` factories inside the literal could be swapped and survive. #6
 - `dispose()` ordering was never swept; the assertion `.sort()`s, making it explicitly order-insensitive. #6
 - `renderer.dispose()` idempotency is still unmeasured — **the stated blocker has lifted**, since `tools/gl/harness.ts` now runs in a real browser and already calls `dispose()`. #6
-- `loop.test.ts` still asserts "an AI fired within 30 frames" — a time bound that moves whenever AI RNG timing moves, rather than a deterministic event. #75 **(curve)**
-- Wall mesh and material counts rose 1.6×–4.1×; `makeWall` allocates a `BoxGeometry` and a material each, and nothing measures the render cost. #75 **(curve)**
 - The GL harness exercises `refit()` against the `WIDE_ARENA` fixture, not against shipped arena-04. #67
 - A `lane` claim's `to` endpoint is a plain floor cell pinned by nothing. #67
 - `makeTank`/`mkTank` is redefined in **10 test files**; `src/sim/test-helpers.ts` still does not exist. #2
