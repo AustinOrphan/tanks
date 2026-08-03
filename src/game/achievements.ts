@@ -96,8 +96,16 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
   {
     id: 'demolition',
     label: 'Demolition',
-    description: 'Blow apart 50 walls.',
-    earned: (c) => c.lifetime.wallsDestroyed >= 50,
+    // A `wall-destroyed` event is one destructible CELL, and the 3x arena rescale made a
+    // cell an eighteenth of the area it was: the whole game held 16 destructible walls
+    // (arena-01 2, -02 8, -03 3, -04 3) and now holds 144 (18 / 72 / 27 / 27). At the old
+    // 50 this needed at least four complete playthroughs; unchanged it would be cleared
+    // inside level 2 alone, which holds 72, by roughly three well-placed mines.
+    //
+    // Scaled by the same 9x so the ASK is what it was. It is one number and pure feel --
+    // retune it freely, but do not read the old 50 as still meaning what it meant.
+    description: 'Blow apart 450 walls.',
+    earned: (c) => c.lifetime.wallsDestroyed >= 450,
   },
   {
     id: 'trick-shot',
