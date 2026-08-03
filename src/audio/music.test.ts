@@ -1,7 +1,7 @@
 // The bed schedules against the AUDIO clock, so a fake context plus an injected
 // timer makes the whole thing testable without waiting in real time.
 import { describe, it, expect } from 'vitest';
-import { createMusicBed } from './music';
+import { createMusicBed, INTENSITY_GLIDE_SECONDS } from './music';
 import { noteToHz, trackById, type MusicTrackDef } from './music-data';
 import { MUSIC_TRACK_ID } from './engine';
 import { parseChord } from './chords';
@@ -885,6 +885,206 @@ describe('composed tracks', () => {
       expect(harmony, `scheduled ${hz}Hz: neither authored nor in the harmony`).toContain(pc);
     }
     bed.stop();
+  });
+
+  it('SNAPS to the asked-for density on start, rather than gliding in from the last life', () => {
+    // The glide softens a change during play. A fresh bed is not a change: on
+    // start it must already be at the density the game asked for, or the bed
+    // opens by gliding from a value nobody asked for.
+    //
+    // In the shipped game this fires at BOOT, not on respawn: `stopMusic` has
+    // no production caller, so `start()`'s body runs once per page load and a
+    // lost life never restarts the bed. An earlier version of this comment said
+    // "every respawn" -- review showed that path does not exist. It is pinned
+    // anyway, and across a restart below, because createMusicBed is a public
+    // factory and the restart is reachable through it.
+    const layer = (hz: number, intensity: number) => ({
+      voice: 'bass' as const, notes: [hz, hz, hz, hz], generate: null, intensity,
+    });
+    const LOUD = 700, MIDD = 750, QUIET = 800;
+    // Derived from the constant, so retuning the glide cannot silently turn this
+    // into a test that passes for the wrong reason: at a coarse enough rate the
+    // first step would already be below 0.75 and the assertion would hold even
+    // without the snap. TEN steps to cross the whole range, whatever the tuning.
+    const stepSeconds = INTENSITY_GLIDE_SECONDS / 10;
+    const track: MusicTrackDef = {
+      id: 'snap', stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [layer(LOUD, 0.75), layer(MIDD, 0.45), layer(QUIET, 0)],
+    };
+    const { ctx, t, bed } = withTrack(track);
+    // Ask for a MIDDLE density, not the floor: asking for 0 cannot tell a snap
+    // to the target from a snap to zero, or from an initial value that happens
+    // to be zero. Review proved that -- deleting the snap and moving the
+    // initial value to 0 passed the whole gate.
+    bed.setIntensity(0.5);
+    bed.start();
+    for (let i = 1; i <= 4; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+    const played = (hz: number) => ctx.notes.filter((n) => Math.round(n.freq) === hz).length;
+    expect(played(QUIET), 'the always-on layer never sounded').toBeGreaterThan(0);
+    // Above the asked-for density: silent. Without the snap, `intensity` starts
+    // at its initial 1 and walks down, so this layer sounds first.
+    expect(played(LOUD), 'a layer above the asked-for density sounded at startup').toBe(0);
+    // BELOW the asked-for density: sounding, from the first step. This is the
+    // other half, and it is what makes the assertion above a statement about
+    // the TARGET rather than about zero.
+    expect(played(MIDD), 'a layer below the asked-for density was silent at startup')
+      .toBeGreaterThan(0);
+
+    // A RESTART snaps too. Without this, a snap that fires only the first time
+    // passes: the assertions above only ever exercise a fresh bed.
+    const before = ctx.notes.length;
+    bed.setIntensity(0); // the game now wants the floor
+    bed.start();
+    for (let i = 5; i <= 8; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+    const after = ctx.notes.slice(before);
+    const playedAfter = (hz: number) => after.filter((n) => Math.round(n.freq) === hz).length;
+    expect(playedAfter(QUIET), 'nothing sounded after the restart').toBeGreaterThan(0);
+    expect(playedAfter(MIDD), 'a restart glided down from the old density instead of snapping')
+      .toBe(0);
+  });
+
+  it('takes INTENSITY_GLIDE_SECONDS of AUDIO time to cross, at any tempo', () => {
+    // Pins the rate end to end, in the clock the listener actually hears. The
+    // glide and the step clock are charged from ONE stepLength() reading in
+    // pump(), so they cannot diverge -- the first version read it inside
+    // scheduleStep, before a suite change had installed its tempo ramp, and so
+    // charged the previous step's duration. Two tempos, one assertion: the
+    // wall-clock span is a property of the constant, not of the track.
+    const cross = (stepSeconds: number): number => {
+      const track: MusicTrackDef = {
+        id: `t${stepSeconds}`, stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+        // 0.01 goes silent essentially when the glide reaches the bottom.
+        tracks: [
+          { voice: 'bass', notes: [100, 100, 100, 100], generate: null, intensity: 0.01 },
+          { voice: 'pad', notes: [200, 200, 200, 200], generate: null, intensity: 0 },
+        ],
+      };
+      const { ctx, t, bed } = withTrack(track);
+      bed.setIntensity(1);
+      bed.start();
+      ctx.currentTime = stepSeconds; t.tick();
+      const from = ctx.currentTime;
+      bed.setIntensity(0);
+      const steps = Math.ceil((INTENSITY_GLIDE_SECONDS / stepSeconds) * 3) + 8;
+      for (let i = 2; i <= steps; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+      bed.stop();
+      const last = Math.max(...ctx.notes.filter((n) => Math.round(n.freq) === 100).map((n) => n.startedAt));
+      return last - from;
+    };
+    // Tempos an order of magnitude apart must agree: that INVARIANCE is what a
+    // per-step rate of stepSeconds/INTENSITY_GLIDE_SECONDS buys, and what a
+    // fixed per-step delta would destroy.
+    const fast = cross(0.05), slow = cross(0.5);
+    expect(fast, 'the glide is not tempo-invariant').toBeCloseTo(slow, 1);
+    // Each span is the glide plus at most one LOOKAHEAD_SECONDS (0.6): these
+    // are SCHEDULING times, and the bed always runs a lookahead ahead of the
+    // clock. It can never be shorter than the constant.
+    for (const [st, span] of [[0.05, fast], [0.5, slow]] as const) {
+      expect(span, `crossed faster than the constant at stepSeconds ${st}`)
+        .toBeGreaterThanOrEqual(INTENSITY_GLIDE_SECONDS);
+      expect(span, `crossed slower than the constant plus a lookahead at stepSeconds ${st}`)
+        .toBeLessThan(INTENSITY_GLIDE_SECONDS + 0.6 + st);
+    }
+  });
+
+  it('glides UP as well as down, so an arrangement that thinned can come back', () => {
+    // Review found the direction of travel completely untested: a glide that
+    // could thin but never thicken passed all 1286 tests. Shipped, that is the
+    // same "left with a drone" defect this feature exists to fix -- after one
+    // respawn the high-threshold layers would never return for the rest of the
+    // session. The mirror of the downward case: the QUIETEST-threshold layer
+    // must re-enter first, and nothing may re-enter on the first step.
+    const layer = (hz: number, intensity: number) => ({
+      voice: 'bass' as const, notes: [hz, hz, hz, hz], generate: null, intensity,
+    });
+    const HI = 400, MID = 500;
+    const stepSeconds = INTENSITY_GLIDE_SECONDS / 10;
+    const track: MusicTrackDef = {
+      id: 'rise', stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [layer(HI, 0.75), layer(MID, 0.45)],
+    };
+    const { ctx, t, bed } = withTrack(track);
+    bed.setIntensity(0);
+    bed.start(); // snaps to 0: both layers silent
+    ctx.currentTime = stepSeconds; t.tick();
+    const riseTime = ctx.currentTime;
+    bed.setIntensity(1); // the round restarts and enemies start dying again
+    for (let i = 2; i <= 20; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+    const firstAt = (hz: number): number => {
+      const ts = ctx.notes.filter((n) => Math.round(n.freq) === hz).map((n) => n.startedAt);
+      return ts.length === 0 ? Infinity : Math.min(...ts);
+    };
+    const hi = firstAt(HI), mid = firstAt(MID);
+    expect(hi, 'the arrangement never came back -- the glide only travels downward')
+      .toBeLessThan(Infinity);
+    expect(mid, 'the 0.45 layer never came back').toBeLessThan(Infinity);
+    // Both silent before the rise, and the quieter threshold re-enters first.
+    expect(mid, 'a layer sounded before the arrangement was asked to thicken')
+      .toBeGreaterThan(riseTime);
+    expect(mid, 'the two layers re-entered together -- the rise was a switch, not a glide')
+      .toBeLessThan(hi);
+  });
+
+  it('GLIDES the arrangement down instead of cutting every layer in one step', () => {
+    // The defect: musicIntensity steps 1.0 -> 0 the instant a life is lost --
+    // resetArena revives every enemy while enemiesAtRoundStart is only
+    // recomputed per LEVEL -- and setIntensity was a bare assignment. Measured
+    // on the shipped data, 72 of 120 layers across the 24 arena-context suite
+    // members fall silent in the same step: every stab, lead and pluck, leaving
+    // only bass and pad. The music dropped to a drone on every respawn.
+    //
+    // Gliding makes the staggered thresholds do the work: the loudest layer
+    // leaves first and the arrangement thins out over INTENSITY_GLIDE_SECONDS.
+    const layer = (hz: number, intensity: number) => ({
+      voice: 'bass' as const,
+      notes: [hz, hz, hz, hz],
+      generate: null,
+      intensity,
+    });
+    // Distinct pitches so each layer is identifiable in ctx.notes.
+    const HI = 400, MID = 500, LOW = 600;
+    // Ten steps to cross the full range, derived from the constant rather than
+    // hardcoded: review measured that a fixed 0.5s step only resolves the
+    // ordering for INTENSITY_GLIDE_SECONDS in roughly [1.0, 20.0], so the
+    // comment promising a free retune was false. Deriving it makes it true.
+    const stepSeconds = INTENSITY_GLIDE_SECONDS / 10;
+    const track: MusicTrackDef = {
+      id: 'thresholds', stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [layer(HI, 0.75), layer(MID, 0.45), layer(LOW, 0)],
+    };
+    const { ctx, t, bed } = withTrack(track);
+    bed.setIntensity(1);
+    bed.start();
+    for (let i = 1; i <= 2; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    const dropTime = ctx.currentTime;
+    bed.setIntensity(0); // the respawn
+    for (let i = 3; i <= 20; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+
+    // The LAST moment each layer was scheduled, measured on the audio clock.
+    const lastAt = (hz: number): number =>
+      Math.max(...ctx.notes.filter((n) => Math.round(n.freq) === hz).map((n) => n.startedAt), -1);
+    const hi = lastAt(HI), mid = lastAt(MID), low = lastAt(LOW);
+
+    expect(low, 'the always-on layer stopped, so this measures the wrong thing')
+      .toBeGreaterThan(dropTime);
+    expect(hi, 'the 0.75 layer never played before the drop').toBeGreaterThan(-1);
+    // The discriminator. With a bare assignment both thresholds are crossed in
+    // the SAME step, so hi === mid and this fails; with a glide the 0.75 layer
+    // must fall silent strictly earlier than the 0.45 one.
+    expect(hi, 'every layer was cut in one step -- the arrangement did not thin out')
+      .toBeLessThan(mid);
+    // What this one actually catches is that the layer was still sounding WHEN
+    // the drop arrived -- not that the drop was gradual. It cannot check the
+    // latter: LOOKAHEAD_SECONDS has already committed a note past `dropTime`
+    // before setIntensity is even called, so every sounding layer is
+    // structurally guaranteed one. `hi < mid` above is the sole discriminator
+    // for gradualness; this guards against measuring a layer that had already
+    // gone silent, which would make that comparison meaningless.
+    expect(hi, 'the loudest layer was already silent before the drop').toBeGreaterThan(dropTime);
   });
 });
 

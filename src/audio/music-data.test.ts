@@ -6,6 +6,7 @@ import {
   VOICES,
   __parseAllForTests as parseAll,
 } from './music-data';
+import { SUITES } from './suites';
 
 describe('noteToHz', () => {
   it('anchors on A4 = 440, the definition everything else derives from', () => {
@@ -102,6 +103,33 @@ describe('the shipped track data', () => {
 
   it('trackById returns null for an unknown id rather than throwing', () => {
     expect(trackById('no-such-track')).toBeNull();
+  });
+});
+
+describe('the arrangement census the glide is justified by', () => {
+  it('recomputes the 72-of-120 figure quoted in music.ts and the commit', () => {
+    // music.ts's glide comment and PR #76 both quote "72 of 120 layers across
+    // the 24 arena-context suite members". CLAUDE.md: quote a measurement and
+    // you owe it a recomputing test -- otherwise an edit to music-tracks.json
+    // or music-suites.json silently falsifies the prose that justifies a
+    // feature. This is that test; it fails rather than lets the numbers rot.
+    const members = new Set<string>();
+    for (const s of SUITES) if (s.context === 'arena') for (const m of s.members) members.add(m);
+    const tracks = MUSIC_TRACKS.filter((t) => members.has(t.id));
+    const layers = tracks.flatMap((t) => t.tracks);
+    const silenced = layers.filter((l) => l.intensity > 0);
+    expect(members.size, 'the arena-context suite membership changed').toBe(24);
+    expect(layers.length, 'the arena-context layer population changed').toBe(120);
+    expect(silenced.length, 'the number of layers a 1.0 -> 0 drop silences changed').toBe(72);
+    // The SPLIT is the actual argument -- that what falls silent is every
+    // melodic and rhythmic voice, leaving only bass and pad. A census that
+    // matched 72 while moving a lead to threshold 0 would not.
+    const byVoice = (ls: typeof layers) =>
+      ls.reduce<Record<string, number>>((a, l) => ((a[l.voice] = (a[l.voice] ?? 0) + 1), a), {});
+    expect(byVoice(layers.filter((l) => l.intensity === 0)), 'the always-on voices changed')
+      .toEqual({ bass: 24, pad: 24 });
+    expect(byVoice(silenced), 'the silenced voices changed')
+      .toEqual({ stab: 36, lead: 22, pluck: 14 });
   });
 });
 
