@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ARENA_DEFS } from './config/arenas';
 import { loadArena } from './arena';
+import { cellCentre } from './arena-claims';
 
 // What makes a 3x upscale safe, pinned so nobody "tidies" it to an even factor.
 describe('the arena resolution', () => {
@@ -25,9 +26,21 @@ describe('the arena resolution', () => {
   it('keeps float64 exact across the whole coordinate range boards use', () => {
     // Not a mathematical guarantee -- 2/3 is not representable in binary -- but an
     // empirical property of float64 rounding, so it is checked rather than assumed.
-    // Population: cells 0..59, covering the largest shipped board (15*3 = 45 cols).
-    for (let c = 0; c < 60; c++) {
-      expect((3 * c + 1 + 0.5) * (2 / 3), `cell ${c}`).toBe((c + 0.5) * 2);
+    // Routed through the REAL `cellCentre` production function and REAL shipped-arena
+    // dimensions, not a formula reimplemented in isolation with no imported symbol --
+    // a change to either cellCentre's arithmetic or an arena's cols/cellSize is what
+    // this test is meant to catch, and a copy of the formula catches neither.
+    // Population: every arena in ARENA_DEFS, every column c with c ≡ 1 (mod 3) -- the
+    // centre sub-cell of each old cellSize-2 cell's 3x3 block -- against that old cell's
+    // own centre formula (c_old + 0.5) * 2.
+    let checked = 0;
+    for (const a of ARENA_DEFS) {
+      for (let c = 1; c < a.cols; c += 3) {
+        const cOld = (c - 1) / 3;
+        expect(cellCentre(a, [c, 0]).x, `${a.id} col ${c}`).toBe((cOld + 0.5) * 2);
+        checked++;
+      }
     }
+    expect(checked).toBeGreaterThan(0);
   });
 });

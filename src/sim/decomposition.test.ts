@@ -147,9 +147,16 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
   });
 
   it('agrees on line of sight for every ordered pair', () => {
+    let blocked = 0;
     for (const m of pts) for (const t of pts) {
-      expect(lineOfSight(m, t, b), `${m.x},${m.y} -> ${t.x},${t.y}`).toBe(lineOfSight(m, t, a));
+      const clear = lineOfSight(m, t, a);
+      if (!clear) blocked++;
+      expect(lineOfSight(m, t, b), `${m.x},${m.y} -> ${t.x},${t.y}`).toBe(clear);
     }
+    // Guard against a vacuous pass: a `lineOfSight` gutted to `return true` unconditionally
+    // agrees with itself on both decompositions and this test would stay green. Some pairs
+    // in this fixture must actually be blocked for the comparison to mean anything.
+    expect(blocked).toBeGreaterThan(0);
   });
 
   it('agrees on the bank shot for every ordered pair', () => {

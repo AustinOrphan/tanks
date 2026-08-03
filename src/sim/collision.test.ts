@@ -277,6 +277,13 @@ describe('resolveWalls', () => {
     const t = makeTank(1, 'player', { x: 2.3, y: 2.3 }, 0);
     resolveWalls(t, walls);
     for (const w of walls) expect(circleVsAABB(t.pos, TANK_RADIUS, w.aabb).hit, `wall ${w.id}`).toBe(false);
+    // Bound WHERE it landed, not just that it cleared both boxes -- "cleared" alone is
+    // satisfied by an inverted, 30x-scaled push that flings the hull far from the corner
+    // just as readily as by the correct small displacement. The corner is at (2, 2); the
+    // hull started 0.3 inside it on each axis and should resolve nearby, on the outward
+    // (increasing x, increasing y) side.
+    expect(t.pos.x).toBeCloseTo(2.5, 9);
+    expect(t.pos.y).toBeCloseTo(2.5, 9);
   });
 
   it('does not escape or NaN in a gap narrower than the hull', () => {

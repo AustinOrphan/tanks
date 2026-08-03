@@ -274,6 +274,7 @@ describe('bankShot', () => {
     // seam/buried candidate's own rejection now has fixtures where it demonstrably
     // matters, and `faceIsBuried` (the guard this sub-sweep was originally written to
     // control for) no longer exists to give it a control anyway.
+    let nonNullMerged = 0;
     for (let mx = 0.5; mx < 6; mx += 0.5) {
       for (let tx = 0.5; tx < 6; tx += 0.5) {
         const m = { x: mx, y: 4 };
@@ -281,12 +282,20 @@ describe('bankShot', () => {
         const a = bankShot(m, t, merged, 1);
         const b = bankShot(m, t, three, 1);
         compared++;
+        if (a !== null) nonNullMerged++;
         if (a === null || b === null) expect(b, `${mx}->${tx}`).toBe(a);
         else expect(b, `${mx}->${tx}`).toBeCloseTo(a, 9);
       }
     }
 
     expect(compared).toBe(121); // population: 11 muzzle x 11 target positions
+    // Guard against a vacuous pass: `a === null && b === null` satisfies the comparison
+    // above trivially, so a future change that made every candidate invalid on both sides
+    // would still read green -- same approach as decomposition.test.ts's row-seam sibling.
+    // Today 72 of the 121 pairs resolve a real bank shot on both sides (the other 49 sit
+    // where neither muzzle nor target has line of sight to a reflecting face); pinning that
+    // count catches a regression that silently drains the non-vacuous portion too.
+    expect(nonNullMerged).toBe(72);
   });
 
   it('falls through to a farther reflector when the nearer one\'s reflected leg is blocked', () => {
