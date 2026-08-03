@@ -6,21 +6,24 @@ on:
   # A manual re-run, for when a deploy needs redoing without a commit.
   workflow_dispatch:
 
-# The repository's default workflow permission is `read` (checked:
-# `gh api repos/AustinOrphan/tanks/actions/permissions/workflow` returns
-# {"default_workflow_permissions":"read"}). A workflow may still request more,
-# which is exactly why that default is safe to leave alone -- so the two scopes
-# the Pages deployment needs are declared here and nowhere else:
-#   pages: write    -- create the deployment
-#   id-token: write -- deploy-pages authenticates with OIDC, not a PAT
+# Least privilege at the WORKFLOW level, then the one scope each job actually needs.
+# The split matters: `build` is the job that runs `npm ci`, which executes dependency
+# lifecycle scripts (one in the current tree: esbuild's postinstall), and it has no
+# reason to hold a token that can publish a deployment or mint an OIDC assertion.
+# `configure-pages` only READS the site's metadata -- its `enablement` input defaults
+# to 'false', and its own docs say enabling "requires a token other than GITHUB_TOKEN"
+# -- so `pages: read` is enough there.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Pages accepts one deployment at a time. `cancel-in-progress: false` because a
-# half-finished deploy that gets cancelled leaves the live site on the previous
-# commit with no signal saying so; queueing costs a minute and is unambiguous.
+# Pages accepts one deployment at a time. `cancel-in-progress: false` because cancelling
+# a half-finished deploy leaves the live site on the previous commit.
+#
+# Note what this does NOT do: it is not a queue. GitHub cancels any run already PENDING
+# in the group when a newer one arrives, so a push landing during a deploy can be
+# superseded by the next push. Only the in-progress run is protected. The latest commit
+# always wins, which is the behaviour we want -- but "everything eventually deploys" is
+# not what is being promised here.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -28,26 +31,49 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The github-pages environment admits only `main`, so a workflow_dispatch from any
+    # other branch would run the whole build and then be rejected at the deploy job.
+    # Fail before spending the runner instead.
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
     steps:
       # Current majors, which are NOT the ones ci.yml pins: that file is on
-      # checkout@v4 / setup-node@v4 / cache@v4 / upload-artifact@v4 while the
-      # current releases are v7 / v7 / v6 / v7. New code should not inherit
-      # that; bumping ci.yml is a separate change with its own gate to watch.
+      # checkout@v4 / setup-node@v4 / cache@v4 / upload-artifact@v4. Three of those
+      # four are three majors behind (current v7 / v7 / v7); `cache` is two behind,
+      # because actions/cache has no v7 -- its current major is v6. Bumping ci.yml is
+      # separate work with its own gate to watch.
       - uses: actions/checkout@v7
+
+      # First, not last: with `enablement` defaulted off this step's only real function
+      # is to fail early if Pages is not configured for the Actions source. Its outputs
+      # (base_url, base_path) are deliberately unused -- vite.config.ts's `base: './'`
+      # already handles the subpath, and does so for `npm run dev` and the gallery too.
+      - uses: actions/configure-pages@v6
 
       - uses: actions/setup-node@v7
         with:
-          # CI proves the 20.19.0 floor and 22. The deploy builds on one of
-          # them rather than a third version, so a bundle that ships is a
-          # bundle some CI job has already built.
+          # CI proves the 20.19.0 floor and 22; the deploy builds on one of those rather
+          # than a third version. That is all it proves -- this is a separate build, not
+          # CI's artifact, and nothing here shows the two are byte-identical.
           node-version: '22'
           cache: npm
 
       - run: npm ci
 
-      # CI runs on this same push, but it does not GATE the deploy -- nothing
-      # stops a red main from publishing. Re-running the gate here is the only
-      # thing that does. It costs about a minute; a broken live game costs more.
+      # CI runs on this same push, but it does not GATE the deploy: main carries no
+      # branch protection and no ruleset (`gh api .../branches/main/protection` -> 404),
+      # and there is no workflow_run edge between the two files. Without these steps a
+      # red main would publish.
+      #
+      # Be precise about what this is: 5 of ci.yml's 7 checking steps. It does NOT run
+      # the `visual` job -- `tools/gl/run.mjs` and `tools/visual/verify.mjs` -- which
+      # needs a ~130MB chromium download, and which CLAUDE.md records as the ONLY
+      # coverage src/render/ has ("a green npm test is not the whole gate for
+      # src/render/"). A render regression that only those catch will still publish.
+      # Gating on the full run would mean a workflow_run trigger; see the PR discussion.
       - name: Typecheck
         run: npx tsc --noEmit
 
@@ -57,28 +83,30 @@ jobs:
       - name: Build
         run: npx vite build
 
-      # The Pages-critical assertion, duplicated from ci.yml deliberately: this
-      # is the failure mode this workflow exists to avoid. `base: './'` in
-      # vite.config.ts is what makes the bundle work at
-      # https://austinorphan.github.io/tanks/ rather than only at a domain
-      # root; with the default base, dist/index.html asks for /assets/index-*.js
-      # and the project page is blank. No unit test can see it -- Vitest
-      # resolves BASE_URL to '/' whatever the build config says.
+      # The Pages-critical check, and the reason this workflow can trust its own output:
+      # `base: './'` is what makes the bundle work under a deploy subpath rather than
+      # only at a domain root. Nothing in `npm test` can see it -- under Vitest
+      # `import.meta.env.BASE_URL` is '/' even though vitest reads the same config that
+      # sets `base: './'` -- so it has to be asserted against the BUILT output.
+      # Shared with ci.yml via tools/portability/, not pasted into both files.
+      #
+      # The one thing a relative base cannot survive: copying index.html to 404.html for
+      # an SPA fallback. /tanks/foo/bar would then serve an index.html whose ./assets/...
+      # resolves to /tanks/foo/assets/... and 404s. The game has no client-side router,
+      # so it needs no fallback -- but that trick is one file away.
       - name: Assert the build is subpath-portable
-        run: |
-          grep -q 'src="\./assets/' dist/index.html \
-            || { echo "dist/index.html does not reference assets relatively:"; \
-                 grep -o '<script[^>]*>' dist/index.html; exit 1; }
-          ! grep -qE '"/(audio|assets)/' dist/assets/*.js \
-            || { echo "bundle contains origin-absolute asset paths:"; \
-                 grep -oE '"/(audio|assets)/[^"]*"' dist/assets/*.js | sort -u; exit 1; }
+        run: npm run portability
 
-      # No `.nojekyll` file: artifact-based Pages deployments do not run Jekyll
-      # at all, so the underscore-prefix problem that file exists to solve
-      # cannot arise here. It would be needed only for the legacy
-      # deploy-from-a-branch source.
-      - uses: actions/configure-pages@v6
+      # Carried over from ci.yml for the same reason as the steps above: it gates
+      # nothing today, and the deploy is what makes the result public.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
+      # No `.nojekyll`: an artifact deployment does not run Jekyll, so the
+      # underscore-prefix problem that file exists to solve cannot arise. (GitHub's docs
+      # only discuss `.nojekyll` for the branch source; the artifact behaviour is
+      # attested by others serving `_`-prefixed paths, not by a first-party statement.)
+      # Moot either way -- nothing in dist/ is underscore-prefixed.
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
@@ -86,8 +114,14 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    # GitHub creates this environment when Pages is set to the Actions source,
-    # with a protection rule restricting deployments to the default branch.
+    timeout-minutes: 10
+    # The only job that needs to write. `id-token: write` is how deploy-pages
+    # authenticates (OIDC, not a PAT).
+    permissions:
+      pages: write
+      id-token: write
+    # Created by GitHub when Pages is set to the Actions source. Its branch policy
+    # currently admits `main` only.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

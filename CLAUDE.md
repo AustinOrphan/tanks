@@ -27,6 +27,23 @@ assertion on Node 20.19.0 — the declared floor — and 22. `engines.node` is
 actually demands: a plain `>=20.19.0` would be wrong too, since it admits 22.0–22.12
 and eight packages reject those.
 
+**The game deploys from `main` to GitHub Pages** (`.github/workflows/pages.yml`), live at
+`https://austinorphan.com/tanks/` — a **custom apex domain inherited from the user page**,
+so `austinorphan.github.io/tanks/` 301-redirects there. It is still a `/tanks/` subpath,
+which is what makes `base: './'` in `vite.config.ts` load-bearing: with the default base
+the bundle asks for `/assets/…` and the page is blank. `npm run portability`
+(`tools/portability/check.mjs`) asserts that against the BUILT output, and both workflows
+call it — it cannot live in `npm test`, because under Vitest `import.meta.env.BASE_URL` is
+`/` even though vitest reads the same config that sets `base: './'`.
+
+The deploy re-runs 5 of `ci.yml`'s 7 checking steps, **not the `visual` job** — so a render
+regression that only `tools/gl/` and `tools/visual/` catch will publish. Nothing gates the
+deploy on CI passing; `main` carries no branch protection. Two consequences of the shared
+origin, neither fixable from this repo: every project page under `austinorphan.com` shares
+one localStorage namespace (the game's four keys are all `tanks.*`-prefixed), and the
+portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
+CacheStorage entry it does not own — so an offline feature here needs coordination first.
+
 ## Architecture invariants
 
 **`src/sim/` is a pure, deterministic core.** It must import nothing from `three`,

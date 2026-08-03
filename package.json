@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test": "tsc --noEmit && vitest run",
     "visual": "node tools/visual/verify.mjs dist --check",
+    "portability": "node tools/portability/check.mjs dist",
     "test:gl": "node tools/gl/run.mjs",
     "gallery": "node tools/gallery/run.mjs",
     "audio": "node tools/audio/render.mjs"
