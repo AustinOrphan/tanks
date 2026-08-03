@@ -1,7 +1,7 @@
 # Tanks!
 
 A browser arena shooter: a deterministic 2D simulation core with a Three.js render layer
-projected from it. Spec and plan live in `docs/superpowers/`.
+projected from it. Spec, plan and backlog live in `docs/superpowers/`.
 
 ## Commands
 
@@ -342,7 +342,19 @@ The one module genuinely without coverage is `main.ts`: it runs at module scope 
 `document.getElementById('app')`, so importing it starts the game and no test can reach it.
 Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anything else.
 
-Merged PR descriptions carry the detailed residual backlog.
+**Deferred work goes in `docs/superpowers/backlog.md`** — one entry per open question,
+saying what the question is and what would answer it. A PR that defers something adds its
+entry in the same PR.
+
+That file exists because the previous arrangement was "merged PR descriptions carry the
+detailed residual backlog", and measured across all 76 merged PRs, 20 carry a
+residual-style heading and 35 mention deferred work anywhere — so finding an open item
+meant reading 76 PR bodies and hoping. Those older residuals have not been harvested yet;
+until they are, a merged PR body is still the only home for some of them.
+
+The rest of this section is a landmine map rather than a task list: it records what has
+already been tried and must not be re-attempted. It is deliberately not moving to the
+backlog.
 
 **Retroreflecting wall seams: real, measure-zero, and do NOT apply the obvious fix.** Walls
 are one AABB per grid cell, so a flat multi-cell run shares internal faces. A ray arriving
