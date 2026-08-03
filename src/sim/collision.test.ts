@@ -339,36 +339,42 @@ describe('resolveWalls', () => {
   });
 
   it('escapes a boundary-flush wall inward, never through the boundary ring', () => {
-    // A destructible cell flush against the top boundary (its minY sits exactly on the
-    // boundary wall's maxY, the way any shipped arena's edge cells do) -- the risk this
-    // guards is the escape march finding the boundary CONTIGUOUS with the cell and
-    // walking straight through it, landing the hull outside the entire map with nothing
-    // left to contain it. Measured: escaping sideways or downward, INTO the cell's open
-    // neighbours, costs 1 unit (half the 2-unit cell); escaping up, through the cell AND
-    // the boundary ring's own 2-unit thickness, costs 3 -- so the algorithm's own
-    // shortest-axis pick lands the hull inside the play area every time here, not because
-    // of any boundary special-case (there is none) but because a realistic single-cell-
-    // thick wall run is always closer on its interior face than through itself plus the
-    // boundary. A synthetic arena that is 100% wall with no interior space at all (no
-    // shipped arena is, and this sim's own penetration bound -- 0.375 units, world.ts's
-    // separateTanks -- never drives a hull deep enough into any real wall's interior for
-    // this to flip) CAN still be pushed past the boundary; that residual is out of scope
-    // here and recorded in task-5b-report.md rather than guarded against.
-    const cell: Wall = { id: 1, kind: 'destructible', destroyed: false, aabb: { minX: 2, minY: 0, maxX: 4, maxY: 2 } };
-    const boundaryThickness = 2, W = 8, H = 8;
-    const boundaries: Wall[] = [
-      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: -boundaryThickness, maxX: W + boundaryThickness, maxY: 0 } },
-      { id: 3, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: H, maxX: W + boundaryThickness, maxY: H + boundaryThickness } },
-      { id: 4, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: 0, maxX: 0, maxY: H } },
-      { id: 5, kind: 'solid', destroyed: false, aabb: { minX: W, minY: 0, maxX: W + boundaryThickness, maxY: H } },
-    ];
-    const t = makeTank(1, 'player', { x: 3, y: 1 }, 0);
-    resolveWalls(t, [cell, ...boundaries]);
-    // Never crossed into the boundary ring's own span (y < 0), let alone past its outer
-    // face (y < -boundaryThickness).
-    expect(t.pos.y).toBeGreaterThanOrEqual(0);
+    // A cell flush against the LEFT boundary (its minX sits exactly on the boundary
+    // wall's maxX, the way any shipped arena's edge column does) -- the risk this guards
+    // is the escape march finding the boundary CONTIGUOUS with the cell and walking
+    // straight through it, landing the hull outside the play area with nothing left to
+    // contain it.
+    //
+    // Deliberately NOT symmetric, and deliberately blocking up/down far away: the tie-
+    // break (push VECTOR, smallest x then smallest y -- see resolveWalls's own doc
+    // comment) always prefers a negative-x candidate over one with x=0, so a boundary
+    // placed on the west side is the one orientation where a march bug that UNDER-counts
+    // every axis (stops after one box instead of continuing through the mass) doesn't
+    // just coincidentally get out-voted by that same tie-break -- it would make the
+    // boundary the STRICT minimum instead. Right is left open (real distance 1.5, cheap);
+    // up and down are each blocked by a 100-unit wall (real distance ~101), so they can
+    // never legitimately compete; left leads into a 2-unit-thick boundary (real distance
+    // 0.5 through the cell + 2.0 through the boundary = 2.5). The unique correct answer
+    // is right, landing well inside the play area.
+    //
+    // If unionExitDistance stopped after a single box instead of marching through the
+    // whole mass -- exactly the defect this task fixes for a multi-cell run -- every
+    // distance here collapses to its first-hop value: right stays 1.5 (already single-
+    // hop), but left wrongly drops to 0.5 and up/down wrongly drop to 1, making left the
+    // STRICT minimum (0.5 < 1 < 1.5) and pushing the hull straight into the boundary's own
+    // span (x < 0). Verified: reverting unionExitDistance's loop bound to `step <= 0`
+    // makes this test fail (t.pos.x lands at -0.5, not >= 0) -- see task-5b-report.md.
+    const cell: Wall = { id: 1, kind: 'destructible', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
+    const boundaryThickness = 2, H = 8;
+    const leftBoundary: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: 0, maxX: 0, maxY: H } };
+    const upBlocker: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: -102, maxX: 2, maxY: 0 } };
+    const downBlocker: Wall = { id: 4, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 2, maxX: 2, maxY: 102 } };
+    const t = makeTank(1, 'player', { x: 0.5, y: 1 }, 0);
+    resolveWalls(t, [cell, leftBoundary, upBlocker, downBlocker]);
+    // Escaped right, into the play area -- never entered the boundary ring's own span.
     expect(t.pos.x).toBeGreaterThanOrEqual(0);
-    expect(t.pos.x).toBeLessThanOrEqual(W);
+    expect(t.pos.x).toBeCloseTo(2.5, 9);
+    expect(t.pos.y).toBeCloseTo(1, 9);
   });
 
   it('does not apply a push for an overlap at or below SWEEP_EPS', () => {
