@@ -27,12 +27,44 @@ export interface SandboxOptions {
  * Where enemies stand, in fill order: the corners of the enemy half first, then the
  * gaps. Fixed rather than random so "the second brown" is always the same tank in the
  * same place -- a sandbox exists to make observations repeatable.
+ *
+ * Authored in cells of `SANDBOX_AUTHORED_CELL` world units and rescaled to whatever
+ * resolution ARENA_01 currently uses -- see `blockScale`. They are NOT grid indices.
  */
 export const SANDBOX_ENEMY_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [1, 2], [9, 2], [3, 1], [7, 1], [5, 2], [1, 3], [9, 3], [3, 3], [7, 3], [5, 1],
 ];
 
 const PLAYER_CELL: readonly [number, number] = [5, 7];
+
+/**
+ * The cell size the anchors above and the wall/clearance sizes below were authored
+ * against. The sandbox borrows ARENA_01's dimensions, so when the shipped arenas were
+ * re-expressed at a finer cell size every one of those numbers silently changed meaning:
+ * the board stayed 22x18 world units while the anchors, read as raw indices, collapsed
+ * into its top-left ninth, and `walls=N` started scattering sub-tank-sized pillars. All
+ * of it passed `sandbox.test.ts`, which pins grid characters and never world geometry.
+ *
+ * Everything here is therefore expressed in these units and scaled through `blockScale`,
+ * so the next resolution change moves the sandbox with the arenas instead of past them.
+ */
+const SANDBOX_AUTHORED_CELL = 2;
+
+/** How many of today's cells make up one authored block. 1 if nothing was rescaled. */
+function blockScale(cellSize: number): number {
+  return Math.max(1, Math.round(SANDBOX_AUTHORED_CELL / cellSize));
+}
+
+/**
+ * An authored cell's index in today's grid: its CENTRE sub-cell, which is what keeps the
+ * world position identical across a rescale (`(k*c + (k-1)/2 + 0.5) * cellSize` is
+ * `(c + 0.5) * SANDBOX_AUTHORED_CELL` for odd k). Odd k is the same property the arena
+ * upscale relied on to leave every shipped spawn where it was.
+ */
+function scaleCell([c, r]: readonly [number, number], k: number): readonly [number, number] {
+  const off = (k - 1) >> 1;
+  return [c * k + off, r * k + off];
+}
 
 const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   brown: 'B',
@@ -45,9 +77,19 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   green: 'N',
 };
 
-/** Chebyshev-adjacent to any spawn cell: walls may not crowd a tank at birth. */
-function nearSpawn(c: number, r: number, spawnCells: ReadonlyArray<readonly [number, number]>): boolean {
-  return spawnCells.some(([sc, sr]) => Math.abs(sc - c) <= 1 && Math.abs(sr - r) <= 1);
+/**
+ * Within one authored block of any spawn cell: walls may not crowd a tank at birth.
+ * `reach` is in today's cells, so the world-space clearance is the same whatever the
+ * resolution -- as a raw Chebyshev-1 it shrank with the cells and stopped clearing a
+ * tank's own hull.
+ */
+function nearSpawn(
+  c: number,
+  r: number,
+  spawnCells: ReadonlyArray<readonly [number, number]>,
+  reach: number,
+): boolean {
+  return spawnCells.some(([sc, sr]) => Math.abs(sc - c) <= reach && Math.abs(sr - r) <= reach);
 }
 
 /** 4-neighbour flood fill over open cells; true when every open cell is reached. */
@@ -94,13 +136,15 @@ export function sandboxArena(opts: SandboxOptions): Arena {
   }
   const { cols, rows, cellSize } = ARENA_01; // the one board size the renderer can show
   const legend: Arena['legend'] = { '#': 'solid' };
+  const k = blockScale(cellSize);
 
   const cells: string[][] = Array.from({ length: rows }, () => Array(cols).fill('.'));
-  const spawnCells: Array<readonly [number, number]> = [PLAYER_CELL];
-  cells[PLAYER_CELL[1]][PLAYER_CELL[0]] = 'P';
+  const player = scaleCell(PLAYER_CELL, k);
+  const spawnCells: Array<readonly [number, number]> = [player];
+  cells[player[1]][player[0]] = 'P';
   kinds.forEach((kind, i) => {
     if (kind === 'player') throw new Error('tanks= lists ENEMIES; the player is always present');
-    const [c, r] = SANDBOX_ENEMY_ANCHORS[i];
+    const [c, r] = scaleCell(SANDBOX_ENEMY_ANCHORS[i], k);
     cells[r][c] = KIND_LETTER[kind];
     spawnCells.push([c, r]);
   });
@@ -108,13 +152,22 @@ export function sandboxArena(opts: SandboxOptions): Arena {
   // Scatter walls: seeded shuffle of the eligible cells, then take placements one at a
   // time, skipping any that would seal a pocket. Refusing loudly beats returning fewer
   // than asked -- a silent cap reads as "the board has 12 walls" when it has 7.
+  // A "wall" is one AUTHORED block (k x k of today's cells), not one cell: at k=3 a single
+  // cell is 0.667 units against a 1.0 tank diameter, which is a pillar rather than the
+  // cover this knob exists to place.
   const wanted = opts.walls ?? 0;
   if (wanted > 0) {
     let seed = opts.seed ?? 1;
     const candidates: Array<[number, number]> = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (cells[r][c] === '.' && !nearSpawn(c, r, spawnCells)) candidates.push([c, r]);
+    for (let br = 0; br + k <= rows; br += k) {
+      for (let bc = 0; bc + k <= cols; bc += k) {
+        let free = true;
+        for (let r = br; r < br + k && free; r++) {
+          for (let c = bc; c < bc + k && free; c++) {
+            if (cells[r][c] !== '.' || nearSpawn(c, r, spawnCells, k)) free = false;
+          }
+        }
+        if (free) candidates.push([bc, br]);
       }
     }
     for (let i = candidates.length - 1; i > 0; i--) {
@@ -123,12 +176,15 @@ export function sandboxArena(opts: SandboxOptions): Arena {
       const j = Math.floor(draw.value * (i + 1));
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
+    const paint = (bc: number, br: number, ch: string): void => {
+      for (let r = br; r < br + k; r++) for (let c = bc; c < bc + k; c++) cells[r][c] = ch;
+    };
     let placed = 0;
-    for (const [c, r] of candidates) {
+    for (const [bc, br] of candidates) {
       if (placed === wanted) break;
-      cells[r][c] = '#';
+      paint(bc, br, '#');
       if (fullyConnected(cells.map((row) => row.join('')), legend)) placed++;
-      else cells[r][c] = '.';
+      else paint(bc, br, '.');
     }
     if (placed < wanted) {
       throw new Error(`could only place ${placed} of ${wanted} walls without sealing a pocket`);
