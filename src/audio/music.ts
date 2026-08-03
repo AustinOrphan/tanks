@@ -33,6 +33,16 @@ const STEP_SECONDS = 1.5;
 /** How far ahead to schedule, and how often to wake. Standard lookahead. */
 const LOOKAHEAD_SECONDS = 0.6;
 const TIMER_MS = 250;
+/**
+ * Seconds for the arrangement to travel the full 0..1 intensity range.
+ *
+ * Feel, not measurement -- retune it freely; the tests assert the ORDER layers
+ * leave in and that none leaves instantly, not any particular timing. It wants
+ * to be long enough that losing a life reads as the music receding and short
+ * enough that clearing a level still feels answered: at the arena tracks'
+ * 0.14s steps this is 15 steps to cross the whole range.
+ */
+export const INTENSITY_GLIDE_SECONDS = 2.0;
 
 export interface MusicBed {
   /** Idempotent: a second start does not layer a second bed. */
@@ -172,7 +182,20 @@ export function createMusicBed(
   let chords = track ? track.chords.map((c) => parseChord(c)).filter((c): c is Chord => !!c) : [];
   let generated: Array<Array<number | null> | null> = track ? track.tracks.map(() => null) : [];
   let cycle = 0;
+  /**
+   * The arrangement density actually SOUNDING. `targetIntensity` is what the
+   * game last asked for; this walks toward it a step at a time.
+   *
+   * They are two variables because the game's own signal is a step function:
+   * `musicIntensity` (loop.ts) is `destroyed / (total - 1)`, and `resetArena`
+   * revives every enemy while `enemiesAtRoundStart` is only recomputed per
+   * LEVEL -- so losing a life takes it from 1.0 to 0 in a single frame. Assigned
+   * straight through, that silenced 72 of 120 layers across the 24 arena-context
+   * suite members at once (every stab, lead and pluck; only bass and pad have a
+   * threshold of 0), mid-phrase, on every respawn.
+   */
   let intensity = 1;
+  let targetIntensity = 1;
   let stepsIntoCycle = 0;
   let pendingSuite: { next: MusicTrackDef; at: 'bar' | 'cycle' } | null = null;
   /**
@@ -298,6 +321,21 @@ export function createMusicBed(
       note(partial, at, STEP_SECONDS * 1.8, 0.05, 'sine');
     }
     step += 1;
+  }
+
+  /**
+   * Walk `intensity` toward the target by one step's worth of glide.
+   *
+   * Deliberately in STEPS, not seconds off the audio clock: the layer gate is
+   * evaluated once per scheduled step, so moving it on any finer grain would
+   * have no observable effect. Layer thresholds are staggered (0.45 / 0.6 /
+   * 0.75 in the shipped tracks), so a walk crosses them one at a time and the
+   * arrangement thins out instead of collapsing.
+   */
+  function glideIntensity(stepSeconds: number): void {
+    const perStep = stepSeconds / INTENSITY_GLIDE_SECONDS;
+    const gap = targetIntensity - intensity;
+    intensity = Math.abs(gap) <= perStep ? targetIntensity : intensity + Math.sign(gap) * perStep;
   }
 
   function scheduleStep(at: number): void {
@@ -467,7 +505,17 @@ export function createMusicBed(
     if (nextStepAt < ctx.currentTime) nextStepAt = ctx.currentTime;
     while (nextStepAt < horizon) {
       scheduleStep(nextStepAt);
-      nextStepAt += stepLength();
+      // ONE stepLength() reading serves both the glide and the clock, and it is
+      // taken AFTER scheduleStep so it is the duration of the step just
+      // scheduled -- a suite change installs its tempo ramp inside that call,
+      // and `ramp.played` advances there too. Reading it before, as the first
+      // version did, charged the glide the PREVIOUS step's duration, which made
+      // the glide's span depend on tempo (2.53s at 0.05s steps against 2.08s at
+      // 0.5s steps, where it should be one number). Scheduling before gliding
+      // also keeps every layer within a step gated on a single value.
+      const played = stepLength();
+      glideIntensity(played);
+      nextStepAt += played;
     }
   }
 
@@ -475,6 +523,11 @@ export function createMusicBed(
     start(): void {
       if (disposed || timer !== null) return;
       if (!canPlay(ctx)) return;
+      // A fresh bed SNAPS to the density the game is asking for. Gliding here
+      // would fade the arrangement in from whatever the last life ended on,
+      // which is a transition nobody asked for -- the glide exists to soften a
+      // change DURING play, not to stage an entrance.
+      intensity = targetIntensity;
       bus = ctx.createGain();
       bus.gain.value = volume;
       bus.connect(dest);
@@ -544,7 +597,7 @@ export function createMusicBed(
       return track?.id ?? null;
     },
     setIntensity(v: number): void {
-      intensity = Math.max(0, Math.min(1, v));
+      targetIntensity = Math.max(0, Math.min(1, v));
     },
     isPlaying(): boolean {
       return timer !== null;
