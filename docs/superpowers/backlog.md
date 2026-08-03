@@ -55,3 +55,38 @@ unless it lives in `World` and is cloned correctly, or replays stop being exact 
 of their inputs.
 
 **Not scheduled.** Recorded so it is not rediscovered a fourth time.
+
+---
+
+## Follow-ups from "walls as geometry, not cells"
+
+**Raised 2026-08-02**, by the final review of the arena-resolution branch. All four were
+consciously deferred, not missed. None blocks that branch.
+
+**1. Merged walls tile their normal map at the wrong density.** `concreteNormal` is ONE
+shared texture with a fixed `repeat=(2,2)` (`render/entities.ts:592`), and `BoxGeometry`'s
+per-face UVs are size-independent, so a 6-unit merged run tiles it exactly as a 2-unit box
+did — density falls by the merge factor. Confirmed by eye at 8x magnification on arena-02's
+4x-merged crossing pillar (faint vertical streaking present only after the change, absent
+from an unmerged control at matched scale); **not visible at gameplay zoom in any of the
+four before/after level pairs**. The fix is larger than scaling the repeat: the texture is
+shared across every wall, so it needs a clone per wall (or per distinct extent).
+
+**2. arena-02's boundary-flush run can be escaped past the ring.** Its rows 12-14 put three
+destructible cells against each side boundary, so the escape march's horizontal exit beats
+the vertical one and 544 of 160,000 interior-start points (0.02 grid) resolve outside the
+ring. **Not reachable at the depths the sim produces**: the shallowest such start is 0.677
+units deep against the 0.375-unit shove `world.ts:99` documents, and mine blasts only shrink
+the region (0 of 633,600 at >=50% destruction). A 57,600-tick probe (4 arenas x 12 seeds x
+1200) saw 0 tanks outside, 0 inside a wall, 0 shells escaped — but that samples end-of-tick
+only and does not bound mid-`stepMovement` depth across the three
+`separateTanks`/`resolveWalls` alternations. What would close it: sample inside that loop.
+
+**3. `loop.test.ts` asserts "an AI fired within N frames".** That window moves whenever AI
+RNG timing moves, and it moved twice on this branch (widened 12 -> 30 frames when tank ids
+were renumbered). It should assert a specific deterministic event instead of a time bound.
+
+**4. Wall mesh and material count rose 1.6x-4.1x.** arena-02 went 20 -> 81 wall entities, and
+`render/entities.ts:568` allocates a `BoxGeometry` AND a material per wall. Destructible
+cells are 3x subdivided and never merge, which is deliberate — but nothing has measured the
+render cost, and the growth is entirely in the destructible family.
