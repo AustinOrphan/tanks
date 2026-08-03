@@ -453,10 +453,24 @@ re-deriving all of them, which is the cost the file exists to remove. Deleting t
 part of the work, not follow-up to it.
 
 `tools/backlog.test.ts` makes the deletion cheap to get right rather than merely required:
-it recomputes the ledger's own section counts from the file, so removing a line fails the
-build until the header agrees. If you close something and the suite goes red on a count,
-that is the guard working. **If you close something and the suite stays green, you forgot
-the entry.**
+it cross-checks the ledger's stated counts against the list itself and pins no count literal
+of its own, so deleting a line and updating the `Counts:` paragraph is a **one-file edit that
+goes green**. It shipped with literals first, which made this sentence false — fixing the
+header left the build red until the TEST's expected values were edited too, and "repair the
+red build by changing what the test expects" is the habit that ends guards. If you find
+yourself editing an expected count in `backlog.test.ts`, stop: you are removing the guard,
+not satisfying it.
+
+**What it does not see: everything above the `## Ledger` heading.** The spikes and the
+numbered follow-up entries are unguarded, so closing one goes green either way — and closing
+a spike often strands ledger lines that cite the same PR, so grep for that PR number before
+calling it done. Green is not evidence you got this right; red is evidence you did not.
+
+Two cases the binary rule does not cover. If a line bundled several facts and only one is
+settled, **rewrite it down to what is still true** rather than deleting it, and say in the PR
+body which half closed. If you verify a line and find it **false rather than done**, delete
+it and itemise it under "Where the numbers went" — two lines already there were removed that
+way. A wrong entry costs a reader more than a missing one.
 
 That file exists because the previous arrangement was "merged PR descriptions carry the
 detailed residual backlog". Over the 77 merged PRs, 20 bodies carry an ATX heading matching

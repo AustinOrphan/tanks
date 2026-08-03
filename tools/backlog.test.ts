@@ -19,6 +19,8 @@ import suitesJson from '../src/audio/data/music-suites.json';
 
 const BACKLOG = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url)), 'utf8');
 const CLAUDE_MD = readFileSync(fileURLToPath(new URL('../CLAUDE.md', import.meta.url)), 'utf8');
+/** Both files hard-wrap, so any sentence-level match must ignore where the lines break. */
+const FLAT_BACKLOG = BACKLOG.replace(/\s+/g, ' ');
 
 /** Bullet counts per `###` subsection of the Ledger, in document order. */
 function ledgerSections(): { title: string; bullets: number }[] {
@@ -38,30 +40,48 @@ describe('backlog.md quotes numbers it can still justify', () => {
     expect(BACKLOG).toContain('## Ledger');
   });
 
+  // These two cases deliberately pin NO absolute number. The section counts are the file
+  // describing itself, not a measurement of the world, so freezing them here would make
+  // every legitimate backlog edit -- adding a line, or closing one, which CLAUDE.md now
+  // REQUIRES -- also an edit to this file's expected values. That trains the one habit
+  // that defeats guards: repairing a red build by changing what the test expects. It is
+  // also what made CLAUDE.md's "removing a line fails the build until the header agrees"
+  // false when first written; with literals here, fixing the header left it red.
+  //
+  // So: parse the header's own claim and compare it to the list. Update the prose, go
+  // green. The numbers that ARE pinned as literals below are the ones measuring committed
+  // DATA, where a frozen value is the point.
   it('states its own section counts correctly', () => {
-    const secs = ledgerSections().filter((s) => s.bullets > 0);
-    const counts = secs.map((s) => s.bullets);
-    // The header sentence claims "17 / 31 / 26 / 10". Recompute and compare, so adding a
-    // ledger line without updating the header fails here rather than misleading a reader.
-    expect(counts).toEqual([17, 31, 26, 10]);
-    expect(BACKLOG).toContain('17 / 31 / 26 / 10');
-
+    const counts = ledgerSections().filter((s) => s.bullets > 0).map((s) => s.bullets);
     const total = counts.reduce((a, b) => a + b, 0);
-    expect(total).toBe(84);
-    expect(BACKLOG).toContain(`**${total} lines below**`);
+    expect(total).toBeGreaterThan(0); // else an empty parse would satisfy everything below
+
+    const stated = /Counts: \*\*(\d+) lines below\*\* — ([\d/ ]+?) across/.exec(FLAT_BACKLOG);
+    expect(stated, 'the Counts sentence must exist and keep its shape').not.toBeNull();
+    expect(Number(stated![1])).toBe(total);
+    expect(stated![2].trim()).toBe(counts.join(' / '));
   });
 
   it('states how many lines came from outside the harvested scope', () => {
     const ledger = BACKLOG.slice(BACKLOG.indexOf('## Ledger'));
     const bullets = ledger.split('\n').filter((l) => l.startsWith('- '));
     const prose = bullets.filter((l) => l.includes('prose-only PR')).length;
-    // The scope claim is the one the review falsified last time: the harvest covered PRs
-    // with a residual HEADING, and these are the spot-checked extras. If someone adds an
-    // out-of-scope line without marking it, the stated split stops being true.
-    expect(prose).toBe(9);
-    expect(bullets.length - prose).toBe(75);
-    expect(BACKLOG).toContain('**75** came from the');
-    expect(BACKLOG).toContain('**9** from prose-only PRs');
+    expect(bullets.length).toBeGreaterThan(0);
+
+    // The scope claim is the one review falsified last time: the harvest covered PRs with
+    // a residual HEADING, and these are the spot-checked extras. An unmarked out-of-scope
+    // line silently makes the split wrong.
+    const stated = /\*\*(\d+)\*\* came from the 21 PRs in scope and \*\*(\d+)\*\* from prose-only/.exec(FLAT_BACKLOG);
+    expect(stated, 'the in-scope/prose-only split sentence must exist').not.toBeNull();
+    expect(Number(stated![1])).toBe(bullets.length - prose);
+    expect(Number(stated![2])).toBe(prose);
+
+    // "Where the numbers went" restates the in-scope figure. Both must move together, or
+    // the file contradicts itself with the build green -- which is the defect this whole
+    // test file exists to prevent.
+    const restated = /became the \*\*(\d+)\*\* in-scope lines above/.exec(FLAT_BACKLOG);
+    expect(restated, 'the restatement in "Where the numbers went" must exist').not.toBeNull();
+    expect(Number(restated![1])).toBe(bullets.length - prose);
   });
 
   it('states the same harvest figures in CLAUDE.md and backlog.md', () => {
