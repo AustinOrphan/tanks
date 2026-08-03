@@ -1,7 +1,7 @@
 // The bed schedules against the AUDIO clock, so a fake context plus an injected
 // timer makes the whole thing testable without waiting in real time.
 import { describe, it, expect } from 'vitest';
-import { createMusicBed } from './music';
+import { createMusicBed, INTENSITY_GLIDE_SECONDS } from './music';
 import { noteToHz, trackById, type MusicTrackDef } from './music-data';
 import { MUSIC_TRACK_ID } from './engine';
 import { parseChord } from './chords';
@@ -225,6 +225,639 @@ describe('composed tracks', () => {
     bed.stop();
   });
 
+  it('SWITCHES tracks only at a cycle boundary, never mid-phrase', () => {
+    // The whole seamlessness argument. Queue a swap partway through a cycle and
+    // the outgoing track must finish it; the incoming one must start at ITS
+    // step 0, not wherever the old cursor happened to be.
+    const a: MusicTrackDef = {
+      id: 'a', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('C2'), noteToHz('E2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const b: MusicTrackDef = {
+      id: 'b', stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D2'), noteToHz('D1'), noteToHz('D2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(a);
+    bed.start();
+    ctx.currentTime = 1; t.tick(); // 2 steps in: mid-cycle
+    bed.queueTrack(b);
+    expect(bed.currentTrackId(), 'a queued switch must not take effect at once').toBe('a');
+    for (let i = 2; i <= 9; i++) { ctx.currentTime = i; t.tick(); }
+
+    const played = ctx.notes.map((n) => Math.round(n.freq));
+    const aNotes = a.tracks[0].notes!.map((n) => Math.round(n!));
+    const bNotes = b.tracks[0].notes!.map((n) => Math.round(n!));
+    const switchAt = played.findIndex((f) => bNotes.includes(f) && !aNotes.includes(f));
+    expect(switchAt, 'the switch never happened').toBeGreaterThan(0);
+    // It landed on a multiple of the cycle length: 4 steps here.
+    expect(switchAt % 4, `switched at step ${switchAt}, not a cycle boundary`).toBe(0);
+    // Track a played WHOLE cycles up to that point -- no truncated phrase.
+    expect(played.slice(0, switchAt)).toEqual(
+      Array.from({ length: switchAt }, (_, i) => aNotes[i % aNotes.length]),
+    );
+    // And b starts at ITS beginning, not mid-pattern.
+    expect(played.slice(switchAt, switchAt + 4)).toEqual(bNotes);
+    expect(bed.currentTrackId()).toBe('b');
+    bed.stop();
+  });
+
+  it('keeps the STEP GRID unbroken across a switch', () => {
+    // A switch that dropped or doubled a step would be audible as a stumble even
+    // if the notes themselves were right.
+    const mk = (id: string, hz: number): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [{ voice: 'bass', notes: [hz, hz], generate: null, intensity: 0 }],
+    });
+    const { ctx, t, bed } = withTrack(mk('x', noteToHz('A1')!));
+    bed.start();
+    bed.queueTrack(mk('y', noteToHz('D1')!));
+    for (let i = 1; i <= 8; i++) { ctx.currentTime = i; t.tick(); }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((p, q) => p - q);
+    for (let i = 1; i < starts.length; i++) {
+      expect(starts[i] - starts[i - 1], `gap at ${i} spans the switch`).toBeCloseTo(1, 9);
+    }
+    bed.stop();
+  });
+
+  it('bridges with material from the SECTIONS THEMSELVES, nothing invented', () => {
+    // Austin, after four iterations of composed interstitial material: "you're
+    // still using something that exists in neither section to bridge between
+    // the two and it's off". This is that sentence as an assertion: every pitch
+    // scheduled across the whole run, transition included, must come from one
+    // of the two tracks' own note lists. There is no third thing.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('F1'), noteToHz('A1'), noteToHz('C#2')], generate: null, intensity: 0 },
+        // A lead too, so the OVERLAP path is inside this sweep: its notes are
+        // legal material, and anything else the overlap emitted would fail.
+        { voice: 'lead', notes: [noteToHz('D4'), noteToHz('F4'), noteToHz('A4'), noteToHz('E4')], generate: null, intensity: 0 },
+      ],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('C3'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 30; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const legal = new Set(
+      [...from.tracks.flatMap((l) => l.notes ?? []), ...to.tracks.flatMap((l) => l.notes ?? [])]
+        .filter((n): n is number => n !== null)
+        .map((n) => Math.round(n)),
+    );
+    expect(ctx.notes.length).toBeGreaterThan(8);
+    for (const n of ctx.notes) {
+      expect(legal, `scheduled ${Math.round(n.freq)}Hz: material from neither section`).toContain(
+        Math.round(n.freq),
+      );
+    }
+    expect(bed.currentTrackId()).toBe('to');
+    bed.stop();
+  });
+
+  it('a CONTEXT change lands on the next bar; a roam change still waits for the cycle', () => {
+    // The player-visible defect this fixes: every suite change waited for the
+    // playing track's next CYCLE boundary. Measured against the real modules,
+    // a context change therefore lagged the screen by min 0.35s / median 6.35s
+    // / max 11.85s (24 of 24 calls, swept every 0.5s across one 12.8s menu
+    // cycle) -- so leaving the title screen played menu music several seconds
+    // into the level, then changed suite while the round was underway.
+    //
+    // Those absolutes MOVE with the sweep grid: the same measurement at 1.0s
+    // reads 0.85/6.85/11.85 and at 0.1s reads 0.68/7.08/13.38, because a finer
+    // grid catches calls closer to the boundary and the 0.6s lookahead bounds
+    // how late a change can still be recalled. The durable result is the
+    // CONTRAST between the two landings, not any one set of numbers.
+    //
+    // A ROAM change is a musical decision and still belongs at the cycle
+    // boundary. A CONTEXT change is a response to the player and belongs at the
+    // next bar. Both are asserted here, so the fix cannot be "switch instantly".
+    const spec = (id: string, barSteps = 2): MusicTrackDef => ({
+      id, stepSeconds: 0.5, barSteps, chords: ['Am', 'F', 'C', 'G'],
+      tracks: [{
+        voice: 'bass',
+        notes: [noteToHz('A1'), noteToHz('F1'), noteToHz('C2'), noteToHz('G1'),
+                noteToHz('A1'), noteToHz('F1'), noteToHz('C2'), noteToHz('G1')],
+        generate: null, intensity: 0,
+      }],
+    });
+    // cycleSteps = 8 (the one layer is 8 notes), barSteps = 2 -> bars at 0,2,4,6.
+    const landing = (at?: 'bar' | 'cycle', warm = 0, toBar = 4): number => {
+      const { ctx, t, bed } = withTrack(spec('from'));
+      bed.start();
+      let i = 0;
+      // Advance the clock BEFORE asking, so the call lands mid-bar as often as
+      // on a bar line. Without this the request always arrives at step 0, where
+      // "the next bar" and "the very next step" are the same index.
+      for (let w = 0; w < warm; w++) { i += 1; ctx.currentTime = i * 0.5; t.tick(); }
+      bed.changeSuite(spec('to', toBar), at ? { at } : undefined);
+      for (let k = 1; k <= 24; k++) {
+        i += 1;
+        ctx.currentTime = i * 0.5;
+        t.tick();
+        if (bed.currentTrackId() === 'to') { bed.stop(); return k; }
+      }
+      bed.stop();
+      return -1;
+    };
+    // Exact indices: the fake clock is deterministic (0.5s steps, 0.6s
+    // lookahead, so scheduling runs one step ahead of the tick count).
+    //
+    // Swept across the whole outgoing bar rather than asserted at one offset.
+    // A single sample taken at warm=0 CANNOT discriminate this fix from
+    // "switch on the very next step": at step 0 the next bar IS the next step,
+    // so both land at 1. The alternation below is the discriminator -- ask
+    // mid-bar (odd offsets) and a correct implementation waits one extra step.
+    const WARMS = [0, 1, 2, 3, 4, 5, 6, 7];
+    const bars = WARMS.map((w) => landing('bar', w));
+    expect(bars, 'a context change did not land on the outgoing track\'s bar line').toEqual(
+      [1, 2, 1, 2, 1, 2, 1, 2],
+    );
+    // The incoming track's bar is deliberately 4 while the outgoing track's is
+    // 2 (`landing`'s toBar default), so the two fixtures are not interchangeable:
+    // the boundary that matters is the one the LISTENER is currently hearing.
+    // Reading the bar off the incoming track instead moves this sweep to
+    // [3,2,1,4,3,2,1,4] (measured), so the pin above is what catches that swap.
+    //
+    // A roam change still counts down to the cycle boundary and wraps.
+    expect(WARMS.map((w) => landing('cycle', w)), 'a roam change stopped waiting for the cycle')
+      .toEqual([7, 6, 5, 4, 3, 2, 1, 8]);
+    expect(WARMS.map((w) => landing(undefined, w)), 'the implicit default disagreed with the explicit one')
+      .toEqual([7, 6, 5, 4, 3, 2, 1, 8]);
+  });
+
+  it("enters through the incoming piece's OWN final bar -- its dominant -- first", () => {
+    // The through-line construction ends every progression on its dominant, so
+    // the incoming track's last bar IS the entry music. The first thing heard
+    // from the new section must be that final bar, then the cycle proper.
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('D1'), noteToHz('D1')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+    const incoming = ctx.notes
+      .map((n) => Math.round(n.freq))
+      .filter((f) => f !== Math.round(noteToHz('D1')!));
+    // Final bar first (E2, G#2 -- the V bar), THEN the cycle from the top.
+    const e2 = Math.round(noteToHz('E2')!);
+    const gs2 = Math.round(noteToHz('G#2')!);
+    const a2 = Math.round(noteToHz('A2')!);
+    expect(incoming.slice(0, 2), 'the pickup bar was skipped').toEqual([e2, gs2]);
+    expect(incoming.slice(2, 4), 'the cycle proper did not follow').toEqual([a2, a2]);
+    bed.stop();
+  });
+
+  it('carries the OUTGOING melody over the pickup, fading, then gone', () => {
+    // The overlap Austin asked for, bounded by the no-invented-material law:
+    // the overlapping notes are the outgoing track's own last-bar lead line.
+    // It must sound DURING the pickup and be silent once the cycle proper
+    // starts -- an overlap that lingers is two melodies fighting.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [
+        { voice: 'bass', notes: [noteToHz('D1'), noteToHz('D1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 },
+        // The lead's LAST BAR is C#5/E5 -- distinct pitches, so presence in the
+        // pickup window is attributable.
+        { voice: 'lead', notes: [noteToHz('D5'), noteToHz('F5'), noteToHz('C#5'), noteToHz('E5')], generate: null, intensity: 0 },
+      ],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A2'), noteToHz('A2'), noteToHz('E2'), noteToHz('G#2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+
+    const cs5 = Math.round(noteToHz('C#5')!);
+    const e5 = Math.round(noteToHz('E5')!);
+    // The pickup spans steps 4..5 (the incoming 2-step final bar). The outgoing
+    // lead's final-bar notes ride over exactly that window.
+    const outgoingLeadTimes = ctx.notes
+      .filter((n) => [cs5, e5].includes(Math.round(n.freq)))
+      .map((n) => Math.round(n.startedAt - 0.08));
+    const inPickup = outgoingLeadTimes.filter((x) => x === 4 || x === 5);
+    const after = outgoingLeadTimes.filter((x) => x > 5);
+    expect(inPickup.length, 'no overlap sounded in the pickup').toBeGreaterThan(0);
+    expect(after, 'the overlap lingered past the pickup').toEqual([]);
+    bed.stop();
+  });
+
+  it('a QUEUED track cannot hijack a suite change: the new suite plays a full cycle first', () => {
+    // Review reproduced this exactly: the pickup made the wrap one bar later
+    // read as a cycle boundary, so changeSuite(B) + queueTrack(Q) played B for
+    // its pickup bar only, then Q took over. B must play its pickup AND a full
+    // cycle before any queued switch fires.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    const q = mk('q', 'E2');
+    const { ctx, t, bed } = withTrack(a);
+    bed.start();
+    bed.changeSuite(b);
+    bed.queueTrack(q);
+    for (let i = 1; i <= 20; i++) { ctx.currentTime = i; t.tick(); }
+    const c2 = Math.round(noteToHz('C2')!);
+    const bCount = ctx.notes.filter((n) => Math.round(n.freq) === c2).length;
+    // b's pickup (2 steps) plus its full cycle (4 steps) = at least 6 sounding
+    // steps before q may enter. The hijack gave exactly 2.
+    expect(bCount, `b played only ${bCount} steps before being replaced`).toBeGreaterThanOrEqual(6);
+    expect(bed.currentTrackId()).toBe('q'); // ...and q does arrive, eventually
+    bed.stop();
+  });
+
+  it('a single-bar-cycle suite is not clobbered in the same step it arrives', () => {
+    // startAtStep is 0 when the incoming cycle is one bar long, which used to
+    // satisfy the queued check in the SAME step: the incoming suite never
+    // sounded a note while the ramp described a transition to a discarded track.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const single: MusicTrackDef = {
+      id: 'single', stepSeconds: 0.5, barSteps: 2, chords: ['E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('B1'), noteToHz('B1')], generate: null, intensity: 0 }],
+    };
+    const q: MusicTrackDef = {
+      id: 'q', stepSeconds: 0.5, barSteps: 2, chords: ['E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(single);
+    bed.queueTrack(q);
+    for (let i = 1; i <= 24; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const b1 = Math.round(noteToHz('B1')!);
+    expect(
+      ctx.notes.filter((n) => Math.round(n.freq) === b1).length,
+      'the incoming suite never sounded',
+    ).toBeGreaterThanOrEqual(4); // pickup + its full (one-bar) cycle
+    bed.stop();
+  });
+
+  it('stop() mid-transition clears it: no stale ramp survives into a restart', () => {
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: Array.from({ length: 16 }, () => noteToHz('A1')), generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = { ...from, id: 'to', stepSeconds: 0.5 };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    expect(bed.inTransition(), 'a committed change is a transition in flight').toBe(true);
+    for (let i = 1; i <= 18; i++) { ctx.currentTime = i; t.tick(); } // into the ramp
+    bed.stop();
+    expect(bed.inTransition(), 'stop() left the transition alive').toBe(false);
+    // And a restart does not resume a stale ramp against a new clock.
+    bed.start();
+    expect(bed.inTransition()).toBe(false);
+    bed.stop();
+  });
+
+  it('RAMPS the tempo across the pickup bar rather than switching instantly', () => {
+    // The ramp spans the incoming piece's pickup bar, so its resolution IS the
+    // bar length: 2-step fixture bars gave only the two endpoints, which is why
+    // this fixture uses realistic 8-step bars.
+    const mkNotes = (name: string, n: number): Array<number | null> =>
+      Array.from({ length: n }, () => noteToHz(name));
+    const from: MusicTrackDef = {
+      id: 'slow', stepSeconds: 1, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: mkNotes('A1', 16), generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = {
+      id: 'fast', stepSeconds: 0.25, barSteps: 8, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: mkNotes('A1', 16), generate: null, intensity: 0 }],
+    };
+    const { ctx, t, bed } = withTrack(from);
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 80; i++) { ctx.currentTime = i * 0.5; t.tick(); }
+    const starts = [...new Set(ctx.notes.map((n) => Number(n.startedAt.toFixed(6))))].sort((a, b) => a - b);
+    const gaps = starts.slice(1).map((v, i) => v - starts[i]);
+    // An instant switch would show only 1.0 and 0.25. A ramp visits values in
+    // between -- that is the whole point.
+    const between = gaps.filter((g) => g > 0.3 && g < 0.95);
+    expect(between.length, `gaps: ${gaps.map((g) => g.toFixed(2)).join(',')}`).toBeGreaterThan(0);
+    bed.stop();
+  });
+
+  it('consults the DIRECTOR at each completed cycle, and applies its directives', () => {
+    // The wiring that makes the playlist real: a cycle completes, the director
+    // answers, the bed applies it through the same paths a caller would use.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    const calls: number[] = [];
+    const director = {
+      first: () => a,
+      next: () => {
+        calls.push(1);
+        return calls.length === 1 ? ({ kind: 'queue', track: b } as const) : ({ kind: 'stay' } as const);
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    for (let i = 1; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
+    // Consulted once per completed 4-step cycle, not per step.
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    expect(calls.length).toBeLessThan(6);
+    // And the directive took effect: b plays after a's first full cycle.
+    const c2 = Math.round(noteToHz('C2')!);
+    expect(ctx.notes.filter((n) => Math.round(n.freq) === c2).length).toBeGreaterThan(0);
+    expect(bed.currentTrackId()).toBe('b');
+    bed.stop();
+  });
+
+  it("a 'suite' directive enters via the PICKUP; a 'queue' does not", () => {
+    // The two directives must map to their distinct mechanisms. Downgrading a
+    // suite change to a plain queue skips the pickup bar and the ramp -- the
+    // entire handled join -- and nothing used to notice.
+    const a: MusicTrackDef = {
+      id: 'a', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    // b's bars are distinct: bar 1 = D2, final bar = G2. Pickup entry plays G2
+    // FIRST; a queued entry would open on D2.
+    const b: MusicTrackDef = {
+      id: 'b', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D2'), noteToHz('D2'), noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    let sent = false;
+    const director = {
+      first: () => a,
+      next: () => {
+        if (sent) return { kind: 'stay' } as const;
+        sent = true;
+        return { kind: 'suite', track: b } as const;
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    for (let i = 1; i <= 14; i++) { ctx.currentTime = i; t.tick(); }
+    const bNotes = ctx.notes
+      .map((n) => Math.round(n.freq))
+      .filter((f) => f !== Math.round(noteToHz('A1')!));
+    expect(bNotes.length).toBeGreaterThan(3);
+    expect(bNotes[0], 'suite directive skipped the pickup bar').toBe(Math.round(noteToHz('G2')!));
+    bed.stop();
+  });
+
+  it('does NOT consult the director at the pickup wrap -- only at real cycles', () => {
+    // The pickup wraps stepsIntoCycle one bar in; consulting there would advance
+    // the playlist before the member had actually played.
+    const mk = (id: string, hz: string, step = 1): MusicTrackDef => ({
+      id, stepSeconds: step, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    let consulted = 0;
+    const director = {
+      first: () => a,
+      next: () => {
+        consulted += 1;
+        return { kind: 'stay' } as const;
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    bed.changeSuite(b);
+    // Phase 1: a's own cycle completes (4 steps) -- but a suite change is
+    // already committed, so there is nothing to ask: the director's previous
+    // answer has not landed yet.
+    for (let i = 1; i <= 4; i++) { ctx.currentTime = i; t.tick(); }
+    expect(consulted, 'consulted while a switch was already pending').toBe(0);
+    // Phase 2: b's pickup plays and WRAPS (2 steps). stepsIntoCycle hits 0 here,
+    // but the member has only played one bar -- no consult.
+    for (let i = 5; i <= 6; i++) { ctx.currentTime = i; t.tick(); }
+    expect(consulted, 'the pickup wrap consulted the director').toBe(0);
+    // Phase 3: b's full cycle finally completes -- now it is asked.
+    for (let i = 7; i <= 12; i++) { ctx.currentTime = i; t.tick(); }
+    expect(consulted).toBe(1);
+    bed.stop();
+  });
+
+  it('a PAUSE does not desync the director from what actually plays', () => {
+    // The gap that let two blockers through: every director test ran one
+    // uninterrupted session, while loop.ts calls stopMusic() on EVERY non-
+    // playing state -- Esc included. A committed switch must survive the pause,
+    // or the director has counted a member against its dwell that never played.
+    const mk = (id: string, hz: string): MusicTrackDef => ({
+      id, stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz(hz), noteToHz(hz), noteToHz(hz), noteToHz(hz)], generate: null, intensity: 0 }],
+    });
+    const a = mk('a', 'A1');
+    const b = mk('b', 'C2');
+    // DISTINCT tracks per call: a director that hands the same track every time
+    // makes a dropped directive invisible, because the next consult re-supplies
+    // it. Each handed track must actually sound.
+    const c = mk('c', 'E3');
+    const queue = [b, c];
+    const handed: MusicTrackDef[] = [];
+    const director = {
+      first: () => a,
+      next: () => {
+        const track = queue[handed.length] ?? c;
+        handed.push(track);
+        return { kind: 'queue', track } as const;
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    bed.start();
+    // Tick to the PRECISE window the blocker lives in: a directive handed out
+    // but not yet adopted. Stopping at a fixed tick missed it -- b had already
+    // been adopted, so the drop had nothing to drop.
+    let ticks = 0;
+    while (ticks < 20 && !(handed.length > 0 && bed.currentTrackId() === 'a')) {
+      ticks += 1;
+      ctx.currentTime = ticks;
+      t.tick();
+    }
+    expect(handed.length, 'never reached the committed-but-unadopted window').toBe(1);
+    expect(bed.currentTrackId()).toBe('a');
+    bed.stop();   // Esc, with b committed but not yet adopted
+    bed.start();  // resume
+    for (let i = ticks + 1; i <= ticks + 12; i++) { ctx.currentTime = i; t.tick(); }
+    // EVERY handed track must have sounded. Dropping the one committed at the
+    // pause leaves the director believing it played while the bed never did.
+    const played = new Set(ctx.notes.map((n) => Math.round(n.freq)));
+    for (const track of handed) {
+      const hz = Math.round(track.tracks[0].notes![0]!);
+      expect(played, `"${track.id}" was handed out but never sounded`).toContain(hz);
+    }
+    bed.stop();
+  });
+
+  it('a pause during a PICKUP does not cut the incoming member to one bar', () => {
+    // The second blocker: stop() zeroed the switch lock while leaving the cycle
+    // position mid-pickup, so the pickup's premature wrap read as a real
+    // boundary on resume and the incoming member vanished after one bar.
+    const from: MusicTrackDef = {
+      id: 'from', stepSeconds: 1, barSteps: 2, chords: ['Am', 'E'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1'), noteToHz('A1'), noteToHz('A1'), noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    const to: MusicTrackDef = {
+      id: 'to', stepSeconds: 1, barSteps: 2, chords: ['Dm', 'A'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('D2'), noteToHz('D2'), noteToHz('G2'), noteToHz('G2')], generate: null, intensity: 0 }],
+    };
+    const other: MusicTrackDef = { ...from, id: 'other',
+      tracks: [{ voice: 'bass', notes: [noteToHz('E3'), noteToHz('E3'), noteToHz('E3'), noteToHz('E3')], generate: null, intensity: 0 }] };
+    // A track is ALREADY queued when the pause happens, so a stale cycle
+    // position on resume would adopt it immediately and evict the incoming
+    // member mid-pickup -- which is the shape of the original blocker.
+    const director = {
+      first: () => from,
+      next: () => ({ kind: 'stay' } as const),
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: from, director,
+    });
+    bed.start();
+    bed.changeSuite(to);
+    for (let i = 1; i <= 5; i++) { ctx.currentTime = i; t.tick(); } // into the pickup
+    bed.queueTrack(other);
+    bed.stop();
+    bed.start();
+    for (let i = 6; i <= 16; i++) { ctx.currentTime = i; t.tick(); }
+    // The incoming member must sound for more than its pickup bar.
+    const toNotes = ctx.notes.filter((n) =>
+      [Math.round(noteToHz('D2')!), Math.round(noteToHz('G2')!)].includes(Math.round(n.freq)),
+    );
+    expect(toNotes.length, 'the incoming member was cut to its pickup').toBeGreaterThanOrEqual(4);
+    bed.stop();
+  });
+
+  it("a DIRECTOR-driven suite change takes the cycle boundary, not the next bar", () => {
+    // The roam path assigns its own `at`, on a different line from the public
+    // changeSuite() default. Pinning the default therefore does NOT pin this:
+    // flipping line ~399 to 'bar' left the whole suite green before this test
+    // existed, so a musical decision would have started jumping in on a bar.
+    //
+    // barSteps 2 against a cycle of 8 is what discriminates the two: a bar
+    // landing arrives within 2 steps of the decision, a cycle landing waits
+    // out the rest of the cycle.
+    const layer = (f: string) => [{
+      voice: 'bass' as const,
+      notes: [noteToHz(f), noteToHz(f), noteToHz(f), noteToHz(f),
+              noteToHz(f), noteToHz(f), noteToHz(f), noteToHz(f)],
+      generate: null, intensity: 0,
+    }];
+    const a: MusicTrackDef = { id: 'a', stepSeconds: 0.5, barSteps: 2, chords: ['Am', 'F', 'C', 'G'], tracks: layer('A1') };
+    const b: MusicTrackDef = { ...a, id: 'b', tracks: layer('D2') };
+    let handed = false;
+    const director = {
+      first: () => a,
+      next: () => {
+        if (handed) return { kind: 'stay' } as const;
+        handed = true;
+        return { kind: 'suite', track: b } as const;
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: a, director,
+    });
+    // A PAUSE is what makes the two arms distinguishable at all. stop() zeroes
+    // stepsSinceConsult but deliberately leaves stepsIntoCycle where it was, so
+    // after a resume the consult fires MID-cycle instead of on the boundary.
+    // Without this the director is only ever consulted at stepsIntoCycle === 0,
+    // where `% barSteps === 0` is also true and 'bar' and 'cycle' coincide --
+    // which is why a version of this test without the pause could not fail.
+    let i = 0;
+    bed.start();
+    for (let k = 0; k < 3; k++) { i += 1; ctx.currentTime = i * 0.5; t.tick(); }
+    bed.stop();
+    bed.start();
+    let landedAt = -1;
+    for (let k = 1; k <= 40 && landedAt < 0; k++) {
+      i += 1;
+      ctx.currentTime = i * 0.5;
+      t.tick();
+      if (bed.currentTrackId() === 'b') landedAt = k;
+    }
+    bed.stop();
+    // 10 measured; routing the roam decision through the bar arm gives 8.
+    expect(landedAt, 'a roam suite change stopped waiting for the cycle boundary').toBe(10);
+  });
+
+  it('never becomes a per-STEP callback, even for a degenerate one-step cycle', () => {
+    // cycleSteps can be 1 for a track with a single-note layer. createMusicBed
+    // is a public factory and cycleSteps is derived, not validated, so the
+    // interval carries a floor.
+    const one: MusicTrackDef = {
+      id: 'one', stepSeconds: 1, barSteps: 1, chords: ['Am'],
+      tracks: [{ voice: 'bass', notes: [noteToHz('A1')], generate: null, intensity: 0 }],
+    };
+    let consulted = 0;
+    const director = {
+      first: () => one,
+      next: () => {
+        consulted += 1;
+        return { kind: 'stay' } as const;
+      },
+      enterContext: () => null,
+      currentContext: () => 'arena' as const,
+    };
+    const ctx = new FakeCtx();
+    const t = fakeTimer();
+    const bed = createMusicBed(ctx as unknown as BaseAudioContext, ctx.destination, {
+      setInterval: t.setInterval, clearInterval: t.clearInterval, track: one, director,
+    });
+    bed.start();
+    for (let i = 1; i <= 20; i++) { ctx.currentTime = i; t.tick(); }
+    const steps = ctx.notes.length;
+    expect(steps).toBeGreaterThan(15);
+    expect(consulted, `consulted ${consulted} times over ${steps} steps`).toBeLessThan(steps / 2);
+    bed.stop();
+  });
+
   it('plays THE track the engine asks for, by id', () => {
     // Review proved the old version could not fail: `trackById('arena')!` yields
     // null when the id is absent, withTrack(null) silently takes the generated
@@ -252,6 +885,206 @@ describe('composed tracks', () => {
       expect(harmony, `scheduled ${hz}Hz: neither authored nor in the harmony`).toContain(pc);
     }
     bed.stop();
+  });
+
+  it('SNAPS to the asked-for density on start, rather than gliding in from the last life', () => {
+    // The glide softens a change during play. A fresh bed is not a change: on
+    // start it must already be at the density the game asked for, or the bed
+    // opens by gliding from a value nobody asked for.
+    //
+    // In the shipped game this fires at BOOT, not on respawn: `stopMusic` has
+    // no production caller, so `start()`'s body runs once per page load and a
+    // lost life never restarts the bed. An earlier version of this comment said
+    // "every respawn" -- review showed that path does not exist. It is pinned
+    // anyway, and across a restart below, because createMusicBed is a public
+    // factory and the restart is reachable through it.
+    const layer = (hz: number, intensity: number) => ({
+      voice: 'bass' as const, notes: [hz, hz, hz, hz], generate: null, intensity,
+    });
+    const LOUD = 700, MIDD = 750, QUIET = 800;
+    // Derived from the constant, so retuning the glide cannot silently turn this
+    // into a test that passes for the wrong reason: at a coarse enough rate the
+    // first step would already be below 0.75 and the assertion would hold even
+    // without the snap. TEN steps to cross the whole range, whatever the tuning.
+    const stepSeconds = INTENSITY_GLIDE_SECONDS / 10;
+    const track: MusicTrackDef = {
+      id: 'snap', stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [layer(LOUD, 0.75), layer(MIDD, 0.45), layer(QUIET, 0)],
+    };
+    const { ctx, t, bed } = withTrack(track);
+    // Ask for a MIDDLE density, not the floor: asking for 0 cannot tell a snap
+    // to the target from a snap to zero, or from an initial value that happens
+    // to be zero. Review proved that -- deleting the snap and moving the
+    // initial value to 0 passed the whole gate.
+    bed.setIntensity(0.5);
+    bed.start();
+    for (let i = 1; i <= 4; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+    const played = (hz: number) => ctx.notes.filter((n) => Math.round(n.freq) === hz).length;
+    expect(played(QUIET), 'the always-on layer never sounded').toBeGreaterThan(0);
+    // Above the asked-for density: silent. Without the snap, `intensity` starts
+    // at its initial 1 and walks down, so this layer sounds first.
+    expect(played(LOUD), 'a layer above the asked-for density sounded at startup').toBe(0);
+    // BELOW the asked-for density: sounding, from the first step. This is the
+    // other half, and it is what makes the assertion above a statement about
+    // the TARGET rather than about zero.
+    expect(played(MIDD), 'a layer below the asked-for density was silent at startup')
+      .toBeGreaterThan(0);
+
+    // A RESTART snaps too. Without this, a snap that fires only the first time
+    // passes: the assertions above only ever exercise a fresh bed.
+    const before = ctx.notes.length;
+    bed.setIntensity(0); // the game now wants the floor
+    bed.start();
+    for (let i = 5; i <= 8; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+    const after = ctx.notes.slice(before);
+    const playedAfter = (hz: number) => after.filter((n) => Math.round(n.freq) === hz).length;
+    expect(playedAfter(QUIET), 'nothing sounded after the restart').toBeGreaterThan(0);
+    expect(playedAfter(MIDD), 'a restart glided down from the old density instead of snapping')
+      .toBe(0);
+  });
+
+  it('takes INTENSITY_GLIDE_SECONDS of AUDIO time to cross, at any tempo', () => {
+    // Pins the rate end to end, in the clock the listener actually hears. The
+    // glide and the step clock are charged from ONE stepLength() reading in
+    // pump(), so they cannot diverge -- the first version read it inside
+    // scheduleStep, before a suite change had installed its tempo ramp, and so
+    // charged the previous step's duration. Two tempos, one assertion: the
+    // wall-clock span is a property of the constant, not of the track.
+    const cross = (stepSeconds: number): number => {
+      const track: MusicTrackDef = {
+        id: `t${stepSeconds}`, stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+        // 0.01 goes silent essentially when the glide reaches the bottom.
+        tracks: [
+          { voice: 'bass', notes: [100, 100, 100, 100], generate: null, intensity: 0.01 },
+          { voice: 'pad', notes: [200, 200, 200, 200], generate: null, intensity: 0 },
+        ],
+      };
+      const { ctx, t, bed } = withTrack(track);
+      bed.setIntensity(1);
+      bed.start();
+      ctx.currentTime = stepSeconds; t.tick();
+      const from = ctx.currentTime;
+      bed.setIntensity(0);
+      const steps = Math.ceil((INTENSITY_GLIDE_SECONDS / stepSeconds) * 3) + 8;
+      for (let i = 2; i <= steps; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+      bed.stop();
+      const last = Math.max(...ctx.notes.filter((n) => Math.round(n.freq) === 100).map((n) => n.startedAt));
+      return last - from;
+    };
+    // Tempos an order of magnitude apart must agree: that INVARIANCE is what a
+    // per-step rate of stepSeconds/INTENSITY_GLIDE_SECONDS buys, and what a
+    // fixed per-step delta would destroy.
+    const fast = cross(0.05), slow = cross(0.5);
+    expect(fast, 'the glide is not tempo-invariant').toBeCloseTo(slow, 1);
+    // Each span is the glide plus at most one LOOKAHEAD_SECONDS (0.6): these
+    // are SCHEDULING times, and the bed always runs a lookahead ahead of the
+    // clock. It can never be shorter than the constant.
+    for (const [st, span] of [[0.05, fast], [0.5, slow]] as const) {
+      expect(span, `crossed faster than the constant at stepSeconds ${st}`)
+        .toBeGreaterThanOrEqual(INTENSITY_GLIDE_SECONDS);
+      expect(span, `crossed slower than the constant plus a lookahead at stepSeconds ${st}`)
+        .toBeLessThan(INTENSITY_GLIDE_SECONDS + 0.6 + st);
+    }
+  });
+
+  it('glides UP as well as down, so an arrangement that thinned can come back', () => {
+    // Review found the direction of travel completely untested: a glide that
+    // could thin but never thicken passed all 1286 tests. Shipped, that is the
+    // same "left with a drone" defect this feature exists to fix -- after one
+    // respawn the high-threshold layers would never return for the rest of the
+    // session. The mirror of the downward case: the QUIETEST-threshold layer
+    // must re-enter first, and nothing may re-enter on the first step.
+    const layer = (hz: number, intensity: number) => ({
+      voice: 'bass' as const, notes: [hz, hz, hz, hz], generate: null, intensity,
+    });
+    const HI = 400, MID = 500;
+    const stepSeconds = INTENSITY_GLIDE_SECONDS / 10;
+    const track: MusicTrackDef = {
+      id: 'rise', stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [layer(HI, 0.75), layer(MID, 0.45)],
+    };
+    const { ctx, t, bed } = withTrack(track);
+    bed.setIntensity(0);
+    bed.start(); // snaps to 0: both layers silent
+    ctx.currentTime = stepSeconds; t.tick();
+    const riseTime = ctx.currentTime;
+    bed.setIntensity(1); // the round restarts and enemies start dying again
+    for (let i = 2; i <= 20; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+    const firstAt = (hz: number): number => {
+      const ts = ctx.notes.filter((n) => Math.round(n.freq) === hz).map((n) => n.startedAt);
+      return ts.length === 0 ? Infinity : Math.min(...ts);
+    };
+    const hi = firstAt(HI), mid = firstAt(MID);
+    expect(hi, 'the arrangement never came back -- the glide only travels downward')
+      .toBeLessThan(Infinity);
+    expect(mid, 'the 0.45 layer never came back').toBeLessThan(Infinity);
+    // Both silent before the rise, and the quieter threshold re-enters first.
+    expect(mid, 'a layer sounded before the arrangement was asked to thicken')
+      .toBeGreaterThan(riseTime);
+    expect(mid, 'the two layers re-entered together -- the rise was a switch, not a glide')
+      .toBeLessThan(hi);
+  });
+
+  it('GLIDES the arrangement down instead of cutting every layer in one step', () => {
+    // The defect: musicIntensity steps 1.0 -> 0 the instant a life is lost --
+    // resetArena revives every enemy while enemiesAtRoundStart is only
+    // recomputed per LEVEL -- and setIntensity was a bare assignment. Measured
+    // on the shipped data, 72 of 120 layers across the 24 arena-context suite
+    // members fall silent in the same step: every stab, lead and pluck, leaving
+    // only bass and pad. The music dropped to a drone on every respawn.
+    //
+    // Gliding makes the staggered thresholds do the work: the loudest layer
+    // leaves first and the arrangement thins out over INTENSITY_GLIDE_SECONDS.
+    const layer = (hz: number, intensity: number) => ({
+      voice: 'bass' as const,
+      notes: [hz, hz, hz, hz],
+      generate: null,
+      intensity,
+    });
+    // Distinct pitches so each layer is identifiable in ctx.notes.
+    const HI = 400, MID = 500, LOW = 600;
+    // Ten steps to cross the full range, derived from the constant rather than
+    // hardcoded: review measured that a fixed 0.5s step only resolves the
+    // ordering for INTENSITY_GLIDE_SECONDS in roughly [1.0, 20.0], so the
+    // comment promising a free retune was false. Deriving it makes it true.
+    const stepSeconds = INTENSITY_GLIDE_SECONDS / 10;
+    const track: MusicTrackDef = {
+      id: 'thresholds', stepSeconds, barSteps: 2, chords: ['Am', 'F'],
+      tracks: [layer(HI, 0.75), layer(MID, 0.45), layer(LOW, 0)],
+    };
+    const { ctx, t, bed } = withTrack(track);
+    bed.setIntensity(1);
+    bed.start();
+    for (let i = 1; i <= 2; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    const dropTime = ctx.currentTime;
+    bed.setIntensity(0); // the respawn
+    for (let i = 3; i <= 20; i++) { ctx.currentTime = i * stepSeconds; t.tick(); }
+    bed.stop();
+
+    // The LAST moment each layer was scheduled, measured on the audio clock.
+    const lastAt = (hz: number): number =>
+      Math.max(...ctx.notes.filter((n) => Math.round(n.freq) === hz).map((n) => n.startedAt), -1);
+    const hi = lastAt(HI), mid = lastAt(MID), low = lastAt(LOW);
+
+    expect(low, 'the always-on layer stopped, so this measures the wrong thing')
+      .toBeGreaterThan(dropTime);
+    expect(hi, 'the 0.75 layer never played before the drop').toBeGreaterThan(-1);
+    // The discriminator. With a bare assignment both thresholds are crossed in
+    // the SAME step, so hi === mid and this fails; with a glide the 0.75 layer
+    // must fall silent strictly earlier than the 0.45 one.
+    expect(hi, 'every layer was cut in one step -- the arrangement did not thin out')
+      .toBeLessThan(mid);
+    // What this one actually catches is that the layer was still sounding WHEN
+    // the drop arrived -- not that the drop was gradual. It cannot check the
+    // latter: LOOKAHEAD_SECONDS has already committed a note past `dropTime`
+    // before setIntensity is even called, so every sounding layer is
+    // structurally guaranteed one. `hi < mid` above is the sole discriminator
+    // for gradualness; this guards against measuring a layer that had already
+    // gone silent, which would make that comparison meaningless.
+    expect(hi, 'the loudest layer was already silent before the drop').toBeGreaterThan(dropTime);
   });
 });
 

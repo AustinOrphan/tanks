@@ -14,6 +14,8 @@ import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
 import { AUDIO_MANIFEST } from '../audio/manifest';
+import type { SuiteContext } from '../audio/suites';
+import type { GameState } from './state';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createGameStateMachine, type GameStateMachine } from './state';
 import { createHud, type Hud } from './hud';
@@ -188,6 +190,36 @@ export function musicIntensity(remaining: number, total: number): number {
   if (total <= 1) return 1;
   const destroyed = Math.max(0, total - remaining);
   return Math.max(0, Math.min(1, destroyed / (total - 1)));
+}
+
+/**
+ * Which musical world a game state belongs to.
+ *
+ * Pause deliberately keeps the ARENA context: the round is still in progress
+ * behind the panel, and moving the music elsewhere would make a pause feel like
+ * leaving the level. It is ducked instead.
+ */
+export function musicContextFor(state: GameState): SuiteContext {
+  switch (state) {
+    case 'title':
+      return 'menu';
+    case 'win':
+      return 'victory';
+    case 'lose':
+      return 'defeat';
+    case 'playing':
+    case 'paused':
+      return 'arena';
+    default: {
+      // Exhaustive by construction, the way TANK_KINDS forces a JSON entry: a
+      // new GameState is a COMPILE error here rather than silently inheriting
+      // arena's music. A `default: return 'arena'` compiled clean when a state
+      // was added, which is how a screen ends up scored as though it were a
+      // round in progress.
+      const unreachable: never = state;
+      return unreachable;
+    }
+  }
 }
 
 function countEnemies(world: World): number {
@@ -532,6 +564,33 @@ export function startGameWith(
     hud.setLevelSelect(unlockedLevels(), deps.levels.count);
   });
 
+  /**
+   * The music follows the game rather than merely starting and stopping.
+   *
+   * Shared by the state-change path and BOOT. Boot matters: the initial title
+   * panel is pushed straight to the HUD without going through the state
+   * machine, so hanging this off onChange alone left the title screen silent --
+   * which is the very gap this change exists to close, and the browser probe
+   * caught it.
+   */
+  function followMusic(s: GameState): void {
+    // startMusic is idempotent, so a resume passing back through 'playing' does
+    // not double-start anything -- but NOT via the `music.playing()` check,
+    // which guards the Howl branch the game never reaches. On the generated-bed
+    // path that actually runs, `if (!bed)` builds the bed once (engine.ts) and
+    // `bed.start()` returns early when its timer already exists (music.ts).
+    // It runs for EVERY state now: title, endings and pause all have music, and
+    // each is a context the director moves to through the same handled join a
+    // suite change uses.
+    audio.startMusic();
+    audio.setMusicContext(musicContextFor(s));
+    // Pause DUCKS rather than stops. Stopping discards the playlist's committed
+    // decisions and leaves the scheduler at an ambiguous position -- exactly
+    // what produced both blockers in the suite-wiring review -- while ducking
+    // touches only the gain, so resuming is seamless.
+    audio.duckMusic(s === 'paused');
+  }
+
   sm.onChange((s) => {
     hud.setState(s);
     // The round indicator is pushed ONLY from onSimulated, which the driver runs
@@ -540,15 +599,7 @@ export function startGameWith(
     // there indefinitely, since switchTo rebuilds the world without simulating.
     // The chip sits in the topbar (z-index 1), so it paints over the panel.
     if (s !== 'playing') hud.setRoundPhase(null);
-    // startMusic is idempotent (engine checks music.playing()), so a resume passing
-    // back through 'playing' does not double-start anything.
-    if (s === 'playing') audio.startMusic();
-    // ... and stop it everywhere else. This was harmless while music was always
-    // silent: nothing ever called stopMusic, so the track "played" through pause,
-    // the win panel and the title screen after a quit. With a GENERATED bed that
-    // is audible synthesis running forever, and muting only zeroes its gain --
-    // the oscillators keep churning.
-    else audio.stopMusic();
+    followMusic(s);
     // Progress is recorded AT the win, not at the Next Level click: quitting after a
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
     // unlock real levels.
@@ -569,6 +620,7 @@ export function startGameWith(
   });
 
   hud.setState(sm.state); // initial title panel
+  followMusic(sm.state); // ...and its music: this path bypasses sm.onChange
   hud.setLevel(level + 1, deps.levels.count);
   hud.setLevelSelect(unlockedLevels(), deps.levels.count);
   deps.stats.startRun();

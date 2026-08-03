@@ -24,6 +24,8 @@ function makeSpyEngine(): { engine: AudioEngine; calls: PlayCall[] } {
     getVolume: () => DEFAULT_VOLUME,
     unlock: () => {},
     setMusicIntensity: () => {},
+    setMusicContext: () => {},
+    duckMusic: () => {},
     dispose: () => {},
   };
   return { engine, calls };
