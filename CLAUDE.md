@@ -183,12 +183,13 @@ again. Quote a measurement in `notes` and you owe it a recomputing test.
 
 **Walls load as geometry, not as cells.** `loadArena` merges SOLID cells into maximal
 rectangles (`mergeSolidRuns`) and numbers tanks from a counter of their own. Both exist
-because three parts of the sim read the wall ARRAY rather than the arena's shape, and
-the 3x resolution upscale exposed all three: tank ids shared a counter with walls, so
+because four parts of the sim read the wall ARRAY rather than the arena's shape, and
+the 3x resolution upscale exposed all four: tank ids shared a counter with walls, so
 wall count reseeded every per-tank RNG stream in `ai/targeting.ts`; `resolveWalls`
 applied one push per overlapping wall, so a sliced wall pushed several times and its
-interior seams offered phantom corners; and `bankShot` chose the first reflector in
-wall-array order.
+interior seams offered phantom corners; `bankShot` chose the first reflector in
+wall-array order; and `circleVsAABB`'s `inside` branch resolved a hull escape
+differently depending on which sub-cell box it was handed.
 
 **The bank-shot dependence turned out to live one function deeper**, which is worth
 knowing before anyone "simplifies" it. `bankShot` now picks the SHORTEST muzzle ->
@@ -215,13 +216,14 @@ destructible cell is a destruction UNIT: mine blasts destroy by world-space radi
 (`mines.ts`), so a finer grid means finer breaching. arena-02's centre barrier is
 authored as adjacent blocks whose separate destruction is the level's design.
 
-**A hull INSIDE a wall escapes the mass, not the sub-cell.** `circleVsAABB`'s `inside`
-branch pushes out through the nearest face of the ONE box it is handed, which for a
-sub-cell is usually a buried internal seam — so the same hull in the same place resolved
-differently depending only on the slicing (measured: 780 of 1,681 interior centres on an
-isolated destructible mass). `resolveWalls` now marches box to box along each axis to
-find where the wall MASS ends, which is a property of the union. `circleVsAABB` itself is
-untouched, because `bullets.ts` depends on it. This was reachable, not theoretical:
+**The fourth is the hull-escape case: a hull INSIDE a wall escapes the mass, not the
+sub-cell.** `circleVsAABB`'s `inside` branch pushes out through the nearest face of the
+ONE box it is handed, which for a sub-cell is usually a buried internal seam — so the
+same hull in the same place resolved differently depending only on the slicing
+(measured: 780 of 1,681 interior centres on an isolated destructible mass).
+`resolveWalls` now marches box to box along each axis to find where the wall MASS ends,
+which is a property of the union. `circleVsAABB` itself is untouched, because
+`bullets.ts` depends on it. This was reachable, not theoretical:
 `separateTanks` drives hulls up to 0.375 units into a block and `stepMovement` calls
 `resolveWalls` immediately afterwards.
 
