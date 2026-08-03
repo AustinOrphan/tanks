@@ -24,43 +24,49 @@ import { makeTank } from './arena';
  *  fine oscillation trajectories disagree too, which failed both earlier
  *  drafts even on correct production code.
  *
- *  A THIRD, distinct residual survives even with every gap real: a hull
- *  CENTRE placed inside a destructible mass diverges between coarse and fine,
+ *  A THIRD, distinct residual survived even with every gap real: a hull
+ *  CENTRE placed inside a destructible mass diverged between coarse and fine,
  *  even fully isolated from any other wall -- a minimal isolated probe (one
  *  coarse destructible cell vs. its four fine sub-cells, no solid nearby) put
  *  820 of 1600 densely-swept interior points (0.05-unit steps) in disagreement.
- *  The mechanism is `circleVsAABB`'s `inside` branch: a centre inside a box
- *  pushes out through THAT box's nearest face, which for a fine sub-cell is
+ *  The mechanism was `circleVsAABB`'s `inside` branch: a centre inside a box
+ *  pushed out through THAT box's nearest face, which for a fine sub-cell was
  *  often a buried internal seam rather than the mass's true outer edge -- the
  *  collision-side twin of the retroreflecting-seam residual this repo already
- *  accepts for rays, and the reason solid cells are merged at all (destructible
- *  cells never merge, so it is structurally still open there).
+ *  accepts for rays, and the reason solid cells were merged at all (destructible
+ *  cells never merge, so it stayed structurally open there).
  *
- *  This is NOT merely a synthetic-position artifact -- the inside branch IS
+ *  It was NOT merely a synthetic-position artifact -- the inside branch was
  *  gameplay-reachable. `world.ts:98-104` documents `separateTanks` (tank-vs-tank
  *  shoving) driving a hull "0.375 units inside a solid block", and
  *  `stepMovement` calls `resolveWalls` immediately after every `separateTanks`
- *  pass (`world.ts:112-118`) -- so a shoved tank's centre can start a
+ *  pass (`world.ts:112-118`) -- so a shoved tank's centre could start a
  *  `resolveWalls` call already inside a wall, not just arrive at one from
  *  outside. Reviewer-probed with the real `moveTank`, legal non-overlapping
  *  starts, and the actual 3-pass alternation (4 tanks x 120 ticks): a FLAT
  *  destructible face saw 0 of 300 seeds reach the inside branch and 0 diverge
- *  (this fixture's regime, and the position test below stays scoped to it on
+ *  (this fixture's regime, and the position test below stayed scoped to it on
  *  purpose); a CONCAVE destructible pocket saw 147 of 300 seeds call
  *  `resolveWalls` with a centre already inside the mass, and 168 of 300 seeds
  *  end at decomposition-dependent positions (21 of those with no inside event
- *  at all -- the already-accepted oscillation class above). Both figures are
+ *  at all -- the already-accepted oscillation class above). Both figures were
  *  from a synthetic pocket fixture built to demonstrate reachability, not a
  *  shipped arena -- but `config/data/arenas.json` ships 3x3 destructible
  *  blocks, and a 3x3 block becomes concave the moment a mine blast destroys
- *  one interior cell, which shipped mines do. The position test below
- *  therefore sweeps only hull centres that start OUTSIDE every wall in both
- *  decompositions -- not because the inside branch is unreachable, but because
- *  it is a separate, already-identified defect (raised as its own decision,
- *  not fixed here) and mixing it into this test would make a failure here
- *  ambiguous between "decomposition leaked into a NEW mechanism" and "the
- *  known inside-branch defect fired again". See task-5-report.md for the full
- *  mutation table and all residuals. */
+ *  one interior cell, which shipped mines do.
+ *
+ *  CLOSED by Task 5b: `resolveWalls` now checks, before its deepest-overlap
+ *  pass, whether the hull's centre sits inside ANY wall's box. If so it marches
+ *  box-to-box along the four axes (`unionExitDistance`) to find where the wall
+ *  MASS ends -- not the nearest face of whichever single box the centre happens
+ *  to be in -- and pushes out along the cheapest axis, ties broken on the push
+ *  vector for the same reason the deepest-overlap pass already was. That is a
+ *  property of the union, so it reads the same regardless of how the mass was
+ *  sliced. `circleVsAABB` itself is untouched (bullets.ts depends on its exact
+ *  behaviour), so this is resolveWalls-only. The position test below no longer
+ *  excludes interior starts -- it sweeps all 1,024 points, which is the actual
+ *  proof this closed the residual rather than moved it. See task-5b-report.md
+ *  for the mutation table. */
 const COARSE = {
   id: 'coarse', cols: 6, rows: 6, cellSize: 2,
   legend: { '#': 'solid' as const, x: 'destructible' as const },
@@ -111,23 +117,23 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
   const pts: { x: number; y: number }[] = [];
   for (let x = 0.35; x < 12; x += 0.37) for (let y = 0.35; y < 12; y += 0.37) pts.push({ x, y });
 
-  // circleVsAABB's `inside` branch (centre already inside a box) is not decomposition-
-  // invariant -- see the fixture comment's third residual, including WHY it is scoped out
-  // here despite being reachable (via separateTanks, not just "arriving from outside").
-  // The position test restricts its sweep to centres outside every wall in BOTH
-  // decompositions -- the regime this fixture's flat destructible face is in, empirically
-  // invariant (0 of 300 reviewer-probed seeds diverged), and distinct from the concave-
-  // pocket inside-branch defect that is out of scope for this test.
+  // circleVsAABB's `inside` branch (centre already inside a box) USED to not be
+  // decomposition-invariant -- see the fixture comment's third residual. Task 5b closed
+  // it in resolveWalls, so the position test below no longer needs to exclude interior
+  // starts; `inside` stays in use by the dedicated interior-only regression test further
+  // down, which pins the narrower "inside both decompositions" case on its own.
   const inside = (p: { x: number; y: number }, walls: { aabb: { minX: number; minY: number; maxX: number; maxY: number } }[]) =>
     walls.some((w) => p.x >= w.aabb.minX && p.x <= w.aabb.maxX && p.y >= w.aabb.minY && p.y <= w.aabb.maxY);
-  const exteriorPts = pts.filter((p) => !inside(p, a) && !inside(p, b));
 
   it('resolves every hull position identically', () => {
-    // Population: 848 of the 1024 swept points (176 excluded as starting inside a wall
-    // in one decomposition or the other).
-    expect(exteriorPts.length).toBe(848);
+    // Population: all 1,024 swept points -- widened from the 848-of-1024 exterior-only
+    // sweep Task 5 shipped with. The 176 previously-excluded points (interior to at least
+    // one decomposition) are exactly what Task 5b's inside-the-mass fix makes safe to
+    // include; their presence here, passing, is the actual proof that fix worked rather
+    // than merely narrowing where the divergence hides.
+    expect(pts.length).toBe(1024);
     let moved = 0;
-    for (const p of exteriorPts) {
+    for (const p of pts) {
       const ta = makeTank(1, 'player', { ...p }, 0);
       const tb = makeTank(1, 'player', { ...p }, 0);
       resolveWalls(ta, a);
