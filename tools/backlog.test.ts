@@ -79,17 +79,25 @@ describe('backlog.md quotes numbers it can still justify', () => {
   });
 
   it('states how many lines came from outside the harvested scope', () => {
-    const ledger = BACKLOG.slice(BACKLOG.indexOf('## Ledger'));
-    const bullets = ledger.split('\n').filter((l) => l.startsWith('- '));
-    const prose = bullets.filter((l) => l.includes('prose-only PR')).length;
-    expect(bullets.length).toBeGreaterThan(0);
+    // Count through ledgerSections(), not raw `- ` lines in the slice. The two disagreed
+    // the moment the scope paragraph grew bullets of its own: this assertion saw them as
+    // ledger lines and the section counts did not, so one number was 2 higher than the
+    // other and the file looked self-inconsistent when it was not. One definition of "a
+    // ledger line", used by every assertion here.
+    const secs = ledgerSections().filter((s) => s.bullets > 0);
+    const total = secs.reduce((n, s) => n + s.bullets, 0);
+    const prose = proseInSections(secs);
+    expect(total).toBeGreaterThan(0);
 
-    // The scope claim is the one review falsified last time: the harvest covered PRs with
-    // a residual HEADING, and these are the spot-checked extras. An unmarked out-of-scope
-    // line silently makes the split wrong.
-    const stated = /\*\*(\d+)\*\* came from the 21 PRs in scope and \*\*(\d+)\*\* from prose-only/.exec(FLAT_BACKLOG);
+    // There is no longer a scope COUNT to check, and that is the fix rather than a gap:
+    // three drafts stated the scope as a number (21, then 20) and all three were false,
+    // because the harvest is an enumerated set that does not match the `/residual/i`
+    // predicate it started from -- #58 matches and contributed nothing, while #43, #74 and
+    // #76 contributed without matching. A guard can only check the file against itself, so
+    // it converged on a self-consistent falsehood twice. What IS checkable is below.
+    const stated = /\*\*(\d+)\*\* came from the harvested set and \*\*(\d+)\*\* from prose-only/.exec(FLAT_BACKLOG);
     expect(stated, 'the in-scope/prose-only split sentence must exist').not.toBeNull();
-    expect(Number(stated![1])).toBe(bullets.length - prose);
+    expect(Number(stated![1])).toBe(total - prose);
     expect(Number(stated![2])).toBe(prose);
 
     // "Where the numbers went" says the 76 open items became the in-scope lines of the
@@ -113,6 +121,25 @@ describe('backlog.md quotes numbers it can still justify', () => {
     return Number(m![1]);
   }
 
+  it('lists exactly the prose-only PRs its lines are attributed to', () => {
+    // The text names which out-of-scope PRs were spot-checked. It said "four (#31, #45,
+    // #50, #74)" while the marked lines cite six -- #9 and #14 were never in the list.
+    // Recompute the set from the lines rather than trusting the sentence.
+    const ledger = BACKLOG.slice(BACKLOG.indexOf('## Ledger'));
+    const cited = new Set<number>();
+    for (const l of ledger.split('\n')) {
+      if (l.startsWith('- ') && l.includes('prose-only PR')) {
+        for (const m of l.matchAll(/#(\d+)/g)) cited.add(Number(m[1]));
+      }
+    }
+    const listed = /Six were spot-checked \(([^)]+)\)/.exec(FLAT_BACKLOG);
+    expect(listed, 'the spot-check list must exist and keep its shape').not.toBeNull();
+    const named = new Set([...listed![1].matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
+    expect([...named].sort((a, b) => a - b)).toEqual([...cited].sort((a, b) => a - b));
+    // And the word must match the count, which is how "four" survived against six.
+    expect(named.size).toBe(6);
+  });
+
   it("backlog.md's own partition adds up", () => {
     // The file states 147 = 63 closed + 8 unsettleable + 76 open. That is recomputable from
     // the file itself, which is the standard every other case here meets -- and mutation
@@ -135,7 +162,7 @@ describe('backlog.md quotes numbers it can still justify', () => {
     // looks like.
     const enumerated = figure(FLAT_BACKLOG, /(\d+) items were enumerated/, 'backlog enumerated');
     const closed = figure(FLAT_BACKLOG, /(\d+) were already closed by later work/, 'backlog closed');
-    const quoted = /enumerated (\d+) items and found \*\*(\d+) already done\*\*/.exec(FLAT_CLAUDE);
+    const quoted = /enumerated (\d+) items.{0,80}?found \*\*(\d+) already done\*\*/.exec(FLAT_CLAUDE);
     expect(quoted, "CLAUDE.md's harvest sentence must exist and keep its shape").not.toBeNull();
     expect(Number(quoted![1])).toBe(enumerated);
     expect(Number(quoted![2])).toBe(closed);

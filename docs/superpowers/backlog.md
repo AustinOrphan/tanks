@@ -182,8 +182,10 @@ the payoff the hardest one does not.
 - **If the difficulty term becomes data**, `arenas.json` is the validated home for it and
   `validateArenas` the place a bad edit should fail — not a new parallel table.
 
-**Not scheduled.** Recorded so #76's deferral does not have to be rediscovered from a
-commit message.
+**Not scheduled**, and its blocking half is now tracked as issue #89 (a model for level and
+per-tank difficulty) — this entry stays because the measurement is the decision record; the
+work it unblocks is the issue. Recorded so #76's deferral does not have to be rediscovered
+from a commit message.
 
 ---
 ## Deployment residuals, measured while shipping the GitHub Pages workflow
@@ -202,7 +204,8 @@ traffic. Pages sets no `cache-control` on a `.wav` 404 (0 of 3 probed) while `.m
 `.ogg`, `.js` and `.png` 404s all get `max-age=14400` (4 of 4), and a Pages 404 body is
 9,379 bytes: **9,379 × 10 = 91.6 kB and 10 round trips per load, never cached** — about
 half the 186 kB gzipped bundle. The fix is a decision, not a patch: render and commit the
-ten wavs, or stop the manifest requesting files that are not there. Note `npm run audio`
+ten wavs, or stop the manifest requesting files that are not there. **Tracked as issue #86**,
+which also absorbed the ledger's line about the CREDITS.md licensing policy being unexercised. Note `npm run audio`
 does **not** do the first — it writes to the gitignored `audio-out/`, needs chromium, and
 names files `${label}.wav`, not `public/audio/cannon.wav`.
 
@@ -253,14 +256,26 @@ but "some CI job already built this bundle" is not a thing anyone has shown.
 
 ## Ledger: deferred work harvested from PR descriptions
 
-**Compiled 2026-08-03, rebuilt after adversarial review.** Scope, stated exactly: the **20**
-PRs whose bodies carry an ATX heading matching `/residual/i` — #75 among them, still open
-when this was compiled, which an earlier draft double-counted as "21 plus #75". One of the
-20 (#58) is a false positive of that predicate: its heading is about *closing* a residual.
-**PRs that record deferred work only in prose were NOT swept** — roughly 15 more bodies, and
-spot-checks of four (#31, #45, #50, #74) all yielded open items, included below and marked.
-This is a floor on the backlog, not a sweep of history. Re-running the predicate today gives
-a different set: the merged population grows on every merge.
+**Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
+a predicate: it is the PRs cited by `#NN` in the lines below.** Say it that way because three
+successive drafts stated it as a count — 21, then 20 — and all three were false.
+
+The harvest *started* from "merged PRs whose body carries an ATX heading matching
+`/residual/i`", which at the grep baseline `a7b39ec` (77 merged) selects 20. It then diverged
+in both directions, so that predicate does not describe what was swept:
+
+- **#58 matches and contributed nothing.** Its heading is about *closing* a residual named in
+  #55's review — a false positive of the pattern.
+- **#43, #74 and #76 contributed lines without matching.** #76 has no ATX heading at all and
+  never uses the word "residual"; its deferrals are a closing paragraph of prose.
+
+The predicate is also unstable: #80 merged 55 minutes after the baseline carrying a
+`## Residuals` heading, so re-running it today selects a different set again. Any "how many
+PRs" number here is derived, drifting, and has been wrong every time it was written down.
+
+**PRs that record deferred work only in prose were NOT swept** — roughly 15 more bodies. Six
+were spot-checked (#9, #14, #31, #45, #50, #74) and all six yielded open items, included
+below and marked. This is a floor on the backlog, not a sweep of history.
 
 **These lines are triage notes, not proven claims.** Each was checked once by grep against
 `a7b39ec`; none is pinned by a test unless it says so. Verify before acting. The three
@@ -269,8 +284,8 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **84 lines below** — 17 / 31 / 26 / 10 across four groups. **75** came from the
-21 PRs in scope and **9** from prose-only PRs outside it. They do not sum to the number of
+Counts: **83 lines below** — 17 / 31 / 25 / 10 across four groups. **74** came from the
+harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
 
@@ -349,7 +364,6 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - `OFFENSIVE` and `BERSERKER` route to `teal.ts`; the profile field for how much a threat overrides a tank's approach does not exist. #69
 - No crossfade when the music bed starts or stops. `start()` snaps by design, and the #76 glide is intensity-only — but `music.ts:418` already carries a linear per-note fade for the suite-change overlay, which is the machinery to reuse. #64
 - The one-oscillator `beep` stays as the floor for contexts that cannot support the synth graph. #64
-- No third-party audio assets are committed, so the licensing policy in CREDITS.md is unexercised. #1, #64
 - No sustain/tie marker in the note grammar; `hold` is per voice, not per note. #68
 - No per-note velocity; amplitude comes from `VOICES[].peak`. #68
 - No MIDI import. #68
@@ -376,7 +390,7 @@ Each needs a measurement, a browser, or a person.
 
 ### Where the numbers went
 
-147 items were enumerated from the 21 PRs in scope. 63 were already closed by later work
+147 items were enumerated from the harvested set. 63 were already closed by later work
 (62 found by the triage, plus one the review caught: the `startMusic()`/`loaderror` race
 was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, since #73).
 8 remain unsettleable. 76 were still open.
@@ -385,11 +399,11 @@ The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the t
 are listed, not dropped, which an earlier draft's arithmetic missed by mapping the 76 onto
 all 75 in-scope lines including that section.
 
-The 76 open became the **67** in-scope lines of the first three groups, near enough
+The 76 open became the **66** in-scope lines of the first three groups, near enough
 one-to-one, with these
 adjustments: 4 are PR #75's residuals and live in the "Follow-ups from walls as geometry"
 spike; 1 is the intensity spike; 1 is a null item (no save system references tank ids);
-2 share the audio-assets line; 2 were one corner defect counted twice and are now one
+2 shared the audio-assets line, now deleted and absorbed by issue #86; 2 were one corner defect counted twice and are now one
 line; 3 duplicated CLAUDE.md and are left to it; and **2 were false and are deleted** — a
 claim that the GL harness drives `refit()` from `WIDE_ARENA` (it uses bare literals), and
 a claim that arena-01's *brown* holds an unpinned bank onto the spawn (the tree names grey
