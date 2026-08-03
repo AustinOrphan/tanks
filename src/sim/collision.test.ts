@@ -310,6 +310,44 @@ describe('resolveWalls', () => {
     expect(t.pos.y).toBeLessThan(4);
   });
 
+  it('leaves the hull CENTRE outside the mass for every gap the shipped arenas can make', () => {
+    // The bounds asserted above cannot tell "acceptably stuck, still overlapping" from
+    // "resolved to a point inside a wall" -- every interior point satisfies them. That
+    // second outcome is real, and it is NOT a property the code has unconditionally, so
+    // asserting it on one fixture would only be sampling a coincidence. Measured over the
+    // sweep below, it is a function of the gap:
+    //
+    //   gap  0.30 0.40 0.50 | 0.60 0.6667 0.70 0.80 0.90 1.00
+    //   ends INSIDE INSIDE INSIDE | outside ...
+    //
+    // Population: those 9 gaps, tank started centred in each. The boundary sits between
+    // 0.50 and 0.60, and every gap a shipped arena can produce is at or above cellSize
+    // (0.6667) because walls are cell-aligned -- which is why the sub-0.6 half is
+    // documented here rather than fixed. A change that pushed the boundary above 0.6667
+    // would put a reachable gap on the wrong side of it, and this test is what catches it.
+    const resolvedInsideAt = (gap: number): boolean => {
+      const walls: Wall[] = [
+        { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } },
+        { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 2 + gap, minY: 0, maxX: 4 + gap, maxY: 2 } },
+      ];
+      const t = makeTank(1, 'player', { x: 2 + gap / 2, y: 1 }, 0);
+      resolveWalls(t, walls);
+      return walls.some(
+        (w) => t.pos.x >= w.aabb.minX && t.pos.x <= w.aabb.maxX
+          && t.pos.y >= w.aabb.minY && t.pos.y <= w.aabb.maxY,
+      );
+    };
+    for (const gap of [0.6, 2 / 3, 0.7, 0.8, 0.9, 1.0]) {
+      expect(resolvedInsideAt(gap), `gap ${gap}`).toBe(false);
+    }
+    // Negative control: the sub-hull gaps really do end inside, so the loop above is
+    // discriminating between two reachable outcomes rather than restating something
+    // that holds everywhere.
+    for (const gap of [0.3, 0.4, 0.5]) {
+      expect(resolvedInsideAt(gap), `gap ${gap}`).toBe(true);
+    }
+  });
+
   it('breaks a tie on the push vector, not wall array order', () => {
     // Two walls placed diagonally, corners 0.25 apart from a tank centred exactly on
     // their bisector -- all coordinates are dyadic (integers and .25/.5 fractions), so
@@ -327,6 +365,15 @@ describe('resolveWalls', () => {
     resolveWalls(ba, [B, A]);
     expect(ba.pos.x).toBe(ab.pos.x);
     expect(ba.pos.y).toBe(ab.pos.y);
+
+    // ...and pin WHICH of the two tied pushes wins, not merely that both orders agree.
+    // Order-independence alone is satisfied by either direction of the comparator, so
+    // flipping `>` to `<` in the deepest-overlap tiebreak survived the entire suite --
+    // 1315 tests, the golden trace byte-identical, all four arenas' decomposition sweeps
+    // still at 0 divergences. The comparator keeps the LARGEST push vector, which here
+    // is A's (pushing down-left, away from B), so the tank ends up below its start.
+    expect(ab.pos.x).toBeLessThan(2.25);
+    expect(ab.pos.y).toBeLessThan(2.25);
   });
 
   it('escapes a single-box mass exactly as circleVsAABB\'s inside branch would', () => {

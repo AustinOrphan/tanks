@@ -473,9 +473,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       tracksProgress: opts.tracksProgress ?? true,
       bounds: (level: number) =>
-        // width/height are world-space (arenaBounds(ARENA_01)) and unchanged by the
-        // resolution upscale; cellSize is ARENA_01.cellSize, which moved 2 -> 2/3.
-        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 2 / 3 },
+        // Width/height are world-space (arenaBounds(ARENA_01)); cellSize is DELIBERATELY
+        // not ARENA_01.cellSize. While the fake echoed the shipped constant, the
+        // "sizes the renderer to the arena" assertion below could not tell "loop.ts
+        // passes shownBounds.cellSize through" from "loop.ts hardcodes the constant" --
+        // hardcoding it in loop.ts left all 142 tests in this file, levels.test.ts and
+        // framing.test.ts passing. An unshipped value makes the assertion discriminate.
+        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 1.5 },
       world: (level, seed, policy, lives) => {
         rec.levelBuilds.push({ level, lives });
         // The same reference the loop receives: post-build mutations (invincibility)
@@ -649,7 +653,8 @@ describe('startGameWith: construction', () => {
     const [, w, ht, boundary] = h.rec.rendererArgs[0];
     expect(w).toBe(width);
     expect(ht).toBe(height);
-    expect(boundary).toBe(CURRENT_ARENA.cellSize);
+    // The FAKE's cellSize, which is not CURRENT_ARENA.cellSize -- see the bounds fake.
+    expect(boundary).toBe(1.5);
     h.handle.dispose();
   });
 
