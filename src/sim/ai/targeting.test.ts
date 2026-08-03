@@ -236,6 +236,208 @@ describe('bankShot', () => {
     expect(returned).toBeGreaterThan(200); // the fuzz must actually exercise the happy path
     expect(selfHits).toBe(0);
   });
+
+  it('returns the same bank shot however the reflector is sliced', () => {
+    const merged: Wall[] = [
+      { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 6, maxY: 2 } },
+    ];
+    const three: Wall[] = [0, 2, 4].map((x, i) => ({
+      id: i + 1, kind: 'solid' as const, destroyed: false,
+      aabb: { minX: x, minY: 0, maxX: x + 2, maxY: 2 },
+    }));
+    let compared = 0;
+
+    // Muzzle/target ABOVE the run (y outside its [0,2] band) -- reflects off the run's
+    // TOP face. The bounce point's x-coordinate coincides EXACTLY with a seam (x=2 or 4)
+    // for 8 of these 121 pairs, which is what originally exposed a losIgnoring
+    // boundary-touch bug: the muzzle->bounce / bounce->target legs graze the NEIGHBOURING
+    // sub-cell's corner at that exact x, and an unfixed losIgnoring reported that graze as
+    // a block. This is a regression test for that fix specifically -- reverting it
+    // (temporarily, by hand, during development) reintroduced mismatches here.
+    //
+    // A second sub-sweep used to run here too (muzzle/target beside the run, y WITHIN its
+    // [0,2] band, to make a vertical seam face itself geometrically reachable rather than
+    // merely coincided with). It reported 0 mismatches under every mutation tried --
+    // dropping either LOS leg, dropping both, first-valid selection, reversed wall order,
+    // longest-path selection -- and was deleted rather than kept as an inert "proof of
+    // nothing". The narrow, measured reason: for endpoints OUTSIDE every wall -- the only
+    // muzzle/target positions the game can ever call bankShot with, since callers pass
+    // tank centres and resolveWalls guarantees a tank is never inside a wall -- merged and
+    // sliced agree at 0 differences across ~1.9M probes swept over 6 reflector shapes (a
+    // 3-cell row, a 3-cell column, a 3x3 square, an L-shape, a T-junction, two separated
+    // runs) at 2 grid alignments each. Disagreements DO exist, but only when an endpoint
+    // sits inside or exactly on a wall corner (48-192 mismatches per shape on a
+    // lattice-aligned grid, 0 on a non-aligned grid, always a muzzle sitting exactly on a
+    // wall corner) -- states resolveWalls never produces, so a "repaired Pattern B" built
+    // on them would assert behaviour at unreachable positions, which is worse than no
+    // test. See the two tests below for what replaced this sub-sweep's actual job: a
+    // seam/buried candidate's own rejection now has fixtures where it demonstrably
+    // matters, and `faceIsBuried` (the guard this sub-sweep was originally written to
+    // control for) no longer exists to give it a control anyway.
+    let nonNullMerged = 0;
+    for (let mx = 0.5; mx < 6; mx += 0.5) {
+      for (let tx = 0.5; tx < 6; tx += 0.5) {
+        const m = { x: mx, y: 4 };
+        const t = { x: tx, y: 6 };
+        const a = bankShot(m, t, merged, 1);
+        const b = bankShot(m, t, three, 1);
+        compared++;
+        if (a !== null) nonNullMerged++;
+        if (a === null || b === null) expect(b, `${mx}->${tx}`).toBe(a);
+        else expect(b, `${mx}->${tx}`).toBeCloseTo(a, 9);
+      }
+    }
+
+    expect(compared).toBe(121); // population: 11 muzzle x 11 target positions
+    // Guard against a vacuous pass: `a === null && b === null` satisfies the comparison
+    // above trivially, so a future change that made every candidate invalid on both sides
+    // would still read green -- same approach as decomposition.test.ts's row-seam sibling.
+    // Today 72 of the 121 pairs resolve a real bank shot on both sides (the other 49 sit
+    // where neither muzzle nor target has line of sight to a reflecting face); pinning that
+    // count catches a regression that silently drains the non-vacuous portion too.
+    expect(nonNullMerged).toBe(72);
+  });
+
+  it('falls through to a farther reflector when the nearer one\'s reflected leg is blocked', () => {
+    // Two reflectors: NEAR (the shorter, and so normally-winning, path) and FAR (always
+    // clear, longer path). An obstacle sits between the NEAR bounce point and the target
+    // ONLY -- confirmed below not to touch the muzzle->bounce leg of either reflector, nor
+    // any of FAR's legs -- so this isolates the bounce->target LOS check specifically.
+    // Unlike a single-reflector "returns null" test, FAR being available and CORRECT
+    // means shortest-path selection cannot silently prefer NEAR anyway if the rejection
+    // is missing: a missing bounce->target check makes NEAR (wrongly) win over FAR, which
+    // is directly observable as the wrong angle, not just non-null vs null.
+    const near: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 0, maxX: 20, maxY: 2 } };
+    const far: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 20, maxX: 20, maxY: 22 } };
+    const obstacle: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: 7.5, minY: 3, maxX: 9, maxY: 5 } };
+    const m = { x: 5, y: 4 };
+    const t = { x: 10, y: 6 };
+
+    const soloNear = bankShot(m, t, [near], 1);
+    const soloFar = bankShot(m, t, [far], 1);
+    expect(soloNear).not.toBeNull();
+    expect(soloFar).not.toBeNull();
+    expect(soloNear).not.toBeCloseTo(soloFar as number, 6); // genuinely different candidates
+
+    // Without the obstacle, NEAR (shorter) wins -- confirms it really is the closer one.
+    expect(bankShot(m, t, [near, far], 1)).toBeCloseTo(soloNear as number, 9);
+
+    // With the obstacle blocking ONLY near's reflected leg, the answer must become FAR's,
+    // not near's (which would mean the rejection was skipped) and not null (which would
+    // mean FAR's own candidate was wrongly rejected too).
+    expect(bankShot(m, t, [near, far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+    // FAR's own candidate is unaffected by the obstacle in isolation, confirming the
+    // obstacle's placement doesn't leak into FAR's legs.
+    expect(bankShot(m, t, [far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+  });
+
+  it('falls through to a farther reflector when the nearer one\'s approach leg is blocked', () => {
+    // Mirror of the previous test: muzzle and target swapped, so the same obstacle now
+    // sits between NEAR's bounce point and the MUZZLE instead, isolating the
+    // muzzle->bounce LOS check.
+    const near: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 0, maxX: 20, maxY: 2 } };
+    const far: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -20, minY: 20, maxX: 20, maxY: 22 } };
+    const obstacle: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: 7.5, minY: 3, maxX: 9, maxY: 5 } };
+    const m = { x: 10, y: 6 };
+    const t = { x: 5, y: 4 };
+
+    const soloNear = bankShot(m, t, [near], 1);
+    const soloFar = bankShot(m, t, [far], 1);
+    expect(soloNear).not.toBeNull();
+    expect(soloFar).not.toBeNull();
+    expect(soloNear).not.toBeCloseTo(soloFar as number, 6);
+
+    expect(bankShot(m, t, [near, far], 1)).toBeCloseTo(soloNear as number, 9);
+    expect(bankShot(m, t, [near, far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+    expect(bankShot(m, t, [far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
+  });
+
+  it('blocks a leg that crosses a wall far from either endpoint, on a long segment', () => {
+    // REGRESSION. `hit.t` is a fraction of the leg's length; `headingIntoBox` probes a
+    // fixed SWEEP_EPS of WORLD distance. Comparing them directly made the graze branch
+    // fire for any hit within SWEEP_EPS*len of an endpoint, while the probe still looked
+    // only SWEEP_EPS ahead -- so on a segment longer than 1 unit there was a band of
+    // offsets where a REAL crossing probed clear and was waved through as a graze.
+    //
+    // The obstacle sits squarely across the muzzle->bounce leg. `delta` slides the muzzle
+    // just off the obstacle's top face; the leg is ~7 units long, so the leaked band was
+    // (SWEEP_EPS, SWEEP_EPS*len] ~= (1e-7, 7e-7].
+    const reflector: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -100, minY: 0, maxX: 100, maxY: 2 } };
+    const obstacle: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: 8, maxX: 1, maxY: 9 } };
+    const target = { x: 0.5, y: 6 };
+
+    // The obstacle must actually be in the way: without it every offset resolves a bank.
+    for (const delta of [0, 1e-8, 2e-7, 6e-7, 1e-6]) {
+      expect(bankShot({ x: 0, y: 9 + delta }, target, [reflector], 1), `clear delta=${delta}`).not.toBeNull();
+    }
+    // With it, every offset must be blocked. 2e-7 and 6e-7 are inside the old leak band
+    // and returned the unobstructed angle before this was fixed; 0/1e-8 (probe lands
+    // inside) and 1e-6 (past the band entirely) were always blocked and are the controls
+    // that prove the fixture straddles the boundary rather than sitting on one side.
+    for (const delta of [0, 1e-8, 2e-7, 6e-7, 1e-6]) {
+      expect(bankShot({ x: 0, y: 9 + delta }, target, [reflector, obstacle], 1), `blocked delta=${delta}`).toBeNull();
+    }
+  });
+
+  it('picks between two equal-length reflectors deterministically, not by array order', () => {
+    // A boxed room: muzzle and target sit near the LEFT wall, so LEFT is both listed
+    // first below and would be the first candidate found in wall/face iteration order.
+    //
+    // The two candidate paths here are EXACTLY the same length -- both sqrt(52), by the
+    // symmetry of (1,5)/(5,9) about the room -- so what this test pins is the ANGLE
+    // tiebreak, not the length comparison. (An earlier version of this comment claimed
+    // the top path was shorter and that this proved selection by path length. It is not
+    // shorter; the lengths are bit-identical. Length ordering is pinned instead by the
+    // two fall-through tests above and by decomposition.test.ts's 'picks the shorter of
+    // two non-collinear bank reflectors'.) It still kills first-valid, which is what the
+    // final assertion is for.
+    const left: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1, maxX: 0, maxY: 11 } };
+    const right: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 10, minY: -1, maxX: 11, maxY: 11 } };
+    const bottom: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1, maxX: 11, maxY: 0 } };
+    const top: Wall = { id: 4, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: 10, maxX: 11, maxY: 11 } };
+    const m = { x: 1, y: 5 };
+    const t = { x: 5, y: 9 };
+
+    // Each wall alone gives a valid, genuinely different candidate -- confirms they
+    // actually compete rather than one being degenerate or unreachable.
+    const soloLeft = bankShot(m, t, [left], 1);
+    const soloTop = bankShot(m, t, [top], 1);
+    expect(soloLeft).not.toBeNull();
+    expect(soloTop).not.toBeNull();
+    expect(soloLeft).not.toBeCloseTo(soloTop as number, 6);
+
+    // Both candidate paths are analytically sqrt(52): mirroring t across left's inner
+    // face x=0 gives (-5,9) and across top's inner face y=10 gives (5,11), and the muzzle
+    // is equidistant from both mirrors. Asserted rather than left as prose -- if a fixture
+    // edit ever made the two lengths differ, this test would quietly stop exercising the
+    // tiebreak and nothing else would notice.
+    expect(Math.hypot(-5 - m.x, 9 - m.y)).toBeCloseTo(Math.sqrt(52), 12);
+    expect(Math.hypot(5 - m.x, 11 - m.y)).toBeCloseTo(Math.sqrt(52), 12);
+
+    // left is listed FIRST; a first-valid implementation returns soloLeft's angle for this
+    // exact array (verified directly against a first-valid build during development).
+    // The real implementation must return soloTop's angle -- the smaller angle of the two
+    // tied candidates -- instead.
+    const combined = bankShot(m, t, [left, right, bottom, top], 1);
+    expect(combined).toBeCloseTo(soloTop as number, 9);
+    expect(combined).not.toBeCloseTo(soloLeft as number, 6);
+
+    // Array order must not matter: every ordering of the same 4 walls gives the same
+    // shortest answer.
+    const permutations: Wall[][] = [
+      [left, right, bottom, top],
+      [top, bottom, right, left],
+      [right, left, top, bottom],
+      [bottom, top, left, right],
+    ];
+    for (const walls of permutations) {
+      expect(bankShot(m, t, walls, 1)).toBeCloseTo(soloTop as number, 9);
+    }
+    // population: 4 of the 24 possible orderings of these 4 walls (4! = 24) -- a
+    // hand-picked sample (original order plus 3 rotations/swaps), not an exhaustive
+    // sweep of the full permutation group.
+    expect(permutations.length).toBe(4);
+  });
 });
 
 describe('shotHitsOwnSide', () => {

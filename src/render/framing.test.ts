@@ -26,9 +26,14 @@ function cameraAt(aspect: number): THREE.PerspectiveCamera {
 describe('framedBounds', () => {
   it('covers the playable area plus the boundary ring exactly', () => {
     // The ring is one cell thick and sits OUTSIDE play, so the framed area is two
-    // cells wider and taller than the board. Larger than this and a strip of ground
+    // rings wider and taller than the board. Larger than this and a strip of ground
     // shows beyond the walls; smaller and the walls hang over the clear colour.
-    expect(framedBounds(W, H, BOUNDARY)).toEqual({ width: W + 4, height: H + 4 });
+    // BOUNDARY (= CURRENT_ARENA.cellSize) is now 2/3, was 2, so the ring adds
+    // 2 * 2/3 = 4/3 per axis rather than the old flat 4. Written as the literal
+    // fraction `4/3`, not `BOUNDARY * 2`, so this still fails if framedBounds'
+    // multiplier or sign drifts -- referencing BOUNDARY here would just restate
+    // framedBounds' own body, the tautology the next test's comment warns against.
+    expect(framedBounds(W, H, BOUNDARY)).toEqual({ width: W + 4 / 3, height: H + 4 / 3 });
   });
 
   it('matches the outer extent of the arena walls it has to cover', () => {
@@ -43,8 +48,15 @@ describe('framedBounds', () => {
     const maxY = Math.max(...walls.map((w) => w.aabb.maxY));
 
     const { width, height } = framedBounds(W, H, BOUNDARY);
-    expect(width).toBe(maxX - minX);
-    expect(height).toBe(maxY - minY);
+    // `maxX - minX` (computed as `(W + t) - (-t)`) and framedBounds' own
+    // `W + t * 2` are mathematically identical, and were bit-for-bit equal at the
+    // old cellSize (2, exactly representable in binary). At 2/3 -- inexact in
+    // binary -- the two expressions round differently in the last bit: measured
+    // 23.333333333333332 vs 23.333333333333336, a difference of ~3.55e-15 (a few
+    // ULPs on a value of this magnitude), not a geometry drift. toBeCloseTo(_, 12)
+    // tolerates ~5e-13, four orders of magnitude looser than the actual gap.
+    expect(width).toBeCloseTo(maxX - minX, 12);
+    expect(height).toBeCloseTo(maxY - minY, 12);
   });
 
   it('scales with the boundary it is given, not with the shipped arena', () => {

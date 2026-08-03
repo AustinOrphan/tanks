@@ -209,11 +209,20 @@ export function createScene(
 
     sun.position.set(cx - w * 0.6, span * 1.6, cz - h * 0.6);
     sun.target.position.set(cx, 0, cz);
-    // Half-extents of the framed board, plus a margin so a caster right on the
+    // Half-DIAGONAL of the framed board, plus a margin so a caster right on the
     // boundary still has its shadow inside the map. Texel density is the shadow
     // fidelity knob (see normalBias above), so the shadow camera must track the
     // board or big arenas regrow the acne/detachment trade-off.
-    const shadowHalf = Math.max(framed.width, framed.height) / 2 + ring;
+    //
+    // The half-diagonal, not the half-longest-side: this ortho is oriented by the sun's
+    // azimuth, not by the board's axes, so a square window sized to the longer SIDE
+    // clips the corners. That was invisible while `ring` was 2.0 -- the margin happened
+    // to be large enough to cover the shortfall -- and became visible the moment the 3x
+    // cell rescale made `ring` 0.667: measured on arena-01, 2,436 of 158,400 playable-floor
+    // points (0.05 grid) fell outside the shadow ortho and 0 of 4 playable corners were
+    // inside, against 0 and 4 of 4 before the rescale. On screen the boundary wall's
+    // shadow stopped in a hard diagonal cut and the corner was lit.
+    const shadowHalf = Math.hypot(framed.width, framed.height) / 2 + ring;
     shadowCam.left = -shadowHalf;
     shadowCam.right = shadowHalf;
     shadowCam.top = shadowHalf;

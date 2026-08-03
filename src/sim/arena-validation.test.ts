@@ -202,13 +202,22 @@ describe('the cover ratio each arena quotes in its notes', () => {
   // validated only as strings, so the validator cannot help.
   //
   // Destructible cells are NOT counted as open: they are walls until destroyed, and
-  // counting them changes arena-04 to 38 of 154 (the ranking is unaffected, but the
+  // counting them changes arena-04 to 311 of 1386 (the ranking is unaffected, but the
   // quoted numbers are the excluding ones and the note now says so).
+  //
+  // These counts are all population, not just denominators: every open cell of every
+  // shipped arena's 33x27 (45x33 for arena-04) grid is walked, so `open` moved to ~9x
+  // its old value across the board. `unseen` moved by roughly the same factor but not
+  // exactly -- it is resampled at 9x the point density (cell centres, not a continuous
+  // area), which measures the same underlying unseen region more finely rather than a
+  // region that changed shape. Subsampling the new grid at exactly the points that map
+  // back to the old cell centres (k -> 3k+1 on both axes) reproduces the old counts
+  // (35/86, 41/83, 30/88, 35/151) exactly, confirming the geometry itself did not move.
   const EXPECTED: Record<string, { unseen: number; open: number }> = {
-    'arena-01': { unseen: 35, open: 86 },
-    'arena-02': { unseen: 41, open: 83 },
-    'arena-03': { unseen: 30, open: 88 },
-    'arena-04': { unseen: 35, open: 151 },
+    'arena-01': { unseen: 288, open: 774 },
+    'arena-02': { unseen: 369, open: 747 },
+    'arena-03': { unseen: 248, open: 792 },
+    'arena-04': { unseen: 284, open: 1359 },
   };
 
   it('recomputes every quoted count, and the ranking the note claims', () => {
@@ -281,10 +290,10 @@ describe('the STATIONARY-banker spawn rule, which green is the reason for', () =
 });
 
 describe("green's bank reach, which is why it is in level 4", () => {
-  // arena-04's notes claim the sniper "answers the board's own weakness": 35 of the 151
-  // open cells are seen by no enemy from its spawn, and green's ricochets cover 20 of
-  // those 35. Prose next to a grid anyone may edit, so it is recomputed here.
-  it('reaches 29 cells by ricochet it cannot see, covering 20 of the 35 nothing else sees', () => {
+  // arena-04's notes claim the sniper "answers the board's own weakness": 284 of the
+  // 1359 open cells are seen by no enemy from its spawn, and green's ricochets cover
+  // 171 of those 284. Prose next to a grid anyone may edit, so it is recomputed here.
+  it('reaches 275 cells by ricochet it cannot see, covering 171 of the 284 nothing else sees', () => {
     const arena = arenaById('arena-04');
     const { walls, spawns } = loadArena(arena);
     const green = spawns.find((s) => s.kind === 'green');
@@ -309,13 +318,13 @@ describe("green's bank reach, which is why it is in level 4", () => {
         if (bankShot(green!.pos, p, walls, cfg.weapon.ricochetCount) !== null) bankOnly.push([c, r]);
       }
     }
-    expect({ bankOnly: bankOnly.length, open }).toEqual({ bankOnly: 29, open: 151 });
+    expect({ bankOnly: bankOnly.length, open }).toEqual({ bankOnly: 275, open: 1359 });
 
     // The assertion that actually justifies the placement, and the reason it is an
-    // OVERLAP rather than a count: 29 bank-only cells aimed at ground three other
+    // OVERLAP rather than a count: 275 bank-only cells aimed at ground three other
     // enemies already cover would be worth nothing. What matters is how much of the
     // unseen region green alone can reach.
     const covered = bankOnly.filter(([c, r]) => unseen.has(key(c, r)));
-    expect({ covered: covered.length, unseen: unseen.size }).toEqual({ covered: 20, unseen: 35 });
+    expect({ covered: covered.length, unseen: unseen.size }).toEqual({ covered: 171, unseen: 284 });
   });
 });
