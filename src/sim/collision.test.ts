@@ -322,6 +322,55 @@ describe('resolveWalls', () => {
     expect(ba.pos.y).toBe(ab.pos.y);
   });
 
+  it('escapes a single-box mass exactly as circleVsAABB\'s inside branch would', () => {
+    // One wall, no neighbours to march through -- the union-exit case degenerates to
+    // circleVsAABB's old inside-branch push. Coordinates are asymmetric on every axis
+    // (no ties) so the analytic answer is unambiguous: nearest face is the bottom
+    // (toBottom = 0.3, beating toLeft = 3, toRight = 7, toTop = 1.7), so the tank is
+    // pushed straight down by 0.3 + TANK_RADIUS, landing exactly on the box's bottom
+    // face. Confirms Task 5b's new inside-case block leaves the single-box case
+    // unchanged from what circleVsAABB itself would have computed.
+    const wall: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 10, maxY: 2 } };
+    const t = makeTank(1, 'player', { x: 3, y: 0.3 }, 0);
+    resolveWalls(t, [wall]);
+    expect(t.pos.x).toBeCloseTo(3, 9);
+    expect(t.pos.y).toBeCloseTo(-0.5, 9);
+    expect(circleVsAABB(t.pos, TANK_RADIUS, wall.aabb).hit).toBe(false);
+  });
+
+  it('escapes a boundary-flush wall inward, never through the boundary ring', () => {
+    // A destructible cell flush against the top boundary (its minY sits exactly on the
+    // boundary wall's maxY, the way any shipped arena's edge cells do) -- the risk this
+    // guards is the escape march finding the boundary CONTIGUOUS with the cell and
+    // walking straight through it, landing the hull outside the entire map with nothing
+    // left to contain it. Measured: escaping sideways or downward, INTO the cell's open
+    // neighbours, costs 1 unit (half the 2-unit cell); escaping up, through the cell AND
+    // the boundary ring's own 2-unit thickness, costs 3 -- so the algorithm's own
+    // shortest-axis pick lands the hull inside the play area every time here, not because
+    // of any boundary special-case (there is none) but because a realistic single-cell-
+    // thick wall run is always closer on its interior face than through itself plus the
+    // boundary. A synthetic arena that is 100% wall with no interior space at all (no
+    // shipped arena is, and this sim's own penetration bound -- 0.375 units, world.ts's
+    // separateTanks -- never drives a hull deep enough into any real wall's interior for
+    // this to flip) CAN still be pushed past the boundary; that residual is out of scope
+    // here and recorded in task-5b-report.md rather than guarded against.
+    const cell: Wall = { id: 1, kind: 'destructible', destroyed: false, aabb: { minX: 2, minY: 0, maxX: 4, maxY: 2 } };
+    const boundaryThickness = 2, W = 8, H = 8;
+    const boundaries: Wall[] = [
+      { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: -boundaryThickness, maxX: W + boundaryThickness, maxY: 0 } },
+      { id: 3, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: H, maxX: W + boundaryThickness, maxY: H + boundaryThickness } },
+      { id: 4, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: 0, maxX: 0, maxY: H } },
+      { id: 5, kind: 'solid', destroyed: false, aabb: { minX: W, minY: 0, maxX: W + boundaryThickness, maxY: H } },
+    ];
+    const t = makeTank(1, 'player', { x: 3, y: 1 }, 0);
+    resolveWalls(t, [cell, ...boundaries]);
+    // Never crossed into the boundary ring's own span (y < 0), let alone past its outer
+    // face (y < -boundaryThickness).
+    expect(t.pos.y).toBeGreaterThanOrEqual(0);
+    expect(t.pos.x).toBeGreaterThanOrEqual(0);
+    expect(t.pos.x).toBeLessThanOrEqual(W);
+  });
+
   it('does not apply a push for an overlap at or below SWEEP_EPS', () => {
     // A depth of 5e-8 is below SWEEP_EPS (1e-7) but the circle genuinely overlaps
     // (distSq < radius^2), so `hit.hit` is true and `best` is non-null -- this is the
