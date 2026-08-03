@@ -278,17 +278,31 @@ const FACE_NORMALS: Vec2[] = [
  * is the same path.
  *
  * A candidate reflecting off a face buried inside a neighbouring wall (an interior seam
- * manufactured by how the level data sliced a reflector into cells) does NOT need its own
- * rejection here: reaching a buried point from outside the wall it's buried in requires
- * the final approach to pass through the neighbour that occupies the space immediately
- * past that face, and `losIgnoring`'s graze-aware check below already rejects that as a
- * real penetration, not a touch. Verified empirically, not just argued: an earlier
- * version of this function carried an explicit `faceIsBuried` guard, and removing it
- * changed the answer on 0 of 4,587,750 (muzzle, target) probes -- adjacent-pair,
- * three-in-a-row, an L-shape with a partially-overlapping neighbour, a diagonal
- * staircase, and all 4 shipped arenas' real merged wall geometry, compared via a
- * per-config result hash with and without the guard. Deleted rather than kept as dead
- * weight: a guard whose own test cannot make it fail is worse than no guard.
+ * manufactured by how the level data sliced a reflector into cells) does not get its own
+ * rejection here. An earlier version of this function carried an explicit `faceIsBuried`
+ * guard and it was deleted, on this evidence and with this limit:
+ *
+ *   - On probes where BOTH endpoints lie strictly outside every wall -- the only states
+ *     the sim actually produces, since `resolveWalls` keeps every hull centre out of the
+ *     wall mass -- removing the guard changed the answer on **0 of 4,195,692** (muzzle,
+ *     target) pairs: 12 synthetic shapes (adjacent pair, three-in-a-row, column, L, T,
+ *     plus-cross, fully-surrounded centre, diagonal staircase, overlapping pair,
+ *     partial-overlap L, partial face cover, offset runs) plus all 4 shipped arenas'
+ *     real merged geometry, compared per-config with and without the guard.
+ *   - Off that domain it is NOT a no-op. With an endpoint lying exactly ON a wall
+ *     surface, **81 of 1,966,116** probes differ, all on arena-03, all with the TARGET on
+ *     a surface. Witness: muzzle (20.666666666666668, 0), target (20, 5.333333333333333)
+ *     -- which sits exactly on the shared boundary of two wall boxes -- returns
+ *     1.695151321341659 unguarded, off a face buried inside the neighbour, versus
+ *     1.012197011451334 guarded.
+ *
+ * So the guard is unnecessary because of REACHABILITY, not for the structural reason an
+ * earlier version of this comment gave ("reaching a buried point requires passing through
+ * the neighbour, which `losIgnoring` already rejects"). That argument is false: the
+ * approach can arrive exactly at the seam CORNER, where the neighbour is only touched and
+ * the graze check correctly lets it through. Do not re-add the guard without a fixture
+ * that fails when it is removed -- and note such a fixture must place an endpoint on a
+ * wall surface, which is why none exists.
  *
  * @param maxBounces — Presently used ONLY as a precondition: must be >= 1 to proceed.
  *   The search is single-bounce-only; multi-bounce is not implemented. Task 21+ must

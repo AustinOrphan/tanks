@@ -398,12 +398,16 @@ describe('resolveWalls', () => {
     // of this shape. This test proves only that case, not that every shipped arena's edge
     // geometry is safe: arena-02's rows 12-14 put a 3-cell-DEEP destructible run flush
     // against each side boundary, and that geometry DOES let the escape march cross the
-    // boundary for some interior starts (measured: 544 of 20,000 swept points, deepest
-    // safe/shallowest divergent start 0.6767 units in -- deeper than the 0.375-unit shove
-    // `world.ts:98-101` documents, so judged unreachable but NOT proven safe by this test).
-    // See task-5b-report.md's "Boundary-flush behaviour" section for the full numbers and
-    // why a 1-cell-deep run (this fixture) and a 3-cell-deep run (arena-02) are genuinely
-    // different cases, not the same claim at two scales.
+    // boundary for some interior starts. Re-measured for this comment, with the
+    // population stated because two earlier versions of it disagreed (one said "544 of
+    // 20,000", the other "544 of 160,000", same numerator): over every hull centre on a
+    // 0.05 grid across arena-02's playable rect [0,22]x[0,18], population 159,201,
+    // **154 resolve to a point outside that rect**. The shallowest such start is **0.720
+    // units** from the nearest legal (non-overlapping) hull centre, against the
+    // 0.375-unit shove `world.ts:98-101` documents -- so judged unreachable, but NOT
+    // proven safe by this test. A 1-cell-deep run (this fixture) and a 3-cell-deep run
+    // (arena-02) are genuinely different cases, not the same claim at two scales: the
+    // march's horizontal exit only beats the vertical one when the run is deep enough.
     //
     // The risk this test DOES guard: the escape march finding the boundary CONTIGUOUS with
     // a 1-cell-deep wall and walking straight through it, landing the hull outside the play
@@ -427,7 +431,7 @@ describe('resolveWalls', () => {
     // hop), but left wrongly drops to 0.5 and up/down wrongly drop to 1, making left the
     // STRICT minimum (0.5 < 1 < 1.5) and pushing the hull straight into the boundary's own
     // span (x < 0). Verified: reverting unionExitDistance's loop bound to `step <= 0`
-    // makes this test fail (t.pos.x lands at -0.5, not >= 0) -- see task-5b-report.md.
+    // makes this test fail (t.pos.x lands at -0.5, not >= 0) -- (see this PR's description).
     const cell: Wall = { id: 1, kind: 'destructible', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };
     const boundaryThickness = 2, H = 8;
     const leftBoundary: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -boundaryThickness, minY: 0, maxX: 0, maxY: H } };
@@ -458,7 +462,7 @@ describe('resolveWalls', () => {
     resolveWalls(t, [wall1, wall2, wall3, blockerL, blockerU, blockerD]);
     // Correct: escapes right by 0.1 + TANK_RADIUS, landing at x=2.5. Verified this fails
     // under the mutation (dropping `!x.destroyed` from unionExitDistance's `find`), landing
-    // at x=6.5 instead -- see task-5b-report.md.
+    // at x=6.5 instead -- (see this PR's description).
     expect(t.pos.x).toBeCloseTo(2.5, 9);
     expect(t.pos.y).toBeCloseTo(1, 9);
   });
@@ -477,7 +481,7 @@ describe('resolveWalls', () => {
     resolveWalls(t, [wall]);
     // Verified this fails under the mutation (reducing the tie-break to a bare `d <
     // escapeDist`, so the first-scanned direction keeps a tied result): the first-scanned
-    // axis is RIGHT, so the mutant lands at (2.5, 1) instead -- see task-5b-report.md.
+    // axis is RIGHT, so the mutant lands at (2.5, 1) instead -- (see this PR's description).
     expect(t.pos.x).toBeCloseTo(-0.5, 9);
     expect(t.pos.y).toBeCloseTo(1, 9);
   });
@@ -491,7 +495,7 @@ describe('resolveWalls', () => {
     // `<` bound would have NEITHER wall claim the seam point, skipping the march entirely
     // and falling back to the old deepest-overlap `circleVsAABB` pass, which resolves the
     // same seam differently (landing at (2.5, -0.5) -- verified by mutation, see
-    // task-5b-report.md). Dyadic coordinates are a real class of position this codebase
+    // this PR's description). Dyadic coordinates are a real class of position this codebase
     // already treats as reachable, not a contrived float coincidence -- see "breaks a tie
     // on the push vector" above, which makes the identical argument for a diagonal corner.
     const wallA: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: 0, minY: 0, maxX: 2, maxY: 2 } };

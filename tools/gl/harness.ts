@@ -263,7 +263,7 @@ check('screenToGround maps the canvas centre to the arena centre', () => {
 });
 
 check('refit re-aims ground, camera and screenToGround at a NEW board size', () => {
-  // The constraint this retires: every arena had to be 11x9 because the scene sized
+  // The constraint this retires: every arena had to be one fixed size because the scene sized
   // its ground plane, camera and shadow rig ONCE at construction. A refit to a wider
   // board must move all of it -- and the GL context must survive (in-place, not a
   // rebuild).

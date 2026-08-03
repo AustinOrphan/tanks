@@ -179,9 +179,23 @@ export function sandboxArena(opts: SandboxOptions): Arena {
     const paint = (bc: number, br: number, ch: string): void => {
       for (let r = br; r < br + k; r++) for (let c = bc; c < bc + k; c++) cells[r][c] = ch;
     };
+    // A block may not touch one already placed. `loadArena` merges adjacent SOLID cells
+    // into maximal rectangles, so two blocks side by side load as ONE wall and `walls=N`
+    // quietly yields fewer than N entities -- which is exactly what `levels.test.ts`'s
+    // "scatters the requested walls" caught the first time these became 3x3 blocks.
+    const touchesPlaced = (bc: number, br: number): boolean => {
+      for (let r = br - 1; r <= br + k; r++) {
+        for (let c = bc - 1; c <= bc + k; c++) {
+          if (r < 0 || c < 0 || r >= rows || c >= cols) continue;
+          if (cells[r][c] === '#') return true;
+        }
+      }
+      return false;
+    };
     let placed = 0;
     for (const [bc, br] of candidates) {
       if (placed === wanted) break;
+      if (touchesPlaced(bc, br)) continue;
       paint(bc, br, '#');
       if (fullyConnected(cells.map((row) => row.join('')), legend)) placed++;
       else paint(bc, br, '.');

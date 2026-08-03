@@ -62,7 +62,9 @@ export function makeTank(id: number, kind: TankKind, pos: { x: number; y: number
  *
  * Solid only. A destructible cell is a destruction unit -- mine blasts destroy by
  * world-space radius, so finer cells mean finer breaching -- and arena-02's centre
- * barrier is authored as adjacent 2.0 blocks that must stay separately destructible.
+ * barrier is authored as adjacent blocks that must stay separately destructible. (Those
+ * blocks were 2.0 units when this was written and are 0.667 since the rescale, which is
+ * exactly the point: merging them would fuse a barrier the level breaches piecemeal.)
  */
 function mergeSolidRuns(mask: boolean[][], cols: number, rows: number): [number, number, number, number][] {
   const runs: { r: number; c0: number; c1: number }[] = [];

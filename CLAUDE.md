@@ -206,15 +206,20 @@ step-out-along-the-normal form this file records as tried and reverted. It is sa
 for a structural reason: `losIgnoring` has exactly two callers, both inside `bankShot`,
 so it cannot reach `reflectSweep` and cannot reopen the escape bug.
 
-An explicit `faceIsBuried` guard was written first and then DELETED, because with the
-graze fix in place it changed nothing: 0 differences across 4,587,750 (muzzle, target)
-probes — an adjacent pair, three-in-a-row, an L-shape with a partially-overlapping
-neighbour, a diagonal staircase, and all 4 shipped arenas' real merged wall geometry,
-compared via a per-config result hash with and without the guard (`targeting.ts:277` is
-the ledger of record; this figure is copied from there, not independently re-measured).
-If a face is buried, the neighbour occupies the space outside it, so any ray reaching
-that face is already a real penetration of the neighbour. Do not re-add the guard
-without a fixture that fails when it is removed.
+An explicit `faceIsBuried` guard was written first and then DELETED, on evidence with a
+stated DOMAIN — the unqualified version of this paragraph was falsified in review. With
+both endpoints strictly outside every wall, which is the only state the sim produces
+(`resolveWalls` keeps every hull centre out of the mass), removing the guard changed
+0 of **4,195,692** (muzzle, target) probes across 12 synthetic shapes and all 4 shipped
+arenas' real merged geometry. With an endpoint exactly ON a wall surface it is not a
+no-op: **81 of 1,966,116** probes differ, all on arena-03. So the guard is unnecessary
+because of REACHABILITY. The structural argument this file used to give — "if a face is
+buried the neighbour occupies the space outside it, so any ray reaching it is already a
+real penetration" — is FALSE, and there is a witness: an approach arriving exactly at the
+seam CORNER only touches the neighbour, and the graze check correctly lets it through.
+`targeting.ts:277` is the ledger of record. Do not re-add the guard without a fixture
+that fails when it is removed — and such a fixture has to put an endpoint on a wall
+surface, which is why none exists.
 
 **Destructible walls are never merged**, and that is a rule, not an oversight. A
 destructible cell is a destruction UNIT: mine blasts destroy by world-space radius
@@ -231,6 +236,13 @@ which is a property of the union. `circleVsAABB` itself is untouched, because
 `bullets.ts` depends on it. This was reachable, not theoretical:
 `separateTanks` drives hulls up to 0.375 units into a block and `stepMovement` calls
 `resolveWalls` immediately afterwards.
+
+**Two numbers in this section are NOT pinned by any test**, which by this file's own rule
+is a debt: the 780 above (an independent reconstruction at the pre-fix commit measured
+774, a 0.8% difference nobody has resolved — treat it as "most of an isolated destructible
+mass's interior", not as a figure), and `targeting.ts`'s buried-face probe count, whose
+guard is deleted so nothing can ever re-derive it. The decomposition GUARANTEES are pinned,
+by `decomposition.test.ts`; these two provenance figures are not.
 
 `src/sim/decomposition.test.ts` pins the property directly — the same geometry
 expressed at two cell sizes must agree on `resolveWalls`, `lineOfSight` and `bankShot`.

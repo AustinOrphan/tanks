@@ -65,8 +65,8 @@ import { makeTank } from './arena';
  *  sliced. `circleVsAABB` itself is untouched (bullets.ts depends on its exact
  *  behaviour), so this is resolveWalls-only. The position test below no longer
  *  excludes interior starts -- it sweeps all 1,024 points, which is the actual
- *  proof this closed the residual rather than moved it. See task-5b-report.md
- *  for the mutation table. */
+ *  proof this closed the residual rather than moved it. The mutation table for this
+ *  work is in the PR description. */
 const COARSE = {
   id: 'coarse', cols: 6, rows: 6, cellSize: 2,
   legend: { '#': 'solid' as const, x: 'destructible' as const },
@@ -105,7 +105,7 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
     // rectangles whatever cell size expressed it"). This is what "stop merging solid cells
     // (emit one box per cell)" breaks -- LOS/bankShot/resolveWalls all stayed
     // decomposition-invariant for every EXTERIOR point probed under that mutation (measured;
-    // see task-5-report.md), because headingIntoBox absorbs ray seam-grazes and Task 4's
+    // (see this PR's description), because headingIntoBox absorbs ray seam-grazes and Task 4's
     // deepest-overlap resolveWalls absorbs circle seam-grazes -- so only a structural count
     // on the wall list itself catches it. Boundary walls (always solid, always 4) are
     // excluded by bounding the search to the interior.
@@ -157,7 +157,7 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
   // which is a flakiness defect independent of CI simply being slower. Thinning plus the
   // explicit timeout below (`tools/baseline/trace.test.ts` precedent) fixes both: on this
   // machine the thinned population runs in well under a second per test (see the durations
-  // recorded in `.superpowers/sdd/2026-08-02-walls-as-geometry/final-fixes-report.md`).
+  // recorded in this PR's description).
   const swept: { x: number; y: number }[] = pts.filter((_, i) => Math.floor(i / 32) % 2 === 0 && i % 32 % 2 === 0);
 
   it('agrees on line of sight for every ordered pair', () => {
@@ -197,10 +197,10 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
   // raySegmentVsAABB's own bounds check regardless of decomposition, so "first valid" and
   // "shortest valid" coincide there by construction (measured: 0 mismatches over 2.2M
   // swept exterior pairs against three different fixture shapes, including an L-shaped
-  // destructible mass, under the first-valid mutation -- see task-5-report.md). A flat
+  // destructible mass, under the first-valid mutation -- (see this PR's description). A flat
   // multi-cell destructible ROW does expose headingIntoBox, but not first-vs-shortest, for
   // the same reason. Two targeted checks below close that gap -- each is the SOLE killer
-  // of its mutation (see task-5-report.md's mutation table), so each gets its own `it`
+  // of its mutation (see this PR's description)'s mutation table), so each gets its own `it`
   // with a distinguishing name/label: sharing one block with the ~23s sweep above would
   // both bury an unlabelled failure and let an earlier failure abort the run before these
   // execute at all.
