@@ -270,7 +270,7 @@ a quoted measurement that nothing recomputes is how the previous draft of this f
 a fabricated figure.
 
 Counts: **84 lines below** — 17 / 31 / 26 / 10 across four groups. **75** came from the
-21 PRs in scope and **9** from prose-only PRs outside it. They do not sum to the number of
+20 PRs in scope and **9** from prose-only PRs outside it. They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
 
@@ -376,7 +376,7 @@ Each needs a measurement, a browser, or a person.
 
 ### Where the numbers went
 
-147 items were enumerated from the 21 PRs in scope. 63 were already closed by later work
+147 items were enumerated from the 20 PRs in scope. 63 were already closed by later work
 (62 found by the triage, plus one the review caught: the `startMusic()`/`loaderror` race
 was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, since #73).
 8 remain unsettleable. 76 were still open.

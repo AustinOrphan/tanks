@@ -445,6 +445,23 @@ and what would answer it; the ledger below them carries one-line pointers. A PR 
 something adds its entry in the same PR, **and a PR that closes something deletes its entry
 in the same PR.**
 
+**Issues or backlog? Split on lifecycle, not on subject.** GitHub Issues is the default and
+the bar to clear: if a thing has an owner, a state and a close event, it is an issue, and
+`Fixes #N` in the PR body closes it on merge. `backlog.md` earns its keep only for decision
+records — a spike carrying a measurement, its population, and what would answer the
+question. Those have a conclusion rather than a close event, they want review in a PR
+alongside the code they describe, and an agent reading the repo cold sees files where it
+does not see issues. That last point is the whole reason this file exists rather than being
+80 issues.
+
+Be honest about the tension when you use it: the delete-when-you-close rule above is a
+hand-rolled version of what `Fixes #N` does for free, and hand-rolled upkeep is exactly what
+rotted last time. So **the ledger is not the default**. Before adding a line to it, ask
+whether the thing has an owner and a close event; if it does, file an issue. Most of the
+existing ledger — "emotes", "achievement rarity", "no upper bound on `barSteps`" — is issues
+wearing a markdown bullet, and it may well migrate. When an issue supersedes a ledger line,
+delete the line and cite the issue, which is the same rule as any other close.
+
 The second half is the one that rots, and it is not a tidiness rule. When the previous
 arrangement was finally harvested, a one-pass triage of the 20 merged PR bodies carrying a
 `/residual/i` heading enumerated 147 items and found **63 already done** — roughly two in

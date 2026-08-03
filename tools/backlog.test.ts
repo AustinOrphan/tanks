@@ -87,7 +87,16 @@ describe('backlog.md quotes numbers it can still justify', () => {
     // The scope claim is the one review falsified last time: the harvest covered PRs with
     // a residual HEADING, and these are the spot-checked extras. An unmarked out-of-scope
     // line silently makes the split wrong.
-    const stated = /\*\*(\d+)\*\* came from the 21 PRs in scope and \*\*(\d+)\*\* from prose-only/.exec(FLAT_BACKLOG);
+    // The scope figure is stated in three places and they disagreed on main: the Scope
+    // sentence said 20 while these two said 21, and the regex here HARDCODED 21, so the
+    // guard enforced the wrong one. Extract it from the Scope sentence and require the
+    // other two to match, rather than freezing any number in this file.
+    const scope = figure(FLAT_BACKLOG, /Scope, stated exactly: the \*\*(\d+)\*\* PRs/, 'scope');
+    const scopeMentions = FLAT_BACKLOG.match(/(\d+) PRs in scope/g) ?? [];
+    expect(scopeMentions.length, 'the two "N PRs in scope" restatements must exist').toBe(2);
+    for (const m of scopeMentions) expect(Number(/(\d+)/.exec(m)![1])).toBe(scope);
+
+    const stated = new RegExp(`\\*\\*(\\d+)\\*\\* came from the ${scope} PRs in scope and \\*\\*(\\d+)\\*\\* from prose-only`).exec(FLAT_BACKLOG);
     expect(stated, 'the in-scope/prose-only split sentence must exist').not.toBeNull();
     expect(Number(stated![1])).toBe(bullets.length - prose);
     expect(Number(stated![2])).toBe(prose);
