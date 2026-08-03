@@ -352,11 +352,45 @@ describe('bankShot', () => {
     expect(bankShot(m, t, [far, obstacle], 1)).toBeCloseTo(soloFar as number, 9);
   });
 
-  it('picks the shortest of several competing reflectors, not the first in array order', () => {
+  it('blocks a leg that crosses a wall far from either endpoint, on a long segment', () => {
+    // REGRESSION. `hit.t` is a fraction of the leg's length; `headingIntoBox` probes a
+    // fixed SWEEP_EPS of WORLD distance. Comparing them directly made the graze branch
+    // fire for any hit within SWEEP_EPS*len of an endpoint, while the probe still looked
+    // only SWEEP_EPS ahead -- so on a segment longer than 1 unit there was a band of
+    // offsets where a REAL crossing probed clear and was waved through as a graze.
+    //
+    // The obstacle sits squarely across the muzzle->bounce leg. `delta` slides the muzzle
+    // just off the obstacle's top face; the leg is ~7 units long, so the leaked band was
+    // (SWEEP_EPS, SWEEP_EPS*len] ~= (1e-7, 7e-7].
+    const reflector: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -100, minY: 0, maxX: 100, maxY: 2 } };
+    const obstacle: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: 8, maxX: 1, maxY: 9 } };
+    const target = { x: 0.5, y: 6 };
+
+    // The obstacle must actually be in the way: without it every offset resolves a bank.
+    for (const delta of [0, 1e-8, 2e-7, 6e-7, 1e-6]) {
+      expect(bankShot({ x: 0, y: 9 + delta }, target, [reflector], 1), `clear delta=${delta}`).not.toBeNull();
+    }
+    // With it, every offset must be blocked. 2e-7 and 6e-7 are inside the old leak band
+    // and returned the unobstructed angle before this was fixed; 0/1e-8 (probe lands
+    // inside) and 1e-6 (past the band entirely) were always blocked and are the controls
+    // that prove the fixture straddles the boundary rather than sitting on one side.
+    for (const delta of [0, 1e-8, 2e-7, 6e-7, 1e-6]) {
+      expect(bankShot({ x: 0, y: 9 + delta }, target, [reflector, obstacle], 1), `blocked delta=${delta}`).toBeNull();
+    }
+  });
+
+  it('picks between two equal-length reflectors deterministically, not by array order', () => {
     // A boxed room: muzzle and target sit near the LEFT wall, so LEFT is both listed
-    // first below and would be the first candidate found in wall/face iteration order --
-    // but the actual shortest bank path is off the TOP wall instead, proving the
-    // selection is made by path length, not by position in the array.
+    // first below and would be the first candidate found in wall/face iteration order.
+    //
+    // The two candidate paths here are EXACTLY the same length -- both sqrt(52), by the
+    // symmetry of (1,5)/(5,9) about the room -- so what this test pins is the ANGLE
+    // tiebreak, not the length comparison. (An earlier version of this comment claimed
+    // the top path was shorter and that this proved selection by path length. It is not
+    // shorter; the lengths are bit-identical. Length ordering is pinned instead by the
+    // two fall-through tests above and by decomposition.test.ts's 'picks the shorter of
+    // two non-collinear bank reflectors'.) It still kills first-valid, which is what the
+    // final assertion is for.
     const left: Wall = { id: 1, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1, maxX: 0, maxY: 11 } };
     const right: Wall = { id: 2, kind: 'solid', destroyed: false, aabb: { minX: 10, minY: -1, maxX: 11, maxY: 11 } };
     const bottom: Wall = { id: 3, kind: 'solid', destroyed: false, aabb: { minX: -1, minY: -1, maxX: 11, maxY: 0 } };
@@ -372,9 +406,18 @@ describe('bankShot', () => {
     expect(soloTop).not.toBeNull();
     expect(soloLeft).not.toBeCloseTo(soloTop as number, 6);
 
+    // Both candidate paths are analytically sqrt(52): mirroring t across left's inner
+    // face x=0 gives (-5,9) and across top's inner face y=10 gives (5,11), and the muzzle
+    // is equidistant from both mirrors. Asserted rather than left as prose -- if a fixture
+    // edit ever made the two lengths differ, this test would quietly stop exercising the
+    // tiebreak and nothing else would notice.
+    expect(Math.hypot(-5 - m.x, 9 - m.y)).toBeCloseTo(Math.sqrt(52), 12);
+    expect(Math.hypot(5 - m.x, 11 - m.y)).toBeCloseTo(Math.sqrt(52), 12);
+
     // left is listed FIRST; a first-valid implementation returns soloLeft's angle for this
     // exact array (verified directly against a first-valid build during development).
-    // The real implementation must return soloTop's angle -- the shorter path -- instead.
+    // The real implementation must return soloTop's angle -- the smaller angle of the two
+    // tied candidates -- instead.
     const combined = bankShot(m, t, [left, right, bottom, top], 1);
     expect(combined).toBeCloseTo(soloTop as number, 9);
     expect(combined).not.toBeCloseTo(soloLeft as number, 6);

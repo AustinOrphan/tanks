@@ -237,14 +237,24 @@ function headingIntoBox(start: Vec2, target: Vec2, box: AABB): boolean {
  * means the segment only grazed a corner on its way past (let it through). A hit
  * anywhere in the MIDDLE of the range (an actual crossing) is never a graze and is
  * always a real block, unaffected by this check.
+ *
+ * "At either extreme" is measured in WORLD UNITS, not in the ray parameter. `hit.t` is a
+ * fraction of this segment's length, while `headingIntoBox` probes a fixed `SWEEP_EPS` of
+ * world distance; comparing the two directly means that on a segment longer than 1 unit
+ * the graze branch fires for hits up to `SWEEP_EPS * len` from the endpoint, while the
+ * probe only ever looks `SWEEP_EPS` ahead. Everything in between is a REAL crossing whose
+ * probe still lands short of the box, so it was waved through as a graze -- a shot
+ * reported clear straight through a solid wall. Multiplying by `len` puts both sides in
+ * the same unit, which is what makes the two branches mean what the paragraph above says.
  */
 function losIgnoring(from: Vec2, to: Vec2, walls: Wall[], ignore: Wall): boolean {
+  const len = Math.hypot(to.x - from.x, to.y - from.y);
   for (const w of walls) {
     if (w === ignore || w.destroyed) continue;
     const hit = raySegmentVsAABB(from, to, w.aabb);
     if (hit === null) continue;
-    if (hit.t <= SWEEP_EPS && !headingIntoBox(from, to, w.aabb)) continue;
-    if (hit.t >= 1 - SWEEP_EPS && !headingIntoBox(to, from, w.aabb)) continue;
+    if (hit.t * len <= SWEEP_EPS && !headingIntoBox(from, to, w.aabb)) continue;
+    if ((1 - hit.t) * len <= SWEEP_EPS && !headingIntoBox(to, from, w.aabb)) continue;
     return false;
   }
   return true;
