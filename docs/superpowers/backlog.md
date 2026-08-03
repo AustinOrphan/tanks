@@ -186,6 +186,71 @@ the payoff the hardest one does not.
 commit message.
 
 ---
+## Deployment residuals, measured while shipping the GitHub Pages workflow
+
+**Raised 2026-08-03**, reviewing PR #80. Measured against the live `austinorphan.com`
+Pages infrastructure using sibling project sites of the same account, because `/tanks/`
+was not yet deployed.
+
+**1. The ten missing audio files cost 91.6 kB on every load, and it never caches.**
+`public/audio/` holds only `.gitkeep`; no `.wav` has ever been committed
+(`git log --all --diff-filter=A --name-only -- '*.wav'` is empty), so all ten manifest
+entries 404 and `audio/engine.ts` falls through to the procedural path. That part works —
+a Pages 404 arrives as a *successful* XHR with `status: 404`, and Howler's `onload` branch
+emits `loaderror` immediately with no retry, which is the cheap failure shape. The cost is
+traffic. Pages sets no `cache-control` on a `.wav` 404 (0 of 3 probed) while `.mp3`,
+`.ogg`, `.js` and `.png` 404s all get `max-age=14400` (4 of 4), and a Pages 404 body is
+9,379 bytes: **9,379 × 10 = 91.6 kB and 10 round trips per load, never cached** — about
+half the 186 kB gzipped bundle. The fix is a decision, not a patch: render and commit the
+ten wavs, or stop the manifest requesting files that are not there. Note `npm run audio`
+does **not** do the first — it writes to the gitignored `audio-out/`, needs chromium, and
+names files `${label}.wav`, not `public/audio/cannon.wav`.
+
+**2. A service worker this repo does not own controls `/tanks/`.** The portfolio root
+registers `navigator.serviceWorker.register("/sw.js")`, served from the origin root with no
+`Service-Worker-Allowed` header, so its scope is `/`. It calls `clients.claim()`, and its
+`activate` handler deletes every CacheStorage entry not named `austin-orphan-portfolio-v2`.
+Harmless today — its precache list is `/`, `/blog`, `/rss.xml`, and `caches.match` is keyed
+by exact URL, so every game request falls through to `fetch`. But any offline/precache work
+here would be silently wiped whenever a player visits the portfolio, and if that worker
+gains runtime caching the game would serve stale hashed assets with no way for this
+pipeline to invalidate them. Not fixable from this repo. **UNVERIFIED:** the scope is
+derived from the spec and the absent header, not measured in a browser —
+`navigator.serviceWorker.getRegistrations()` on a deployed `/tanks/` page would settle it.
+
+**3. HTTPS cannot be enforced through GitHub, because Cloudflare proxies the domain.**
+`http://` and `https://` are different localStorage origins, and all four save keys
+(`tanks.progress.v1`, `tanks.stats.v1`, `tanks.achievements.v1`, `tanks.custom.v1`) are
+origin-scoped, so anything built on the http origin vanishes when HTTPS is enforced. The
+obvious fix does not work: `PUT /repos/AustinOrphan/tanks/pages -F https_enforced=true`
+returns `"The certificate has not finished being issued"`. The reason is structural, not
+transient — **all five** of the account's Pages sites report
+`https_certificate.state: "bad_authz"` with the same `expires_at: 2026-07-24`, including
+the apex, which already has `https_enforced: true` and serves fine. `austinorphan.com`
+answers with `server: cloudflare` and a `cf-ray` header while `austinorphan.github.io`
+answers `server: GitHub.com`, and the cert on the wire is a Cloudflare wildcard
+(`SAN: *.austinorphan.com`) rather than the `[austinorphan.com, www.austinorphan.com]`
+pair GitHub's record wants. GitHub's ACME challenge is answered by Cloudflare's edge, so
+its authorization can never complete. The equivalent lever is **Cloudflare → SSL/TLS →
+Edge Certificates → Always Use HTTPS**, which covers every project page on the zone at
+once; the alternative is unproxying DNS, at the cost of the CDN.
+
+**4. Copying `index.html` to `404.html` would break the site.** Pages serves a real 404 and
+the game has no client-side router, so nothing needs the SPA fallback today. But that trick
+is one file away and `base: './'` cannot survive it: `/tanks/foo/bar` would serve an
+`index.html` whose `./assets/…` resolves to `/tanks/foo/assets/…`. This is *the* known
+failure mode of a relative base.
+
+**5. Untested claim, recorded rather than asserted:** the deploy builds only on Node 22
+while `ci.yml` also builds on 20.19.0. Whether the two produce byte-identical bundles is
+unmeasured. Nothing ships from the 20.19.0 build, so there is no path to the live site —
+but "some CI job already built this bundle" is not a thing anyone has shown.
+
+**6. No Open Graph or canonical tags** in `dist/index.html` (0 matches for
+`og:|twitter:|rel="canonical"`), so sharing the link gives no preview card.
+
+---
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** Scope, stated exactly: the

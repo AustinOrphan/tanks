@@ -48,14 +48,17 @@ jobs:
       # references /assets/... absolutely and is a blank page on any host that
       # is not a domain root -- which a passing unit test cannot detect, since
       # Vitest resolves BASE_URL to '/' regardless of the build config.
+      #
+      # This used to be an inline shell block, duplicated here and in pages.yml.
+      # It is now tools/portability/check.mjs, for two reasons measured rather
+      # than assumed: the shell version PASSED on a dist/ with no JavaScript at
+      # all (grep exits 2 on a non-matching glob, and `!` inverts that to 0),
+      # and its second clause matched double-quoted paths only -- vite 8
+      # minifies the same source to a backtick template, so it had quietly
+      # stopped catching anything when the toolchain moved. The checker has its
+      # own negative controls in tools/portability/check.test.ts.
       - name: Assert the build is subpath-portable
-        run: |
-          grep -q 'src="\./assets/' dist/index.html \
-            || { echo "dist/index.html does not reference assets relatively:"; \
-                 grep -o '<script[^>]*>' dist/index.html; exit 1; }
-          ! grep -qE '"/(audio|assets)/' dist/assets/*.js \
-            || { echo "bundle contains origin-absolute asset paths:"; \
-                 grep -oE '"/(audio|assets)/[^"]*"' dist/assets/*.js | sort -u; exit 1; }
+        run: npm run portability
 
       # Dev-only advisories (vite/vitest dev-server CVEs) cannot reach a static
       # bundle, so gating on them would be a permanent, non-actionable red.
