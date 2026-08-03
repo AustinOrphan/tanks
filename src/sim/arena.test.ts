@@ -34,15 +34,21 @@ describe('arenaBounds', () => {
 describe('loadArena', () => {
   it('produces the interior walls plus exactly 4 solid boundary walls', () => {
     const { walls } = loadArena(ARENA_01);
-    const solidCells = countChar(ARENA_01.grid, '#');
     const destructibleCells = countChar(ARENA_01.grid, 'x');
 
-    expect(walls.length).toBe(solidCells + destructibleCells + 4);
+    // Solid cells merge into maximal rectangles (mergeSolidRuns, arena.ts) before
+    // becoming walls, so raw '#' cell count no longer predicts solid wall count --
+    // only destructible cells (never merged) still map 1:1. mergedSolidBoxes is
+    // measured directly by running loadArena against ARENA_01's current grid, not
+    // re-derived from raw cell count (which would just re-run the merge in the test).
+    const mergedSolidBoxes = 5;
+
+    expect(walls.length).toBe(mergedSolidBoxes + destructibleCells + 4);
 
     const destructible = walls.filter((w) => w.kind === 'destructible');
     const solid = walls.filter((w) => w.kind === 'solid');
     expect(destructible.length).toBe(destructibleCells);
-    expect(solid.length).toBe(solidCells + 4); // interior solids + 4 boundaries
+    expect(solid.length).toBe(mergedSolidBoxes + 4); // interior solids + 4 boundaries
   });
 
   it('assigns unique ids across walls and tanks', () => {
@@ -205,9 +211,11 @@ describe('loadArena', () => {
     for (const w of interior) {
       expect(['solid', 'destructible']).toContain(w.kind);
     }
-    const solidCells = countChar(ARENA_01.grid, '#');
     const destructibleCells = countChar(ARENA_01.grid, 'x');
-    expect(interior.filter((w) => w.kind === 'solid').length).toBe(solidCells);
+    // Merged, per the previous test's comment: raw '#' count no longer predicts
+    // solid wall count once adjacent solid cells merge into maximal rectangles.
+    const mergedSolidBoxes = 5;
+    expect(interior.filter((w) => w.kind === 'solid').length).toBe(mergedSolidBoxes);
     expect(interior.filter((w) => w.kind === 'destructible').length).toBe(destructibleCells);
   });
 
