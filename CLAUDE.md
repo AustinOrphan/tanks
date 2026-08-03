@@ -445,12 +445,20 @@ and what would answer it; the ledger below them carries one-line pointers. A PR 
 something adds its entry in the same PR, **and a PR that closes something deletes its entry
 in the same PR.**
 
-The second half is the one that rots, and it is not a tidiness rule. Of the 147 deferred
-items harvested out of PR descriptions, **63 were already done** — 43% of what read as a
-backlog was work someone had finished and nobody had struck out. That is what makes a
-backlog worse than nothing: a reader cannot tell the live items from the dead ones without
-re-deriving all of them, which is the cost the file exists to remove. Deleting the line is
-part of the work, not follow-up to it.
+The second half is the one that rots, and it is not a tidiness rule. When the previous
+arrangement was finally harvested, a one-pass triage of the 20 merged PR bodies carrying a
+`/residual/i` heading enumerated 147 items and found **63 already done** — roughly two in
+five. Read that as an order of magnitude rather than a rate: what counts as "one item" was
+a judgement call, not a command, and the ~15 PRs recording deferred work only in prose were
+never swept. `docs/superpowers/backlog.md` carries the breakdown.
+
+Two caveats on using it as evidence, since both cut against the rule. Nobody *could* have
+struck those out — a merged description is immutable, so the rot was structural rather than
+negligence. And `backlog.md` is days old, so its own rot rate is unmeasured. The number is
+the reason to expect the failure here, not proof it has happened. What it does establish is
+the cost: a reader who cannot separate live entries from dead ones has to re-derive them,
+which is the whole expense the file exists to remove. Deleting the line is part of the work,
+not follow-up to it.
 
 `tools/backlog.test.ts` makes the deletion cheap to get right rather than merely required:
 it cross-checks the ledger's stated counts against the list itself and pins no count literal

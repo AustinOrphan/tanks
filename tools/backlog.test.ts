@@ -19,24 +19,40 @@ import suitesJson from '../src/audio/data/music-suites.json';
 
 const BACKLOG = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url)), 'utf8');
 const CLAUDE_MD = readFileSync(fileURLToPath(new URL('../CLAUDE.md', import.meta.url)), 'utf8');
-/** Both files hard-wrap, so any sentence-level match must ignore where the lines break. */
+/**
+ * Both files hard-wrap, so any sentence-level match must ignore where the lines break.
+ * The first version collapsed only CLAUDE.md, which left every backlog.md regex brittle:
+ * re-flowing a paragraph failed with "expected undefined to be '63'" — a wording problem
+ * reported as a wrong number. Collapse both.
+ */
 const FLAT_BACKLOG = BACKLOG.replace(/\s+/g, ' ');
+const FLAT_CLAUDE = CLAUDE_MD.replace(/\s+/g, ' ');
 
 /** Bullet counts per `###` subsection of the Ledger, in document order. */
-function ledgerSections(): { title: string; bullets: number }[] {
+function ledgerSections(): { title: string; bullets: number; prose: number }[] {
   const ledger = BACKLOG.slice(BACKLOG.indexOf('## Ledger'));
-  const out: { title: string; bullets: number }[] = [];
+  const out: { title: string; bullets: number; prose: number }[] = [];
   for (const line of ledger.split('\n')) {
-    if (line.startsWith('### ')) out.push({ title: line.slice(4), bullets: 0 });
-    else if (out.length > 0 && line.startsWith('- ')) out[out.length - 1].bullets += 1;
+    if (line.startsWith('### ')) out.push({ title: line.slice(4), bullets: 0, prose: 0 });
+    else if (out.length > 0 && line.startsWith('- ')) {
+      out[out.length - 1].bullets += 1;
+      if (line.includes('prose-only PR')) out[out.length - 1].prose += 1;
+    }
   }
   return out;
 }
 
+function proseInSections(secs: { prose: number }[]): number {
+  return secs.reduce((n, s) => n + s.prose, 0);
+}
+
 describe('backlog.md quotes numbers it can still justify', () => {
   it('loads as text at all', () => {
-    // Without this every `toContain` below passes vacuously on "".
+    // Without this every match below passes vacuously on "". CLAUDE.md is guarded here too
+    // rather than relying on tools/instructions.test.ts to do it: this file asserts against
+    // CLAUDE.md, so it owes its own non-vacuity check.
     expect(BACKLOG.length).toBeGreaterThan(2000);
+    expect(CLAUDE_MD.length).toBeGreaterThan(2000);
     expect(BACKLOG).toContain('## Ledger');
   });
 
@@ -76,33 +92,53 @@ describe('backlog.md quotes numbers it can still justify', () => {
     expect(Number(stated![1])).toBe(bullets.length - prose);
     expect(Number(stated![2])).toBe(prose);
 
-    // "Where the numbers went" restates the in-scope figure. Both must move together, or
-    // the file contradicts itself with the build green -- which is the defect this whole
-    // test file exists to prevent.
-    const restated = /became the \*\*(\d+)\*\* in-scope lines above/.exec(FLAT_BACKLOG);
+    // "Where the numbers went" says the 76 open items became the in-scope lines of the
+    // first THREE groups -- the fourth group is the unsettleable ones, which are listed
+    // rather than dropped. An earlier draft mapped the 76 onto all 75 in-scope lines,
+    // double-counting that fourth group, and the first version of this assertion enforced
+    // the error. Compare against the right subtotal.
+    const openGroups = ledgerSections().filter((s) => s.bullets > 0).slice(0, 3);
+    const inScopeOpen = openGroups.reduce((n, s) => n + s.bullets, 0) - proseInSections(openGroups);
+    const restated = /became the \*\*(\d+)\*\* in-scope lines of the first three groups/.exec(FLAT_BACKLOG);
     expect(restated, 'the restatement in "Where the numbers went" must exist').not.toBeNull();
-    expect(Number(restated![1])).toBe(bullets.length - prose);
+    expect(Number(restated![1])).toBe(inScopeOpen);
   });
 
-  it('states the same harvest figures in CLAUDE.md and backlog.md', () => {
-    // CLAUDE.md argues the delete-when-you-close rule from "147 harvested, 63 already
-    // done, 43%". backlog.md is where those came from. Two files quoting one measurement
-    // is how they drift -- and a stale 43% would be arguing from a number that no longer
-    // holds, in the file whose whole job is to be believed.
-    const enumerated = /(\d+) items were enumerated/.exec(BACKLOG)?.[1];
-    const closed = /(\d+) were already closed by later work/.exec(BACKLOG)?.[1];
-    expect(enumerated).toBe('147');
-    expect(closed).toBe('63');
-    // Both files hard-wrap their prose, so a sentence spans lines and an exact substring
-    // match breaks on re-wrapping rather than on a wrong number. Collapse whitespace first:
-    // the first draft of this test did not, and failed on the line break inside the very
-    // sentence it was checking.
-    const flat = CLAUDE_MD.replace(/\s+/g, ' ');
-    expect(flat).toContain(`${enumerated} deferred items harvested`);
-    expect(flat).toContain(`**${closed} were already done**`);
-    // And the percentage CLAUDE.md rounds to must be the one those two produce.
-    const pct = Math.round((Number(closed) / Number(enumerated)) * 100);
-    expect(flat).toContain(`${pct}% of what read as a backlog`);
+  // Pull a number out of a sentence NUMERICALLY, never by substring. `toContain('147 ...')`
+  // matched a CLAUDE.md that said 1147 -- an unanchored needle is a superstring away from
+  // any left-extended number, and the same hole accepted "143%" for 43%. Found by mutation.
+  function figure(text: string, re: RegExp, what: string): number {
+    const m = re.exec(text);
+    expect(m, `${what}: sentence missing or reworded`).not.toBeNull();
+    return Number(m![1]);
+  }
+
+  it("backlog.md's own partition adds up", () => {
+    // The file states 147 = 63 closed + 8 unsettleable + 76 open. That is recomputable from
+    // the file itself, which is the standard every other case here meets -- and mutation
+    // showed all three could be broken with the suite green.
+    const enumerated = figure(FLAT_BACKLOG, /(\d+) items were enumerated/, 'enumerated');
+    const closed = figure(FLAT_BACKLOG, /(\d+) were already closed by later work/, 'closed');
+    const unsettleable = figure(FLAT_BACKLOG, /(\d+) remain unsettleable/, 'unsettleable');
+    const open = figure(FLAT_BACKLOG, /(\d+) were still open/, 'open');
+    expect(closed + unsettleable + open).toBe(enumerated);
+  });
+
+  it('quotes the same harvest figures in CLAUDE.md and backlog.md', () => {
+    // CLAUDE.md argues the delete-when-you-close rule from these two numbers; backlog.md is
+    // where they came from. Compared as NUMBERS, not needles.
+    //
+    // What this does NOT do, stated because a green tick invites the opposite reading: it
+    // cannot tell whether 147 and 63 are TRUE. They came from a one-pass triage in which
+    // "one item" was a judgement call, and no command in this repo reproduces them. This
+    // asserts only that the two files agree -- which is worth having, and is less than it
+    // looks like.
+    const enumerated = figure(FLAT_BACKLOG, /(\d+) items were enumerated/, 'backlog enumerated');
+    const closed = figure(FLAT_BACKLOG, /(\d+) were already closed by later work/, 'backlog closed');
+    const quoted = /enumerated (\d+) items and found \*\*(\d+) already done\*\*/.exec(FLAT_CLAUDE);
+    expect(quoted, "CLAUDE.md's harvest sentence must exist and keep its shape").not.toBeNull();
+    expect(Number(quoted![1])).toBe(enumerated);
+    expect(Number(quoted![2])).toBe(closed);
   });
 
   it('recomputes "13 of 42" generated layers at density >= 0.5', () => {
