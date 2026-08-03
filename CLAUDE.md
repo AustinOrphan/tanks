@@ -445,22 +445,24 @@ and what would answer it; the ledger below them carries one-line pointers. A PR 
 something adds its entry in the same PR, **and a PR that closes something deletes its entry
 in the same PR.**
 
-**Issues or backlog? Split on lifecycle, not on subject.** GitHub Issues is the default and
-the bar to clear: if a thing has an owner, a state and a close event, it is an issue, and
-`Fixes #N` in the PR body closes it on merge. `backlog.md` earns its keep only for decision
-records — a spike carrying a measurement, its population, and what would answer the
-question. Those have a conclusion rather than a close event, they want review in a PR
-alongside the code they describe, and an agent reading the repo cold sees files where it
-does not see issues. That last point is the whole reason this file exists rather than being
-80 issues.
+**Issues or backlog?** One question: **can a PR close it?** If yes it is an issue — file it,
+and `Fixes #N` closes it on merge, which is upkeep you do not have to remember. If it needs a
+decision or a measurement *before* anyone could write that PR, it is a spike here.
 
-Be honest about the tension when you use it: the delete-when-you-close rule above is a
-hand-rolled version of what `Fixes #N` does for free, and hand-rolled upkeep is exactly what
-rotted last time. So **the ledger is not the default**. Before adding a line to it, ask
-whether the thing has an owner and a close event; if it does, file an issue. Most of the
-existing ledger — "emotes", "achievement rarity", "no upper bound on `barSteps`" — is issues
-wearing a markdown bullet, and it may well migrate. When an issue supersedes a ledger line,
-delete the line and cite the issue, which is the same rule as any other close.
+That test does not partition cleanly, and saying it does would be worse than admitting it.
+Some ledger lines are closable by a PR *and* carry a figure this file's guard recomputes —
+the inert density knob and the unreachable tracks. When both apply, prefer the issue and
+move the measurement with it. An earlier draft of this paragraph tried a three-part test
+("owner, state, close event"); **none of the eight issues filed so far has an assignee**, so
+the owner limb rejected every example that motivated the rule.
+
+**What is binding today**, whatever should happen eventually: the ledger exists, the
+delete-when-you-close rule above applies to it, and `tools/backlog.test.ts` gates its counts.
+If it migrates to issues that is a deliberate change, not attrition — "it should have been an
+issue" is not a reason to leave a closed line sitting in the file.
+
+One collision worth knowing: a ledger line ends in `#N` meaning **the PR it came from**, and
+an issue is also `#N`. Write `issue #N` when you mean an issue.
 
 The second half is the one that rots, and it is not a tidiness rule. When the previous
 arrangement was finally harvested, a one-pass triage of the 20 merged PR bodies carrying a
