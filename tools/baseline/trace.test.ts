@@ -27,12 +27,18 @@ describe('baseline', () => {
     // that actually moves when AI or collision behaviour moves. Changing it is a
     // deliberate act: re-record the value and say in the commit WHY it moved.
     //
-    // What it does and does not cover: across this plan the hash moved for Tasks 1, 2
-    // and 4 (wall geometry and movement behaviour) but did NOT move for Task 3 (bank
-    // shots), Task 5 (tests only) or Task 5b (hull-inside-wall escape). So this is a
-    // pin on arena and movement behaviour; it is blind to the bank-shot path and to
-    // the inside-wall escape mechanism, and a green run here does not mean either of
-    // those is covered.
+    // What it does and does not cover, RE-MEASURED against the current tree (not carried
+    // forward from when it was recorded): mutating bankShot to return the first valid
+    // candidate instead of the shortest now changes the hash (to
+    // 0cf1f76a14060992eb8763c9cd20e95b8c17cde2d1dbe3e8de6c87ff47137e9a) and fails this
+    // test -- a later change to resolveWalls altered trajectories enough that bank shots
+    // now do influence the trace, even though the bank-shot rewrite itself did not move it
+    // when it landed. Mutating the inside-wall escape (disabling resolveWalls' union-mass
+    // marching so a hull inside a wall resolves through the single sub-cell box instead)
+    // still leaves the hash unchanged and this test still passes: the seeded replay never
+    // drives a hull inside a wall, so that path remains uncovered. Lesson: a coverage claim
+    // recorded at one commit can go stale as later changes alter trajectories -- re-measure
+    // rather than carrying it forward.
     expect(hash).toBe('015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4');
   }, 300_000);
 });

@@ -161,7 +161,8 @@ floor cells and are pinned by nothing — moving a wall so a lane's target cell
 stops meaning what its `why` says is a change no test can see. See the `lane`
 variant's doc comment in `config/arena-types.ts`.
 
-**arena-04 is the first shipped board that is not 11x9** (15x11), so PR #53's
+**arena-04 is the first shipped board that is not 33x27** (45x33; world dimensions are
+unchanged by the 3x cell-size rescale — only the cell counts moved), so PR #53's
 per-level render refit is now exercised by a level players actually reach rather
 than only by a fixture. `WIDE_ARENA` moved 15x11 -> 17x13 when it landed, because
 `arena-validation.test.ts` asserts the fixture differs from every shipped arena
@@ -170,16 +171,18 @@ data. Three distinct board sizes are now covered.
 
 **Adding a level moves more pins than the level file.** Five places moved when
 arena-04 landed, and the list is the checklist for the next one:
-`cell-mapping.test.ts`'s cell and spawn totals (683 / 25); `EXPECTED_CLAIMS` in
+`cell-mapping.test.ts`'s cell and spawn totals (4379 / 25); `EXPECTED_CLAIMS` in
 `arena-validation.test.ts` (the claim mix, not a count); that file's `variable
 arena dimensions` block (fixture dimensions and bounds); its cover-ratio
 `EXPECTED` table; and three size labels in `tools/gl/harness.ts`. The harness
 labels are prose, so nothing failed when one of them was missed — review caught
 it. Any number a `notes` string quotes is likewise unpinned by construction:
-`notes` are validated as strings only. Two blocks in `arena-validation.test.ts`
-exist purely to recompute quoted prose — arena-02's `12 of 16` and arena-04's
-cover ratios — because both were measured once by hand and nothing checked them
-again. Quote a measurement in `notes` and you owe it a recomputing test.
+`notes` are validated as strings only. Three blocks in `arena-validation.test.ts`
+exist purely to recompute quoted prose — arena-02's `12 of 16`, arena-04's cover
+ratios, and arena-04's bank-reach count (275 cells reached by ricochet, covering
+171 of the 284 nothing else sees) — because all three were measured once by hand
+and nothing checked them again. Quote a measurement in `notes` and you owe it a
+recomputing test.
 
 **Walls load as geometry, not as cells.** `loadArena` merges SOLID cells into maximal
 rectangles (`mergeSolidRuns`) and numbers tanks from a counter of their own. Both exist
@@ -204,12 +207,14 @@ for a structural reason: `losIgnoring` has exactly two callers, both inside `ban
 so it cannot reach `reflectSweep` and cannot reopen the escape bug.
 
 An explicit `faceIsBuried` guard was written first and then DELETED, because with the
-graze fix in place it changed nothing: 0 differences across 1,374,336 probes over
-T-junctions, partial overlaps, nested boxes, staircases, L-shapes and 300 randomised
-configurations, plus 0 buried candidates surviving `losIgnoring` in 776,160 probes of
-the shipped arenas. If a face is buried, the neighbour occupies the space outside it, so
-any ray reaching that face is already a real penetration of the neighbour. Do not
-re-add the guard without a fixture that fails when it is removed.
+graze fix in place it changed nothing: 0 differences across 4,587,750 (muzzle, target)
+probes — an adjacent pair, three-in-a-row, an L-shape with a partially-overlapping
+neighbour, a diagonal staircase, and all 4 shipped arenas' real merged wall geometry,
+compared via a per-config result hash with and without the guard (`targeting.ts:277` is
+the ledger of record; this figure is copied from there, not independently re-measured).
+If a face is buried, the neighbour occupies the space outside it, so any ray reaching
+that face is already a real penetration of the neighbour. Do not re-add the guard
+without a fixture that fails when it is removed.
 
 **Destructible walls are never merged**, and that is a rule, not an oversight. A
 destructible cell is a destruction UNIT: mine blasts destroy by world-space radius
@@ -232,11 +237,18 @@ expressed at two cell sizes must agree on `resolveWalls`, `lineOfSight` and `ban
 `tools/baseline/trace.test.ts` is a golden trace over 4 arenas x 6 seeds x 2500 ticks
 and is now ASSERTED, not merely printed: `determinism.test.ts` only proves
 self-consistency, which is invariant under behaviour changes. **Know what it does not
-cover.** Across this work the hash moved for the tank-id and wall-merge changes and for
-the deepest-overlap resolver, but did NOT move for the bank-shot rewrite or the
-inside-wall escape — the seeded replay never drives a hull inside a wall and never
-depends on which reflector was chosen. It is a pin on arena and movement behaviour; the
-decomposition guarantees are held by `decomposition.test.ts`, not by this hash.
+cover, RE-MEASURED against the current tree.** Mutating `bankShot` to return the first
+valid candidate instead of the shortest now changes the hash (to
+`0cf1f76a14060992eb8763c9cd20e95b8c17cde2d1dbe3e8de6c87ff47137e9a`) and fails the test —
+a later change to `resolveWalls` altered trajectories enough that bank shots now DO
+influence the trace, even though the bank-shot rewrite itself did not move it when it
+first landed. Mutating the inside-wall escape (disabling `resolveWalls`' union-mass
+marching so a hull inside a wall resolves through the single sub-cell box instead) still
+leaves the hash unchanged: the seeded replay never drives a hull inside a wall, so that
+path stays uncovered. The lesson generalises: a coverage claim recorded at one commit can
+go stale as later changes alter trajectories, so re-measure rather than carrying it
+forward. The decomposition guarantees are held by `decomposition.test.ts`, not by this
+hash.
 
 ## Testing conventions, learned the hard way
 
@@ -401,14 +413,18 @@ Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anythi
 
 Merged PR descriptions carry the detailed residual backlog.
 
-**Retroreflecting wall seams: real, measure-zero, and do NOT apply the obvious fix.** Walls
-are one AABB per grid cell, so a flat multi-cell run shares internal faces. A ray arriving
-at *exactly* a cell-boundary coordinate can enter through one of those buried faces; its
-normal then points along the run and the shell reflects back the way it came instead of
-mirroring off the visible face. Measured: **1 of 121 sampled crossings** (45°, offsets
-−0.60..+0.60 in 0.01 steps against cellSize 2) — the one at exactly 0.00 — and **0 of 155
-ricochets** in 15 seeded games × 4000 ticks landed on an exact cell corner. So it is not the
-hazard on every flat face the PR #1 backlog describes.
+**Retroreflecting wall seams: real, measure-zero, and do NOT apply the obvious fix.**
+Solid walls now load as merged maximal rectangles (`mergeSolidRuns`, see "Walls load as
+geometry, not as cells" above), not one AABB per grid cell — but a merged run still
+abuts its neighbours at internal seams, so the buried-face hazard below is unchanged in
+kind, only in which faces carry it. A ray arriving at *exactly* a seam coordinate can
+enter through one of those buried faces; its normal then points along the run and the
+shell reflects back the way it came instead of mirroring off the visible face. Measured
+**against the pre-upscale `cellSize` 2 geometry, one AABB per grid cell** (retired since
+this branch; not re-measured against merged geometry): **1 of 121 sampled crossings**
+(45°, offsets −0.60..+0.60 in 0.01 steps against cellSize 2) — the one at exactly 0.00 —
+and **0 of 155 ricochets** in 15 seeded games × 4000 ticks landed on an exact cell corner.
+So it was not the hazard on every flat face the PR #1 backlog describes.
 
 The obvious fix — reject a hit whose face is buried, by stepping a hair out along the normal
 and testing containment in another wall — **was tried and reverted**: it fails 4 tests in
