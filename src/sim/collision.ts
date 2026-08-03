@@ -327,8 +327,49 @@ export function driveVelocity(tank: Tank): Vec2 {
  * SWEEP_MAX_ITERATIONS; a gap narrower than the hull cannot be resolved by any
  * displacement and simply exhausts the budget rather than looping forever.
  */
+const AXES: Vec2[] = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+
+function containsPoint(b: AABB, p: Vec2): boolean {
+  return p.x >= b.minX && p.x <= b.maxX && p.y >= b.minY && p.y <= b.maxY;
+}
+
+/** How far from `p` along `dir` until the wall MASS ends. Marches box to box, so a run
+ *  of sub-cells gives the same answer as the single box covering the same span. */
+function unionExitDistance(p: Vec2, dir: Vec2, walls: Wall[]): number {
+  let dist = 0;
+  for (let step = 0; step <= walls.length; step++) {
+    const probe = { x: p.x + dir.x * (dist + SWEEP_EPS), y: p.y + dir.y * (dist + SWEEP_EPS) };
+    const w = walls.find((x) => !x.destroyed && containsPoint(x.aabb, probe));
+    if (!w) return dist;
+    dist = dir.x === 1 ? w.aabb.maxX - p.x
+      : dir.x === -1 ? p.x - w.aabb.minX
+      : dir.y === 1 ? w.aabb.maxY - p.y
+      : p.y - w.aabb.minY;
+  }
+  return dist;
+}
+
 export function resolveWalls(tank: Tank, walls: Wall[]): void {
   for (let iter = 0; iter < SWEEP_MAX_ITERATIONS; iter++) {
+    // A centre INSIDE the mass escapes the mass. circleVsAABB's `inside` branch pushes
+    // out through the nearest face of the one box it is given, which for a sub-cell is
+    // usually a buried seam -- so the same hull in the same place resolved differently
+    // depending only on how the wall was sliced. Ties break on the push VECTOR, never
+    // on array or axis position, for the same reason the deepest-overlap pass does.
+    if (walls.some((w) => !w.destroyed && containsPoint(w.aabb, tank.pos))) {
+      let escape: Vec2 | null = null;
+      let escapeDist = Infinity;
+      for (const dir of AXES) {
+        const d = unionExitDistance(tank.pos, dir, walls);
+        const cand = { x: dir.x * (d + TANK_RADIUS), y: dir.y * (d + TANK_RADIUS) };
+        if (d < escapeDist || (d === escapeDist && escape !== null &&
+            (cand.x < escape.x || (cand.x === escape.x && cand.y < escape.y)))) {
+          escapeDist = d;
+          escape = cand;
+        }
+      }
+      if (escape !== null) { tank.pos = vadd(tank.pos, escape); continue; }
+    }
     let best: Vec2 | null = null;
     let bestDepth = 0;
     for (const wall of walls) {

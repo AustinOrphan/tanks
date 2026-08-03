@@ -223,6 +223,20 @@ describe('the sim reads geometry, not the grid that expressed it', () => {
     expect(nonNullB).toBe(121);
   });
 
+  it('resolves a hull whose centre is inside the mass identically', () => {
+    const interiorPts = pts.filter((p) => inside(p, a) && inside(p, b));
+    // Population pin: the complement of the exterior sweep, same 1024-point grid.
+    expect(interiorPts.length).toBeGreaterThan(20);
+    for (const p of interiorPts) {
+      const ta = makeTank(1, 'player', { ...p }, 0);
+      const tb = makeTank(1, 'player', { ...p }, 0);
+      resolveWalls(ta, a);
+      resolveWalls(tb, b);
+      expect(tb.pos.x, `x=${p.x} y=${p.y}`).toBeCloseTo(ta.pos.x, 9);
+      expect(tb.pos.y, `x=${p.x} y=${p.y}`).toBeCloseTo(ta.pos.y, 9);
+    }
+  });
+
   it('picks the shorter of two non-collinear bank reflectors (first-vs-shortest)', () => {
     // Two NON-collinear reflectors so neither blocks the other's path, listed FAR-then-NEAR
     // so array order and length order disagree. Not a coarse/fine comparison (that pair
