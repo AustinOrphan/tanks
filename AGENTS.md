@@ -181,6 +181,61 @@ exist purely to recompute quoted prose — arena-02's `12 of 16` and arena-04's
 cover ratios — because both were measured once by hand and nothing checked them
 again. Quote a measurement in `notes` and you owe it a recomputing test.
 
+**Walls load as geometry, not as cells.** `loadArena` merges SOLID cells into maximal
+rectangles (`mergeSolidRuns`) and numbers tanks from a counter of their own. Both exist
+because three parts of the sim read the wall ARRAY rather than the arena's shape, and
+the 3x resolution upscale exposed all three: tank ids shared a counter with walls, so
+wall count reseeded every per-tank RNG stream in `ai/targeting.ts`; `resolveWalls`
+applied one push per overlapping wall, so a sliced wall pushed several times and its
+interior seams offered phantom corners; and `bankShot` chose the first reflector in
+wall-array order.
+
+**The bank-shot dependence turned out to live one function deeper**, which is worth
+knowing before anyone "simplifies" it. `bankShot` now picks the SHORTEST muzzle ->
+bounce -> target path, ties broken on the angle, so its answer is a property of the
+arena rather than of the array. But the defect a subdivided wall actually triggered was
+in `losIgnoring`: a bounce landing exactly on a seam put the segment's own ENDPOINT on
+the neighbouring box's corner, and `raySegmentVsAABB` counts a boundary touch as a hit,
+so a legitimate shot was reported blocked. `losIgnoring` now disambiguates with
+`headingIntoBox` — the same direction-probe form `reflectSweep` already ships, NOT the
+step-out-along-the-normal form this file records as tried and reverted. It is safe here
+for a structural reason: `losIgnoring` has exactly two callers, both inside `bankShot`,
+so it cannot reach `reflectSweep` and cannot reopen the escape bug.
+
+An explicit `faceIsBuried` guard was written first and then DELETED, because with the
+graze fix in place it changed nothing: 0 differences across 1,374,336 probes over
+T-junctions, partial overlaps, nested boxes, staircases, L-shapes and 300 randomised
+configurations, plus 0 buried candidates surviving `losIgnoring` in 776,160 probes of
+the shipped arenas. If a face is buried, the neighbour occupies the space outside it, so
+any ray reaching that face is already a real penetration of the neighbour. Do not
+re-add the guard without a fixture that fails when it is removed.
+
+**Destructible walls are never merged**, and that is a rule, not an oversight. A
+destructible cell is a destruction UNIT: mine blasts destroy by world-space radius
+(`mines.ts`), so a finer grid means finer breaching. arena-02's centre barrier is
+authored as adjacent blocks whose separate destruction is the level's design.
+
+**A hull INSIDE a wall escapes the mass, not the sub-cell.** `circleVsAABB`'s `inside`
+branch pushes out through the nearest face of the ONE box it is handed, which for a
+sub-cell is usually a buried internal seam — so the same hull in the same place resolved
+differently depending only on the slicing (measured: 780 of 1,681 interior centres on an
+isolated destructible mass). `resolveWalls` now marches box to box along each axis to
+find where the wall MASS ends, which is a property of the union. `circleVsAABB` itself is
+untouched, because `bullets.ts` depends on it. This was reachable, not theoretical:
+`separateTanks` drives hulls up to 0.375 units into a block and `stepMovement` calls
+`resolveWalls` immediately afterwards.
+
+`src/sim/decomposition.test.ts` pins the property directly — the same geometry
+expressed at two cell sizes must agree on `resolveWalls`, `lineOfSight` and `bankShot`.
+`tools/baseline/trace.test.ts` is a golden trace over 4 arenas x 6 seeds x 2500 ticks
+and is now ASSERTED, not merely printed: `determinism.test.ts` only proves
+self-consistency, which is invariant under behaviour changes. **Know what it does not
+cover.** Across this work the hash moved for the tank-id and wall-merge changes and for
+the deepest-overlap resolver, but did NOT move for the bank-shot rewrite or the
+inside-wall escape — the seeded replay never drives a hull inside a wall and never
+depends on which reflector was chosen. It is a pin on arena and movement behaviour; the
+decomposition guarantees are held by `decomposition.test.ts`, not by this hash.
+
 ## Testing conventions, learned the hard way
 
 These are not style preferences. Each one exists because a real defect shipped green.
