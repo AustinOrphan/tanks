@@ -37,7 +37,7 @@
 | `src/sim/arena-validation.test.ts` (modify) | Runs the generic runner over every arena; the two bespoke describe blocks are deleted |
 | `src/sim/sandbox.test.ts` (modify) | Asserts generated sandbox output passes `validateArenaShape` |
 | `tools/gl/harness.ts` (modify) | Renders the 15×11 fixture, proving per-level refit |
-| `CLAUDE.md` / `AGENTS.md` (modify) | Architecture note; kept byte-identical to each other |
+| `CLAUDE.md` (modify) | Architecture note; `AGENTS.md` is a symlink to it |
 
 ---
 
@@ -1291,7 +1291,7 @@ nudged-player probes are now automatic for any arena that claims it.
 - [ ] **Step 2: Keep the two files identical and gate**
 
 ```bash
-cp CLAUDE.md AGENTS.md
+# AGENTS.md is a SYMLINK to CLAUDE.md; nothing to copy.
 cmp CLAUDE.md AGENTS.md && echo identical
 npm test
 ```

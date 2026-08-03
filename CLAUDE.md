@@ -423,19 +423,23 @@ The one module genuinely without coverage is `main.ts`: it runs at module scope 
 `document.getElementById('app')`, so importing it starts the game and no test can reach it.
 Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anything else.
 
-**Deferred work goes in `docs/superpowers/backlog.md`** — one entry per open question,
-saying what the question is and what would answer it. A PR that defers something adds its
-entry in the same PR.
+**Deferred work goes in `docs/superpowers/backlog.md`** — spikes carry what the question is
+and what would answer it; the ledger below them carries one-line pointers. A PR that defers
+something adds its entry in the same PR.
 
 That file exists because the previous arrangement was "merged PR descriptions carry the
-detailed residual backlog", and measured across all 76 merged PRs, 20 carry a
-residual-style heading and 35 mention deferred work anywhere — so finding an open item
-meant reading 76 PR bodies and hoping. Those older residuals have not been harvested yet;
-until they are, a merged PR body is still the only home for some of them.
+detailed residual backlog". Over the 77 merged PRs, 20 bodies carry an ATX heading matching
+`/residual/i` and 35 mention deferred work anywhere (`/residual|backlog|defer|follow[- ]?up|
+future work|next step|out of scope|not doing/i`) — so finding an open item meant reading 77
+PR bodies and hoping. **Both numbers move on every merge; re-run the predicate rather than
+trusting them.** A first pass harvested the PRs with a heading; PRs that record deferred
+work only in prose have NOT been swept, so a merged PR body is still the only home for
+some of it.
 
-The rest of this section is a landmine map rather than a task list: it records what has
-already been tried and must not be re-attempted. It is deliberately not moving to the
-backlog.
+Most of this section is a landmine map rather than a task list: it records what has already
+been tried and must not be re-attempted, and that part stays here. The exception is the
+retroreflecting-seam fix — "must distinguish a coplanar neighbour that continues the surface
+from a perpendicular one that merely touches it" is an open task, and it has a ledger line.
 
 **Retroreflecting wall seams: real, measure-zero, and do NOT apply the obvious fix.**
 Solid walls now load as merged maximal rectangles (`mergeSolidRuns`, see "Walls load as

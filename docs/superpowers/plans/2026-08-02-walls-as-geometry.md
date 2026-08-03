@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - `src/sim/` imports nothing from `three`, `howler`, or the DOM. `src/sim/purity.test.ts` scans raw text **including strings and test titles**.
-- `CLAUDE.md` and `AGENTS.md` must stay **byte-identical** (`cmp CLAUDE.md AGENTS.md`).
+- `AGENTS.md` is a **symlink** to `CLAUDE.md`; edit `CLAUDE.md` only, and never replace the link with a copy (`tools/instructions.test.ts` fails if you do).
 - No `Co-Authored-By` or tool-attribution trailers in commit messages.
 - Every new assertion must be able to fail. Before adding one, name the production change that breaks it, apply that change, watch it fail, revert.
 - **Commit before running any mutation experiment.** The revert step is `git checkout -- FILE`, which cannot distinguish finished work from deliberate breakage.
@@ -872,7 +872,7 @@ git commit -m "tests: move the wall-count denominators the merge shrinks, and pi
 ### Task 7: Look at it, then document it
 
 **Files:**
-- Modify: `CLAUDE.md`, then `cp CLAUDE.md AGENTS.md`
+- Modify: `CLAUDE.md` (`AGENTS.md` is a symlink to it, so there is nothing to copy)
 
 - [ ] **Step 1: Screenshot all four levels**
 
@@ -946,7 +946,8 @@ decomposition guarantees are held by `decomposition.test.ts`, not by this hash.
 - [ ] **Step 3: Sync and gate**
 
 ```bash
-cp CLAUDE.md AGENTS.md && cmp CLAUDE.md AGENTS.md && echo identical
+# AGENTS.md is a SYMLINK to CLAUDE.md -- editing CLAUDE.md is the whole job.
+git ls-files -s AGENTS.md   # expect mode 120000
 npx vitest run 2>&1 | grep -E "Tests |Test Files"
 git add CLAUDE.md AGENTS.md && git commit -m "docs: walls load as geometry, and why destructibles stay per-cell"
 ```

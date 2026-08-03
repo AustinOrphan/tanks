@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - `src/sim/` imports nothing from `three`, `howler`, or the DOM. `purity.test.ts` scans raw text **including strings and test titles**.
-- `CLAUDE.md` and `AGENTS.md` byte-identical (`cmp CLAUDE.md AGENTS.md`).
+- `AGENTS.md` is a **symlink** to `CLAUDE.md`; edit `CLAUDE.md` only (`tools/instructions.test.ts` pins the link).
 - No `Co-Authored-By` or tool-attribution trailers.
 - **Commit before any mutation experiment.** `git checkout -- FILE` cannot tell your finished work from deliberate breakage; it has destroyed real work three times in this repo.
 - Write commit messages from `git diff --stat` / `git show`, never from recollection.
@@ -458,7 +458,8 @@ resolution for visual consistency, not because mixing is unsupported.
 - [ ] **Step 2: Sync and gate**
 
 ```bash
-cp CLAUDE.md AGENTS.md && cmp CLAUDE.md AGENTS.md && echo identical
+# AGENTS.md is a SYMLINK to CLAUDE.md -- editing CLAUDE.md is the whole job.
+git ls-files -s AGENTS.md   # expect mode 120000
 npm test 2>&1 | grep -E "Tests |Test Files"
 git add CLAUDE.md AGENTS.md && git commit -m "docs: cellSize 2/3, and why the upscale factor is odd"
 ```
