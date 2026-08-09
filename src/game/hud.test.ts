@@ -247,16 +247,49 @@ describe('createHud panel', () => {
     });
     h.setState('playing');
 
+    // pointerdown, not click: Chromium does not synthesise a click for a touch tap while
+    // another touch point is active, so a click binding left a player unable to pause
+    // while driving or aiming -- which is the normal state of play. jsdom cannot model
+    // the missing click, so what is pinned here is the BINDING.
     (root.querySelector('.hud-pause-btn') as HTMLButtonElement).dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
     );
-    expect(pauses, 'the Pause button is not wired to anything').toBe(1);
+    expect(pauses, 'the Pause button is not wired to pointerdown').toBe(1);
 
     // pointerdown, not click: a mine lands when the thumb touches, not when it lifts.
     (root.querySelector('.hud-mine-btn') as HTMLButtonElement).dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
     );
     expect(mines, 'the Mine button is not wired to anything').toBe(1);
+  });
+
+  it('drives its Fire button from a real pointerdown, not just the callback', () => {
+    // Same composition-blindness reasoning as the Pause/Mine test above: nothing here
+    // dispatches at a real button unless this test does it.
+    const { hud: h, root } = mount();
+    let fires = 0;
+    h.onFireTap(() => {
+      fires += 1;
+    });
+    h.setState('playing');
+
+    // pointerdown, not click: a shot lands the instant the thumb touches, exactly like
+    // the Mine button, and NOT on release.
+    (root.querySelector('.hud-fire-btn') as HTMLButtonElement).dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
+    );
+    expect(fires, 'the Fire button is not wired to anything').toBe(1);
+  });
+
+  it('suppresses the compat mousemove a Fire tap would otherwise synthesise', () => {
+    // Same preventDefault as the Mine button, for the same reason: without it the
+    // compat mousemove reaches the window-bound aim handler and drags aim to this
+    // button's corner.
+    const { root } = mount();
+    const btn = root.querySelector('.hud-fire-btn') as HTMLButtonElement;
+    const ev = new PointerEvent('pointerdown', { bubbles: true, cancelable: true });
+    btn.dispatchEvent(ev);
+    expect(ev.defaultPrevented, 'the Fire tap was not suppressed').toBe(true);
   });
 
   it('does not eat a keyboard press after a drag dismissal', () => {
@@ -280,6 +313,159 @@ describe('createHud panel', () => {
       new MouseEvent('click', { bubbles: true, cancelable: true }),
     );
     expect(starts, 'the first keyboard activation after a drag dismissal was eaten').toBe(1);
+  });
+
+  it('draws the driving thumb where it landed, and clamps the knob to the throw', () => {
+    const { hud: h, root } = mount();
+    const viz = root.querySelector('.hud-touchviz') as HTMLElement;
+    const base = root.querySelector('.hud-stick-base') as HTMLElement;
+    const knob = root.querySelector('.hud-stick-knob') as HTMLElement;
+
+    h.setTouchIndicator({ stick: null, aim: null, scheme: 'stick', used: false });
+    expect(viz.classList.contains('hud-touchviz--hidden'), 'shown before any touch').toBe(true);
+
+    // 20px up: inside the 56px radius, so the knob sits exactly under the thumb.
+    h.setTouchIndicator({
+      stick: { originX: 100, originY: 300, x: 100, y: 280 },
+      aim: null,
+      scheme: 'stick',
+      used: true,
+    });
+    expect(viz.classList.contains('hud-touchviz--hidden')).toBe(false);
+    expect(base.style.transform).toBe('translate(100px, 300px)');
+    // 12.09px, NOT the raw 20px the thumb moved: the knob is positioned by the same
+    // `stickVector` the tank obeys, so its offset IS the speed. A 20px push is 0.357 of
+    // the radius, which the dead-zone rescale turns into 0.216 of full pace.
+    expect(knob.style.transform).toBe('translate(100px, 287.9024390243902px)');
+
+    // Inside the dead zone the tank does not move, so the knob must not either. Review
+    // caught a parallel clamp that drew the knob at the raw offset here: a thumb
+    // drifting ~10px visibly moved it while the tank sat still.
+    h.setTouchIndicator({
+      stick: { originX: 100, originY: 300, x: 100, y: 295 },
+      aim: null,
+      scheme: 'stick',
+      used: true,
+    });
+    expect(knob.style.transform, 'the knob moved inside the dead zone').toBe(
+      'translate(100px, 300px)',
+    );
+
+    // 200px up: well past the radius. The tank is already at full speed, so a knob that
+    // kept following would show a throw that buys nothing.
+    h.setTouchIndicator({
+      stick: { originX: 100, originY: 300, x: 100, y: 100 },
+      aim: null,
+      scheme: 'stick',
+      used: true,
+    });
+    expect(knob.style.transform, 'the knob escaped the stick').toBe('translate(100px, 244px)');
+  });
+
+  it('marks the point the turret is being sent to, and clears it when the thumb lifts', () => {
+    // The dot is the COMMANDED target; the aim ray in the 3D scene is where the turret
+    // actually points. They differ while it slews, and that gap is what playtest
+    // feedback said was invisible.
+    const { hud: h, root } = mount();
+    const dot = root.querySelector('.hud-aimdot') as HTMLElement;
+
+    h.setTouchIndicator({ stick: null, aim: { originX: 640, originY: 220, x: 640, y: 220 }, scheme: 'point', used: true });
+    expect(dot.classList.contains('hud-aimdot--hidden')).toBe(false);
+    expect(dot.style.transform).toBe('translate(640px, 220px)');
+
+    h.setTouchIndicator({ stick: null, aim: null, scheme: 'point', used: true });
+    expect(dot.classList.contains('hud-aimdot--hidden'), 'the dot outlived the thumb').toBe(true);
+  });
+
+  it('draws the aim thumb as a SECOND ring+knob under the stick scheme, not the crosshair', () => {
+    // The whole point of the two schemes having two different visualisations: under
+    // 'stick' the aim thumb IS a stick (aim.origin is where it landed, just like the
+    // driving stick), so it must draw like one -- not as a point-scheme crosshair, which
+    // would show a spot on the ground rather than a pushed direction.
+    const { hud: h, root } = mount();
+    const dot = root.querySelector('.hud-aimdot') as HTMLElement;
+    const aimStick = root.querySelector('.hud-aimstick') as HTMLElement;
+    const aimBase = root.querySelector('.hud-aimstick .hud-stick-base') as HTMLElement;
+    const aimKnob = root.querySelector('.hud-aimstick .hud-stick-knob') as HTMLElement;
+
+    h.setTouchIndicator({
+      stick: null,
+      aim: { originX: 700, originY: 300, x: 700, y: 280 }, // 20px up: inside the radius
+      scheme: 'stick',
+      used: true,
+    });
+    expect(aimStick.classList.contains('hud-aimstick--hidden'), 'the aim stick did not show').toBe(
+      false,
+    );
+    expect(aimBase.style.transform).toBe('translate(700px, 300px)');
+    expect(aimKnob.style.transform).toBe('translate(700px, 287.9024390243902px)') // same rescale as the driving stick;
+    expect(dot.classList.contains('hud-aimdot--hidden'), 'the crosshair also showed').toBe(true);
+  });
+
+  it('clamps the aim stick knob to the throw, exactly like the driving stick', () => {
+    // Reuses the SAME clamp: past STICK_RADIUS_PX (56) the turret is already at full
+    // deflection, so a knob that kept following would show a throw that buys nothing.
+    const { hud: h, root } = mount();
+    const aimKnob = root.querySelector('.hud-aimstick .hud-stick-knob') as HTMLElement;
+
+    // 200px up: well past the 56px radius.
+    h.setTouchIndicator({
+      stick: null,
+      aim: { originX: 700, originY: 300, x: 700, y: 100 },
+      scheme: 'stick',
+      used: true,
+    });
+    expect(aimKnob.style.transform, 'the aim knob escaped the stick').toBe(
+      'translate(700px, 244px)',
+    );
+  });
+
+  it('hides the aim stick under the point scheme, even with an aim reading present', () => {
+    const { hud: h, root } = mount();
+    const aimStick = root.querySelector('.hud-aimstick') as HTMLElement;
+    const dot = root.querySelector('.hud-aimdot') as HTMLElement;
+
+    h.setTouchIndicator({
+      stick: null,
+      aim: { originX: 640, originY: 220, x: 640, y: 220 },
+      scheme: 'point',
+      used: true,
+    });
+    expect(aimStick.classList.contains('hud-aimstick--hidden'), 'the aim stick showed under point').toBe(
+      true,
+    );
+    expect(dot.classList.contains('hud-aimdot--hidden')).toBe(false);
+  });
+
+  it('pulses the aim mark when the player fires, and re-pulses on a second shot', () => {
+    // The visible half of the fire confirmation. Review replaced this method's body with
+    // a no-op and 198 tests still passed: loop.test.ts only checked that a MOCK was
+    // called, and nothing touched the real DOM effect at all.
+    const { hud: h, root } = mount();
+    const dot = root.querySelector('.hud-aimdot') as HTMLElement;
+    h.setTouchIndicator({
+      stick: null,
+      aim: { originX: 640, originY: 220, x: 640, y: 220 },
+      scheme: 'point',
+      used: true,
+    });
+    expect(dot.classList.contains('hud-aimdot--fired')).toBe(false);
+
+    h.signalPlayerFire();
+    expect(dot.classList.contains('hud-aimdot--fired'), 'the shot did not pulse').toBe(true);
+
+    // Two shots in quick succession must read as TWO. The class is already present, so
+    // only the remove/reflow/re-add restart makes the animation play again -- deleting
+    // that trick leaves the class on and this assertion is what catches it.
+    const restarted: string[] = [];
+    const realRemove = dot.classList.remove.bind(dot.classList);
+    dot.classList.remove = (...names: string[]) => {
+      restarted.push(...names);
+      realRemove(...names);
+    };
+    h.signalPlayerFire();
+    expect(restarted, 'the second shot did not restart the pulse').toContain('hud-aimdot--fired');
+    expect(dot.classList.contains('hud-aimdot--fired')).toBe(true);
   });
 
   it('shows the touch controls only while playing', () => {
@@ -670,6 +856,59 @@ describe('hud: pause panel', () => {
     topbar.value = '0.7';
     topbar.dispatchEvent(new Event('input'));
     expect((root.querySelector('.hud-panel-volume') as HTMLInputElement).value).toBe('0.7');
+  });
+
+  it('the aim-scheme toggle shows the current scheme, labelled so the schemes read as different', () => {
+    const { hud: h, root } = mount();
+    const toggle = () => root.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
+
+    h.setTouchScheme('stick');
+    expect(toggle().textContent).toMatch(/stick/i);
+    const stickLabel = toggle().textContent;
+    const stickAria = toggle().getAttribute('aria-label');
+
+    h.setTouchScheme('point');
+    expect(toggle().textContent).toMatch(/point/i);
+    // Not just different case of the same string -- genuinely distinct copy, so a
+    // screen-reader user or a sighted player gets an actual explanation of each.
+    expect(toggle().textContent).not.toBe(stickLabel);
+    expect(toggle().getAttribute('aria-label')).not.toBe(stickAria);
+  });
+
+  it('taps the toggle and reports the OTHER scheme, from a real click at the button', () => {
+    // Same composition-blindness reasoning as the Pause/Mine/Fire button tests: drive
+    // a real event at a real element rather than only invoking the callback directly.
+    const { hud: h, root } = mount();
+    const seen: string[] = [];
+    h.onTouchSchemeChange((s) => seen.push(s));
+    h.setTouchScheme('stick');
+
+    const toggle = root.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the toggle is not wired to anything').toEqual(['point']);
+
+    // The button does NOT flip its own label -- it only reports the choice. The loop
+    // echoes the ACCEPTED value back via setTouchScheme, same convention as the hull
+    // and skin pickers, so the label must not move until that echo arrives.
+    expect(root.querySelector('.hud-scheme-toggle')!.textContent).toMatch(/stick/i);
+
+    h.setTouchScheme('point'); // the loop's echo
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen).toEqual(['point', 'stick']);
+  });
+
+  it('the aim-scheme toggle is reachable from the title screen too, not just pause', () => {
+    // The settings row (and everything in it) shows on 'title' AND 'paused' -- see the
+    // shared visibility test above. This pins that the toggle specifically rides along,
+    // since a row-level class check cannot tell "the row is visible" from "the row is
+    // visible AND still has every control in it".
+    const { hud: h, root } = mount();
+    h.setState('title');
+    const toggle = root.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
+    expect(settingsRow.classList.contains('hud-panel-settings--hidden')).toBe(false);
+    expect(settingsRow.contains(toggle)).toBe(true);
   });
 });
 

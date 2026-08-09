@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createInputController, InputController } from './input';
+import { AIM_PROJECTION_UNITS, STICK_RADIUS_PX, STICK_DEADZONE } from './touch';
 import type { Vec2 } from '../sim/types';
 
 // A predictable screenToGround: echoes the client coords as a world point.
@@ -369,6 +370,191 @@ function touch(
   );
 }
 
+describe('createInputController — touch: fire is a separate deliberate action', () => {
+  // Aiming and firing used to be the same gesture: touching the right half both aimed
+  // and fired. Playtest feedback -- re-aiming with the turret near a wall put a shell
+  // into it, and the ricochet came back into the player's own tank -- is why they were
+  // split. These pin the split itself; the schemes' own aiming behaviour is below.
+
+  it('touching the right half does not fire, under either scheme', () => {
+    // Population: both entries TOUCH_SCHEMES actually lists, not just the default.
+    for (const scheme of ['stick', 'point'] as const) {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setTouchScheme(scheme);
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire, `${scheme}: pointerdown fired`).toBe(false);
+
+      touch(window, 'pointermove', { x: RIGHT + 40, y: 260 });
+      expect(controller.sample().fire, `${scheme}: dragging to re-aim fired`).toBe(false);
+
+      touch(window, 'pointerup', { x: RIGHT + 40, y: 260 });
+      expect(controller.sample().fire, `${scheme}: lifting the thumb fired`).toBe(false);
+
+      controller.dispose();
+      controller = null;
+    }
+  });
+
+  it('pressFire() latches a shot as a one-shot edge, the touch button\'s only path in', () => {
+    // This is what the on-screen Fire button calls (hud.ts's onFireTap -> loop.ts).
+    // Same latch as the mouse and keyboard paths: sample() consumes it exactly once.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+
+    controller.pressFire();
+    expect(controller.sample().fire).toBe(true);
+    expect(controller.sample().fire).toBe(false);
+  });
+});
+
+describe('createInputController — touch: point scheme', () => {
+  it('unprojects where the right thumb lands, exactly as the mouse does', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point');
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+    expect(controller.sample().aim).toEqual({ x: RIGHT, y: 250 }); // echoGround passes coords through
+  });
+
+  it('re-aims on a drag, tracking the thumb exactly, without ever firing', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point');
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+    controller.sample();
+
+    touch(window, 'pointermove', { x: RIGHT + 40, y: 260 });
+    const s = controller.sample();
+    expect(s.aim).toEqual({ x: RIGHT + 40, y: 260 });
+    expect(s.fire, 'dragging to re-aim fired').toBe(false);
+  });
+
+  it('does not let an unrelated finger lifting cancel the aim thumb', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point');
+    touch(target, 'pointerdown', { id: 1, x: RIGHT, y: 200 }); // aim thumb
+    controller.sample();
+    touch(window, 'pointerup', { id: 9, x: 10, y: 10 }); // some other finger lifts
+    touch(window, 'pointermove', { id: 1, x: RIGHT + 30, y: 220 });
+    expect(controller.sample().aim, 'the aim thumb was released by another finger').toEqual({
+      x: RIGHT + 30,
+      y: 220,
+    });
+  });
+
+  it('lifting the aim thumb does not recentre the turret', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point');
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+    const aimed = controller.sample().aim;
+    expect(aimed).toEqual({ x: RIGHT, y: 250 });
+
+    touch(window, 'pointerup', { x: RIGHT, y: 250 });
+    expect(controller.sample().aim, 'lifting the thumb recentred the aim').toEqual(aimed);
+  });
+});
+
+describe('createInputController — touch: stick scheme', () => {
+  it('is the default scheme', () => {
+    // touchIndicator().scheme is the only externally observable reading of the internal
+    // default; setTouchScheme has never been called on this controller.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    expect(controller.touchIndicator().scheme).toBe('stick');
+  });
+
+  it('projects the aim exactly AIM_PROJECTION_UNITS from the player, in the pushed direction', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('stick'); // explicit, though it is also the default
+    controller.setPlayerPosition({ x: 5, y: -3 });
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 200 });
+    // Push straight right, well past the dead zone and the stick's own radius.
+    touch(window, 'pointermove', { x: RIGHT + 200, y: 200 });
+    const aim = controller.sample().aim;
+    expect(aim.x).toBeCloseTo(5 + AIM_PROJECTION_UNITS, 6);
+    expect(aim.y).toBeCloseTo(-3, 6);
+
+    // A diagonal push changes the DIRECTION but must land the same reach from the
+    // player -- the projection distance is constant regardless of how hard the thumb
+    // is thrown, which is the property AIM_PROJECTION_UNITS exists to guarantee.
+    touch(window, 'pointermove', { x: RIGHT + 200, y: 400 });
+    const aim2 = controller.sample().aim;
+    expect(Math.hypot(aim2.x - 5, aim2.y - -3)).toBeCloseTo(AIM_PROJECTION_UNITS, 6);
+  });
+
+  it('holds the last aim inside the dead zone rather than snapping it away', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setPlayerPosition({ x: 0, y: 0 }); // scheme defaults to 'stick'
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 200 });
+    // Well past the dead zone: establishes a real aim in the +x direction.
+    touch(window, 'pointermove', { x: RIGHT + 30, y: 200 });
+    const established = controller.sample().aim;
+    expect(established.x).toBeGreaterThan(0);
+
+    // Back inside the dead zone (STICK_DEADZONE * STICK_RADIUS_PX ~= 10px of travel).
+    // The mutation this guards: applyAimGesture snapping `aim` to {0,0} or to the
+    // player position whenever the throw reads as "no direction".
+    const insideDeadZone = STICK_DEADZONE * STICK_RADIUS_PX - 2;
+    touch(window, 'pointermove', { x: RIGHT + insideDeadZone, y: 200 });
+    expect(
+      controller.sample().aim,
+      'the dead zone snapped the aim instead of holding it',
+    ).toEqual(established);
+  });
+
+  it('lifting the aim thumb does not recentre the turret', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setPlayerPosition({ x: 0, y: 0 });
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 200 });
+    touch(window, 'pointermove', { x: RIGHT + 200, y: 200 });
+    const aimed = controller.sample().aim;
+    expect(aimed.x).toBeGreaterThan(0);
+
+    touch(window, 'pointerup', { x: RIGHT + 200, y: 200 });
+    expect(controller.sample().aim, 'lifting the thumb recentred the turret').toEqual(aimed);
+  });
+});
+
+describe('createInputController — touch: switching scheme mid-gesture', () => {
+  it('drops the in-flight gesture, and a fresh touch immediately uses the new scheme', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setPlayerPosition({ x: 0, y: 0 }); // default scheme is 'stick'
+
+    touch(target, 'pointerdown', { id: 5, x: RIGHT, y: 200 });
+    touch(window, 'pointermove', { id: 5, x: RIGHT + 200, y: 200 }); // full deflection, +x
+    const beforeSwitch = controller.sample().aim;
+    expect(beforeSwitch.x).toBeCloseTo(AIM_PROJECTION_UNITS, 6); // from player (0,0)
+
+    controller.setTouchScheme('point');
+
+    // The SAME finger, still down and still moving -- but the pointer id it held
+    // belonged to the dropped 'stick' gesture, so this move must now be ignored.
+    touch(window, 'pointermove', { id: 5, x: RIGHT + 300, y: 200 });
+    expect(
+      controller.sample().aim,
+      'the old gesture kept steering the aim after the scheme switched',
+    ).toEqual(beforeSwitch);
+
+    // A FRESH touch, though, is read under the NEW scheme immediately.
+    touch(target, 'pointerdown', { id: 6, x: 600, y: 300 });
+    expect(controller.sample().aim).toEqual({ x: 600, y: 300 }); // point: unprojected 1:1
+  });
+});
+
 describe('createInputController — touch', () => {
   it('drives from a thumb dragged in the left half', () => {
     const target = makeTarget();
@@ -403,49 +589,6 @@ describe('createInputController — touch', () => {
       controller.dispose();
       controller = null;
     }
-  });
-
-  it('aims where the right thumb lands, and firing is that same touch', () => {
-    const target = makeTarget();
-    controller = createInputController(target, echoGround);
-
-    touch(target, 'pointerdown', { x: RIGHT, y: 250 });
-    const s = controller.sample();
-    expect(s.aim).toEqual({ x: RIGHT, y: 250 }); // echoGround passes coords through
-    expect(s.fire, 'a tap on the aiming half must shoot').toBe(true);
-  });
-
-  it('re-aims on a drag without firing again', () => {
-    // Otherwise holding to adjust aim would empty the magazine. Only the initial touch
-    // pulls the trigger; sample() clears the latch, so the drag must not re-set it.
-    const target = makeTarget();
-    controller = createInputController(target, echoGround);
-
-    touch(target, 'pointerdown', { x: RIGHT, y: 250 });
-    expect(controller.sample().fire).toBe(true); // consumes the latch
-
-    touch(window, 'pointermove', { x: RIGHT + 40, y: 260 });
-    const s = controller.sample();
-    expect(s.aim).toEqual({ x: RIGHT + 40, y: 260 });
-    expect(s.fire, 'dragging to re-aim fired a second shot').toBe(false);
-  });
-
-  it('drives and aims at the same time, with the thumbs interleaved', () => {
-    // The whole point of tracking by pointerId. The browser interleaves moves from both
-    // thumbs, and a controller keyed on "the last pointer" would have the aim thumb
-    // steering the tank.
-    const target = makeTarget();
-    controller = createInputController(target, echoGround);
-
-    touch(target, 'pointerdown', { id: 1, x: LEFT, y: 300 });
-    touch(target, 'pointerdown', { id: 2, x: RIGHT, y: 200 });
-    touch(window, 'pointermove', { id: 1, x: LEFT, y: 100 }); // drive north
-    touch(window, 'pointermove', { id: 2, x: RIGHT + 10, y: 210 }); // re-aim
-    touch(window, 'pointermove', { id: 1, x: LEFT, y: 100 }); // drive again
-
-    const s = controller.sample();
-    expect(s.move.y, 'the aiming thumb stole the stick').toBeCloseTo(-1, 6);
-    expect(s.aim, 'the driving thumb moved the aim').toEqual({ x: RIGHT + 10, y: 210 });
   });
 
   it('lets the aim thumb lift without stopping the tank', () => {
@@ -486,9 +629,10 @@ describe('createInputController — touch', () => {
   it('splits on the live viewport width, so a rotation re-splits', () => {
     const target = makeTarget();
     controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point'); // isolates the split from the aim maths
     // x=600 is the AIMING half at 1024 wide...
     touch(target, 'pointerdown', { id: 1, x: 600, y: 200 });
-    expect(controller.sample().fire, 'x=600 should aim at 1024 wide').toBe(true);
+    expect(controller.sample().aim, 'x=600 should aim at 1024 wide').toEqual({ x: 600, y: 200 });
 
     // ...and the DRIVING half once the device is turned and the viewport is wider.
     Object.defineProperty(window, 'innerWidth', { value: 2048, configurable: true });
@@ -499,25 +643,28 @@ describe('createInputController — touch', () => {
   });
 
   it('ignores the compatibility mouse events a browser synthesises after a touch', () => {
-    // MEASURED on a Pixel 5 before this guard: one tap in the AIMING half put two shells
-    // in flight (3 of 3 taps), and one tap in the DRIVING half fired a shell at all
-    // (3 of 3) -- aimed at the player's own thumb, because the compat `mousemove`
-    // reaches the window-bound handler and drags `aim` there. The burst lands ~200ms
-    // after touchend, well past the 0.4s fire cooldown.
+    // MEASURED on a Pixel 5 before this guard existed (when touching still fired): one
+    // tap in the AIMING half put two shells in flight (3 of 3 taps), and one tap in the
+    // DRIVING half fired a shell at all (3 of 3) -- aimed at the player's own thumb,
+    // because the compat `mousemove` reaches the window-bound handler and drags `aim`
+    // there. The burst lands ~200ms after touchend, well past the 0.4s fire cooldown.
+    // Touch no longer fires on its own, but the compat burst must still be suppressed:
+    // a compat `mousedown` reaching the fire latch would be a second, accidental path in.
     //
     // jsdom synthesises none of this, so the sequence is dispatched by hand.
     const target = makeTarget();
     controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point');
 
     touch(target, 'pointerdown', { x: RIGHT, y: 250 });
     touch(window, 'pointerup', { x: RIGHT, y: 250 });
-    expect(controller.sample().fire, 'the touch itself must fire').toBe(true);
+    expect(controller.sample().fire, 'touch aiming must never fire on its own').toBe(false);
 
     // ...and now the browser's compatibility burst for that same tap.
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: LEFT, clientY: 90 }));
     target.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
     const after = controller.sample();
-    expect(after.fire, 'the compat mousedown fired a second shell').toBe(false);
+    expect(after.fire, 'the compat mousedown fired a shell').toBe(false);
     expect(after.aim, 'the compat mousemove dragged the aim to the thumb').toEqual({
       x: RIGHT,
       y: 250,
@@ -587,19 +734,6 @@ describe('createInputController — touch', () => {
     touch(window, 'pointermove', { id: 2, x: LEFT + 20, y: 560 }); // pushing SOUTH
 
     expect(controller.sample().move.y, 'the second thumb stole the stick').toBeLessThan(0);
-  });
-
-  it('does not let an unrelated finger lifting cancel the aim thumb', () => {
-    const target = makeTarget();
-    controller = createInputController(target, echoGround);
-    touch(target, 'pointerdown', { id: 1, x: RIGHT, y: 200 }); // aim thumb
-    controller.sample(); // consume the fire latch
-    touch(window, 'pointerup', { id: 9, x: 10, y: 10 }); // some other finger lifts
-    touch(window, 'pointermove', { id: 1, x: RIGHT + 30, y: 220 });
-    expect(controller.sample().aim, 'the aim thumb was released by another finger').toEqual({
-      x: RIGHT + 30,
-      y: 220,
-    });
   });
 
   it('removes its pointer listeners on dispose', () => {

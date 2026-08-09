@@ -4,6 +4,12 @@ import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
+import {
+  STICK_RADIUS_PX,
+  stickVector,
+  type TouchIndicator,
+  type TouchScheme,
+} from '../input/touch';
 import './hud.css';
 
 export interface RoundPhaseInfo {
@@ -70,6 +76,12 @@ export interface Hud {
   /** The touch-only Mine button. Routed to the input controller's own latch. */
   onMineTap(cb: () => void): void;
   /**
+   * The touch-only Fire button, beside Mine. Routed to the input controller's own
+   * `pressFire()` latch -- a tap here is indistinguishable downstream from a click or a
+   * keypress. Touch aiming deliberately does NOT fire on its own; see TouchScheme.
+   */
+  onFireTap(cb: () => void): void;
+  /**
    * Both tallies, pushed by the loop whenever they change. The HUD re-renders the
    * stats table only while it is visible, and keeps the win/lose run-summary line
    * live -- the winning kill is recorded a beat AFTER the state flips.
@@ -92,6 +104,32 @@ export interface Hud {
    * landing together stack rather than replacing one another.
    */
   showAchievementToasts(defs: readonly AchievementDef[]): void;
+  /**
+   * Draw the player's thumbs back on screen: the driving stick where it landed, and a
+   * dot on the point the turret is being sent to.
+   *
+   * Pushed every frame from the loop. Takes CLIENT pixels, which is why it is not part
+   * of the sim's input at all -- see TouchIndicator.
+   */
+  setTouchIndicator(t: TouchIndicator): void;
+  /**
+   * Which touch aim scheme is active, echoed back by the loop after an accepted toggle --
+   * same convention as `setHullColor`/`setSkin`: the HUD shows what was STORED, not what
+   * was clicked. Also settles which shape `setTouchIndicator` draws for the aim thumb: a
+   * second ring+knob under 'stick' (it IS a stick), a crosshair under 'point'.
+   */
+  setTouchScheme(scheme: TouchScheme): void;
+  /** Fired with the OTHER scheme when the player taps the aim-style toggle. */
+  onTouchSchemeChange(cb: (scheme: TouchScheme) => void): void;
+  /**
+   * The player just fired. Pulses the aim mark, so a tap that produced a shot is
+   * distinguishable from a tap that did not -- on a phone the muzzle is under the
+   * player's own hand, and the shell is gone before the eye gets there.
+   *
+   * Driven by the sim's `fire` event rather than by the tap, so it confirms a shot that
+   * ACTUALLY happened: a tap during the cooldown correctly does not pulse.
+   */
+  signalPlayerFire(): void;
   /** Fired with the skin id when the player clicks one. */
   onPickSkin(cb: (id: SkinId) => void): void;
   dispose(): void;
@@ -125,11 +163,31 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <!-- Where the thumbs are, drawn back on screen. Playtest feedback: with nothing
+         rendered, the aiming thumb gave no clue which way the shot was going, and the
+         driving thumb had only feel to go on. aria-hidden because they are a mirror of
+         what the player is already doing with their hands. -->
+    <div class="hud-touchviz hud-touchviz--hidden" aria-hidden="true">
+      <div class="hud-stick hud-stick--hidden">
+        <div class="hud-stick-base"></div>
+        <div class="hud-stick-knob"></div>
+      </div>
+      <!-- The aim thumb under the 'stick' scheme: a SECOND ring+knob, structurally
+           identical to the driving stick above and reusing its classes -- only the
+           wrapper differs, so the clamping logic in setTouchIndicator is shared rather
+           than duplicated. Under 'point' this stays hidden and hud-aimdot draws instead. -->
+      <div class="hud-aimstick hud-aimstick--hidden">
+        <div class="hud-stick-base"></div>
+        <div class="hud-stick-knob"></div>
+      </div>
+      <div class="hud-aimdot hud-aimdot--hidden"></div>
+    </div>
     <!-- Touch-only controls. Hidden by default and revealed by a (pointer: coarse)
          media query, so a mouse player never sees a Mine button that Space already
          does -- and a phone gets the only affordance it has for either action. -->
     <div class="hud-touch hud-touch--hidden">
       <button class="hud-pause-btn" type="button" aria-label="Pause">II</button>
+      <button class="hud-fire-btn" type="button" aria-label="Fire">FIRE</button>
       <button class="hud-mine-btn" type="button" aria-label="Drop mine">MINE</button>
     </div>
     <!-- The title screen. Deliberately NOT a <button>: any key and any pointer press
@@ -188,6 +246,10 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-panel-settings hud-panel-settings--hidden">
         <button class="hud-panel-mute" type="button">Mute (M)</button>
         <input class="hud-panel-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
+        <!-- The right thumb's aim scheme, reachable from both the title screen and the
+             pause panel -- a phone player can only change this here, there being no
+             keyboard to bind it to. Label/hint text is filled in by renderSchemeToggle. -->
+        <button class="hud-scheme-toggle" type="button"></button>
       </div>
     </div>
   `;
@@ -203,7 +265,16 @@ export function createHud(root: HTMLElement): Hud {
   const touchRow = el.querySelector('.hud-touch') as HTMLElement;
   const pauseBtn = el.querySelector('.hud-pause-btn') as HTMLButtonElement;
   const mineBtn = el.querySelector('.hud-mine-btn') as HTMLButtonElement;
+  const fireBtn = el.querySelector('.hud-fire-btn') as HTMLButtonElement;
   const topbarEl = el.querySelector('.hud-topbar') as HTMLElement;
+  const touchVizEl = el.querySelector('.hud-touchviz') as HTMLElement;
+  const stickEl = el.querySelector('.hud-stick') as HTMLElement;
+  const stickBaseEl = el.querySelector('.hud-stick-base') as HTMLElement;
+  const stickKnobEl = el.querySelector('.hud-stick-knob') as HTMLElement;
+  const aimDotEl = el.querySelector('.hud-aimdot') as HTMLElement;
+  const aimStickEl = el.querySelector('.hud-aimstick') as HTMLElement;
+  const aimStickBaseEl = el.querySelector('.hud-aimstick .hud-stick-base') as HTMLElement;
+  const aimStickKnobEl = el.querySelector('.hud-aimstick .hud-stick-knob') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
@@ -236,6 +307,7 @@ export function createHud(root: HTMLElement): Hud {
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
+  const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
@@ -243,6 +315,7 @@ export function createHud(root: HTMLElement): Hud {
   const quitCbs: Array<() => void> = [];
   const pauseTapCbs: Array<() => void> = [];
   const mineTapCbs: Array<() => void> = [];
+  const fireTapCbs: Array<() => void> = [];
   const onPauseTapClick = (e: Event): void => {
     // Same reason as the Mine button below: without this the tap's compat mousemove
     // reaches the window-bound aim handler and yanks the turret to this corner.
@@ -257,6 +330,20 @@ export function createHud(root: HTMLElement): Hud {
     // `onMouseMove` IS bound at the window.
     e.preventDefault();
     for (const cb of mineTapCbs) cb();
+  };
+  // Same call as Mine, but be honest about how much of the work it is doing. Review
+  // removed this `preventDefault` and could NOT demonstrate any behavioural difference
+  // over 6 trials: `onPointerEnd` is bound at the window and stamps `lastTouchAt` for
+  // any touch pointer, including one that never reached the canvas, so this button's own
+  // pointerup already refreshes the compat-mouse backstop. It is kept as belt to that
+  // braces -- the backstop is a time window, and a tap is not obliged to end promptly.
+  //
+  // pointerdown, not click, and that part IS load-bearing: Chromium does not synthesise
+  // a click for a touch tap while another touch point is active, so a click binding
+  // would leave Fire dead whenever a thumb was already driving or aiming.
+  const onFireTapClick = (e: Event): void => {
+    e.preventDefault();
+    for (const cb of fireTapCbs) cb();
   };
   /**
    * The title screen swallows the gesture that dismisses it.
@@ -326,10 +413,18 @@ export function createHud(root: HTMLElement): Hud {
   // press twice.
   el.addEventListener('keydown', disarm, true);
 
-  pauseBtn.addEventListener('click', onPauseTapClick);
+  // pointerdown, NOT click -- the same binding Mine and Fire use, and for a reason that
+  // only shows up with two thumbs down. Chromium does not synthesise a `click` for a
+  // touch tap while ANOTHER touch point is already active: measured, pointerup reaches
+  // the button but no click follows, so a player could not pause while driving or
+  // aiming. An isolated tap worked, which is why it survived earlier testing -- and this
+  // change is exactly what makes both-thumbs-down the normal state of play, since aiming
+  // no longer fires and thumbs linger.
+  pauseBtn.addEventListener('pointerdown', onPauseTapClick);
   // pointerdown, not click: a mine wants to land the instant the thumb touches, and
   // click waits for the release.
   mineBtn.addEventListener('pointerdown', onMineTapClick);
+  fireBtn.addEventListener('pointerdown', onFireTapClick);
   const resetStatsCbs: Array<() => void> = [];
   const resetProgressCbs: Array<() => void> = [];
   const pickHullCbs: Array<(id: HullColorId) => void> = [];
@@ -582,6 +677,34 @@ export function createHud(root: HTMLElement): Hud {
   panelVolumeEl.addEventListener('input', handlePanelVolume);
   panelVolumeEl.addEventListener('mouseup', blurAfterDrag);
 
+  // The aim-scheme toggle: one button, two states, cycling between them like a mute
+  // button rather than offering two radio buttons for a binary choice. Labelled with
+  // what each scheme DOES, not its internal name, so a player who has never seen the
+  // word "scheme" still understands the difference.
+  const SCHEME_LABEL: Record<TouchScheme, string> = { stick: 'Aim: Stick', point: 'Aim: Point' };
+  const SCHEME_HINT: Record<TouchScheme, string> = {
+    stick: 'A second thumbstick -- push toward where you want to aim.',
+    point: 'Touch the spot you want the turret to point at.',
+  };
+  const OTHER_SCHEME: Record<TouchScheme, TouchScheme> = { stick: 'point', point: 'stick' };
+  let currentScheme: TouchScheme = 'stick';
+  function renderSchemeToggle(): void {
+    schemeToggleBtn.textContent = SCHEME_LABEL[currentScheme];
+    schemeToggleBtn.title = SCHEME_HINT[currentScheme];
+    schemeToggleBtn.setAttribute(
+      'aria-label',
+      `Touch aim style: ${SCHEME_LABEL[currentScheme]}. ${SCHEME_HINT[currentScheme]} ` +
+        `Tap to switch to ${SCHEME_LABEL[OTHER_SCHEME[currentScheme]]}.`,
+    );
+  }
+  renderSchemeToggle();
+  const schemeChangeCbs: Array<(scheme: TouchScheme) => void> = [];
+  const handleSchemeToggle = (): void => {
+    for (const cb of schemeChangeCbs) cb(OTHER_SCHEME[currentScheme]);
+  };
+  schemeToggleBtn.addEventListener('click', handleSchemeToggle);
+  schemeToggleBtn.addEventListener('click', blurIfPointer);
+
   // Where the session stands in the level sequence, for the win panel's copy. Null
   // until the loop calls setLevel, and a HUD never told about levels keeps its
   // original single-arena wording.
@@ -696,6 +819,28 @@ export function createHud(root: HTMLElement): Hud {
   let lastLives: number | null = null;
   let lastEnemies: number | null = null;
 
+  /**
+   * Position a ring+knob pair from a `{originX, originY, x, y}` thumb reading. Shared by
+   * the driving stick and the aim stick under 'stick' scheme, so the CLAMP -- past
+   * STICK_RADIUS_PX the tank (or turret) is already at full deflection, and a knob that
+   * kept following would show a throw that buys nothing -- lives in exactly one place.
+   */
+  function drawStick(
+    baseEl: HTMLElement,
+    knobEl: HTMLElement,
+    thumb: { originX: number; originY: number; x: number; y: number },
+  ): void {
+    baseEl.style.transform = `translate(${thumb.originX}px, ${thumb.originY}px)`;
+    // Positioned by `stickVector` -- the SAME function the tank obeys -- rather than by
+    // a parallel clamp of its own. Review caught the parallel version disagreeing inside
+    // the dead zone: a thumb drifting up to ~10px visibly moved the knob while the tank
+    // sat still, which is the opposite of what the ring is for. Now the knob IS the
+    // speed: at the origin the tank is stopped, at the ring's edge it is at full pace.
+    const v = stickVector({ x: thumb.originX, y: thumb.originY }, { x: thumb.x, y: thumb.y });
+    knobEl.style.transform =
+      `translate(${thumb.originX + v.x * STICK_RADIUS_PX}px, ${thumb.originY + v.y * STICK_RADIUS_PX}px)`;
+  }
+
   return {
     setLives(n: number): void {
       if (n === lastLives) return;
@@ -782,6 +927,13 @@ export function createHud(root: HTMLElement): Hud {
       damageEl.classList.add('hud-damage--hit');
       livesEl.classList.add('hud-lives--hit');
     },
+    signalPlayerFire(): void {
+      // Same restart trick as signalPlayerDeath: two shots in quick succession must read
+      // as two, not one.
+      aimDotEl.classList.remove('hud-aimdot--fired');
+      void aimDotEl.offsetWidth;
+      aimDotEl.classList.add('hud-aimdot--fired');
+    },
     onMuteToggle(cb: () => void): void {
       muteCbs.push(cb);
     },
@@ -799,6 +951,9 @@ export function createHud(root: HTMLElement): Hud {
     },
     onMineTap(cb: () => void): void {
       mineTapCbs.push(cb);
+    },
+    onFireTap(cb: () => void): void {
+      fireTapCbs.push(cb);
     },
     setStats(data: { lifetime: StatCounts; run: StatCounts }): void {
       statsData = data;
@@ -822,8 +977,40 @@ export function createHud(root: HTMLElement): Hud {
       currentSkin = id;
       renderSkinSelection();
     },
+    setTouchIndicator(t: TouchIndicator): void {
+      // Hidden entirely until a touch has happened, so a mouse player never sees it.
+      touchVizEl.classList.toggle('hud-touchviz--hidden', !t.used);
+      if (!t.used) return;
+
+      stickEl.classList.toggle('hud-stick--hidden', t.stick === null);
+      if (t.stick) {
+        drawStick(stickBaseEl, stickKnobEl, t.stick);
+      }
+
+      // The aim thumb draws as a SECOND ring+knob under 'stick' -- it IS a stick, and
+      // t.aim.origin{X,Y} is where it landed -- reusing drawStick's clamping exactly as
+      // the driving stick above does. Under 'point' it stays hidden and the crosshair
+      // (hud-aimdot) draws instead.
+      const aimIsStick = t.scheme === 'stick';
+      aimStickEl.classList.toggle('hud-aimstick--hidden', !(aimIsStick && t.aim !== null));
+      if (aimIsStick && t.aim) {
+        drawStick(aimStickBaseEl, aimStickKnobEl, t.aim);
+      }
+
+      aimDotEl.classList.toggle('hud-aimdot--hidden', aimIsStick || t.aim === null);
+      if (!aimIsStick && t.aim) {
+        aimDotEl.style.transform = `translate(${t.aim.x}px, ${t.aim.y}px)`;
+      }
+    },
     onPickSkin(cb: (id: SkinId) => void): void {
       pickSkinCbs.push(cb);
+    },
+    setTouchScheme(scheme: TouchScheme): void {
+      currentScheme = scheme;
+      renderSchemeToggle();
+    },
+    onTouchSchemeChange(cb: (scheme: TouchScheme) => void): void {
+      schemeChangeCbs.push(cb);
     },
     setAchievements(earned: ReadonlySet<AchievementId>): void {
       earnedIds = earned;
@@ -859,8 +1046,11 @@ export function createHud(root: HTMLElement): Hud {
       panel.removeEventListener('click', onPanelClickCapture, true);
       el.removeEventListener('pointerdown', disarm, true);
       el.removeEventListener('keydown', disarm, true);
-      pauseBtn.removeEventListener('click', onPauseTapClick);
+      pauseBtn.removeEventListener('pointerdown', onPauseTapClick);
       mineBtn.removeEventListener('pointerdown', onMineTapClick);
+      fireBtn.removeEventListener('pointerdown', onFireTapClick);
+      schemeToggleBtn.removeEventListener('click', handleSchemeToggle);
+      schemeToggleBtn.removeEventListener('click', blurIfPointer);
       achOpenBtn.removeEventListener('click', handleAchOpen);
       achOpenBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);

@@ -161,6 +161,140 @@
   touch-action: pan-y;
 }
 
+/* ---- Thumbs, drawn back on screen ------------------------------------------------- */
+
+/*
+ * Playtest feedback, and the reason this exists: with nothing rendered, the AIMING thumb
+ * gave no clue which way the shot was going. The driving thumb had the same problem but
+ * is partly self-explanatory by feel, because firing is not tangled up in it.
+ *
+ * Two marks, showing two different things, which is the point: the dot is where the
+ * turret has been SENT, and the aim ray in the 3D scene is where it actually POINTS. The
+ * turret slews at a finite rate, so those differ while it catches up -- and that gap is
+ * exactly what was invisible.
+ *
+ * pointer-events: none throughout. These are a mirror of the player's own hands; they
+ * must never eat the touches they are drawing.
+ */
+.hud-touchviz {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Without this a mouse player sees thumb marks for thumbs they do not have -- the class
+ * alone does nothing, the dead-CSS failure hud.css.test.ts exists to catch. */
+.hud-touchviz--hidden {
+  display: none;
+}
+
+.hud-stick--hidden,
+.hud-aimstick--hidden,
+.hud-aimdot--hidden {
+  display: none;
+}
+
+/* Both marks are positioned by `transform: translate(...)` from the top-left corner, so
+ * `left/top` stay at 0 and the negative margins centre them on the point. Transform
+ * rather than left/top because it is the compositor's job and runs every frame. */
+.hud-stick-base,
+.hud-stick-knob,
+.hud-aimdot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  /* border-box so the negative margins centre the VISIBLE ring. Measured without it:
+   * the 2px border pushed the bordered rings 2px down-right of the actual touch point,
+   * while the unbordered knob sat correctly. */
+  box-sizing: border-box;
+}
+
+/* The stick's landing point: a ring the size of the real throw, so the player can see
+ * how much of it is left. 2 x STICK_RADIUS_PX (56) across. */
+.hud-stick-base {
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border: 2px solid rgba(231, 236, 244, 0.30);
+  background: rgba(231, 236, 244, 0.06);
+}
+
+.hud-stick-knob {
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  background: rgba(231, 236, 244, 0.34);
+}
+
+/* The aim thumb's stick, under the 'stick' scheme -- structurally identical to
+ * .hud-stick above (same base/knob classes, same drawStick clamp in hud.ts), tinted
+ * yellow instead of grey so it reads as the SAME instrument as the aim ray and the
+ * point-scheme crosshair (aimray.ts, 0xffe066) rather than a second driving stick. */
+.hud-aimstick .hud-stick-base {
+  border-color: rgba(255, 224, 102, 0.45);
+  background: rgba(255, 224, 102, 0.08);
+}
+
+.hud-aimstick .hud-stick-knob {
+  background: rgba(255, 224, 102, 0.5);
+}
+
+/* Yellow, matching the aim ray it belongs with (aimray.ts, 0xffe066): the dot and the
+ * ray are two halves of one indicator and should read as the same instrument. */
+.hud-aimdot {
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border: 2px solid rgba(255, 224, 102, 0.85);
+  background: rgba(255, 224, 102, 0.16);
+}
+
+/* Cross-hairs through the ring, and the ARM LENGTH is the point of them.
+ *
+ * With absolute aim the target is by definition underneath the fingertip, so a mark that
+ * fits inside the contact patch is invisible exactly when it is wanted. A fingertip
+ * covers roughly 40px; the arms span 46px, so they emerge past the finger on all four
+ * sides and the mark stays readable while it is being touched. */
+.hud-aimdot::before,
+.hud-aimdot::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 224, 102, 0.85);
+}
+
+.hud-aimdot::before {
+  left: 50%;
+  top: -10px;
+  width: 2px;
+  height: 46px;
+  margin-left: -1px;
+}
+
+.hud-aimdot::after {
+  top: 50%;
+  left: -10px;
+  height: 2px;
+  width: 46px;
+  margin-top: -1px;
+}
+
+/* A shot landed on this mark. Brief and bright: it confirms the tap did something,
+ * which the muzzle flash cannot do when the muzzle is under the player's hand. */
+.hud-aimdot--fired {
+  animation: hud-aimdot-fire 220ms ease-out;
+}
+
+@keyframes hud-aimdot-fire {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 224, 102, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 18px rgba(255, 224, 102, 0);
+  }
+}
+
 /* ---- Touch controls -------------------------------------------------------------- */
 
 /* Hidden on anything with a precise pointer. A mouse player already has Space for mines
@@ -185,6 +319,7 @@
 }
 
 .hud-pause-btn,
+.hud-fire-btn,
 .hud-mine-btn {
   pointer-events: auto;
 }
@@ -209,6 +344,7 @@
  * Google's guidance call reliably tappable, and these sit near the screen edge where
  * accuracy is worst. */
 .hud-pause-btn,
+.hud-fire-btn,
 .hud-mine-btn {
   pointer-events: auto;
   cursor: pointer;
@@ -232,7 +368,15 @@
   color: #ffe9a8;
 }
 
+/* Distinct from Mine's yellow: Fire is the button a player's thumb rests nearest and
+ * taps most, so it gets the strongest accent of the three. */
+.hud-fire-btn {
+  background: rgba(214, 69, 69, 0.28);
+  color: #ffd6d6;
+}
+
 .hud-pause-btn:active,
+.hud-fire-btn:active,
 .hud-mine-btn:active {
   transform: translateY(2px);
 }
@@ -708,6 +852,18 @@
   width: 140px;
 }
 
+/* The right thumb's aim-scheme toggle. Themed like .hud-panel-mute -- same row, same
+ * kind of control (a button that cycles between two states). */
+.hud-scheme-toggle {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-weight: 700;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
 
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
 

@@ -53,6 +53,56 @@ export function stickVector(origin: Vec2, current: Vec2, radius = STICK_RADIUS_P
 }
 
 /**
+ * Where the player's thumbs are, in CLIENT pixels, for drawing them back on screen.
+ *
+ * Deliberately NOT part of `InputState`. The sim consumes InputState and replays are
+ * exact functions of it, so screen-space pixels must never enter that shape. This lives
+ * here, beside the stick maths, so the input layer and the HUD share one definition
+ * rather than each describing the thumbs their own way.
+ */
+export interface TouchIndicator {
+  /** The driving thumb: where it landed, and where it is now. */
+  stick: { originX: number; originY: number; x: number; y: number } | null;
+  /**
+   * The aiming thumb. Under `point` this is the spot the turret is being sent to; under
+   * `stick` it is a second thumbstick, and `origin` is where it landed.
+   */
+  aim: { originX: number; originY: number; x: number; y: number } | null;
+  /** Which scheme is live, so the HUD draws a crosshair or a second stick. */
+  scheme: TouchScheme;
+  /** True once any touch has been seen, so touch-only affordances can appear on demand. */
+  used: boolean;
+}
+
+/**
+ * How the right thumb expresses aim.
+ *
+ * NEITHER scheme fires. That is the point of having them at all: aiming and firing used
+ * to be one gesture, so re-aiming while the turret faced a nearby wall put a shell into
+ * it -- and with ricochets and friendly fire, into the player's own tank. Firing is a
+ * separate deliberate button in both.
+ *
+ * - `point`: the turret is sent to the world spot under the thumb. Precise for picking a
+ *   target, but the fingertip covers the very thing it is choosing.
+ * - `stick`: a second floating thumbstick; the turret faces the direction it is pushed.
+ *   Nothing is occluded, and it expresses an ANGLE -- which is what this game is
+ *   actually played in, since shells are banked off walls rather than aimed at tanks.
+ */
+export type TouchScheme = 'point' | 'stick';
+
+export const TOUCH_SCHEMES: readonly TouchScheme[] = ['stick', 'point'];
+
+/**
+ * How far in front of the tank the aim stick projects its target point.
+ *
+ * `InputState.aim` is a world POINT, so a direction has to become one. Only the
+ * DIRECTION of the offset matters -- the turret slews toward the point either way -- so
+ * this just needs to be far enough that floating-point noise near the tank cannot swing
+ * the angle. Well beyond any arena's diagonal.
+ */
+export const AIM_PROJECTION_UNITS = 100;
+
+/**
  * Which half of the viewport a touch landed in.
  *
  * The split is the whole control scheme: left thumb drives, right thumb aims and fires.
