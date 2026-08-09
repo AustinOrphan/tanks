@@ -76,6 +76,12 @@
   display: none;
 }
 
+/* Focused programmatically when the title screen is dismissed, never by tabbing, so a
+ * ring around the entire panel would be noise with nothing to explain it. */
+.hud-panel:focus {
+  outline: none;
+}
+
 /* ---- Title screen --------------------------------------------------------------- */
 
 /* The topbar is game furniture -- lives, enemies remaining, the level chip. On a title

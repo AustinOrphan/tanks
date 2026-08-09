@@ -1438,9 +1438,13 @@ describe('startGameWith: round-phase HUD', () => {
     h.handle.dispose();
   });
 
+  // bootAtSplash for the same reason as its five siblings: leaving the title screen
+  // pushes a round-phase clear, and this test's `length > 0` guard would be satisfied
+  // by that null alone -- adjudication proved it passes with the live-branch clear
+  // deleted.
   it('hides once the round goes live', () => {
     const base = createArenaWorld(1);
-    const h = boot(
+    const h = bootAtSplash(
       makeDeps({
         // Far past COUNTDOWN_TICKS + GRACE_TICKS.
         world: { ...base, tick: 5000, roundStartTick: 0 },

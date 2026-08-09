@@ -152,7 +152,12 @@ export function createHud(root: HTMLElement): Hud {
         <button class="hud-stats-back" type="button">Back</button>
       </div>
     </div>
-    <div class="hud-panel hud-panel--hidden">
+    <!-- tabindex="-1" so the menu can RECEIVE focus when the title screen is dismissed
+         without joining the tab order. It must be this container and not the Start
+         button: isMuteHotkey/isPauseHotkey both ignore a key whose target is inside
+         input, button, select or textarea, so focusing the button leaves M and Escape
+         dead at the menu -- measured in a browser, and a regression against main. -->
+    <div class="hud-panel hud-panel--hidden" tabindex="-1">
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
       <div class="hud-levels hud-levels--hidden"></div>
@@ -537,7 +542,8 @@ export function createHud(root: HTMLElement): Hud {
       titleEl.textContent = 'TANKS!';
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
       actionBtn.textContent = 'Start';
-      if (leavingSplash) actionBtn.focus();
+      // The panel, NOT actionBtn -- see the tabindex note on the element.
+      if (leavingSplash) panel.focus();
     } else if (s === 'win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {

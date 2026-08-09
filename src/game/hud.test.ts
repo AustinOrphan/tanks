@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
+import { isMuteHotkey, isPauseHotkey } from './loop';
 import { SKINS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
@@ -153,6 +154,34 @@ describe('createHud panel', () => {
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
     expect(title(root)).toBe('TANKS!');
     expect(action(root).textContent).toBe('Start');
+  });
+
+  it('leaves the menu hotkeys alive after the title screen is dismissed', () => {
+    // REGRESSION, found in a browser and invisible to all 1351 tests before this one:
+    // handing focus to the Start button on dismissal killed M and Escape at the menu.
+    // isMuteHotkey/isPauseHotkey deliberately ignore any key whose target sits inside
+    // input/button/select/textarea -- keys typed at a control belong to the control --
+    // so whatever receives focus here decides whether the hotkeys work at all.
+    //
+    // Asserted through the real predicates rather than by checking the tag name, so
+    // this keeps meaning what it says if that guard's selector ever changes.
+    const { hud: h } = mount();
+    h.setState('title'); // splash -> title: the focus handoff
+    const active = document.activeElement as HTMLElement;
+    expect(active.className, 'focus went somewhere unexpected').toContain('hud-panel');
+    const ev = (key: string): KeyboardEvent =>
+      ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
+    expect(isMuteHotkey(ev('m')), 'M is dead at the menu').toBe(true);
+    expect(isPauseHotkey(ev('Escape')), 'Escape is dead at the menu').toBe(true);
+  });
+
+  it('gives the title screen an accessible name and role', () => {
+    // Both attributes survived deletion against the whole suite. They are the only
+    // thing that describes a screen blocking the entire game to a screen reader.
+    const { root } = mount();
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    expect(splash.getAttribute('role')).toBe('dialog');
+    expect(splash.getAttribute('aria-label')).toMatch(/press any key/i);
   });
 
   it('does not render the Game Over panel behind the splash screen at boot', () => {
