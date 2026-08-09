@@ -120,8 +120,11 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-damage" aria-hidden="true"></div>
     <!-- The title screen. Deliberately NOT a <button>: any key and any pointer press
          dismiss it, so the whole overlay is the target and a single focusable control
-         would understate that. loop.ts owns the listeners. -->
-    <div class="hud-splash hud-splash--hidden">
+         would understate that. loop.ts owns the listeners.
+         role/aria-label because a screen reader is otherwise told nothing about a
+         screen that is blocking the entire game behind it. -->
+    <div class="hud-splash hud-splash--hidden" role="dialog" aria-modal="true"
+         aria-label="Tanks! title screen. Press any key to begin.">
       <h1 class="hud-splash-title">TANKS!</h1>
       <p class="hud-splash-hint">Press any key or tap to begin</p>
     </div>
@@ -477,7 +480,9 @@ export function createHud(root: HTMLElement): Hud {
   let levelChoice = false;
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash the row onto it.
-  let shownState: GameState = 'title';
+  let shownState: GameState = 'splash';
+  /** Previous state, so leaving the splash can hand focus somewhere useful. */
+  let lastState: GameState = 'splash';
   const levelSelectCbs: Array<(level: number) => void> = [];
 
   function setState(s: GameState): void {
@@ -489,6 +494,12 @@ export function createHud(root: HTMLElement): Hud {
     achView.classList.add('hud-achievements--hidden');
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
+    // Leaving the title screen hands focus to the menu's primary action. Without it
+    // `document.activeElement` is still <body> when the menu appears, so a
+    // keyboard-only player has to Tab in from nowhere and a screen reader announces
+    // nothing at all -- the overlay simply vanishes.
+    const leavingSplash = lastState === 'splash' && s !== 'splash';
+    lastState = s;
     // The topbar is the only chrome that outranks the menu panel, so it is also the
     // only thing that would show through on the title screen.
     topbarEl.classList.toggle('hud-topbar--hidden', s === 'splash');
@@ -526,6 +537,7 @@ export function createHud(root: HTMLElement): Hud {
       titleEl.textContent = 'TANKS!';
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
       actionBtn.textContent = 'Start';
+      if (leavingSplash) actionBtn.focus();
     } else if (s === 'win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {

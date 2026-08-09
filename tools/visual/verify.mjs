@@ -366,7 +366,9 @@ function runChecks(results) {
  * a >10% floor, failing 4 checks across 4 viewports on a board that renders perfectly.
  *
  * Tolerant of a build with no splash screen so this file does not become the reason a
- * revert cannot be measured.
+ * revert cannot be measured. Returns whether it dismissed one; the call site ignores
+ * that, because the checks downstream report the consequence more usefully than a
+ * thrown error here would.
  */
 async function dismissSplash(page) {
   const isShowing = () =>

@@ -86,9 +86,11 @@
   display: none;
 }
 
-/* Sits above the menu panel and below the topbar, and takes pointer events so a press
- * anywhere on it counts. It is opaque rather than a scrim: the menu is rendered behind
- * it and should not read as a thing you are looking through. */
+/* Takes pointer events so a press anywhere on it counts.
+ *
+ * A heavy scrim, not an opaque fill: at 0.92 the arena, both wall types and the tanks
+ * stay legible behind it, which is the intent -- the game is visibly already there,
+ * waiting. Calling it opaque (an earlier draft did) is measurably untrue. */
 .hud-splash {
   position: absolute;
   inset: 0;

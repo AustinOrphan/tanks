@@ -17,12 +17,18 @@ export interface GameStateMachine {
   toTitle(): void;
   /**
    * Splash -> menu, and ONLY from splash. The transition exists to be driven by a real
-   * user gesture: browsers create an AudioContext suspended and refuse to resume one
-   * outside a gesture handler, so before the first interaction the game has no audio at
-   * all. Measured on the built bundle: at the menu with no gesture, both AudioContexts
-   * report `suspended`; one background click flips both to `running`. Making the first
-   * gesture unavoidable is what turns "silent until you touch it" from a bug report
-   * into the screen's purpose.
+   * user gesture.
+   *
+   * Be precise about why, because the obvious version is wrong: this does NOT unlock
+   * audio, and neither does its caller. `audio/engine.ts` has always resumed the
+   * AudioContext from its own document-level pointerdown/keydown handler, so the game
+   * was never permanently silent -- it unlocked on whatever the player first touched.
+   *
+   * What this adds is ORDERING. Browsers create an AudioContext suspended (measured on
+   * the built bundle: at the menu with no gesture, both contexts report `suspended`;
+   * one click flips both to `running`), so a player could sit looking at a silent menu
+   * until they happened to click something. A screen that cannot be left without a
+   * gesture closes that window: the menu is never the thing that looks broken.
    */
   dismissSplash(): void;
   startPlaying(): void;

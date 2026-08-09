@@ -641,10 +641,10 @@ export function startGameWith(
   // state machine does the guarding -- `dismissSplash` acts only from 'splash' -- so a
   // keypress or click during play falls through to the handlers below unchanged.
   //
-  // This is the whole of the audio fix. A browser will not resume a suspended
-  // AudioContext outside a gesture handler, so the menu bed cannot sound before the
-  // player touches the page; putting a screen in front of the menu that cannot be left
-  // without a gesture means the menu is never the thing that looks broken.
+  // The audio half of this is ORDERING, not unlocking -- see dismissSplash in state.ts.
+  // `audio/engine.ts` already resumes the context from its own document-level gesture
+  // handler, and did before this screen existed. What changes is that the gesture is
+  // now guaranteed to have happened before the menu is on screen.
   const onSplashGesture = (): void => {
     sm.dismissSplash();
   };
