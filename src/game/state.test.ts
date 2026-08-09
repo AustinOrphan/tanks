@@ -2,9 +2,40 @@ import { describe, it, expect, vi } from 'vitest';
 import { createGameStateMachine } from './state';
 
 describe('game state machine', () => {
-  it('starts in title', () => {
+  it('starts on the splash screen, not the menu', () => {
     const sm = createGameStateMachine();
+    expect(sm.state).toBe('splash');
+  });
+
+  it('dismissSplash moves splash -> title, and does nothing from anywhere else', () => {
+    const sm = createGameStateMachine();
+    sm.dismissSplash();
     expect(sm.state).toBe('title');
+
+    // The listeners driving this are unconditional -- every keypress and every pointer
+    // press in the game calls it -- so the guard is what keeps a shot or a pause key
+    // from yanking a live game back to the menu. Swept over every other state.
+    for (const reach of [
+      () => sm.startPlaying(),
+      () => {
+        sm.startPlaying();
+        sm.pause();
+      },
+      () => {
+        sm.startPlaying();
+        sm.onEvents([{ type: 'win' }]);
+      },
+      () => {
+        sm.startPlaying();
+        sm.onEvents([{ type: 'lose' }]);
+      },
+      () => sm.toTitle(),
+    ]) {
+      reach();
+      const before = sm.state;
+      sm.dismissSplash();
+      expect(sm.state, `dismissSplash moved the game out of ${before}`).toBe(before);
+    }
   });
 
   it('startPlaying moves to playing', () => {
@@ -29,8 +60,8 @@ describe('game state machine', () => {
 
   it('ignores win/lose events when not playing', () => {
     const sm = createGameStateMachine();
-    sm.onEvents([{ type: 'win' }]); // still in title
-    expect(sm.state).toBe('title');
+    sm.onEvents([{ type: 'win' }]); // still on the splash screen
+    expect(sm.state).toBe('splash');
   });
 
   it('restart from win or lose returns to playing', () => {
@@ -63,6 +94,7 @@ describe('game state machine', () => {
   it('does not fire onChange when the state is unchanged', () => {
     const sm = createGameStateMachine();
     const cb = vi.fn();
+    sm.dismissSplash(); // splash -> title, before the subscriber is attached
     sm.onChange(cb);
     sm.toTitle(); // already in title, no transition
     expect(cb).not.toHaveBeenCalled();
@@ -73,7 +105,7 @@ describe('pause transitions', () => {
   it('pauses only from playing', () => {
     const sm = createGameStateMachine();
     sm.pause();
-    expect(sm.state).toBe('title'); // title is not pausable
+    expect(sm.state).toBe('splash'); // the splash screen is not pausable
     sm.startPlaying();
     sm.pause();
     expect(sm.state).toBe('paused');

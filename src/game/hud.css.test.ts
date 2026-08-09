@@ -130,6 +130,10 @@ describe('hud.css is syntactically whole', () => {
       '.hud-shells', '.hud-shells--hidden', // dev shell count
       '.hud-phase', '.hud-banner', '.hud-banner-word', '.hud-banner-count', // round phase
       '.hud-level--hidden', // level progression: without it the empty chip always shows
+      // title screen: without the hidden rule it covers the game from load and never
+      // leaves; the hint's pulse is the only cue that a press is what is wanted
+      '.hud-splash', '.hud-splash--hidden', '.hud-splash-title', '.hud-splash-hint',
+      '.hud-topbar--hidden', // the title screen's only overlapping chrome
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling

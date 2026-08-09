@@ -172,6 +172,17 @@ async function run(browser) {
       }
     }
     await page.waitForTimeout(1500);
+    // Leave the title screen first. Until it is gone the menu has no Start button to
+    // find -- setState('splash') returns before the branch that writes the label, so
+    // the locator below matches nothing -- and the panel-hidden check further down
+    // reads TRUE while the splash is up, because the menu behind it is hidden too.
+    // Both safeguards silently degrade into the Enter fallback without this.
+    if (await page.locator('.hud-splash:not(.hud-splash--hidden)').count()) {
+      await page.keyboard.press('Space');
+      await page
+        .waitForSelector('.hud-splash.hud-splash--hidden', { timeout: 5000 })
+        .catch(() => {});
+    }
     const start = page.locator('button', { hasText: /start|play/i }).first();
     if (await start.count()) await start.click();
     else await page.keyboard.press('Enter');

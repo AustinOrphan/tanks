@@ -118,6 +118,16 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <!-- The title screen. Deliberately NOT a <button>: any key and any pointer press
+         dismiss it, so the whole overlay is the target and a single focusable control
+         would understate that. loop.ts owns the listeners.
+         role/aria-label because a screen reader is otherwise told nothing about a
+         screen that is blocking the entire game behind it. -->
+    <div class="hud-splash hud-splash--hidden" role="dialog" aria-modal="true"
+         aria-label="Tanks! title screen. Press any key to begin.">
+      <h1 class="hud-splash-title">TANKS!</h1>
+      <p class="hud-splash-hint">Press any key or tap to begin</p>
+    </div>
     <div class="hud-toasts" aria-live="polite"></div>
     <div class="hud-achievements hud-achievements--hidden">
       <h1>Achievements</h1>
@@ -142,7 +152,12 @@ export function createHud(root: HTMLElement): Hud {
         <button class="hud-stats-back" type="button">Back</button>
       </div>
     </div>
-    <div class="hud-panel hud-panel--hidden">
+    <!-- tabindex="-1" so the menu can RECEIVE focus when the title screen is dismissed
+         without joining the tab order. It must be this container and not the Start
+         button: isMuteHotkey/isPauseHotkey both ignore a key whose target is inside
+         input, button, select or textarea, so focusing the button leaves M and Escape
+         dead at the menu -- measured in a browser, and a regression against main. -->
+    <div class="hud-panel hud-panel--hidden" tabindex="-1">
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
       <div class="hud-levels hud-levels--hidden"></div>
@@ -170,6 +185,8 @@ export function createHud(root: HTMLElement): Hud {
   const bannerCountEl = el.querySelector('.hud-banner-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
+  const splashEl = el.querySelector('.hud-splash') as HTMLElement;
+  const topbarEl = el.querySelector('.hud-topbar') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
@@ -468,7 +485,9 @@ export function createHud(root: HTMLElement): Hud {
   let levelChoice = false;
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash the row onto it.
-  let shownState: GameState = 'title';
+  let shownState: GameState = 'splash';
+  /** Previous state, so leaving the splash can hand focus somewhere useful. */
+  let lastState: GameState = 'splash';
   const levelSelectCbs: Array<(level: number) => void> = [];
 
   function setState(s: GameState): void {
@@ -479,7 +498,22 @@ export function createHud(root: HTMLElement): Hud {
     customizeView.classList.add('hud-customize--hidden');
     achView.classList.add('hud-achievements--hidden');
     disarmReset();
-    if (s === 'playing') {
+    splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
+    // Leaving the title screen hands focus to the menu's primary action. Without it
+    // `document.activeElement` is still <body> when the menu appears, so a
+    // keyboard-only player has to Tab in from nowhere and a screen reader announces
+    // nothing at all -- the overlay simply vanishes.
+    const leavingSplash = lastState === 'splash' && s !== 'splash';
+    lastState = s;
+    // The topbar is the only chrome that outranks the menu panel, so it is also the
+    // only thing that would show through on the title screen.
+    topbarEl.classList.toggle('hud-topbar--hidden', s === 'splash');
+    // Splash and playing both want the menu panel gone. Splash returns BEFORE the
+    // branches below for the same reason `paused` returns early: the final `else`
+    // renders a Game Over corpse screen, so any state that falls through to it gets
+    // "Out of lives." written into the panel -- on a fresh page load, that is the
+    // first thing a player would see.
+    if (s === 'playing' || s === 'splash') {
       panel.classList.add('hud-panel--hidden');
       return;
     }
@@ -508,6 +542,8 @@ export function createHud(root: HTMLElement): Hud {
       titleEl.textContent = 'TANKS!';
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
       actionBtn.textContent = 'Start';
+      // The panel, NOT actionBtn -- see the tabindex note on the element.
+      if (leavingSplash) panel.focus();
     } else if (s === 'win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {
@@ -526,7 +562,11 @@ export function createHud(root: HTMLElement): Hud {
     }
   }
 
-  setState('title');
+  // The boot state, and it must match the state machine's own initial state
+  // (`state.ts`), which is now the splash screen rather than the menu. `loop.ts` also
+  // pushes `hud.setState(sm.state)` at boot precisely because that path bypasses
+  // `sm.onChange`; this call is what the HUD looks like before it arrives.
+  setState('splash');
 
   // The button is the only indication of mute state, and there is genuinely no
   // music shipped, so "silent" is the normal condition -- without this a muted

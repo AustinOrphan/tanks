@@ -349,6 +349,48 @@ function runChecks(results) {
 
 
 /**
+ * Leave the title screen, the way a player does.
+ *
+ * The game opens on a splash screen that only a real gesture dismisses. Browsers will
+ * not resume a suspended AudioContext outside a gesture handler; the screen guarantees
+ * that gesture happens before the menu is visible. (It does not perform the resume --
+ * audio/engine.ts has always done that from its own handler.)
+ *
+ * Every threshold in CHECKS was calibrated against the MENU behind it, and the overlay
+ * is a 92% scrim, so measuring the splash instead reports a near-blank page:
+ * `paintedFraction` fell to 1.0-2.4% against a >10% floor, failing 4 checks across 4
+ * viewports on a board that renders perfectly.
+ *
+ * Tolerant of a build with no splash screen so this file does not become the reason a
+ * revert cannot be measured. Returns whether it dismissed one; the call site ignores
+ * that, because the checks downstream report the consequence more usefully than a
+ * thrown error here would.
+ */
+async function dismissSplash(page) {
+  const isShowing = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.hud-splash');
+      return !!el && !el.classList.contains('hud-splash--hidden');
+    });
+  if (!(await isShowing())) return false;
+  await page.keyboard.press('Space');
+  try {
+    await page.waitForFunction(
+      () => document.querySelector('.hud-splash')?.classList.contains('hud-splash--hidden'),
+      { timeout: 5000 },
+    );
+  } catch {
+    // Report the state as it is; the checks decide whether it is a failure.
+    return false;
+  }
+  // Two frames, matching settle(): the overlay leaving is a paint, not just a class.
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))),
+  );
+  return true;
+}
+
+/**
  * Wait until the page is actually DRAWING, then report the GL state.
  *
  * Waits on a signal rather than a duration: a fixed delay was enough locally
@@ -438,6 +480,8 @@ async function main() {
           console.log(`  ${vp.name}: GL context lost on attempt ${attempt}, retrying once`);
         }
       }
+
+      await dismissSplash(page);
 
       const shot = await page.screenshot({ type: 'png' });
       await writeFile(join(outDir, `${vp.name}.png`), shot);

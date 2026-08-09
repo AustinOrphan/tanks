@@ -45,9 +45,11 @@ export interface HostWindow {
   addEventListener(type: 'keydown', fn: (e: KeyboardEvent) => void): void;
   addEventListener(type: 'resize', fn: (e: Event) => void): void;
   addEventListener(type: 'blur', fn: (e: Event) => void): void;
+  addEventListener(type: 'pointerdown', fn: (e: Event) => void): void;
   removeEventListener(type: 'keydown', fn: (e: KeyboardEvent) => void): void;
   removeEventListener(type: 'resize', fn: (e: Event) => void): void;
   removeEventListener(type: 'blur', fn: (e: Event) => void): void;
+  removeEventListener(type: 'pointerdown', fn: (e: Event) => void): void;
 }
 
 /**
@@ -201,6 +203,11 @@ export function musicIntensity(remaining: number, total: number): number {
  */
 export function musicContextFor(state: GameState): SuiteContext {
   switch (state) {
+    // The splash screen shares the menu's suite rather than taking one of its own. It
+    // is the same world musically, and it is the screen on which nothing can be heard
+    // yet anyway -- the context is set here so that the gesture which dismisses it
+    // starts the menu bed already in the right suite, with no switch on arrival.
+    case 'splash':
     case 'title':
       return 'menu';
     case 'win':
@@ -630,7 +637,32 @@ export function startGameWith(
   hud.setAchievements(deps.achievements.earned());
   refreshStats(world);
 
+  // The title screen leaves on ANY gesture. Both listeners are unconditional and the
+  // state machine does the guarding -- `dismissSplash` acts only from 'splash' -- so a
+  // keypress or click during play falls through to the handlers below unchanged.
+  //
+  // The audio half of this is ORDERING, not unlocking -- see dismissSplash in state.ts.
+  // `audio/engine.ts` already resumes the context from its own document-level gesture
+  // handler, and did before this screen existed. What changes is that the gesture is
+  // now guaranteed to have happened before the menu is on screen.
+  const onSplashGesture = (): void => {
+    sm.dismissSplash();
+  };
+  deps.host.addEventListener('pointerdown', onSplashGesture);
+
   const onKey = (e: KeyboardEvent): void => {
+    // A key that dismisses the title screen does that and NOTHING ELSE.
+    //
+    // Falling through here meant "Press any key to begin" included M, which mutes:
+    // the one key most likely to be pressed by someone testing whether the game has
+    // sound would silence the menu bed this screen exists to make audible, with only
+    // the Mute button's label left to explain why. Escape and P were harmless by luck
+    // alone -- pause() no-ops from 'title' -- which is not a property to rely on as
+    // more hotkeys arrive.
+    if (sm.state === 'splash') {
+      sm.dismissSplash();
+      return;
+    }
     if (isMuteHotkey(e)) hud.setMuted(audio.toggleMute());
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from 'playing' and
@@ -663,6 +695,7 @@ export function startGameWith(
       deps.host.removeEventListener('keydown', onKey);
       deps.host.removeEventListener('resize', onResize);
       deps.host.removeEventListener('blur', onBlur);
+      deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
       renderer.dispose();
       audio.dispose();

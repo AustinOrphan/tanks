@@ -76,6 +76,78 @@
   display: none;
 }
 
+/* Focused programmatically when the title screen is dismissed, never by tabbing, so a
+ * ring around the entire panel would be noise with nothing to explain it. */
+.hud-panel:focus {
+  outline: none;
+}
+
+/* ---- Title screen --------------------------------------------------------------- */
+
+/* The topbar is game furniture -- lives, enemies remaining, the level chip. On a title
+ * screen it reads as a game already in progress ("Lives: 3  Enemies: 3  Level: 1/4"
+ * over the word TANKS!), so it is hidden outright rather than dimmed behind the
+ * overlay, which would leave a legible ghost of it. */
+.hud-topbar--hidden {
+  display: none;
+}
+
+/* Takes pointer events so a press anywhere on it counts.
+ *
+ * A heavy scrim, not an opaque fill: at 0.92 the arena, both wall types and the tanks
+ * stay legible behind it, which is the intent -- the game is visibly already there,
+ * waiting. Calling it opaque (an earlier draft did) is measurably untrue. */
+.hud-splash {
+  position: absolute;
+  inset: 0;
+  /* Above the topbar (1) and the toast rail (2). The title screen is the whole
+   * screen; nothing is allowed to paint over it. */
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(14, 17, 22, 0.92);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Without this the title screen covers the game from page load and never leaves --
+ * the class does nothing on its own, the dead-CSS failure hud.css.test.ts exists for. */
+.hud-splash--hidden {
+  display: none;
+}
+
+.hud-splash-title {
+  margin: 0;
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #f2f5fa;
+  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* The hint is the whole interaction, so it pulses rather than sitting still: on a
+ * screen whose only instruction is "press something", a static line reads as a
+ * caption. Honours prefers-reduced-motion below. */
+.hud-splash-hint {
+  margin: 0;
+  font-size: 17px;
+  color: #aeb6c2;
+  animation: hud-splash-pulse 2s ease-in-out infinite;
+}
+
+@keyframes hud-splash-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .hud-title {
   margin: 0;
   font-size: 56px;
@@ -648,6 +720,12 @@
 @media (prefers-reduced-motion: reduce) {
   .hud-damage--hit {
     animation: none;
+  }
+  /* The hint stays fully legible rather than stopping mid-pulse at 0.55 opacity:
+   * cancelling the animation must not leave the only instruction on screen dimmed. */
+  .hud-splash-hint {
+    animation: none;
+    opacity: 1;
   }
   @keyframes hud-lives-pulse {
     0%, 100% { color: #d8dde6; transform: none; }
