@@ -356,6 +356,42 @@ function runChecks(results) {
  * screenshotted a blank page. A sized canvas and a live HUD are NOT sufficient
  * evidence -- both survive a lost context -- so the context itself is checked.
  */
+/**
+ * Leave the title screen, the way a player does.
+ *
+ * The game opens on a splash screen that only a real gesture dismisses -- browsers
+ * will not resume a suspended AudioContext otherwise. Every threshold in CHECKS was
+ * calibrated against the MENU behind it, and the overlay is 92% opaque, so measuring
+ * the splash instead reports a blank page: `paintedFraction` fell to 1.0-2.4% against
+ * a >10% floor, failing 4 checks across 4 viewports on a board that renders perfectly.
+ *
+ * Tolerant of a build with no splash screen so this file does not become the reason a
+ * revert cannot be measured.
+ */
+async function dismissSplash(page) {
+  const isShowing = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.hud-splash');
+      return !!el && !el.classList.contains('hud-splash--hidden');
+    });
+  if (!(await isShowing())) return false;
+  await page.keyboard.press('Space');
+  try {
+    await page.waitForFunction(
+      () => document.querySelector('.hud-splash')?.classList.contains('hud-splash--hidden'),
+      { timeout: 5000 },
+    );
+  } catch {
+    // Report the state as it is; the checks decide whether it is a failure.
+    return false;
+  }
+  // Two frames, matching settle(): the overlay leaving is a paint, not just a class.
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))),
+  );
+  return true;
+}
+
 async function settle(page) {
   try {
     await page.waitForFunction(
@@ -438,6 +474,8 @@ async function main() {
           console.log(`  ${vp.name}: GL context lost on attempt ${attempt}, retrying once`);
         }
       }
+
+      await dismissSplash(page);
 
       const shot = await page.screenshot({ type: 'png' });
       await writeFile(join(outDir, `${vp.name}.png`), shot);
