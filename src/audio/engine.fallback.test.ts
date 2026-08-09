@@ -2,9 +2,14 @@
 //
 // The PRODUCTION audio path, which engine.test.ts cannot reach.
 //
-// No audio assets ship with this slice (public/audio/ holds only .gitkeep), so
-// every Howl fires `loaderror`, every `sounds[key]` is nulled, and the
-// procedural `beep()` fallback is the ONLY path that ever makes a sound today.
+// No audio assets ship (public/audio/ holds only .gitkeep), so the procedural
+// `beep()` path is the ONLY one that ever makes a sound today. It reaches that
+// state two ways now, and this file covers the SECOND: the shipped manifest
+// declares nothing, so no Howl is built at all; but a manifest that DOES declare
+// a file gets there via `loaderror` nulling `sounds[key]`, and that handler still
+// has to work for the day a real asset lands. These cases run against
+// AUTHORED_LAYOUT for exactly that reason -- against the empty shipped manifest
+// they would build zero Howls and assert nothing.
 // engine.test.ts mocks `Howl.on()` as a no-op, so `loaderror` never fires there
 // and `sounds[key]` is always a truthy Howl -- its 8 green tests exercise the
 // asset path exclusively and would stay green if `beep()` were deleted.
@@ -41,7 +46,12 @@ vi.mock('howler', () => {
 });
 
 import { createAudioEngine } from './engine';
-import { AUDIO_MANIFEST } from './manifest';
+// AUTHORED_LAYOUT, not LOADABLE: every case in this file is about what happens
+// when a declared file FAILS TO LOAD, and the shipped manifest declares nothing, so
+// against it this file builds zero Howls and asserts nothing. Measured: with the
+// shipped manifest, deleting `sounds[key] = null` from engine.ts's loaderror handler
+// passed all 1355 tests; against this fixture it fails 8.
+import { AUDIO_MANIFEST, AUTHORED_LAYOUT as LOADABLE } from './manifest';
 
 interface FakeNode {
   connect(target: unknown): unknown;
@@ -117,7 +127,7 @@ afterEach(() => {
 
 describe('audio engine procedural fallback (the only live path today)', () => {
   it('routes play() to a real oscillator once the asset fails to load', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon');
@@ -128,9 +138,26 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     engine.dispose();
   });
 
+  it('routes play() to a real oscillator with the SHIPPED manifest, which asks for nothing', () => {
+    // The mirror of the case above, and the gap review left open when this file moved
+    // wholesale to the fixture: every other case here declares a file and lets it fail,
+    // but the shipped manifest declares none, so `sounds[key]` is ABSENT rather than
+    // present-and-null. `play()`'s `if (howl)` treats those identically -- this is what
+    // asserts that, through the minimal AudioContext that is the beep() floor.
+    //
+    // No flushLoadErrors(): there is no load to fail. That is the point.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    engine.play('cannon');
+
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx, 'the shipped manifest never reached an AudioContext at all').toBeDefined();
+    expect(ctx.started).toEqual([180]); // FALLBACK_FREQ.cannon, same as the declared path
+    engine.dispose();
+  });
+
   it('resumes a suspended AudioContext, so the first sound is audible', async () => {
     FakeAudioContext.gestureGranted = true;
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon');
@@ -148,7 +175,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     // resume() issued outside a gesture never settles, so `state` stays
     // 'suspended' forever -- a naive `if (suspended) resume()` on every sound
     // retains a pending promise per shot fired for the whole session.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon');
@@ -163,7 +190,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('unlock() resumes the context from a real user gesture', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
     FakeAudioContext.gestureGranted = true;
 
@@ -178,7 +205,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('retries the resume on the next sound after a failed unlock', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon'); // gesture not granted -> resume never settles
@@ -199,7 +226,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('stays silent while muted rather than resuming the context', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
     engine.setMuted(true);
 

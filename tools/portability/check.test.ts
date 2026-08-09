@@ -67,12 +67,47 @@ describe('subpath portability checker', () => {
     expect(failures[0]).toMatch(/no JS bundle found/);
   });
 
-  it('fails when the probe asset is no longer in the bundle', () => {
-    // Otherwise a manifest rename would leave both asset checks looking at nothing and
-    // reporting success -- the hud.css failure mode. Fails if the probeSeen guard goes.
-    const failures = portabilityFailures(RELATIVE_HTML, bundle('const ch=`./`;'));
+  it('fails when the probe is gone but the bundle still carries audio files', () => {
+    // The rot case: a manifest RENAME would leave both asset checks looking at nothing
+    // and reporting success -- the hud.css failure mode. Fails if the probeSeen guard
+    // goes. The bundle here still ships an audio file, so the assets did not leave;
+    // only the probe stopped matching them.
+    const failures = portabilityFailures(RELATIVE_HTML, bundle('x={a:`${ch}audio/shot.wav`};'));
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatch(/no reference to audio\/cannon\.wav/);
+    expect(failures[0]).toMatch(/probe has rotted/);
+  });
+
+  it('passes when there are no audio files at all -- the shipped, empty-manifest state', () => {
+    // AUDIO_MANIFEST declares nothing, so `audioUrl` is tree-shaken and no audio URL
+    // reaches the bundle. That is not the probe rotting, and failing on it would make
+    // the gate red on every build for as long as no asset is committed.
+    expect(portabilityFailures(RELATIVE_HTML, bundle('const ch=`./`;'))).toEqual([]);
+  });
+
+  it('detects a rotted probe across every audio form, not just .wav', () => {
+    // Review measured four shapes walking silently through the first draft of this
+    // branch: .opus and .aac assets, an UPPERCASE filename, and the computed
+    // `${id}audio/${key}.wav` form -- which matters most, because a key-driven loop
+    // over the manifest is the natural next edit to make here.
+    for (const src of [
+      'x={a:`${ch}audio/theme.opus`};',
+      'x={a:`${ch}audio/hit.aac`};',
+      'x={a:`${ch}audio/Cannon.WAV`};',
+      'x=`${ch}audio/${k}.wav`;',
+    ]) {
+      const failures = portabilityFailures(RELATIVE_HTML, bundle(src));
+      expect(failures, src).toHaveLength(1);
+      expect(failures[0], src).toMatch(/probe has rotted/);
+    }
+  });
+
+  it('does not mistake Howler MIME literals for audio files', () => {
+    // Every bundle ships `audio/wav`, `audio/mpeg` and ten more as MIME strings. Read
+    // as asset URLs they would pin the rot branch on permanently -- which they did, on
+    // the first draft of this check.
+    const mime = 'const t=["audio/wav","audio/mpeg","audio/x-caf;"];';
+    expect(portabilityFailures(RELATIVE_HTML, bundle(mime))).toEqual([]);
   });
 
   it('reports every distinct absolute path, not just the first', () => {

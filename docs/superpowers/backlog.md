@@ -194,20 +194,16 @@ from a commit message.
 Pages infrastructure using sibling project sites of the same account, because `/tanks/`
 was not yet deployed.
 
-**1. The ten missing audio files cost 91.6 kB on every load, and it never caches.**
-`public/audio/` holds only `.gitkeep`; no `.wav` has ever been committed
-(`git log --all --diff-filter=A --name-only -- '*.wav'` is empty), so all ten manifest
-entries 404 and `audio/engine.ts` falls through to the procedural path. That part works —
-a Pages 404 arrives as a *successful* XHR with `status: 404`, and Howler's `onload` branch
-emits `loaderror` immediately with no retry, which is the cheap failure shape. The cost is
-traffic. Pages sets no `cache-control` on a `.wav` 404 (0 of 3 probed) while `.mp3`,
-`.ogg`, `.js` and `.png` 404s all get `max-age=14400` (4 of 4), and a Pages 404 body is
-9,379 bytes: **9,379 × 10 = 91.6 kB and 10 round trips per load, never cached** — about
-half the 186 kB gzipped bundle. The fix is a decision, not a patch: render and commit the
-ten wavs, or stop the manifest requesting files that are not there. **Tracked as issue #86**,
-which also absorbed the ledger's line about the CREDITS.md licensing policy being unexercised. Note `npm run audio`
-does **not** do the first — it writes to the gitignored `audio-out/`, needs chromium, and
-names files `${label}.wav`, not `public/audio/cannon.wav`.
+**1. ~~The ten missing audio files cost 91.6 kB on every load~~ — CLOSED.** The manifest
+no longer declares files that do not exist, so the ten requests are gone (measured on the
+built bundle: 10 → 0). The entry stays only as the record of the measurement, because the
+figure is quoted elsewhere: a GitHub Pages 404 body is 9,379 bytes and carries no
+`cache-control`, so the cost was 93,790 bytes and 10 round trips on EVERY load, never
+cached — re-measured directly against the deployed `/tanks/` rather than sibling sites,
+10 of 10 requests, all 404, all uncached. The decision taken was the second of the two the
+original entry named: stop requesting files that are not there, and let `src/audio/synth.ts`
+be the voice rather than the fallback. `CREDITS.md`'s licensing policy is unchanged and
+still unexercised — committing a real set remains open as issue #86.
 
 **2. A service worker this repo does not own controls `/tanks/`.** The portfolio root
 registers `navigator.serviceWorker.register("/sw.js")`, served from the origin root with no

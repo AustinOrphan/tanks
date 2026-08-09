@@ -10,14 +10,16 @@
 // so the paths that actually run in a browser are the ones under test.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createAudioEngine, DUCK_FACTOR } from './engine';
-import { AUDIO_MANIFEST, DEFAULT_VOLUME } from './manifest';
+import { AUDIO_MANIFEST, AUTHORED_LAYOUT, DEFAULT_VOLUME } from './manifest';
 
 vi.mock('howler', () => {
   class FakeHowl {
     private handlers: Record<string, Array<() => void>> = {};
     constructor(public opts: { src: string[]; loop?: boolean }) {
-      // Every asset 404s in this repo, which is the shipped reality: fire
-      // loaderror asynchronously exactly as Howler does.
+      // Fire loaderror asynchronously, exactly as Howler does for a missing file.
+      // This is no longer the shipped reality -- the manifest declares nothing, so
+      // nothing is requested -- but it is what a DECLARED file would do while none
+      // exists, which is what the cases using AUTHORED_LAYOUT are about.
       queueMicrotask(() => {
         for (const h of this.handlers.loaderror ?? []) h();
       });
@@ -222,7 +224,13 @@ describe('engine: the generated music bed', () => {
     // where the Howl still exists and has not yet failed: measured in a real
     // browser, the asset resolved at ~1354ms while boot called startMusic at
     // ~380ms, and the title screen produced 0 bed voices against 8 after Start.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    //
+    // AUTHORED_LAYOUT, not AUDIO_MANIFEST: the race is BETWEEN startMusic and a
+    // `loaderror`, and the shipped manifest declares no music file, so no Howl is
+    // built and no load can fail. Against it this test passes for the wrong reason --
+    // measured, deleting the `if (musicWanted) beginMusic()` retry left all 507 tests
+    // in src/audio + src/game green.
+    const engine = createAudioEngine(AUTHORED_LAYOUT);
     engine.startMusic(); // BEFORE the flush: the Howl is alive and mute
     await flush(); // ...and now it fails, as it always will in this repo
     const c = ctxOf();
@@ -325,13 +333,17 @@ describe('engine: the generated music bed', () => {
     engine.dispose();
   });
 
+  // AUTHORED_LAYOUT below, not AUDIO_MANIFEST: this case is ABOUT a `loaderror`, and
+  // the shipped manifest declares no music file, so no Howl is built and no load can
+  // fail. Against the shipped manifest the assertions would pass for the wrong reason
+  // -- nothing to resurrect because nothing was ever requested.
   it('a stop BEFORE the load failure stays stopped, and dispose disarms the retry', async () => {
     // The retry is armed by startMusic and must be disarmed by both stopMusic
     // and dispose -- otherwise a load failure arriving later resurrects audio
     // the game has already turned off. Review verified this by probe; it is a
     // test now. `musicWanted = false` in stopMusic was deletable with all 476
     // tests in src/audio + src/game passing.
-    const stopped = createAudioEngine(AUDIO_MANIFEST);
+    const stopped = createAudioEngine(AUTHORED_LAYOUT);
     CapableCtx.instances = [];
     stopped.startMusic();
     stopped.stopMusic();
@@ -346,7 +358,7 @@ describe('engine: the generated music bed', () => {
     // covers it); removing both fails here. So this proves a disposed engine
     // never builds a context, NOT that the disarm in dispose is load-bearing
     // today. It is belt-and-braces, and this is the belt.
-    const gone = createAudioEngine(AUDIO_MANIFEST);
+    const gone = createAudioEngine(AUTHORED_LAYOUT);
     CapableCtx.instances = [];
     gone.startMusic();
     gone.dispose();
