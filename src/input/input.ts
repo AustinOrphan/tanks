@@ -2,11 +2,15 @@ import type { InputState, Vec2 } from '../sim/types';
 import {
   stickVector,
   touchSide,
+  isTap,
+  isDoubleTap,
   AIM_PROJECTION_UNITS,
   type TouchIndicator,
   type TouchScheme,
+  type TouchSample,
+  type FireMode,
 } from './touch';
-export type { TouchIndicator, TouchScheme } from './touch';
+export type { TouchIndicator, TouchScheme, FireMode } from './touch';
 
 export interface InputController {
   sample(): InputState;
@@ -44,6 +48,11 @@ export interface InputController {
    * so a thumb held across the switch cannot carry stale meaning into the new scheme.
    */
   setTouchScheme(scheme: TouchScheme): void;
+  /**
+   * How the aim thumb pulls the trigger. The FIRE button works in every mode -- these
+   * add a gesture rather than replacing it.
+   */
+  setFireMode(mode: FireMode): void;
   /**
    * The player's WORLD position, pushed each frame by the loop.
    *
@@ -182,6 +191,18 @@ export function createInputController(
   let aimOrigin: Vec2 = { x: 0, y: 0 };
   let touchUsed = false;
   let scheme: TouchScheme = 'stick';
+  let fireMode: FireMode = 'tap';
+  /** The aim thumb's press, held until release so the gesture can be classified. */
+  let aimDownAt = 0;
+  let aimDownPos: Vec2 = { x: 0, y: 0 };
+  /** The last completed tap on the aim side, for double-tap detection. */
+  let lastAimTap: TouchSample | null = null;
+  /**
+   * Set when the game stops consuming input mid-gesture, so the touch in flight cannot
+   * become a shot. Cleared by the next press, which is a gesture the player made with
+   * the game actually running.
+   */
+  let aimGestureVoid = false;
   let playerPos: Vec2 | null = null;
 
   /**
@@ -239,6 +260,9 @@ export function createInputController(
       aimPointer = e.pointerId;
       aimOrigin = { x: e.clientX, y: e.clientY };
       aimPoint = { x: e.clientX, y: e.clientY };
+      aimDownAt = performance.now();
+      aimDownPos = { x: e.clientX, y: e.clientY };
+      aimGestureVoid = false; // a fresh press, made while the game was running
       applyAimGesture();
       // DELIBERATELY NO FIRE HERE. Aiming and firing used to be this one gesture, and
       // that made re-aiming dangerous: with the turret facing a nearby wall, the touch
@@ -269,6 +293,29 @@ export function createInputController(
       stickPointer = null;
       stickMove = { x: 0, y: 0 };
     } else if (e.pointerId === aimPointer) {
+      // Classify the gesture that just ended, BEFORE clearing it.
+      //
+      // `pointercancel` lands here too, and deliberately counts the same: the browser
+      // taking the gesture is not the player's doing, and a cancelled touch is not a
+      // shot they asked for -- but it also must not leave a half-tap primed to pair with
+      // the next one, so it goes through the same bookkeeping and resets the pair.
+      const ended: TouchSample = {
+        downAt: aimDownAt,
+        upAt: performance.now(),
+        from: aimDownPos,
+        to: { x: e.clientX, y: e.clientY },
+      };
+      // A gesture the game did not see the whole of is treated exactly like a cancelled
+      // one: it cannot fire, and it cannot prime the next pair.
+      const cancelled = e.type === 'pointercancel' || aimGestureVoid;
+      if (!cancelled && fireMode === 'tap' && isTap(ended)) {
+        firePressed = true;
+      } else if (!cancelled && fireMode === 'double' && isDoubleTap(lastAimTap, ended)) {
+        firePressed = true;
+        lastAimTap = null; // a completed double does not begin the next one
+      } else {
+        lastAimTap = cancelled ? null : ended;
+      }
       aimPointer = null;
       aimPoint = null;
     }
@@ -290,6 +337,7 @@ export function createInputController(
     aimPointer = null;
     aimPoint = null;
     stickMove = { x: 0, y: 0 };
+    lastAimTap = null;
   };
   const onVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') releaseAll();
@@ -366,12 +414,29 @@ export function createInputController(
     clearQueuedPresses(): void {
       firePressed = false;
       minePressed = false;
+      // The touch half of the same problem, and it is NOT covered by the two latches
+      // above. The window-level pointer listeners keep running while the driver has
+      // stopped calling sample(), so a thumb lifted during a pause would latch a shot
+      // that sits unconsumed until the first sample() after resume -- fired at nothing,
+      // with the turret wherever it was left. The keyboard version of this bug is why
+      // this method exists at all.
+      //
+      // The gesture in flight is VOIDED rather than released: the thumb may still be
+      // physically down, and dropping `aimPointer` would stop it steering the turret on
+      // resume, which is the same mistake as releasing a held movement key.
+      lastAimTap = null;
+      if (aimPointer !== null) aimGestureVoid = true;
     },
     pressMine(): void {
       minePressed = true;
     },
     pressFire(): void {
       firePressed = true;
+    },
+    setFireMode(next: FireMode): void {
+      if (next === fireMode) return;
+      fireMode = next;
+      lastAimTap = null; // a half-finished double must not survive the switch
     },
     setTouchScheme(next: TouchScheme): void {
       if (next === scheme) return;
@@ -380,6 +445,7 @@ export function createInputController(
       // be read as a stick origin that was never placed as one.
       aimPointer = null;
       aimPoint = null;
+      lastAimTap = null;
     },
     setPlayerPosition(pos: Vec2 | null): void {
       playerPos = pos === null ? null : { x: pos.x, y: pos.y };

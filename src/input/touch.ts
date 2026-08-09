@@ -103,6 +103,91 @@ export const TOUCH_SCHEMES: readonly TouchScheme[] = ['stick', 'point'];
 export const AIM_PROJECTION_UNITS = 100;
 
 /**
+ * How the right thumb pulls the trigger.
+ *
+ * The FIRE button exists in every mode -- these ADD a gesture, they never replace it.
+ * That is deliberate: a gesture can be missed or mistimed, and a game with a shell cap
+ * and friendly-fire ricochets needs one way to shoot that cannot be ambiguous.
+ *
+ * - `button`: the button alone. Nothing on the aim side ever fires.
+ * - `tap`: a tap on the aim side fires. Instant and unambiguous UNDER `stick`, where a
+ *   tap has no aiming meaning because the stick only aims while dragged. Under `point`
+ *   a tap IS the aim gesture, so this combination reproduces the original defect --
+ *   re-aiming at a wall shoots into it. Offered anyway, because it is the crispest
+ *   option on the default scheme and the pairing is the player's to make.
+ * - `double`: two taps in the same place fire. Safe under BOTH schemes, because a
+ *   re-aim is a single tap somewhere new and cannot accumulate into a shot.
+ */
+export type FireMode = 'button' | 'tap' | 'double';
+
+export const FIRE_MODES: readonly FireMode[] = ['tap', 'double', 'button'];
+
+/**
+ * Longest a touch can last and still count as a tap rather than a drag. A thumb placed
+ * to aim and held rests far longer than this.
+ *
+ * FEEL, not measurement, and it fails CLOSED on purpose: a tap that misses the window
+ * simply does not fire, and the FIRE button is always there. The opposite failure -- a
+ * deliberate aim-hold read as a shot -- is the defect this whole scheme rework exists to
+ * remove, so the window stays tight.
+ *
+ * Known residual, measured rather than assumed: the timestamps come from
+ * `performance.now()` when the main thread HANDLES the event, not when the finger moved.
+ * Probing the shipped bundle, a 90ms scripted tap was seen as 205ms under load -- inside
+ * the window, but not by much. On a busier device a real tap could exceed it and quietly
+ * do nothing. If that shows up in play, raise this before reaching for anything cleverer;
+ * under `stick` a stationary touch has no aiming meaning, so a longer window is cheap
+ * there. Under `point` it is not, because a hold IS the aim.
+ */
+export const TAP_MAX_MS = 250;
+
+/** How far a touch may wander and still be a tap. Fingers are not styluses. */
+export const TAP_SLOP_PX = 12;
+
+/** Longest gap between two taps for the second to complete a double. */
+export const DOUBLE_TAP_MAX_MS = 300;
+
+/**
+ * How far apart two taps may land and still be one double-tap.
+ *
+ * THE LOAD-BEARING HALF of double-tap detection, and the reason it is safe where a
+ * single tap is not. Two quick taps in the SAME place mean "fire". Two quick taps in
+ * DIFFERENT places mean someone is re-aiming -- and reading that as a shot is exactly
+ * the defect this whole scheme rework exists to remove. Time alone cannot tell them
+ * apart.
+ */
+export const DOUBLE_TAP_SLOP_PX = 40;
+
+/** A completed touch, as the tap detectors need to see it. */
+export interface TouchSample {
+  /** performance.now() at pointerdown / pointerup. */
+  downAt: number;
+  upAt: number;
+  from: Vec2;
+  to: Vec2;
+}
+
+/** True if this touch was a tap -- brief, and it stayed put. */
+export function isTap(t: TouchSample): boolean {
+  if (t.upAt - t.downAt > TAP_MAX_MS) return false;
+  return Math.hypot(t.to.x - t.from.x, t.to.y - t.from.y) <= TAP_SLOP_PX;
+}
+
+/**
+ * True if `now` completes a double-tap begun by `previous`.
+ *
+ * Measured from the previous tap's RELEASE to this one's PRESS: the gap a player feels
+ * is between the taps, not between their starts, and timing from the starts would let a
+ * long first tap eat the whole window.
+ */
+export function isDoubleTap(previous: TouchSample | null, now: TouchSample): boolean {
+  if (previous === null || !isTap(previous) || !isTap(now)) return false;
+  if (now.downAt - previous.upAt > DOUBLE_TAP_MAX_MS) return false;
+  return Math.hypot(now.from.x - previous.from.x, now.from.y - previous.from.y) <=
+    DOUBLE_TAP_SLOP_PX;
+}
+
+/**
  * Which half of the viewport a touch landed in.
  *
  * The split is the whole control scheme: left thumb drives, right thumb aims and fires.

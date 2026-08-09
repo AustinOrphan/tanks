@@ -9,6 +9,7 @@ import {
   stickVector,
   type TouchIndicator,
   type TouchScheme,
+  type FireMode,
 } from '../input/touch';
 import './hud.css';
 
@@ -121,6 +122,14 @@ export interface Hud {
   setTouchScheme(scheme: TouchScheme): void;
   /** Fired with the OTHER scheme when the player taps the aim-style toggle. */
   onTouchSchemeChange(cb: (scheme: TouchScheme) => void): void;
+  /**
+   * Which touch fire mode is active (see `FireMode` in touch.ts), echoed back by the
+   * loop after an accepted toggle -- same convention as `setTouchScheme`: the HUD shows
+   * what was STORED, not what was clicked.
+   */
+  setFireMode(mode: FireMode): void;
+  /** Fired with the NEXT mode in the cycle when the player taps the fire-mode toggle. */
+  onFireModeChange(cb: (mode: FireMode) => void): void;
   /**
    * The player just fired. Pulses the aim mark, so a tap that produced a shot is
    * distinguishable from a tap that did not -- on a phone the muzzle is under the
@@ -250,6 +259,11 @@ export function createHud(root: HTMLElement): Hud {
              pause panel -- a phone player can only change this here, there being no
              keyboard to bind it to. Label/hint text is filled in by renderSchemeToggle. -->
         <button class="hud-scheme-toggle" type="button"></button>
+        <!-- How the aim thumb pulls the trigger (see FireMode in touch.ts) -- beside the
+             aim-scheme toggle, same row, same reachability. The FIRE button works in
+             EVERY mode; this only adds a gesture. Label/hint filled in by
+             renderFireModeToggle. -->
+        <button class="hud-firemode-toggle" type="button"></button>
       </div>
     </div>
   `;
@@ -308,6 +322,7 @@ export function createHud(root: HTMLElement): Hud {
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
   const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
+  const firemodeToggleBtn = el.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
@@ -705,6 +720,40 @@ export function createHud(root: HTMLElement): Hud {
   schemeToggleBtn.addEventListener('click', handleSchemeToggle);
   schemeToggleBtn.addEventListener('click', blurIfPointer);
 
+  // The fire-mode toggle: one button, THREE states, cycling tap -> double -> button ->
+  // tap. Unlike the binary scheme toggle this needs an explicit NEXT map rather than a
+  // simple swap. Labelled in plain, user-facing terms -- a player who has never seen the
+  // word "gesture" still needs to understand the difference, and the FIRE button working
+  // in every mode is the one fact every hint below repeats.
+  const FIREMODE_LABEL: Record<FireMode, string> = {
+    tap: 'Fire: Tap to fire',
+    double: 'Fire: Double-tap to fire',
+    button: 'Fire: Button only',
+  };
+  const FIREMODE_HINT: Record<FireMode, string> = {
+    tap: 'A tap on the aim side fires. The FIRE button still works too.',
+    double: 'Two quick taps in the same spot fire; re-aiming does not. The FIRE button still works too.',
+    button: 'Only the FIRE button fires -- the aim side never does.',
+  };
+  const NEXT_FIRE_MODE: Record<FireMode, FireMode> = { tap: 'double', double: 'button', button: 'tap' };
+  let currentFireMode: FireMode = 'tap';
+  function renderFireModeToggle(): void {
+    firemodeToggleBtn.textContent = FIREMODE_LABEL[currentFireMode];
+    firemodeToggleBtn.title = FIREMODE_HINT[currentFireMode];
+    firemodeToggleBtn.setAttribute(
+      'aria-label',
+      `Touch fire style: ${FIREMODE_LABEL[currentFireMode]}. ${FIREMODE_HINT[currentFireMode]} ` +
+        `Tap to switch to ${FIREMODE_LABEL[NEXT_FIRE_MODE[currentFireMode]]}.`,
+    );
+  }
+  renderFireModeToggle();
+  const fireModeChangeCbs: Array<(mode: FireMode) => void> = [];
+  const handleFireModeToggle = (): void => {
+    for (const cb of fireModeChangeCbs) cb(NEXT_FIRE_MODE[currentFireMode]);
+  };
+  firemodeToggleBtn.addEventListener('click', handleFireModeToggle);
+  firemodeToggleBtn.addEventListener('click', blurIfPointer);
+
   // Where the session stands in the level sequence, for the win panel's copy. Null
   // until the loop calls setLevel, and a HUD never told about levels keeps its
   // original single-arena wording.
@@ -1012,6 +1061,13 @@ export function createHud(root: HTMLElement): Hud {
     onTouchSchemeChange(cb: (scheme: TouchScheme) => void): void {
       schemeChangeCbs.push(cb);
     },
+    setFireMode(mode: FireMode): void {
+      currentFireMode = mode;
+      renderFireModeToggle();
+    },
+    onFireModeChange(cb: (mode: FireMode) => void): void {
+      fireModeChangeCbs.push(cb);
+    },
     setAchievements(earned: ReadonlySet<AchievementId>): void {
       earnedIds = earned;
       // Only if the page is open: rebuilding a hidden list every frame-batch is
@@ -1051,6 +1107,8 @@ export function createHud(root: HTMLElement): Hud {
       fireBtn.removeEventListener('pointerdown', onFireTapClick);
       schemeToggleBtn.removeEventListener('click', handleSchemeToggle);
       schemeToggleBtn.removeEventListener('click', blurIfPointer);
+      firemodeToggleBtn.removeEventListener('click', handleFireModeToggle);
+      firemodeToggleBtn.removeEventListener('click', blurIfPointer);
       achOpenBtn.removeEventListener('click', handleAchOpen);
       achOpenBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);

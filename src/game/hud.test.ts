@@ -912,6 +912,65 @@ describe('hud: pause panel', () => {
   });
 });
 
+describe('hud: the fire-mode toggle', () => {
+  it('shows the current mode, labelled so all three modes read as different', () => {
+    const { hud: h, root } = mount();
+    const toggle = () => root.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
+
+    h.setFireMode('tap');
+    expect(toggle().textContent).toMatch(/tap/i);
+    const tapLabel = toggle().textContent;
+    const tapAria = toggle().getAttribute('aria-label');
+
+    h.setFireMode('double');
+    expect(toggle().textContent).toMatch(/double/i);
+    expect(toggle().textContent).not.toBe(tapLabel);
+    const doubleLabel = toggle().textContent;
+    expect(toggle().getAttribute('aria-label')).not.toBe(tapAria);
+
+    h.setFireMode('button');
+    expect(toggle().textContent).toMatch(/button/i);
+    expect(toggle().textContent).not.toBe(tapLabel);
+    expect(toggle().textContent).not.toBe(doubleLabel);
+  });
+
+  it('taps the toggle and reports the NEXT mode in the cycle, from a real click at the button', () => {
+    // Same composition-blindness reasoning as the Pause/Mine/Fire/scheme-toggle tests:
+    // drive a real event at a real element rather than only invoking the callback.
+    const { hud: h, root } = mount();
+    const seen: string[] = [];
+    h.onFireModeChange((m) => seen.push(m));
+    h.setFireMode('tap');
+
+    const toggle = root.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the toggle is not wired to anything').toEqual(['double']);
+
+    // The button does NOT flip its own label -- it only reports the choice. The loop
+    // echoes the ACCEPTED value back via setFireMode, same convention as the scheme
+    // toggle, so the label must not move until that echo arrives.
+    expect(root.querySelector('.hud-firemode-toggle')!.textContent).toMatch(/tap/i);
+
+    h.setFireMode('double'); // the loop's echo
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen).toEqual(['double', 'button']);
+
+    h.setFireMode('button'); // the loop's echo
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the third click did not wrap back to tap').toEqual(['double', 'button', 'tap']);
+  });
+
+  it('is reachable from the title screen too, not just pause', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    const toggle = root.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
+    expect(settingsRow.classList.contains('hud-panel-settings--hidden')).toBe(false);
+    expect(settingsRow.contains(toggle)).toBe(true);
+  });
+});
+
 describe('hud: level select on the main menu', () => {
   const row = (root: HTMLElement): HTMLElement => root.querySelector('.hud-levels') as HTMLElement;
   const buttons = (root: HTMLElement): HTMLButtonElement[] =>

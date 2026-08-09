@@ -146,7 +146,7 @@ describe('hud.css is syntactically whole', () => {
       '.hud-aimstick', '.hud-aimstick--hidden',
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
-      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', // the settings row's controls
+      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle', // the settings row's controls
       '.hud-levels', '.hud-levels--hidden', '.hud-level-btn', '.hud-level-btn--locked', // level select
       // stats: without the hidden rules the page covers everything from load
       '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
@@ -201,11 +201,11 @@ describe('hud.css is syntactically whole', () => {
     // hid a real gap -- losing all 15 dynamically-built buttons still left 12 > 10.
     // If a UI change moves this number, that is the moment to check the new buttons
     // are covered, which is the whole point of pinning it.
-    // 31 since the touch aim schemes landed: 29 (27 + the Pause and Mine buttons) + the
-    // Fire button and the aim-scheme toggle. The count moving is the prompt to check the
-    // new buttons are themed, which is why it is pinned exactly -- and it did exactly
-    // that here.
-    expect(buttons.length).toBe(31);
+    // 32 since the fire-mode toggle landed: 31 (29 [27 + the Pause and Mine buttons] +
+    // the Fire button and the aim-scheme toggle) + the fire-mode toggle beside it. The
+    // count moving is the prompt to check the new buttons are themed, which is why it is
+    // pinned exactly -- and it did exactly that here.
+    expect(buttons.length).toBe(32);
     expect(unstyled).toEqual([]);
 
     dispose();
