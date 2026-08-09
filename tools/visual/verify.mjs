@@ -349,21 +349,17 @@ function runChecks(results) {
 
 
 /**
- * Wait until the page is actually DRAWING, then report the GL state.
- *
- * Waits on a signal rather than a duration: a fixed delay was enough locally
- * and on a warm runner and not enough on a cold one, where the first viewport
- * screenshotted a blank page. A sized canvas and a live HUD are NOT sufficient
- * evidence -- both survive a lost context -- so the context itself is checked.
- */
-/**
  * Leave the title screen, the way a player does.
  *
- * The game opens on a splash screen that only a real gesture dismisses -- browsers
- * will not resume a suspended AudioContext otherwise. Every threshold in CHECKS was
- * calibrated against the MENU behind it, and the overlay is 92% opaque, so measuring
- * the splash instead reports a blank page: `paintedFraction` fell to 1.0-2.4% against
- * a >10% floor, failing 4 checks across 4 viewports on a board that renders perfectly.
+ * The game opens on a splash screen that only a real gesture dismisses. Browsers will
+ * not resume a suspended AudioContext outside a gesture handler; the screen guarantees
+ * that gesture happens before the menu is visible. (It does not perform the resume --
+ * audio/engine.ts has always done that from its own handler.)
+ *
+ * Every threshold in CHECKS was calibrated against the MENU behind it, and the overlay
+ * is a 92% scrim, so measuring the splash instead reports a near-blank page:
+ * `paintedFraction` fell to 1.0-2.4% against a >10% floor, failing 4 checks across 4
+ * viewports on a board that renders perfectly.
  *
  * Tolerant of a build with no splash screen so this file does not become the reason a
  * revert cannot be measured. Returns whether it dismissed one; the call site ignores
@@ -394,6 +390,14 @@ async function dismissSplash(page) {
   return true;
 }
 
+/**
+ * Wait until the page is actually DRAWING, then report the GL state.
+ *
+ * Waits on a signal rather than a duration: a fixed delay was enough locally
+ * and on a warm runner and not enough on a cold one, where the first viewport
+ * screenshotted a blank page. A sized canvas and a live HUD are NOT sufficient
+ * evidence -- both survive a lost context -- so the context itself is checked.
+ */
 async function settle(page) {
   try {
     await page.waitForFunction(
