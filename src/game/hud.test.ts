@@ -282,6 +282,50 @@ describe('createHud panel', () => {
     expect(starts, 'the first keyboard activation after a drag dismissal was eaten').toBe(1);
   });
 
+  it('draws the driving thumb where it landed, and clamps the knob to the throw', () => {
+    const { hud: h, root } = mount();
+    const viz = root.querySelector('.hud-touchviz') as HTMLElement;
+    const base = root.querySelector('.hud-stick-base') as HTMLElement;
+    const knob = root.querySelector('.hud-stick-knob') as HTMLElement;
+
+    h.setTouchIndicator({ stick: null, aim: null, used: false });
+    expect(viz.classList.contains('hud-touchviz--hidden'), 'shown before any touch').toBe(true);
+
+    // 20px up: inside the 56px radius, so the knob sits exactly under the thumb.
+    h.setTouchIndicator({
+      stick: { originX: 100, originY: 300, x: 100, y: 280 },
+      aim: null,
+      used: true,
+    });
+    expect(viz.classList.contains('hud-touchviz--hidden')).toBe(false);
+    expect(base.style.transform).toBe('translate(100px, 300px)');
+    expect(knob.style.transform).toBe('translate(100px, 280px)');
+
+    // 200px up: well past the radius. The tank is already at full speed, so a knob that
+    // kept following would show a throw that buys nothing.
+    h.setTouchIndicator({
+      stick: { originX: 100, originY: 300, x: 100, y: 100 },
+      aim: null,
+      used: true,
+    });
+    expect(knob.style.transform, 'the knob escaped the stick').toBe('translate(100px, 244px)');
+  });
+
+  it('marks the point the turret is being sent to, and clears it when the thumb lifts', () => {
+    // The dot is the COMMANDED target; the aim ray in the 3D scene is where the turret
+    // actually points. They differ while it slews, and that gap is what playtest
+    // feedback said was invisible.
+    const { hud: h, root } = mount();
+    const dot = root.querySelector('.hud-aimdot') as HTMLElement;
+
+    h.setTouchIndicator({ stick: null, aim: { x: 640, y: 220 }, used: true });
+    expect(dot.classList.contains('hud-aimdot--hidden')).toBe(false);
+    expect(dot.style.transform).toBe('translate(640px, 220px)');
+
+    h.setTouchIndicator({ stick: null, aim: null, used: true });
+    expect(dot.classList.contains('hud-aimdot--hidden'), 'the dot outlived the thumb').toBe(true);
+  });
+
   it('shows the touch controls only while playing', () => {
     // A Pause button on the pause panel is a second, untested way out of a paused game,
     // and a Mine button on the menu lays nothing. Swept over every state rather than

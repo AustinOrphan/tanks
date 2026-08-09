@@ -137,6 +137,10 @@ describe('hud.css is syntactically whole', () => {
       // touch controls: without the hidden rule the row shows on the menu and the pause
       // panel too, and without the media query a mouse player gets buttons for keys
       '.hud-touch', '.hud-touch--hidden', '.hud-pause-btn', '.hud-mine-btn',
+      // the thumbs drawn back on screen: without the hidden rules a mouse player sees
+      // marks for thumbs they do not have, and the marks never clear
+      '.hud-touchviz', '.hud-touchviz--hidden', '.hud-stick-base', '.hud-stick-knob',
+      '.hud-stick--hidden', '.hud-aimdot', '.hud-aimdot--hidden', '.hud-aimdot--fired',
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling

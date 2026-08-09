@@ -1,8 +1,14 @@
 import type { InputState, Vec2 } from '../sim/types';
-import { stickVector, touchSide } from './touch';
+import { stickVector, touchSide, type TouchIndicator } from './touch';
+export type { TouchIndicator } from './touch';
 
 export interface InputController {
   sample(): InputState;
+  /**
+   * The thumbs, for the HUD to draw. Read-only and outside `sample()` on purpose: see
+   * TouchIndicator.
+   */
+  touchIndicator(): TouchIndicator;
   /**
    * Drop latched fire/mine presses WITHOUT releasing held movement keys. For pause:
    * the driver stops sampling, and only sample() resets these latches, so a Space
@@ -141,14 +147,18 @@ export function createInputController(
 
   let stickPointer: number | null = null;
   let stickOrigin: Vec2 = { x: 0, y: 0 };
+  let stickCurrent: Vec2 = { x: 0, y: 0 };
   let stickMove: Vec2 = { x: 0, y: 0 };
   let aimPointer: number | null = null;
+  let aimPoint: Vec2 | null = null;
+  let touchUsed = false;
 
   const isTouch = (e: PointerEvent): boolean => e.pointerType !== 'mouse';
 
   const onPointerDown = (e: PointerEvent): void => {
     if (!isTouch(e)) return;
     lastTouchAt = performance.now();
+    touchUsed = true;
     // Suppress the compatibility mouse events this touch would otherwise synthesise.
     // Measured in Chromium: the burst goes from ["mousemove","mousedown"] to []. This is
     // the deterministic half; `isCompatMouse` is the backstop.
@@ -166,9 +176,11 @@ export function createInputController(
       if (stickPointer !== null) return;
       stickPointer = e.pointerId;
       stickOrigin = { x: e.clientX, y: e.clientY };
+      stickCurrent = { x: e.clientX, y: e.clientY };
       stickMove = { x: 0, y: 0 };
     } else {
       aimPointer = e.pointerId;
+      aimPoint = { x: e.clientX, y: e.clientY };
       aim = screenToGround(e.clientX, e.clientY);
       // Touching to aim also fires. On a phone there is no second button and no hover,
       // so aiming and shooting cannot be separate gestures without adding a step to
@@ -181,9 +193,11 @@ export function createInputController(
     if (!isTouch(e)) return;
     lastTouchAt = performance.now();
     if (e.pointerId === stickPointer) {
-      stickMove = stickVector(stickOrigin, { x: e.clientX, y: e.clientY });
+      stickCurrent = { x: e.clientX, y: e.clientY };
+      stickMove = stickVector(stickOrigin, stickCurrent);
     } else if (e.pointerId === aimPointer) {
       // Drag to re-aim without firing again: only the initial touch pulls the trigger.
+      aimPoint = { x: e.clientX, y: e.clientY };
       aim = screenToGround(e.clientX, e.clientY);
     }
   };
@@ -198,6 +212,7 @@ export function createInputController(
       stickMove = { x: 0, y: 0 };
     } else if (e.pointerId === aimPointer) {
       aimPointer = null;
+      aimPoint = null;
     }
   };
   // Focus loss eats the keyup: alt-tab while holding W and the OS delivers that
@@ -212,6 +227,7 @@ export function createInputController(
     // the tank driving into a wall until the player thinks to touch and lift again.
     stickPointer = null;
     aimPointer = null;
+    aimPoint = null;
     stickMove = { x: 0, y: 0 };
   };
   const onVisibilityChange = (): void => {
@@ -266,6 +282,21 @@ export function createInputController(
       firePressed = false;
       minePressed = false;
       return state;
+    },
+    touchIndicator(): TouchIndicator {
+      return {
+        stick:
+          stickPointer === null
+            ? null
+            : {
+                originX: stickOrigin.x,
+                originY: stickOrigin.y,
+                x: stickCurrent.x,
+                y: stickCurrent.y,
+              },
+        aim: aimPoint === null ? null : { x: aimPoint.x, y: aimPoint.y },
+        used: touchUsed,
+      };
     },
     clearQueuedPresses(): void {
       firePressed = false;

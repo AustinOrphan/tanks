@@ -53,6 +53,23 @@ export function stickVector(origin: Vec2, current: Vec2, radius = STICK_RADIUS_P
 }
 
 /**
+ * Where the player's thumbs are, in CLIENT pixels, for drawing them back on screen.
+ *
+ * Deliberately NOT part of `InputState`. The sim consumes InputState and replays are
+ * exact functions of it, so screen-space pixels must never enter that shape. This lives
+ * here, beside the stick maths, so the input layer and the HUD share one definition
+ * rather than each describing the thumbs their own way.
+ */
+export interface TouchIndicator {
+  /** The driving thumb: where it landed, and where it is now. */
+  stick: { originX: number; originY: number; x: number; y: number } | null;
+  /** The aiming thumb's current position -- the point the turret is being sent to. */
+  aim: { x: number; y: number } | null;
+  /** True once any touch has been seen, so touch-only affordances can appear on demand. */
+  used: boolean;
+}
+
+/**
  * Which half of the viewport a touch landed in.
  *
  * The split is the whole control scheme: left thumb drives, right thumb aims and fires.

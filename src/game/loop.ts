@@ -424,6 +424,7 @@ export function startGameWith(
     world,
     onSimulated(w): void {
       refreshStats(w);
+      hud.setTouchIndicator(input.touchIndicator());
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
     },
@@ -432,6 +433,12 @@ export function startGameWith(
     // CLAUDE.md warns about. Discriminate on kind.
     onFrameEvents(events): void {
       if (isPlayerDeath(events)) hud.signalPlayerDeath();
+      // Discriminated by ownerId, not presence: the stream is shared, so a bare
+      // `some(e => e.type === 'fire')` pulses on every enemy shot -- exactly the
+      // presence-only mistake CLAUDE.md warns about.
+      if (playerId !== null && events.some((e) => e.type === 'fire' && e.ownerId === playerId)) {
+        hud.signalPlayerFire();
+      }
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
@@ -624,6 +631,12 @@ export function startGameWith(
     // there indefinitely, since switchTo rebuilds the world without simulating.
     // The chip sits in the topbar (z-index 1), so it paints over the panel.
     if (s !== 'playing') hud.setRoundPhase(null);
+    // Same reasoning as the round chip above: the marks are pushed ONLY from
+    // onSimulated, which the driver runs only while playing, so pausing mid-drag would
+    // strand a thumb on screen with no thumb under it.
+    if (s !== 'playing') {
+      hud.setTouchIndicator({ ...input.touchIndicator(), stick: null, aim: null });
+    }
     followMusic(s);
     // Progress is recorded AT the win, not at the Next Level click: quitting after a
     // win keeps the unlock. The sandbox records nothing -- a test rig must not

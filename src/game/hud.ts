@@ -4,6 +4,7 @@ import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
+import { STICK_RADIUS_PX, type TouchIndicator } from '../input/touch';
 import './hud.css';
 
 export interface RoundPhaseInfo {
@@ -92,6 +93,23 @@ export interface Hud {
    * landing together stack rather than replacing one another.
    */
   showAchievementToasts(defs: readonly AchievementDef[]): void;
+  /**
+   * Draw the player's thumbs back on screen: the driving stick where it landed, and a
+   * dot on the point the turret is being sent to.
+   *
+   * Pushed every frame from the loop. Takes CLIENT pixels, which is why it is not part
+   * of the sim's input at all -- see TouchIndicator.
+   */
+  setTouchIndicator(t: TouchIndicator): void;
+  /**
+   * The player just fired. Pulses the aim mark, so a tap that produced a shot is
+   * distinguishable from a tap that did not -- on a phone the muzzle is under the
+   * player's own hand, and the shell is gone before the eye gets there.
+   *
+   * Driven by the sim's `fire` event rather than by the tap, so it confirms a shot that
+   * ACTUALLY happened: a tap during the cooldown correctly does not pulse.
+   */
+  signalPlayerFire(): void;
   /** Fired with the skin id when the player clicks one. */
   onPickSkin(cb: (id: SkinId) => void): void;
   dispose(): void;
@@ -125,6 +143,17 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <!-- Where the thumbs are, drawn back on screen. Playtest feedback: with nothing
+         rendered, the aiming thumb gave no clue which way the shot was going, and the
+         driving thumb had only feel to go on. aria-hidden because they are a mirror of
+         what the player is already doing with their hands. -->
+    <div class="hud-touchviz hud-touchviz--hidden" aria-hidden="true">
+      <div class="hud-stick hud-stick--hidden">
+        <div class="hud-stick-base"></div>
+        <div class="hud-stick-knob"></div>
+      </div>
+      <div class="hud-aimdot hud-aimdot--hidden"></div>
+    </div>
     <!-- Touch-only controls. Hidden by default and revealed by a (pointer: coarse)
          media query, so a mouse player never sees a Mine button that Space already
          does -- and a phone gets the only affordance it has for either action. -->
@@ -204,6 +233,11 @@ export function createHud(root: HTMLElement): Hud {
   const pauseBtn = el.querySelector('.hud-pause-btn') as HTMLButtonElement;
   const mineBtn = el.querySelector('.hud-mine-btn') as HTMLButtonElement;
   const topbarEl = el.querySelector('.hud-topbar') as HTMLElement;
+  const touchVizEl = el.querySelector('.hud-touchviz') as HTMLElement;
+  const stickEl = el.querySelector('.hud-stick') as HTMLElement;
+  const stickBaseEl = el.querySelector('.hud-stick-base') as HTMLElement;
+  const stickKnobEl = el.querySelector('.hud-stick-knob') as HTMLElement;
+  const aimDotEl = el.querySelector('.hud-aimdot') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
@@ -782,6 +816,13 @@ export function createHud(root: HTMLElement): Hud {
       damageEl.classList.add('hud-damage--hit');
       livesEl.classList.add('hud-lives--hit');
     },
+    signalPlayerFire(): void {
+      // Same restart trick as signalPlayerDeath: two shots in quick succession must read
+      // as two, not one.
+      aimDotEl.classList.remove('hud-aimdot--fired');
+      void aimDotEl.offsetWidth;
+      aimDotEl.classList.add('hud-aimdot--fired');
+    },
     onMuteToggle(cb: () => void): void {
       muteCbs.push(cb);
     },
@@ -821,6 +862,30 @@ export function createHud(root: HTMLElement): Hud {
     setSkin(id: SkinId): void {
       currentSkin = id;
       renderSkinSelection();
+    },
+    setTouchIndicator(t: TouchIndicator): void {
+      // Hidden entirely until a touch has happened, so a mouse player never sees it.
+      touchVizEl.classList.toggle('hud-touchviz--hidden', !t.used);
+      if (!t.used) return;
+
+      stickEl.classList.toggle('hud-stick--hidden', t.stick === null);
+      if (t.stick) {
+        stickBaseEl.style.transform = `translate(${t.stick.originX}px, ${t.stick.originY}px)`;
+        // The KNOB is clamped to the stick's radius while the thumb is not: past the
+        // radius the tank is already at full speed, so a knob that kept following would
+        // show a throw that buys nothing.
+        const dx = t.stick.x - t.stick.originX;
+        const dy = t.stick.y - t.stick.originY;
+        const dist = Math.hypot(dx, dy);
+        const k = dist > STICK_RADIUS_PX ? STICK_RADIUS_PX / dist : 1;
+        stickKnobEl.style.transform =
+          `translate(${t.stick.originX + dx * k}px, ${t.stick.originY + dy * k}px)`;
+      }
+
+      aimDotEl.classList.toggle('hud-aimdot--hidden', t.aim === null);
+      if (t.aim) {
+        aimDotEl.style.transform = `translate(${t.aim.x}px, ${t.aim.y}px)`;
+      }
     },
     onPickSkin(cb: (id: SkinId) => void): void {
       pickSkinCbs.push(cb);
