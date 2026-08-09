@@ -41,7 +41,12 @@ vi.mock('howler', () => {
 });
 
 import { createAudioEngine } from './engine';
-import { AUDIO_MANIFEST } from './manifest';
+// AUTHORED_LAYOUT, not LOADABLE: every case in this file is about what happens
+// when a declared file FAILS TO LOAD, and the shipped manifest declares nothing, so
+// against it this file builds zero Howls and asserts nothing. Measured: with the
+// shipped manifest, deleting `sounds[key] = null` from engine.ts's loaderror handler
+// passed all 1355 tests; against this fixture it fails 8.
+import { AUTHORED_LAYOUT as LOADABLE } from './manifest';
 
 interface FakeNode {
   connect(target: unknown): unknown;
@@ -117,7 +122,7 @@ afterEach(() => {
 
 describe('audio engine procedural fallback (the only live path today)', () => {
   it('routes play() to a real oscillator once the asset fails to load', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon');
@@ -130,7 +135,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
 
   it('resumes a suspended AudioContext, so the first sound is audible', async () => {
     FakeAudioContext.gestureGranted = true;
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon');
@@ -148,7 +153,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     // resume() issued outside a gesture never settles, so `state` stays
     // 'suspended' forever -- a naive `if (suspended) resume()` on every sound
     // retains a pending promise per shot fired for the whole session.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon');
@@ -163,7 +168,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('unlock() resumes the context from a real user gesture', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
     FakeAudioContext.gestureGranted = true;
 
@@ -178,7 +183,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('retries the resume on the next sound after a failed unlock', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
 
     engine.play('cannon'); // gesture not granted -> resume never settles
@@ -199,7 +204,7 @@ describe('audio engine procedural fallback (the only live path today)', () => {
   });
 
   it('stays silent while muted rather than resuming the context', async () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     await flushLoadErrors();
     engine.setMuted(true);
 
