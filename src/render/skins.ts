@@ -23,7 +23,7 @@ function xorshift(seed: number): () => number {
   };
 }
 
-type RGB = [number, number, number];
+export type RGB = [number, number, number];
 
 function rgbOf(hex: string): RGB {
   return [
@@ -58,11 +58,14 @@ function scale(c: RGB, f: number): RGB {
  * Rec. 709 luma (the sRGB/BT.709 primaries this palette's hexes are authored against),
  * coarse and cheap -- only used to compare two tones' lightness. Was Rec. 601 until this
  * fix: same shape of formula, different channel weights, and the weights are what decide
- * MIN_ACCENT_DELTA's firing set below, so the two must be read together. `skins.test.ts`
- * keeps its OWN Rec. 601 luma for `toneStats` on purpose -- it measures the rendered
- * pixel bytes as an independent check, not by re-running this function.
+ * MIN_ACCENT_DELTA's firing set below, so the two must be read together. The weights are
+ * pinned by `skins.test.ts`'s firing-set test, and by nothing else: until that test was
+ * written a 709 -> 601 swap left the whole suite passing (82 files passed, 1 skipped;
+ * 1535 tests). `skins.test.ts` also keeps its OWN Rec. 601 luma for `toneStats`, which
+ * measures rendered pixel bytes rather than re-running this function -- useful, but it
+ * is NOT what catches a weight change.
  */
-function luma(c: RGB): number {
+export function luma(c: RGB): number {
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 }
 
@@ -120,7 +123,7 @@ function hslToRgb(h: number, s: number, l: number): RGB {
  * untouched. See skins.test.ts's population-24 sweep for the full table this is read
  * off of.
  */
-const MIN_ACCENT_DELTA = 43;
+export const MIN_ACCENT_DELTA = 43;
 
 /**
  * An EXPLICIT accent pick (not `auto`) is used directly as the pattern's second tone --
@@ -137,7 +140,7 @@ const MIN_ACCENT_DELTA = 43;
  * multiplying or lifting RGB channels unevenly shifts hue as a side effect. Grey/white
  * accents (s = 0) have no hue to preserve, so this reduces to the old behaviour for them.
  */
-function ensureContrast(base: RGB, accent: RGB): RGB {
+export function ensureContrast(base: RGB, accent: RGB): RGB {
   const { h, s, l: startL } = rgbToHsl(accent);
   let l = startL;
   let t = accent;
@@ -146,7 +149,19 @@ function ensureContrast(base: RGB, accent: RGB): RGB {
   for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < MIN_ACCENT_DELTA; i++) {
     l = towardBlack ? Math.max(0, l - STEP) : Math.min(1, l + STEP);
     t = hslToRgb(h, s, l);
-    if (l === 0 || l === 1) break; // pinned at a pole: no further move is possible
+    // Pinned at a pole: no further move exists, so stop rather than spin the remaining
+    // iterations. MEASURED UNREACHABLE at the shipped MIN_ACCENT_DELTA: instrumenting
+    // this line with a counter and sweeping 909,792 (hull, accent) pairs -- 52 base
+    // lightnesses x 3 hue families x 5,832 accents on a 15-step RGB grid (18 values a
+    // channel, 18^3) -- hits it 0
+    // times. The same probe hits it 34,835 times at MIN_ACCENT_DELTA 127 and 483,695
+    // times at 200, which is what proves the counter was wired rather than dead -- the
+    // boundary between 43 and 127 was not bisected, so all that is claimed here is
+    // "unreachable at 43, reachable by 127", not a threshold. So this is
+    // a guard against RETUNING, not against the shipped palette: raise the threshold
+    // past what a pole can deliver and accents start arriving here achromatic, losing
+    // the chosen hue. `skins.test.ts` asserts that unreachability directly.
+    if (l === 0 || l === 1) break;
   }
   return t;
 }

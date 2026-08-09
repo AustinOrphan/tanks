@@ -1,6 +1,7 @@
 // DataTextures are CPU-side, so the whole generator is testable headlessly.
 import { describe, it, expect } from 'vitest';
-import { createSkinTexture } from './skins';
+import { createSkinTexture, ensureContrast, luma as luma709, MIN_ACCENT_DELTA } from './skins';
+import type { RGB } from './skins';
 import { SKINS, PALETTE, ACCENTS } from '../game/customization';
 
 const pixelsOf = (
@@ -279,5 +280,135 @@ describe('createSkinTexture', () => {
       }
       expect(checked).toBe(24); // 6 shipped hulls x 4 patterned skins, all of them
     });
+  });
+});
+
+describe('ensureContrast never trades the chosen hue away for contrast', () => {
+  /**
+   * Review found the pole-clip branch (`if (l === 0 || l === 1) break`) had zero
+   * coverage, and named the failure it would produce: an accent pushed all the way to a
+   * pole comes back pure black or pure white, silently losing the hue the player picked.
+   *
+   * Measuring first (as the mutation-before-test rule requires) showed the branch is
+   * UNREACHABLE at the shipped MIN_ACCENT_DELTA -- 0 hits over the 909,792-pair probe
+   * described in `skins.ts`, against 34,835 at 127 and 483,695 at 200 from that same
+   * instrumented probe. So the right test is not one that contrives a clip; it is one
+   * that pins the unreachability, and fails the day a retune breaks it. That is a live
+   * risk: MIN_ACCENT_DELTA has already been moved once (60 -> 43).
+   *
+   * NOTE the two populations, which an earlier draft of this comment conflated: the
+   * 909,792-pair figure is `skins.ts`'s instrumented probe (a 15-step accent grid), and
+   * SWEEP below is a coarser 33,696-pair grid sized to run inside the suite. Numbers
+   * from one do not describe the other.
+   *
+   * Killed mutants, all re-measured on the current head:
+   *   - MIN_ACCENT_DELTA 43 -> 200 fails 5 of 13 tests here: all three below, plus the
+   *     pre-existing gold-stays-gold and white-accent pairs.
+   *   - iteration budget 20 -> 1 fails 2 of 13 -- the separation test below, plus the
+   *     pre-existing contrast-floor test.
+   *   - luma Rec. 709 -> Rec. 601 fails exactly 1 test repo-wide, the weights test
+   *     below. Before that test existed the SAME mutation left the whole suite passing
+   *     (82 files passed, 1 skipped; 1535 tests), which is why the claim that this
+   *     file's own Rec. 601 luma
+   *     "independently checks the weights" was false, and is deleted rather than
+   *     reworded.
+   *
+   * EQUIVALENT (not merely surviving) mutant: dropping the `Math.max(0, ...)` clamp
+   * changes 0 of 909,792 outputs, because it is unreachable for the same reason the
+   * `break` is. No test could kill it, so it is not a coverage hole.
+   *
+   * These call `ensureContrast` directly rather than reading pixels back out of a
+   * texture, because the population needed to make "never" mean anything is thousands of
+   * pairs. The texture route was abandoned after the version first written took 253s for
+   * 400 pairs -- but that cost was the `expect()` inside the pixel loop, NOT texture
+   * generation. At SIZE 128 that is 16,384 px and 65,536 RGBA bytes, and the loop
+   * asserted per BYTE: 20 pairs measure 6ms to generate, against 11,036ms with an
+   * assertion per byte (8.4us each, which is what reconciles 400 pairs to ~221s of the
+   * 253s observed). The sweeps below, calling `ensureContrast` directly, run in
+   * MILLISECONDS -- the file's ~1.0s total is dominated by the texture-based tests
+   * above, so do not read it as this sweep's cost.
+   *
+   * Production's Rec. 709 `luma` is imported as `luma709` and does NOT replace this
+   * file's Rec. 601 `luma`, which is used for the rendered-pixel `toneStats`. Importing
+   * it is right for the question the separation test asks -- "did the loop converge
+   * against the threshold the loop itself uses", which is only well posed in the loop's
+   * own metric -- and it does mean that test cannot see a wrong weighting. That is what
+   * the weights test below is for.
+   */
+  const SWEEP: Array<{ base: RGB; accent: RGB }> = (() => {
+    const out: Array<{ base: RGB; accent: RGB }> = [];
+    // 52 base lightnesses x 3 hue families (grey, magenta ramp, cyan ramp) x a 51-step
+    // RGB accent grid (6 values a channel). Chosen to cover both sides of the
+    // `luma(base) > 127` branch and both fully saturated and achromatic accents, which
+    // take different paths through the HSL round-trip.
+    for (let bl = 0; bl < 256; bl += 5) {
+      for (const base of [[bl, bl, bl], [bl, 0, 255 - bl], [0, bl, 255 - bl]] as RGB[]) {
+        for (let r = 0; r < 256; r += 51)
+          for (let g = 0; g < 256; g += 51)
+            for (let b = 0; b < 256; b += 51) out.push({ base, accent: [r, g, b] });
+      }
+    }
+    return out;
+  })();
+
+  const isAchromatic = (c: RGB): boolean => c[0] === c[1] && c[1] === c[2];
+
+  it('always reaches the required separation, over a 33,696-pair sweep', () => {
+    // Population: all 33,696 pairs in SWEEP -- an exhaustive product of the grids above,
+    // NOT a sample of the 2^48 possible pairs. What it establishes is that no pair in
+    // this grid leaves the loop short of the threshold, i.e. that 20 iterations at a
+    // 0.05 step suffice for the whole grid.
+    expect(SWEEP.length, 'the sweep is not the 33,696-pair grid this test describes').toBe(33696);
+    const short = SWEEP.filter(
+      ({ base, accent }) =>
+        Math.abs(luma709(base) - luma709(ensureContrast(base, accent))) < MIN_ACCENT_DELTA - 1e-9,
+    );
+    expect(short.length, `${short.length} pairs, e.g. ${JSON.stringify(short[0])}`).toBe(0);
+  });
+
+  it('keeps a chromatic accent chromatic -- the pole is never reached', () => {
+    // THE assertion review asked for. It fails the moment the clip branch starts firing:
+    // re-run at MIN_ACCENT_DELTA 200 and 20,008 of these 32,760 chromatic accents come
+    // back grey. (An earlier draft quoted 483,695 here, which is the other probe's
+    // pole-hit count and larger than this whole population -- the exact "count without
+    // its denominator" failure this repo keeps shipping.)
+    const chromatic = SWEEP.filter(({ accent }) => !isAchromatic(accent));
+    expect(chromatic.length, 'the chromatic sub-population is no longer 32,760').toBe(32760);
+
+    const flattened = chromatic.filter(({ base, accent }) => isAchromatic(ensureContrast(base, accent)));
+    expect(
+      flattened.length,
+      `${flattened.length} chromatic accents came back grey, e.g. ${JSON.stringify(flattened[0])}`,
+    ).toBe(0);
+  });
+
+  it('nudges exactly the three white-hull pairings, which is what pins the luma weights', () => {
+    // Closes a hole review measured: swapping production's luma from Rec. 709 to Rec.
+    // 601 left the whole suite passing (82 files passed, 1 skipped; 1535 tests), even
+    // though `skins.ts` says those weights decide this very firing set. Nothing checked
+    // them.
+    //
+    // Population: all 24 (hull, explicit accent) pairs the shipped palette can produce --
+    // 6 hulls x 4 non-auto accents, the complete set, not a sample. Under Rec. 601 the
+    // set gains orange/gold, so this fails on that mutation.
+    const rgbOfHex = (h: string): RGB => [
+      parseInt(h.slice(1, 3), 16),
+      parseInt(h.slice(3, 5), 16),
+      parseInt(h.slice(5, 7), 16),
+    ];
+    const fired: string[] = [];
+    let checked = 0;
+    for (const hull of PALETTE) {
+      for (const a of ACCENTS) {
+        if (a.hex === null) continue; // `auto` is derived, not run through ensureContrast
+        checked += 1;
+        const accent = rgbOfHex(a.hex);
+        const out = ensureContrast(rgbOfHex(hull.hex), accent);
+        const moved = out[0] !== accent[0] || out[1] !== accent[1] || out[2] !== accent[2];
+        if (moved) fired.push(`${hull.id}/${a.id}`);
+      }
+    }
+    expect(checked, 'the palette changed size; this population is no longer 24').toBe(24);
+    expect(fired.sort()).toEqual(['white/gold', 'white/silver', 'white/white']);
   });
 });
