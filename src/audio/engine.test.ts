@@ -67,11 +67,16 @@ vi.mock('howler', () => {
 });
 
 import { createAudioEngine, DUCK_FACTOR } from './engine';
-import { AUDIO_MANIFEST, DEFAULT_VOLUME } from './manifest';
+// AUTHORED_LAYOUT, not LOADABLE: this file tests the FILE-LOADING path -- one
+// Howl per entry, reached by src -- and the shipped manifest is deliberately empty,
+// because no audio file has ever been committed. Pointing these at the shipped
+// manifest would leave them asserting things about zero Howls, which is how a loading
+// path rots unnoticed until the day a real asset lands.
+import { AUTHORED_LAYOUT as LOADABLE, DEFAULT_VOLUME } from './manifest';
 
 /** The Howl the engine built for a given manifest SFX key. */
 function howlFor(key: string): MockHowl {
-  const src = AUDIO_MANIFEST.sfx[key];
+  const src = LOADABLE.sfx[key];
   const found = howls.find((h) => h.opts.src[0] === src);
   if (!found) throw new Error(`no Howl was constructed for sfx key "${key}" (src ${src})`);
   return found;
@@ -79,7 +84,7 @@ function howlFor(key: string): MockHowl {
 
 /** The Howl the engine built for the music track. */
 function musicHowl(): MockHowl {
-  const found = howls.find((h) => h.opts.src[0] === AUDIO_MANIFEST.music);
+  const found = howls.find((h) => h.opts.src[0] === LOADABLE.music);
   if (!found) throw new Error('no Howl was constructed for the music track');
   return found;
 }
@@ -92,11 +97,11 @@ describe('createAudioEngine', () => {
   });
 
   it('constructs one Howl per manifest entry and starts unmuted', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     expect(engine.isMuted()).toBe(false);
     // One per SFX key plus the music track. Without this, every `howlFor()`
     // below could be silently looking at a Howl the engine never wired up.
-    expect(howls).toHaveLength(Object.keys(AUDIO_MANIFEST.sfx).length + 1);
+    expect(howls).toHaveLength(Object.keys(LOADABLE.sfx).length + 1);
     engine.dispose();
   });
 
@@ -105,14 +110,14 @@ describe('createAudioEngine', () => {
     // touched anything. If the engine boots at some other level and waits for
     // an 'input' event to call Howler.volume(), the displayed value is wrong
     // until the first drag.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
 
     expect(globalVolume).toHaveBeenCalledWith(DEFAULT_VOLUME);
     engine.dispose();
   });
 
   it('reports its current volume', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     expect(engine.getVolume()).toBe(DEFAULT_VOLUME);
     engine.setVolume(0.25);
     expect(engine.getVolume()).toBe(0.25);
@@ -127,7 +132,7 @@ describe('createAudioEngine', () => {
     // per-bounce ricochet pitch ladder to a single monotone ping; scoping it to
     // the wrong id (or none) repitches every other copy of the sample still
     // ringing out, which on a busy tick is most of them.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const cannon = howlFor('cannon');
 
     engine.play('cannon', { rate: 1.2, volume: 0.8 });
@@ -148,7 +153,7 @@ describe('createAudioEngine', () => {
     // rate(undefined, id) on a real Howl coerces to NaN and silences the voice,
     // and defaulting to rate(1, id) would clobber a pitch a previous call set
     // on a pooled voice.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const ping = howlFor('ping');
 
     engine.play('ping');
@@ -162,7 +167,7 @@ describe('createAudioEngine', () => {
   it('gives each play() its own sound id, so overlapping shots are tuned independently', () => {
     // Howler pools voices; two shots in flight share a Howl but not a sound id.
     // Forwarding a rate against a stale id repitches the wrong shot.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const ping = howlFor('ping');
 
     engine.play('ping', { rate: 1 });
@@ -176,7 +181,7 @@ describe('createAudioEngine', () => {
   });
 
   it('falls back to the procedural path for an unknown key without touching any Howl', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
 
     // No Howl for this key -> procedural fallback -> guarded no-op in node
     // (there is no window/AudioContext here). The real fallback path is
@@ -189,7 +194,7 @@ describe('createAudioEngine', () => {
   });
 
   it('toggleMute flips state and returns the new value', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     expect(engine.toggleMute()).toBe(true);
     expect(engine.isMuted()).toBe(true);
     expect(engine.toggleMute()).toBe(false);
@@ -201,7 +206,7 @@ describe('createAudioEngine', () => {
   });
 
   it('setMuted drives the muted state and forwards it to Howler', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     engine.setMuted(true);
     expect(engine.isMuted()).toBe(true);
     engine.setMuted(false);
@@ -211,7 +216,7 @@ describe('createAudioEngine', () => {
   });
 
   it('setVolume clamps to [0,1] and forwards to Howler', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     engine.setVolume(2);
     engine.setVolume(-1);
     expect(globalVolume).toHaveBeenCalledWith(1);
@@ -222,7 +227,7 @@ describe('createAudioEngine', () => {
   });
 
   it('startMusic plays the music track and stopMusic stops it', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const music = musicHowl();
 
     engine.startMusic();
@@ -241,7 +246,7 @@ describe('createAudioEngine', () => {
     // differently depending on whether the asset happened to load. No asset
     // ships today (public/audio holds only .gitkeep), so this path is latent
     // -- but "latent" is why it needs a test rather than why it does not.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const music = musicHowl();
     engine.startMusic();
     music.volume.mockClear();
@@ -256,7 +261,7 @@ describe('createAudioEngine', () => {
   });
 
   it('startMusic does not restart a track that is already playing', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const music = musicHowl();
     music.playing.mockReturnValue(true);
 
@@ -267,11 +272,11 @@ describe('createAudioEngine', () => {
   });
 
   it('plays every manifest key through its own Howl, exactly once', () => {
-    const engine = createAudioEngine(AUDIO_MANIFEST);
-    for (const key of Object.keys(AUDIO_MANIFEST.sfx)) {
+    const engine = createAudioEngine(LOADABLE);
+    for (const key of Object.keys(LOADABLE.sfx)) {
       expect(() => engine.play(key)).not.toThrow();
     }
-    for (const key of Object.keys(AUDIO_MANIFEST.sfx)) {
+    for (const key of Object.keys(LOADABLE.sfx)) {
       expect(howlFor(key).play, `sfx key "${key}" never reached its Howl`).toHaveBeenCalledTimes(1);
     }
     engine.dispose();
@@ -280,7 +285,7 @@ describe('createAudioEngine', () => {
   it('dispose unloads every Howl it created', () => {
     // Browsers cap concurrent AudioContexts and howler holds decoded buffers;
     // a title -> play -> title cycle that leaks both exhausts them.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    const engine = createAudioEngine(LOADABLE);
     const created = [...howls];
     engine.dispose();
     for (const h of created) expect(h.unload).toHaveBeenCalledTimes(1);

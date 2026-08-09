@@ -10,7 +10,7 @@
 // so the paths that actually run in a browser are the ones under test.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createAudioEngine, DUCK_FACTOR } from './engine';
-import { AUDIO_MANIFEST, DEFAULT_VOLUME } from './manifest';
+import { AUDIO_MANIFEST, AUTHORED_LAYOUT, DEFAULT_VOLUME } from './manifest';
 
 vi.mock('howler', () => {
   class FakeHowl {
@@ -325,13 +325,17 @@ describe('engine: the generated music bed', () => {
     engine.dispose();
   });
 
+  // AUTHORED_LAYOUT below, not AUDIO_MANIFEST: this case is ABOUT a `loaderror`, and
+  // the shipped manifest declares no music file, so no Howl is built and no load can
+  // fail. Against the shipped manifest the assertions would pass for the wrong reason
+  // -- nothing to resurrect because nothing was ever requested.
   it('a stop BEFORE the load failure stays stopped, and dispose disarms the retry', async () => {
     // The retry is armed by startMusic and must be disarmed by both stopMusic
     // and dispose -- otherwise a load failure arriving later resurrects audio
     // the game has already turned off. Review verified this by probe; it is a
     // test now. `musicWanted = false` in stopMusic was deletable with all 476
     // tests in src/audio + src/game passing.
-    const stopped = createAudioEngine(AUDIO_MANIFEST);
+    const stopped = createAudioEngine(AUTHORED_LAYOUT);
     CapableCtx.instances = [];
     stopped.startMusic();
     stopped.stopMusic();
@@ -346,7 +350,7 @@ describe('engine: the generated music bed', () => {
     // covers it); removing both fails here. So this proves a disposed engine
     // never builds a context, NOT that the disarm in dispose is load-bearing
     // today. It is belt-and-braces, and this is the belt.
-    const gone = createAudioEngine(AUDIO_MANIFEST);
+    const gone = createAudioEngine(AUTHORED_LAYOUT);
     CapableCtx.instances = [];
     gone.startMusic();
     gone.dispose();

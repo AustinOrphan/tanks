@@ -133,18 +133,25 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
     }
   }
 
-  try {
-    music = new Howl({ src: [manifest.music], loop: true, volume: MUSIC_VOLUME, preload: true });
-    music.on('loaderror', () => {
+  // A null `music` means no authored loop exists, so there is nothing to ask for and
+  // `music` simply stays null -- which is the state a 404 arrived at anyway, one failed
+  // request later. Requesting a file that has never been committed cost 9,379 bytes of
+  // 404 body per load, uncached. `beginMusic` builds the generated bed when music is
+  // null, so the game sounds the same; it just stops asking first.
+  if (manifest.music !== null) {
+    try {
+      music = new Howl({ src: [manifest.music], loop: true, volume: MUSIC_VOLUME, preload: true });
+      music.on('loaderror', () => {
+        music = null;
+        // The failure arrives ASYNCHRONOUSLY, and the game now asks for music at
+        // boot -- inside the window where this Howl still looks playable, so
+        // startMusic took the Howl branch and returned. Nothing else would ever
+        // retry, and the screen that asked would stay silent for its whole life.
+        if (musicWanted) beginMusic();
+      });
+    } catch {
       music = null;
-      // The failure arrives ASYNCHRONOUSLY, and the game now asks for music at
-      // boot -- inside the window where this Howl still looks playable, so
-      // startMusic took the Howl branch and returned. Nothing else would ever
-      // retry, and the screen that asked would stay silent for its whole life.
-      if (musicWanted) beginMusic();
-    });
-  } catch {
-    music = null;
+    }
   }
 
   // True while a resume() is in flight. Browsers suspend a context created

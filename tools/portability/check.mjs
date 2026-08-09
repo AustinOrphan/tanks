@@ -36,7 +36,15 @@ import { pathToFileURL } from 'node:url';
 
 /** The asset family whose URLs must never be origin-absolute. */
 const ASSET_DIRS = 'audio|assets';
-/** A file the audio manifest is known to request, used to locate the runtime base. */
+/**
+ * A file the audio manifest would request, used to locate the runtime base.
+ *
+ * Nothing requests it TODAY: `AUDIO_MANIFEST` deliberately declares no files, because
+ * none has ever been committed, so `audioUrl` is tree-shaken out of the bundle
+ * entirely. Check (3) below therefore has nothing to probe -- which this file treats
+ * as a state to ASSERT rather than a reason to go quiet, since a guard that silently
+ * finds nothing is the exact failure the hud.css lesson is about.
+ */
 const PROBE_ASSET = 'audio/cannon.wav';
 
 /**
@@ -100,12 +108,32 @@ export function portabilityFailures(indexHtml, bundles) {
   }
 
   // The hud.css lesson: a guard that finds nothing to check must say so rather than
-  // report success. If the probe asset vanishes, checks (2) and (3) stop meaning anything.
+  // report success. If the probe asset vanishes, check (3) stops meaning anything.
+  //
+  // But "vanished" has two causes, and only one is a bug. The manifest ships EMPTY on
+  // purpose, so no audio URL reaches the bundle at all and there is genuinely nothing
+  // to interpolate. That state is checkable in its own right: assert the absence is
+  // TOTAL. If any asset-family URL is present while the probe is not, the probe has
+  // rotted against a bundle that does still carry assets, and it must be updated.
   if (!probeSeen) {
-    failures.push(
-      `no reference to ${PROBE_ASSET} in any bundle -- the audio manifest changed shape, ` +
-        `so this check no longer proves anything. Update PROBE_ASSET.`,
+    // An audio FILE reference, which needs three qualifications to be meaningful here:
+    // not the full ASSET_DIRS (`assets/` matches vite's own chunk names, always
+    // present), and a filename with an extension (a bare `audio/wav` is one of Howler's
+    // dozen MIME-type literals, which ship in every bundle and would pin this branch on
+    // forever).
+    const anyAudioUrl = bundles.some(({ source }) =>
+      /audio\/[\w-]+\.(?:wav|mp3|ogg|m4a|webm|flac)\b/.test(source),
     );
+    if (anyAudioUrl) {
+      failures.push(
+        `no reference to ${PROBE_ASSET} in any bundle, but the bundle DOES carry other ` +
+          `audio/ URLs -- so the probe has rotted rather than the audio having gone. ` +
+          `Update PROBE_ASSET to one the manifest still requests.`,
+      );
+    }
+    // Otherwise: no asset URLs at all, which is the empty-manifest state. Check (2)
+    // still ran over every bundle and found no origin-absolute path -- vacuously, and
+    // that is the honest reading. Re-arms by itself the moment an asset is declared.
   }
 
   return failures;
