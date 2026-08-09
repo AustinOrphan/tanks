@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
 import { createHud } from './hud';
+import { ACHIEVEMENTS } from './achievements';
 
 // `?raw` returns an EMPTY STRING unless `test.css` is enabled in vite.config -- vitest
 // stubs CSS imports by default. That is not a harmless miss: every assertion below would
@@ -22,35 +23,37 @@ function stripComments(text: string): string {
 }
 
 /**
- * The selectors hud.css actually opens a rule for, split on `,` so a grouped rule
- * counts for each of its members. Parsed rather than substring-matched: `.hud-x` is a
- * substring of `.hud-x--hidden`, so `includes()` cannot tell a styled button from one
- * that only has a modifier.
- *
- * Plain rules do not nest -- the test above enforces exactly that -- so a single
- * in-a-rule flag is enough to skip declarations, and at-rule preludes (`@media`) are
- * skipped so their nested selectors are still collected.
+ * The four properties every themed button in the HUD sets, and a browser-default one
+ * sets none of. This is the INTERSECTION measured across all 27 buttons the HUD
+ * renders, not a guess: `.hud-swatch` sets no `padding` or `font-weight`,
+ * `.hud-level-btn` no `padding`, so those cannot be required of everything. Each of
+ * the 27 differs from a bare `<button>` on all four.
  */
-function definedSelectors(text: string): Set<string> {
-  const found = new Set<string>();
-  let prelude = '';
-  let inRule = false;
-  for (const ch of stripComments(text)) {
-    if (ch === '{') {
-      const p = prelude.trim();
-      if (!inRule && !p.startsWith('@')) {
-        for (const sel of p.split(',')) if (sel.trim()) found.add(sel.trim());
-        inRule = true;
-      }
-      prelude = '';
-    } else if (ch === '}') {
-      inRule = false;
-      prelude = '';
-    } else {
-      prelude += ch;
-    }
-  }
-  return found;
+const THEMED_PROPS = ['backgroundColor', 'color', 'borderRadius', 'cursor'] as const;
+
+/** Every button the mounted HUD can show, with each subtree-rebuilding setter driven. */
+function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  const hud = createHud(root);
+  // The three `createElement('button')` sites in hud.ts are the swatch row and the skin
+  // row (both built during `createHud`) and the level row (built here). The other
+  // setters rebuild subtrees that hold no buttons today; they are driven anyway so that
+  // a button added to one of them lands under this sweep instead of beside it.
+  hud.setLevelSelect(2, 4);
+  hud.setAchievements(new Set());
+  hud.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
+  return {
+    root,
+    dispose: () => {
+      hud.dispose();
+      style.remove();
+      document.body.innerHTML = '';
+    },
+  };
 }
 
 describe('hud.css is syntactically whole', () => {
@@ -133,44 +136,47 @@ describe('hud.css is syntactically whole', () => {
     }
   });
 
-  it('gives every button the HUD renders a base rule of its own', () => {
-    // `.hud-achievements-open` shipped with NO base rule -- only its `--hidden`
-    // modifier -- so it fell through to browser default button styling while its
-    // three siblings were themed.
+  it('never lets a button fall through to browser default styling', () => {
+    // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
+    // modifier -- so on the main menu it rendered as a stock grey browser button
+    // beside three themed siblings, for as long as the feature existed.
     //
-    // The presence test above could not have caught it, and adding the selector to
-    // that list would not either: it uses `toContain`, and `.hud-achievements-open`
-    // is a SUBSTRING of `.hud-achievements-open--hidden`. The assertion would have
-    // passed on the broken file. This one parses rules instead of matching text, and
-    // discounts `--modifier` classes, which is the whole of the defect: having a
-    // modifier rule is exactly what made the button look styled to a grep.
+    // The presence test above could not have caught it, and listing the selector there
+    // would not either: it uses `toContain`, and `.hud-achievements-open` is a
+    // SUBSTRING of `.hud-achievements-open--hidden`, so the assertion passes on the
+    // broken file.
     //
-    // Population: every <button> in the mounted HUD -- the template's, plus the
-    // swatch and skin rows, which `createHud` builds during construction -- plus the
-    // level-select row. Those are all 3 `createElement('button')` sites in hud.ts;
-    // only the level row needs a call to appear.
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const hud = createHud(root);
-    hud.setLevelSelect(2, 4); // the one button-creating site construction alone misses
+    // This measures the RESOLVED style against a bare <button> rather than looking for
+    // a matching rule, because the defect is "looks unstyled", not "has no rule". An
+    // earlier draft of this guard did parse hud.css, and adversarial review found
+    // eleven ways past it -- a rule that is empty, a rule that only sets `margin-top`,
+    // a rule that exists only as `:hover`/`:disabled`/`::after`, a rule scoped inside
+    // an `@media` that never matches. All of those resolve to a default-looking button
+    // and all of them now fail here, because jsdom applies the cascade and the
+    // question asked is what the user would see.
+    const { root, dispose } = mountEveryButton();
+    const bare = document.createElement('button'); // same document: same UA defaults
+    document.body.appendChild(bare);
+    const ref = getComputedStyle(bare);
+
     const buttons = Array.from(root.querySelectorAll('button'));
-
-    const defined = definedSelectors(css);
-    const hasBaseRule = (cls: string): boolean =>
-      defined.has(`.${cls}`) || [...defined].some((s) => s.startsWith(`.${cls}:`));
-
     const unstyled = buttons
-      .map((b) => Array.from(b.classList))
-      // A `--modifier` rule is not a base style. `.hud-quit--hidden` sets
-      // `display: none` and says nothing about how the button looks when shown.
-      .filter((classes) => !classes.some((c) => !c.includes('--') && hasBaseRule(c)))
-      .map((classes) => classes.join('.'));
+      .map((b) => {
+        const cs = getComputedStyle(b);
+        const bareProps = THEMED_PROPS.filter((p) => cs[p] === ref[p]);
+        return { button: Array.from(b.classList).join('.'), bareProps };
+      })
+      .filter((r) => r.bareProps.length > 0)
+      .map((r) => `${r.button} [default: ${r.bareProps.join(', ')}]`);
 
-    hud.dispose();
-    document.body.innerHTML = '';
-
-    expect(buttons.length).toBeGreaterThan(10); // the sweep is not vacuous
+    // Exactly, not a lower bound: this is the sweep's denominator, and a lower bound
+    // hid a real gap -- losing all 15 dynamically-built buttons still left 12 > 10.
+    // If a UI change moves this number, that is the moment to check the new buttons
+    // are covered, which is the whole point of pinning it.
+    expect(buttons.length).toBe(27);
     expect(unstyled).toEqual([]);
+
+    dispose();
   });
 
   it('keeps the stacking order the overlays depend on', () => {
