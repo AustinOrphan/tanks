@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createInputController, InputController } from './input';
-import { AIM_PROJECTION_UNITS, STICK_RADIUS_PX, STICK_DEADZONE } from './touch';
+import {
+  AIM_PROJECTION_UNITS,
+  STICK_RADIUS_PX,
+  STICK_DEADZONE,
+  FIRE_MODES,
+  TAP_MAX_MS,
+  DOUBLE_TAP_MAX_MS,
+  DOUBLE_TAP_SLOP_PX,
+} from './touch';
 import type { Vec2 } from '../sim/types';
 
 // A predictable screenToGround: echoes the client coords as a world point.
@@ -648,17 +656,21 @@ describe('createInputController — touch', () => {
     // DRIVING half fired a shell at all (3 of 3) -- aimed at the player's own thumb,
     // because the compat `mousemove` reaches the window-bound handler and drags `aim`
     // there. The burst lands ~200ms after touchend, well past the 0.4s fire cooldown.
-    // Touch no longer fires on its own, but the compat burst must still be suppressed:
-    // a compat `mousedown` reaching the fire latch would be a second, accidental path in.
+    // In BUTTON mode touch never fires on its own, so this isolates the thing under
+    // test -- compat-event suppression -- from FireMode's tap/double-tap gestures, which
+    // have their own dedicated tests below and are the one deliberate way a bare touch
+    // now fires. A compat `mousedown` reaching the fire latch would still be a second,
+    // accidental path in regardless of mode.
     //
     // jsdom synthesises none of this, so the sequence is dispatched by hand.
     const target = makeTarget();
     controller = createInputController(target, echoGround);
     controller.setTouchScheme('point');
+    controller.setFireMode('button');
 
     touch(target, 'pointerdown', { x: RIGHT, y: 250 });
     touch(window, 'pointerup', { x: RIGHT, y: 250 });
-    expect(controller.sample().fire, 'touch aiming must never fire on its own').toBe(false);
+    expect(controller.sample().fire, 'touch aiming fired in button mode').toBe(false);
 
     // ...and now the browser's compatibility burst for that same tap.
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: LEFT, clientY: 90 }));
@@ -736,6 +748,138 @@ describe('createInputController — touch', () => {
     expect(controller.sample().move.y, 'the second thumb stole the stick').toBeLessThan(0);
   });
 
+  it('a thumb lifted while PAUSED does not fire on resume', () => {
+    // The repo already fixed this once for the keyboard -- a Space pressed while
+    // hotkey-paused dropped a mine on the first tick after resume, which is why
+    // clearQueuedPresses exists. The touch gesture state added for fire modes was not
+    // covered by it.
+    //
+    // The window-level pointer listeners keep running while paused, but the driver stops
+    // calling sample(), so a `fire` latched during the pause sits unconsumed until the
+    // first sample() AFTER resume -- a shot with no touch behind it, aimed wherever the
+    // turret happened to be left. That is the very defect this whole rework removes,
+    // arriving through a different door.
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('tap');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      controller.clearQueuedPresses(); // exactly what loop.ts does on pause
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 }); // thumb lifts while paused
+
+      expect(controller.sample().fire, 'a shot leaked across the pause').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a tap from BEFORE a pause cannot pair with one after it', () => {
+    // The double-tap half of the same leak: a completed tap primes the pair, the pause
+    // does not clear it, and the player's first re-aiming tap after resume completes a
+    // double they never made.
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('double');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 }); // one tap, before the pause
+      controller.sample();
+
+      controller.clearQueuedPresses(); // pause
+      vi.advanceTimersByTime(100);
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 }); // one fresh tap after resume
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+
+      expect(controller.sample().fire, 'a stale tap paired across the pause').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a tap fires ONCE, even with the compat mouse burst behind it', () => {
+    // Review found this combination covered by two separate tests but never together:
+    // one proves compat events are suppressed under `button` mode, the other proves a
+    // tap fires -- neither proves a tap fires exactly once when the browser's synthesised
+    // burst lands ~200ms later. Against a shell cap of 5, a doubled shot is expensive.
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('tap');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(60);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire, 'the tap did not fire').toBe(true);
+
+      vi.advanceTimersByTime(200); // the compat burst's usual delay
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: RIGHT, clientY: 250 }));
+      target.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+      expect(controller.sample().fire, 'the compat burst fired a second shell').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('firing still works on the NEXT gesture after a pause voided one', () => {
+    // The void is per-gesture, not a latch. Without the reset on the next press, a
+    // single pause would kill tap-to-fire for the rest of the session -- silently, since
+    // the button would still work and nothing else would look wrong. Mutation-proven:
+    // removing the reset passes every other test in this file.
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('tap');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      controller.clearQueuedPresses(); // pause, mid-gesture
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire, 'the voided gesture fired').toBe(false);
+
+      // ...and now a gesture the player makes with the game actually running.
+      vi.advanceTimersByTime(600);
+      touch(target, 'pointerdown', { id: 2, x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(60);
+      touch(window, 'pointerup', { id: 2, x: RIGHT, y: 250 });
+      expect(controller.sample().fire, 'firing never recovered after the pause').toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a thumb held across a pause still steers on resume', () => {
+    // The other edge, and the reason the gesture is VOIDED rather than released: the
+    // thumb is still physically on the glass. Dropping the pointer would leave the
+    // turret unsteerable until the player lifted and replaced it -- the same mistake as
+    // releasing a movement key that is still held, which clearQueuedPresses documents
+    // that it deliberately does not do.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setFireMode('tap');
+    controller.setTouchScheme('point');
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+    controller.clearQueuedPresses(); // pause
+    touch(window, 'pointermove', { x: RIGHT + 40, y: 300 }); // still dragging on resume
+
+    const s = controller.sample();
+    expect(s.aim, 'the held thumb stopped steering after a pause').toEqual({
+      x: RIGHT + 40,
+      y: 300,
+    });
+    expect(s.fire, 'the voided gesture still fired').toBe(false);
+  });
+
   it('removes its pointer listeners on dispose', () => {
     const target = makeTarget();
     const c = createInputController(target, echoGround);
@@ -746,5 +890,265 @@ describe('createInputController — touch', () => {
     touch(window, 'pointermove', { x: LEFT, y: 100 });
     controller = createInputController(target, echoGround);
     expect(controller.sample().move).toEqual({ x: 0, y: 0 });
+  });
+});
+
+// ---- Fire modes ---------------------------------------------------------------------
+//
+// FireMode picks how the AIM thumb pulls the trigger (touch.ts). Fake timers control the
+// gaps `isTap`/`isDoubleTap` measure via performance.now(), so the tap/drag and
+// same-tick/double-tap boundaries are exercised honestly rather than at whatever gap the
+// real clock happens to produce between synchronous dispatches.
+
+describe('createInputController — fire modes: button', () => {
+  it('a tap on the aim side fires nothing', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('button');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50); // well inside TAP_MAX_MS: a clean tap
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire, 'a tap fired in button mode').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('createInputController — fire modes: tap', () => {
+  it('a tap fires exactly once', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('tap'); // also the default, set explicitly for clarity
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire).toBe(true);
+      expect(controller.sample().fire, 'the fire edge did not consume itself').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a drag does not fire -- that is aiming, not a tap', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('tap');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      // Travels well past TAP_SLOP_PX before release: a drag, not a tap.
+      touch(window, 'pointermove', { x: RIGHT + 100, y: 250 });
+      touch(window, 'pointerup', { x: RIGHT + 100, y: 250 });
+      expect(controller.sample().fire, 'a drag fired').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a touch held too long does not fire either -- that is a thumb resting to aim', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('tap');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(TAP_MAX_MS + 1);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('createInputController — fire modes: double', () => {
+  it('a single tap fires nothing', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('double');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('two quick taps in the SAME place fire once', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('double');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire, 'the first tap alone fired').toBe(false);
+
+      vi.advanceTimersByTime(DOUBLE_TAP_MAX_MS - 50); // still inside the pairing window
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(controller.sample().fire, 'the completed double-tap did not fire').toBe(true);
+
+      // A completed double does not begin the next one: a THIRD tap right after must not
+      // pair with the second half of the one that just fired.
+      vi.advanceTimersByTime(50);
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(
+        controller.sample().fire,
+        'a third tap paired with the already-completed double',
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('two quick taps in DIFFERENT places fire nothing -- the reason double-tap is safe where a single tap is not', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('double');
+
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      controller.sample();
+
+      vi.advanceTimersByTime(50); // well inside DOUBLE_TAP_MAX_MS
+      // Well past DOUBLE_TAP_SLOP_PX: a re-aim, not a second half of the same double.
+      touch(target, 'pointerdown', { x: RIGHT + DOUBLE_TAP_SLOP_PX + 20, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT + DOUBLE_TAP_SLOP_PX + 20, y: 250 });
+      expect(
+        controller.sample().fire,
+        'two taps in different places fired -- re-aiming must never shoot',
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('createInputController — fire modes: pointercancel', () => {
+  it('never fires, in any mode', () => {
+    // Population: every mode FIRE_MODES actually lists ('button' trivially never fires
+    // from the aim side at all; included anyway so the sweep is honest about what it
+    // covers rather than skipping the mode where the assertion cannot fail).
+    for (const mode of FIRE_MODES) {
+      vi.useFakeTimers({ toFake: ['performance'] });
+      try {
+        const target = makeTarget();
+        controller = createInputController(target, echoGround);
+        controller.setFireMode(mode);
+
+        touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+        vi.advanceTimersByTime(50);
+        touch(window, 'pointercancel', { x: RIGHT, y: 250 });
+        expect(controller.sample().fire, mode).toBe(false);
+      } finally {
+        vi.useRealTimers();
+        controller?.dispose();
+        controller = null;
+      }
+    }
+  });
+
+  it('does not leave a half-tap primed to pair with the next one, in double mode', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('double');
+
+      // A tap that would otherwise prime the pairing, but it is CANCELLED.
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointercancel', { x: RIGHT, y: 250 });
+      controller.sample();
+
+      // A real tap, quickly after, in the same spot: if the cancelled touch had
+      // survived as `lastAimTap`, this would complete a double and fire.
+      vi.advanceTimersByTime(50);
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(
+        controller.sample().fire,
+        'the cancelled touch stayed primed and paired with the next tap',
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('createInputController — fire modes: switching mid-gesture', () => {
+  it('drops a pending half-double on a mode switch', () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    try {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode('double');
+
+      // First half of what would become a double-tap.
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      controller.sample();
+
+      // Switched away and back, still inside the pairing window -- setFireMode clears
+      // the half-tap on any actual change, including a round trip.
+      controller.setFireMode('button');
+      controller.setFireMode('double');
+
+      vi.advanceTimersByTime(50); // still well inside DOUBLE_TAP_MAX_MS
+      touch(target, 'pointerdown', { x: RIGHT, y: 250 });
+      vi.advanceTimersByTime(50);
+      touch(window, 'pointerup', { x: RIGHT, y: 250 });
+      expect(
+        controller.sample().fire,
+        'the pre-switch half survived and completed a double',
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('createInputController — fire modes: the FIRE button always works', () => {
+  it('pressFire() latches a shot in every mode', () => {
+    // Population: every mode FIRE_MODES actually lists. The whole design point of
+    // FireMode is that these are ADDED gestures, never a replacement for the button.
+    for (const mode of FIRE_MODES) {
+      const target = makeTarget();
+      controller = createInputController(target, echoGround);
+      controller.setFireMode(mode);
+
+      controller.pressFire();
+      expect(controller.sample().fire, mode).toBe(true);
+      expect(controller.sample().fire, `${mode}: did not consume the edge`).toBe(false);
+
+      controller.dispose();
+      controller = null;
+    }
   });
 });

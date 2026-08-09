@@ -11,7 +11,13 @@ import type { AchievementContext, AchievementId } from './achievements';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
-import { TOUCH_SCHEMES, type TouchIndicator, type TouchScheme } from '../input/touch';
+import {
+  TOUCH_SCHEMES,
+  FIRE_MODES,
+  type TouchIndicator,
+  type TouchScheme,
+  type FireMode,
+} from '../input/touch';
 import { COUNTDOWN_TICKS } from '../sim/constants';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
@@ -57,6 +63,12 @@ interface Recorder {
   schemeStoreSets: TouchScheme[];
   /** Every scheme echoed back to the HUD (hud.setTouchScheme), in order. */
   schemeEchoes: TouchScheme[];
+  /** Every mode pushed to the INPUT controller's setFireMode, in order. */
+  fireModeSets: FireMode[];
+  /** Every mode accepted by the STORE (touchSettings.setFireMode), in order. */
+  fireModeStoreSets: FireMode[];
+  /** Every mode echoed back to the HUD (hud.setFireMode), in order. */
+  fireModeEchoes: FireMode[];
   playerPosPushes: number;
   lastPlayerPos: { x: number; y: number } | null;
   touchPushes: TouchIndicator[];
@@ -105,7 +117,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedScheme?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -119,6 +131,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     mineTap(): void;
     fireTap(): void;
     toggleScheme(s: TouchScheme): void;
+    toggleFireMode(m: FireMode): void;
     pickLevel(i: number): void;
     resetStats(): void;
     resetProgress(): void;
@@ -160,6 +173,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     schemeSets: [],
     schemeStoreSets: [],
     schemeEchoes: [],
+    fireModeSets: [],
+    fireModeStoreSets: [],
+    fireModeEchoes: [],
     playerPosPushes: 0,
     lastPlayerPos: null,
     touchPushes: [],
@@ -212,6 +228,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onMineTap = (): void => {};
   let onFireTap = (): void => {};
   let onTouchSchemeChange = (_s: TouchScheme): void => {};
+  let onFireModeChange = (_m: FireMode): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
@@ -279,6 +296,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       setTouchScheme(sch): void {
         rec.schemeSets.push(sch);
+      },
+      setFireMode(m): void {
+        rec.fireModeSets.push(m);
       },
       setPlayerPosition(pos): void {
         rec.playerPosPushes += 1;
@@ -430,6 +450,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onTouchSchemeChange: (cb: (s: TouchScheme) => void) => {
           onTouchSchemeChange = cb;
         },
+        setFireMode: (m: FireMode) => {
+          rec.fireModeEchoes.push(m);
+        },
+        onFireModeChange: (cb: (m: FireMode) => void) => {
+          onFireModeChange = cb;
+        },
         setStats: () => {
           rec.statPushes += 1;
         },
@@ -486,13 +512,20 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     })(),
     touchSettings: (() => {
       let scheme: TouchScheme = (opts.savedScheme ?? 'stick') as TouchScheme;
-      // From the REAL scheme list, not a duplicate that could drift.
+      let fireMode: FireMode = (opts.savedFireMode ?? 'tap') as FireMode;
+      // From the REAL scheme/mode lists, not duplicates that could drift.
       const VALID = new Set<string>(TOUCH_SCHEMES);
+      const VALID_MODES = new Set<string>(FIRE_MODES);
       return {
         scheme: () => scheme,
         setScheme: (id: TouchScheme) => {
           if (VALID.has(id)) scheme = id;
           rec.schemeStoreSets.push(id);
+        },
+        fireMode: () => fireMode,
+        setFireMode: (id: FireMode) => {
+          if (VALID_MODES.has(id)) fireMode = id;
+          rec.fireModeStoreSets.push(id);
         },
       };
     })(),
@@ -659,6 +692,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       mineTap: () => onMineTap(),
       fireTap: () => onFireTap(),
       toggleScheme: (s: TouchScheme) => onTouchSchemeChange(s),
+      toggleFireMode: (m: FireMode) => onFireModeChange(m),
       pickLevel: (i) => onPickLevel(i),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
@@ -1092,6 +1126,30 @@ describe('startGameWith: leaving the title screen', () => {
 });
 
 describe('startGameWith: the touch controls', () => {
+  it('drops queued presses on EVERY exit from play, not just pause', () => {
+    // The driver stops calling sample() for any state that is not 'playing'
+    // (driver.ts), but the window-level pointer listeners keep running. So a gesture
+    // completed while a win/lose screen is up latches a shot that sits unconsumed until
+    // the first sample() of the NEXT round -- fired at nothing, on a level the player
+    // has only just started.
+    //
+    // Review found this after the 'paused' instance was fixed: same mechanism, same
+    // file, one call site short. Your aim thumb is routinely down at the moment you
+    // die, so it is not an edge case.
+    for (const stopped of ['paused', 'win', 'lose', 'title'] as const) {
+      const h = boot();
+      h.setState('playing');
+      const before = h.rec.inputClears;
+      h.setState(stopped);
+      expect(
+        h.rec.inputClears,
+        `leaving play for ${stopped} did not drop queued presses`,
+      ).toBeGreaterThan(before);
+      h.handle.dispose();
+    }
+  });
+
+
   it('clears the thumb marks when play stops, so none is stranded on screen', () => {
     // The marks are pushed ONLY from onSimulated, which the driver runs only while
     // playing -- so pausing mid-drag would leave a ring on screen with no thumb under
@@ -1251,6 +1309,50 @@ describe('startGameWith: the touch aim-scheme wiring', () => {
       'point',
     );
     expect(h.rec.schemeSets.at(-1)).toBe('point'); // the input controller was not moved either
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the touch fire-mode wiring', () => {
+  it('pushes the SAVED mode into the input controller and echoes it to the HUD at boot', () => {
+    const h = boot(makeDeps({ savedFireMode: 'double' }));
+    // Pushed once, at construction -- before any frame has been simulated.
+    expect(h.rec.fireModeSets[0]).toBe('double');
+    expect(h.rec.fireModeEchoes[0]).toBe('double');
+    h.handle.dispose();
+  });
+
+  it('defaults to tap when nothing was saved', () => {
+    const h = boot(makeDeps());
+    expect(h.rec.fireModeSets[0]).toBe('tap');
+    expect(h.rec.fireModeEchoes[0]).toBe('tap');
+    h.handle.dispose();
+  });
+
+  it('a toggle stores the pick, pushes it into the input controller, and echoes the ACCEPTED value back', () => {
+    // Same three-step convention as the scheme toggle: store, then echo what the store
+    // actually accepted -- not blindly the click's own argument.
+    const h = boot(makeDeps({ savedFireMode: 'tap' }));
+    h.hud.toggleFireMode('double');
+    expect(h.rec.fireModeStoreSets).toEqual(['double']);
+    expect(
+      h.rec.fireModeSets.at(-1),
+      'the input controller was not told about the switch',
+    ).toBe('double');
+    expect(h.rec.fireModeEchoes.at(-1)).toBe('double');
+    h.handle.dispose();
+  });
+
+  it('an off-list mode is refused by the store, and the echo says so', () => {
+    // The HUD toggle can only ever emit a real FireMode, but the handler must not trust
+    // that -- mirrors the scheme toggle's "off-list scheme is refused" test.
+    const h = boot(makeDeps({ savedFireMode: 'double' }));
+    h.hud.toggleFireMode('triple' as never);
+    expect(
+      h.rec.fireModeEchoes.at(-1),
+      'the echo did not fall back to the stored value',
+    ).toBe('double');
+    expect(h.rec.fireModeSets.at(-1)).toBe('double'); // the input controller was not moved either
     h.handle.dispose();
   });
 });
@@ -1981,13 +2083,20 @@ describe('startGameWith: pause drops queued input', () => {
     // but an Esc/P pause left a latched Space press to mine on the first resumed tick.
     // Wired at the state change, so hotkey, blur and any future pause trigger all pass
     // through the same clear.
+    //
+    // Counted as DELTAS, not absolutes. The clear now fires on every exit from play
+    // rather than only on pause -- win and lose leak the same way, which review found
+    // one call site later -- so the boot transitions contribute clears of their own and
+    // an absolute count would be pinning boot bookkeeping rather than this behaviour.
     const h = boot(makeDeps());
     h.setState('playing');
+    const base = h.rec.inputClears;
     h.keydown({ key: 'Escape' });
-    expect(h.rec.inputClears).toBe(1);
+    expect(h.rec.inputClears - base, 'pausing did not clear').toBe(1);
     h.keydown({ key: 'Escape' }); // resume: no extra clear
+    expect(h.rec.inputClears - base, 'resuming cleared, which it must not').toBe(1);
     h.blur(); // auto-pause: clears again
-    expect(h.rec.inputClears).toBe(2);
+    expect(h.rec.inputClears - base, 'a blur-pause did not clear').toBe(2);
     h.handle.dispose();
   });
 });

@@ -348,6 +348,9 @@ export function startGameWith(
   // The saved scheme, pushed at boot so the very first touch already uses it -- see the
   // echo-back wiring below for what happens when the player changes it in the HUD.
   input.setTouchScheme(deps.touchSettings.scheme());
+  // Same convention for the saved fire mode: pushed at boot so the very first tap on
+  // the aim side already reads under the right gesture.
+  input.setFireMode(deps.touchSettings.fireMode());
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
   // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
@@ -602,6 +605,16 @@ export function startGameWith(
     input.setTouchScheme(accepted);
   });
 
+  // The fire-mode toggle: same three-step convention -- store, then echo the ACCEPTED
+  // value back to both the HUD and the input controller. setFireMode refuses anything
+  // off FIRE_MODES, so the echo can never show a mode the input layer was not told.
+  hud.onFireModeChange((next) => {
+    deps.touchSettings.setFireMode(next);
+    const accepted = deps.touchSettings.fireMode();
+    hud.setFireMode(accepted);
+    input.setFireMode(accepted);
+  });
+
   hud.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause, but a handler that rebuilds the
     // world deserves its own guard, not a CSS class as its only defence.
@@ -710,7 +723,12 @@ export function startGameWith(
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger
     // all pass through the same clear. (input.ts clears itself on window blur too;
     // that covers alt-tab, this covers Esc/P.)
-    if (s === 'paused') input.clearQueuedPresses();
+    // EVERY exit from play, not just pause. The driver stops calling sample() for any
+    // state that is not 'playing' (driver.ts), while the window-level pointer and key
+    // listeners keep running -- so a press completed on a win, lose or title screen
+    // latches and fires on the first sample() of the NEXT round. Review found this
+    // after the 'paused' instance was fixed: same mechanism, one call site short.
+    if (s !== 'playing') input.clearQueuedPresses();
   });
 
   hud.setState(sm.state); // initial title panel
@@ -722,6 +740,7 @@ export function startGameWith(
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
   hud.setTouchScheme(deps.touchSettings.scheme());
+  hud.setFireMode(deps.touchSettings.fireMode());
   hud.setAchievements(deps.achievements.earned());
   refreshStats(world);
 

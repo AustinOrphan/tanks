@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { stickVector, touchSide, STICK_RADIUS_PX, STICK_DEADZONE } from './touch';
+import {
+  stickVector,
+  touchSide,
+  isTap,
+  isDoubleTap,
+  STICK_RADIUS_PX,
+  STICK_DEADZONE,
+  TAP_MAX_MS,
+  TAP_SLOP_PX,
+  DOUBLE_TAP_MAX_MS,
+  DOUBLE_TAP_SLOP_PX,
+  type TouchSample,
+} from './touch';
 
 /** A thumb that landed at the origin and moved by (dx, dy) CSS px. */
 const push = (dx: number, dy: number): ReturnType<typeof stickVector> =>
@@ -84,5 +96,75 @@ describe('which thumb is which', () => {
     // midpoint -- where the driving thumb would suddenly be aiming.
     expect(touchSide(500, 800)).toBe('aim');
     expect(touchSide(500, 1600)).toBe('move');
+  });
+});
+
+describe('telling a tap from a drag', () => {
+  const sample = (o: Partial<TouchSample> = {}): TouchSample => ({
+    downAt: 1000,
+    upAt: 1100,
+    from: { x: 300, y: 400 },
+    to: { x: 300, y: 400 },
+    ...o,
+  });
+
+  it('accepts a brief touch that stayed put', () => {
+    expect(isTap(sample())).toBe(true);
+  });
+
+  it('rejects a touch held too long -- that is a thumb resting to aim, not a trigger', () => {
+    expect(isTap(sample({ upAt: 1000 + TAP_MAX_MS }))).toBe(true); // the boundary is a tap
+    expect(isTap(sample({ upAt: 1000 + TAP_MAX_MS + 1 }))).toBe(false);
+  });
+
+  it('rejects a touch that travelled -- that is a drag, and under stick it is aiming', () => {
+    // Swept across the boundary rather than sampled at one convenient distance.
+    expect(isTap(sample({ to: { x: 300 + TAP_SLOP_PX, y: 400 } }))).toBe(true);
+    expect(isTap(sample({ to: { x: 300 + TAP_SLOP_PX + 1, y: 400 } }))).toBe(false);
+    // Diagonal: the slop is a RADIUS, not a per-axis budget. 9+9 is inside 12 per axis
+    // but 12.7 away, so a per-axis check would wrongly accept it.
+    expect(isTap(sample({ to: { x: 309, y: 409 } }))).toBe(false);
+  });
+});
+
+describe('telling a double-tap from a re-aim', () => {
+  const at = (downAt: number, x: number, y: number): TouchSample => ({
+    downAt,
+    upAt: downAt + 60,
+    from: { x, y },
+    to: { x, y },
+  });
+
+  it('accepts two quick taps in the same place', () => {
+    expect(isDoubleTap(at(1000, 300, 400), at(1200, 300, 400))).toBe(true);
+  });
+
+  it('REJECTS two quick taps in different places -- that is someone re-aiming', () => {
+    // The whole reason double-tap is safe where a single tap is not. Without the
+    // distance test, adjusting aim twice in quick succession would fire a shell -- the
+    // exact defect this control scheme was reworked to remove.
+    expect(isDoubleTap(at(1000, 300, 400), at(1200, 300 + DOUBLE_TAP_SLOP_PX, 400))).toBe(true);
+    expect(isDoubleTap(at(1000, 300, 400), at(1200, 300 + DOUBLE_TAP_SLOP_PX + 1, 400))).toBe(
+      false,
+    );
+    expect(isDoubleTap(at(1000, 300, 400), at(1200, 500, 700))).toBe(false);
+  });
+
+  it('rejects a second tap that came too late', () => {
+    // Measured from the FIRST tap's release, not its press: a long first tap must not
+    // eat the window a player can feel.
+    const first = at(1000, 300, 400); // released at 1060
+    expect(isDoubleTap(first, at(1060 + DOUBLE_TAP_MAX_MS, 300, 400))).toBe(true);
+    expect(isDoubleTap(first, at(1060 + DOUBLE_TAP_MAX_MS + 1, 300, 400))).toBe(false);
+  });
+
+  it('rejects when either half was a drag rather than a tap', () => {
+    const dragged: TouchSample = { downAt: 1000, upAt: 1060, from: { x: 300, y: 400 }, to: { x: 380, y: 400 } };
+    expect(isDoubleTap(dragged, at(1200, 300, 400)), 'a drag then a tap').toBe(false);
+    expect(isDoubleTap(at(1000, 300, 400), { ...at(1200, 300, 400), to: { x: 380, y: 400 } }), 'a tap then a drag').toBe(false);
+  });
+
+  it('has nothing to complete when there is no previous tap', () => {
+    expect(isDoubleTap(null, at(1000, 300, 400))).toBe(false);
   });
 });
