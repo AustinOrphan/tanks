@@ -178,6 +178,7 @@ export function createHud(root: HTMLElement): Hud {
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const splashEl = el.querySelector('.hud-splash') as HTMLElement;
+  const topbarEl = el.querySelector('.hud-topbar') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
@@ -488,6 +489,9 @@ export function createHud(root: HTMLElement): Hud {
     achView.classList.add('hud-achievements--hidden');
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
+    // The topbar is the only chrome that outranks the menu panel, so it is also the
+    // only thing that would show through on the title screen.
+    topbarEl.classList.toggle('hud-topbar--hidden', s === 'splash');
     // Splash and playing both want the menu panel gone. Splash returns BEFORE the
     // branches below for the same reason `paused` returns early: the final `else`
     // renders a Game Over corpse screen, so any state that falls through to it gets

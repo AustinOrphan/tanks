@@ -78,13 +78,23 @@
 
 /* ---- Title screen --------------------------------------------------------------- */
 
+/* The topbar is game furniture -- lives, enemies remaining, the level chip. On a title
+ * screen it reads as a game already in progress ("Lives: 3  Enemies: 3  Level: 1/4"
+ * over the word TANKS!), so it is hidden outright rather than dimmed behind the
+ * overlay, which would leave a legible ghost of it. */
+.hud-topbar--hidden {
+  display: none;
+}
+
 /* Sits above the menu panel and below the topbar, and takes pointer events so a press
  * anywhere on it counts. It is opaque rather than a scrim: the menu is rendered behind
  * it and should not read as a thing you are looking through. */
 .hud-splash {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  /* Above the topbar (1) and the toast rail (2). The title screen is the whole
+   * screen; nothing is allowed to paint over it. */
+  z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;

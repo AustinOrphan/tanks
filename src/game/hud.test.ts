@@ -138,6 +138,9 @@ describe('createHud panel', () => {
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     expect(splash.classList.contains('hud-splash--hidden')).toBe(false);
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
+    // Lives/Enemies/Level over the word TANKS! reads as a game already running.
+    const topbar = root.querySelector('.hud-topbar') as HTMLElement;
+    expect(topbar.classList.contains('hud-topbar--hidden')).toBe(true);
   });
 
   it('shows the title panel once the splash screen is dismissed', () => {
@@ -145,6 +148,8 @@ describe('createHud panel', () => {
     h.setState('title');
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     expect(splash.classList.contains('hud-splash--hidden')).toBe(true);
+    const topbar = root.querySelector('.hud-topbar') as HTMLElement;
+    expect(topbar.classList.contains('hud-topbar--hidden')).toBe(false);
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
     expect(title(root)).toBe('TANKS!');
     expect(action(root).textContent).toBe('Start');
