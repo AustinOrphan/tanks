@@ -1,6 +1,7 @@
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2 } from '../sim/types';
+import type { Vec2, InputState } from '../sim/types';
+import { decidePlayerInput, createPlayerAiState, mulberry32 } from '../sim/ai/player-profile';
 import { createLevelSystem, type LevelSystem } from './levels';
 import { createProgressStore, type ProgressStore } from './progress';
 import { createStatsStore, type StatsStore } from './stats';
@@ -352,6 +353,29 @@ export function startGameWith(
   // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
   // rebinds the director, or the player's own cannon scores as an enemy's.
   let playerId = world.tanks.find((t) => t.kind === 'player')?.id;
+  /**
+   * `?dev=1&autoplay=1`: the scripted "competent player" (sim/ai/player-profile.ts)
+   * drives the tank instead of the real input controller, so the game can demo itself.
+   *
+   * Its own RNG stream and hold-state, independent of the world's own seed -- see
+   * player-profile.ts's module comment for why driving the player must not draw from
+   * the same stream the enemy AI does. Seeded once per session (not per level/reset):
+   * autoplay is a demo aid, not a replay a test asserts against, so it does not need
+   * `buildWorld`'s reproducibility guarantees the way the world's own seed does.
+   *
+   * The flag is read HERE, at the boundary, and never reaches src/sim/: decidePlayerInput
+   * takes a World and returns an InputState exactly like the real controller's sample()
+   * does, so step() cannot tell which one produced it, and a replay stays an exact
+   * function of its inputs whether autoplay was on or not.
+   */
+  const autoplayRnd = mulberry32(deriveSeed(deps.wallMs()) + 1);
+  const autoplayState = createPlayerAiState(autoplayRnd);
+  const effectiveInput = {
+    sample: (): InputState =>
+      deps.devFlags.autoplay && playerId !== undefined
+        ? decidePlayerInput(driver.world, playerId, autoplayRnd, autoplayState)
+        : input.sample(),
+  };
   const director = deps.createDirector(audio, playerId ?? -1);
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
@@ -425,7 +449,7 @@ export function startGameWith(
   const driver = createDriver({
     now: deps.now,
     raf: deps.raf,
-    input,
+    input: effectiveInput,
     renderer,
     director,
     stateMachine: sm,

@@ -87,6 +87,17 @@ export interface DevFlags {
    * The playtest staple -- walk a level, watch the AI, tune feel, no respawns.
    */
   invincible: boolean;
+  /**
+   * Drive the player with the scripted "competent player" (sim/ai/player-profile.ts)
+   * instead of reading the input controller -- the game demos itself.
+   *
+   * Chosen HERE, in the game layer, never inside src/sim/: the flag only decides WHICH
+   * function loop.ts calls to build this frame's InputState (decidePlayerInput vs
+   * input.sample()). The sim never sees the flag itself, only the InputState either
+   * path hands to step() -- so a replay stays an exact function of its inputs, autoplay
+   * or not.
+   */
+  autoplay: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -103,6 +114,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   sandboxDisarmed: true,
   sandboxWalls: null,
   invincible: false,
+  autoplay: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -186,6 +198,7 @@ export function parseDevFlags(search: string): DevFlags {
     sandboxDisarmed: params.has('disarmed') ? isOn(params, 'disarmed') : true,
     sandboxWalls: asWalls(params),
     invincible: isOn(params, 'invincible'),
+    autoplay: isOn(params, 'autoplay'),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps

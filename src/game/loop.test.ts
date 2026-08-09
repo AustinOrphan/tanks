@@ -1594,6 +1594,71 @@ describe('startGameWith: dev flags stay off by default', () => {
   });
 });
 
+describe('startGameWith: autoplay wiring', () => {
+  // driver.test.ts already proves the driver calls `deps.input.sample()` once per
+  // simulated tick against a FAKE `input`; it cannot see whether loop.ts wires the REAL
+  // input controller into that seam, let alone whether ?dev=1&autoplay=1 swaps it for
+  // the scripted player -- the same composition-blindness gap loop.test.ts's other
+  // "real frame, pumped" tests exist to close (CLAUDE.md: driver.test.ts injects fake
+  // hooks and cannot see whether loop.ts wires the real collaborators into them).
+  it('samples the real input controller with the flag off (unchanged from today)', () => {
+    const h = boot(makeDeps({ devFlags: { autoplay: false } }));
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks
+    expect(h.rec.samples).toBe(6);
+    h.handle.dispose();
+  });
+
+  it('never touches the real input controller once autoplay is on', () => {
+    // If loop.ts's effectiveInput still fell through to input.sample() this would be 6,
+    // exactly like the test above -- the only way it lands at 0 is if the scripted
+    // player (decidePlayerInput) is genuinely driving in its place.
+    const h = boot(makeDeps({ devFlags: { autoplay: true } }));
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks
+    expect(h.rec.samples).toBe(0);
+    h.handle.dispose();
+  });
+
+  it('actually moves the player tank, not just a live world.tick', () => {
+    // world.tick advances every simulated frame regardless of what InputState step()
+    // receives -- even the all-zeros shape the fake input controller returns -- so a
+    // wiring bug that samples SOMETHING but hands step() a static/neutral input (the
+    // fake's own {move:{0,0}, aim:{1,0}, fire:false, mine:false}) would still pass a
+    // bare tick>0 check. Checking the player's position moved off its spawn is what
+    // actually distinguishes "decidePlayerInput is driving" from "some input arrived".
+    // Player spawn position comes from the arena's fixed grid, not the seed, so any
+    // seed gives the same reference point -- no need to touch the fake levels system
+    // (and its recorder side effects) to get it.
+    const spawn = createArenaWorld(1).tanks.find((t) => t.kind === 'player')!.pos;
+    const h = boot(makeDeps({ devFlags: { autoplay: true } }));
+    h.setState('playing');
+    // A single fireFrame call is clamped to MAX_FRAME_DT (0.25s = 15 ticks, frame.ts),
+    // so one huge `now` jump does NOT simulate the elapsed time -- many small frames do
+    // (same pattern as the "routes events" test above). COUNTDOWN_TICKS (180, 3s) blocks
+    // all movement, so this needs to clear that before the player can have moved at all.
+    for (let i = 1; i <= 60; i++) h.fireFrame(i * 100); // 60 x 100ms, well under the clamp
+    const r = h.rec.renders[h.rec.renders.length - 1];
+    const player = r.curr.tanks.find((t: Tank) => t.kind === 'player')!;
+    expect(player.pos).not.toEqual(spawn);
+    h.handle.dispose();
+  });
+
+  it('leaves the real controller wired for its own calls (pause clear, mine tap, dispose)', () => {
+    // Autoplay only replaces what feeds step(); pressMine/clearQueuedPresses/dispose
+    // still belong to the real controller, unconditionally, so pausing or tearing down
+    // an autoplay session behaves exactly like a normal one.
+    const h = boot(makeDeps({ devFlags: { autoplay: true } }));
+    h.setState('playing');
+    h.hud.mineTap();
+    expect(h.rec.minePresses).toBe(1);
+    h.setState('paused');
+    expect(h.rec.inputClears).toBeGreaterThan(0);
+    h.handle.dispose();
+    expect(h.rec.disposed).toContain('input');
+  });
+});
+
 describe('startGameWith: a pinned dev seed', () => {
   it('uses the pinned seed instead of the clock', () => {
     const h = boot(makeDeps({ wallMs: 999, devFlags: { seed: 4242 } }));
