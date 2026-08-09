@@ -85,6 +85,23 @@ describe('subpath portability checker', () => {
     expect(portabilityFailures(RELATIVE_HTML, bundle('const ch=`./`;'))).toEqual([]);
   });
 
+  it('detects a rotted probe across every audio form, not just .wav', () => {
+    // Review measured four shapes walking silently through the first draft of this
+    // branch: .opus and .aac assets, an UPPERCASE filename, and the computed
+    // `${id}audio/${key}.wav` form -- which matters most, because a key-driven loop
+    // over the manifest is the natural next edit to make here.
+    for (const src of [
+      'x={a:`${ch}audio/theme.opus`};',
+      'x={a:`${ch}audio/hit.aac`};',
+      'x={a:`${ch}audio/Cannon.WAV`};',
+      'x=`${ch}audio/${k}.wav`;',
+    ]) {
+      const failures = portabilityFailures(RELATIVE_HTML, bundle(src));
+      expect(failures, src).toHaveLength(1);
+      expect(failures[0], src).toMatch(/probe has rotted/);
+    }
+  });
+
   it('does not mistake Howler MIME literals for audio files', () => {
     // Every bundle ships `audio/wav`, `audio/mpeg` and ten more as MIME strings. Read
     // as asset URLs they would pin the rot branch on permanently -- which they did, on

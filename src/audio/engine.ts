@@ -138,7 +138,7 @@ export function createAudioEngine(manifest: AudioManifest): AudioEngine {
   // request later. Requesting a file that has never been committed cost 9,379 bytes of
   // 404 body per load, uncached. `beginMusic` builds the generated bed when music is
   // null, so the game sounds the same; it just stops asking first.
-  if (manifest.music !== null) {
+  if (manifest.music) {
     try {
       music = new Howl({ src: [manifest.music], loop: true, volume: MUSIC_VOLUME, preload: true });
       music.on('loaderror', () => {

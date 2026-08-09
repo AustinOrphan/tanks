@@ -2,9 +2,14 @@
 //
 // The PRODUCTION audio path, which engine.test.ts cannot reach.
 //
-// No audio assets ship with this slice (public/audio/ holds only .gitkeep), so
-// every Howl fires `loaderror`, every `sounds[key]` is nulled, and the
-// procedural `beep()` fallback is the ONLY path that ever makes a sound today.
+// No audio assets ship (public/audio/ holds only .gitkeep), so the procedural
+// `beep()` path is the ONLY one that ever makes a sound today. It reaches that
+// state two ways now, and this file covers the SECOND: the shipped manifest
+// declares nothing, so no Howl is built at all; but a manifest that DOES declare
+// a file gets there via `loaderror` nulling `sounds[key]`, and that handler still
+// has to work for the day a real asset lands. These cases run against
+// AUTHORED_LAYOUT for exactly that reason -- against the empty shipped manifest
+// they would build zero Howls and assert nothing.
 // engine.test.ts mocks `Howl.on()` as a no-op, so `loaderror` never fires there
 // and `sounds[key]` is always a truthy Howl -- its 8 green tests exercise the
 // asset path exclusively and would stay green if `beep()` were deleted.

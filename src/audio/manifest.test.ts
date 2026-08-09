@@ -54,9 +54,13 @@ describe('AUDIO_MANIFEST', () => {
     // verbatim and never rewrites, so a bare '/audio/cannon.wav' is opaque to the
     // bundler and setting `base` does NOT fix it -- served from a subpath the browser
     // would ask for <origin>/audio/... instead of <origin>/tanks/audio/... .
-    expect(manifestSource).toContain('import.meta.env.BASE_URL');
-    expect(manifestSource, 'a hardcoded root path bypasses base rewriting').not.toMatch(
-      /return `\/audio\//,
+    // Comments STRIPPED first. The draft of this assertion matched the JSDoc above
+    // `audioUrl`, which names `import.meta.env.BASE_URL` in prose -- so replacing the
+    // function body with a hardcoded '/' passed the whole suite AND the portability
+    // gate. Third tautology of this change; the mutation sweep found all three.
+    const code = manifestSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    expect(code, 'audioUrl no longer derives its path from the configured base').toContain(
+      'import.meta.env.BASE_URL',
     );
 
     // And each key maps to the file NAMED AFTER IT. Derive the expected name from the

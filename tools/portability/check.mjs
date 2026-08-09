@@ -121,9 +121,14 @@ export function portabilityFailures(indexHtml, bundles) {
     // present), and a filename with an extension (a bare `audio/wav` is one of Howler's
     // dozen MIME-type literals, which ship in every bundle and would pin this branch on
     // forever).
-    const anyAudioUrl = bundles.some(({ source }) =>
-      /audio\/[\w-]+\.(?:wav|mp3|ogg|m4a|webm|flac)\b/.test(source),
-    );
+    // Every Howler-supported extension, case-insensitive, PLUS the computed form
+    // `${id}audio/${k}.wav` -- a key-driven loop over the manifest is the natural next
+    // edit here, and review measured that shape walking straight through the first
+    // draft. `audio/aac` and friends are MIME literals in every bundle, which is why a
+    // filename (a dot and an extension) is required rather than a bare `audio/`.
+    const AUDIO_FILE =
+      /audio\/(?:\$\{[^}]*\}|[\w-]+)\.(?:wav|mp3|ogg|oga|m4a|m4b|mp4|aac|caf|weba|webm|dolby|flac|opus)\b/i;
+    const anyAudioUrl = bundles.some(({ source }) => AUDIO_FILE.test(source));
     if (anyAudioUrl) {
       failures.push(
         `no reference to ${PROBE_ASSET} in any bundle, but the bundle DOES carry other ` +

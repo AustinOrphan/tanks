@@ -52,7 +52,10 @@ subpath without reconfiguration.
 
 ## Audio assets
 
-None are committed. `public/audio/` holds only a `.gitkeep`, so the engine
-degrades to procedural Web Audio tones — a deliberate fallback so development is
-never blocked on assets. See [CREDITS.md](CREDITS.md); its attribution tables are
+None are committed. `public/audio/` holds only a `.gitkeep`, so the manifest
+declares nothing and the engine synthesises every sound in Web Audio rather than
+requesting files that are not there — a deliberate choice, not a degraded mode,
+so development is never blocked on assets. (It used to declare all ten anyway and
+let each 404: 10 requests and 93,790 uncached bytes per load, measured against the
+deployed site.) See [CREDITS.md](CREDITS.md); its attribution tables are
 intentionally empty rather than fabricated.

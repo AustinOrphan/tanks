@@ -16,8 +16,10 @@ vi.mock('howler', () => {
   class FakeHowl {
     private handlers: Record<string, Array<() => void>> = {};
     constructor(public opts: { src: string[]; loop?: boolean }) {
-      // Every asset 404s in this repo, which is the shipped reality: fire
-      // loaderror asynchronously exactly as Howler does.
+      // Fire loaderror asynchronously, exactly as Howler does for a missing file.
+      // This is no longer the shipped reality -- the manifest declares nothing, so
+      // nothing is requested -- but it is what a DECLARED file would do while none
+      // exists, which is what the cases using AUTHORED_LAYOUT are about.
       queueMicrotask(() => {
         for (const h of this.handlers.loaderror ?? []) h();
       });

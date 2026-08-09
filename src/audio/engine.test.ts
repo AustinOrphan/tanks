@@ -72,7 +72,7 @@ import { createAudioEngine, DUCK_FACTOR } from './engine';
 // because no audio file has ever been committed. Pointing these at the shipped
 // manifest would leave them asserting things about zero Howls, which is how a loading
 // path rots unnoticed until the day a real asset lands.
-import { AUTHORED_LAYOUT as LOADABLE, DEFAULT_VOLUME } from './manifest';
+import { AUDIO_MANIFEST, AUTHORED_LAYOUT as LOADABLE, DEFAULT_VOLUME } from './manifest';
 
 /** The Howl the engine built for a given manifest SFX key. */
 function howlFor(key: string): MockHowl {
@@ -94,6 +94,21 @@ describe('createAudioEngine', () => {
     globalMute.mockClear();
     globalVolume.mockClear();
     howls.length = 0;
+  });
+
+  it('asks the network for NOTHING when the manifest declares nothing', () => {
+    // The headline behaviour of the change that emptied the manifest, and it had no
+    // test: every other case in this file runs against LOADABLE, so nothing observed
+    // the SHIPPED configuration. Deleting the `if (manifest.music)` guard, or letting
+    // the sfx loop run over a populated map, has to fail here.
+    //
+    // Population: the shipped AUDIO_MANIFEST, which declares 0 sfx and no music. On the
+    // deployed site the previous manifest cost 10 requests and 93,790 bytes per load.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    expect(howls, 'the empty manifest still built a Howl, so it still hits the network').toEqual(
+      [],
+    );
+    engine.dispose();
   });
 
   it('constructs one Howl per manifest entry and starts unmuted', () => {
