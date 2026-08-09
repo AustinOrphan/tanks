@@ -118,6 +118,13 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <!-- The title screen. Deliberately NOT a <button>: any key and any pointer press
+         dismiss it, so the whole overlay is the target and a single focusable control
+         would understate that. loop.ts owns the listeners. -->
+    <div class="hud-splash hud-splash--hidden">
+      <h1 class="hud-splash-title">TANKS!</h1>
+      <p class="hud-splash-hint">Press any key or tap to begin</p>
+    </div>
     <div class="hud-toasts" aria-live="polite"></div>
     <div class="hud-achievements hud-achievements--hidden">
       <h1>Achievements</h1>
@@ -170,6 +177,7 @@ export function createHud(root: HTMLElement): Hud {
   const bannerCountEl = el.querySelector('.hud-banner-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
+  const splashEl = el.querySelector('.hud-splash') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
@@ -479,7 +487,13 @@ export function createHud(root: HTMLElement): Hud {
     customizeView.classList.add('hud-customize--hidden');
     achView.classList.add('hud-achievements--hidden');
     disarmReset();
-    if (s === 'playing') {
+    splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
+    // Splash and playing both want the menu panel gone. Splash returns BEFORE the
+    // branches below for the same reason `paused` returns early: the final `else`
+    // renders a Game Over corpse screen, so any state that falls through to it gets
+    // "Out of lives." written into the panel -- on a fresh page load, that is the
+    // first thing a player would see.
+    if (s === 'playing' || s === 'splash') {
       panel.classList.add('hud-panel--hidden');
       return;
     }
@@ -526,7 +540,11 @@ export function createHud(root: HTMLElement): Hud {
     }
   }
 
-  setState('title');
+  // The boot state, and it must match the state machine's own initial state
+  // (`state.ts`), which is now the splash screen rather than the menu. `loop.ts` also
+  // pushes `hud.setState(sm.state)` at boot precisely because that path bypasses
+  // `sm.onChange`; this call is what the HUD looks like before it arrives.
+  setState('splash');
 
   // The button is the only indication of mute state, and there is genuinely no
   // music shipped, so "silent" is the normal condition -- without this a muted

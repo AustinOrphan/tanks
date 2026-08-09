@@ -112,6 +112,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
+  /** Fires the host pointerdown listener -- the splash screen's dismissal path. */
+  pointerdown(): void;
   resize(): void;
 } {
   const rec: Recorder = {
@@ -169,7 +171,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 
   let pending: ((now: number) => void) | null = null;
-  let state: GameState = 'title';
+  let state: GameState = 'splash'; // faithful to state.ts's initial state
   const changeCbs: Array<(s: GameState) => void> = [];
   let onMute = (): void => {};
   let onVolume = (_v: number): void => {};
@@ -302,6 +304,16 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       toTitle(): void {
         state = 'title';
         emit();
+      },
+      // Guarded exactly as state.ts guards it: acts only from 'splash'. An unguarded
+      // fake would let a keypress during play "dismiss" a splash that is not showing
+      // and emit a spurious change, which is the divergence this file has been bitten
+      // by before.
+      dismissSplash(): void {
+        if (state === 'splash') {
+          state = 'title';
+          emit();
+        }
       },
       startPlaying(): void {
         state = 'playing';
@@ -583,6 +595,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       const entry = rec.listeners.find(([t]) => t === 'keydown');
       if (!entry) throw new Error('no keydown listener');
       (entry[1] as (ev: Partial<KeyboardEvent>) => void)(e);
+    },
+    pointerdown(): void {
+      const entry = rec.listeners.find(([t]) => t === 'pointerdown');
+      if (!entry) throw new Error('no pointerdown listener');
+      (entry[1] as () => void)();
     },
     resize(): void {
       const entry = rec.listeners.find(([t]) => t === 'resize');
@@ -902,16 +919,24 @@ describe('startGameWith: HUD wiring', () => {
 
   it('shows the initial state and stats before any frame runs', () => {
     const h = boot();
-    expect(h.rec.hudStates[0]).toBe('title');
+    // The splash screen, not the menu: the HUD's first push must match the state
+    // machine's initial state, and loop.ts pushes it explicitly because that path
+    // bypasses sm.onChange.
+    expect(h.rec.hudStates[0]).toBe('splash');
     expect(h.rec.lives.length).toBeGreaterThan(0);
     h.handle.dispose();
   });
 });
 
 describe('startGameWith: listeners and teardown', () => {
-  it('registers keydown, resize and blur, and sizes the canvas once at boot', () => {
+  it('registers keydown, resize, blur and pointerdown, and sizes the canvas once at boot', () => {
     const h = boot();
-    expect(h.rec.listeners.map(([t]) => t).sort()).toEqual(['blur', 'keydown', 'resize']);
+    expect(h.rec.listeners.map(([t]) => t).sort()).toEqual([
+      'blur',
+      'keydown',
+      'pointerdown', // dismisses the splash screen; see the audio-unlock note in loop.ts
+      'resize',
+    ]);
     expect(h.rec.resizes).toEqual([[1024, 768]]);
     h.handle.dispose();
   });
@@ -940,7 +965,7 @@ describe('startGameWith: listeners and teardown', () => {
   it('removes exactly the listeners it added, by identity', () => {
     const h = boot();
     h.handle.dispose();
-    expect(h.rec.removed).toHaveLength(3);
+    expect(h.rec.removed).toHaveLength(4);
     for (const [type, fn] of h.rec.removed) {
       expect(h.rec.listeners).toContainEqual([type, fn]);
     }
@@ -1549,6 +1574,7 @@ describe('startGameWith: the main menu', () => {
 
   it('a level pick from the title rebuilds at that level and starts play', () => {
     const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
+    h.pointerdown(); // leave the splash screen the way a player does
     h.hud.pickLevel(1);
     expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
     expect(h.getState()).toBe('playing');
@@ -1571,6 +1597,7 @@ describe('startGameWith: a level pick is bounds-checked', () => {
     // world from ARENAS[picked] deserves its own guard -- ARENAS[7] is undefined and
     // loadArena(undefined) is a crash, not a shrug.
     const h = boot(makeDeps({ levelCount: 2 }));
+    h.pointerdown(); // leave the splash screen the way a player does
     h.hud.pickLevel(7);
     h.hud.pickLevel(-1);
     expect(h.rec.levelBuilds).toHaveLength(1); // only the boot build

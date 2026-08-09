@@ -130,11 +130,39 @@ describe('createHud panel', () => {
   const action = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-action') as HTMLButtonElement;
 
-  it('shows the title panel on mount', () => {
+  it('shows the splash screen on mount, with the menu panel behind it hidden', () => {
+    // The HUD boots into the same state the state machine does. Before the splash
+    // screen existed this asserted the menu, so it is the one test that pins which
+    // screen a player actually lands on.
     const { root } = mount();
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    expect(splash.classList.contains('hud-splash--hidden')).toBe(false);
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
+  });
+
+  it('shows the title panel once the splash screen is dismissed', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    expect(splash.classList.contains('hud-splash--hidden')).toBe(true);
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
     expect(title(root)).toBe('TANKS!');
     expect(action(root).textContent).toBe('Start');
+  });
+
+  it('does not render the Game Over panel behind the splash screen at boot', () => {
+    // setState's final `else` is a Game Over branch, and every state that does not
+    // return before reaching it falls in. 'splash' returns early alongside 'playing'.
+    // Without that return, the very first setState at mount writes "Game Over" /
+    // "Out of lives." into the panel AND leaves it un-hidden, so the first thing a
+    // player sees on a fresh page load is a defeat screen.
+    //
+    // Only the boot path is asserted because it is the only one that reaches 'splash':
+    // dismissSplash goes splash -> title and nothing returns to it, so there is no
+    // lose -> splash transition to guard.
+    const { root } = mount();
+    expect(title(root)).not.toBe('Game Over');
+    expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
   });
 
   it('hides the panel while playing and restores it on win and lose', () => {
