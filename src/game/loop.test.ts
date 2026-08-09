@@ -85,6 +85,9 @@ interface Recorder {
   resizes: Array<[number, number]>;
   refits: Array<[number, number, number]>;
   restyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
+  previewCanvasesReceived: HTMLCanvasElement[];
+  previewRestyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
+  previewResizes: number;
   hullSets: string[];
   hullEchoes: string[];
   skinSets: string[];
@@ -119,9 +122,10 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean } = {}): {
   deps: GameDeps;
   rec: Recorder;
+  previewCanvas: HTMLCanvasElement;
   fireFrame(now: number): void;
   hasFrame(): boolean;
   hud: {
@@ -140,6 +144,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     pickHull(id: HullColorId): void;
     pickSkin(id: SkinId): void;
     pickAccent(id: AccentId): void;
+    openCustomize(): void;
+    closeCustomize(): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -195,6 +201,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     resizes: [],
     refits: [],
     restyles: [],
+    previewCanvasesReceived: [],
+    previewRestyles: [],
+    previewResizes: 0,
     hullSets: [],
     hullEchoes: [],
     skinSets: [],
@@ -240,6 +249,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onPickAccent = (_id: AccentId): void => {};
   let onResetProgress = (): void => {};
   let onPickLevel = (_i: number): void => {};
+  let onCustomizeOpen = (): void => {};
+  let onCustomizeClose = (): void => {};
+  // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
+  // fake createPreview below can assert it received the SAME element the HUD exposed --
+  // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
+  const fakePreviewCanvas = document.createElement('canvas');
 
   function emit(): void {
     for (const cb of changeCbs) cb(state);
@@ -278,6 +293,21 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         dispose(): void {
           rec.disposed.push('renderer');
+        },
+      };
+    },
+    createPreview: (canvas) => {
+      rec.previewCanvasesReceived.push(canvas);
+      if (opts.previewUnavailable) return null; // no spare WebGL context, real code path
+      return {
+        setStyle(hex: string | null, skin: string, accent: string | null): void {
+          rec.previewRestyles.push({ hex, skin, accent });
+        },
+        resize(): void {
+          rec.previewResizes += 1;
+        },
+        dispose(): void {
+          rec.disposed.push('preview');
         },
       };
     },
@@ -482,6 +512,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onPickAccentColor: (cb: (id: AccentId) => void) => {
           onPickAccent = cb;
+        },
+        previewCanvas: fakePreviewCanvas,
+        onCustomizeOpen: (cb: () => void) => {
+          onCustomizeOpen = cb;
+        },
+        onCustomizeClose: (cb: () => void) => {
+          onCustomizeClose = cb;
         },
         setAchievements: (earned: ReadonlySet<string>) => {
           rec.achPushes.push([...earned]);
@@ -698,6 +735,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   return {
     deps,
     rec,
+    previewCanvas: fakePreviewCanvas,
     fireFrame(now): void {
       const cb = pending;
       if (!cb) throw new Error('no frame queued');
@@ -721,6 +759,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       pickSkin: (id: SkinId) => onPickSkin(id),
       pickAccent: (id: AccentId) => onPickAccent(id),
       resetProgress: () => onResetProgress(),
+      openCustomize: () => onCustomizeOpen(),
+      closeCustomize: () => onCustomizeClose(),
     },
     setState: (s) => {
       state = s;
@@ -2541,6 +2581,65 @@ describe('startGameWith: the paint shop wiring', () => {
     expect(h.rec.restyles).toEqual([
       { hex: '#hex-blue', skin: 'solid', accent: '#accent-silver' },
     ]);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the live tank preview', () => {
+  it('is built against the HUD\'s OWN canvas, styled with the current save, when the panel opens', () => {
+    const h = boot(makeDeps({ savedHull: 'purple', savedSkin: 'camo', savedAccent: 'gold' }));
+    expect(h.rec.previewCanvasesReceived).toHaveLength(0); // not built merely by booting
+    h.hud.openCustomize();
+    expect(h.rec.previewCanvasesReceived).toEqual([h.previewCanvas]);
+    expect(h.rec.previewRestyles).toEqual([
+      { hex: '#hex-purple', skin: 'camo', accent: '#accent-gold' },
+    ]);
+    h.handle.dispose();
+  });
+
+  it('is disposed when the panel closes via the chokepoint the HUD fires on ANY close', () => {
+    // Not just the Back button: hud.ts routes every close (Back, or a state change
+    // while the panel is open, e.g. Start) through the same onCustomizeClose --
+    // this fake exercises exactly that one callback, so it stands for both paths.
+    const h = boot(makeDeps());
+    h.hud.openCustomize();
+    expect(h.rec.disposed).not.toContain('preview');
+    h.hud.closeCustomize();
+    expect(h.rec.disposed).toContain('preview');
+    h.handle.dispose();
+  });
+
+  it('restyles alongside the main renderer on every pick, not just at open', () => {
+    const h = boot(makeDeps({ savedHull: 'red' }));
+    h.hud.openCustomize();
+    h.rec.previewRestyles.length = 0; // clear the open-time restyle to isolate the pick
+    h.hud.pickSkin('checker');
+    expect(h.rec.previewRestyles).toEqual([{ hex: '#hex-red', skin: 'checker', accent: null }]);
+    // And the main renderer got the SAME triple -- the tank behind the panel and the
+    // one inside it must never disagree.
+    expect(h.rec.restyles.at(-1)).toEqual(h.rec.previewRestyles.at(-1));
+    h.handle.dispose();
+  });
+
+  it('a pick while the panel is CLOSED restyles the renderer but builds no preview', () => {
+    // The whole point of scoping the preview's lifetime to the panel: a pick made
+    // anywhere else in the game must not silently construct a second WebGL context.
+    const h = boot(makeDeps());
+    h.hud.pickHull('red');
+    expect(h.rec.restyles).toHaveLength(1);
+    expect(h.rec.previewCanvasesReceived).toHaveLength(0);
+    expect(h.rec.previewRestyles).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('createPreview returning null (no spare WebGL context) does not throw on later picks', () => {
+    const h = boot(makeDeps({ previewUnavailable: true }));
+    h.hud.openCustomize();
+    // The panel opening must not throw even though no preview object came back --
+    // this is the mutation that matters: an unguarded `preview.setStyle` (dot, not
+    // `preview?.setStyle`) throws here on the null return.
+    expect(() => h.hud.pickHull('red')).not.toThrow();
+    expect(() => h.hud.closeCustomize()).not.toThrow();
     h.handle.dispose();
   });
 });

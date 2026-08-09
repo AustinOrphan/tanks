@@ -105,6 +105,24 @@ export interface Hud {
   setAccentColor(id: AccentId): void;
   /** Fired with the accent id when the player clicks one. */
   onPickAccentColor(cb: (id: AccentId) => void): void;
+  /**
+   * The paint shop's live tank preview canvas -- owned by the HUD (it is markup, same
+   * as every other element here), driven by the caller. `render/preview.ts` builds a
+   * SECOND WebGLRenderer against it, which is why the HUD only hands the element out
+   * rather than doing any WebGL of its own: keeping hud.ts free of `three` is what
+   * lets hud.test.ts keep running under plain jsdom.
+   */
+  readonly previewCanvas: HTMLCanvasElement;
+  /**
+   * The Customize panel just became visible/hidden. This is the ONE chokepoint for
+   * both transitions -- the Back button (`showCustomize(false)`) and any OTHER state
+   * change, which closes the panel unconditionally (see setState) -- so a caller that
+   * builds the live preview on open and disposes it on close cannot leak a WebGL
+   * context down the second path. Fired only on an actual transition, never on a
+   * redundant call.
+   */
+  onCustomizeOpen(cb: () => void): void;
+  onCustomizeClose(cb: () => void): void;
   /** The earned set, pushed by the loop whenever it changes. Re-renders if open. */
   setAchievements(earned: ReadonlySet<AchievementId>): void;
   /**
@@ -225,17 +243,24 @@ export function createHud(root: HTMLElement): Hud {
     </div>
     <div class="hud-customize hud-customize--hidden">
       <h1>Customize</h1>
-      <p>Hull colour — repaints the tank behind this menu.</p>
-      <div class="hud-swatches"></div>
-      <p>Skin — patterns the hull and turret; tracks stay solid.</p>
-      <div class="hud-skins"></div>
-      <p>Skin colour — the pattern's second tone. Auto matches the hull.</p>
-      <div class="hud-accents"></div>
-      <!-- The accent's own tone never shows on the "solid" skin (createSkinTexture
-           returns null for it, the no-map default) -- without this a player who picks an
-           accent before a pattern sees no change at all and may think the pick did
-           nothing. Not a button: it explains a state, it does not trigger one. -->
-      <p class="hud-accent-hint hud-accent-hint--hidden">Pick a pattern above to see this colour.</p>
+      <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
+           this canvas, using the SAME tank-building code (render/entities.ts) and skin
+           textures (render/skins.ts) the game itself uses -- not a depiction of the
+           tank, the tank. Owned as markup here, driven from game/loop.ts via
+           onCustomizeOpen/onCustomizeClose (hud.ts stays free of three.js, see the Hud
+           interface doc comment on previewCanvas). aria-hidden: it is a repaint of
+           choices already exposed as labelled, focusable buttons below; a screen
+           reader gains nothing from the canvas itself. -->
+      <canvas class="hud-preview" aria-hidden="true"></canvas>
+      <section class="hud-customize-section">
+        <h2>Hull</h2>
+        <div class="hud-swatches"></div>
+      </section>
+      <section class="hud-customize-section">
+        <h2>Skin</h2>
+        <div class="hud-skins"></div>
+        <div class="hud-accents"></div>
+      </section>
       <button class="hud-customize-back" type="button">Back</button>
     </div>
     <div class="hud-stats hud-stats--hidden">
@@ -322,9 +347,9 @@ export function createHud(root: HTMLElement): Hud {
   const statsBackBtn = el.querySelector('.hud-stats-back') as HTMLButtonElement;
   const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
+  const previewCanvasEl = el.querySelector('.hud-preview') as HTMLCanvasElement;
   const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
   const accentsRow = el.querySelector('.hud-accents') as HTMLElement;
-  const accentHintEl = el.querySelector('.hud-accent-hint') as HTMLElement;
   const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
   const achOpenBtn = el.querySelector('.hud-achievements-open') as HTMLButtonElement;
   const achView = el.querySelector('.hud-achievements') as HTMLElement;
@@ -513,6 +538,8 @@ export function createHud(root: HTMLElement): Hud {
 
   const pickAccentCbs: Array<(id: AccentId) => void> = [];
   let currentAccent: AccentId = ACCENTS[0].id;
+  const customizeOpenCbs: Array<() => void> = [];
+  const customizeCloseCbs: Array<() => void> = [];
 
   // One button per accent entry, built once, exactly like the hull swatches above --
   // reusing `.hud-swatch` rather than a new class, since it IS the same control: a
@@ -537,14 +564,6 @@ export function createHud(root: HTMLElement): Hud {
     for (const b of Array.from(accentsRow.children) as HTMLButtonElement[]) {
       b.classList.toggle('hud-swatch--selected', b.dataset.accent === currentAccent);
     }
-  }
-
-  // `solid` (SKINS[0], the default) has no texture -- createSkinTexture returns null for
-  // it -- so an accent choice has nothing to paint onto. Shown only in that exact
-  // combination: an explicit (non-`auto`) accent picked while the skin is still solid.
-  function renderAccentHint(): void {
-    const show = currentSkin === SKINS[0].id && currentAccent !== ACCENTS[0].id;
-    accentHintEl.classList.toggle('hud-accent-hint--hidden', !show);
   }
 
   let statsData: { lifetime: StatCounts; run: StatCounts } | null = null;
@@ -622,14 +641,21 @@ export function createHud(root: HTMLElement): Hud {
     if (show) renderStatsTable();
   }
 
+  // The single chokepoint for both the panel's own Back button AND setState's
+  // unconditional close (below) -- see onCustomizeOpen/onCustomizeClose's doc comment.
+  // Guarded on the ACTUAL transition so a caller building/disposing the live preview
+  // off these never sees a redundant open or a redundant dispose.
   function showCustomize(show: boolean): void {
+    const wasOpen = !customizeView.classList.contains('hud-customize--hidden');
     customizeView.classList.toggle('hud-customize--hidden', !show);
     panel.classList.toggle('hud-panel--hidden', show);
     if (show) {
       renderSwatchSelection();
       renderSkinSelection();
       renderAccentSelection();
-      renderAccentHint();
+      if (!wasOpen) for (const cb of customizeOpenCbs) cb();
+    } else if (wasOpen) {
+      for (const cb of customizeCloseCbs) cb();
     }
   }
 
@@ -827,7 +853,10 @@ export function createHud(root: HTMLElement): Hud {
     // playing early-return below, or an overlay opened on the title screen would
     // sit over the live game. They are title-screen affairs.
     statsView.classList.add('hud-stats--hidden');
-    customizeView.classList.add('hud-customize--hidden');
+    // Routed through showCustomize (not a bare class add, unlike its stats/achievements
+    // siblings above/below) so this path fires onCustomizeClose too -- the common exit
+    // from the panel is Start, which arrives here, not through the Back button.
+    showCustomize(false);
     achView.classList.add('hud-achievements--hidden');
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
@@ -1079,15 +1108,20 @@ export function createHud(root: HTMLElement): Hud {
     setSkin(id: SkinId): void {
       currentSkin = id;
       renderSkinSelection();
-      renderAccentHint();
     },
     setAccentColor(id: AccentId): void {
       currentAccent = id;
       renderAccentSelection();
-      renderAccentHint();
     },
     onPickAccentColor(cb: (id: AccentId) => void): void {
       pickAccentCbs.push(cb);
+    },
+    previewCanvas: previewCanvasEl,
+    onCustomizeOpen(cb: () => void): void {
+      customizeOpenCbs.push(cb);
+    },
+    onCustomizeClose(cb: () => void): void {
+      customizeCloseCbs.push(cb);
     },
     setTouchIndicator(t: TouchIndicator): void {
       // Hidden entirely until a touch has happened, so a mouse player never sees it.

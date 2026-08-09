@@ -56,6 +56,28 @@ function gradientPixels(): Uint8ClampedArray<ArrayBuffer> {
   return data;
 }
 
+/**
+ * The same generated sky-to-ground reflection environment createScene builds below,
+ * pulled out so render/preview.ts's much smaller preview scene can give its tank the
+ * SAME material read the main scene gives it -- one gradient, not two copies that could
+ * drift apart. Every MeshStandardMaterial in render/entities.ts carries nonzero
+ * metalness, which renders near-black with no environment at all (see createScene's own
+ * comment on this), so a preview built without this would look worse than the tank it is
+ * supposed to be showing faithfully.
+ */
+export function createEnvironmentMap(renderer: THREE.WebGLRenderer): THREE.Texture {
+  const envScene = new THREE.Scene();
+  const grad = new THREE.DataTexture(gradientPixels(), 1, ENV_STEPS, THREE.RGBAFormat);
+  grad.needsUpdate = true;
+  grad.mapping = THREE.EquirectangularReflectionMapping;
+  envScene.background = grad;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envMap = pmrem.fromScene(envScene).texture;
+  grad.dispose();
+  pmrem.dispose();
+  return envMap;
+}
+
 export function createScene(
   canvas: HTMLCanvasElement,
   worldWidth: number,
@@ -92,19 +114,11 @@ export function createScene(
   //
   // Built here rather than loaded: a 2x64 gradient run through PMREM costs a few lines
   // and no asset, matching how the audio is generated rather than shipped.
-  const envScene = new THREE.Scene();
-  const grad = new THREE.DataTexture(gradientPixels(), 1, ENV_STEPS, THREE.RGBAFormat);
-  grad.needsUpdate = true;
-  grad.mapping = THREE.EquirectangularReflectionMapping;
-  envScene.background = grad;
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envMap = pmrem.fromScene(envScene).texture;
+  const envMap = createEnvironmentMap(renderer);
   scene.environment = envMap;
   // Intensity well under 1: the environment is here to give metals something to
   // reflect, not to light the scene. At 1.0 it flattened the sun's shadows.
   scene.environmentIntensity = 0.35;
-  grad.dispose();
-  pmrem.dispose();
 
   // Single fixed camera tilted ~50deg down, framing the whole board (no scrolling).
   const BASE_FOV = 50;

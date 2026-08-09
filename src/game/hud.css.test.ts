@@ -155,6 +155,9 @@ describe('hud.css is syntactically whole', () => {
       // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
       '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
       '.hud-swatch', '.hud-swatch--selected',
+      // the live preview's fixed size -- without it the canvas falls back to the HTML
+      // default replaced-element size (300x150), and the section label styling
+      '.hud-preview', '.hud-customize-section',
       // the accent row's own flex/gap -- without it the swatches touch edge-to-edge,
       // unlike every other row in the pane (.hud-swatches, .hud-skins)
       '.hud-accents',
@@ -271,6 +274,26 @@ describe('hud.css is syntactically whole', () => {
     expect(accentsStyle.display).toBe('flex');
     expect(accentsStyle.display).toBe(swatchesStyle.display);
     expect(accentsStyle.gap).toBe(swatchesStyle.gap);
+
+    document.body.innerHTML = '';
+  });
+
+  it('gives the preview canvas an explicit size', () => {
+    // A real browser falls a sizeless <canvas> back to 300x150 (the HTML
+    // replaced-element default) -- jsdom does not model that (a bare canvas here
+    // reports 'auto'/'auto', not '300px'/'150px'), so this cannot compare against that
+    // fallback the way the accent-row test next door compares against `display: block`.
+    // What it CAN prove under jsdom is the positive: the rule resolves to the exact
+    // pixel size render/preview.ts's camera framing assumes, distinguishing "rule
+    // exists but sets nothing" from "rule sets the real values" -- the presence-only
+    // check above cannot tell those apart.
+    const preview = document.createElement('canvas');
+    preview.className = 'hud-preview';
+    document.body.appendChild(preview);
+    const previewStyle = getComputedStyle(preview);
+
+    expect(previewStyle.width).toBe('260px');
+    expect(previewStyle.height).toBe('190px');
 
     document.body.innerHTML = '';
   });

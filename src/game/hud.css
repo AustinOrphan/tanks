@@ -635,9 +635,15 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  /* Lighter than the stats scrim ON PURPOSE: the whole point of this pane is the
-   * live repaint of the tank standing behind it. */
-  background: rgba(10, 12, 16, 0.35);
+  /* SAME strength as the stats/achievements scrim now, not the old lighter 0.35 --
+   * that value existed only so the arena's own player tank, standing at its spawn
+   * behind this pane, was visible through it; that WAS the "preview". Measured with
+   * a real screenshot after .hud-preview landed: at 0.35 the arena tank still shows
+   * through clearly enough to visually collide with the Skin section's buttons,
+   * reading as a second, smaller, out-of-place tank beside the real preview. Now that
+   * the pane has an actual preview, the arena behind it is background noise, not
+   * content -- so it gets the same treatment stats/achievements already had. */
+  background: rgba(10, 12, 16, 0.72);
   color: #d8dde6;
 }
 
@@ -650,16 +656,34 @@
   display: none;
 }
 
-/* Shown only while `solid` (no texture) is picked alongside an explicit accent, which
- * has nothing to render onto -- see hud.ts's renderAccentHint. Muted rather than the
- * pane's full-strength text colour: it explains a state, it should not read as urgent. */
-.hud-accent-hint {
-  font-size: 0.85em;
-  opacity: 0.75;
+/* The live tank preview -- render/preview.ts draws into this canvas with its OWN
+ * WebGL context (see that file's doc comment on why a second context is safe here).
+ * Fixed size rather than fluid: it is a close-up of one tank, not a viewport that
+ * benefits from filling available space, and a fixed size keeps
+ * render/preview.ts's camera framing (fitCameraToArea against PREVIEW_AREA_W/H)
+ * predictable rather than re-fitting against an arbitrary box. Widescreen (260x190,
+ * not square) because the tank itself is -- HULL_LEN plus the turret and muzzle
+ * overhang the nose further than the hull is wide. */
+.hud-preview {
+  width: 260px;
+  height: 190px;
+  border-radius: 12px;
 }
 
-.hud-accent-hint--hidden {
-  display: none;
+.hud-customize-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Same size/weight as the pane's own <h1>, one step down -- a label for a group of
+ * controls, not a second page title. */
+.hud-customize-section h2 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 700;
+  opacity: 0.85;
 }
 
 .hud-swatches {

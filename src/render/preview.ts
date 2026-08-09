@@ -1,0 +1,220 @@
+/**
+ * The paint shop's tank preview: a small, dedicated WebGL scene showing the PLAYER
+ * tank close up, built from the SAME `render/entities.ts` mesh/material/skin code and
+ * `render/skins.ts` textures the main game scene uses, through the same
+ * tone-mapping/exposure and a matching generated environment map (see
+ * scene.ts's `createEnvironmentMap`) -- so the geometry, materials and skin are not a
+ * depiction, they are the game's own. The one thing that deliberately differs is the
+ * LIGHT RIG: a simpler key/fill/ambient set sized for a close-up, not the arena's
+ * sun/fill/rim tuned for a whole board, so absolute colour can read slightly
+ * differently even though every material is identical -- see setStyle's own check in
+ * tools/gl/harness.ts for what IS asserted (which channel dominates after a hull
+ * change), not pixel-exact equality with the arena.
+ *
+ * A second WebGLRenderer is a real cost, so `game/loop.ts` builds one only while the
+ * Customize panel is open (`hud.onCustomizeOpen`) and `dispose()`s it on close
+ * (`onCustomizeClose`) -- the peak is two live contexts (this one plus the main
+ * game's), well under a typical browser's concurrent-context cap (commonly cited
+ * around 8-16), though this was not measured against actual eviction on low-end
+ * hardware, nor against how the MAIN context behaves if the browser ever does evict
+ * one (`webglcontextlost` is not handled here or in renderer.ts).
+ *
+ * There is exactly ONE `.hud-preview` canvas for the whole session (see hud.ts's
+ * markup) -- open/Back/open again reuses the SAME element, not a fresh one -- so
+ * dispose() deliberately does NOT call `renderer.forceContextLoss()` the way
+ * scene.ts's does. scene.ts's canvas gets a brand new WebGLRenderer on every level
+ * (a genuinely new canvas each time main.ts boots, or never at all otherwise), so
+ * losing the context on teardown is free. This canvas is reused, and a lost context
+ * does not reliably come back: a real run proved a second `createTankPreview` on a
+ * force-lost canvas returns a live renderer that draws nothing (see the "reopening on
+ * the SAME canvas" check in tools/gl/harness.ts, which fails against the
+ * forceContextLoss version and is the reason this comment exists). dispose() still
+ * frees everything IT owns -- the entity views, the lights, the ground, the generated
+ * environment map -- so nothing GROWS across an open/close cycle; only the context
+ * itself, and the small viewport/state THREE keeps for it, survives to be reused.
+ *
+ * `createTankPreview` returns `null` instead of throwing if the environment cannot
+ * hand out a context (three.js's WebGLRenderer constructor throws when
+ * `canvas.getContext` returns null). A low-end device that has run out of contexts
+ * loses the preview, not the game -- see preview.test.ts, which proves this branch
+ * for real: jsdom has no WebGL implementation at all, so constructing here under
+ * vitest exercises the exact same catch this guards a real browser with.
+ */
+import * as THREE from 'three';
+import { createEntityViews, type EntityViews } from './entities';
+import { createEnvironmentMap } from './scene';
+import { fitCameraToArea } from './framing';
+import type { SkinId } from '../game/customization';
+import type { World } from '../sim/world';
+import type { Tank } from '../sim/types';
+
+export interface TankPreview {
+  /** Repaint live -- same triple as Renderer3D.setPlayerStyle, same semantics. */
+  setStyle(hex: string | null, skin: SkinId, accentHex: string | null): void;
+  /** Re-read the canvas's CSS size and re-fit the camera. Cheap; call on window resize. */
+  resize(): void;
+  dispose(): void;
+}
+
+// Matches scene.ts's BASE_FOV: not imported (that one is a local const, not exported,
+// and reaching in just for a shared literal is not worth widening scene.ts's surface
+// for) but kept equal on purpose, so the preview's perspective distortion reads the
+// same as the tank the player is used to seeing in the arena.
+const FOV = 50;
+
+// The area fitCameraToArea frames, in world units -- the hull is 1x1 (HULL_WIDTH /
+// HULL_LEN in entities.ts) but the turret overhangs the nose and the muzzle overhangs
+// the turret, so the framed area is generously larger than the hull alone. Chosen by
+// eye against the real geometry (see "Numbers that are feel, not measurement" in
+// CLAUDE.md); cheap to retune with `npm run gallery`.
+const PREVIEW_AREA_W = 2.4;
+const PREVIEW_AREA_H = 1.8;
+const PREVIEW_MARGIN = 0.1;
+
+// A neutral 3/4 pose: hull turned off dead-on so both a flank and the front plate
+// read, turret aligned with the hull rather than off aiming at nothing in particular.
+const PREVIEW_BODY_ANGLE = Math.PI * 0.15;
+
+/** A single, motionless player tank. Not built through sim/world.ts's `createWorld` --
+ * that pulls collision/bullets/mines/ai into the render bundle for a static prop this
+ * module never simulates. `World`/`Tank` are TYPE-ONLY imports (see the import above),
+ * so this file reaches sim only at the type level, the same way renderer.ts already
+ * does for `World`. */
+function previewWorld(): World {
+  const tank: Tank = {
+    id: 1,
+    kind: 'player',
+    pos: { x: 0, y: 0 },
+    bodyAngle: PREVIEW_BODY_ANGLE,
+    turretAngle: PREVIEW_BODY_ANGLE,
+    alive: true,
+    desiredMove: { x: 0, y: 0 },
+    activeMineIds: [],
+    fireCooldown: 0,
+    mineCooldown: 0,
+    aiState: 'idle',
+    aiTimer: 0,
+  };
+  return {
+    tick: 0,
+    nextId: 2,
+    seed: 1,
+    unarmedTrigger: 'none',
+    tanks: [tank],
+    bullets: [],
+    mines: [],
+    blasts: [],
+    walls: [],
+    spawns: [],
+    status: 'playing',
+    lives: 1,
+    roundStartTick: 1,
+  };
+}
+
+export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null {
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  } catch {
+    return null;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Transparent clear: the panel already paints its own backdrop (hud.css
+  // .hud-customize), so the preview blends into it rather than fighting it with a
+  // second background colour.
+  renderer.setClearColor(0x000000, 0);
+  // Same tone-mapping/exposure as scene.ts's main renderer: without this the SAME
+  // material would come out a different brightness/contrast here than in the arena,
+  // which is exactly the "depiction, not the tank" drift this module exists to avoid.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.35;
+  renderer.shadowMap.enabled = true;
+
+  const scene = new THREE.Scene();
+  const envMap = createEnvironmentMap(renderer);
+  scene.environment = envMap;
+  scene.environmentIntensity = 0.35;
+
+  const key = new THREE.DirectionalLight(0xffffff, 1.8);
+  key.position.set(-1.6, 2.4, 1.9);
+  key.target.position.set(0, 0, 0);
+  key.castShadow = true;
+  key.shadow.mapSize.set(512, 512);
+  const shadowCam = key.shadow.camera as THREE.OrthographicCamera;
+  shadowCam.left = -1.6;
+  shadowCam.right = 1.6;
+  shadowCam.top = 1.6;
+  shadowCam.bottom = -1.6;
+  shadowCam.near = 0.5;
+  shadowCam.far = 8;
+  key.shadow.bias = -0.0008;
+  scene.add(key, key.target);
+
+  const fill = new THREE.DirectionalLight(0xbcd0ff, 0.55);
+  fill.position.set(1.6, 1.2, -1.3);
+  scene.add(fill);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambient);
+
+  // A small round platform, just enough to receive a contact shadow -- this is a
+  // close-up of one tank, not an arena, so it does not try to be one.
+  const groundGeo = new THREE.CircleGeometry(1.3, 32);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x2f6d4f,
+    roughness: 1,
+    metalness: 0,
+  });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const entities: EntityViews = createEntityViews(scene);
+
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 100);
+  const target = new THREE.Vector3(0, 0, 0);
+
+  function fit(): void {
+    const w = canvas.clientWidth || 1;
+    const h = canvas.clientHeight || 1;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(w, h, false);
+    camera.aspect = h === 0 ? 1 : w / h;
+    fitCameraToArea(camera, target, PREVIEW_AREA_W, PREVIEW_AREA_H, PREVIEW_MARGIN);
+  }
+  fit();
+
+  const world = previewWorld();
+
+  function draw(): void {
+    entities.sync(world, world, 1, 0);
+    renderer.render(scene, camera);
+  }
+  draw();
+
+  return {
+    setStyle(hex, skin, accentHex): void {
+      entities.setPlayerStyle(hex, skin, accentHex);
+      draw();
+    },
+    resize(): void {
+      fit();
+      draw();
+    },
+    dispose(): void {
+      entities.dispose();
+      key.dispose();
+      fill.dispose();
+      groundGeo.dispose();
+      groundMat.dispose();
+      envMap.dispose();
+      scene.environment = null;
+      // NOT renderer.forceContextLoss() -- see this file's doc comment. The single
+      // persistent `.hud-preview` canvas needs its context reusable on the NEXT open,
+      // and a force-lost context does not reliably come back.
+      renderer.dispose();
+    },
+  };
+}
