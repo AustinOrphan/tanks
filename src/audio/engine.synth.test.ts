@@ -222,7 +222,13 @@ describe('engine: the generated music bed', () => {
     // where the Howl still exists and has not yet failed: measured in a real
     // browser, the asset resolved at ~1354ms while boot called startMusic at
     // ~380ms, and the title screen produced 0 bed voices against 8 after Start.
-    const engine = createAudioEngine(AUDIO_MANIFEST);
+    //
+    // AUTHORED_LAYOUT, not AUDIO_MANIFEST: the race is BETWEEN startMusic and a
+    // `loaderror`, and the shipped manifest declares no music file, so no Howl is
+    // built and no load can fail. Against it this test passes for the wrong reason --
+    // measured, deleting the `if (musicWanted) beginMusic()` retry left all 507 tests
+    // in src/audio + src/game green.
+    const engine = createAudioEngine(AUTHORED_LAYOUT);
     engine.startMusic(); // BEFORE the flush: the Howl is alive and mute
     await flush(); // ...and now it fails, as it always will in this repo
     const c = ctxOf();
