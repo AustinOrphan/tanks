@@ -11,6 +11,7 @@ import type { AchievementContext, AchievementId } from './achievements';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
+import { TOUCH_SCHEMES, type TouchIndicator, type TouchScheme } from '../input/touch';
 import { COUNTDOWN_TICKS } from '../sim/constants';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
@@ -49,6 +50,17 @@ interface Recorder {
   deathSignals: number;
   inputClears: number;
   minePresses: number;
+  firePresses: number;
+  /** Every scheme pushed to the INPUT controller's setTouchScheme, in order. */
+  schemeSets: TouchScheme[];
+  /** Every scheme accepted by the STORE (touchSettings.setScheme), in order. */
+  schemeStoreSets: TouchScheme[];
+  /** Every scheme echoed back to the HUD (hud.setTouchScheme), in order. */
+  schemeEchoes: TouchScheme[];
+  playerPosPushes: number;
+  lastPlayerPos: { x: number; y: number } | null;
+  touchPushes: TouchIndicator[];
+  fireSignals: number;
   cleared: number[];
   progressResets: number;
   statBatches: Array<{ count: number; playerId: number }>;
@@ -93,7 +105,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedScheme?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -105,6 +117,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     quitToTitle(): void;
     pauseTap(): void;
     mineTap(): void;
+    fireTap(): void;
+    toggleScheme(s: TouchScheme): void;
     pickLevel(i: number): void;
     resetStats(): void;
     resetProgress(): void;
@@ -112,6 +126,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     pickSkin(id: SkinId): void;
   };
   setState(s: GameState): void;
+  setTouch(t: TouchIndicator): void;
+  firePlayerShot(): void;
   getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
@@ -140,6 +156,14 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     deathSignals: 0,
     inputClears: 0,
     minePresses: 0,
+    firePresses: 0,
+    schemeSets: [],
+    schemeStoreSets: [],
+    schemeEchoes: [],
+    playerPosPushes: 0,
+    lastPlayerPos: null,
+    touchPushes: [],
+    fireSignals: 0,
     cleared: [],
     progressResets: 0,
     statBatches: [],
@@ -180,9 +204,14 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onMute = (): void => {};
   let onVolume = (_v: number): void => {};
   let onStartRestart = (): void => {};
+  // Faithful shape, and mutable so a test can put a thumb down.
+  let touchState: TouchIndicator = { stick: null, aim: null, scheme: 'stick', used: false };
+  let fireNext = false;
   let onQuit = (): void => {};
   let onPauseTap = (): void => {};
   let onMineTap = (): void => {};
+  let onFireTap = (): void => {};
+  let onTouchSchemeChange = (_s: TouchScheme): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
@@ -234,13 +263,26 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         rec.samples += 1;
         // Prove the wiring passes x and y through in that order, not swapped.
         screenToGround(3, 7);
-        return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
+        const fire = fireNext;
+        fireNext = false; // latched, exactly as the real controller consumes it
+        return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire, mine: false };
       },
       clearQueuedPresses(): void {
         rec.inputClears += 1;
       },
+      touchIndicator: () => touchState,
       pressMine(): void {
         rec.minePresses += 1;
+      },
+      pressFire(): void {
+        rec.firePresses += 1;
+      },
+      setTouchScheme(sch): void {
+        rec.schemeSets.push(sch);
+      },
+      setPlayerPosition(pos): void {
+        rec.playerPosPushes += 1;
+        rec.lastPlayerPos = pos;
       },
       dispose(): void {
         rec.disposed.push('input');
@@ -354,11 +396,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setLives: (n) => rec.lives.push(n),
         setEnemiesRemaining: (n) => rec.enemies.push(n),
         setState: (s) => rec.hudStates.push(s),
+        setTouchIndicator: (t: TouchIndicator) => rec.touchPushes.push(t),
         setMuted: (m) => rec.muted.push(m),
         setShellCount: (i) => rec.shellCounts.push(i),
         setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
         setRoundPhase: (info) => rec.roundPhases.push(info),
         signalPlayerDeath: () => { rec.deathSignals += 1; },
+        signalPlayerFire: () => { rec.fireSignals += 1; },
         onMuteToggle: (cb) => {
           onMute = cb;
         },
@@ -376,6 +420,15 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onMineTap: (cb: () => void) => {
           onMineTap = cb;
+        },
+        onFireTap: (cb: () => void) => {
+          onFireTap = cb;
+        },
+        setTouchScheme: (s: TouchScheme) => {
+          rec.schemeEchoes.push(s);
+        },
+        onTouchSchemeChange: (cb: (s: TouchScheme) => void) => {
+          onTouchSchemeChange = cb;
         },
         setStats: () => {
           rec.statPushes += 1;
@@ -428,6 +481,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setSkin: (id: SkinId) => {
           if (VALID_SKINS.has(id)) skin = id;
           rec.skinSets.push(id);
+        },
+      };
+    })(),
+    touchSettings: (() => {
+      let scheme: TouchScheme = (opts.savedScheme ?? 'stick') as TouchScheme;
+      // From the REAL scheme list, not a duplicate that could drift.
+      const VALID = new Set<string>(TOUCH_SCHEMES);
+      return {
+        scheme: () => scheme,
+        setScheme: (id: TouchScheme) => {
+          if (VALID.has(id)) scheme = id;
+          rec.schemeStoreSets.push(id);
         },
       };
     })(),
@@ -592,6 +657,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       quitToTitle: () => onQuit(),
       pauseTap: () => onPauseTap(),
       mineTap: () => onMineTap(),
+      fireTap: () => onFireTap(),
+      toggleScheme: (s: TouchScheme) => onTouchSchemeChange(s),
       pickLevel: (i) => onPickLevel(i),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
@@ -601,6 +668,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     setState: (s) => {
       state = s;
       emit();
+    },
+    setTouch: (t: TouchIndicator) => {
+      touchState = t;
+    },
+    firePlayerShot: () => {
+      fireNext = true;
     },
     getState: () => state,
     blur(): void {
@@ -1019,6 +1092,77 @@ describe('startGameWith: leaving the title screen', () => {
 });
 
 describe('startGameWith: the touch controls', () => {
+  it('clears the thumb marks when play stops, so none is stranded on screen', () => {
+    // The marks are pushed ONLY from onSimulated, which the driver runs only while
+    // playing -- so pausing mid-drag would leave a ring on screen with no thumb under
+    // it, and quitting to the title would strand it there indefinitely.
+    //
+    // Review deleted this entire feature from loop.ts and all 117 tests still passed:
+    // the recorder below was written to and never read once. That is worse than a weak
+    // assertion -- it is plumbing that looks like coverage.
+    const h = boot();
+    h.setTouch({
+      stick: { originX: 90, originY: 500, x: 90, y: 400 },
+      aim: { originX: 300, originY: 300, x: 300, y: 300 },
+      scheme: 'stick',
+      used: true,
+    });
+    h.setState('playing');
+    h.fireFrame(20);
+    const held = h.rec.touchPushes.at(-1);
+    expect(held?.stick, 'the thumb was not drawn while playing').not.toBeNull();
+
+    for (const stopped of ['paused', 'title', 'win', 'lose'] as const) {
+      h.setState(stopped);
+      const last = h.rec.touchPushes.at(-1);
+      expect(last?.stick, `a driving thumb was stranded on ${stopped}`).toBeNull();
+      expect(last?.aim, `an aim mark was stranded on ${stopped}`).toBeNull();
+      h.setState('playing');
+      h.fireFrame(40);
+    }
+    h.handle.dispose();
+  });
+
+
+  it("pulses the aim mark on the PLAYER's shot", () => {
+    // On a phone the muzzle is under the player's own hand and the shell is gone before
+    // the eye gets there, so a tap that fired and a tap that hit the cooldown look
+    // identical. Driven by the sim's `fire` event, so it confirms a shot that actually
+    // happened rather than a tap that was merely registered.
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    expect(h.rec.fireSignals).toBe(0);
+
+    h.firePlayerShot();
+    h.fireFrame(20);
+    expect(h.rec.fireSignals, 'the player fired and the mark did not pulse').toBe(1);
+    h.handle.dispose();
+  });
+
+  it('does NOT pulse when an ENEMY fires', () => {
+    // The control, and the reason the check is discriminated by ownerId: the event
+    // stream is shared, so `some(e => e.type === 'fire')` pulses on every enemy shot.
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+
+    // Run until an enemy actually fires, so this asserts against a real enemy shot
+    // rather than against a frame where nothing happened at all.
+    let enemyFired = false;
+    for (let i = 1; i <= 600 && !enemyFired; i++) {
+      h.fireFrame(i * 17);
+      enemyFired = h.rec.directed.some((batch) =>
+        batch.some((e) => e.type === 'fire' && e.ownerId !== h.rec.directorPlayerIds.at(-1)),
+      );
+    }
+    expect(enemyFired, 'no enemy fired in 600 frames, so this proves nothing').toBe(true);
+    expect(h.rec.fireSignals, 'an enemy shot pulsed the player\'s aim mark').toBe(0);
+    h.handle.dispose();
+  });
+
+
+
   it('the pause button toggles pause, through the same guards as the hotkey', () => {
     const h = boot();
     h.hud.startRestart(); // into play
@@ -1055,6 +1199,102 @@ describe('startGameWith: the touch controls', () => {
     expect(h.rec.minePresses).toBe(0);
     h.hud.mineTap();
     expect(h.rec.minePresses, 'the Mine button did not reach the input controller').toBe(1);
+    h.handle.dispose();
+  });
+
+  it('the fire button latches a shot on the input controller', () => {
+    // Same convention as the Mine button above: through pressFire()'s own latch, not a
+    // separate path into the sim.
+    const h = boot();
+    expect(h.rec.firePresses).toBe(0);
+    h.hud.fireTap();
+    expect(h.rec.firePresses, 'the Fire button did not reach the input controller').toBe(1);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the touch aim-scheme wiring', () => {
+  it('pushes the SAVED scheme into the input controller and echoes it to the HUD at boot', () => {
+    const h = boot(makeDeps({ savedScheme: 'point' }));
+    // Pushed once, at construction -- before any frame has been simulated.
+    expect(h.rec.schemeSets[0]).toBe('point');
+    expect(h.rec.schemeEchoes[0]).toBe('point');
+    h.handle.dispose();
+  });
+
+  it('defaults to stick when nothing was saved', () => {
+    const h = boot(makeDeps());
+    expect(h.rec.schemeSets[0]).toBe('stick');
+    expect(h.rec.schemeEchoes[0]).toBe('stick');
+    h.handle.dispose();
+  });
+
+  it('a toggle stores the pick, pushes it into the input controller, and echoes the ACCEPTED value back', () => {
+    // Same three-step convention as a hull-colour pick: store, then echo what the store
+    // actually accepted -- not blindly the click's own argument.
+    const h = boot(makeDeps({ savedScheme: 'stick' }));
+    h.hud.toggleScheme('point');
+    expect(h.rec.schemeStoreSets).toEqual(['point']);
+    expect(h.rec.schemeSets.at(-1), 'the input controller was not told about the switch').toBe(
+      'point',
+    );
+    expect(h.rec.schemeEchoes.at(-1)).toBe('point');
+    h.handle.dispose();
+  });
+
+  it('an off-list scheme is refused by the store, and the echo says so', () => {
+    // The HUD toggle can only ever emit a real TouchScheme, but the handler must not
+    // trust that -- mirrors the paint shop's "off-palette pick is refused" test.
+    const h = boot(makeDeps({ savedScheme: 'point' }));
+    h.hud.toggleScheme('joystick' as never);
+    expect(h.rec.schemeEchoes.at(-1), 'the echo did not fall back to the stored value').toBe(
+      'point',
+    );
+    expect(h.rec.schemeSets.at(-1)).toBe('point'); // the input controller was not moved either
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the aim stick\'s player-position feed', () => {
+  it('pushes the LIVE player tank\'s world position on every simulated frame', () => {
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    expect(h.rec.playerPosPushes).toBe(0);
+
+    h.fireFrame(20);
+    const player = world.tanks.find((t) => t.kind === 'player')!;
+    expect(h.rec.playerPosPushes, 'setPlayerPosition was not called from onSimulated').toBe(1);
+    // Position, not identity -- a defect that passed a stale or zeroed struct through
+    // would fail here even though "some object" was pushed.
+    expect(h.rec.lastPlayerPos).toEqual({ x: player.pos.x, y: player.pos.y });
+    h.handle.dispose();
+  });
+
+  it('pushes null when the built world has no player tank', () => {
+    // The stick still needs to hold its last aim rather than throw when a world is
+    // ever built without one -- setPlayerPosition's own contract for `null`.
+    const world = {
+      ...createArenaWorld(1),
+      roundStartTick: -1000,
+      tanks: createArenaWorld(1).tanks.filter((t) => t.kind !== 'player'),
+    };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(20);
+    expect(h.rec.playerPosPushes).toBeGreaterThan(0);
+    expect(h.rec.lastPlayerPos, 'a world with no player pushed a stale position').toBeNull();
+    h.handle.dispose();
+  });
+
+  it('keeps pushing on every subsequent frame, not just the first', () => {
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(20);
+    h.fireFrame(40);
+    h.fireFrame(60);
+    expect(h.rec.playerPosPushes).toBe(3);
     h.handle.dispose();
   });
 });

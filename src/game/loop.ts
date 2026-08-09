@@ -5,6 +5,7 @@ import { createLevelSystem, type LevelSystem } from './levels';
 import { createProgressStore, type ProgressStore } from './progress';
 import { createStatsStore, type StatsStore } from './stats';
 import { createCustomizationStore, type CustomizationStore, type SkinId } from './customization';
+import { createTouchSettingsStore, type TouchSettingsStore } from './touch-settings';
 import {
   createAchievementsStore,
   type AchievementsStore,
@@ -101,6 +102,8 @@ export interface GameDeps {
   readonly stats: StatsStore;
   /** The paint shop's saved choice. Render-only downstream. */
   readonly customization: CustomizationStore;
+  /** The right thumb's saved aim scheme. Input-only downstream, unlike customization. */
+  readonly touchSettings: TouchSettingsStore;
   readonly achievements: AchievementsStore;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
@@ -265,6 +268,7 @@ export function createBrowserDeps(): GameDeps {
   const progress = createProgressStore(browserStorage());
   const stats = createStatsStore(browserStorage());
   const customization = createCustomizationStore(browserStorage());
+  const touchSettings = createTouchSettingsStore(browserStorage());
   const achievements = createAchievementsStore(browserStorage());
   return {
     createRenderer,
@@ -277,6 +281,7 @@ export function createBrowserDeps(): GameDeps {
     progress,
     stats,
     customization,
+    touchSettings,
     achievements,
     now: () => performance.now(),
     wallMs: () => Date.now(),
@@ -339,6 +344,9 @@ export function startGameWith(
     playerSkin: deps.customization.skin(),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
+  // The saved scheme, pushed at boot so the very first touch already uses it -- see the
+  // echo-back wiring below for what happens when the player changes it in the HUD.
+  input.setTouchScheme(deps.touchSettings.scheme());
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
   // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
@@ -424,6 +432,12 @@ export function startGameWith(
     world,
     onSimulated(w): void {
       refreshStats(w);
+      // The aim STICK needs the player's WORLD position to project a point from --
+      // see setPlayerPosition's doc comment. `null` when there is no player tank in
+      // this world, in which case the input layer simply holds its last aim.
+      const player = w.tanks.find((t) => t.kind === 'player');
+      input.setPlayerPosition(player ? { x: player.pos.x, y: player.pos.y } : null);
+      hud.setTouchIndicator(input.touchIndicator());
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
     },
@@ -432,6 +446,14 @@ export function startGameWith(
     // CLAUDE.md warns about. Discriminate on kind.
     onFrameEvents(events): void {
       if (isPlayerDeath(events)) hud.signalPlayerDeath();
+      // Discriminated by ownerId, not presence: the stream is shared, so a bare
+      // `some(e => e.type === 'fire')` pulses on every enemy shot -- exactly the
+      // presence-only mistake CLAUDE.md warns about.
+      // `!== undefined`, not `!== null`: playerId is `number | undefined`, so the null
+      // form was always true and the guard did nothing. tsc does not flag it.
+      if (playerId !== undefined && events.some((e) => e.type === 'fire' && e.ownerId === playerId)) {
+        hud.signalPlayerFire();
+      }
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
@@ -539,6 +561,23 @@ export function startGameWith(
     input.pressMine();
   });
 
+  // The touch-only Fire button, routed the same way: a tap here is indistinguishable
+  // from a click or a keypress once it reaches the latch. Touch aiming deliberately
+  // never fires on its own -- see TouchScheme in input/touch.ts.
+  hud.onFireTap(() => {
+    input.pressFire();
+  });
+
+  // The aim-scheme toggle: store, then echo the ACCEPTED value back -- same convention
+  // as the paint shop's onPickHullColor/onPickSkin below. setScheme refuses anything off
+  // TOUCH_SCHEMES, so the echo can never show a scheme the input layer was not told.
+  hud.onTouchSchemeChange((next) => {
+    deps.touchSettings.setScheme(next);
+    const accepted = deps.touchSettings.scheme();
+    hud.setTouchScheme(accepted);
+    input.setTouchScheme(accepted);
+  });
+
   hud.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause, but a handler that rebuilds the
     // world deserves its own guard, not a CSS class as its only defence.
@@ -624,6 +663,12 @@ export function startGameWith(
     // there indefinitely, since switchTo rebuilds the world without simulating.
     // The chip sits in the topbar (z-index 1), so it paints over the panel.
     if (s !== 'playing') hud.setRoundPhase(null);
+    // Same reasoning as the round chip above: the marks are pushed ONLY from
+    // onSimulated, which the driver runs only while playing, so pausing mid-drag would
+    // strand a thumb on screen with no thumb under it.
+    if (s !== 'playing') {
+      hud.setTouchIndicator({ ...input.touchIndicator(), stick: null, aim: null });
+    }
     followMusic(s);
     // Progress is recorded AT the win, not at the Next Level click: quitting after a
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
@@ -652,6 +697,7 @@ export function startGameWith(
   hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
+  hud.setTouchScheme(deps.touchSettings.scheme());
   hud.setAchievements(deps.achievements.earned());
   refreshStats(world);
 

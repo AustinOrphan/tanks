@@ -1,8 +1,20 @@
 import type { InputState, Vec2 } from '../sim/types';
-import { stickVector, touchSide } from './touch';
+import {
+  stickVector,
+  touchSide,
+  AIM_PROJECTION_UNITS,
+  type TouchIndicator,
+  type TouchScheme,
+} from './touch';
+export type { TouchIndicator, TouchScheme } from './touch';
 
 export interface InputController {
   sample(): InputState;
+  /**
+   * The thumbs, for the HUD to draw. Read-only and outside `sample()` on purpose: see
+   * TouchIndicator.
+   */
+  touchIndicator(): TouchIndicator;
   /**
    * Drop latched fire/mine presses WITHOUT releasing held movement keys. For pause:
    * the driver stops sampling, and only sample() resets these latches, so a Space
@@ -19,6 +31,28 @@ export interface InputController {
    * including being consumed by the next sample() and cleared by clearQueuedPresses().
    */
   pressMine(): void;
+  /**
+   * Latch a shot, as the left mouse button does.
+   *
+   * Touch aiming does NOT fire -- see TouchScheme. A phone has no trigger, so the shot
+   * is an on-screen button, and it goes through the SAME latch as every other fire path
+   * so a tapped shot is indistinguishable from a clicked one.
+   */
+  pressFire(): void;
+  /**
+   * Which scheme the right thumb is using. Changing it drops any aim gesture in flight,
+   * so a thumb held across the switch cannot carry stale meaning into the new scheme.
+   */
+  setTouchScheme(scheme: TouchScheme): void;
+  /**
+   * The player's WORLD position, pushed each frame by the loop.
+   *
+   * The aim STICK needs it: `InputState.aim` is a point, so a direction has to be
+   * projected from somewhere, and the tank is the only sensible origin. World, not
+   * screen -- the input layer never learns where anything is drawn. `null` when there is
+   * no player, in which case the stick simply holds its last aim.
+   */
+  setPlayerPosition(pos: Vec2 | null): void;
   dispose(): void;
 }
 
@@ -118,7 +152,7 @@ export function createInputController(
     e.preventDefault();
   };
 
-  // ---- Touch: left thumb drives, right thumb aims and fires ----------------------
+  // ---- Touch: left thumb drives, right thumb aims. NEITHER fires. ------------------
   //
   // Pointer events rather than touch events, so one code path covers finger, stylus and
   // any future pen -- filtered to non-mouse so the existing mouse handling above is
@@ -127,11 +161,11 @@ export function createInputController(
   // implement it, and window-level move/up tracking survives a thumb sliding off the
   // canvas, which capture is only one way to achieve).
   //
-  // `aim` is a WORLD POINT, not an angle -- screenToGround does the projection, exactly
-  // as it does for the mouse. That is why the right thumb aims ABSOLUTELY, at the spot it
-  // touches, rather than as a relative stick: a relative stick would need the player's
-  // screen position in here to turn a direction into a point, and nothing else in this
-  // module knows where the tank is.
+  // `aim` is a WORLD POINT, not an angle. Under `point` that is the spot the thumb is
+  // over, unprojected exactly as the mouse is. Under `stick` it is projected out in
+  // front of the tank along the pushed direction -- which needs the player's WORLD
+  // position, pushed in by the loop, and never its screen position: the input layer does
+  // not learn where anything is drawn.
   /**
    * The width the left/right split is measured against. Read fresh on every touch, not
    * captured: a phone rotated mid-round would otherwise keep splitting at the old
@@ -141,14 +175,46 @@ export function createInputController(
 
   let stickPointer: number | null = null;
   let stickOrigin: Vec2 = { x: 0, y: 0 };
+  let stickCurrent: Vec2 = { x: 0, y: 0 };
   let stickMove: Vec2 = { x: 0, y: 0 };
   let aimPointer: number | null = null;
+  let aimPoint: Vec2 | null = null;
+  let aimOrigin: Vec2 = { x: 0, y: 0 };
+  let touchUsed = false;
+  let scheme: TouchScheme = 'stick';
+  let playerPos: Vec2 | null = null;
+
+  /**
+   * Turn the aim thumb's gesture into the world point `InputState.aim` carries.
+   *
+   * `point`: unproject the spot under the thumb, exactly as the mouse does.
+   * `stick`: project a point out in front of the tank along the pushed direction. The
+   * stick's own vector is reused, so the dead zone and clamping behave identically to
+   * the driving stick -- inside the dead zone the aim simply HOLDS rather than snapping
+   * back, because a turret that recentres itself when the thumb rests is unusable.
+   */
+  const applyAimGesture = (): void => {
+    if (aimPoint === null) return;
+    if (scheme === 'point') {
+      aim = screenToGround(aimPoint.x, aimPoint.y);
+      return;
+    }
+    if (playerPos === null) return;
+    const dir = stickVector(aimOrigin, aimPoint);
+    if (dir.x === 0 && dir.y === 0) return; // inside the dead zone: hold the last aim
+    const len = Math.hypot(dir.x, dir.y);
+    aim = {
+      x: playerPos.x + (dir.x / len) * AIM_PROJECTION_UNITS,
+      y: playerPos.y + (dir.y / len) * AIM_PROJECTION_UNITS,
+    };
+  };
 
   const isTouch = (e: PointerEvent): boolean => e.pointerType !== 'mouse';
 
   const onPointerDown = (e: PointerEvent): void => {
     if (!isTouch(e)) return;
     lastTouchAt = performance.now();
+    touchUsed = true;
     // Suppress the compatibility mouse events this touch would otherwise synthesise.
     // Measured in Chromium: the burst goes from ["mousemove","mousedown"] to []. This is
     // the deterministic half; `isCompatMouse` is the backstop.
@@ -166,14 +232,19 @@ export function createInputController(
       if (stickPointer !== null) return;
       stickPointer = e.pointerId;
       stickOrigin = { x: e.clientX, y: e.clientY };
+      stickCurrent = { x: e.clientX, y: e.clientY };
       stickMove = { x: 0, y: 0 };
     } else {
+      if (aimPointer !== null) return; // first aiming thumb wins, as on the left
       aimPointer = e.pointerId;
-      aim = screenToGround(e.clientX, e.clientY);
-      // Touching to aim also fires. On a phone there is no second button and no hover,
-      // so aiming and shooting cannot be separate gestures without adding a step to
-      // every shot.
-      firePressed = true;
+      aimOrigin = { x: e.clientX, y: e.clientY };
+      aimPoint = { x: e.clientX, y: e.clientY };
+      applyAimGesture();
+      // DELIBERATELY NO FIRE HERE. Aiming and firing used to be this one gesture, and
+      // that made re-aiming dangerous: with the turret facing a nearby wall, the touch
+      // that began a new aim put a shell into it, and the ricochet came back into the
+      // player's own tank. Firing is `pressFire()`, from a button the player presses on
+      // purpose.
     }
   };
 
@@ -181,10 +252,11 @@ export function createInputController(
     if (!isTouch(e)) return;
     lastTouchAt = performance.now();
     if (e.pointerId === stickPointer) {
-      stickMove = stickVector(stickOrigin, { x: e.clientX, y: e.clientY });
+      stickCurrent = { x: e.clientX, y: e.clientY };
+      stickMove = stickVector(stickOrigin, stickCurrent);
     } else if (e.pointerId === aimPointer) {
-      // Drag to re-aim without firing again: only the initial touch pulls the trigger.
-      aim = screenToGround(e.clientX, e.clientY);
+      aimPoint = { x: e.clientX, y: e.clientY };
+      applyAimGesture();
     }
   };
 
@@ -198,7 +270,11 @@ export function createInputController(
       stickMove = { x: 0, y: 0 };
     } else if (e.pointerId === aimPointer) {
       aimPointer = null;
+      aimPoint = null;
     }
+    // NOTE: lifting the aim thumb does NOT recentre or clear `aim`. The turret keeps the
+    // heading it was given, which is what lets the player line a shot up, let go, and
+    // then press Fire.
   };
   // Focus loss eats the keyup: alt-tab while holding W and the OS delivers that
   // keyup to the other window, leaving 'w' held forever and the tank driving
@@ -212,6 +288,7 @@ export function createInputController(
     // the tank driving into a wall until the player thinks to touch and lift again.
     stickPointer = null;
     aimPointer = null;
+    aimPoint = null;
     stickMove = { x: 0, y: 0 };
   };
   const onVisibilityChange = (): void => {
@@ -267,12 +344,45 @@ export function createInputController(
       minePressed = false;
       return state;
     },
+    touchIndicator(): TouchIndicator {
+      return {
+        stick:
+          stickPointer === null
+            ? null
+            : {
+                originX: stickOrigin.x,
+                originY: stickOrigin.y,
+                x: stickCurrent.x,
+                y: stickCurrent.y,
+              },
+        aim:
+          aimPoint === null
+            ? null
+            : { originX: aimOrigin.x, originY: aimOrigin.y, x: aimPoint.x, y: aimPoint.y },
+        scheme,
+        used: touchUsed,
+      };
+    },
     clearQueuedPresses(): void {
       firePressed = false;
       minePressed = false;
     },
     pressMine(): void {
       minePressed = true;
+    },
+    pressFire(): void {
+      firePressed = true;
+    },
+    setTouchScheme(next: TouchScheme): void {
+      if (next === scheme) return;
+      scheme = next;
+      // Drop any aim gesture in flight: a thumb held across the switch would otherwise
+      // be read as a stick origin that was never placed as one.
+      aimPointer = null;
+      aimPoint = null;
+    },
+    setPlayerPosition(pos: Vec2 | null): void {
+      playerPos = pos === null ? null : { x: pos.x, y: pos.y };
     },
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);
