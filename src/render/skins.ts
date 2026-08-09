@@ -33,19 +33,6 @@ function rgbOf(hex: string): RGB {
   ];
 }
 
-/**
- * Mix toward white rather than scalar-multiply for LIGHT tones: on saturated
- * bases a multiply clips one channel and the lift disappears under the scene's
- * lighting and tone mapping -- measured on-tank, x1.45 read as solid.
- */
-function lighten(c: RGB, t: number): RGB {
-  return [
-    Math.round(c[0] + (255 - c[0]) * t),
-    Math.round(c[1] + (255 - c[1]) * t),
-    Math.round(c[2] + (255 - c[2]) * t),
-  ];
-}
-
 function scale(c: RGB, f: number): RGB {
   return [
     Math.min(255, Math.round(c[0] * f)),
@@ -140,13 +127,13 @@ export const MIN_ACCENT_DELTA = 43;
  * multiplying or lifting RGB channels unevenly shifts hue as a side effect. Grey/white
  * accents (s = 0) have no hue to preserve, so this reduces to the old behaviour for them.
  */
-export function ensureContrast(base: RGB, accent: RGB): RGB {
+export function ensureContrast(base: RGB, accent: RGB, delta = MIN_ACCENT_DELTA): RGB {
   const { h, s, l: startL } = rgbToHsl(accent);
   let l = startL;
   let t = accent;
   const towardBlack = luma(base) > 127;
   const STEP = 0.05;
-  for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < MIN_ACCENT_DELTA; i++) {
+  for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < delta; i++) {
     l = towardBlack ? Math.max(0, l - STEP) : Math.min(1, l + STEP);
     t = hslToRgb(h, s, l);
     // Pinned at a pole: no further move exists, so stop rather than spin the remaining
@@ -174,6 +161,159 @@ function fill(px: Uint8ClampedArray, i: number, c: RGB): void {
 }
 
 /**
+ * How far an `auto` accent is pushed from the hull, in luma.
+ *
+ * FEEL, chosen by rendering the candidates on the real tank -- but the CONSISTENCY it
+ * buys is not a matter of taste. Every skin used to derive its own second tone with its
+ * own formula and its own magnitude: stripes `lighten(base, 0.75)`, flow
+ * `lighten(base, 0.6)`, checker `scale(base, 0.66)`, camo `scale(base, 0.62)`. Two went
+ * lighter and two went darker, so the same hull changed character skin to skin -- and
+ * measured across the 24 shipped (hull, skin) pairs the tone spread ran from 11.4 to
+ * 141.6, a 12x range.
+ *
+ * Worse, `lighten` toward white is a no-op ON white: the shipped white hull measured
+ * 14.3 spread on stripes and 11.4 on flow, against 33.6-141.6 for every other pair.
+ * After the change the four single-accent skins land in 68.5-75.4 -- a 1.10x range, not
+ * the 1.9x an earlier draft quoted; 1.85x is the spread across all 30 pairs INCLUDING
+ * clouds, which is deliberately far louder. Both figures are Rec. 709, this file's own
+ * luma; measured in the Rec. 601 that skins.test.ts's `toneStats` uses, the worst is
+ * 64.3 rather than 68.5, which is the margin the visibility floor of 50 actually has.
+ * Both were invisible on the tank -- a featureless white blob, confirmed by screenshot.
+ * A fixed delta with the direction chosen by the hull cannot do that, because it moves
+ * AWAY from whichever pole the hull sits near.
+ */
+export const AUTO_ACCENT_DELTA = 64;
+
+/**
+ * The second tone for an `auto` pick: the hull's own colour, pushed `delta` in luma
+ * away from whichever pole it is nearest.
+ *
+ * This is `ensureContrast` with the accent seeded to the base itself, which is exactly
+ * the right primitive -- it already moves ONLY lightness (so the hull's hue and
+ * saturation survive, and a blue tank gets a lighter blue rather than a grey) and it
+ * already picks its direction from the hull's own luma. Sharing it is what makes the
+ * `auto` path and the explicit-accent path behave the same way instead of drifting.
+ */
+function autoAccent(base: RGB, delta = AUTO_ACCENT_DELTA): RGB {
+  return stepLightness(base, delta, luma(base) <= 127);
+}
+
+/**
+ * The twin racing stripes, in texture units -- which are WORLD units, because every
+ * surface they land on is mapped at one texture repeat per unit.
+ *
+ * TWO stripes straddling the centreline, not one: Austin asked for a single stripe
+ * first, then for two once he saw it on the tank. They sit at +/- CENTRE from the
+ * centreline and are 2 x HALF wide each, so together they lay down about the same ink
+ * the single stripe did (0.168 of the hull's 0.875 width) but read as a pair.
+ *
+ * `entities.ts` normalises the turret and barrel to the hull's half-width when it
+ * projects them, so the pair stays that same FRACTION of each part rather than a
+ * constant width -- at constant width they would have swallowed the barrel, which is
+ * only 0.26 across.
+ */
+const STRIPE_CENTRE_V = 0.105;
+const STRIPE_HALF_V = 0.042;
+
+/**
+ * Step `base`'s lightness in a CHOSEN direction until it clears `delta` in luma.
+ *
+ * The direction is the parameter, because two callers want different policies from the
+ * same walk: `autoAccent` wants whichever direction has room (maximum visibility), and
+ * `cloudTone` wants UP wherever up will do (a cloud is light).
+ */
+function stepLightness(base: RGB, delta: number, up: boolean): RGB {
+  const { h, s, l: startL } = rgbToHsl(base);
+  let l = startL;
+  let t = base;
+  for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < delta; i++) {
+    l = up ? Math.min(1, l + 0.05) : Math.max(0, l - 0.05);
+    t = hslToRgb(h, s, l);
+    if (l === 0 || l === 1) break;
+  }
+  return t;
+}
+
+/**
+ * A cloud tone: like `autoAccent`, but it goes UP unless up cannot deliver the contrast.
+ *
+ * `autoAccent` moves away from whichever pole the hull is nearest, which is right for a
+ * marking whose only job is to be seen. Clouds is a skin with an IDENTITY, and on a
+ * light hull "away from the pole" means down -- at the 1.8x delta clouds uses, that put
+ * the dominant tone at luma 23 on the orange hull and 29 on the green: near-black
+ * blotches on a skin called Clouds. Three of the six shipped hulls darkened, but only
+ * those TWO were near-black -- white's dominant sat at 112 against a 236 hull, a mid
+ * grey, and white darkening is the behaviour this function deliberately keeps. So the
+ * fix moves 2 of 30 textures, not 3. Every test it had asked about contrast, and
+ * contrast was fine, so nothing objected.
+ *
+ * Lightening is preferred and only refused when the headroom to white is too small to
+ * clear AUTO_ACCENT_DELTA at all -- which for the shipped palette is the white hull
+ * alone (19 luma of headroom). There, darkening is right anyway: grey cloud on a white
+ * sky is still cloud. A first attempt used a lightness FLOOR instead and was wrong in a
+ * way worth recording: flooring keeps the tone out of the black, but on orange it left
+ * only 29.7 of spread and tripped this file's own visibility guard.
+ */
+function cloudTone(base: RGB, delta: number): RGB {
+  const headroom = 255 - luma(base);
+  return stepLightness(base, delta, headroom >= AUTO_ACCENT_DELTA);
+}
+
+/**
+ * A seamless field of round blotches in two tones over a base -- camo and clouds are the
+ * same field at different densities and different distances from the hull, which is the
+ * point of sharing it. The seed is fixed so a given hull always paints the same pattern.
+ *
+ * COVERAGE IS THE PARAMETER THAT MATTERS, and it is easy to get wrong: the tones are
+ * painted in order, so the second buries the first wherever they overlap. At clouds'
+ * density the base survives on 27.9% of the texture and the second tone takes 44.4%,
+ * which is what makes it read as sky behind cloud; camo needs the opposite -- the hull
+ * has to stay the tank's colour, and survives on 57.8% -- so it runs far fewer and
+ * smaller blotches. Those three figures are identical on all 6 shipped hulls, because
+ * the blotch geometry is seeded and carries no colour dependence at all; an earlier
+ * draft of this comment quoted 19% and 73%, which were the OLD camo's numbers, and
+ * claimed coverage varied by hull, which it does not.
+ */
+function blotches(
+  px: Uint8ClampedArray,
+  base: RGB,
+  first: RGB,
+  second: RGB,
+  count: number,
+  rMin: number,
+  rMax: number,
+  lobes: number,
+): void {
+  for (let i = 0; i < SIZE * SIZE * 4; i += 4) fill(px, i, base);
+  const rnd = xorshift(0xc4310);
+  for (const tone of [first, second]) {
+    for (let b = 0; b < count; b++) {
+      const cx = rnd() * SIZE;
+      const cy = rnd() * SIZE;
+      const r = rMin + rnd() * (rMax - rMin);
+      // Each patch is a CLUSTER of overlapping circles rather than one circle. A single
+      // circle per patch reads as polka dots -- Austin's "camo still doesn't look camo"
+      // -- because real camouflage is irregular and interlocking. Overlapping lobes cost
+      // nothing and are what turn a dot into a blob.
+      for (let lobe = 0; lobe < lobes; lobe++) {
+        const ox = cx + (rnd() * 2 - 1) * r * 0.8;
+        const oy = cy + (rnd() * 2 - 1) * r * 0.8;
+        const lr = r * (0.45 + rnd() * 0.55);
+        for (let y = Math.floor(oy - lr); y < oy + lr; y++) {
+          for (let x = Math.floor(ox - lr); x < ox + lr; x++) {
+            if ((x - ox) ** 2 + (y - oy) ** 2 > lr * lr) continue;
+            // Wrap so patches crossing an edge tile seamlessly.
+            const wx = ((x % SIZE) + SIZE) % SIZE;
+            const wy = ((y % SIZE) + SIZE) % SIZE;
+            fill(px, (wy * SIZE + wx) * 4, tone);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
  * The pattern painters, by skin id. Each writes SIZE x SIZE RGBA. `solid` is absent
  * on purpose -- it is the no-map default, not a texture of one colour.
  *
@@ -190,14 +330,27 @@ const PAINTERS: Record<
   (px: Uint8ClampedArray, base: RGB, accent: RGB | null) => void
 > = {
   stripes(px, base, accent) {
-    // Two pale racing bands along the hull's long axis (texture v).
-    const light = accent ? ensureContrast(base, accent) : lighten(base, 0.75);
+    // TWIN racing stripes straddling the centreline, running the length of the tank.
+    //
+    // Banded on v, NOT u, and that is the whole fix for the direction: the hull is an
+    // ExtrudeGeometry whose cap UVs are the shape's own (x, y) = (LENGTH, width), so a
+    // band at constant u is a band at constant length -- a belt running ACROSS the tank,
+    // perpendicular to the treads. Banding on v instead holds the width constant and
+    // runs the full length, which is parallel to the treads. `entities.ts` projects the
+    // turret and barrel with their across-axis on v too, so the same stripe continues up
+    // over the turret and out along the barrel.
+    //
+    // The tank's centreline is v = 0, which RepeatWrapping puts on the tile's EDGE, so
+    // the stripe straddles the seam and both halves have to be measured.
+    const light = accent ? ensureContrast(base, accent) : autoAccent(base);
     for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        const u = x / SIZE;
-        const banded = (u > 0.3 && u < 0.42) || (u > 0.58 && u < 0.7);
-        fill(px, (y * SIZE + x) * 4, banded ? light : base);
-      }
+      const v = y / SIZE;
+      // Signed distance from the centreline, which sits at v = 0 -- the tile's EDGE
+      // under RepeatWrapping, so the far half of the texture is really the near half on
+      // the other side of the tank.
+      const d = Math.abs(v > 0.5 ? v - 1 : v);
+      const banded = Math.abs(d - STRIPE_CENTRE_V) < STRIPE_HALF_V;
+      for (let x = 0; x < SIZE; x++) fill(px, (y * SIZE + x) * 4, banded ? light : base);
     }
   },
   camo(px, base, accent) {
@@ -205,29 +358,31 @@ const PAINTERS: Record<
     // before; an explicit accent supplies the first and the second is a scaled step off
     // THAT (not off the base), so "black camo" reads as two shades of near-black blotch
     // rather than pulling a totally unrelated tone from the hull.
-    const dark = accent ? ensureContrast(base, accent) : scale(base, 0.62);
-    const deep = accent ? scale(dark, 0.7) : scale(base, 0.4);
-    for (let i = 0; i < SIZE * SIZE * 4; i += 4) fill(px, i, base);
-    const rnd = xorshift(0xc4310);
-    for (const tone of [dark, deep]) {
-      for (let b = 0; b < 26; b++) {
-        const cx = rnd() * SIZE;
-        const cy = rnd() * SIZE;
-        const r = 6 + rnd() * 14;
-        for (let y = Math.floor(cy - r); y < cy + r; y++) {
-          for (let x = Math.floor(cx - r); x < cx + r; x++) {
-            if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
-            // Wrap so blotches crossing an edge tile seamlessly.
-            const wx = ((x % SIZE) + SIZE) % SIZE;
-            const wy = ((y % SIZE) + SIZE) % SIZE;
-            fill(px, (wy * SIZE + wx) * 4, tone);
-          }
-        }
-      }
-    }
+    // Camo takes a SMALLER step than the other skins, and that is deliberate rather
+    // than an inconsistency: its blotches cover most of the surface, where a stripe
+    // covers a tenth of it, and a large area needs far less contrast to read. Given the
+    // full delta the blue tank came back reading as SNOW camo -- the blotches won and
+    // the hull colour stopped being the tank's colour. Both tones stay on the same side
+    // of the hull so camo is a family of one paint, not a clash.
+    const dark = accent ? ensureContrast(base, accent) : autoAccent(base, AUTO_ACCENT_DELTA * 0.5);
+    const deep = accent ? scale(dark, 0.7) : autoAccent(base, AUTO_ACCENT_DELTA * 0.95);
+    // Sparse and small, so the hull survives as the majority tone.
+    blotches(px, base, dark, deep, 7, 8, 15, 5);
+  },
+  clouds(px, base, accent) {
+    // The same blotch field as camo, taken to the FULL accent delta and beyond. Camo
+    // holds its tones close to the hull so the hull stays the tank's colour; clouds
+    // deliberately does not, and the light tone wins -- a blue tank reads as blue sky
+    // with white cloud rather than as a blue tank with markings.
+    //
+    // It exists because the unified accent work briefly gave camo these deltas by
+    // accident, and the result was better as its own thing than as a broken camo.
+    const soft = accent ? ensureContrast(base, accent) : cloudTone(base, AUTO_ACCENT_DELTA);
+    const bright = accent ? scale(soft, 0.7) : cloudTone(base, AUTO_ACCENT_DELTA * 1.8);
+    blotches(px, base, soft, bright, 13, 9, 18, 4);
   },
   checker(px, base, accent) {
-    const dark = accent ? ensureContrast(base, accent) : scale(base, 0.66);
+    const dark = accent ? ensureContrast(base, accent) : autoAccent(base);
     const cells = 8;
     const cell = SIZE / cells;
     for (let y = 0; y < SIZE; y++) {
@@ -240,7 +395,7 @@ const PAINTERS: Record<
   flow(px, base, accent) {
     // Soft diagonal bands built on a sine, so the tile scrolls seamlessly -- this is
     // the ANIMATED one; its speed lives in the skin def (game/customization.ts).
-    const light = accent ? ensureContrast(base, accent) : lighten(base, 0.6);
+    const light = accent ? ensureContrast(base, accent) : autoAccent(base);
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         const t = (Math.sin(((x + y) / SIZE) * Math.PI * 4) + 1) / 2;

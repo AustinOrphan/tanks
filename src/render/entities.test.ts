@@ -773,6 +773,102 @@ describe('skins (player texture override)', () => {
     return m;
   };
 
+  /**
+   * Recover a named mesh's geometry from the scene, so its UVs can be read.
+   *
+   * Three builds and lays out geometry on the CPU, so this is measurable headlessly --
+   * the pie-slice defect this guards was a UV mapping bug, and a UV mapping bug is
+   * exactly the class that a green suite cannot see and only a screenshot found.
+   */
+  const geoOf = (scene: THREE.Scene, x: number, name: string): THREE.BufferGeometry => {
+    let g: THREE.BufferGeometry | null = null;
+    scene.traverse((o) => {
+      if (o.name === name) {
+        let root: THREE.Object3D | null = o;
+        while (root.parent && root.parent.type !== 'Scene') root = root.parent;
+        if (root && (root as THREE.Group).position.x === x) g = (o as THREE.Mesh).geometry;
+      }
+    });
+    if (!g) throw new Error(`no ${name} geometry at x=${x}`);
+    return g;
+  };
+
+  /**
+   * Do all vertices sharing a z coordinate also share a v coordinate?
+   *
+   * That is precisely what "planar, projected from above" means, and it is the property
+   * the stripe skin needs: the stripe is a band in v, so if v is a function of z alone
+   * the band runs straight along the barrel. A LatheGeometry's own UVs fail it -- they
+   * wrap u around the axis of revolution and run v along the PROFILE -- which is why a
+   * hard-edged stripe arrived as pie slices radiating from the turret's centre.
+   *
+   * Deliberately NOT asserting v === z * k: that would re-derive production's own
+   * formula and pass even if the scale were wrong in a way that ruined the look.
+   */
+  const vIsFunctionOfZ = (geo: THREE.BufferGeometry): boolean => {
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+    const byZ = new Map<string, number>();
+    for (let i = 0; i < pos.count; i++) {
+      const key = pos.getZ(i).toFixed(4);
+      const v = uv.getY(i);
+      const seen = byZ.get(key);
+      if (seen === undefined) byZ.set(key, v);
+      else if (Math.abs(seen - v) > 1e-6) return false;
+    }
+    return true;
+  };
+
+  /** How many distinct v values a geometry carries -- 1 means the projection collapsed. */
+  const distinctVs = (geo: THREE.BufferGeometry): number => {
+    const uv = geo.attributes.uv;
+    const seen = new Set<string>();
+    for (let i = 0; i < uv.count; i++) seen.add(uv.getY(i).toFixed(4));
+    return seen.size;
+  };
+
+  it('maps the turret and barrel planar for the STRIPE skin, and only for it', () => {
+    // Austin: "Racing stripes pattern on turret is weird like pie slices?" -- confirmed
+    // by screenshot, a white pinwheel on the dome while the hull carried clean bands.
+    //
+    // The fix is deliberately narrow. Austin also said the radial mapping was GOOD on
+    // the other skins ("the turret of checkerboard is what I meant with the pinwheel",
+    // "I liked the flow skin turret previously"), so every skin except `stripes` keeps
+    // the lathe's own wrap. This test pins BOTH halves of that -- a fix applied to all
+    // skins would fail the second half.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+
+    views.setPlayerStyle('#3d7bd6', 'stripes', null);
+    views.sync(w, w, 0);
+    for (const part of ['hull', 'turret', 'barrel'] as const) {
+      const geo = geoOf(scene, 3, part);
+      expect(vIsFunctionOfZ(geo), `striped ${part} is not planar`).toBe(true);
+      // ...and v must actually MOVE with z. Without this the assertion above passes on a
+      // geometry whose v is constant, which is a flat unstriped part -- "a function of
+      // z" is satisfied by a constant function, and that is precisely the degenerate
+      // case a wrong scale factor would produce.
+      expect(distinctVs(geo), `${part}'s stripe UVs are degenerate`).toBeGreaterThan(1);
+    }
+
+    for (const skin of ['checker', 'flow', 'camo', 'clouds'] as const) {
+      views.setPlayerStyle('#3d7bd6', skin, null);
+      views.sync(w, w, 0);
+      expect(
+        vIsFunctionOfZ(geoOf(scene, 3, 'turret')),
+        `${skin} lost the lathe wrap that makes its turret a pinwheel`,
+      ).toBe(false);
+    }
+
+    // The ENEMY never carries a skin map, so it must never be re-projected either --
+    // otherwise the stripe skin would silently re-UV every tank on the board.
+    views.setPlayerStyle('#3d7bd6', 'stripes', null);
+    views.sync(w, w, 0);
+    expect(vIsFunctionOfZ(geoOf(scene, 7, 'turret')), 'an enemy turret was re-projected').toBe(false);
+  });
+
   it('dresses hull AND turret in the map, leaves tracks solid and enemies bare', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
