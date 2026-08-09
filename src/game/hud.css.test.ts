@@ -6,8 +6,10 @@
 //
 // Both were invisible to `npm test` and to `tsc`. This is the cheapest guard that would
 // have caught either.
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
+import { createHud } from './hud';
 
 // `?raw` returns an EMPTY STRING unless `test.css` is enabled in vite.config -- vitest
 // stubs CSS imports by default. That is not a harmless miss: every assertion below would
@@ -17,6 +19,38 @@ import css from './hud.css?raw';
 /** Strip comments first: `{` and `}` inside them are prose, not syntax. */
 function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/**
+ * The selectors hud.css actually opens a rule for, split on `,` so a grouped rule
+ * counts for each of its members. Parsed rather than substring-matched: `.hud-x` is a
+ * substring of `.hud-x--hidden`, so `includes()` cannot tell a styled button from one
+ * that only has a modifier.
+ *
+ * Plain rules do not nest -- the test above enforces exactly that -- so a single
+ * in-a-rule flag is enough to skip declarations, and at-rule preludes (`@media`) are
+ * skipped so their nested selectors are still collected.
+ */
+function definedSelectors(text: string): Set<string> {
+  const found = new Set<string>();
+  let prelude = '';
+  let inRule = false;
+  for (const ch of stripComments(text)) {
+    if (ch === '{') {
+      const p = prelude.trim();
+      if (!inRule && !p.startsWith('@')) {
+        for (const sel of p.split(',')) if (sel.trim()) found.add(sel.trim());
+        inRule = true;
+      }
+      prelude = '';
+    } else if (ch === '}') {
+      inRule = false;
+      prelude = '';
+    } else {
+      prelude += ch;
+    }
+  }
+  return found;
 }
 
 describe('hud.css is syntactically whole', () => {
@@ -97,6 +131,46 @@ describe('hud.css is syntactically whole', () => {
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
+  });
+
+  it('gives every button the HUD renders a base rule of its own', () => {
+    // `.hud-achievements-open` shipped with NO base rule -- only its `--hidden`
+    // modifier -- so it fell through to browser default button styling while its
+    // three siblings were themed.
+    //
+    // The presence test above could not have caught it, and adding the selector to
+    // that list would not either: it uses `toContain`, and `.hud-achievements-open`
+    // is a SUBSTRING of `.hud-achievements-open--hidden`. The assertion would have
+    // passed on the broken file. This one parses rules instead of matching text, and
+    // discounts `--modifier` classes, which is the whole of the defect: having a
+    // modifier rule is exactly what made the button look styled to a grep.
+    //
+    // Population: every <button> in the mounted HUD -- the template's, plus the
+    // swatch and skin rows, which `createHud` builds during construction -- plus the
+    // level-select row. Those are all 3 `createElement('button')` sites in hud.ts;
+    // only the level row needs a call to appear.
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = createHud(root);
+    hud.setLevelSelect(2, 4); // the one button-creating site construction alone misses
+    const buttons = Array.from(root.querySelectorAll('button'));
+
+    const defined = definedSelectors(css);
+    const hasBaseRule = (cls: string): boolean =>
+      defined.has(`.${cls}`) || [...defined].some((s) => s.startsWith(`.${cls}:`));
+
+    const unstyled = buttons
+      .map((b) => Array.from(b.classList))
+      // A `--modifier` rule is not a base style. `.hud-quit--hidden` sets
+      // `display: none` and says nothing about how the button looks when shown.
+      .filter((classes) => !classes.some((c) => !c.includes('--') && hasBaseRule(c)))
+      .map((classes) => classes.join('.'));
+
+    hud.dispose();
+    document.body.innerHTML = '';
+
+    expect(buttons.length).toBeGreaterThan(10); // the sweep is not vacuous
+    expect(unstyled).toEqual([]);
   });
 
   it('keeps the stacking order the overlays depend on', () => {
