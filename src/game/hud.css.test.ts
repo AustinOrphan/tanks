@@ -39,10 +39,16 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const hud = createHud(root);
-  // The three `createElement('button')` sites in hud.ts are the swatch row and the skin
-  // row (both built during `createHud`) and the level row (built here). The other
-  // setters rebuild subtrees that hold no buttons today; they are driven anyway so that
-  // a button added to one of them lands under this sweep instead of beside it.
+  // The three `createElement('button')` sites in hud.ts today are the swatch row and
+  // the skin row (both built during `createHud`) and the level row (built here). The
+  // other setters rebuild subtrees that hold no buttons today; they are driven anyway
+  // so a button added to one of them lands under this sweep instead of beside it.
+  //
+  // KNOWN BLIND SPOT, found by review rather than assumed away: this sweeps the DOM
+  // these calls produce, not every path that can produce a button. A button created by
+  // a setter not called here is invisible to the guard, and the pinned count below
+  // will not notice either, because it never appears. If you add a button-building
+  // path, drive it here.
   hud.setLevelSelect(2, 4);
   hud.setAchievements(new Set());
   hud.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
@@ -177,6 +183,41 @@ describe('hud.css is syntactically whole', () => {
     expect(unstyled).toEqual([]);
 
     dispose();
+  });
+
+  it('keeps the two spacing distinctions the shared button theme flattens', () => {
+    // Factoring seven near-identical rules into one group traded repetition for
+    // cascade order: Quit's gap now depends on `.hud-quit { margin-top: 10px }` still
+    // sitting AFTER the group that sets 2px, and on the Back buttons still being
+    // outside the group that sets the panel size. Both are invisible to the guard
+    // above -- it asks whether a button is themed, not whether it is themed right --
+    // and a tidy-up that reorders the three blocks would silently regress either.
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    const styleOf = (cls: string): CSSStyleDeclaration => {
+      const b = document.createElement('button');
+      b.className = cls;
+      document.body.appendChild(b);
+      return getComputedStyle(b);
+    };
+    const panel = ['hud-stats-open', 'hud-achievements-open', 'hud-customize-open'];
+    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back'];
+
+    // Quitting is pushed further off the action button than its neighbours are off
+    // each other. Asserted as the relationship, so retuning either value is free.
+    const quitGap = parseFloat(styleOf('hud-quit').marginTop);
+    for (const cls of panel) {
+      expect(parseFloat(styleOf(cls).marginTop), cls).toBeLessThan(quitGap);
+    }
+    // The panel buttons take a fixed size; the Back buttons inherit theirs.
+    const inherited = getComputedStyle(document.createElement('button')).fontSize;
+    for (const cls of panel) expect(styleOf(cls).fontSize, cls).not.toBe(inherited);
+    for (const cls of back) expect(styleOf(cls).fontSize, cls).toBe(inherited);
+    for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
+
+    style.remove();
+    document.body.innerHTML = '';
   });
 
   it('keeps the stacking order the overlays depend on', () => {
