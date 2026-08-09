@@ -247,10 +247,14 @@ describe('createHud panel', () => {
     });
     h.setState('playing');
 
+    // pointerdown, not click: Chromium does not synthesise a click for a touch tap while
+    // another touch point is active, so a click binding left a player unable to pause
+    // while driving or aiming -- which is the normal state of play. jsdom cannot model
+    // the missing click, so what is pinned here is the BINDING.
     (root.querySelector('.hud-pause-btn') as HTMLButtonElement).dispatchEvent(
-      new MouseEvent('click', { bubbles: true }),
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
     );
-    expect(pauses, 'the Pause button is not wired to anything').toBe(1);
+    expect(pauses, 'the Pause button is not wired to pointerdown').toBe(1);
 
     // pointerdown, not click: a mine lands when the thumb touches, not when it lifts.
     (root.querySelector('.hud-mine-btn') as HTMLButtonElement).dispatchEvent(

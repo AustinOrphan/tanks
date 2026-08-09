@@ -331,9 +331,16 @@ export function createHud(root: HTMLElement): Hud {
     e.preventDefault();
     for (const cb of mineTapCbs) cb();
   };
-  // Same reasoning and the same suppression as Mine: preventDefault stops the compat
-  // mousemove from dragging `aim` to this button's corner. pointerdown, not click, so a
-  // shot lands the instant the thumb touches rather than waiting for the release.
+  // Same call as Mine, but be honest about how much of the work it is doing. Review
+  // removed this `preventDefault` and could NOT demonstrate any behavioural difference
+  // over 6 trials: `onPointerEnd` is bound at the window and stamps `lastTouchAt` for
+  // any touch pointer, including one that never reached the canvas, so this button's own
+  // pointerup already refreshes the compat-mouse backstop. It is kept as belt to that
+  // braces -- the backstop is a time window, and a tap is not obliged to end promptly.
+  //
+  // pointerdown, not click, and that part IS load-bearing: Chromium does not synthesise
+  // a click for a touch tap while another touch point is active, so a click binding
+  // would leave Fire dead whenever a thumb was already driving or aiming.
   const onFireTapClick = (e: Event): void => {
     e.preventDefault();
     for (const cb of fireTapCbs) cb();
@@ -406,7 +413,14 @@ export function createHud(root: HTMLElement): Hud {
   // press twice.
   el.addEventListener('keydown', disarm, true);
 
-  pauseBtn.addEventListener('click', onPauseTapClick);
+  // pointerdown, NOT click -- the same binding Mine and Fire use, and for a reason that
+  // only shows up with two thumbs down. Chromium does not synthesise a `click` for a
+  // touch tap while ANOTHER touch point is already active: measured, pointerup reaches
+  // the button but no click follows, so a player could not pause while driving or
+  // aiming. An isolated tap worked, which is why it survived earlier testing -- and this
+  // change is exactly what makes both-thumbs-down the normal state of play, since aiming
+  // no longer fires and thumbs linger.
+  pauseBtn.addEventListener('pointerdown', onPauseTapClick);
   // pointerdown, not click: a mine wants to land the instant the thumb touches, and
   // click waits for the release.
   mineBtn.addEventListener('pointerdown', onMineTapClick);
@@ -1032,7 +1046,7 @@ export function createHud(root: HTMLElement): Hud {
       panel.removeEventListener('click', onPanelClickCapture, true);
       el.removeEventListener('pointerdown', disarm, true);
       el.removeEventListener('keydown', disarm, true);
-      pauseBtn.removeEventListener('click', onPauseTapClick);
+      pauseBtn.removeEventListener('pointerdown', onPauseTapClick);
       mineBtn.removeEventListener('pointerdown', onMineTapClick);
       fireBtn.removeEventListener('pointerdown', onFireTapClick);
       schemeToggleBtn.removeEventListener('click', handleSchemeToggle);
