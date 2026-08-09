@@ -22,13 +22,33 @@
         height: 100%;
         overflow: hidden;
         background: #1a1a1a;
+        /* Pull-to-refresh and the horizontal back-swipe both begin as a drag on the
+         * board, which is also how the tank is driven. */
+        overscroll-behavior: none;
       }
       #app {
         position: fixed;
         inset: 0;
       }
+      /*
+       * touch-action: none is what makes the virtual thumbstick work AT ALL, and it is
+       * not a nicety.
+       *
+       * Left at the default, the browser treats a drag on the canvas as a candidate pan
+       * or pinch: measured on a Pixel 5, a vertical drive drag produced pointerdown, TWO
+       * pointermoves and then pointercancel, after which no further pointermove is
+       * delivered for that finger -- so the stick died about where it first left the
+       * dead zone, and could not restart without lifting. A horizontal drag was
+       * cancelled after 16px. Two thumbs moving apart -- the normal posture of a
+       * twin-stick -- zoomed the page to 4.25x and cancelled both.
+       *
+       * Scoped to the canvas rather than set globally, so the HUD's own scrollable
+       * panes (the achievements list) keep their gestures. The buttons set
+       * `touch-action: manipulation` for the same reason at a smaller scale.
+       */
       canvas {
         display: block;
+        touch-action: none;
       }
     </style>
   </head>

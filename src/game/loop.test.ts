@@ -48,6 +48,7 @@ interface Recorder {
   roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
   deathSignals: number;
   inputClears: number;
+  minePresses: number;
   cleared: number[];
   progressResets: number;
   statBatches: Array<{ count: number; playerId: number }>;
@@ -102,6 +103,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     volume(v: number): void;
     startRestart(): void;
     quitToTitle(): void;
+    pauseTap(): void;
+    mineTap(): void;
     pickLevel(i: number): void;
     resetStats(): void;
     resetProgress(): void;
@@ -136,6 +139,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     roundPhases: [],
     deathSignals: 0,
     inputClears: 0,
+    minePresses: 0,
     cleared: [],
     progressResets: 0,
     statBatches: [],
@@ -177,6 +181,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onVolume = (_v: number): void => {};
   let onStartRestart = (): void => {};
   let onQuit = (): void => {};
+  let onPauseTap = (): void => {};
+  let onMineTap = (): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
@@ -232,6 +238,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       clearQueuedPresses(): void {
         rec.inputClears += 1;
+      },
+      pressMine(): void {
+        rec.minePresses += 1;
       },
       dispose(): void {
         rec.disposed.push('input');
@@ -361,6 +370,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onQuitToTitle: (cb: () => void) => {
           onQuit = cb;
+        },
+        onPauseTap: (cb: () => void) => {
+          onPauseTap = cb;
+        },
+        onMineTap: (cb: () => void) => {
+          onMineTap = cb;
         },
         setStats: () => {
           rec.statPushes += 1;
@@ -575,6 +590,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       volume: (v) => onVolume(v),
       startRestart: () => onStartRestart(),
       quitToTitle: () => onQuit(),
+      pauseTap: () => onPauseTap(),
+      mineTap: () => onMineTap(),
       pickLevel: (i) => onPickLevel(i),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
@@ -997,6 +1014,47 @@ describe('startGameWith: leaving the title screen', () => {
     const h = boot(); // already past the splash
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
     expect(h.rec.muted).toEqual([true]);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the touch controls', () => {
+  it('the pause button toggles pause, through the same guards as the hotkey', () => {
+    const h = boot();
+    h.hud.startRestart(); // into play
+    expect(h.getState()).toBe('playing');
+
+    h.hud.pauseTap();
+    expect(h.getState()).toBe('paused');
+    h.hud.pauseTap();
+    // The resume half is DEFENSIVE and unreachable from the current UI: the touch row
+    // hides while paused, so a player resumes with the pause panel's own Resume button.
+    // Exercised here through the state machine because the guard costs nothing and a
+    // future always-visible pause button would rely on it.
+    expect(h.getState(), 'the pause toggle is not symmetric').toBe('playing');
+    h.handle.dispose();
+  });
+
+  it('the pause button cannot reach a state the hotkey cannot', () => {
+    // It routes through sm.pause()/resume(), which act only from 'playing'/'paused'.
+    // A second path out of a finished game is exactly what this must not become.
+    const h = boot();
+    for (const state of ['title', 'win', 'lose'] as const) {
+      h.setState(state);
+      h.hud.pauseTap();
+      expect(h.getState(), `pauseTap moved the game out of ${state}`).toBe(state);
+    }
+    h.handle.dispose();
+  });
+
+  it('the mine button latches a mine on the input controller', () => {
+    // Through the controller's own latch, NOT a separate path into the sim: that is
+    // what makes a tapped mine identical to a keyed one, including being consumed by
+    // the next sample() and cleared on pause.
+    const h = boot();
+    expect(h.rec.minePresses).toBe(0);
+    h.hud.mineTap();
+    expect(h.rec.minePresses, 'the Mine button did not reach the input controller').toBe(1);
     h.handle.dispose();
   });
 });

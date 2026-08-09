@@ -134,6 +134,9 @@ describe('hud.css is syntactically whole', () => {
       // leaves; the hint's pulse is the only cue that a press is what is wanted
       '.hud-splash', '.hud-splash--hidden', '.hud-splash-title', '.hud-splash-hint',
       '.hud-topbar--hidden', // the title screen's only overlapping chrome
+      // touch controls: without the hidden rule the row shows on the menu and the pause
+      // panel too, and without the media query a mouse player gets buttons for keys
+      '.hud-touch', '.hud-touch--hidden', '.hud-pause-btn', '.hud-mine-btn',
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', // the panel audio pair keeps its styling
@@ -191,7 +194,10 @@ describe('hud.css is syntactically whole', () => {
     // hid a real gap -- losing all 15 dynamically-built buttons still left 12 > 10.
     // If a UI change moves this number, that is the moment to check the new buttons
     // are covered, which is the whole point of pinning it.
-    expect(buttons.length).toBe(27);
+    // 29 since the touch controls landed: 27 + the Pause and Mine buttons. The count
+    // moving is the prompt to check the new buttons are themed, which is why it is
+    // pinned exactly -- and it did exactly that here.
+    expect(buttons.length).toBe(29);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -227,6 +233,56 @@ describe('hud.css is syntactically whole', () => {
     for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
 
     document.body.innerHTML = '';
+  });
+
+  it('keeps the narrow-viewport rules the phone layout needs', () => {
+    // Measured on a 393px-wide phone before this existed: the volume slider ran 35px
+    // PAST the viewport edge and the topbar wrapped to 72px tall, eating the top of the
+    // board. After, across four shapes: 320x568 36px/-10, 393x727 40px/-12,
+    // 727x393 (landscape) 40px/-12, 820x1180 51px/-20 -- nothing clipped anywhere.
+    //
+    // A TEXT assertion, and weak on purpose -- jsdom does no layout, so nothing here can
+    // measure a width. It catches the block being deleted or the selectors being
+    // renamed out from under it, which is the regression that actually happens. The real
+    // check is the pixel gate, which already renders a 390x844 viewport.
+    const src = stripComments(css);
+    expect(src, 'the narrow-viewport block is gone').toMatch(/@media\s*\(max-width:\s*760px\)/);
+    // 760, not 520: a phone in LANDSCAPE is 727 wide and 393 TALL, and at 520 it got
+    // none of these rules -- a 51px topbar across the shape that can least afford it.
+    expect(src, 'the very-narrow block is gone').toMatch(/@media\s*\(max-width:\s*360px\)/);
+    const block = src.split(/@media\s*\(max-width:\s*760px\)/)[1] ?? '';
+    for (const sel of ['.hud-topbar', '.hud-stat', '.hud-mute', '.hud-volume']) {
+      expect(block.slice(0, 600), `${sel} dropped out of the narrow layout`).toContain(sel);
+    }
+  });
+
+  it('keeps the panels out of the browser pinch handler', () => {
+    // The fix for a measured zoom TRAP, and it was pinned by nothing while the two
+    // neighbouring queries both were. A two-finger gesture on the pause panel zoomed the
+    // page to 5x, and because the canvas is `touch-action: none` you could not pinch back
+    // out over the board -- so the zoom survived Resume and the game stayed magnified.
+    //
+    // pan-y, not none: these panes scroll (the achievements list is 744px of content in a
+    // 430px box) and that must keep working. Verified in a browser: scale stays 1 at 8 of
+    // 8 sites, and the list still scrolls.
+    const src = stripComments(css);
+    const rule = src.slice(0, src.indexOf('touch-action: pan-y'));
+    for (const sel of ['.hud-panel', '.hud-stats', '.hud-customize', '.hud-achievements']) {
+      expect(rule, `${sel} can still be pinched into a zoom trap`).toContain(sel);
+    }
+    expect(src, 'the pan-y rule is gone').toContain('touch-action: pan-y');
+  });
+
+  it('keeps the query that hides the touch controls from a mouse', () => {
+    // Load-bearing, not defensive: setState('playing') REMOVES `.hud-touch--hidden`, so
+    // this query is the ONLY thing keeping the Pause and Mine buttons off a desktop
+    // screen. Measured -- deleting it left every mouse player two unexplained buttons
+    // and nothing failed.
+    const src = stripComments(css);
+    expect(src, 'the pointer:fine query is gone').toMatch(/@media\s*\(pointer:\s*fine\)/);
+    const block = src.split(/@media\s*\(pointer:\s*fine\)/)[1]?.slice(0, 200) ?? '';
+    expect(block, 'the query no longer hides .hud-touch').toContain('.hud-touch');
+    expect(block).toContain('display: none');
   });
 
   it('keeps the stacking order the overlays depend on', () => {
