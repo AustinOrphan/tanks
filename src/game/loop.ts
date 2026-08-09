@@ -651,7 +651,18 @@ export function startGameWith(
   deps.host.addEventListener('pointerdown', onSplashGesture);
 
   const onKey = (e: KeyboardEvent): void => {
-    onSplashGesture();
+    // A key that dismisses the title screen does that and NOTHING ELSE.
+    //
+    // Falling through here meant "Press any key to begin" included M, which mutes:
+    // the one key most likely to be pressed by someone testing whether the game has
+    // sound would silence the menu bed this screen exists to make audible, with only
+    // the Mute button's label left to explain why. Escape and P were harmless by luck
+    // alone -- pause() no-ops from 'title' -- which is not a property to rely on as
+    // more hotkeys arrive.
+    if (sm.state === 'splash') {
+      sm.dismissSplash();
+      return;
+    }
     if (isMuteHotkey(e)) hud.setMuted(audio.toggleMute());
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from 'playing' and

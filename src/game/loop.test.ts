@@ -609,7 +609,25 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 }
 
+/**
+ * Boots the game AND leaves the title screen, which is where nearly every test in this
+ * file wants to start: `hud.onStartRestart` branches on `sm.state === 'title'`, so a
+ * `startRestart()` from the splash screen silently takes the Play-Again/advance branch
+ * instead of the menu's Start branch. Both land on 'playing', so the tests still pass
+ * while exercising a different path -- review measured 16 `startRestart()` call sites
+ * affected, with only 1 of 109 tests failing when the boot state was moved.
+ *
+ * Use `bootAtSplash()` when the title screen itself is the subject.
+ */
 function boot(h = makeDeps()): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
+  const booted = bootAtSplash(h);
+  booted.pointerdown(); // splash -> title, the way a player leaves it
+  return booted;
+}
+
+function bootAtSplash(
+  h = makeDeps(),
+): ReturnType<typeof makeDeps> & { handle: { dispose(): void } } {
   const canvas = document.createElement('canvas');
   const root = document.createElement('div');
   const handle = startGameWith(canvas, root, h.deps);
@@ -782,7 +800,7 @@ describe('startGameWith: HUD wiring', () => {
     // the initial title panel is pushed straight to the HUD without going
     // through the state machine, so hanging the music off onChange alone left
     // this path silent; a browser probe caught it after the unit tests passed.
-    const h = boot(makeDeps());
+    const h = bootAtSplash(makeDeps());
     // The exact SEQUENCE, not three independent counters. Review swapped
     // startMusic and setMusicContext in loop.ts and all 1268 tests stayed
     // green; it also doubled the startMusic call and nothing noticed. Both
@@ -791,6 +809,22 @@ describe('startGameWith: HUD wiring', () => {
     // whether or not the bed exists yet, and startMusic is idempotent -- but
     // an ordering the tests cannot see is one this repo has been bitten by.)
     expect(h.rec.audioCalls, 'boot left the title screen silent').toEqual([
+      'start',
+      'context:menu',
+      'duck:false',
+    ]);
+
+    // Leaving the splash screen repeats the same three calls, and each is a no-op:
+    // startMusic builds the bed once and bed.start() returns early once its timer
+    // exists, and the engine stores a context it already holds.
+    //
+    // What is pinned here is the CONTEXT -- still 'menu', not a second suite. Splash
+    // and the menu deliberately share one, so arriving at the menu asks for no suite
+    // change; a different context here would cut the bed off and start another a beat
+    // later, right under the player's first gesture. Give musicContextFor('splash')
+    // any other suite and this fails.
+    h.pointerdown();
+    expect(h.rec.audioCalls.slice(3), 'dismissing the splash changed suite').toEqual([
       'start',
       'context:menu',
       'duck:false',
@@ -918,12 +952,51 @@ describe('startGameWith: HUD wiring', () => {
   });
 
   it('shows the initial state and stats before any frame runs', () => {
-    const h = boot();
+    const h = bootAtSplash();
     // The splash screen, not the menu: the HUD's first push must match the state
     // machine's initial state, and loop.ts pushes it explicitly because that path
     // bypasses sm.onChange.
     expect(h.rec.hudStates[0]).toBe('splash');
     expect(h.rec.lives.length).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: leaving the title screen', () => {
+  it('any key dismisses it -- the keyboard half of "Press any key or tap to begin"', () => {
+    // Deleting `sm.dismissSplash()` from onKey left the WHOLE suite green: the pointer
+    // path had a helper and the keyboard path had nothing, while the on-screen text
+    // promises both.
+    const h = bootAtSplash();
+    expect(h.getState()).toBe('splash');
+    h.keydown({ key: 'x', repeat: false, target: null } as Partial<KeyboardEvent>);
+    expect(h.getState()).toBe('title');
+    h.handle.dispose();
+  });
+
+  it('a pointer press dismisses it', () => {
+    const h = bootAtSplash();
+    h.pointerdown();
+    expect(h.getState()).toBe('title');
+    h.handle.dispose();
+  });
+
+  it('the key that dismisses it does nothing else -- M must not mute the game', () => {
+    // "Press any key" includes M, and M is the mute hotkey. Without the early return
+    // in onKey, the single key most likely to be pressed by someone checking whether
+    // the game has sound silenced the menu bed this screen exists to make audible.
+    const h = bootAtSplash();
+    h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
+    expect(h.getState()).toBe('title');
+    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('still mutes on M once the game is past the title screen', () => {
+    // The other edge: the early return must not swallow the hotkey forever.
+    const h = boot(); // already past the splash
+    h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
+    expect(h.rec.muted).toEqual([true]);
     h.handle.dispose();
   });
 });
@@ -965,7 +1038,15 @@ describe('startGameWith: listeners and teardown', () => {
   it('removes exactly the listeners it added, by identity', () => {
     const h = boot();
     h.handle.dispose();
-    expect(h.rec.removed).toHaveLength(4);
+    // The TYPES as a set, not just a count with an each-was-added check: review showed
+    // that form passes when one type is removed twice and another never at all, which
+    // is exactly how the new pointerdown listener would have leaked unnoticed.
+    expect(h.rec.removed.map(([t]) => t).sort()).toEqual([
+      'blur',
+      'keydown',
+      'pointerdown',
+      'resize',
+    ]);
     for (const [type, fn] of h.rec.removed) {
       expect(h.rec.listeners).toContainEqual([type, fn]);
     }
@@ -1268,7 +1349,10 @@ describe('startGameWith: round-phase HUD', () => {
     // The round opens with COUNTDOWN_TICKS in which movement is blocked. Without
     // this the player presses a direction, nothing happens for three seconds, and
     // the game reads as broken -- which is what it did while this sat behind a flag.
-    const h = boot(inCountdown());
+    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
+    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
+    // and knock these assertions out of step with `renders`.
+    const h = bootAtSplash(inCountdown());
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.roundPhases.length).toBeGreaterThan(0);
@@ -1282,7 +1366,10 @@ describe('startGameWith: round-phase HUD', () => {
     // ~17ms per frame is one tick at TICK_HZ, so every tick of the countdown gets
     // its own frame and the final one is genuinely exercised. Coarser frames skip
     // ~6 ticks each and a countdown that went quiet one tick early slipped through.
-    const h = boot(inCountdown());
+    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
+    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
+    // and knock these assertions out of step with `renders`.
+    const h = bootAtSplash(inCountdown());
     h.setState('playing');
     for (let i = 1; i <= COUNTDOWN_TICKS + 20; i++) h.fireFrame(i * 17);
     // Per-frame push and per-frame render, so index i is the same frame in both.
@@ -1304,7 +1391,10 @@ describe('startGameWith: round-phase HUD', () => {
     // was on screen -- and quitting to title leaves it there indefinitely, since
     // switchTo rebuilds the world without simulating a frame. The chip lives in
     // the topbar (z-index 1) and paints ABOVE the panel, so it is not subtle.
-    const h = boot(inCountdown());
+    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
+    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
+    // and knock these assertions out of step with `renders`.
+    const h = bootAtSplash(inCountdown());
     h.setState('playing');
     h.fireFrame(20);
     expect(h.rec.roundPhases.at(-1)).not.toBeNull(); // it is announcing
@@ -1318,7 +1408,10 @@ describe('startGameWith: round-phase HUD', () => {
   });
 
   it('makes the FIRST round of the page load prominent', () => {
-    const h = boot(inCountdown());
+    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
+    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
+    // and knock these assertions out of step with `renders`.
+    const h = bootAtSplash(inCountdown());
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.roundPhases[0]?.prominent).toBe(true);
@@ -1328,7 +1421,10 @@ describe('startGameWith: round-phase HUD', () => {
   it('drops to the quiet chip on the next round', () => {
     // Rounds restart on every respawn, not just a new game -- resetArena moves
     // roundStartTick -- so the second round must not re-teach.
-    const h = boot(inCountdown());
+    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
+    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
+    // and knock these assertions out of step with `renders`.
+    const h = bootAtSplash(inCountdown());
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.roundPhases[0]?.prominent).toBe(true);
@@ -1574,7 +1670,6 @@ describe('startGameWith: the main menu', () => {
 
   it('a level pick from the title rebuilds at that level and starts play', () => {
     const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
-    h.pointerdown(); // leave the splash screen the way a player does
     h.hud.pickLevel(1);
     expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
     expect(h.getState()).toBe('playing');
@@ -1597,7 +1692,6 @@ describe('startGameWith: a level pick is bounds-checked', () => {
     // world from ARENAS[picked] deserves its own guard -- ARENAS[7] is undefined and
     // loadArena(undefined) is a crash, not a shrug.
     const h = boot(makeDeps({ levelCount: 2 }));
-    h.pointerdown(); // leave the splash screen the way a player does
     h.hud.pickLevel(7);
     h.hud.pickLevel(-1);
     expect(h.rec.levelBuilds).toHaveLength(1); // only the boot build
