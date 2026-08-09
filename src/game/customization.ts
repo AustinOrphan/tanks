@@ -30,6 +30,36 @@ export const PALETTE: readonly Swatch[] = Object.freeze([
 
 export const DEFAULT_HULL: HullColorId = 'blue';
 
+/**
+ * The pattern's SECOND tone -- the racing stripe, the checker cell, the camo blotch.
+ * Historically this was always DERIVED from the hull hex (lighten/scale in
+ * render/skins.ts), which is why a player never had "add white to whatever hull I
+ * picked" as a choice of their own. `auto` keeps exactly that derivation (`hex: null`
+ * is the sentinel render/skins.ts reads to mean "compute it from the base, as before"),
+ * kept as the default so an existing save's tank does not change appearance. The
+ * others are literal tones, not further derived -- picking `black` means black bands,
+ * not a darkened version of black.
+ */
+export type AccentId = 'auto' | 'black' | 'white' | 'silver' | 'gold';
+
+export interface AccentSwatch {
+  id: AccentId;
+  label: string;
+  /** null only for `auto`: the render layer derives the tone from the hull itself. */
+  hex: string | null;
+}
+
+/** First entry is `auto`, the shipped default. */
+export const ACCENTS: readonly AccentSwatch[] = Object.freeze([
+  { id: 'auto', label: 'Auto (matches hull)', hex: null },
+  { id: 'black', label: 'Black', hex: '#101010' },
+  { id: 'white', label: 'White', hex: '#f2f2f2' },
+  { id: 'silver', label: 'Silver', hex: '#ccd3dc' },
+  { id: 'gold', label: 'Gold', hex: '#e8c547' },
+]);
+
+export const DEFAULT_ACCENT: AccentId = 'auto';
+
 export type SkinId = 'solid' | 'stripes' | 'camo' | 'checker' | 'flow';
 
 export interface SkinDef {
@@ -56,6 +86,7 @@ export const DEFAULT_SKIN: SkinId = 'solid';
 
 const IDS = new Set<string>(PALETTE.map((s) => s.id));
 const SKIN_IDS = new Set<string>(SKINS.map((s) => s.id));
+const ACCENT_IDS = new Set<string>(ACCENTS.map((s) => s.id));
 
 export interface CustomizationStore {
   hull(): HullColorId;
@@ -65,11 +96,17 @@ export interface CustomizationStore {
   skin(): SkinId;
   /** Off-list ids are refused, exactly like hull colours. */
   setSkin(id: SkinId): void;
+  /** The pattern's second tone. Defaults to `auto` -- see AccentId's doc comment. */
+  accent(): AccentId;
+  /** Off-list ids are refused, exactly like hull colours and skins. */
+  setAccent(id: AccentId): void;
+  /** null for `auto`: the render layer derives the tone from the hull hex itself. */
+  accentHexFor(id: AccentId): string | null;
 }
 
 export function createCustomizationStore(storage: Storage): CustomizationStore {
-  function read(): { hull: HullColorId; skin: SkinId } {
-    const fallback = { hull: DEFAULT_HULL, skin: DEFAULT_SKIN };
+  function read(): { hull: HullColorId; skin: SkinId; accent: AccentId } {
+    const fallback = { hull: DEFAULT_HULL, skin: DEFAULT_SKIN, accent: DEFAULT_ACCENT };
     let raw: string | null = null;
     try {
       raw = storage.getItem(CUSTOM_KEY);
@@ -78,8 +115,11 @@ export function createCustomizationStore(storage: Storage): CustomizationStore {
     }
     if (raw === null || raw === '') return fallback;
     try {
-      const parsed = JSON.parse(raw) as { hull?: unknown; skin?: unknown } | null;
-      // Each field validated independently: a junk skin must not reset the hull.
+      const parsed = JSON.parse(raw) as
+        | { hull?: unknown; skin?: unknown; accent?: unknown }
+        | null;
+      // Each field validated independently: a junk skin must not reset the hull, and a
+      // save from before `accent` existed must not reset either of the other two.
       return {
         hull:
           typeof parsed?.hull === 'string' && IDS.has(parsed.hull)
@@ -89,6 +129,10 @@ export function createCustomizationStore(storage: Storage): CustomizationStore {
           typeof parsed?.skin === 'string' && SKIN_IDS.has(parsed.skin)
             ? (parsed.skin as SkinId)
             : DEFAULT_SKIN,
+        accent:
+          typeof parsed?.accent === 'string' && ACCENT_IDS.has(parsed.accent)
+            ? (parsed.accent as AccentId)
+            : DEFAULT_ACCENT,
       };
     } catch {
       return fallback;
@@ -114,6 +158,15 @@ export function createCustomizationStore(storage: Storage): CustomizationStore {
     },
     hexFor(id: HullColorId): string {
       return PALETTE.find((s) => s.id === id)?.hex ?? PALETTE[0].hex;
+    },
+    accent: () => shadow.accent,
+    setAccent(id: AccentId): void {
+      if (!ACCENT_IDS.has(id)) return;
+      shadow = { ...shadow, accent: id };
+      persist();
+    },
+    accentHexFor(id: AccentId): string | null {
+      return ACCENTS.find((s) => s.id === id)?.hex ?? null;
     },
     skin: () => shadow.skin,
     setSkin(id: SkinId): void {

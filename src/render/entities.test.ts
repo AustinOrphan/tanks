@@ -719,7 +719,7 @@ describe('the paint shop (player colour override)', () => {
     w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
     views.sync(w, w, 0);
 
-    views.setPlayerStyle('#d64545', 'solid');
+    views.setPlayerStyle('#d64545', 'solid', null);
     views.sync(w, w, 0);
 
     const partColor = (x: number, name: string): number => {
@@ -744,7 +744,7 @@ describe('the paint shop (player colour override)', () => {
     expect(partColor(7, 'hull')).not.toBe(0xd64545); // brown keeps its identity
 
     // And back to the roster default.
-    views.setPlayerStyle(null, 'solid');
+    views.setPlayerStyle(null, 'solid', null);
     views.sync(w, w, 0);
     let restored = -1;
     scene.traverse((o) => {
@@ -778,7 +778,7 @@ describe('skins (player texture override)', () => {
     const views = createEntityViews(scene);
     const w = makeWorld();
     w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
-    views.setPlayerStyle('#d64545', 'camo');
+    views.setPlayerStyle('#d64545', 'camo', null);
     views.sync(w, w, 0);
 
     // Mapped parts go WHITE so the map's own tint is not multiplied twice.
@@ -795,7 +795,7 @@ describe('skins (player texture override)', () => {
     expect(matOf(scene, 7, 'hull').map).toBeNull();
 
     // Back to solid: the map comes OFF and the tint returns to the material.
-    views.setPlayerStyle('#d64545', 'solid');
+    views.setPlayerStyle('#d64545', 'solid', null);
     views.sync(w, w, 0);
     expect(matOf(scene, 3, 'hull').map).toBeNull();
     expect(matOf(scene, 3, 'hull').color.getHex()).toBe(0xd64545);
@@ -808,7 +808,7 @@ describe('skins (player texture override)', () => {
     const w = makeWorld();
     w.tanks = [makeTank(1, 'player', 3, 3)];
 
-    views.setPlayerStyle(null, 'flow');
+    views.setPlayerStyle(null, 'flow', null);
     views.sync(w, w, 0, 0.5);
     const flowMap = matOf(scene, 3, 'hull').map as THREE.Texture;
     // 0.08 repeats/s (the skin def's scroll.u) over 0.5s of dt.
@@ -817,7 +817,7 @@ describe('skins (player texture override)', () => {
     views.sync(w, w, 0); // dt omitted: animation frozen, offset holds
     expect(flowMap.offset.x).toBeCloseTo(0.04, 6);
 
-    views.setPlayerStyle(null, 'camo');
+    views.setPlayerStyle(null, 'camo', null);
     views.sync(w, w, 0, 0.5);
     const camoMap = matOf(scene, 3, 'hull').map as THREE.Texture;
     expect(camoMap.offset.x).toBe(0); // no scroll in the def, no drift
@@ -834,7 +834,7 @@ describe('skins (player texture override)', () => {
     alive.tanks = [makeTank(1, 'player', 3, 3)];
     const dead = makeWorld();
     dead.tanks = [];
-    views.setPlayerStyle(null, 'camo');
+    views.setPlayerStyle(null, 'camo', null);
     views.sync(alive, alive, 0);
     const worn = matOf(scene, 3, 'hull').map as THREE.Texture;
     let disposed = 0;
@@ -851,12 +851,12 @@ describe('skins (player texture override)', () => {
     const views = createEntityViews(scene);
     const w = makeWorld();
     w.tanks = [makeTank(1, 'player', 3, 3)];
-    views.setPlayerStyle(null, 'camo');
+    views.setPlayerStyle(null, 'camo', null);
     views.sync(w, w, 0);
     const first = matOf(scene, 3, 'hull').map as THREE.Texture;
     let disposed = 0;
     first.addEventListener('dispose', () => disposed++);
-    views.setPlayerStyle(null, 'checker'); // replaces the map -> old one must go
+    views.setPlayerStyle(null, 'checker', null); // replaces the map -> old one must go
     expect(disposed).toBe(1);
     views.sync(w, w, 0);
     const second = matOf(scene, 3, 'hull').map as THREE.Texture;

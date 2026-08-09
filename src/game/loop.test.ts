@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import { ZERO_STATS } from './stats';
-import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
+import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import type { AchievementContext, AchievementId } from './achievements';
 import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
@@ -84,11 +84,13 @@ interface Recorder {
   volumes: number[];
   resizes: Array<[number, number]>;
   refits: Array<[number, number, number]>;
-  restyles: Array<{ hex: string | null; skin: string }>;
+  restyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
   hullSets: string[];
   hullEchoes: string[];
   skinSets: string[];
   skinEchoes: string[];
+  accentSets: string[];
+  accentEchoes: string[];
   toasts: string[][];
   achPushes: string[][];
   achChecks: Array<{
@@ -117,7 +119,7 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[] } = {}): {
   deps: GameDeps;
   rec: Recorder;
   fireFrame(now: number): void;
@@ -137,6 +139,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     resetProgress(): void;
     pickHull(id: HullColorId): void;
     pickSkin(id: SkinId): void;
+    pickAccent(id: AccentId): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -196,6 +199,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     hullEchoes: [],
     skinSets: [],
     skinEchoes: [],
+    accentSets: [],
+    accentEchoes: [],
     toasts: [],
     achPushes: [],
     achChecks: [],
@@ -232,6 +237,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
+  let onPickAccent = (_id: AccentId): void => {};
   let onResetProgress = (): void => {};
   let onPickLevel = (_i: number): void => {};
 
@@ -267,8 +273,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         refit(w2: number, h2: number, b: number): void {
           rec.refits.push([w2, h2, b]);
         },
-        setPlayerStyle(hex: string | null, skin: string): void {
-          rec.restyles.push({ hex, skin });
+        setPlayerStyle(hex: string | null, skin: string, accent: string | null): void {
+          rec.restyles.push({ hex, skin, accent });
         },
         dispose(): void {
           rec.disposed.push('renderer');
@@ -471,6 +477,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onPickSkin: (cb: (id: SkinId) => void) => {
           onPickSkin = cb;
         },
+        setAccentColor: (id: string) => {
+          rec.accentEchoes.push(id);
+        },
+        onPickAccentColor: (cb: (id: AccentId) => void) => {
+          onPickAccent = cb;
+        },
         setAchievements: (earned: ReadonlySet<string>) => {
           rec.achPushes.push([...earned]);
         },
@@ -493,9 +505,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     customization: (() => {
       let hull: HullColorId = (opts.savedHull ?? 'blue') as HullColorId;
       let skin: SkinId = (opts.savedSkin ?? 'solid') as SkinId;
-      // From the REAL palette and skin list, not duplicate lists that drift.
+      let accent: AccentId = (opts.savedAccent ?? 'auto') as AccentId;
+      // From the REAL palette, skin and accent lists, not duplicate lists that drift.
       const VALID = new Set<string>(PALETTE.map((sw) => sw.id));
       const VALID_SKINS = new Set<string>(SKINS.map((sk) => sk.id));
+      const VALID_ACCENTS = new Set<string>(ACCENTS.map((a) => a.id));
       return {
         hull: () => hull,
         setHull: (id: HullColorId) => {
@@ -508,6 +522,14 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           if (VALID_SKINS.has(id)) skin = id;
           rec.skinSets.push(id);
         },
+        accent: () => accent,
+        setAccent: (id: AccentId) => {
+          if (VALID_ACCENTS.has(id)) accent = id;
+          rec.accentSets.push(id);
+        },
+        // Mirrors the real store: null for 'auto', a fake hex for anything else -- so
+        // a restyle test can tell "auto propagated" from "a literal accent propagated".
+        accentHexFor: (id: AccentId) => (id === 'auto' ? null : `#accent-${id}`),
       };
     })(),
     touchSettings: (() => {
@@ -697,6 +719,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
       pickSkin: (id: SkinId) => onPickSkin(id),
+      pickAccent: (id: AccentId) => onPickAccent(id),
       resetProgress: () => onResetProgress(),
     },
     setState: (s) => {
@@ -1675,7 +1698,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
     // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid' });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null });
     off.handle.dispose();
   });
 
@@ -1683,15 +1706,15 @@ describe('startGameWith: dev flags stay off by default', () => {
     // One at a time, so a wiring that turns them all on together -- or crosses two of
     // them -- fails rather than passing on the aggregate.
     const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
-    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid' });
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null });
     ray.handle.dispose();
 
     const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
-    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid' });
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null });
     reach.handle.dispose();
 
     const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
-    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, playerColor: '#hex-blue', playerSkin: 'solid' });
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null });
     timer.handle.dispose();
   });
 });
@@ -2440,7 +2463,7 @@ describe('startGameWith: the paint shop wiring', () => {
     const h = boot(makeDeps());
     h.hud.pickHull('red');
     expect(h.rec.hullSets).toEqual(['red']);
-    expect(h.rec.restyles).toEqual([{ hex: '#hex-red', skin: 'solid' }]);
+    expect(h.rec.restyles).toEqual([{ hex: '#hex-red', skin: 'solid', accent: null }]);
     expect(h.rec.hullEchoes.at(-1)).toBe('red');
     h.handle.dispose();
   });
@@ -2451,7 +2474,8 @@ describe('startGameWith: the paint shop wiring', () => {
     const h = boot(makeDeps({ savedHull: 'green' }));
     h.hud.pickHull('teal' as never);
     expect(h.rec.hullEchoes.at(-1)).toBe('green');
-    expect(h.rec.restyles).toEqual([{ hex: '#hex-green', skin: 'solid' }]); // restyled with the stored value
+    // restyled with the stored value
+    expect(h.rec.restyles).toEqual([{ hex: '#hex-green', skin: 'solid', accent: null }]);
     h.handle.dispose();
   });
 
@@ -2463,13 +2487,13 @@ describe('startGameWith: the paint shop wiring', () => {
     h.handle.dispose();
   });
 
-  it('a skin pick stores, restyles with BOTH halves of the style, and echoes back', () => {
+  it('a skin pick stores, restyles with the FULL style, and echoes back', () => {
     const h = boot(makeDeps({ savedHull: 'red' }));
     h.hud.pickSkin('checker');
     expect(h.rec.skinSets).toEqual(['checker']);
-    // The restyle carries the stored hull too: sending half the style would
-    // silently reset the paint under a skin change.
-    expect(h.rec.restyles).toEqual([{ hex: '#hex-red', skin: 'checker' }]);
+    // The restyle carries the stored hull too: sending part of the style would
+    // silently reset the rest under a skin change.
+    expect(h.rec.restyles).toEqual([{ hex: '#hex-red', skin: 'checker', accent: null }]);
     expect(h.rec.skinEchoes.at(-1)).toBe('checker');
     h.handle.dispose();
   });
@@ -2478,7 +2502,45 @@ describe('startGameWith: the paint shop wiring', () => {
     const h = boot(makeDeps({ savedSkin: 'flow' }));
     h.hud.pickSkin('zebra' as never);
     expect(h.rec.skinEchoes.at(-1)).toBe('flow');
-    expect(h.rec.restyles).toEqual([{ hex: '#hex-blue', skin: 'flow' }]);
+    expect(h.rec.restyles).toEqual([{ hex: '#hex-blue', skin: 'flow', accent: null }]);
+    h.handle.dispose();
+  });
+
+  it('builds the renderer with the SAVED accent (auto resolves to a null hex) and echoes it at boot', () => {
+    const h = boot(makeDeps());
+    const options = h.rec.rendererArgs[0][4] as { playerAccent?: string | null };
+    expect(options.playerAccent).toBeNull();
+    expect(h.rec.accentEchoes[0]).toBe('auto');
+    h.handle.dispose();
+  });
+
+  it('a non-auto saved accent resolves to its own hex at boot, not null', () => {
+    const h = boot(makeDeps({ savedAccent: 'black' }));
+    const options = h.rec.rendererArgs[0][4] as { playerAccent?: string | null };
+    expect(options.playerAccent).toBe('#accent-black');
+    h.handle.dispose();
+  });
+
+  it('an accent pick stores, restyles with the FULL style, and echoes back', () => {
+    const h = boot(makeDeps({ savedHull: 'red', savedSkin: 'checker' }));
+    h.hud.pickAccent('gold');
+    expect(h.rec.accentSets).toEqual(['gold']);
+    // Carries the stored hull AND skin: sending part of the style would silently
+    // reset the rest under an accent change.
+    expect(h.rec.restyles).toEqual([
+      { hex: '#hex-red', skin: 'checker', accent: '#accent-gold' },
+    ]);
+    expect(h.rec.accentEchoes.at(-1)).toBe('gold');
+    h.handle.dispose();
+  });
+
+  it('an off-list accent pick is refused by the store, and the echo says so', () => {
+    const h = boot(makeDeps({ savedAccent: 'silver' }));
+    h.hud.pickAccent('rainbow' as never);
+    expect(h.rec.accentEchoes.at(-1)).toBe('silver');
+    expect(h.rec.restyles).toEqual([
+      { hex: '#hex-blue', skin: 'solid', accent: '#accent-silver' },
+    ]);
     h.handle.dispose();
   });
 });

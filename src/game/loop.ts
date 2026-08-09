@@ -74,6 +74,7 @@ export interface GameDeps {
       mineTimer?: boolean;
       playerColor?: string;
       playerSkin?: SkinId;
+      playerAccent?: string | null;
     },
   ) => Renderer3D;
   readonly createInput: (
@@ -340,9 +341,10 @@ export function startGameWith(
     aimRay: deps.devFlags.aimRay,
     mineReach: deps.devFlags.mineReach,
     mineTimer: deps.devFlags.mineTimer,
-    // The paint shop's saved colour and skin, applied from the first frame.
+    // The paint shop's saved colour, skin and accent, applied from the first frame.
     playerColor: deps.customization.hexFor(deps.customization.hull()),
     playerSkin: deps.customization.skin(),
+    playerAccent: deps.customization.accentHexFor(deps.customization.accent()),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
   // The saved scheme, pushed at boot so the very first touch already uses it -- see the
@@ -626,12 +628,13 @@ export function startGameWith(
     sm.toTitle();
   });
 
-  // Hull and skin restyle through ONE renderer call: the style is a pair, and
-  // sending half of it would reset the other half to a default.
+  // Hull, skin and accent restyle through ONE renderer call: the style is a triple,
+  // and sending part of it would reset the rest to a default.
   function restyle(): void {
     renderer.setPlayerStyle(
       deps.customization.hexFor(deps.customization.hull()),
       deps.customization.skin(),
+      deps.customization.accentHexFor(deps.customization.accent()),
     );
   }
 
@@ -646,6 +649,12 @@ export function startGameWith(
   hud.onPickSkin((id) => {
     deps.customization.setSkin(id);
     hud.setSkin(deps.customization.skin());
+    restyle();
+  });
+
+  hud.onPickAccentColor((id) => {
+    deps.customization.setAccent(id);
+    hud.setAccentColor(deps.customization.accent());
     restyle();
   });
 
@@ -739,6 +748,7 @@ export function startGameWith(
   hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
+  hud.setAccentColor(deps.customization.accent());
   hud.setTouchScheme(deps.touchSettings.scheme());
   hud.setFireMode(deps.touchSettings.fireMode());
   hud.setAchievements(deps.achievements.earned());

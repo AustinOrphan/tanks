@@ -17,10 +17,12 @@ export interface EntityViews {
   sync(prev: World, curr: World, alpha: number, dt?: number): void;
   /**
    * The paint shop: override the PLAYER's hull colour (a CSS hex, null for the roster
-   * default) and skin. Takes effect on the next sync via the same rebuild path a kind
-   * change uses -- live, even for the tank already standing behind the menu.
+   * default), skin, and the skin's accent tone (a CSS hex, null for `auto` -- derive
+   * the tone from the hull, as skins.ts always has). Takes effect on the next sync via
+   * the same rebuild path a kind change uses -- live, even for the tank already
+   * standing behind the menu.
    */
-  setPlayerStyle(hex: string | null, skin: SkinId): void;
+  setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null): void;
   dispose(): void;
 }
 
@@ -839,10 +841,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   return {
     sync,
-    setPlayerStyle(hex: string | null, skin: SkinId): void {
+    setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null): void {
       playerHex = hex;
       playerSkinMap?.dispose();
-      playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color);
+      playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color, accentHex);
       playerScroll = SKINS.find((sk) => sk.id === skin)?.scroll ?? null;
       colorGen++;
     },

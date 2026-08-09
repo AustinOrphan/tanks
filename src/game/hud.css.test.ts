@@ -48,10 +48,11 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const hud = createHud(root);
-  // The three `createElement('button')` sites in hud.ts today are the swatch row and
-  // the skin row (both built during `createHud`) and the level row (built here). The
-  // other setters rebuild subtrees that hold no buttons today; they are driven anyway
-  // so a button added to one of them lands under this sweep instead of beside it.
+  // The four `createElement('button')` sites in hud.ts today are the hull-swatch row,
+  // the skin row and the accent row (all three built during `createHud`) and the level
+  // row (built here). The other setters rebuild subtrees that hold no buttons today;
+  // they are driven anyway so a button added to one of them lands under this sweep
+  // instead of beside it.
   //
   // KNOWN BLIND SPOT, found by review rather than assumed away: this sweeps the DOM
   // these calls produce, not every path that can produce a button. A button created by
@@ -154,6 +155,9 @@ describe('hud.css is syntactically whole', () => {
       // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
       '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
       '.hud-swatch', '.hud-swatch--selected',
+      // the accent row's own flex/gap -- without it the swatches touch edge-to-edge,
+      // unlike every other row in the pane (.hud-swatches, .hud-skins)
+      '.hud-accents',
       // skins: the border is the pane's only current-skin signal
       '.hud-skin', '.hud-skin--selected',
       // achievements: hidden rules, the earned/locked contrast, and the toast rail
@@ -201,11 +205,12 @@ describe('hud.css is syntactically whole', () => {
     // hid a real gap -- losing all 15 dynamically-built buttons still left 12 > 10.
     // If a UI change moves this number, that is the moment to check the new buttons
     // are covered, which is the whole point of pinning it.
-    // 32 since the fire-mode toggle landed: 31 (29 [27 + the Pause and Mine buttons] +
-    // the Fire button and the aim-scheme toggle) + the fire-mode toggle beside it. The
-    // count moving is the prompt to check the new buttons are themed, which is why it is
-    // pinned exactly -- and it did exactly that here.
-    expect(buttons.length).toBe(32);
+    // 37 since the accent (skin colour) row landed: 32 (31 [29 [27 + the Pause and Mine
+    // buttons] + the Fire button and the aim-scheme toggle] + the fire-mode toggle) + 5
+    // for ACCENTS.length -- one swatch button per accent entry, same as the hull row.
+    // The count moving is the prompt to check the new buttons are themed, which is why
+    // it is pinned exactly -- and it did exactly that here.
+    expect(buttons.length).toBe(37);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -239,6 +244,33 @@ describe('hud.css is syntactically whole', () => {
     for (const cls of panel) expect(styleOf(cls).fontSize, cls).not.toBe(inherited);
     for (const cls of back) expect(styleOf(cls).fontSize, cls).toBe(inherited);
     for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
+
+    document.body.innerHTML = '';
+  });
+
+  it('lays out the accent row like its siblings, not as one touching strip', () => {
+    // `.hud-accents` shipped with NO layout rule of its own -- `.hud-swatches` and
+    // `.hud-skins` both set `display: flex; gap: ...`, but the accent row (a THIRD,
+    // separate container in hud.ts, reusing `.hud-swatch` for its buttons) had neither,
+    // so it resolved to the browser default (`display: block`, `gap: normal`) and its
+    // circular swatches rendered edge-to-edge as one solid strip -- unlike every other
+    // row in the same pane. Measured directly: before the fix, `getComputedStyle` on a
+    // bare `.hud-accents` div reports `display: block`. Presence-only checks (the
+    // selector list above) cannot see this: `.hud-accents` matching zero rules and
+    // `.hud-accents` matching a rule with no layout declarations look identical to
+    // `toContain`.
+    const swatches = document.createElement('div');
+    swatches.className = 'hud-swatches';
+    const accents = document.createElement('div');
+    accents.className = 'hud-accents';
+    document.body.appendChild(swatches);
+    document.body.appendChild(accents);
+
+    const swatchesStyle = getComputedStyle(swatches);
+    const accentsStyle = getComputedStyle(accents);
+    expect(accentsStyle.display).toBe('flex');
+    expect(accentsStyle.display).toBe(swatchesStyle.display);
+    expect(accentsStyle.gap).toBe(swatchesStyle.gap);
 
     document.body.innerHTML = '';
   });
