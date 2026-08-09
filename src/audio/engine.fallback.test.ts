@@ -51,7 +51,7 @@ import { createAudioEngine } from './engine';
 // against it this file builds zero Howls and asserts nothing. Measured: with the
 // shipped manifest, deleting `sounds[key] = null` from engine.ts's loaderror handler
 // passed all 1355 tests; against this fixture it fails 8.
-import { AUTHORED_LAYOUT as LOADABLE } from './manifest';
+import { AUDIO_MANIFEST, AUTHORED_LAYOUT as LOADABLE } from './manifest';
 
 interface FakeNode {
   connect(target: unknown): unknown;
@@ -135,6 +135,23 @@ describe('audio engine procedural fallback (the only live path today)', () => {
     const ctx = FakeAudioContext.instances[0];
     expect(ctx).toBeDefined();
     expect(ctx.started).toEqual([180]); // FALLBACK_FREQ.cannon
+    engine.dispose();
+  });
+
+  it('routes play() to a real oscillator with the SHIPPED manifest, which asks for nothing', () => {
+    // The mirror of the case above, and the gap review left open when this file moved
+    // wholesale to the fixture: every other case here declares a file and lets it fail,
+    // but the shipped manifest declares none, so `sounds[key]` is ABSENT rather than
+    // present-and-null. `play()`'s `if (howl)` treats those identically -- this is what
+    // asserts that, through the minimal AudioContext that is the beep() floor.
+    //
+    // No flushLoadErrors(): there is no load to fail. That is the point.
+    const engine = createAudioEngine(AUDIO_MANIFEST);
+    engine.play('cannon');
+
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx, 'the shipped manifest never reached an AudioContext at all').toBeDefined();
+    expect(ctx.started).toEqual([180]); // FALLBACK_FREQ.cannon, same as the declared path
     engine.dispose();
   });
 
