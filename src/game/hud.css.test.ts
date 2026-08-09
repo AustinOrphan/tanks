@@ -6,8 +6,11 @@
 //
 // Both were invisible to `npm test` and to `tsc`. This is the cheapest guard that would
 // have caught either.
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
+import { createHud } from './hud';
+import { ACHIEVEMENTS } from './achievements';
 
 // `?raw` returns an EMPTY STRING unless `test.css` is enabled in vite.config -- vitest
 // stubs CSS imports by default. That is not a harmless miss: every assertion below would
@@ -17,6 +20,54 @@ import css from './hud.css?raw';
 /** Strip comments first: `{` and `}` inside them are prose, not syntax. */
 function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/**
+ * Four properties every themed button in the HUD sets and a browser-default one does
+ * not. Chosen by measurement, not taste, but state the measurement precisely: all 27
+ * buttons differ from a bare `<button>` on THIRTEEN properties, and these are four of
+ * those thirteen. The other nine are longhand expansions of the same two declarations
+ * (`background` and `border-color`'s four sides, `border-image`, `text-indent`), so
+ * asserting them would restate these rather than add reach.
+ *
+ * What the measurement rules OUT is the useful half: `padding` and `font-weight` are
+ * NOT in the intersection -- `.hud-swatch` sets neither and `.hud-level-btn` no
+ * padding -- so requiring either would fail on buttons that are correctly themed.
+ */
+const THEMED_PROPS = ['backgroundColor', 'color', 'borderRadius', 'cursor'] as const;
+
+/** Every button the mounted HUD can show, with each subtree-rebuilding setter driven. */
+function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
+  // No <style> injection here on purpose. `hud.ts` does `import './hud.css'`, and
+  // vitest applies it at module scope, so the real stylesheet is already live. An
+  // earlier draft injected the text itself, which LOOKED harmless and was not:
+  // deleting that import from hud.ts -- which ships a completely unstyled HUD to
+  // every player -- left all of these tests green, because the injection supplied
+  // what production had stopped supplying. Relying on the import puts it under the
+  // guard. (`css` is still imported above; the text-level tests read it.)
+  const root = document.createElement('div');
+  document.body.appendChild(root);
+  const hud = createHud(root);
+  // The three `createElement('button')` sites in hud.ts today are the swatch row and
+  // the skin row (both built during `createHud`) and the level row (built here). The
+  // other setters rebuild subtrees that hold no buttons today; they are driven anyway
+  // so a button added to one of them lands under this sweep instead of beside it.
+  //
+  // KNOWN BLIND SPOT, found by review rather than assumed away: this sweeps the DOM
+  // these calls produce, not every path that can produce a button. A button created by
+  // a setter not called here is invisible to the guard, and the pinned count below
+  // will not notice either, because it never appears. If you add a button-building
+  // path, drive it here.
+  hud.setLevelSelect(2, 4);
+  hud.setAchievements(new Set());
+  hud.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
+  return {
+    root,
+    dispose: () => {
+      hud.dispose();
+      document.body.innerHTML = '';
+    },
+  };
 }
 
 describe('hud.css is syntactically whole', () => {
@@ -97,6 +148,81 @@ describe('hud.css is syntactically whole', () => {
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
+  });
+
+  it('never lets a button fall through to browser default styling', () => {
+    // `.hud-achievements-open` shipped with NO rule of its own -- only its `--hidden`
+    // modifier -- so on the main menu it rendered as a stock grey browser button
+    // beside three themed siblings, for as long as the feature existed.
+    //
+    // The presence test above could not have caught it, and listing the selector there
+    // would not either: it uses `toContain`, and `.hud-achievements-open` is a
+    // SUBSTRING of `.hud-achievements-open--hidden`, so the assertion passes on the
+    // broken file.
+    //
+    // This measures the RESOLVED style against a bare <button> rather than looking for
+    // a matching rule, because the defect is "looks unstyled", not "has no rule". An
+    // earlier draft of this guard did parse hud.css, and adversarial review found
+    // eleven ways past it -- a rule that is empty, a rule that only sets `margin-top`,
+    // a rule that exists only as `:hover`/`:disabled`/`::after`, a rule scoped inside
+    // an `@media` that never matches. All of those resolve to a default-looking button
+    // and all of them now fail here, because jsdom applies the cascade and the
+    // question asked is what the user would see.
+    const { root, dispose } = mountEveryButton();
+    const bare = document.createElement('button'); // same document: same UA defaults
+    document.body.appendChild(bare);
+    const ref = getComputedStyle(bare);
+
+    const buttons = Array.from(root.querySelectorAll('button'));
+    const unstyled = buttons
+      .map((b) => {
+        const cs = getComputedStyle(b);
+        const bareProps = THEMED_PROPS.filter((p) => cs[p] === ref[p]);
+        return { button: Array.from(b.classList).join('.'), bareProps };
+      })
+      .filter((r) => r.bareProps.length > 0)
+      .map((r) => `${r.button} [default: ${r.bareProps.join(', ')}]`);
+
+    // Exactly, not a lower bound: this is the sweep's denominator, and a lower bound
+    // hid a real gap -- losing all 15 dynamically-built buttons still left 12 > 10.
+    // If a UI change moves this number, that is the moment to check the new buttons
+    // are covered, which is the whole point of pinning it.
+    expect(buttons.length).toBe(27);
+    expect(unstyled).toEqual([]);
+
+    dispose();
+  });
+
+  it('keeps the two spacing distinctions the shared button theme flattens', () => {
+    // Factoring seven near-identical rules into one group traded repetition for
+    // cascade order: Quit's gap now depends on `.hud-quit { margin-top: 10px }` still
+    // sitting AFTER the group that sets 2px, and on the Back buttons still being
+    // outside the group that sets the panel size. Both are invisible to the guard
+    // above -- it asks whether a button is themed, not whether it is themed right --
+    // and a tidy-up that reorders the three blocks would silently regress either.
+    // Same as above: hud.css arrives through hud.ts's own import, not an injection here.
+    const styleOf = (cls: string): CSSStyleDeclaration => {
+      const b = document.createElement('button');
+      b.className = cls;
+      document.body.appendChild(b);
+      return getComputedStyle(b);
+    };
+    const panel = ['hud-stats-open', 'hud-achievements-open', 'hud-customize-open'];
+    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back'];
+
+    // Quitting is pushed further off the action button than its neighbours are off
+    // each other. Asserted as the relationship, so retuning either value is free.
+    const quitGap = parseFloat(styleOf('hud-quit').marginTop);
+    for (const cls of panel) {
+      expect(parseFloat(styleOf(cls).marginTop), cls).toBeLessThan(quitGap);
+    }
+    // The panel buttons take a fixed size; the Back buttons inherit theirs.
+    const inherited = getComputedStyle(document.createElement('button')).fontSize;
+    for (const cls of panel) expect(styleOf(cls).fontSize, cls).not.toBe(inherited);
+    for (const cls of back) expect(styleOf(cls).fontSize, cls).toBe(inherited);
+    for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
+
+    document.body.innerHTML = '';
   });
 
   it('keeps the stacking order the overlays depend on', () => {
