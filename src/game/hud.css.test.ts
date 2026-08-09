@@ -23,19 +23,28 @@ function stripComments(text: string): string {
 }
 
 /**
- * The four properties every themed button in the HUD sets, and a browser-default one
- * sets none of. This is the INTERSECTION measured across all 27 buttons the HUD
- * renders, not a guess: `.hud-swatch` sets no `padding` or `font-weight`,
- * `.hud-level-btn` no `padding`, so those cannot be required of everything. Each of
- * the 27 differs from a bare `<button>` on all four.
+ * Four properties every themed button in the HUD sets and a browser-default one does
+ * not. Chosen by measurement, not taste, but state the measurement precisely: all 27
+ * buttons differ from a bare `<button>` on THIRTEEN properties, and these are four of
+ * those thirteen. The other nine are longhand expansions of the same two declarations
+ * (`background` and `border-color`'s four sides, `border-image`, `text-indent`), so
+ * asserting them would restate these rather than add reach.
+ *
+ * What the measurement rules OUT is the useful half: `padding` and `font-weight` are
+ * NOT in the intersection -- `.hud-swatch` sets neither and `.hud-level-btn` no
+ * padding -- so requiring either would fail on buttons that are correctly themed.
  */
 const THEMED_PROPS = ['backgroundColor', 'color', 'borderRadius', 'cursor'] as const;
 
 /** Every button the mounted HUD can show, with each subtree-rebuilding setter driven. */
 function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
-  const style = document.createElement('style');
-  style.textContent = css;
-  document.head.appendChild(style);
+  // No <style> injection here on purpose. `hud.ts` does `import './hud.css'`, and
+  // vitest applies it at module scope, so the real stylesheet is already live. An
+  // earlier draft injected the text itself, which LOOKED harmless and was not:
+  // deleting that import from hud.ts -- which ships a completely unstyled HUD to
+  // every player -- left all of these tests green, because the injection supplied
+  // what production had stopped supplying. Relying on the import puts it under the
+  // guard. (`css` is still imported above; the text-level tests read it.)
   const root = document.createElement('div');
   document.body.appendChild(root);
   const hud = createHud(root);
@@ -56,7 +65,6 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
     root,
     dispose: () => {
       hud.dispose();
-      style.remove();
       document.body.innerHTML = '';
     },
   };
@@ -192,9 +200,7 @@ describe('hud.css is syntactically whole', () => {
     // outside the group that sets the panel size. Both are invisible to the guard
     // above -- it asks whether a button is themed, not whether it is themed right --
     // and a tidy-up that reorders the three blocks would silently regress either.
-    const style = document.createElement('style');
-    style.textContent = css;
-    document.head.appendChild(style);
+    // Same as above: hud.css arrives through hud.ts's own import, not an injection here.
     const styleOf = (cls: string): CSSStyleDeclaration => {
       const b = document.createElement('button');
       b.className = cls;
@@ -216,7 +222,6 @@ describe('hud.css is syntactically whole', () => {
     for (const cls of back) expect(styleOf(cls).fontSize, cls).toBe(inherited);
     for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
 
-    style.remove();
     document.body.innerHTML = '';
   });
 
