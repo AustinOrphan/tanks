@@ -3,7 +3,16 @@
 // corrupt values read as the default -- a save must never paint the player an enemy
 // colour, and the palette deliberately contains none.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createCustomizationStore, PALETTE, SKINS, DEFAULT_HULL, DEFAULT_SKIN, CUSTOM_KEY } from './customization';
+import {
+  createCustomizationStore,
+  PALETTE,
+  SKINS,
+  ACCENTS,
+  DEFAULT_HULL,
+  DEFAULT_SKIN,
+  DEFAULT_ACCENT,
+  CUSTOM_KEY,
+} from './customization';
 import { GAME_TANK_DEFS } from '../sim/config/roster';
 
 beforeEach(() => localStorage.clear());
@@ -109,5 +118,63 @@ describe('skins', () => {
     const c = createCustomizationStore(localStorage);
     c.setSkin('zebra' as never);
     expect(c.skin()).toBe(DEFAULT_SKIN);
+  });
+});
+
+describe('accents', () => {
+  it('leads with auto, the shipped default, and includes black and white', () => {
+    expect(ACCENTS[0].id).toBe('auto');
+    expect(ACCENTS[0].id).toBe(DEFAULT_ACCENT);
+    expect(ACCENTS[0].hex).toBeNull(); // auto has no hex of its own -- it derives one
+    const ids = ACCENTS.map((a) => a.id);
+    expect(ids).toContain('black');
+    expect(ids).toContain('white');
+    // Every non-auto entry carries a real hex.
+    for (const a of ACCENTS.filter((x) => x.id !== 'auto')) {
+      expect(a.hex, a.id).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+
+  it('persists an accent pick beside hull and skin, validated the same way', () => {
+    const a = createCustomizationStore(localStorage);
+    expect(a.accent()).toBe(DEFAULT_ACCENT);
+    a.setAccent('black');
+    a.setHull('red');
+    a.setSkin('camo');
+    const b = createCustomizationStore(localStorage);
+    expect(b.accent()).toBe('black');
+    expect(b.hull()).toBe('red'); // the three fields do not clobber each other
+    expect(b.skin()).toBe('camo');
+  });
+
+  it('treats junk and unknown accents as auto, without resetting hull or skin', () => {
+    localStorage.setItem(CUSTOM_KEY, '{"hull":"red","skin":"camo","accent":"rainbow"}');
+    const s = createCustomizationStore(localStorage);
+    expect(s.accent()).toBe(DEFAULT_ACCENT);
+    expect(s.hull()).toBe('red');
+    expect(s.skin()).toBe('camo');
+  });
+
+  it('a save from before `accent` existed reads as auto, not as junk', () => {
+    // Pre-feature saves have no `accent` key at all -- not an invalid one.
+    localStorage.setItem(CUSTOM_KEY, '{"hull":"purple","skin":"flow"}');
+    const s = createCustomizationStore(localStorage);
+    expect(s.accent()).toBe(DEFAULT_ACCENT);
+    expect(s.hull()).toBe('purple');
+    expect(s.skin()).toBe('flow');
+  });
+
+  it('refuses to store a non-list accent id', () => {
+    const s = createCustomizationStore(localStorage);
+    s.setAccent('rainbow' as never);
+    expect(s.accent()).toBe(DEFAULT_ACCENT);
+  });
+
+  it('accentHexFor resolves every entry: null for auto, a real hex for the rest', () => {
+    const s = createCustomizationStore(localStorage);
+    expect(s.accentHexFor('auto')).toBeNull();
+    for (const a of ACCENTS.filter((x) => x.id !== 'auto')) {
+      expect(s.accentHexFor(a.id), a.id).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 });

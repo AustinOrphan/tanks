@@ -15,8 +15,11 @@ export interface Renderer3D {
   resize(w: number, h: number): void;
   /** Re-aim the scene at a new board size. In place: the GL context survives. */
   refit(worldWidth: number, worldHeight: number, boundary: number): void;
-  /** The paint shop: restyle the player live. Null hex restores the roster default. */
-  setPlayerStyle(hex: string | null, skin: SkinId): void;
+  /**
+   * The paint shop: restyle the player live. Null hex restores the roster default;
+   * null accentHex means `auto` -- derive the pattern's second tone from the hull.
+   */
+  setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null): void;
   dispose(): void;
 }
 
@@ -34,6 +37,11 @@ export interface RendererOptions {
   readonly playerColor?: string;
   /** The paint shop's saved skin, applied from the first frame. */
   readonly playerSkin?: SkinId;
+  /**
+   * The paint shop's saved accent tone, applied from the first frame. Undefined/null
+   * means `auto` -- derive the tone from playerColor, exactly as skins.ts always has.
+   */
+  readonly playerAccent?: string | null;
 }
 
 export function createRenderer(
@@ -48,8 +56,12 @@ export function createRenderer(
   let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
   const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
-  if (options.playerColor || options.playerSkin) {
-    entities.setPlayerStyle(options.playerColor ?? null, options.playerSkin ?? 'solid');
+  if (options.playerColor || options.playerSkin || options.playerAccent) {
+    entities.setPlayerStyle(
+      options.playerColor ?? null,
+      options.playerSkin ?? 'solid',
+      options.playerAccent ?? null,
+    );
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
@@ -111,7 +123,7 @@ export function createRenderer(
     screenToGround,
     resize,
     refit,
-    setPlayerStyle: (hex, skin) => entities.setPlayerStyle(hex, skin),
+    setPlayerStyle: (hex, skin, accentHex) => entities.setPlayerStyle(hex, skin, accentHex),
     dispose,
   };
 }

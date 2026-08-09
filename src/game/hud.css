@@ -650,7 +650,28 @@
   display: none;
 }
 
+/* Shown only while `solid` (no texture) is picked alongside an explicit accent, which
+ * has nothing to render onto -- see hud.ts's renderAccentHint. Muted rather than the
+ * pane's full-strength text colour: it explains a state, it should not read as urgent. */
+.hud-accent-hint {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.hud-accent-hint--hidden {
+  display: none;
+}
+
 .hud-swatches {
+  display: flex;
+  gap: 12px;
+}
+
+/* Same layout as .hud-swatches -- the accent row reuses .hud-swatch for its buttons
+ * (same circle-with-ring control) but is a SEPARATE container, so it needs its own
+ * flex/gap rule. Without this the accent swatches render as one solid touching strip,
+ * unlike every other row in this pane. */
+.hud-accents {
   display: flex;
   gap: 12px;
 }

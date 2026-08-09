@@ -1,6 +1,6 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
-import { PALETTE, SKINS, type HullColorId, type SkinId } from './customization';
+import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
@@ -98,6 +98,13 @@ export interface Hud {
   onPickHullColor(cb: (id: HullColorId) => void): void;
   /** The paint shop's current skin, echoed back by the loop after an accepted pick. */
   setSkin(id: SkinId): void;
+  /**
+   * The paint shop's current accent (the pattern's second tone), echoed back by the
+   * loop after an accepted pick -- same convention as `setHullColor`/`setSkin`.
+   */
+  setAccentColor(id: AccentId): void;
+  /** Fired with the accent id when the player clicks one. */
+  onPickAccentColor(cb: (id: AccentId) => void): void;
   /** The earned set, pushed by the loop whenever it changes. Re-renders if open. */
   setAchievements(earned: ReadonlySet<AchievementId>): void;
   /**
@@ -222,6 +229,13 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-swatches"></div>
       <p>Skin — patterns the hull and turret; tracks stay solid.</p>
       <div class="hud-skins"></div>
+      <p>Skin colour — the pattern's second tone. Auto matches the hull.</p>
+      <div class="hud-accents"></div>
+      <!-- The accent's own tone never shows on the "solid" skin (createSkinTexture
+           returns null for it, the no-map default) -- without this a player who picks an
+           accent before a pattern sees no change at all and may think the pick did
+           nothing. Not a button: it explains a state, it does not trigger one. -->
+      <p class="hud-accent-hint hud-accent-hint--hidden">Pick a pattern above to see this colour.</p>
       <button class="hud-customize-back" type="button">Back</button>
     </div>
     <div class="hud-stats hud-stats--hidden">
@@ -309,6 +323,8 @@ export function createHud(root: HTMLElement): Hud {
   const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
   const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
+  const accentsRow = el.querySelector('.hud-accents') as HTMLElement;
+  const accentHintEl = el.querySelector('.hud-accent-hint') as HTMLElement;
   const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
   const achOpenBtn = el.querySelector('.hud-achievements-open') as HTMLButtonElement;
   const achView = el.querySelector('.hud-achievements') as HTMLElement;
@@ -495,6 +511,42 @@ export function createHud(root: HTMLElement): Hud {
     }
   }
 
+  const pickAccentCbs: Array<(id: AccentId) => void> = [];
+  let currentAccent: AccentId = ACCENTS[0].id;
+
+  // One button per accent entry, built once, exactly like the hull swatches above --
+  // reusing `.hud-swatch` rather than a new class, since it IS the same control: a
+  // colour circle with a selection ring. `auto`'s hex is null (it has none of its own --
+  // it derives from whatever hull is picked), so it gets a fixed neutral fill instead of
+  // a palette hex, distinguishing it from any real hull or accent colour on screen.
+  for (const accentSwatch of ACCENTS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hud-swatch';
+    b.dataset.accent = accentSwatch.id;
+    b.title = accentSwatch.label;
+    b.style.background = accentSwatch.hex ?? '#4a4f58';
+    b.addEventListener('click', (e) => {
+      for (const cb of pickAccentCbs) cb(accentSwatch.id);
+      if ((e as MouseEvent).detail > 0) b.blur();
+    });
+    accentsRow.appendChild(b);
+  }
+
+  function renderAccentSelection(): void {
+    for (const b of Array.from(accentsRow.children) as HTMLButtonElement[]) {
+      b.classList.toggle('hud-swatch--selected', b.dataset.accent === currentAccent);
+    }
+  }
+
+  // `solid` (SKINS[0], the default) has no texture -- createSkinTexture returns null for
+  // it -- so an accent choice has nothing to paint onto. Shown only in that exact
+  // combination: an explicit (non-`auto`) accent picked while the skin is still solid.
+  function renderAccentHint(): void {
+    const show = currentSkin === SKINS[0].id && currentAccent !== ACCENTS[0].id;
+    accentHintEl.classList.toggle('hud-accent-hint--hidden', !show);
+  }
+
   let statsData: { lifetime: StatCounts; run: StatCounts } | null = null;
 
   const pct = (num: number, den: number): string =>
@@ -576,6 +628,8 @@ export function createHud(root: HTMLElement): Hud {
     if (show) {
       renderSwatchSelection();
       renderSkinSelection();
+      renderAccentSelection();
+      renderAccentHint();
     }
   }
 
@@ -1025,6 +1079,15 @@ export function createHud(root: HTMLElement): Hud {
     setSkin(id: SkinId): void {
       currentSkin = id;
       renderSkinSelection();
+      renderAccentHint();
+    },
+    setAccentColor(id: AccentId): void {
+      currentAccent = id;
+      renderAccentSelection();
+      renderAccentHint();
+    },
+    onPickAccentColor(cb: (id: AccentId) => void): void {
+      pickAccentCbs.push(cb);
     },
     setTouchIndicator(t: TouchIndicator): void {
       // Hidden entirely until a touch has happened, so a mouse player never sees it.

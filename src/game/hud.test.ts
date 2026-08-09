@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
-import { SKINS } from './customization';
+import { SKINS, ACCENTS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 
@@ -1234,8 +1234,13 @@ describe('hud: the paint shop', () => {
     root.querySelector('.hud-customize') as HTMLElement;
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-customize-open') as HTMLButtonElement;
+  // `.hud-swatch` is the shared circle-button class for BOTH the hull row and the
+  // accent row (they are the same control), so scope by the dataset attribute each
+  // row alone sets -- `data-hull` here, `data-accent` for the accent row below.
   const swatches = (root: HTMLElement): HTMLButtonElement[] =>
-    Array.from(root.querySelectorAll('.hud-swatch'));
+    Array.from(root.querySelectorAll('.hud-swatch[data-hull]'));
+  const accentSwatches = (root: HTMLElement): HTMLButtonElement[] =>
+    Array.from(root.querySelectorAll('.hud-swatch[data-accent]'));
 
   it('opens from the title with one swatch per palette entry, current one marked', () => {
     const { hud: h, root } = mount();
@@ -1285,6 +1290,33 @@ describe('hud: the paint shop', () => {
     expect(skins().filter((b) => b.classList.contains('hud-skin--selected'))).toHaveLength(1);
   });
 
+  it('offers one accent swatch per ACCENTS entry, current one marked, and reports picks', () => {
+    const { hud: h, root } = mount();
+    const picks: string[] = [];
+    h.onPickAccentColor((id) => picks.push(id));
+    h.setAccentColor('black');
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    // One button per entry in the REAL accent list, `auto` first.
+    expect(accentSwatches(root).map((b) => b.dataset.accent)).toEqual(
+      ACCENTS.map((a) => a.id),
+    );
+    const selected = accentSwatches(root).filter((b) =>
+      b.classList.contains('hud-swatch--selected'),
+    );
+    expect(selected).toHaveLength(1);
+    expect(selected[0].dataset.accent).toBe('black');
+
+    const gold = accentSwatches(root).find((b) => b.dataset.accent === 'gold')!;
+    gold.dispatchEvent(new MouseEvent('click'));
+    expect(picks).toEqual(['gold']);
+    h.setAccentColor('gold'); // the loop echoes the accepted pick back
+    expect(gold.classList.contains('hud-swatch--selected')).toBe(true);
+    expect(
+      accentSwatches(root).filter((b) => b.classList.contains('hud-swatch--selected')),
+    ).toHaveLength(1);
+  });
+
   it('is a title-screen affair: hidden everywhere else, closed by any state change', () => {
     const { hud: h, root } = mount();
     h.setState('title');
@@ -1295,5 +1327,37 @@ describe('hud: the paint shop', () => {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-customize-open--hidden'), s).toBe(true);
     }
+  });
+
+  it('hints that an accent needs a pattern, only while the skin is solid AND the accent is explicit', () => {
+    // solid (SKINS[0]) has no texture -- createSkinTexture returns null for it -- so an
+    // accent choice has nothing to render onto. The hint exists so that player is not
+    // left thinking their pick did nothing.
+    const { hud: h, root } = mount();
+    const hint = (): HTMLElement => root.querySelector('.hud-accent-hint') as HTMLElement;
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+
+    // Default: solid skin, `auto` accent -- not an EXPLICIT pick, so no hint.
+    expect(SKINS[0].id).toBe('solid');
+    expect(ACCENTS[0].id).toBe('auto');
+    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(true);
+
+    // Explicit accent picked while still on solid: this is the exact case the hint
+    // exists for.
+    h.setAccentColor('gold');
+    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(false);
+
+    // Moving to a patterned skin makes the accent visible again -- hint clears.
+    h.setSkin('camo');
+    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(true);
+
+    // Back to solid with the explicit accent still set: hint returns.
+    h.setSkin('solid');
+    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(false);
+
+    // Reverting to `auto` on solid: nothing left unexplained, hint clears again.
+    h.setAccentColor('auto');
+    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(true);
   });
 });
