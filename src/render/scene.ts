@@ -56,6 +56,34 @@ function gradientPixels(): Uint8ClampedArray<ArrayBuffer> {
   return data;
 }
 
+/**
+ * The camera's vertical field of view, in degrees.
+ *
+ * A LONG LENS on purpose. The board is a fixed rect viewed at a tilt, so it projects
+ * to a trapezium -- and the wider the lens, the harder the far edge converges and the
+ * more screen is wasted in the two triangles beside it. At the old 50 degrees the
+ * board covered 48.5% of a 16:9 frame; at 30 it covers 59.6%, measured by projecting
+ * the framed rect's corners through this very camera -- framing.test.ts pins the floor.
+ * The camera moves FURTHER OUT to compensate for the narrower lens, and because the fit
+ * then re-tightens the board against the frame, the board ends up BIGGER on screen, not
+ * the same size.
+ *
+ * It also evens out readability: at 50 degrees a tank on the far rank drew noticeably
+ * smaller than one on the near rank, for no gameplay reason.
+ *
+ * 30 IS A TASTE STOP, NOT A LIMIT. Review falsified an earlier claim here that ~68%
+ * (the board's 1.21 aspect over 16:9's 1.78) was the geometric ceiling: that formula is
+ * the UNTILTED one, and a camera tilted by theta foreshortens the board's depth so it
+ * projects with aspect A/sin(theta) -- 1.55 here, not 1.21. Measured through this very
+ * fit at the shipped tilt: fov 20 reaches 65.3%, fov 15 reaches 68.7% (already past the
+ * "ceiling"), fov 5 reaches 77.0%, all still containing the board. The long-lens limit
+ * at this margin is ~82.2% (~87.3% at margin 0 -- an earlier draft quoted the margin-0
+ * figure beside a table measured at 0.03, which silently changed probe mid-sentence).
+ * What stops us at 30 is depth: fov 15 puts the camera 64.9 units out and the board
+ * reads nearly orthographic. Going further is a look decision, not a fix.
+ */
+export const BASE_FOV = 30;
+
 export function createScene(
   canvas: HTMLCanvasElement,
   worldWidth: number,
@@ -106,8 +134,7 @@ export function createScene(
   grad.dispose();
   pmrem.dispose();
 
-  // Single fixed camera tilted ~50deg down, framing the whole board (no scrolling).
-  const BASE_FOV = 50;
+  // Single fixed camera, framing the whole board (no scrolling). See BASE_FOV above.
   const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 1000);
 
   // Everything below here is DIMENSIONAL state, owned by fit() so a level switch can
