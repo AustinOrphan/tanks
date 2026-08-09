@@ -521,6 +521,24 @@ export function startGameWith(
     sm.startPlaying();
   });
 
+  // The touch-only pause button. Routed through the SAME guarded transitions as the
+  // keyboard hotkey rather than its own path -- pause() acts only from 'playing' and
+  // resume() only from 'paused', so the button cannot reach a state the key cannot.
+  //
+  // Deliberately does NOT change the music: musicContextFor maps 'paused' to 'arena'
+  // and the bed ducks instead of stopping, on the reasoning that moving the music
+  // elsewhere would make a pause feel like leaving the level.
+  hud.onPauseTap(() => {
+    if (sm.state === 'paused') sm.resume();
+    else sm.pause();
+  });
+
+  // The touch-only Mine button, routed to the input controller's own latch so a mine
+  // tapped is indistinguishable from a mine keyed: same sample(), same clear-on-pause.
+  hud.onMineTap(() => {
+    input.pressMine();
+  });
+
   hud.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause, but a handler that rebuilds the
     // world deserves its own guard, not a CSS class as its only defence.

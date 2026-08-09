@@ -1,4 +1,5 @@
 import type { InputState, Vec2 } from '../sim/types';
+import { stickVector, touchSide } from './touch';
 
 export interface InputController {
   sample(): InputState;
@@ -9,6 +10,15 @@ export interface InputController {
    * movement stays held on purpose -- the key is physically still down.
    */
   clearQueuedPresses(): void;
+  /**
+   * Latch a mine, as the Space key does.
+   *
+   * A touch device has no Space and no right mouse button, so the on-screen button in
+   * the HUD is the only way to lay one. It goes through the SAME latch rather than
+   * reaching into the sim, so a mine tapped is indistinguishable from a mine keyed --
+   * including being consumed by the next sample() and cleared by clearQueuedPresses().
+   */
+  pressMine(): void;
   dispose(): void;
 }
 
@@ -78,15 +88,117 @@ export function createInputController(
   const onKeyUp = (e: KeyboardEvent): void => {
     keys.delete(e.key.toLowerCase());
   };
+  /**
+   * When the last touch happened, so the COMPATIBILITY mouse events a browser
+   * synthesises afterwards can be ignored.
+   *
+   * This is not defensive: measured on a Pixel 5, one tap in the aiming half put TWO
+   * shells in flight (3 of 3 taps), and one tap in the DRIVING half fired a shell at
+   * all (3 of 3) -- aimed at the player's own thumb, because the compat `mousemove`
+   * reaches the window-bound handler and drags `aim` there. The burst lands ~200ms
+   * after `touchend`, well past the 0.4s fire cooldown for any real hold.
+   *
+   * A time window rather than a permanent "this is a touch device" latch, because a
+   * laptop with a touchscreen has both and must keep both.
+   */
+  let lastTouchAt = -Infinity;
+  const TOUCH_COMPAT_MS = 700;
+  const isCompatMouse = (): boolean => performance.now() - lastTouchAt < TOUCH_COMPAT_MS;
+
   const onMouseMove = (e: MouseEvent): void => {
+    if (isCompatMouse()) return;
     aim = screenToGround(e.clientX, e.clientY);
   };
   const onMouseDown = (e: MouseEvent): void => {
+    if (isCompatMouse()) return;
     if (e.button === 0) firePressed = true;
     else if (e.button === 2) minePressed = true;
   };
   const onContextMenu = (e: MouseEvent): void => {
     e.preventDefault();
+  };
+
+  // ---- Touch: left thumb drives, right thumb aims and fires ----------------------
+  //
+  // Pointer events rather than touch events, so one code path covers finger, stylus and
+  // any future pen -- filtered to non-mouse so the existing mouse handling above is
+  // untouched. Tracked BY pointerId because both thumbs are down at once and the browser
+  // interleaves their moves; `setPointerCapture` is deliberately not used (jsdom does not
+  // implement it, and window-level move/up tracking survives a thumb sliding off the
+  // canvas, which capture is only one way to achieve).
+  //
+  // `aim` is a WORLD POINT, not an angle -- screenToGround does the projection, exactly
+  // as it does for the mouse. That is why the right thumb aims ABSOLUTELY, at the spot it
+  // touches, rather than as a relative stick: a relative stick would need the player's
+  // screen position in here to turn a direction into a point, and nothing else in this
+  // module knows where the tank is.
+  /**
+   * The width the left/right split is measured against. Read fresh on every touch, not
+   * captured: a phone rotated mid-round would otherwise keep splitting at the old
+   * midpoint, and the driving thumb would suddenly be aiming.
+   */
+  const viewportWidth = (): number => window.innerWidth;
+
+  let stickPointer: number | null = null;
+  let stickOrigin: Vec2 = { x: 0, y: 0 };
+  let stickMove: Vec2 = { x: 0, y: 0 };
+  let aimPointer: number | null = null;
+
+  const isTouch = (e: PointerEvent): boolean => e.pointerType !== 'mouse';
+
+  const onPointerDown = (e: PointerEvent): void => {
+    if (!isTouch(e)) return;
+    lastTouchAt = performance.now();
+    // Suppress the compatibility mouse events this touch would otherwise synthesise.
+    // Measured in Chromium: the burst goes from ["mousemove","mousedown"] to []. This is
+    // the deterministic half; `isCompatMouse` is the backstop.
+    //
+    // Be honest about that backstop: forcing `isCompatMouse` to false and leaving this
+    // line alone still measures 0 stray shells, so IN CHROMIUM THE CLOCK NEVER FIRES.
+    // It is kept because its whole value rests on an engine that cannot be tested from
+    // here -- iOS Safari, which has its own history with compatibility events -- and
+    // because the failure it backstops is the one that shipped. Deleting it wants a
+    // measurement on real iOS Safari, not an inference from Chromium.
+    if (e.cancelable) e.preventDefault();
+    if (touchSide(e.clientX, viewportWidth()) === 'move') {
+      // First thumb down on the left wins; a second one there is ignored rather than
+      // stealing the stick mid-drive.
+      if (stickPointer !== null) return;
+      stickPointer = e.pointerId;
+      stickOrigin = { x: e.clientX, y: e.clientY };
+      stickMove = { x: 0, y: 0 };
+    } else {
+      aimPointer = e.pointerId;
+      aim = screenToGround(e.clientX, e.clientY);
+      // Touching to aim also fires. On a phone there is no second button and no hover,
+      // so aiming and shooting cannot be separate gestures without adding a step to
+      // every shot.
+      firePressed = true;
+    }
+  };
+
+  const onPointerMove = (e: PointerEvent): void => {
+    if (!isTouch(e)) return;
+    lastTouchAt = performance.now();
+    if (e.pointerId === stickPointer) {
+      stickMove = stickVector(stickOrigin, { x: e.clientX, y: e.clientY });
+    } else if (e.pointerId === aimPointer) {
+      // Drag to re-aim without firing again: only the initial touch pulls the trigger.
+      aim = screenToGround(e.clientX, e.clientY);
+    }
+  };
+
+  const onPointerEnd = (e: PointerEvent): void => {
+    if (!isTouch(e)) return;
+    // Stamped on END too, and that is the load-bearing one: the compat burst arrives
+    // AFTER the finger lifts.
+    lastTouchAt = performance.now();
+    if (e.pointerId === stickPointer) {
+      stickPointer = null;
+      stickMove = { x: 0, y: 0 };
+    } else if (e.pointerId === aimPointer) {
+      aimPointer = null;
+    }
   };
   // Focus loss eats the keyup: alt-tab while holding W and the OS delivers that
   // keyup to the other window, leaving 'w' held forever and the tank driving
@@ -95,6 +207,12 @@ export function createInputController(
     keys.clear();
     firePressed = false;
     minePressed = false;
+    // A thumb is as capable of being lost as a key: switch apps mid-drive and the
+    // pointerup is delivered to whatever comes next, leaving the stick held forever and
+    // the tank driving into a wall until the player thinks to touch and lift again.
+    stickPointer = null;
+    aimPointer = null;
+    stickMove = { x: 0, y: 0 };
   };
   const onVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') releaseAll();
@@ -110,8 +228,20 @@ export function createInputController(
   window.addEventListener('mousemove', onMouseMove);
   target.addEventListener('mousedown', onMouseDown);
   target.addEventListener('contextmenu', onContextMenu);
+  // DOWN on the canvas so the HUD's own buttons keep their taps -- the overlay is
+  // pointer-events:none except on controls, so an empty stretch of HUD falls through to
+  // here. MOVE and UP at the window, so a thumb that slides off the canvas mid-drive
+  // keeps steering and still releases cleanly.
+  target.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerEnd);
+  window.addEventListener('pointercancel', onPointerEnd);
 
   function readMove(): Vec2 {
+    // The thumbstick wins while it is held. Not summed with the keys: nobody drives with
+    // both, and summing would let a stray held key drag an analogue stick off-axis with
+    // nothing on screen to explain it.
+    if (stickPointer !== null) return stickMove;
     let x = 0;
     let y = 0;
     if (keys.has('a') || keys.has('arrowleft')) x -= 1;
@@ -141,6 +271,9 @@ export function createInputController(
       firePressed = false;
       minePressed = false;
     },
+    pressMine(): void {
+      minePressed = true;
+    },
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -149,6 +282,10 @@ export function createInputController(
       window.removeEventListener('mousemove', onMouseMove);
       target.removeEventListener('mousedown', onMouseDown);
       target.removeEventListener('contextmenu', onContextMenu);
+      target.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerEnd);
+      window.removeEventListener('pointercancel', onPointerEnd);
     },
   };
 }

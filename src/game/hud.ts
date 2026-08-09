@@ -63,6 +63,13 @@ export interface Hud {
   /** Fired by the pause panel's Quit to Title button, and by nothing else. */
   onQuitToTitle(cb: () => void): void;
   /**
+   * The touch-only pause button. Separate from the keyboard hotkey because it is an
+   * affordance, not a binding: `loop.ts` routes both to the same guarded transition.
+   */
+  onPauseTap(cb: () => void): void;
+  /** The touch-only Mine button. Routed to the input controller's own latch. */
+  onMineTap(cb: () => void): void;
+  /**
    * Both tallies, pushed by the loop whenever they change. The HUD re-renders the
    * stats table only while it is visible, and keeps the win/lose run-summary line
    * live -- the winning kill is recorded a beat AFTER the state flips.
@@ -118,6 +125,13 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-banner-count"></div>
     </div>
     <div class="hud-damage" aria-hidden="true"></div>
+    <!-- Touch-only controls. Hidden by default and revealed by a (pointer: coarse)
+         media query, so a mouse player never sees a Mine button that Space already
+         does -- and a phone gets the only affordance it has for either action. -->
+    <div class="hud-touch hud-touch--hidden">
+      <button class="hud-pause-btn" type="button" aria-label="Pause">II</button>
+      <button class="hud-mine-btn" type="button" aria-label="Drop mine">MINE</button>
+    </div>
     <!-- The title screen. Deliberately NOT a <button>: any key and any pointer press
          dismiss it, so the whole overlay is the target and a single focusable control
          would understate that. loop.ts owns the listeners.
@@ -186,6 +200,9 @@ export function createHud(root: HTMLElement): Hud {
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const splashEl = el.querySelector('.hud-splash') as HTMLElement;
+  const touchRow = el.querySelector('.hud-touch') as HTMLElement;
+  const pauseBtn = el.querySelector('.hud-pause-btn') as HTMLButtonElement;
+  const mineBtn = el.querySelector('.hud-mine-btn') as HTMLButtonElement;
   const topbarEl = el.querySelector('.hud-topbar') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
@@ -224,6 +241,95 @@ export function createHud(root: HTMLElement): Hud {
   const volumeCbs: Array<(v: number) => void> = [];
   const startRestartCbs: Array<() => void> = [];
   const quitCbs: Array<() => void> = [];
+  const pauseTapCbs: Array<() => void> = [];
+  const mineTapCbs: Array<() => void> = [];
+  const onPauseTapClick = (e: Event): void => {
+    // Same reason as the Mine button below: without this the tap's compat mousemove
+    // reaches the window-bound aim handler and yanks the turret to this corner.
+    e.preventDefault();
+    for (const cb of pauseTapCbs) cb();
+  };
+  const onMineTapClick = (e: Event): void => {
+    // preventDefault suppresses the compatibility MOUSEMOVE this tap would otherwise
+    // synthesise. Measured: it does NOT cause a stray shell -- the compat `mousedown`
+    // targets this button and `onMouseDown` is bound to the canvas, a sibling, so it
+    // never arrives. What it does do is drag `aim` to the button's corner, because
+    // `onMouseMove` IS bound at the window.
+    e.preventDefault();
+    for (const cb of mineTapCbs) cb();
+  };
+  /**
+   * The title screen swallows the gesture that dismisses it.
+   *
+   * Without this, ONE tap in the centre of the screen both left the splash and pressed
+   * Start underneath it, so the player never saw the menu -- measured on a Pixel 5, and
+   * a centre mouse click does the same thing. The overlay hides on `pointerdown` (loop.ts
+   * listens at the window), and the browser then completes the click on whatever is now
+   * under the finger, which is exactly where `.hud-action` sits.
+   *
+   * preventDefault on pointerdown suppresses the compatibility mouse events and the
+   * click for that gesture. The window listener still runs -- this does not stop
+   * propagation -- so the screen still dismisses.
+   */
+  const onSplashPointerDown = (e: Event): void => {
+    e.preventDefault();
+    // Armed by the SPLASH'S OWN pointerdown, not by the state change. That is the
+    // distinction that matters: only a pointer gesture landing on the overlay can
+    // produce the stray click, so a keyboard dismissal arms nothing, and a later
+    // deliberate press is never at risk.
+    swallowNextPanelClick = true;
+  };
+  splashEl.addEventListener('pointerdown', onSplashPointerDown);
+
+  /**
+   * ...and swallow the click that same gesture completes on the menu underneath.
+   *
+   * preventDefault on pointerdown is not enough on its own: Chromium still delivers the
+   * click, because the overlay is hidden by the time the finger lifts and the click is
+   * then targeted at whatever is now under it -- which is exactly where `.hud-action`
+   * sits. Measured on a Pixel 5: one centre tap left the splash AND started the game, so
+   * the menu was never seen. A centre mouse click did the same.
+   *
+   * SCOPED TO THE GESTURE, NOT TO A CLOCK, and that distinction is the whole of it. A
+   * first draft gave this a 700ms deadline; review measured the real pointerdown -> click
+   * gap at 577-878ms and 16 of 24 taps still skipped the menu. The click is not delivered
+   * until the main thread finishes the work that same pointerdown kicked off -- dismiss,
+   * state change, music suite swap, HUD re-render -- so any deadline is racing the stall
+   * it causes, and on a real phone that stall is longer, not shorter.
+   *
+   * So: armed by the overlay's own pointerdown, consumed by the next click, and cleared
+   * by any pointerdown that is NOT on the overlay. A keyboard dismissal arms nothing, and
+   * a stale flag cannot survive the player's next touch anywhere else.
+   */
+  let swallowNextPanelClick = false;
+  const onPanelClickCapture = (e: Event): void => {
+    if (!swallowNextPanelClick) return;
+    swallowNextPanelClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  panel.addEventListener('click', onPanelClickCapture, true);
+
+  // Capture phase on the HUD root, so it runs BEFORE the overlay's own handler: root to
+  // target means this always disarms first, and the overlay re-arms afterwards only if
+  // the press actually landed on it. So there is deliberately NO "was it on the splash?"
+  // test here -- an earlier draft had one and it was dead by construction, unreachable by
+  // any test, which is worse than not having it.
+  const disarm = (): void => {
+    swallowNextPanelClick = false;
+  };
+  el.addEventListener('pointerdown', disarm, true);
+  // ...and on a key, because a DRAG dismissal delivers its click to the HUD root rather
+  // than into the panel, so the arm is never consumed. Without this, a player who
+  // dismissed by dragging and then tabbed to Start lost exactly one Enter -- measured;
+  // it self-corrects on the second press, but a keyboard or AT user should not have to
+  // press twice.
+  el.addEventListener('keydown', disarm, true);
+
+  pauseBtn.addEventListener('click', onPauseTapClick);
+  // pointerdown, not click: a mine wants to land the instant the thumb touches, and
+  // click waits for the release.
+  mineBtn.addEventListener('pointerdown', onMineTapClick);
   const resetStatsCbs: Array<() => void> = [];
   const resetProgressCbs: Array<() => void> = [];
   const pickHullCbs: Array<(id: HullColorId) => void> = [];
@@ -499,6 +605,9 @@ export function createHud(root: HTMLElement): Hud {
     achView.classList.add('hud-achievements--hidden');
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
+    // Only while playing. Pausing from the pause panel is what its own buttons are for,
+    // and a Mine button on the menu lays nothing.
+    touchRow.classList.toggle('hud-touch--hidden', s !== 'playing');
     // Leaving the title screen hands focus to the menu's primary action. Without it
     // `document.activeElement` is still <body> when the menu appears, so a
     // keyboard-only player has to Tab in from nowhere and a screen reader announces
@@ -685,6 +794,12 @@ export function createHud(root: HTMLElement): Hud {
     onQuitToTitle(cb: () => void): void {
       quitCbs.push(cb);
     },
+    onPauseTap(cb: () => void): void {
+      pauseTapCbs.push(cb);
+    },
+    onMineTap(cb: () => void): void {
+      mineTapCbs.push(cb);
+    },
     setStats(data: { lifetime: StatCounts; run: StatCounts }): void {
       statsData = data;
       if (!statsView.classList.contains('hud-stats--hidden')) renderStatsTable();
@@ -740,6 +855,12 @@ export function createHud(root: HTMLElement): Hud {
       disarmReset(); // a pending confirm timer must not outlive the HUD
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
+      splashEl.removeEventListener('pointerdown', onSplashPointerDown);
+      panel.removeEventListener('click', onPanelClickCapture, true);
+      el.removeEventListener('pointerdown', disarm, true);
+      el.removeEventListener('keydown', disarm, true);
+      pauseBtn.removeEventListener('click', onPauseTapClick);
+      mineBtn.removeEventListener('pointerdown', onMineTapClick);
       achOpenBtn.removeEventListener('click', handleAchOpen);
       achOpenBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);

@@ -82,6 +82,161 @@
   outline: none;
 }
 
+/* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px
+ * PAST the viewport edge and the row wrapped to 72px tall, eating the top of the board.
+ * Shrink the type, tighten the gaps and narrow the slider so it stays one row.
+ *
+ * A width query rather than a device query: this is about how much room the row needs,
+ * and a narrow desktop window has exactly the same problem. 760px rather than 520,
+ * because a phone in LANDSCAPE is 727px wide and 393 TALL -- it got none of these rules
+ * and carried a 51px topbar across a 393px-tall viewport, which is the shape that can
+ * least afford it. */
+@media (max-width: 760px) {
+  .hud-topbar {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .hud-stat {
+    font-size: 13px;
+    letter-spacing: 0;
+    /* "Lives:" and its number belong on one line. Without this each stat wraps inside
+     * its own flex item and the row reads as six stacked fragments. */
+    white-space: nowrap;
+  }
+
+  .hud-mute {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .hud-volume {
+    width: 64px;
+  }
+}
+
+/* An iPhone SE is 320px and still shipping: measured there, the row above still ran 3px
+ * past the edge and wrapped to 54px. The slider is what gives, because it is the only
+ * control here that degrades gracefully -- it stays draggable at 44px, and mute is a
+ * button whose label must stay readable. */
+@media (max-width: 360px) {
+  .hud-topbar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .hud-stat {
+    font-size: 12px;
+  }
+
+  .hud-volume {
+    width: 44px;
+  }
+}
+
+/* A Galaxy Fold's cover screen is 280px and still clipped 4px under the block above.
+ * The slider goes rather than the readouts: lives and enemies remaining are what the
+ * player is reading mid-round, and mute is still a button. Volume remains reachable from
+ * the pause panel's settings row, which is why this can be dropped rather than shrunk
+ * into something undraggable. */
+@media (max-width: 300px) {
+  .hud-volume {
+    display: none;
+  }
+}
+
+/* The panels take pointer events, so they are also where a stray pinch lands. Review
+ * measured a two-finger gesture on the PAUSE panel zooming the page to 5x -- and because
+ * the canvas is `touch-action: none`, pinching back out over the board does nothing, so
+ * the zoom survives Resume and the game is left magnified.
+ *
+ * pan-y rather than none: these panes scroll (the achievements list is 744px of content
+ * in a 430px box), and that must keep working. pan-y allows the scroll and denies the
+ * pinch, which is exactly the split wanted. */
+.hud-panel,
+.hud-stats,
+.hud-customize,
+.hud-achievements,
+.hud-splash {
+  touch-action: pan-y;
+}
+
+/* ---- Touch controls -------------------------------------------------------------- */
+
+/* Hidden on anything with a precise pointer. A mouse player already has Space for mines
+ * and Escape for pause, so these would be two buttons that explain nothing; a phone has
+ * neither key and no other way to reach either action.
+ *
+ * `pointer: coarse` describes the PRIMARY pointer, so a laptop with a touchscreen keeps
+ * the desktop layout -- which is the right call while the buttons duplicate keys rather
+ * than adding anything. */
+.hud-touch {
+  position: absolute;
+  z-index: 2; /* above the topbar, below the title screen */
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* none on the CONTAINER, auto on the buttons: the 12px gap between them is part of
+   * the row's box, and with `auto` here it swallowed aim taps that fell in it --
+   * neither firing nor aiming, which reads as the game ignoring you. */
+  pointer-events: none;
+}
+
+.hud-pause-btn,
+.hud-mine-btn {
+  pointer-events: auto;
+}
+
+/* Without this the row shows on every screen, including the menu and the pause panel --
+ * the class alone does nothing, the dead-CSS failure hud.css.test.ts exists to catch. */
+.hud-touch--hidden {
+  display: none;
+}
+
+@media (pointer: fine) {
+  /* NOT belt and braces, whatever an earlier draft of this comment said: measured on
+   * desktop while playing, setState('playing') REMOVES `--hidden`, so this query is the
+   * only thing hiding the row from a mouse player. Delete it and they get two
+   * unexplained buttons. `hud.css.test.ts` pins that it exists. */
+  .hud-touch {
+    display: none;
+  }
+}
+
+/* Sized for a thumb, not a cursor: 44px is the smallest target both Apple's and
+ * Google's guidance call reliably tappable, and these sit near the screen edge where
+ * accuracy is worst. */
+.hud-pause-btn,
+.hud-mine-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 12px;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 8px 14px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  background: rgba(216, 221, 230, 0.18);
+  color: #e7ecf4;
+  /* A tap must not select the label or summon the magnifier. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.hud-mine-btn {
+  background: rgba(255, 207, 63, 0.22);
+  color: #ffe9a8;
+}
+
+.hud-pause-btn:active,
+.hud-mine-btn:active {
+  transform: translateY(2px);
+}
+
 /* ---- Title screen --------------------------------------------------------------- */
 
 /* The topbar is game furniture -- lives, enemies remaining, the level chip. On a title

@@ -184,6 +184,121 @@ describe('createHud panel', () => {
     expect(splash.getAttribute('aria-label')).toMatch(/press any key/i);
   });
 
+  it('does not let the tap that dismisses the title screen press Start underneath it', () => {
+    // MEASURED on a Pixel 5: one centre tap left the splash AND started the game, so the
+    // menu was never seen. The overlay hides on pointerdown and the browser completes
+    // the click on whatever is now under the finger -- which is exactly where the action
+    // button sits. A centre mouse click did the same.
+    const { hud: h, root } = mount();
+    let starts = 0;
+    h.onStartRestart(() => {
+      starts += 1;
+    });
+    // The real sequence: a pointer lands on the overlay, loop.ts dismisses on that same
+    // pointerdown, and the browser then completes the click on the button beneath.
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    h.setState('title');
+    const action = root.querySelector('.hud-action') as HTMLButtonElement;
+
+    action.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(starts, 'the dismissing gesture also pressed Start').toBe(0);
+
+    // ONE gesture only: the next press is the player's, and must work.
+    action.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(starts, 'the guard ate a press the player meant').toBe(1);
+  });
+
+  it('does not let a stale swallow survive an unrelated touch', () => {
+    // The guard is armed by a gesture and consumed by a click, with no deadline -- a
+    // deadline was measured racing the very stall it causes (577-878ms real gap against
+    // a 700ms window, 16 of 24 taps still skipping the menu). Without a way to clear it,
+    // a gesture whose click never arrives -- a finger sliding off the overlay -- would
+    // leave it armed to eat the player's next real press.
+    const { hud: h, root } = mount();
+    let starts = 0;
+    h.onStartRestart(() => {
+      starts += 1;
+    });
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    h.setState('title');
+
+    // The click never comes; the player instead touches the button deliberately.
+    const action = root.querySelector('.hud-action') as HTMLButtonElement;
+    action.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    action.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(starts, 'a stale swallow ate the next real press').toBe(1);
+  });
+
+  it('drives its pause and mine buttons from real clicks, not just the callback', () => {
+    // Both listeners could be deleted outright and the whole suite stayed green: the
+    // loop tests fake the HUD, and the only other new test checks a CSS class. This is
+    // the composition blindness CLAUDE.md documents, one layer down -- nothing
+    // dispatched an event at a real button.
+    const { hud: h, root } = mount();
+    let pauses = 0;
+    let mines = 0;
+    h.onPauseTap(() => {
+      pauses += 1;
+    });
+    h.onMineTap(() => {
+      mines += 1;
+    });
+    h.setState('playing');
+
+    (root.querySelector('.hud-pause-btn') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(pauses, 'the Pause button is not wired to anything').toBe(1);
+
+    // pointerdown, not click: a mine lands when the thumb touches, not when it lifts.
+    (root.querySelector('.hud-mine-btn') as HTMLButtonElement).dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
+    );
+    expect(mines, 'the Mine button is not wired to anything').toBe(1);
+  });
+
+  it('does not eat a keyboard press after a drag dismissal', () => {
+    // A DRAG dismissal delivers its click to the HUD root rather than into the panel, so
+    // the arm is never consumed and sits waiting. Measured in a browser: a player who
+    // dismissed by dragging and then tabbed to Start lost exactly one Enter. It
+    // self-corrects on the second press, but a keyboard or AT user should not have to
+    // press twice, so any key clears the arm.
+    const { hud: h, root } = mount();
+    let starts = 0;
+    h.onStartRestart(() => {
+      starts += 1;
+    });
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    h.setState('title'); // armed, and the drag's click never lands in the panel
+
+    const hudEl = root.querySelector('.hud') as HTMLElement;
+    hudEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    (root.querySelector('.hud-action') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expect(starts, 'the first keyboard activation after a drag dismissal was eaten').toBe(1);
+  });
+
+  it('shows the touch controls only while playing', () => {
+    // A Pause button on the pause panel is a second, untested way out of a paused game,
+    // and a Mine button on the menu lays nothing. Swept over every state rather than
+    // spot-checked, because the toggle is a single boolean and one sample cannot tell
+    // "only while playing" from "always".
+    const { hud: h, root } = mount();
+    const row = root.querySelector('.hud-touch') as HTMLElement;
+    const hidden = (): boolean => row.classList.contains('hud-touch--hidden');
+
+    h.setState('playing');
+    expect(hidden(), 'the touch controls are missing during play').toBe(false);
+    for (const s of ['splash', 'title', 'paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(hidden(), `the touch controls are showing on ${s}`).toBe(true);
+    }
+  });
+
   it('does not render the Game Over panel behind the splash screen at boot', () => {
     // setState's final `else` is a Game Over branch, and every state that does not
     // return before reaching it falls in. 'splash' returns early alongside 'playing'.
