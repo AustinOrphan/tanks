@@ -23,6 +23,30 @@ function stripComments(text: string): string {
 }
 
 /**
+ * Split a shorthand value into its top-level components, so `max(a, env(b))` counts as
+ * ONE component rather than splitting on the whitespace inside it. A naive
+ * `.split(/\s+/)` turns the topbar's four-part padding into eight fragments and makes
+ * every positional assertion meaningless.
+ */
+function splitShorthand(value: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of value.trim()) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (depth === 0 && /\s/.test(ch)) {
+      if (cur) out.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/**
  * Four properties every themed button in the HUD sets and a browser-default one does
  * not. Chosen by measurement, not taste, but state the measurement precisely: all 27
  * buttons differ from a bare `<button>` on THIRTEEN properties, and these are four of
@@ -462,6 +486,110 @@ describe('hud.css is syntactically whole', () => {
     const block = src.split(/@media\s*\(pointer:\s*fine\)/)[1]?.slice(0, 200) ?? '';
     expect(block, 'the query no longer hides .hud-touch').toContain('.hud-touch');
     expect(block).toContain('display: none');
+  });
+
+  it('keeps the HUD clear of display cutouts and the home-indicator strip', () => {
+    // TEXT assertions, and the reason is measured rather than assumed: jsdom's cssstyle
+    // drops any declaration whose value it cannot parse, and it parses neither `max()`
+    // nor `env()`. Probed in this environment -- a rule
+    // `padding: max(12px, env(safe-area-inset-top)) 18px` computes to paddingTop "0",
+    // while a plain `padding: 12px 18px` computes to "12px". So a computed-style
+    // assertion here would report the safe-area rule as ABSENT whether it is there or
+    // not, which is worse than reading the text.
+    //
+    // What this can still catch is the regression that happens: the rules being deleted
+    // or the selectors renamed out from under them. The real check is a notched device,
+    // and nobody has run one.
+    const src = stripComments(css);
+    const topbar = src.slice(src.indexOf('.hud-topbar {'));
+    const topbarRule = topbar.slice(0, topbar.indexOf('}'));
+    // Top for portrait (status bar / Dynamic Island), left and right for landscape,
+    // where the score row runs under the camera housing. Bottom is deliberately absent:
+    // nothing in the topbar is near it.
+    for (const side of ['top', 'left', 'right']) {
+      expect(topbarRule, `the topbar ignores the ${side} inset`).toContain(
+        `env(safe-area-inset-${side})`,
+      );
+    }
+    // ...and each inset on the side it is FOR. The presence checks above are exactly
+    // the "close to worthless" shape CLAUDE.md names, and it was not hypothetical here:
+    // swapping `env(safe-area-inset-right)` and `env(safe-area-inset-left)` in the
+    // shorthand -- so each pads the opposite edge -- passed all 17 tests in this file.
+    // Measured in Chromium at 844x390 with the notch on the left (inset-left 59px),
+    // shipped computes `12px 18px 12px 59px` and swapped computes `12px 59px 12px 18px`:
+    // the score row stays under the camera housing and gains dead space on the far side.
+    //
+    // The shorthand is top/right/bottom/left, so the position IS the meaning.
+    const paddingDecl = topbarRule
+      .split(';')
+      .map((d) => d.trim())
+      .find((d) => d.startsWith('padding:') && d.includes('env('));
+    expect(paddingDecl, 'the topbar has no safe-area padding declaration at all').toBeDefined();
+    const sides = splitShorthand(paddingDecl!.slice('padding:'.length));
+    // Four components, not two or three: a shorthand with fewer mirrors its opposite
+    // edge, which would silently give the left inset to the right side.
+    expect(sides, `not a four-part shorthand: ${paddingDecl}`).toHaveLength(4);
+    expect(sides[0], 'top').toContain('env(safe-area-inset-top)');
+    expect(sides[1], 'right').toContain('env(safe-area-inset-right)');
+    expect(sides[2], 'bottom is deliberately plain').not.toContain('env(');
+    expect(sides[3], 'left').toContain('env(safe-area-inset-left)');
+
+    const touch = src.slice(src.indexOf('.hud-touch {'));
+    const touchRule = touch.slice(0, touch.indexOf('}'));
+    // Fire and Mine sit in the home-indicator swipe strip at `bottom: 14px`. These are
+    // LONGHANDS, so pair each property with its own inset for the same reason as above
+    // -- `right: max(14px, env(safe-area-inset-bottom))` contains both strings and would
+    // pass a presence check.
+    for (const side of ['right', 'bottom']) {
+      const decl = touchRule
+        .split(';')
+        .map((d) => d.trim())
+        .find((d) => d.startsWith(`${side}:`) && d.includes('env('));
+      expect(decl, `the touch row ignores the ${side} inset`).toBeDefined();
+      expect(decl, `${side} is padded by the wrong inset`).toContain(
+        `env(safe-area-inset-${side})`,
+      );
+    }
+  });
+
+  it('lets no later rule quietly override the safe-area insets', () => {
+    // The trap this shape exists to remove, and it was live: BOTH narrow-viewport
+    // blocks used to set `padding` on .hud-topbar as a shorthand. A shorthand in a
+    // later @media wins outright, so writing the insets into the base rule alone would
+    // have dropped them on every viewport under 760px -- phones, which is the entire
+    // population the feature is for. The blocks now retune two custom properties and
+    // the padding is declared in ONE place.
+    //
+    // Not a style rule: it is the only thing standing between "the insets are written"
+    // and "the insets apply".
+    const blocks: Array<{ selector: string; body: string }> = [];
+    const rule = /([^{}]+)\{([^{}]*)\}/g; // innermost blocks only, so @media prelude is skipped
+    let m: RegExpExecArray | null;
+    const src = stripComments(css);
+    while ((m = rule.exec(src)) !== null) blocks.push({ selector: m[1].trim(), body: m[2] });
+    // The scan is worth nothing if the regex matched nothing.
+    expect(blocks.length).toBeGreaterThan(40);
+
+    const targeting = (cls: string): typeof blocks =>
+      // `(?![\w-])` so `.hud-topbar--hidden` and `.hud-touch--hidden` are not this rule.
+      blocks.filter((b) =>
+        b.selector.split(',').some((s) => new RegExp(`\\${cls}(?![\\w-])`).test(s)),
+      );
+
+    const setsPadding = targeting('.hud-topbar').filter((b) =>
+      /(^|;)\s*padding(-top|-right|-bottom|-left)?\s*:/.test(b.body),
+    );
+    expect(
+      setsPadding.map((b) => b.selector),
+      'more than one rule sets .hud-topbar padding: the narrow-viewport blocks retune --hud-topbar-pad-*',
+    ).toHaveLength(1);
+    expect(setsPadding[0].body).toContain('env(safe-area-inset-top)');
+
+    const setsOffsets = targeting('.hud-touch').filter((b) =>
+      /(^|;)\s*(right|bottom)\s*:/.test(b.body),
+    );
+    expect(setsOffsets.map((b) => b.selector)).toHaveLength(1);
+    expect(setsOffsets[0].body).toContain('env(safe-area-inset-bottom)');
   });
 
   it('keeps the stacking order the overlays depend on', () => {

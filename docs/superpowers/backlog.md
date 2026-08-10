@@ -391,6 +391,29 @@ from this machine at all — it needs macOS + Xcode, which is hardware, not code
 **Not scheduled.** The PR-able pieces (safe areas, a web app manifest, the storage seam, a
 privacy policy) are filed as issues and are worth doing on their own merits.
 
+**What the safe-area / manifest / framing PR left open** (issues #106, #107 and #108; PR
+#130). Three of these need a notched phone in a hand, which is the reason they are here
+rather than in an issue — nobody can write the closing PR from this machine.
+
+- **Do the absolutely-positioned panels need insets too?** `.hud-topbar` and `.hud-touch`
+  are inset by `max(base, env(safe-area-inset-*))`; the stats, achievements and customize
+  panes are not, and reasoning cannot settle it — the panes are centred overlays, so
+  whether a cutout eats a Back button depends on their real measured box. What would
+  answer it: open each pane on a notched device in BOTH orientations and look. If they do
+  need it, the shape is already there to copy.
+- **`display: standalone` or `fullscreen`?** The manifest ships `standalone` because it is
+  the value both platforms honour predictably; `fullscreen` is what a game usually wants
+  on Android, and iOS's handling of it was not verified. One install on each platform
+  answers it.
+- **Orientation: lock landscape, or accept a small board in portrait?** Now measured
+  rather than guessed, and it is NOT a correctness question — `framing.test.ts` sweeps
+  4 shipped arenas x 10 aspects and nothing crops at 20:9 portrait (0.42). It is a
+  product call: the same board fills 20.8–22.9% of the frame at 0.42 against 44.4–49.4%
+  at 21:9 (population: all 4 shipped arenas at each aspect), recomputed by that file's
+  `measures what a phone aspect costs` tripwire. A lock would live in a wrapper's native
+  manifest, which this repo does not have yet — so it is a decision for the wrapper, not
+  a change to make here.
+
 ---
 
 ## Spike: console release (Steam, Switch, PlayStation)
@@ -607,7 +630,7 @@ items triaged; the difference is itemised at the end. All five figures are recom
 - The overlay's outgoing lead is captured once and never re-gated as intensity falls, so it can sound while both tracks' own leads are gated silent — a window now up to a glide long. #76
 - The intensity glide is a rate limiter, not hysteresis: a 1↔0 reversal faster than the 2.0s walk makes a layer flicker MORE than the bare assignment did. Not reachable from the sim today, which moves intensity only on a kill or `resetArena`. #76
 - `tools/visual/verify.mjs:33` resolves Playwright from `/home/dev/.claude/jobs/17681316/...`, a path in a dead session's job directory. When it vanishes the visual gate stops being runnable, and nothing says so. #31 *(prose-only PR)*
-- `fitCameraToArea`'s bisection bracket `hi = span * 8` is unvalidated; below aspect ~0.249 the fallback returns a cropping camera. Test aspects run 0.46–3.0. Was ~0.147 until the fov 50→30 change: a narrower lens needs more distance and exhausts the bracket sooner, so the unusable region grew ~69%. #5 #103
+- `fitCameraToArea` returns a CROPPING camera below aspect ~0.249 — nothing in the bracket fits, so it falls back to the untested `hi` — and no test aspect goes near it; test aspects run 0.42–3.0. The bracket itself is no longer *unvalidated*, which this line used to say: `framing-fit-bracket-4.5` (`tools/mutate/manifest.json`) kills `hi = span * 4.5`, 9 of 90, because the tightest shipped combination needs 4.84 spans of distance at 20:9 portrait. The ~0.249 figure dates from the fov 50→30 change (it was ~0.147 before; a narrower lens needs more distance and exhausts the bracket sooner, so the unusable region grew ~69%) and has not been re-measured since. #5 #103
 - `framedAreaFits` projects the ground plane only (`y = 0` is hardcoded), so nothing above it is inside the fit; the ring starts clipping at wall height **~1.303** at the current `cellSize` (re-derived after #103's fov 50→30, which cost 15.7%; it was ~1.545 after #75 and ~1.721 before). `WALL_H` is 1.0, so headroom over the shipped wall is now 30.3% rather than 54.5%. #5 #103
 
 ### Unpinned behaviour — no test found that would catch the regression
@@ -622,7 +645,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - `FRAME_MARGIN` tightness is self-referential: the test imports the constant and uses it on both sides. Routing around the constant *is* caught. #5
 - `VIEW_DIR`'s pitch magnitude is now pinned to 51.0° by `framing.test.ts` (#103 added it after review measured that swinging it to 80° — a near-top-down camera — passed all 1538 tests; 27 of integer tilts 30–89 survived the coverage floor). What is still unpinned is whether 51° is the right CHOICE: it is not optimal for any single aspect (43° is +3.49pp at 16:9, fov 30) and was kept because within a playable 40–60° band the best fixed tilt (60°) gains only +1.63pp on a uniform mix of 4 arenas × 4 common aspects — going further means going near-top-down (89° gains +10.07pp and is a different game). #5 #103
 - `framing.test.ts`'s coverage tests now import the shipped `BASE_FOV`, and `cameraAt` was moved onto it too, so the old "every framing test builds a 50° camera" no longer holds. What remains unpinned is fov as a SWEPT variable: no test checks behaviour at more than the one shipped value. #5 #103
-- Aspect coverage is a grid of 8 values (0.46–3.0), and the monotonicity premise `fitCameraToArea` documents is unproven between grid points. #5
+- Aspect coverage is a grid of 10 values (0.42–3.0), and the monotonicity premise `fitCameraToArea` documents is unproven between grid points. #5
 - Embeddings that can set an arbitrary aspect — iframes, devtools responsive mode, kiosk webviews — were never considered; every tested shape is an ordinary window. #5
 - Scene geometry other than the four ground corners — wall tops, tanks, turrets, particles, shadow extents — is never projected against the fit. #5
 - `createBrowserDeps` is only partly reachable: two same-shaped `() => number` factories inside the literal could be swapped and survive. #6
