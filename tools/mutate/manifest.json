@@ -42,6 +42,16 @@
     "tests": ["src/render/skins.test.ts"]
   },
   {
+    "id": "preview-drops-the-rotate-buttons",
+    "file": "src/render/preview.ts",
+    "find": "    rotateButtons,\n",
+    "replace": "    rotateButtons: rotateButtons ? undefined : undefined,\n",
+    "expect": "survives",
+    "expectFailures": 0,
+    "why": "A DISCLOSED SURVIVOR, and not an equivalent mutant -- the shipped behaviour it removes is real: the Customize pane's four rotate buttons stop working entirely. It survives because nothing vitest can run reaches it. createTankPreview builds a WebGLRenderer, which jsdom cannot provide (preview.test.ts exercises only the null-return branch for exactly that reason), so no vitest case can observe whether the buttons were forwarded to createPreviewControls; preview-controls.test.ts constructs the controls itself and so never goes through this line at all. What DOES kill it is tools/gl/harness.ts's 'a rotate button turns the tank in the rendered image', in a real browser, measured at both ends: 11828 of 197600 bytes differ with the argument wired and EXACTLY 0 with it dropped. Recorded here rather than left as a number in a PR body so the claim is re-derivable -- and so that if someone ever finds a way to cover this under vitest, the harness flips it to a mismatch instead of letting the entry go quietly stale. The replacement keeps the parameter read so the mutation compiles: a tsc failure would prove nothing about test coverage.",
+    "tests": ["src/render/preview.test.ts", "src/render/preview-controls.test.ts"]
+  },
+  {
     "id": "framing-bounds-multiplier-3",
     "file": "src/render/framing.ts",
     "find": "return { width: worldWidth + boundary * 2, height: worldHeight + boundary * 2 };",

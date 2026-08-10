@@ -308,10 +308,12 @@ export interface PreviewControlsDeps {
 export interface PreviewControls {
   /** The live pose. The caller owns the rendering; this is the read-back. */
   pose(): PreviewPose;
-  /** Whether the idle spin is turning the tank right now. False while the player is
-   * interacting, false once this run of the spin has used up `IDLE_SPIN_MAX_RAD`, and
-   * false while the document is hidden -- it comes back on its own in the first two
-   * cases (see this file's doc comment) and on `visibilitychange` in the third. */
+  /** Whether the idle spin is turning the tank right now -- the same question
+   * `wantsFrame()` asks of it, so it cannot drift from what the loop is doing. False
+   * while the player is interacting, false once this run of the spin has used up
+   * `IDLE_SPIN_MAX_RAD`, and false while the document is hidden. It comes back on its
+   * own in the first two cases (see this file's doc comment) and on `visibilitychange`
+   * in the third. */
   idleRunning(): boolean;
   /** Removes every listener it added, on the canvas AND on the rotate buttons AND on
    * the document, and cancels any pending frame and any pending resume timer. Safe
@@ -362,9 +364,12 @@ export function createPreviewControls(
   /** A pointer is over the canvas. A hovering mouse IS the aim, so the spin must not
    * come back underneath it -- desktop's resume is `pointerleave`, not the timer. */
   let pointerInside = false;
-  /** Set by a pointer or key activation of a rotate button, so the `click` that follows
-   * it does not turn the tank a second time. See onButtonClick. */
+  /** Set by the RELEASE of a rotate-button press, so the compatibility `click` that
+   * follows it does not turn the tank a second time. See onButtonUp and onButtonClick. */
   let suppressClick = false;
+  /** The pointer currently pressing a rotate button, so a release that belongs to some
+   * other pointer cannot arm the suppression above. */
+  let pressedPointerId: number | null = null;
   let frameHandle: number | null = null;
   let lastFrameMs: number | null = null;
   let disposed = false;
@@ -604,19 +609,43 @@ export function createPreviewControls(
 
   const onButtonDown = (b: RotateButton, e: PointerEvent): void => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    suppressClick = true;
+    // A new activation starts clean. Nothing here ARMS the suppression -- only the
+    // release that a click can actually follow does, in onButtonUp.
+    suppressClick = false;
+    pressedPointerId = e.pointerId;
     nudge(b);
     hold = { part: b.part, dir: b.dir, heldSec: 0 };
+    // The repeat delay is measured from the press, so the hold clock starts here rather
+    // than inheriting whatever the idle spin last stamped -- without this, pressing a
+    // button while the spin is running pre-loads `heldSec` with up to a whole clamped
+    // frame and the ramp begins early. (Press-to-ramp is therefore HOLD_REPEAT_DELAY_MS
+    // plus one frame: the frame that re-establishes the clock has dt 0 by design.)
     lastFrameMs = null;
     syncFrame();
   };
 
-  /** Every way a hold can end: release, cancel, or the pointer leaving the button --
+  /**
+   * Every way a hold can end: release, cancel, or the pointer leaving the button --
    * which is how a real button behaves, and which is also what a lifted finger sends.
    * Called with no hold in progress it does nothing but re-arm the resume, which is
-   * harmless and is what a release outside the button should do anyway. */
-  const onButtonUp = (): void => {
+   * harmless and is what a release outside the button should do anyway.
+   *
+   * It is also the ONLY place `suppressClick` is armed, and only on a `pointerup` from
+   * the pointer that pressed -- which is exactly the event a compatibility `click`
+   * follows. Arming it at press time instead is the defect this shape exists to avoid:
+   * a press that ends off the button sends no click, so the flag stuck on and swallowed
+   * the NEXT bare click, killing the assistive-technology path the cluster exists for.
+   */
+  const onButtonUp = (e: PointerEvent): void => {
     hold = null;
+    if (e.type === 'pointerleave') {
+      // The hold is over, but the pointer may come back and release ON the button, and
+      // that release does produce a click -- so the press is still live for the purpose
+      // of suppression. Not cleared here, and cleared by the next press regardless.
+    } else {
+      suppressClick = e.type === 'pointerup' && pressedPointerId === e.pointerId;
+      pressedPointerId = null;
+    }
     syncFrame();
     armResume();
   };
@@ -626,16 +655,19 @@ export function createPreviewControls(
     // The browser would otherwise synthesise a click from this, turning the tank twice;
     // Space would also scroll the page. OS key repeat supplies the repeat, exactly as it
     // does for the canvas's own arrow keys.
+    //
+    // preventDefault is the WHOLE suppression on this path. Setting `suppressClick` here
+    // as well is what broke it: no click ever arrives to consume the flag, so the next
+    // bare click -- an assistive technology's -- was swallowed instead.
     e.preventDefault();
-    suppressClick = true;
     nudge(b);
     armResume();
   };
 
-  /** The fallback path, and the reason both handlers above set `suppressClick`: an
-   * assistive technology can activate a button by dispatching `click` alone, with no
-   * pointer or key event to be seen. Ignoring click entirely would leave those users
-   * with four dead buttons; handling it unconditionally would double every mouse press. */
+  /** The fallback path, and the reason `onButtonUp` arms `suppressClick`: an assistive
+   * technology can activate a button by dispatching `click` alone, with no pointer or
+   * key event to be seen. Ignoring click entirely would leave those users with four dead
+   * buttons; handling it unconditionally would double every mouse press. */
   const onButtonClick = (b: RotateButton): void => {
     if (suppressClick) {
       suppressClick = false;
@@ -673,6 +705,10 @@ export function createPreviewControls(
   const onVisibility = (): void => {
     if (hidden()) cancelFrame();
     else {
+      // A fresh clock, not merely a fresh frame. The time spent hidden is not time the
+      // animation ran, and without this the first frame back differences against the
+      // stamp from before the tab went away -- a clamped 0.1s jump, which is a visible
+      // step at the moment the player looks at it again.
       lastFrameMs = null;
       syncFrame();
     }
@@ -689,7 +725,11 @@ export function createPreviewControls(
       return { bodyAngle, turretAngle };
     },
     idleRunning(): boolean {
-      return idle && !disposed;
+      // Deliberately the same expression the loop schedules on, rather than a second
+      // one that agrees by inspection: this used to read `idle && !disposed`, which
+      // said "running" for a hidden document that was drawing nothing, and its own doc
+      // comment said otherwise. Review caught the contradiction.
+      return idle && !disposed && !hidden();
     },
     dispose(): void {
       disposed = true;

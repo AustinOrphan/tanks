@@ -665,6 +665,9 @@ describe('createPreviewControls: the idle spin', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
     expect(h.cancelled, 'the loop kept running into a hidden tab').toEqual([pending]);
+    // ...and it SAYS so. This read used to be `idle && !disposed`, which reported a
+    // hidden, frame-less preview as spinning and contradicted its own doc comment.
+    expect(h.controls.idleRunning(), 'reports a hidden preview as spinning').toBe(false);
     const parked = h.controls.pose();
     // A callback already in flight must not restart it either.
     h.frames[pending - 1](5000);
@@ -674,9 +677,19 @@ describe('createPreviewControls: the idle spin', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
     expect(h.frames.length).toBe(pending + 1);
-    h.frames[h.frames.length - 1](6000); // fresh clock, so this one only re-establishes it
-    h.frames[h.frames.length - 1](6100);
-    expect(h.controls.pose().bodyAngle).not.toBe(parked.bodyAngle);
+    expect(h.controls.idleRunning()).toBe(true);
+    // THE CLOCK IS FRESH, and that is asserted rather than assumed: the first frame back
+    // must move NOTHING, because the minutes spent hidden are not time the animation
+    // ran. Without the reset it differences against the pre-hide stamp and lands a
+    // clamped 0.1s step -- about 2 degrees -- at the exact moment the player looks at it.
+    h.frames[h.frames.length - 1](600_000);
+    expect(h.controls.pose(), 'the tank jumped on the way back').toEqual(parked);
+    // ...and it really is running again, rather than merely rescheduled.
+    h.frames[h.frames.length - 1](600_100);
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(
+      normalizeAngle(parked.bodyAngle + IDLE_SPIN_RAD_PER_SEC * 0.1),
+      9,
+    );
     h.controls.dispose();
   });
 
@@ -817,6 +830,30 @@ describe('createPreviewControls: the rotate buttons', () => {
     h.controls.dispose();
   });
 
+  it('measures the repeat delay from the press, not from the spin frame before it', () => {
+    // Found in review. The press resets `lastFrameMs`, and without that the first frame
+    // after it differences against the timestamp the IDLE SPIN last stamped -- so
+    // `heldSec` starts pre-loaded with up to a whole clamped frame (0.1s) and the ramp
+    // begins up to a third of the way into a 300ms delay. A tap while the tank was
+    // spinning would then turn further than the same tap on a still tank, which is a
+    // control whose step depends on what it interrupted.
+    //
+    // Driven with the spin RUNNING, which is the only state that can pre-load it.
+    const h = harness();
+    h.frames[0](0);
+    h.frames[1](100); // the spin stamps lastFrameMs = 100
+    const b = h.button('hull', 'right');
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    const afterPress = h.controls.pose().bodyAngle;
+    const next = (): ((t: number) => void) => h.frames[h.frames.length - 1];
+    // Frames 50ms apart from 200: with the reset, heldSec reaches exactly the delay at
+    // t=500 and the ramp has still turned nothing. Without it, heldSec is 0.1 ahead and
+    // the ramp has been running since t=450.
+    for (let t = 200; t <= 500; t += 50) next()(t);
+    expect(h.controls.pose().bodyAngle, 'the ramp started early').toBeCloseTo(afterPress, 12);
+    h.controls.dispose();
+  });
+
   it('turns the turret alone on a turret hold, and the hull alone on a hull hold', () => {
     for (const [part, moved, still] of [
       ['turret', 'turretAngle', 'bodyAngle'],
@@ -872,6 +909,73 @@ describe('createPreviewControls: the rotate buttons', () => {
     h.button('turret', 'left').dispatchEvent(pointerEvent('pointerdown'));
     h.button('turret', 'left').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(h.controls.pose()).toEqual(settled);
+  });
+
+  it('still answers a bare click after an Enter activation', () => {
+    // REGRESSION, found in review. `suppressClick` used to be armed by the key handler
+    // too -- but that handler calls preventDefault(), which is what stops the browser
+    // synthesising a click, so no click ever arrived to consume the flag. It stayed on
+    // and swallowed the NEXT bare click: one keyboard press left the assistive-
+    // technology path dead for the rest of the panel's life. Measured on the broken
+    // code, the pose after the click was 0.34034 where a second step gives 0.20944.
+    const h = harness();
+    const b = h.button('hull', 'right');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start - KEY_STEP_RAD), 9);
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle, 'the click was swallowed').toBeCloseTo(
+      normalizeAngle(start - 2 * KEY_STEP_RAD),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('still answers a bare click after a press that ended off the button', () => {
+    // The other half of the same defect, and a different sequence: pointerdown then
+    // pointerleave (the pointer wandered off and was released somewhere else) produces
+    // no click at all, so a flag armed at PRESS time was never consumed either.
+    const h = harness();
+    const b = h.button('turret', 'left');
+    const start = h.controls.pose().turretAngle;
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    b.dispatchEvent(pointerEvent('pointerleave'));
+    expect(h.controls.pose().turretAngle).toBeCloseTo(normalizeAngle(start + KEY_STEP_RAD), 9);
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().turretAngle, 'the click was swallowed').toBeCloseTo(
+      normalizeAngle(start + 2 * KEY_STEP_RAD),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('does not turn twice when the pointer leaves the button and comes back to release', () => {
+    // The case that decides WHERE the flag is armed. A pointer that leaves and returns
+    // still produces a click on release, so arming only at pointerup -- and not clearing
+    // on leave -- is what keeps this from double-stepping while the two cases above stay
+    // fixed. Clearing the flag on pointerleave passes both of those and fails this.
+    const h = harness();
+    const b = h.button('hull', 'left');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    b.dispatchEvent(pointerEvent('pointerleave'));
+    b.dispatchEvent(pointerEvent('pointerup'));
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start + KEY_STEP_RAD), 9);
+    h.controls.dispose();
+  });
+
+  it('does not let a release from some OTHER pointer arm the click suppression', () => {
+    // A pointerup on the button that no press of ours started -- a drag begun on the
+    // canvas and released over the cluster, when pointer capture is unavailable. It must
+    // not swallow the bare click that follows it from an unrelated activation.
+    const h = harness();
+    const b = h.button('hull', 'right');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(pointerEvent('pointerup', { pointerId: 9 }));
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start - KEY_STEP_RAD), 9);
+    h.controls.dispose();
   });
 
   it('does not turn twice for one mouse press, but still answers a bare click', () => {
@@ -1127,6 +1231,48 @@ describe('createPreviewControls: teardown', () => {
     expect(added.length).toBeGreaterThan(0);
     controls.dispose();
     expect(removed).toEqual(added);
+  });
+
+  it('removes the DOCUMENT listener too, which nothing else can see', () => {
+    // The one leak in this module with NO behavioural signature. `visibilitychange` is
+    // bound on `document`, not on the canvas, so the canvas-level check above cannot see
+    // it -- and after dispose the handler is inert anyway (`wantsFrame()` is false once
+    // `disposed` is set), so no observable behaviour changes either. What leaks is the
+    // listener and the whole controller closure behind it, once per Customize open, for
+    // the life of the session.
+    //
+    // Measured: registering it outside the teardown list survives the entire suite. This
+    // is the only assertion that kills that.
+    const realAdd = document.addEventListener.bind(document);
+    const realRemove = document.removeEventListener.bind(document);
+    const added: Array<[string, unknown]> = [];
+    const removed: Array<[string, unknown]> = [];
+    document.addEventListener = ((t: string, f: unknown, o?: unknown) => {
+      added.push([t, f]);
+      return realAdd(t, f as EventListener, o as boolean);
+    }) as typeof document.addEventListener;
+    document.removeEventListener = ((t: string, f: unknown, o?: unknown) => {
+      removed.push([t, f]);
+      return realRemove(t, f as EventListener, o as boolean);
+    }) as typeof document.removeEventListener;
+    try {
+      const controls = createPreviewControls(makeCanvas(), {
+        camera,
+        initialPose: INITIAL_PREVIEW_POSE,
+        onPose: () => {},
+        raf: () => 1,
+        cancelRaf: () => {},
+      });
+      // It really did bind one, or the pairing below would hold vacuously.
+      expect(added.map(([t]) => t)).toContain('visibilitychange');
+      controls.dispose();
+      // Paired by type AND identity, like the canvas check: removeEventListener with a
+      // different function is a silent no-op.
+      expect(removed).toEqual(added);
+    } finally {
+      document.addEventListener = realAdd;
+      document.removeEventListener = realRemove;
+    }
   });
 
   it('goes quiet after dispose, on every input it listens for', () => {
