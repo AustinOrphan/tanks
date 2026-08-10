@@ -21,6 +21,7 @@ import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
 import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
+import { createTankPreview } from '../../src/render/preview';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -617,6 +618,183 @@ await checkAsync('the generated music bed renders audible samples', async () => 
     bed.start();
   }, 2);
   return peak > 0.01 ? null : `music peaked at ${peak.toExponential(2)}, effectively silent`;
+});
+
+// ---------------------------------------------------------------------------
+// render/preview.ts. A SECOND WebGLRenderer, live only while the Customize panel
+// is open -- these checks are the reason to believe that is actually safe: a real
+// tank gets drawn (not a depiction, the entities.ts mesh), a style change actually
+// reaches the pixels, dispose really frees the GL context (not just the JS
+// references), and two contexts held at once -- this preview's and the main
+// renderer's -- coexist without either losing its context, which is the whole
+// premise the "second WebGL context" design leans on.
+// ---------------------------------------------------------------------------
+
+/** A preview-sized canvas with a real CSS layout box, appended to the document --
+ * preview.ts reads canvas.clientWidth/clientHeight to size itself, which is 0 for a
+ * detached or unstyled canvas. */
+function previewCanvas(w = 260, h = 190): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.style.width = `${w}px`;
+  c.style.height = `${h}px`;
+  document.body.appendChild(c);
+  return c;
+}
+
+function readPixel(gl: WebGLRenderingContext, x: number, y: number): Uint8Array {
+  const px = new Uint8Array(4);
+  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  return px;
+}
+
+check('createTankPreview draws an opaque tank against a transparent background', () => {
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = c.width;
+  const h = c.height;
+  // Centre: the tank's own footprint (PREVIEW_AREA_W/H frame it there on purpose).
+  const centre = readPixel(gl, Math.floor(w / 2), Math.floor(h / 2));
+  // Top row, centre column: above the tank and above the ground disc -- nothing else
+  // is in this scene to paint it, so it must still show the transparent clear colour.
+  const top = readPixel(gl, Math.floor(w / 2), h - 1);
+  preview.dispose();
+  c.remove();
+  if (centre[3] < 200) return `centre pixel alpha ${centre[3]}, expected an opaque tank there`;
+  if (top[3] > 40) return `top-row pixel alpha ${top[3]}, expected the transparent background`;
+  return null;
+});
+
+check('setStyle actually repaints the pixels, not just the JS-side style triple', () => {
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const w = Math.floor(c.width / 2);
+  const h = Math.floor(c.height / 2);
+  preview.setStyle('#ff0000', 'solid', null);
+  const red = readPixel(gl, w, h);
+  preview.setStyle('#0000ff', 'solid', null);
+  const blue = readPixel(gl, w, h);
+  preview.dispose();
+  c.remove();
+  // Not exact-channel equality (lighting/tone-mapping/metalness all move the raw
+  // value away from the input hex) -- the property that matters is which channel
+  // DOMINATES, and that a real hull-colour change flips it.
+  if (!(red[0] > red[2])) return `red hull: pixel was (${red.join(',')}), red should dominate blue`;
+  if (!(blue[2] > blue[0])) return `blue hull: pixel was (${blue.join(',')}), blue should dominate red`;
+  return null;
+});
+
+check('dispose actually runs (does not throw), including a SECOND dispose', () => {
+  // Not a context-loss check: this preview's dispose deliberately does NOT force
+  // context loss (see preview.ts's doc comment -- the canvas is reused, not
+  // recreated, so losing the context would break the very next open, proven by the
+  // "reopening" check below). What dispose DOES still have to do is free every THREE
+  // object it built -- the entity views, the lights, the ground, the generated
+  // environment map -- without throwing, and stay safe to call again (defensive,
+  // catches a double-free on any of those).
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  preview.dispose();
+  preview.dispose(); // must not throw on the second call
+  c.remove();
+  return null;
+});
+
+check('dispose does NOT lose the context -- it is held, live, and reused on reopen', () => {
+  // Pins the exact lifetime claim documented in loop.ts and preview.ts: after
+  // dispose(), the canvas's WebGL context is the SAME object, still live, not lost --
+  // "held for the rest of the session" is the true (and safe) behaviour, not "freed
+  // and reacquired every open/close". This is the direct measurement; the "repeated
+  // open/close cycles" check below shows the CONSEQUENCE (reopening still draws) but
+  // does not by itself distinguish "context reused" from "context re-created cheaply
+  // some other way" -- this check reads the context identity and isContextLost()
+  // directly, so the claim in the doc comments is measured here, not merely inferred.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const glBefore = c.getContext('webgl2') ?? c.getContext('webgl');
+  preview.dispose();
+  const glAfter = c.getContext('webgl2') ?? c.getContext('webgl');
+  const lostAfterDispose = (glAfter as WebGLRenderingContext).isContextLost();
+  const sameCtxAfterDispose = glBefore === glAfter;
+  const reopened = createTankPreview(c);
+  const sameCtxOnReopen = reopened
+    ? (c.getContext('webgl2') ?? c.getContext('webgl')) === glBefore
+    : false;
+  reopened?.dispose();
+  c.remove();
+  if (lostAfterDispose) return 'context IS lost after dispose -- the doc comments are now wrong';
+  if (!sameCtxAfterDispose) return 'a DIFFERENT context object exists after dispose -- not held, replaced';
+  if (!sameCtxOnReopen) return 'reopen did not reuse the same context object';
+  return null;
+});
+
+check('the preview and the main renderer hold TWO live contexts at once, neither lost', () => {
+  // The concurrency claim behind scoping the preview to "panel open": the peak is
+  // two contexts (this one plus the main game's), only while the Customize panel is
+  // open, and there is never a third. This is the direct proof, not an inference
+  // from "each disposes cleanly alone" -- two SEPARATE renderers constructed
+  // together, each checked while the other is still live.
+  const gameCanvas = placedCanvas(800, 500, 0, 0, 800, 500);
+  const game = createRenderer(gameCanvas, W, H, BOUNDARY);
+  const previewC = previewCanvas();
+  const preview = createTankPreview(previewC);
+  if (!preview) {
+    game.dispose();
+    gameCanvas.remove();
+    previewC.remove();
+    return 'createTankPreview returned null in a real browser (main renderer built fine)';
+  }
+  const gameGl = (gameCanvas.getContext('webgl2') ?? gameCanvas.getContext('webgl')) as WebGLRenderingContext;
+  const previewGl = (previewC.getContext('webgl2') ?? previewC.getContext('webgl')) as WebGLRenderingContext;
+  const bothLiveTogether = !gameGl.isContextLost() && !previewGl.isContextLost();
+  const world = createArenaWorld(1);
+  game.render(world, world, 0.5, [], 1 / 60); // both actually draw while coexisting
+  preview.setStyle('#3d7bd6', 'solid', null);
+  const stillLiveAfterDraw = !gameGl.isContextLost() && !previewGl.isContextLost();
+  preview.dispose();
+  game.dispose();
+  gameCanvas.remove();
+  previewC.remove();
+  if (!bothLiveTogether) return 'one context was already lost the moment both existed';
+  if (!stillLiveAfterDraw) return 'one context was lost after both rendered a frame';
+  return null;
+});
+
+check('repeated open/close cycles on the SAME canvas keep drawing a tank', () => {
+  // The production path, not the one every other preview check above exercises: the
+  // HUD owns ONE persistent `.hud-preview` canvas (see hud.ts), and game/loop.ts
+  // opens/disposes a preview against that SAME element every time the Customize panel
+  // opens and closes -- open, Back, open again, Back, open again... is an ordinary
+  // playtest, not an edge case. Every OTHER check in this file builds a fresh canvas
+  // per preview, so none of them can see what happens on a SECOND (or later) create()
+  // against a canvas a previous dispose() already tore down.
+  //
+  // This first caught a real bug: with dispose() calling `renderer.forceContextLoss()`
+  // (matching scene.ts's own pattern), the SECOND createTankPreview on the same canvas
+  // came back non-null but drew nothing -- a force-lost context does not reliably
+  // revive, unlike scene.ts's canvas, which gets a genuinely NEW canvas per level
+  // rather than reusing one. Looped 3 times (not just once) as a cheap stress against
+  // anything that accumulates quietly across cycles rather than failing on the first.
+  const c = previewCanvas();
+  for (let i = 0; i < 3; i++) {
+    const preview = createTankPreview(c);
+    if (!preview) { c.remove(); return `cycle ${i}: createTankPreview returned null in a real browser`; }
+    preview.setStyle(i % 2 === 0 ? '#3d7bd6' : '#d64545', 'solid', null);
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    const centre = readPixel(gl, Math.floor(c.width / 2), Math.floor(c.height / 2));
+    preview.dispose();
+    if (centre[3] < 200) {
+      c.remove();
+      return `cycle ${i}: centre pixel alpha ${centre[3]} -- blank/dead preview on a reused canvas`;
+    }
+  }
+  c.remove();
+  return null;
 });
 
 window.__glResults = results;

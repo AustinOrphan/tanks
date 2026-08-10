@@ -14,6 +14,7 @@ import {
 } from './achievements';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
+import { createTankPreview, type TankPreview } from '../render/preview';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
 import { AUDIO_MANIFEST } from '../audio/manifest';
 import type { SuiteContext } from '../audio/suites';
@@ -77,6 +78,13 @@ export interface GameDeps {
       playerAccent?: string | null;
     },
   ) => Renderer3D;
+  /**
+   * The paint shop's live tank preview, built against the HUD's own canvas
+   * (`hud.previewCanvas`). Returns null if the environment cannot provide a second
+   * WebGL context (see render/preview.ts's doc comment) -- the Customize panel still
+   * works without one, it just shows no preview.
+   */
+  readonly createPreview: (canvas: HTMLCanvasElement) => TankPreview | null;
   readonly createInput: (
     target: HTMLElement,
     screenToGround: (clientX: number, clientY: number) => Vec2,
@@ -274,6 +282,7 @@ export function createBrowserDeps(): GameDeps {
   const achievements = createAchievementsStore(browserStorage());
   return {
     createRenderer,
+    createPreview: createTankPreview,
     createInput: createInputController,
     createAudio: () => createAudioEngine(AUDIO_MANIFEST),
     createDirector: createAudioDirector,
@@ -628,14 +637,43 @@ export function startGameWith(
     sm.toTitle();
   });
 
-  // Hull, skin and accent restyle through ONE renderer call: the style is a triple,
-  // and sending part of it would reset the rest to a default.
-  function restyle(): void {
-    renderer.setPlayerStyle(
+  // The paint shop's live preview: a SECOND WebGL context. Built on onCustomizeOpen,
+  // torn down on onCustomizeClose -- together the ONE chokepoint hud.ts fires both
+  // transitions through (see its doc comment), so this never SKIPS a dispose down the
+  // "Start while the panel is open" path. But "torn down" is dispose(), not context
+  // loss: measured directly (see render/preview.ts's doc comment), the underlying
+  // WebGL context survives dispose() and is REUSED on the next open, because the HUD
+  // holds one persistent `.hud-preview` canvas for the whole session rather than a
+  // fresh one per open. So the context is held from the first Customize open through
+  // the rest of the session, not freed and reacquired every open/close -- what
+  // dispose() DOES reclaim every time is the THREE-side cost (the scene, the tank
+  // mesh, the skin texture, the environment map, the shadow map). The number that
+  // stays true either way, and is the one that actually matters: peak is two live
+  // contexts (this one plus the main game's), never three.
+  let preview: TankPreview | null = null;
+  hud.onCustomizeOpen(() => {
+    preview = deps.createPreview(hud.previewCanvas);
+    preview?.setStyle(
       deps.customization.hexFor(deps.customization.hull()),
       deps.customization.skin(),
       deps.customization.accentHexFor(deps.customization.accent()),
     );
+  });
+  hud.onCustomizeClose(() => {
+    preview?.dispose();
+    preview = null;
+  });
+
+  // Hull, skin and accent restyle through ONE renderer call: the style is a triple,
+  // and sending part of it would reset the rest to a default. The live preview (when
+  // open) gets the SAME triple, so the tank behind the panel and the one inside it
+  // never disagree.
+  function restyle(): void {
+    const hex = deps.customization.hexFor(deps.customization.hull());
+    const skin = deps.customization.skin();
+    const accentHex = deps.customization.accentHexFor(deps.customization.accent());
+    renderer.setPlayerStyle(hex, skin, accentHex);
+    preview?.setStyle(hex, skin, accentHex);
   }
 
   hud.onPickHullColor((id) => {
@@ -800,6 +838,10 @@ export function startGameWith(
 
   const onResize = (): void => {
     renderer.resize(deps.host.innerWidth, deps.host.innerHeight);
+    // Only while open: a disposed preview has nothing to resize, and re-reading
+    // hud.previewCanvas's now-hidden layout would just re-fit against stale/zero
+    // dimensions for no visible effect.
+    preview?.resize();
   };
   deps.host.addEventListener('resize', onResize);
   onResize();
@@ -815,6 +857,10 @@ export function startGameWith(
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
       renderer.dispose();
+      // The panel can still be open at teardown (main.ts's pagehide path can fire
+      // any time) -- dispose whatever live preview context is holding, same as the
+      // main renderer just above.
+      preview?.dispose();
       audio.dispose();
       hud.dispose();
     },

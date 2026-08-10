@@ -1329,35 +1329,102 @@ describe('hud: the paint shop', () => {
     }
   });
 
-  it('hints that an accent needs a pattern, only while the skin is solid AND the accent is explicit', () => {
-    // solid (SKINS[0]) has no texture -- createSkinTexture returns null for it -- so an
-    // accent choice has nothing to render onto. The hint exists so that player is not
-    // left thinking their pick did nothing.
+  // The accent-hint feature (a <p> shown only for solid+explicit-accent) was removed
+  // along with the rest of the panel's prose: Austin asked for exactly two labelled
+  // sections (Hull, Skin) with the rest self-explanatory once the panel has a real
+  // preview. The preview does not resolve the ambiguity the hint used to name (a
+  // solid-skin tank still shows no visible change when an accent is picked) any more
+  // than the old background tank did -- it makes the absence of change more vivid,
+  // not less confusing on its own -- but the selection ring still confirms the pick
+  // registered, and Austin's instruction is explicit enough on its own to cut this
+  // narrow an edge case. See the PR body for the fuller argument.
+
+  it('has exactly two labelled sections -- Hull and Skin -- and no leftover paragraphs', () => {
+    const { root } = mount();
+    const headings = Array.from(pane(root).querySelectorAll('h2')).map((h) => h.textContent);
+    expect(headings).toEqual(['Hull', 'Skin']);
+    // No prose paragraphs left in the pane (the h1 title is not a <p>).
+    expect(pane(root).querySelectorAll('p')).toHaveLength(0);
+  });
+
+  it('puts the skin buttons AND the accent swatches inside the Skin section', () => {
+    const { root } = mount();
+    const sections = Array.from(pane(root).querySelectorAll('.hud-customize-section'));
+    const skinSection = sections.find((s) => s.querySelector('h2')?.textContent === 'Skin');
+    expect(skinSection).toBeDefined();
+    expect(skinSection!.querySelector('.hud-skins')).not.toBeNull();
+    expect(skinSection!.querySelector('.hud-accents')).not.toBeNull();
+  });
+
+  it('exposes a preview canvas element, present even before the panel first opens', () => {
     const { hud: h, root } = mount();
-    const hint = (): HTMLElement => root.querySelector('.hud-accent-hint') as HTMLElement;
+    expect(h.previewCanvas).toBeInstanceOf(HTMLCanvasElement);
+    expect(h.previewCanvas.classList.contains('hud-preview')).toBe(true);
+    expect(root.contains(h.previewCanvas)).toBe(true);
+  });
+
+  it('fires onCustomizeOpen/onCustomizeClose exactly on the Back-button round trip', () => {
+    const { hud: h, root } = mount();
+    const opens: number[] = [];
+    const closes: number[] = [];
+    h.onCustomizeOpen(() => opens.push(1));
+    h.onCustomizeClose(() => closes.push(1));
+    h.setState('title');
+    expect(opens).toHaveLength(0);
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens).toHaveLength(1);
+    expect(closes).toHaveLength(0);
+    root.querySelector('.hud-customize-back')!.dispatchEvent(new MouseEvent('click'));
+    expect(opens).toHaveLength(1);
+    expect(closes).toHaveLength(1);
+  });
+
+  it('unhides the pane BEFORE firing onCustomizeOpen, not after', () => {
+    // Load-bearing for the live preview, even though jsdom cannot see the actual
+    // consequence: game/loop.ts's onCustomizeOpen handler builds the preview and reads
+    // hud.previewCanvas.clientWidth (via render/preview.ts's fit()) to size it. A
+    // canvas still carrying `hud-customize--hidden` at that moment lays out at 0x0 in a
+    // real browser, and fit()'s `|| 1` fallback would silently produce a 1x1 preview --
+    // wrong, not broken, so nothing would throw and no GL check builds a canvas in that
+    // exact hidden state to catch it. This pins the ORDERING that prevents it: by the
+    // time the callback runs, the pane's hidden class is already gone.
+    const { hud: h, root } = mount();
+    let hiddenWhenCallbackFired: boolean | null = null;
+    h.onCustomizeOpen(() => {
+      hiddenWhenCallbackFired = pane(root).classList.contains('hud-customize--hidden');
+    });
     h.setState('title');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(hiddenWhenCallbackFired).toBe(false);
+  });
 
-    // Default: solid skin, `auto` accent -- not an EXPLICIT pick, so no hint.
-    expect(SKINS[0].id).toBe('solid');
-    expect(ACCENTS[0].id).toBe('auto');
-    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(true);
+  it('fires onCustomizeClose on ANY state change while open, not just Back -- the leak this guards', () => {
+    // The common exit from the panel is Start (setState('playing')), which never
+    // touches the Back button. A caller building a live WebGL preview off open/close
+    // (game/loop.ts does) would leak a context down this path if it only fired here.
+    const { hud: h, root } = mount();
+    const closes: number[] = [];
+    h.onCustomizeClose(() => closes.push(1));
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(closes).toHaveLength(0);
+    h.setState('playing');
+    expect(closes).toHaveLength(1);
+  });
 
-    // Explicit accent picked while still on solid: this is the exact case the hint
-    // exists for.
-    h.setAccentColor('gold');
-    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(false);
-
-    // Moving to a patterned skin makes the accent visible again -- hint clears.
-    h.setSkin('camo');
-    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(true);
-
-    // Back to solid with the explicit accent still set: hint returns.
-    h.setSkin('solid');
-    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(false);
-
-    // Reverting to `auto` on solid: nothing left unexplained, hint clears again.
-    h.setAccentColor('auto');
-    expect(hint().classList.contains('hud-accent-hint--hidden')).toBe(true);
+  it('does not fire onCustomizeClose again for state changes AFTER the one that closed it', () => {
+    // setState's guard is `wasOpen`, checked fresh each call -- without it, every
+    // subsequent state change (not just the one that actually closed the panel) would
+    // re-fire the close callback, and a caller disposing a WebGL context on it would
+    // call dispose() on an already-disposed preview.
+    const { hud: h, root } = mount();
+    const closes: number[] = [];
+    h.onCustomizeClose(() => closes.push(1));
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing'); // closes it -- one close
+    h.setState('title');
+    h.setState('paused');
+    expect(closes).toHaveLength(1);
   });
 });

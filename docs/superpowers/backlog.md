@@ -250,6 +250,44 @@ but "some CI job already built this bundle" is not a thing anyone has shown.
 
 ---
 
+## Customize preview residuals, deferred while shipping the live tank preview
+
+**Raised 2026-08-09**, shipping PR #102 (`src/render/preview.ts`, a second WebGL
+context for the Customize panel's live tank preview).
+
+**1. `webglcontextlost` is unhandled, for either renderer, and low-end eviction is
+unmeasured.** The preview's peak-2-contexts design is checked against a typical
+browser's commonly-cited cap (8-16) and against one real Chromium run holding both
+contexts at once — not against actual eviction on constrained hardware, and not
+against how the MAIN game renderer would behave if the browser ever reclaimed its
+context while the preview also held one. Neither `render/renderer.ts` nor
+`render/preview.ts` listens for the event. Needs a measurement (a real low-end
+device, or a forced context loss in a browser) before anyone could write the fix
+with confidence, which is why this is recorded rather than left as an unstated gap.
+
+**2. Preview camera/light-rig constants were chosen by eye, not measured.**
+`PREVIEW_AREA_W`/`PREVIEW_AREA_H`, the camera FOV, and the key/fill/ambient light
+positions in `preview.ts` were tuned against one screenshot, in the spirit of this
+repo's other "feel, not measurement" constants (see CLAUDE.md) — but unlike those,
+nothing here says so at the constant's own definition. Cheap to retune; nobody has
+compared candidates with `npm run gallery --sweep`.
+
+**3. No `npm run gallery` element for the preview.** Every other rendered element
+(tank, mine, shell) has a gallery entry for eyeballing changes without booting the
+full game; the preview does not, so verifying a future retune still means opening
+the real Customize panel by hand or re-running the GL harness.
+
+---
+
+**4. The preview's lens and the arena's are deliberately different, and neither is
+pinned.** `preview.ts`'s `FOV` is 50 while `scene.ts`'s `BASE_FOV` is 30 -- a close-up
+at 30 would push the camera far enough out to read flat. But the two were never
+rendered side by side, and mutating `FOV` 50 -> 30 leaves both gates green (1563 tests,
+39 GL checks), so nothing would catch a change either way. The previous comment claimed
+the two matched and went stale silently when #103 moved `BASE_FOV`; review caught it,
+and the comment now asserts no relationship rather than a false one. Needs eyes, not a
+test. #102
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
