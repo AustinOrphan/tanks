@@ -973,15 +973,33 @@ describe('skins (player texture override)', () => {
     // perfectly continuous. Neither can it see the unroll being applied INWARD. Both of
     // those mutations left the whole suite green before this test existed.
     //
-    // Two independent properties, because no single one catches both mutations:
+    // Two properties, stating different halves of the claim -- the skirt is drawn at the
+    // right SIZE, and it is folded the right WAY:
     //
     //   density  the side walls must be drawn at roughly the authored texel size.
-    //            Zeroing the drop sends this to ~0. Reversing it does NOT -- an inward
-    //            fold still has area -- which is why the second assertion exists.
     //   outward  the UV footprint must be BIGGER than the hull's plan footprint, by
     //            about the body's height on each side, because that is what unrolling a
-    //            skirt outward does. Reversing the drop folds the skirt back over the
-    //            top face instead and the footprint stops growing.
+    //            skirt outward does.
+    //
+    // An earlier version of this comment claimed a division of labour -- that density
+    // catches the zeroed drop and outward catches the reversal, "because no single one
+    // catches both". That is FALSE. Measured by disarming each assertion in turn and
+    // running the other; population: 3 mutations x 2 assertions, all 6 cells run.
+    //
+    //                        density (> 0.5)    outward (> 0.3)
+    //     drop = 0               0.0000  fail      0.0000  fail
+    //     drop reversed          0.1048  fail     -0.0205  fail
+    //     drop x 0.6             0.6010  PASS      0.2236  fail
+    //
+    // So the real division of labour is the other way round from the one claimed:
+    // `outward` is the load-bearing one. It catches a partial unroll -- the skirt folded
+    // the right way but not far enough -- which density passes, because density only
+    // asserts a lower bound and 0.6 clears it.
+    //
+    // `density` is NOT proven load-bearing by this sweep: no mutation was found that it
+    // catches and `outward` misses. It is kept because it states the size half of the
+    // claim directly, and because an over-unroll (drop scaled UP) passes both -- a gap
+    // neither assertion closes, since both are lower bounds.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();

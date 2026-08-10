@@ -429,6 +429,69 @@ describe('createSkinTexture', () => {
       expect(straightEdgeShare('clouds'), 'clouds has grown straight edges -- it will read as pale camo')
         .toBeLessThan(0.10);
     });
+
+    it('camo and clouds TILE: the wrap seam is no busier than the interior', () => {
+      // `skins.ts` says of both generators "Both tile seamlessly", and until this test
+      // that sentence was pinned by nothing but the golden hash -- which fails on ANY
+      // pixel change, so it cannot tell a broken wrap from a re-tune. A tank's hull is
+      // one continuous UV projection, so a tile that does not wrap draws a hard line
+      // across it.
+      //
+      // The measure is the number of tone CHANGES along the joining pair of lines. A
+      // wrapped generator's seam is an ordinary interior boundary and should be in line
+      // with the interior mean; an unwrapped one cuts every feature that crosses it, so
+      // the seam becomes the busiest line in the tile.
+      const seam = (skin: 'camo' | 'clouds', axis: 'col' | 'row'): { wrap: number; interior: number } => {
+        const SZ = 128;
+        const px = pixelsOf(skin, '#3d7bd6', null);
+        const at = (x: number, y: number): string => {
+          const i = (y * SZ + x) * 4;
+          return `${px[i]},${px[i + 1]},${px[i + 2]}`;
+        };
+        // changes between line `a` and the line one step along the axis from it
+        const changes = (a: number): number => {
+          let n = 0;
+          for (let k = 0; k < SZ; k++) {
+            const p = axis === 'col' ? at(a, k) : at(k, a);
+            const q = axis === 'col' ? at((a + 1) % SZ, k) : at(k, (a + 1) % SZ);
+            if (p !== q) n++;
+          }
+          return n;
+        };
+        let sum = 0;
+        for (let a = 0; a < SZ - 1; a++) sum += changes(a);
+        return { wrap: changes(SZ - 1), interior: sum / (SZ - 1) };
+      };
+      // MEASURED on the shipped generators, and on the wrap-broken controls below.
+      //
+      // Every figure below was run; seam count / interior mean, so the ratio is the
+      // number the assertion compares against 4.
+      //
+      //                             camo col    camo row   clouds col  clouds row
+      //   shipped                    7 / 5.86    2 / 5.83    9 / 4.24    1 / 3.93
+      //                                  1.19x       0.34x       2.12x       0.25x
+      //   camo control               75 / 4.91   87 / 4.98    (unmoved)  (unmoved)
+      //     `wrapDelta` returns d       15.3x       17.5x
+      //   clouds control              (unmoved)   (unmoved)  52 / 3.88   33 / 3.49
+      //     `blotches` clips instead                             13.4x       9.5x
+      //     of wrapping
+      //
+      // Both controls are listed because each breaks only its OWN skin -- camo's wrap is
+      // `wrapDelta`, clouds' is the modulo in the lobe loop -- so one control cannot
+      // stand in for the other, and a table with one row would leave the other generator
+      // pinned by nothing again.
+      //
+      // The 4x ceiling sits in the gap: worst shipped is 2.12x, best broken is 9.5x.
+      // Note camo's own row seam (0.34x) is BELOW its interior mean, which is what a
+      // properly wrapped hard-edged tile looks like -- the seam is an ordinary line.
+      for (const skin of ['camo', 'clouds'] as const) {
+        for (const axis of ['col', 'row'] as const) {
+          const { wrap, interior } = seam(skin, axis);
+          expect(wrap, `${skin} does not tile along ${axis}: the seam will draw a line across the hull`)
+            .toBeLessThanOrEqual(4 * interior);
+        }
+      }
+    });
   });
 
   describe('accent (the pattern\'s second tone) is selectable', () => {
