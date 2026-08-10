@@ -44,6 +44,16 @@
  *   npm run mutate -- --manifest tools/mutate/manifest.json
  *   npm run mutate -- --only skins-min-accent-delta-200
  *
+ * Exit codes: 0 clean, every entry matched its declared outcome. 1 ran clean but at
+ * least one entry's actual outcome (or expectFailures count) did not match. 2 refused
+ * to start at all -- a dirty file, an unreachable manifest entry, a probe that could
+ * not determine relatedness, or any other setup-time failure; nothing was touched.
+ * 3 a restore's post-write byte-compare disagreed -- the working tree may genuinely be
+ * mutated, the one code that means "stop and look by hand". 4 some other failure mid-run
+ * (an indeterminate probe, a subprocess timeout) -- the in-flight entry WAS restored
+ * and verified before this surfaced, unlike 3. 130 interrupted (SIGINT/SIGTERM) before
+ * or during a run; whatever was mutated at that point was restored and verified.
+ *
  * See tools/mutate/orchestrate.test.ts for the harness's own tests, including the
  * negative controls this file's own doc comment above promises: a find that does not
  * match must report FAILED-TO-APPLY, and a manifest with a wrong declared outcome
@@ -55,7 +65,7 @@ import { tmpdir } from 'node:os';
 import { join, isAbsolute, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAt, validateManifest, findUnreachableEntries } from './lib.mjs';
-import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES } from './orchestrate.mjs';
+import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFailedError } from './orchestrate.mjs';
 
 // fileURLToPath, not `new URL(...).pathname`: the latter leaves percent-encoding in
 // place (a repo checked out under a path with a space or a non-ASCII character would
@@ -140,18 +150,85 @@ export function unreachableReport(problems) {
   );
 }
 
+/**
+ * Classifies why a `vitest`-spawning subprocess produced no output file, from its
+ * spawnSync result alone (`{ status, signal, error }` -- the shape spawnSync always
+ * returns, real or faked). Pure and exported so it is testable without spawning a
+ * real, deliberately-broken vitest binary per case.
+ *
+ * Three reasons, and they must never be conflated:
+ *
+ *   - 'interrupted': a real SIGINT/SIGTERM reached the child (res.signal is one of
+ *     those), OR vitest caught the signal ITSELF and exited its own way -- measured
+ *     directly: vitest handles SIGINT internally and exits status 130 with signal
+ *     NULL, not by dying from the signal the way an unhandled child would, so
+ *     checking `res.signal` alone misses it. Safe to treat as a graceful stop: this
+ *     classifier only ever runs before anything has been mutated (the reachability
+ *     preflight) or from inside runOne's try/finally (which always restores
+ *     regardless of what this returns).
+ *   - 'timeout': the child was killed by OUR OWN configured killSignal (SIGKILL)
+ *     after SUBPROCESS_TIMEOUT_MS -- checked BEFORE the general interrupted case,
+ *     since SIGKILL is also "a signal". A real, distinct failure that must not be
+ *     silently absorbed as a graceful interruption. (A false positive is possible if
+ *     something else sends SIGKILL, e.g. the OS OOM-killer -- spawnSync's result
+ *     carries no elapsed-time or origin information to distinguish that further, and
+ *     this is not worth a wall-clock measurement to close.)
+ *   - 'indeterminate': anything else -- `res.error` set (the binary could not even be
+ *     launched: deleted, wrong permissions, ENOENT) or a plain nonzero exit with no
+ *     report written (a crash, a broken vitest install). This is the case that was
+ *     previously conflated with "found nothing" -- measured directly (see
+ *     orchestrate.test.ts): a genuinely-empty-but-successful probe (a file nothing
+ *     imports) DOES write a report (`testResults: []`, exit 0, status 0). A MISSING
+ *     report is therefore never a legitimate "found nothing" -- reporting one as such
+ *     is the exact false claim ("nothing tests this file at all") this classifier
+ *     exists to prevent when the true state is "the probe itself never completed".
+ */
+export function classifySubprocessFailure(res) {
+  if (res.signal === SUBPROCESS_KILL_SIGNAL) {
+    return { reason: 'timeout', detail: `killed after ${SUBPROCESS_TIMEOUT_MS}ms with no response` };
+  }
+  if (res.signal != null || res.status === 130) {
+    return { reason: 'interrupted', detail: res.signal ? `signal ${res.signal}` : 'vitest exited 130 (its own SIGINT handling)' };
+  }
+  if (res.error) {
+    return { reason: 'indeterminate', detail: `could not launch vitest: ${res.error.message}` };
+  }
+  return { reason: 'indeterminate', detail: `vitest exited ${res.status} without writing a report` };
+}
+
+/** Turns a classifySubprocessFailure verdict into a thrown, appropriately-flagged
+ *  Error. `.interrupted` is what runOne's catch blocks check; `.timeout` and
+ *  `.indeterminate` are not treated as interruptions anywhere -- they propagate as
+ *  real failures, restored-but-surfaced (see run()'s runManifest catch below). */
+function failureError(verdict, what) {
+  const err = new Error(
+    verdict.reason === 'interrupted'
+      ? `${what} was interrupted (${verdict.detail})`
+      : `${what} failed -- ${verdict.detail}`,
+  );
+  err[verdict.reason] = true; // .interrupted, .timeout, or .indeterminate
+  return err;
+}
+
 const relatedCache = new Map();
 
 /** The set of test files vitest's OWN dependency graph says are related to `file`,
  *  relative to ROOT. One real `vitest related` subprocess per DISTINCT file in the
  *  manifest (cached), run once up front, before anything is mutated -- this is a
- *  manifest-correctness check, not a per-mutation cost. */
-function relatedFilesFor(file) {
-  if (relatedCache.has(file)) return relatedCache.get(file);
+ *  manifest-correctness check, not a per-mutation cost.
+ *
+ *  `vitestBin` is overridable (default: the real binary) so tests can point this at a
+ *  deliberately broken stub without touching the real installation every other test
+ *  in this process depends on -- see orchestrate.test.ts's real end-to-end cases for
+ *  a stub that exits 1 and one that does not exist at all. Exported for the same
+ *  reason: this is the exact function that produced review's false "nothing tests
+ *  this file at all" claim, and it had no test of its own. */
+export function relatedFilesFor(file, vitestBin = join(ROOT, 'node_modules/.bin/vitest')) {
+  const cacheKey = `${vitestBin}\0${file}`;
+  if (relatedCache.has(cacheKey)) return relatedCache.get(cacheKey);
   const outFile = join(tmpdir(), `tanks-mutate-related-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   let related;
   try {
-    const vitestBin = join(ROOT, 'node_modules/.bin/vitest');
     const res = spawnSync(vitestBin, ['related', file, '--run', '--reporter=json', `--outputFile=${outFile}`], {
       cwd: ROOT,
       encoding: 'utf8',
@@ -159,33 +236,14 @@ function relatedFilesFor(file) {
       killSignal: SUBPROCESS_KILL_SIGNAL,
     });
     if (!existsSync(outFile)) {
-      // Two different reasons this file can be missing, and they must not be
-      // conflated: a killed subprocess (res.signal set -- Ctrl+C during the
-      // preflight, or the timeout above) is an ABORTED probe and must not be read as
-      // "found nothing related", which would wrongly refuse every entry touching
-      // this file as unreachable. Only a normal exit with nothing written (vitest's
-      // own "no test files found" case) is legitimately zero related files.
-      if (res.signal) {
-        const err = new Error(`vitest related was interrupted (signal ${res.signal}) while probing ${file}`);
-        // Set directly from the subprocess's own signal, not from the module-level
-        // `interrupted` flag -- that flag is set by a SIGINT/SIGTERM handler, whose
-        // JS callback Node dispatches on the next event-loop tick, not synchronously
-        // with spawnSync unblocking. Checking the flag immediately after this throw
-        // would race it and, measured live, sometimes lose: the flag can still read
-        // false at the exact moment the catch runs, even though this IS why we are
-        // here. res.signal carries the fact directly, with no such race.
-        err.interrupted = true;
-        throw err;
-      }
-      related = new Set();
-    } else {
-      const report = JSON.parse(readFileSync(outFile, 'utf8'));
-      related = new Set((report.testResults ?? []).map((r) => relative(ROOT, r.name).split('\\').join('/')));
+      throw failureError(classifySubprocessFailure(res), `vitest related, probing ${file},`);
     }
+    const report = JSON.parse(readFileSync(outFile, 'utf8'));
+    related = new Set((report.testResults ?? []).map((r) => relative(ROOT, r.name).split('\\').join('/')));
   } finally {
     rmSync(outFile, { force: true });
   }
-  relatedCache.set(file, related);
+  relatedCache.set(cacheKey, related);
   return related;
 }
 
@@ -207,16 +265,7 @@ export function runTestsReal(testFiles) {
       killSignal: SUBPROCESS_KILL_SIGNAL,
     });
     if (!existsSync(outFile)) {
-      const err = new Error(
-        `vitest produced no report (exit ${res.status}, signal ${res.signal}). stderr:\n${(res.stderr ?? '').slice(0, 2000)}`,
-      );
-      // See relatedFilesFor's identical comment: `.interrupted` is set from res.signal
-      // directly (this subprocess's own outcome), not from the separately-scheduled
-      // `interrupted` module flag, which is not guaranteed to be set yet at this point
-      // even when a signal IS what caused this -- measured, not assumed: a live SIGINT
-      // run landed here with that flag still reading false.
-      if (res.signal) err.interrupted = true;
-      throw err;
+      throw failureError(classifySubprocessFailure(res), 'vitest run');
     }
     const report = JSON.parse(readFileSync(outFile, 'utf8'));
     return {
@@ -252,28 +301,42 @@ export function formatResult(result, index, count, entry) {
 // parseArgs/formatResult/dirtyReport/runTestsReal) by orchestrate.test.ts, which runs
 // inside the NORMAL `npm test` vitest process -- installing a SIGINT/SIGTERM handler at
 // import time would suppress that outer process's own Ctrl+C handling too.
-let interrupted = false;
+//
+// What this handler does NOT do, despite an earlier draft's comment claiming it: it
+// does not make the harness respond to a signal WHILE a mutation is in flight. Measured
+// live: the handler's own log line printed in 0 of 10 SIGINT trials. The reason is
+// structural, not a bug in the handler -- `run()` and everything it calls (runManifest,
+// runOne, the vitest spawnSync calls) is fully synchronous, and Node cannot dispatch a
+// registered signal handler's JS callback until the current synchronous call stack
+// unwinds. For a multi-entry run, that means "not until the whole run has already
+// finished" -- by which point there is nothing left to interrupt.
+//
+// What this handler DOES do, and the only reason it exists: a blocking spawnSync child
+// (vitest) shares the foreground process group, so Ctrl+C reaches it directly too, and
+// the child dies on ITS OWN disposition (or, for vitest specifically, its own SIGINT
+// handling -- see classifySubprocessFailure). spawnSync then returns to us with a
+// result whose signal/status IS the real interruption signal, checked synchronously,
+// with no race. Registering ANY handler here changes this process's OWN kernel-level
+// signal disposition the moment `process.on` is called (a synchronous effect, unlike
+// the JS callback body) -- without it, Node's default SIGINT action would terminate
+// THIS process outright, at the OS's discretion, possibly before spawnSync unblocks
+// and runOne's `finally` (the restore) ever runs. So the handler's real job is narrow:
+// stay alive long enough to finish restoring, nothing more.
+let secondSignal = false;
 function installSignalHandlers() {
-  // A blocking spawnSync child (vitest) shares the foreground process group, so
-  // Ctrl+C reaches it too and it dies on its own default disposition -- spawnSync
-  // then returns to us (runTestsReal throws, since the child never wrote its report)
-  // and runOne recognises `shouldStop()` is now true and returns a clean INTERRUPTED
-  // result instead of letting that exception escape as if the restore itself had
-  // failed. Registering a handler here does not (and cannot) interrupt the blocking
-  // call itself; its job is narrower and just as necessary: without ANY handler,
-  // Node's default SIGINT action would kill THIS process outright, at the OS's
-  // discretion, possibly before spawnSync unblocks and runOne's finally runs. With a
-  // handler installed, the default action is suppressed and we merely set a flag.
   function onSignal(sig) {
-    if (interrupted) {
-      // second Ctrl+C: stop being polite and let the default action kill us.
+    if (secondSignal) {
+      // second Ctrl+C: stop being polite and let the default action kill us. (Since
+      // the first press's callback could not run until the synchronous work below
+      // returns either, THIS callback is subject to the identical delay -- but by
+      // the time it does run, the run is over one way or another, so "kill us now"
+      // is always safe.)
       process.removeListener('SIGINT', onSignal);
       process.removeListener('SIGTERM', onSignal);
       process.kill(process.pid, sig);
       return;
     }
-    interrupted = true;
-    console.error(`\nreceived ${sig} -- letting the in-flight mutation finish and restore, then stopping`);
+    secondSignal = true;
   }
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
@@ -292,7 +355,11 @@ async function run() {
     process.exit(2);
   }
 
-  const files = [...new Set(entries.map((e) => e.file))];
+  // Every `tests` path too, not just `file`: a dirty-but-passing test file would
+  // otherwise silently fold someone's uncommitted WIP into the baseline and
+  // post-mutation counts, unnoticed because it never flips killed/survives on its
+  // own -- only the exact numbers would be wrong, and wrong quietly.
+  const files = [...new Set(entries.flatMap((e) => [e.file, ...e.tests]))];
   assertAllClean(files);
 
   // Reachability preflight: refuse to start (nothing mutated yet) if any entry's
@@ -300,15 +367,17 @@ async function run() {
   // per distinct file, cached. Nothing is mutated yet at this point either way, so an
   // interruption here is always safe -- report it plainly (exit 130, matching the
   // interrupted-mid-run exit code) rather than letting it surface as a confusing
-  // "these entries are unreachable" refusal, which is what a killed `vitest related`
-  // subprocess would look like without the signal check inside relatedFilesFor.
+  // "these entries are unreachable" refusal, which is what a failed `vitest related`
+  // probe would otherwise look like (see classifySubprocessFailure/relatedFilesFor).
+  // An INDETERMINATE probe (not interrupted, just failed -- a broken vitest install,
+  // a deleted binary) is deliberately NOT distinguished from any other setup failure
+  // here: it falls through to main()'s catch and reports "could not determine which
+  // tests relate to ..." at exit 2, which is honest about not knowing, rather than
+  // "nothing tests this file" (a confident, false, zero-coverage claim).
   let unreachable;
   try {
     unreachable = findUnreachableEntries(entries, relatedFilesFor);
   } catch (e) {
-    // Checked on the error itself (set from the killed subprocess's own res.signal in
-    // relatedFilesFor), not the module-level `interrupted` flag -- see that function's
-    // comment for why the flag alone is not safe to trust at this exact point.
     if (e?.interrupted) {
       console.error(`\ninterrupted during the reachability preflight; nothing was mutated`);
       process.exitCode = 130;
@@ -329,16 +398,28 @@ async function run() {
     restoreToDisk: (file, content) => writeFileSync(join(ROOT, file), content),
     runTests: runTestsReal,
     onResult: (result, index, count, entry) => console.log(formatResult(result, index, count, entry)),
-    shouldStop: () => interrupted,
   };
 
   let results;
   try {
     results = runManifest(entries, deps, applyAt);
   } catch (e) {
-    console.error('\nFATAL:', e.message ?? e);
-    console.error('Stopped early -- check `git status` / `git diff` for the file named above before doing anything else.');
-    process.exitCode = 3;
+    if (e instanceof RestoreFailedError) {
+      // The one truly alarming case: the post-mutation byte-compare disagreed, so the
+      // working tree really may be left mutated. Exit 3 is reserved for exactly this.
+      console.error('\nFATAL:', e.message);
+      console.error('Stopped early -- check `git status` / `git diff` for the file named above before doing anything else.');
+      process.exitCode = 3;
+      return;
+    }
+    // Any other exception that reached here (an indeterminate probe failure, a
+    // subprocess timeout, an unexpected crash) still passed through runOne's
+    // try/finally -- so the entry in progress WAS restored and byte-verified before
+    // this surfaced. Real failure, worth stopping for, but not the "the tree may be
+    // mutated" emergency exit 3 means -- a distinct code so the two are never conflated.
+    console.error('\nERROR (mid-run):', e?.message ?? e);
+    console.error('The file being mutated when this happened was restored and verified before this error surfaced.');
+    process.exitCode = 4;
     return;
   }
 

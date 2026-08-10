@@ -38,12 +38,16 @@
  * report SURVIVES; and a suite that fails to COLLECT under a mutation must count as
  * killed even when it drives `failed`/`total` to 0.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync, chmodSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
-import { parseArgs, formatResult, dirtyReport, unreachableReport, resolveManifestPath, runTestsReal } from './run.mjs';
+import {
+  parseArgs, formatResult, dirtyReport, unreachableReport, resolveManifestPath, runTestsReal,
+  classifySubprocessFailure, relatedFilesFor,
+} from './run.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 
@@ -477,15 +481,13 @@ describe('runManifest', () => {
     expect(deps.readFile).toHaveBeenCalledTimes(2);
   });
 
-  it('shouldStop, checked between entries, halts before any of them starts', () => {
-    const deps = fakeDeps({ extraDeps: { shouldStop: () => true } });
-    const entries = [entry({ id: 'a' }), entry({ id: 'b' })];
-    const results = runManifest(entries, deps, applyAt);
-    expect(results).toEqual([]);
-    expect(deps.onResult).not.toHaveBeenCalled();
-    expect(deps.readFile).not.toHaveBeenCalled();
-  });
-
+  // There is deliberately no "shouldStop, checked between entries" test here anymore.
+  // An earlier draft had a `deps.shouldStop()` poll at the top of the loop and a test
+  // for it -- removed together, on evidence: `runManifest` is fully synchronous, so a
+  // signal handler's flag can never actually flip before a whole run either finishes
+  // or the in-flight child dies (see orchestrate.mjs's file-level comment and
+  // run.mjs's installSignalHandlers). The test below is the mechanism that DOES work,
+  // proven live in run.mjs's real SIGINT trials.
   it('an INTERRUPTED result stops the loop WITHOUT throwing -- distinct from a RestoreFailedError, which does throw', () => {
     const deps = fakeDeps({
       runTests: () => {
@@ -611,6 +613,58 @@ describe('findUnreachableEntries + unreachableReport (the scoped-tests-must-reac
   });
 });
 
+describe('classifySubprocessFailure (review found this exact gap: a missing report was always read as "found nothing")', () => {
+  // The three cases review proved produce the identical false claim with the OLD
+  // code: a stub that exits 1 with stderr, a deleted/missing binary (spawnSync sets
+  // res.error), and -- proven separately, see the real end-to-end case below -- a
+  // genuinely empty but SUCCESSFUL probe, which is the ONLY one of the three that
+  // should ever be read as "nothing related". All three must be distinguishable from
+  // each other, not just from success.
+
+  it('a stub that exits 1 (no signal, no spawn error) is indeterminate, NOT zero coverage', () => {
+    const v = classifySubprocessFailure({ status: 1, signal: null, error: undefined });
+    expect(v.reason).toBe('indeterminate');
+    expect(v.detail).toMatch(/exited 1/);
+  });
+
+  it('a missing/undeletable binary (spawnSync sets res.error, res.status stays null) is indeterminate', () => {
+    const v = classifySubprocessFailure({ status: null, signal: null, error: new Error('spawn ENOENT') });
+    expect(v.reason).toBe('indeterminate');
+    expect(v.detail).toMatch(/could not launch vitest: spawn ENOENT/);
+  });
+
+  it('a real SIGINT/SIGTERM (res.signal set) is interrupted, not indeterminate', () => {
+    const v = classifySubprocessFailure({ status: null, signal: 'SIGINT', error: undefined });
+    expect(v.reason).toBe('interrupted');
+    expect(v.detail).toMatch(/signal SIGINT/);
+  });
+
+  it('vitest handling SIGINT itself -- status 130, signal null -- is ALSO interrupted, not indeterminate: this is the exact miss review measured (9 of 12 live SIGINT trials misread this shape as FATAL)', () => {
+    const v = classifySubprocessFailure({ status: 130, signal: null, error: undefined });
+    expect(v.reason).toBe('interrupted');
+  });
+
+  it('our OWN timeout kill (signal === the configured killSignal, SIGKILL) is a DISTINCT "timeout" reason, not folded into "interrupted"', () => {
+    const v = classifySubprocessFailure({ status: null, signal: 'SIGKILL', error: undefined });
+    expect(v.reason).toBe('timeout');
+  });
+
+  it('all four failure shapes are pairwise distinguishable', () => {
+    const shapes = [
+      { status: 1, signal: null, error: undefined },
+      { status: null, signal: null, error: new Error('spawn ENOENT') },
+      { status: null, signal: 'SIGINT', error: undefined },
+      { status: null, signal: 'SIGKILL', error: undefined },
+    ];
+    const reasons = shapes.map((s) => classifySubprocessFailure(s).reason);
+    expect(reasons).toEqual(['indeterminate', 'indeterminate', 'interrupted', 'timeout']);
+    // The two 'indeterminate' cases still carry different `detail` text, so they are
+    // not silently merged into one message either.
+    const details = shapes.filter((_, i) => reasons[i] === 'indeterminate').map((s) => classifySubprocessFailure(s).detail);
+    expect(details[0]).not.toBe(details[1]);
+  });
+});
+
 describe('formatResult', () => {
   const e = { expect: 'killed', equivalent: false };
 
@@ -664,6 +718,20 @@ describe('formatResult', () => {
 
 describe('end-to-end: real apply -> real vitest subprocess -> real restore', () => {
   const fixturesDir = join(ROOT, 'tools/mutate/fixtures');
+
+  // Self-healing safety net: every fixture below is cleaned up in its own `finally`,
+  // but a genuinely CRASHED run (the process killed outright, not just a failing
+  // assertion) skips finally blocks too. A leftover `tmp-e2e-*.test.ts` matches
+  // vite.config.ts's `tools/**/*.test.ts` include glob, so the NEXT `npm test` would
+  // silently pick it up and run it as if it were a real suite member. Swept once, up
+  // front, for ANY pid's leftovers -- not just this process's own, since the whole
+  // point is defending against a PREVIOUS run that never got to clean up.
+  beforeAll(() => {
+    if (!existsSync(fixturesDir)) return;
+    for (const f of readdirSync(fixturesDir)) {
+      if (f.startsWith('tmp-e2e-')) rmSync(join(fixturesDir, f), { force: true });
+    }
+  });
 
   function makeFixture(greeting: string) {
     const id = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -814,5 +882,100 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
       ? readdirSync(fixturesDir).filter((f) => f.startsWith(mine))
       : [];
     expect(left).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end: relatedFilesFor against REAL broken subprocesses -- this is the exact
+// function and the exact bug review found live (its own environment mismatch turned
+// out to be a real code defect): a probe that fails for ANY non-signal reason fell
+// through to `related = new Set()`, so it reported "nothing tests this file at all"
+// instead of admitting it could not tell. Reproduced here with real stub binaries,
+// not fakes, to prove the actual spawnSync/existsSync wiring, not just the pure
+// classifier tested above.
+// ---------------------------------------------------------------------------
+
+describe('relatedFilesFor against real broken subprocesses (the exact function and bug review found)', () => {
+  const scratchDir = join(tmpdir(), `tanks-mutate-relatedFilesFor-test-${process.pid}`);
+
+  afterAll(() => {
+    rmSync(scratchDir, { recursive: true, force: true });
+  });
+
+  function makeStub(script: string): string {
+    mkdirSync(scratchDir, { recursive: true });
+    const path = join(scratchDir, `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sh`);
+    writeFileSync(path, script);
+    chmodSync(path, 0o755);
+    return path;
+  }
+
+  it('a stub vitest that prints to stderr and exits 1 throws .indeterminate -- NOT an empty (silently "nothing tests this file") Set', () => {
+    const stub = makeStub('#!/bin/sh\necho "stub vitest: simulated crash" >&2\nexit 1\n');
+    let caught: unknown;
+    try {
+      relatedFilesFor('src/render/skins.ts::stub-exit-1', stub);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error & { indeterminate?: boolean }).indeterminate).toBe(true);
+    expect((caught as Error).message).toMatch(/could not determine which tests relate to|failed --/);
+    expect((caught as Error).message).not.toMatch(/interrupted/);
+  });
+
+  it('a missing vitest binary (spawnSync sets res.error, ENOENT) throws .indeterminate too -- proven by literally deleting the target, matching review\'s own reproduction', () => {
+    const missing = join(scratchDir, `does-not-exist-${Date.now()}.sh`);
+    expect(existsSync(missing)).toBe(false); // never created
+    let caught: unknown;
+    try {
+      relatedFilesFor('src/render/skins.ts::missing-binary', missing);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error & { indeterminate?: boolean }).indeterminate).toBe(true);
+  });
+
+  it('a stub that exits 130 with no signal (vitest\'s own SIGINT handling) throws .interrupted, not .indeterminate', () => {
+    const stub = makeStub('#!/bin/sh\nexit 130\n');
+    let caught: unknown;
+    try {
+      relatedFilesFor('src/render/skins.ts::stub-130', stub);
+    } catch (e) {
+      caught = e;
+    }
+    expect((caught as Error & { interrupted?: boolean }).interrupted).toBe(true);
+  });
+
+  it('a genuinely empty but SUCCESSFUL probe (a real file nothing imports, against the REAL vitest binary) returns an empty Set -- this is the ONLY one of the four cases that legitimately means "nothing related"', () => {
+    const orphanRel = `tools/mutate/fixtures/tmp-e2e-orphan-${process.pid}-${Date.now()}.ts`;
+    const orphanAbs = join(ROOT, orphanRel);
+    mkdirSync(join(ROOT, 'tools/mutate/fixtures'), { recursive: true });
+    writeFileSync(orphanAbs, 'export const nothingImportsThis = 1;\n');
+    try {
+      const related = relatedFilesFor(orphanRel); // real vitest binary (default param)
+      expect(related).toEqual(new Set());
+    } finally {
+      rmSync(orphanAbs, { force: true });
+    }
+  });
+
+  it('the four failure/success shapes are pairwise distinguishable end to end, not just in the pure classifier', () => {
+    const crashStub = makeStub('#!/bin/sh\necho crash >&2\nexit 1\n');
+    const sigintStub = makeStub('#!/bin/sh\nexit 130\n');
+    const missing = join(scratchDir, 'nope.sh');
+
+    const outcomes: string[] = [];
+    for (const [label, bin] of [['crash', crashStub], ['missing', missing], ['sigint', sigintStub]] as const) {
+      try {
+        relatedFilesFor(`src/render/skins.ts::pairwise-${label}`, bin);
+        outcomes.push('ok');
+      } catch (e) {
+        const err = e as Error & { interrupted?: boolean; indeterminate?: boolean };
+        outcomes.push(err.interrupted ? 'interrupted' : err.indeterminate ? 'indeterminate' : 'other');
+      }
+    }
+    expect(outcomes).toEqual(['indeterminate', 'indeterminate', 'interrupted']);
   });
 });

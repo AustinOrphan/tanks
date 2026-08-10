@@ -24,18 +24,18 @@
  *                                  contributed 0 to `failed`/`total`. See isRed and
  *                                  suiteNote below.
  *   onResult(result, index, count, entry) -> void  (called once per entry, for streaming)
- *   shouldStop()                -> boolean, optional, checked BETWEEN entries only. NOT
- *                                  used to interpret a runTests throw (see below) -- a
- *                                  process-wide "was a signal received" flag is set by a
- *                                  Node signal handler, which is dispatched on the NEXT
- *                                  event-loop tick, not synchronously with the blocking
- *                                  subprocess call unwinding -- so checking it immediately
- *                                  after a throw is a real race, measured to actually
- *                                  lose in practice (a live SIGINT test landed with the
- *                                  flag still false at the moment of the catch). Instead,
- *                                  a runTests rejection that was caused by an interrupted
- *                                  subprocess must set `.interrupted = true` on the Error
- *                                  it throws -- runOne checks THAT, not shouldStop().
+ *
+ * There is deliberately NO `shouldStop()`-style poll checked between entries. An
+ * earlier draft had one, on the theory that a signal handler could flip a flag the
+ * loop would notice between iterations. Measured false: `runManifest` (and everything
+ * it calls) is fully synchronous end to end, and Node cannot dispatch a signal
+ * handler's JS callback until the current synchronous stack unwinds -- which, for a
+ * multi-entry run, means "not until the whole run has already finished". A live
+ * SIGINT test confirmed the handler's own log line printed in 0 of 10 trials. The
+ * ONLY interruption signal that is real is the child subprocess's own exit info
+ * (`res.signal`, or vitest's own SIGINT handling exiting status 130): `deps.runTests`
+ * must set `.interrupted = true` on the Error it throws when THAT is why it failed,
+ * and runOne checks the error, not a flag. See run.mjs's classifySubprocessFailure.
  */
 
 export const STATUS = {
@@ -256,7 +256,6 @@ export function runOne(entry, deps, applyAt) {
 export function runManifest(entries, deps, applyAt) {
   const results = [];
   for (let i = 0; i < entries.length; i++) {
-    if (deps.shouldStop && deps.shouldStop()) break;
     const entry = entries[i];
     let result;
     try {
@@ -272,8 +271,8 @@ export function runManifest(entries, deps, applyAt) {
     }
     deps.onResult(result, i + 1, entries.length, entry);
     results.push(result);
-    // An INTERRUPTED result means shouldStop() just went true (that is the only way
-    // runOne returns it) -- stop here rather than looping once more to re-check it.
+    // An INTERRUPTED result is the one reliable interruption signal (see the deps
+    // doc comment above) -- stop here rather than starting a further, riskier entry.
     if (result.status === STATUS.INTERRUPTED) break;
   }
   return results;
