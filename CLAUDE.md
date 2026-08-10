@@ -15,7 +15,11 @@ npm run trace:browser -- --all                              # the golden trace, 
 ```
 
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
-through the REAL render modules against a REAL world. Views are directions and each
+through the REAL render modules against a REAL world. `--skin`/`--hull`/`--accent` dress
+the player tank through the game's own `setPlayerStyle`, and `--frames N` gives an
+animated skin a timeline (one age step is one sim tick — `subjects.ts`'s `timelineDt`);
+without those the gallery drew the roster default, unmapped, and could not show a skin at
+all. Views are directions and each
 element declares its own span, so any view frames any scene. `--sweep A,B --values
 "1|2; 3|4"` patches constants in `src/` between passes and restores them in a `finally`;
 it refuses to start if the target file is already dirty. `--scene game --slowmo 0.05
@@ -123,6 +127,20 @@ FNV-1a fingerprint of all four sim data files — balance, tank-defs, ai-profile
 artefact. It does **not** cover CODE: a change to `targeting.ts` diverges a replay with the
 fingerprint unchanged, so a mismatch proves a trace is stale while a match does not prove
 it is fresh.
+
+**The RENDER ANIMATION CLOCK is a second clock, and it is now named and decided.** The sim
+is fixed-step and never sees wall time; the render layer does, as the `dt` `driver.ts`
+hands `renderer.render`, which forwards it to **two** consumers — `entities.sync` (an
+animated skin's texture scroll, gated on `dt > 0`) and `particles.update`. `frame.ts`'s
+`animationDt(dt, state)` decides how much of it a frame gets: **it runs whenever the game
+is not `paused`**. Pause is the one non-simulating state a player enters deliberately to
+make the board hold still, so the cosmetics stop with it; `splash`/`title` keep a live
+board behind the menu, and `win`/`lose` arrive mid-explosion, where freezing would hang
+debris in the air. Before it was named, the answer was "always, silently" — an unstated
+consequence of the non-playing branch dropping the accumulator but still forwarding
+`plan.dt`, asserted nowhere. `frame.test.ts` pins the rule and `driver.test.ts` pins that
+the driver applies it, the same split `renderAlpha` has. It must stay out of `src/sim/`:
+a wall clock there would break replay.
 
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose

@@ -22,6 +22,7 @@ import { createMusicBed } from '../../src/audio/music';
 import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview } from '../../src/render/preview';
+import { buildGallery, type GalleryOptions } from '../gallery/subjects';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -934,6 +935,83 @@ check('a disposed preview stops listening to the canvas it no longer owns', () =
 });
 
 // ---------------------------------------------------------------------------
+// tools/gallery/subjects.ts: that the gallery can show a SKIN, and an animated one.
+//
+// Here rather than in vitest for the usual reason -- `buildGallery` constructs a
+// WebGLRenderer -- and worth having at all because the gallery is what every future
+// skin change is supposed to be reviewed through. Until now it drew the roster default,
+// unmapped, and `views.sync(prev, curr, alpha)` left `dt` at its default 0, so an
+// animated skin could not move even if one had been selected.
+//
+// Both checks are pixel comparisons against a CONTROL that must NOT move, because
+// "some bytes changed" on its own is satisfied by any wobble in the scene.
+// ---------------------------------------------------------------------------
+
+function galleryCanvas(w = 320, h = 240): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  c.style.width = `${w}px`;
+  c.style.height = `${h}px`;
+  document.body.appendChild(c);
+  return c;
+}
+
+function galleryOpts(over: Partial<GalleryOptions>): GalleryOptions {
+  return {
+    elements: ['tank'], view: 'close', reach: false, timer: false, fill: false,
+    skin: 'solid', hull: '#3d7bd6', accent: null, frames: null, ...over,
+  };
+}
+
+check('the gallery paints the chosen skin onto the tank it renders', () => {
+  const a = galleryCanvas();
+  const b = galleryCanvas();
+  const plain = buildGallery(a, a.width, a.height, galleryOpts({ skin: 'solid' }));
+  const skinned = buildGallery(b, b.width, b.height, galleryOpts({ skin: 'checker' }));
+  plain.draw(0, 0);
+  skinned.draw(0, 0);
+  const glA = (a.getContext('webgl2') ?? a.getContext('webgl')) as WebGLRenderingContext;
+  const glB = (b.getContext('webgl2') ?? b.getContext('webgl')) as WebGLRenderingContext;
+  const solid = grab(glA, a.width, a.height);
+  const checker = grab(glB, b.width, b.height);
+  plain.dispose();
+  skinned.dispose();
+  a.remove();
+  b.remove();
+  const moved = bytesDiffering(solid, checker);
+  // Same hull colour, same pose, same camera: the ONLY difference is the mapped
+  // texture, so 0 here means setPlayerStyle never reached the tank -- which is exactly
+  // what the gallery did before, with no way to tell from a screenshot.
+  if (moved < 1000) return `only ${moved} of ${solid.length} bytes differ between solid and checker -- the skin is not being applied`;
+  return null;
+});
+
+check('the gallery advances an ANIMATED skin along its timeline, and only an animated one', () => {
+  // 600 age steps is 10 seconds of ticks (see timelineDt): `flow` scrolls 0.08 of a
+  // tile per second, so 0.8 of a tile -- unmistakable. The `checker` half is the
+  // control and it is the load-bearing half: the tank element ignores `age` entirely,
+  // so a static skin MUST come back byte-identical, and any pixel difference there
+  // would mean the flow result proves nothing about scrolling.
+  const results: string[] = [];
+  for (const [skin, mustMove] of [['flow', true], ['checker', false]] as const) {
+    const c = galleryCanvas();
+    const g = buildGallery(c, c.width, c.height, galleryOpts({ skin }));
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    g.draw(0, 0);
+    const before = grab(gl, c.width, c.height);
+    g.draw(600, 0);
+    const after = grab(gl, c.width, c.height);
+    g.dispose();
+    c.remove();
+    const moved = bytesDiffering(before, after);
+    if (mustMove && moved < 1000) results.push(`${skin}: only ${moved} of ${before.length} bytes moved over 600 ticks -- the skin is not scrolling`);
+    if (!mustMove && moved !== 0) results.push(`${skin}: ${moved} bytes moved over 600 ticks, but nothing in this scene animates but the skin`);
+  }
+  return results.length > 0 ? results.join('; ') : null;
+});
+
+// ---------------------------------------------------------------------------
 // The idle spin, on the REAL requestAnimationFrame.
 //
 // Everything above this line is synchronous, which is why these are separate: no rAF
@@ -972,7 +1050,7 @@ await checkAsync('the idle spin actually turns the tank on the real rAF', async 
   return null;
 });
 
-await checkAsync('the idle spin stops at the first interaction and does not drift back on its own', async () => {
+await checkAsync('the idle spin stops at the first interaction and does not drift back on its own, for a NON-ANIMATED skin', async () => {
   // The claim the whole design rests on -- a preview that resumes drifting under
   // someone trying to look at one face is the failure this is written to avoid --
   // and until now it was asserted only against an injected raf/cancelRaf pair.
@@ -982,10 +1060,18 @@ await checkAsync('the idle spin stops at the first interaction and does not drif
   // and IDLE_RESUME_DELAY_MS of quiet. Neither happens inside this window -- no
   // pointerleave is dispatched and 500ms is far short of the delay -- so a spin that
   // came back here is one that never stopped.
+  //
+  // THE SKIN QUALIFIER IS ALSO LOAD-BEARING. "0 bytes change after a hover" used to be
+  // unconditional, and it was safe to state that way only because `preview.ts` passed a
+  // hardwired `dt = 0`: selecting `flow` could not have moved a pixel. Now that it can,
+  // this check is about the SPIN, and it says so -- with the static skin selected
+  // explicitly rather than relying on a freshly built preview happening to have no skin
+  // at all. The animated case is two checks below, and it asserts the opposite.
   const c = previewCanvas();
   const preview = createTankPreview(c);
   if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  preview.setStyle('#3d7bd6', 'checker', null);
   c.dispatchEvent(pointerAt('pointermove', c, 70, 0));
   // Let a frame or two go by first: the cancel happens inside the event handler, but
   // a callback already scheduled for this frame may still be in flight.
@@ -997,6 +1083,125 @@ await checkAsync('the idle spin stops at the first interaction and does not drif
   c.remove();
   const moved = bytesDiffering(settled, later);
   if (moved !== 0) return `${moved} bytes changed 500ms after a hover -- the spin restarted or never stopped`;
+  return null;
+});
+
+await checkAsync('a STATIC skin schedules NO frames once the spin has stopped', async () => {
+  // The check above says the pixels come to rest. This one says the panel stops ASKING
+  // for frames, which is a different fact and the one `preview.ts` actually claims:
+  // "picking a static one stops it, so an untouched panel showing `solid` costs no
+  // frames at all once the idle spin ends" (and `backlog.md` entry 5 says the same).
+  //
+  // Nothing pinned it, and the gap was real: `controls.setAnimating(true)` written
+  // unconditionally in `preview.ts` passed 1741 of 1743 vitest cases (2 skipped) and all
+  // 50 GL checks. Every byte-level probe is blind to it by construction -- a static skin
+  // repainted forever changes zero bytes, which is exactly what `afterStatic === 0`
+  // asserts next door. The observable that is NOT blind is the frame request itself.
+  //
+  // An earlier draft of the disclosure claimed this needed an observable `TankPreview`
+  // does not expose. That was wrong: `window.requestAnimationFrame` is the observable,
+  // and it is already reachable from here. UNTESTED and UNFALSIFIABLE are different
+  // claims and this one was only the former.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  preview.setStyle('#3d7bd6', 'checker', null);
+  c.dispatchEvent(pointerAt('pointermove', c, 70, 0));
+  // The spin's cancel happens inside the event handler, but a callback already scheduled
+  // for this frame may still be in flight and will reschedule once before it sees the
+  // stop. Counting starts after that has settled -- same reason as the check above.
+  await idle(100);
+  const real = window.requestAnimationFrame;
+  let scheduled = 0;
+  window.requestAnimationFrame = function (cb: FrameRequestCallback): number {
+    scheduled++;
+    return real.call(window, cb);
+  };
+  try {
+    await idle(400);
+  } finally {
+    // Restored in a finally: leaving a counting wrapper on `window` would silently
+    // follow every later check in this file.
+    window.requestAnimationFrame = real;
+  }
+  preview.dispose();
+  c.remove();
+  // Measured on this harness, both ends: 0 as shipped, 24 with `setAnimating(true)`
+  // written unconditionally. Asserted at exactly 0 rather than at a threshold, because
+  // "stops asking" is the claim -- one frame per 400ms would still be a live loop.
+  if (scheduled !== 0) {
+    return `${scheduled} frames scheduled in 400ms with a static skin -- the panel never stops repainting`;
+  }
+  return null;
+});
+
+await checkAsync('an ANIMATED skin keeps repainting after the spin has stopped', async () => {
+  // The whole of issue #122, measured where it lives. `flow` is the one animated skin
+  // the game ships, and the panel where a player decides whether to wear it showed it
+  // frozen: `preview.ts` passed a literal `dt = 0` and `entities.ts` gates the scroll on
+  // `dt > 0`. Nothing under vitest can see this -- preview.ts returns null in jsdom.
+  //
+  // Same shape as the check above and the opposite expectation, deliberately: the two
+  // together say the spin stopped and the skin did not.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  preview.setStyle('#3d7bd6', 'flow', null);
+  c.dispatchEvent(pointerAt('pointermove', c, 70, 0));
+  await idle(100); // let the spin's last in-flight frame land
+  const settled = grab(gl, c.width, c.height);
+  await idle(500);
+  const later = grab(gl, c.width, c.height);
+  // ...and then a static skin must come to rest. This half is the CONTROL for the half
+  // above -- it is what makes "23584 bytes changed" mean the skin and not some other
+  // repaint (a spin that never stopped would move bytes here too).
+  //
+  // It earns its place: dropping `idle = false` from `stopIdle` fails HERE at 27983
+  // bytes while the "stops for good" check above still passes, because with no animated
+  // skin that same mutation still cancels the frame.
+  //
+  // What it does NOT prove, stated because the obvious reading is wrong: it cannot tell
+  // "the loop stopped" from "the loop is running and drawing the same thing", since a
+  // static skin repainted forever changes zero bytes. Mutating `entities.setPlayerStyle`
+  // to leave a stale `playerScroll` behind leaves this GREEN, because `setAnimating`
+  // has already stopped the clock. The loop's cancellation is asserted where it can be
+  // seen -- preview-controls.test.ts, against the handle `cancelRaf` was handed.
+  preview.setStyle('#3d7bd6', 'checker', null);
+  await idle(100);
+  const stat0 = grab(gl, c.width, c.height);
+  await idle(500);
+  const stat1 = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  const scrolled = bytesDiffering(settled, later);
+  const afterStatic = bytesDiffering(stat0, stat1);
+  // 500ms at scroll u = 0.08 is 0.04 of a tile -- about 5 of the tile's 128 texels,
+  // several screen pixels of pattern on a hull this size. Measured on this harness:
+  // 23584 of 197600 bytes with the skin animating, 0 once `checker` is selected.
+  if (scrolled < 1000) return `only ${scrolled} of ${settled.length} bytes changed in 500ms -- the animated skin is frozen`;
+  if (afterStatic !== 0) return `${afterStatic} bytes changed 500ms after switching to a static skin -- something is still moving`;
+  return null;
+});
+
+await checkAsync('a disposed preview stops an ANIMATED skin too', async () => {
+  // dispose() cancels the pending frame; the animation clock is a second reason for
+  // that frame to exist, and a `dispose` that only cleared `idle` would leave a rAF
+  // loop running against a torn-down renderer for the rest of the session -- once per
+  // Customize close, for anyone wearing `flow`.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  preview.setStyle('#3d7bd6', 'flow', null);
+  await idle(100);
+  preview.dispose();
+  const before = grab(gl, c.width, c.height);
+  await idle(500);
+  const after = grab(gl, c.width, c.height);
+  c.remove();
+  const moved = bytesDiffering(before, after);
+  if (moved !== 0) return `${moved} bytes changed 500ms after dispose -- the skin's frame loop outlived the preview`;
   return null;
 });
 

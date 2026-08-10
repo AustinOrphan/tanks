@@ -5,7 +5,7 @@ import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
-import { SKINS, type SkinId } from '../game/customization';
+import { skinScroll, type SkinId } from '../game/customization';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
@@ -919,7 +919,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       playerSkinMap?.dispose();
       playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color, accentHex);
       playerSkin = skin;
-      playerScroll = SKINS.find((sk) => sk.id === skin)?.scroll ?? null;
+      playerScroll = skinScroll(skin);
       colorGen++;
     },
     dispose,

@@ -374,6 +374,44 @@ describe('driver: interpolation', () => {
   });
 });
 
+describe('driver: the render animation clock', () => {
+  // frame.test.ts pins what `animationDt` decides. This block pins that the driver
+  // APPLIES it -- the composition blindness `step-pipeline.test.ts` exists for, one
+  // layer up: deleting the call and passing `plan.dt` straight through leaves every
+  // animationDt case in frame.test.ts green.
+  //
+  // The renderer forwards this dt to BOTH `entities.sync` (an animated skin's texture
+  // offset) and `particles.update` (debris in flight), so these two cases are the
+  // whole of what stops and what keeps running.
+
+  it('freezes the clock while PAUSED, on a frame that really did render', () => {
+    // The production change this catches: removing the pause carve-out from
+    // driver.ts -- i.e. going back to `render(..., plan.dt)`, which is what main
+    // shipped. Debris then keeps expanding and fading through a pause taken to look
+    // at the board, and `flow` keeps scrolling.
+    const h = harness({ state: 'paused' });
+    h.driver.start();
+    h.raf.fire(100);
+    expect(h.renders).toHaveLength(1);
+    expect(h.renders[0].dt).toBe(0);
+  });
+
+  it.each(['splash', 'title', 'win', 'lose'] as const)(
+    'keeps running while %s, which does NOT simulate either',
+    (state) => {
+      // The opposite production change, and the reason the paused case above is not
+      // just "the else branch zeroes dt": widening the carve-out to the whole
+      // non-playing branch would kill this. 100ms is under MAX_FRAME_DT, so the
+      // clamp is not what is being read here.
+      const h = harness({ state });
+      h.driver.start();
+      h.raf.fire(100);
+      expect(h.driver.world.tick).toBe(0); // really the non-simulating branch
+      expect(h.renders[0].dt).toBeCloseTo(0.1, 9);
+    },
+  );
+});
+
 describe('driver: lifecycle', () => {
   it('schedules nothing until start(), then schedules the first frame', () => {
     const h = harness();

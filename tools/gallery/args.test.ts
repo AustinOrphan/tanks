@@ -3,7 +3,8 @@
 // in the image as literal text. Those are cheap to pin and expensive to rediscover.
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the runner can use it
-import { parseArgs, safeLabel, gridShape, DEFAULTS } from './args.mjs';
+import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS } from './args.mjs';
+import { SKINS } from '../../src/game/customization';
 
 const ESC = String.fromCharCode(27);
 
@@ -144,6 +145,43 @@ describe('gallery args', () => {
       expect(Math.abs(cols - rows)).toBeLessThanOrEqual(1); // and stays near-square
     }
     expect(gridShape(0)).toEqual({ cols: 0, rows: 0 });
+  });
+
+  it('reads the paint-shop triple, and defaults to the unmapped roster tank', () => {
+    const a = parseArgs(['--skin', 'flow', '--hull', '#3d7bd6', '--accent', '#ffcc00']);
+    expect(a.skin).toBe('flow');
+    expect(a.hull).toBe('#3d7bd6');
+    expect(a.accent).toBe('#ffcc00');
+    const d = parseArgs([]);
+    expect(d.skin).toBe('solid');
+    expect(d.hull).toBeNull();
+    expect(d.accent).toBeNull();
+  });
+
+  it('rejects a skin the game does not have, and a colour that is not a hex', () => {
+    // Both cost a browser launch and a black (or wrongly-coloured) screenshot to find
+    // at runtime: an unknown skin dies inside PAINTERS[skin], and a bad hex is parsed
+    // by skins.ts's rgbOf into NaN channels.
+    expect(() => parseArgs(['--skin', 'floww'])).toThrow(/--skin must be one of/);
+    expect(() => parseArgs(['--hull', 'blue'])).toThrow(/--hull must be a #rrggbb hex/);
+    expect(() => parseArgs(['--accent', '#fff'])).toThrow(/--accent must be a #rrggbb hex/);
+  });
+
+  it('accepts exactly the skins the game ships, in both directions', () => {
+    // args.mjs cannot import SkinId (it is loaded by node with no build step), so the
+    // list is duplicated. This is what stops the copy drifting: adding a skin to
+    // customization.ts without adding it here fails HERE, not in a black screenshot.
+    expect([...SKIN_IDS].sort()).toEqual(SKINS.map((s) => s.id).sort());
+    for (const s of SKINS) expect(parseArgs(['--skin', s.id]).skin).toBe(s.id);
+  });
+
+  it('takes a frame count for the gallery scene only, since --scene game has no age', () => {
+    expect(parseArgs(['--frames', '90']).frames).toBe(90);
+    expect(typeof parseArgs(['--frames', '90']).frames).toBe('number');
+    expect(parseArgs([]).frames).toBeNull();
+    expect(() => parseArgs(['--frames', '0'])).toThrow(/whole number of animation steps/);
+    expect(() => parseArgs(['--frames', '2.5'])).toThrow(/whole number of animation steps/);
+    expect(() => parseArgs(['--scene', 'game', '--frames', '90'])).toThrow(/--burst N/);
   });
 
   it('keeps DEFAULTS immutable across parses', () => {

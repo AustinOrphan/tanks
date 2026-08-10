@@ -53,7 +53,7 @@ import { createEntityViews, type EntityViews } from './entities';
 import { createEnvironmentMap } from './scene';
 import { fitCameraToArea } from './framing';
 import { createPreviewControls, type PreviewControls, type PreviewPose } from './preview-controls';
-import type { SkinId } from '../game/customization';
+import { skinScroll, type SkinId } from '../game/customization';
 import type { World } from '../sim/world';
 import type { Tank } from '../sim/types';
 
@@ -303,14 +303,25 @@ export function createTankPreview(
 
   const world = previewWorld();
 
-  function draw(): void {
-    entities.sync(world, world, 1, 0);
+  /**
+   * `dt` is the render animation clock, in seconds -- `entities.sync` gates an animated
+   * skin's texture scroll on `dt > 0`.
+   *
+   * It defaulted to a hardwired literal `0` here, which froze `flow` -- the one animated
+   * skin the game ships -- in the exact panel where a player decides whether to wear it.
+   * A pose change or a restyle still passes 0: those redraws are not time passing, and
+   * crediting them with any would drift the scroll by however often the player moved the
+   * mouse. Time only comes from the controls' rAF loop, via `onAnimate`.
+   */
+  function draw(dt = 0): void {
+    entities.sync(world, world, 1, dt);
     renderer.render(scene, camera);
   }
   draw();
 
   // The interaction layer. It owns the pose and calls back only when it actually
-  // changes, so `onPose` is a redraw request with no filtering of its own.
+  // changes, so `onPose` is a redraw request with no filtering of its own -- and it owns
+  // the panel's one rAF loop, which is why the skin's clock hangs off it too.
   const controls: PreviewControls = createPreviewControls(canvas, {
     camera,
     initialPose: INITIAL_PREVIEW_POSE,
@@ -320,11 +331,33 @@ export function createTankPreview(
       applyPose(world, pose);
       draw();
     },
+    onAnimate(dt, pose): void {
+      applyPose(world, pose);
+      draw(dt);
+    },
   });
 
   return {
     setStyle(hex, skin, accentHex): void {
       entities.setPlayerStyle(hex, skin, accentHex);
+      // Picking an animated skin starts the clock; picking a static one stops it, so an
+      // untouched panel showing `solid` costs no frames at all once the idle spin ends.
+      //
+      // That sentence is PINNED, and was not until review caught it. Writing
+      // `controls.setAnimating(true)` unconditionally here -- a static skin repainting
+      // for the life of the session -- passed 1741 of 1743 vitest cases (2 skipped) and
+      // all 50 GL checks, measured with the one-loop test already present. It is killed now by `a STATIC skin schedules NO frames once
+      // the spin has stopped` in tools/gl/harness.ts: 0 frames as shipped, 24 under the
+      // mutation, over a 400ms window.
+      //
+      // Why every byte-level probe was blind to it, since that is the reusable part: a
+      // static skin repainted forever changes ZERO bytes, and zero bytes is exactly what
+      // the neighbouring check's `afterStatic === 0` half asserts. The observable that
+      // works is the frame REQUEST, not the pixels. An earlier draft of this comment said
+      // killing it needed an observable the preview does not expose; that was wrong --
+      // `window.requestAnimationFrame` was reachable from the harness the whole time, and
+      // "untested" had been written down as "unfalsifiable".
+      controls.setAnimating(skinScroll(skin) !== null);
       draw();
     },
     resize(): void {

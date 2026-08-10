@@ -50,7 +50,38 @@ export const DEFAULTS = {
   slowmo: 1,
   /** Frames to shoot in --scene game, one per rAF. >1 needs no --anim; it IS the anim. */
   burst: 1,
+  /**
+   * The paint shop's triple, dressed onto the PLAYER tank via the game's own
+   * `setPlayerStyle`. Without these the gallery could not show a skin at all -- it drew
+   * the roster default, unmapped, so every skin change to date was reviewable only by
+   * booting the real game.
+   *
+   * Hexes rather than palette ids (`--hull '#3d7bd6'`): `setPlayerStyle` takes hexes,
+   * and resolving an id here would mean importing src/ into a plain .mjs the runner
+   * loads without a build step.
+   */
+  skin: 'solid',
+  hull: null,
+  accent: null,
+  /**
+   * Override how many animation steps to render, for --anim. Null keeps whatever the
+   * chosen elements declare. It exists because every shipped element is static or a few
+   * ticks long, so an animated SKIN had no timeline to scroll along.
+   */
+  frames: null,
 };
+
+/**
+ * The skins --skin accepts, duplicated from `src/game/customization.ts`'s `SkinId`
+ * because this file is loaded by node with no build step and cannot import TypeScript.
+ *
+ * `args.test.ts` asserts this list equals the shipped `SKINS` ids, in both directions,
+ * so adding a skin without teaching the gallery about it fails a test rather than
+ * failing at the URL.
+ */
+export const SKIN_IDS = ['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow'];
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
 
 const BOOLISH = ['anim', 'reach', 'timer', 'fill'];
 
@@ -74,7 +105,7 @@ export function parseValues(raw) {
     .map((v) => v.split('|').map((x) => x.trim()).filter(Boolean))
     .filter((v) => v.length > 0);
 }
-const NUMERIC = ['w', 'h', 'fps', 'subdiv', 'settle', 'slowmo', 'burst'];
+const NUMERIC = ['w', 'h', 'fps', 'subdiv', 'settle', 'slowmo', 'burst', 'frames'];
 
 export function parseArgs(argv) {
   const out = { ...DEFAULTS, values: [] };
@@ -100,6 +131,25 @@ export function parseArgs(argv) {
   }
   if (out.scene !== 'gallery' && out.scene !== 'game') {
     throw new Error(`--scene must be 'gallery' or 'game', got '${out.scene}'`);
+  }
+  if (!SKIN_IDS.includes(out.skin)) {
+    // A typo'd skin would otherwise reach setPlayerStyle, where `PAINTERS[skin]` is
+    // undefined and the page dies with "PAINTERS[skin] is not a function" behind the
+    // runner's pageerror log -- after a full browser launch and a black screenshot.
+    throw new Error(`--skin must be one of ${SKIN_IDS.join(', ')}, got '${out.skin}'`);
+  }
+  for (const key of ['hull', 'accent']) {
+    if (out[key] !== null && !HEX.test(out[key])) {
+      throw new Error(`--${key} must be a #rrggbb hex, got '${out[key]}'`);
+    }
+  }
+  if (out.frames !== null && (!Number.isInteger(out.frames) || out.frames < 1)) {
+    throw new Error(`--frames must be a whole number of animation steps, got ${out.frames}`);
+  }
+  if (out.frames !== null && out.scene === 'game') {
+    // --scene game runs the real clock and shoots one frame per rAF; there is no age to
+    // step. Same reason --anim is refused there, and --burst is the answer.
+    throw new Error('--frames does not apply to --scene game (use --burst N)');
   }
   if (out.crop !== null && !/^\d+x\d+\+\d+\+\d+$/.test(out.crop)) {
     throw new Error(`--crop must look like 640x480+100+50, got '${out.crop}'`);

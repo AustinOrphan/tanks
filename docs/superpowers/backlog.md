@@ -294,16 +294,26 @@ test. #102
 **Raised while making the preview interactive** (`src/render/preview-controls.ts`, the
 hull turntable and the turret aim).
 
-**5. The idle spin is an indefinite render loop, and its COST is unmeasured.** Its
-behaviour is now gated — three async checks in `tools/gl/harness.ts` run on the real
-`requestAnimationFrame` and measure that it turns the tank (23069 of 197600 bytes in
-500ms), that a hover stops it permanently, and that nothing repaints after dispose. What
-none of them says is what it costs: while the Customize panel is open and untouched, a
-second WebGL context repaints a 260x190 canvas every frame, indefinitely, with no
+**5. The preview's indefinite render loop, and its COST, still unmeasured — and it now
+runs for TWO reasons.** Its behaviour is gated: five async checks in `tools/gl/harness.ts`
+run on the real `requestAnimationFrame` and measure that the idle spin turns the tank
+(23069 of 197600 bytes in 500ms), that a hover stops the spin permanently for a
+non-animated skin, that an animated skin keeps repainting afterwards (23584 of 197600
+bytes in 500ms) and comes to rest when a static one is picked, and that nothing repaints
+after dispose. What none of them says is what it costs: while the Customize panel is open,
+a second WebGL context repaints a 260x190 canvas every frame, indefinitely, with no
 timeout and no `document.hidden` check. Nobody has measured that against battery or
 against a low-end device, and "stop after N seconds" was considered and not done because
-the stopping condition would then be invisible to the player. (This entry replaces an
-earlier one saying the spin ran under no gate at all; that was true when it was written.)
+the stopping condition would then be invisible to the player.
+
+The animated skin was hung on this SAME loop rather than given a second one, precisely
+because this entry is still open: a second indefinite repaint would double a cost nobody
+has a figure for. That is a reason to prefer one loop, **not** evidence that one is cheap.
+What did change is the floor — an untouched panel showing a static skin now stops
+repainting entirely once the spin ends, where before the spin was the only loop and the
+same was true; the new case is `flow`, which repaints for as long as the panel is open.
+(This entry replaces an earlier one saying the spin ran under no gate at all; that was
+true when it was written.)
 
 **6. `prefers-reduced-motion` is read in `preview.ts` and nothing covers that read.**
 `createPreviewControls` takes the flag as a parameter and both branches are tested; the
@@ -560,11 +570,28 @@ the cheapest route that does not introduce this tree's first shader?
 - **Decide whether skins should be unlockable at all** (ledger, #61), and specifically what
   happens to a save wearing a locked skin after `Reset progress` calls
   `achievements.reset()` (`loop.ts:708`). The mechanics are trivial; the rule is not.
-- **Look at a scrolling tile at play distance before building anything richer.** Skin
-  textures inherit `DataTexture`'s NearestFilter/no-mipmap defaults, and nobody has looked at
-  whether `flow` shimmers or steps. `npm run gallery --scene game --slowmo` answers it, and
-  the fix (LinearFilter + mipmaps) does not move `skins.test.ts`'s golden hashes, which read
-  the painter's source array rather than a sampled result.
+- **Whether a scrolling tile SHIMMERS at play distance is still open — the spatial half of
+  it was measured and fixed, the temporal half was not.** Skins no longer inherit
+  `DataTexture`'s NearestFilter/no-mipmap defaults: `skins.ts` now names
+  `SKIN_MIN_FILTER`/`SKIN_MAG_FILTER`/`SKIN_MIPMAPS`, and minification moved to
+  `LinearMipmapLinearFilter` + mipmaps on a gallery comparison at matched texel density
+  (33.2 dB PSNR between the two settings on `checker`, 43.0 on `flow`; magnification was
+  LEFT at Nearest, at 51.2 and 60.7 dB — i.e. not visibly different at any scale the game
+  shows). **Those are stills.** Shimmer is a temporal artefact and no still can show it;
+  what was measured is the spatial aliasing that causes it. Eyes on a moving frame at play
+  distance would settle it.
+- **`npm run gallery --scene game` cannot select a skin**, which is why the measurement
+  above had to match texel density in the gallery scene instead. `--skin`/`--hull`/
+  `--accent` reach `buildGallery` only; the real game reads its triple from
+  `localStorage` (`tanks.custom.v1`) and there is no dev flag for it. Seeding that key
+  from `run.mjs` (or adding a flag) is a small PR and would make "what does this skin look
+  like while the game is actually running" a one-command question.
+- **The preview animates an animated skin under `prefers-reduced-motion`; the idle spin
+  does not.** The split is deliberate and written down at `preview-controls.ts`'s doc
+  comment — the spin is motion the panel invents, the scroll is what the skin IS, and the
+  game scrolls it in play whatever the media query says. What is NOT decided is that last
+  clause: nothing in `src/` honours reduced motion during gameplay at all. If it ever
+  should, the preview's rule follows from that decision rather than standing on its own.
 - **If a brightness pulse is wanted, the cheapest route is an emissive channel, not a
   shader** — precedent exists in the same file (the mine's
   `mat.emissive.copy(lo).lerp(hi, pulse)`, `entities.ts:828`). It needs the player's hull and

@@ -4,7 +4,8 @@
 // nothing else guards it.
 import { describe, it, expect } from 'vitest';
 import { DT } from '../sim/constants';
-import { planFrame, renderAlpha, MAX_FRAME_DT } from './frame';
+import { animationDt, planFrame, renderAlpha, MAX_FRAME_DT } from './frame';
+import type { GameState } from './state';
 
 describe('planFrame', () => {
   it('banks a short frame instead of ticking', () => {
@@ -102,5 +103,37 @@ describe('renderAlpha', () => {
   it('is 1 when not simulating, so a static pose renders at its current pose', () => {
     expect(renderAlpha(DT / 2, false)).toBe(1);
     expect(renderAlpha(0, false)).toBe(1);
+  });
+});
+
+describe('animationDt: the render animation clock', () => {
+  // The rule this pins is a DECISION, so both halves have to be able to fail, and they
+  // fail to different mutations: dropping the carve-out (`return dt`) kills the paused
+  // case, and widening it to every non-simulating state (`state === 'playing' ? dt : 0`)
+  // kills the splash/title/win/lose cases.
+  const STATES: GameState[] = ['splash', 'title', 'playing', 'win', 'lose', 'paused'];
+
+  it('stops dead while the game is PAUSED -- particles as well as skins', () => {
+    expect(animationDt(0.02, 'paused')).toBe(0);
+    expect(animationDt(MAX_FRAME_DT, 'paused')).toBe(0);
+  });
+
+  it.each(STATES.filter((s) => s !== 'paused'))('runs at the real delta while %s', (state) => {
+    expect(animationDt(0.02, state)).toBeCloseTo(0.02, 12);
+  });
+
+  it('is exactly ONE state of the six that stops it', () => {
+    // Enumerated from the union rather than sampled: STATES is typed `GameState[]`, so
+    // a seventh state added to state.ts is a decision to make here, not a silent gap --
+    // though only if someone adds it to this list, which tsc cannot force.
+    const stopped = STATES.filter((s) => animationDt(0.02, s) === 0);
+    expect(stopped).toEqual(['paused']);
+  });
+
+  it('passes the frame plan\'s delta through rather than substituting a step of its own', () => {
+    // Catches a clock that ignores its argument and returns a fixed 1/60 -- which would
+    // look right on a 60Hz monitor and be wrong on every other refresh rate.
+    expect(animationDt(0.007, 'playing')).toBeCloseTo(0.007, 12);
+    expect(animationDt(0.1, 'title')).toBeCloseTo(0.1, 12);
   });
 });

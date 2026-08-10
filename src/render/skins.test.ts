@@ -1,5 +1,6 @@
 // DataTextures are CPU-side, so the whole generator is testable headlessly.
 import { describe, it, expect } from 'vitest';
+import * as THREE from 'three';
 import {
   createSkinTexture,
   ensureContrast,
@@ -89,6 +90,47 @@ describe('createSkinTexture', () => {
       expect(t.wrapS, s.id).toBe(1000); // THREE.RepeatWrapping
       t.dispose();
     }
+  });
+
+  it('samples the tile the way it was DECIDED to, not the way DataTexture defaults', () => {
+    // Population: all 5 non-solid skins (derived from SKINS, so a sixth arrives here
+    // automatically). Every one is minted by the same factory, so this is really one
+    // decision checked five times -- what it catches is a per-skin special case as much
+    // as a change to the constants.
+    //
+    // The production change it catches: deleting the three assignments in
+    // createSkinTexture, which is what the file did before -- `magFilter`/`minFilter`
+    // both NearestFilter and `generateMipmaps` false, inherited from three's
+    // DataTexture rather than chosen. At play distance that point-samples ~4 texels per
+    // pixel; see the constants' comments for the measurement that moved it.
+    for (const s of PATTERNED_SKINS) {
+      const t = createSkinTexture(s, '#3d7bd6')!;
+      expect(t.minFilter, s).toBe(THREE.LinearMipmapLinearFilter);
+      expect(t.magFilter, s).toBe(THREE.NearestFilter);
+      expect(t.generateMipmaps, s).toBe(true);
+      t.dispose();
+    }
+  });
+
+  it('never asks for a mipmap filter without mipmaps, which samples BLACK', () => {
+    // Not a restatement of the case above: minFilter and generateMipmaps are separate
+    // constants, so raising one without the other is a one-line edit that typechecks,
+    // passes every pixel assertion in this file (they read image.data, not a sample),
+    // and renders an incomplete texture -- a black tank, visible only in a browser.
+    const MIPMAPPED: number[] = [
+      THREE.NearestMipmapNearestFilter, THREE.NearestMipmapLinearFilter,
+      THREE.LinearMipmapNearestFilter, THREE.LinearMipmapLinearFilter,
+    ];
+    for (const s of PATTERNED_SKINS) {
+      const t = createSkinTexture(s, '#3d7bd6')!;
+      if (MIPMAPPED.includes(t.minFilter)) expect(t.generateMipmaps, s).toBe(true);
+      t.dispose();
+    }
+    // ...and the guard is worth what its own control proves: at least one skin really
+    // does take the mipmap branch, so the loop above is not vacuous.
+    const probe = createSkinTexture(PATTERNED_SKINS[0], '#3d7bd6')!;
+    expect(MIPMAPPED).toContain(probe.minFilter);
+    probe.dispose();
   });
 
   it('is deterministic: the same pick renders the same tank every session', () => {

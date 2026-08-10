@@ -2,7 +2,7 @@ import { step, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import type { GameState } from './state';
-import { planFrame, renderAlpha } from './frame';
+import { animationDt, planFrame, renderAlpha } from './frame';
 
 /**
  * The frame loop, with its clock and its scheduler handed in.
@@ -114,9 +114,14 @@ export function createDriver(deps: DriverDeps): Driver {
       prev = curr;
     }
 
-    // Second, deliberate read. See above.
-    const alpha = renderAlpha(acc, deps.stateMachine.state === 'playing');
-    deps.renderer.render(prev, curr, alpha, frameEvents, plan.dt);
+    // Second, deliberate read. See above. Hoisted into a const only HERE, below the
+    // branch -- the two uses on this line must agree with each other, and both must
+    // see the state as it is AFTER onEvents, not before.
+    const state = deps.stateMachine.state;
+    const alpha = renderAlpha(acc, state === 'playing');
+    // Not plan.dt: the render animation clock is its own decision, and it stops while
+    // the game is paused. See animationDt.
+    deps.renderer.render(prev, curr, alpha, frameEvents, animationDt(plan.dt, state));
   };
 
   return {

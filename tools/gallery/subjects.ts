@@ -4,8 +4,9 @@ import type { World } from '../../src/sim/world';
 import { createEntityViews, BULLET_Y } from '../../src/render/entities';
 import { createMineDebug } from '../../src/render/minedebug';
 import {
-  MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
+  DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
 } from '../../src/sim/constants';
+import type { SkinId } from '../../src/game/customization';
 
 export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
 
@@ -154,6 +155,40 @@ export const VIEWS: Record<string, { dir: [number, number, number]; up?: [number
   below: { dir: [0, -1, 0.0001], up: [0, 0, 1] },
 };
 
+/**
+ * THE GALLERY'S ANIMATION CLOCK, and the one design call in giving the gallery skins.
+ *
+ * Everything else here is tick-indexed: an element declares how many `frames` it wants
+ * and `place` receives an integer `age`, which is a SIM TICK (the `fuse` element burns
+ * `MINE_TIMER` over 90 of them, the `blast` element lives `BLAST_LIFE`). The renderer's
+ * `dt`, by contrast, is wall-clock SECONDS -- it is what `entities.sync` scrolls an
+ * animated skin by and what `particles.update` integrates.
+ *
+ * The mapping chosen, in one sentence: **one `age` step is one sim tick, so a
+ * sub-divided step of `alpha` is `alpha` ticks, and the seconds between two draws are
+ * the ticks between them times `DT`.** A gallery animation therefore advances a skin by
+ * exactly what the game would advance it over the same number of ticks.
+ *
+ * Two consequences worth stating rather than discovering:
+ *
+ * - The gallery derives this from the (age, alpha) it is HANDED, not from a clock of
+ *   its own, so it stays a pure function of the timeline the runner walks -- which is
+ *   what keeps a still reproducible and a sweep comparable. The first draw has no
+ *   predecessor and so gets `dt = 0`; a still shows the tile at offset 0.
+ * - Playback is slow motion, and already was. `run.mjs` writes `--subdiv` frames per
+ *   age step and assembles them at `--fps` (3 and 20 by default), so 60 ticks -- one
+ *   second of game -- plays back over 9 seconds of gif. `flow` scrolls 0.08 of a tile
+ *   per second, so a one-second animation drifts 0.08 of a tile however long the gif
+ *   runs. To judge the SPEED of a skin, watch the game (`--scene game --slowmo`); to
+ *   judge the tile, the sampling and the seams, this is the tool.
+ */
+export function timelineDt(fromTicks: number, toTicks: number): number {
+  // Clamped at 0 rather than trusted: the runner walks ages forward, but a hand-driven
+  // `GALLERY_DRAW(0, 0)` after a sequence would otherwise hand the skin a negative dt,
+  // and `entities.sync`'s `dt > 0` gate would silently swallow it instead of showing it.
+  return Math.max(0, toTicks - fromTicks) * DT;
+}
+
 export interface GalleryOptions {
   /** Names of elements to place, left to right. */
   elements: string[];
@@ -163,6 +198,32 @@ export interface GalleryOptions {
   timer: boolean;
   /** Light the underside, for shots checking for holes. Not how the game is lit. */
   fill: boolean;
+  /**
+   * The paint shop's triple, applied to the PLAYER tank through the game's own
+   * `setPlayerStyle` -- so what the gallery shows is the shipped skin path, not a
+   * depiction of it. `'solid'` with no hull/accent leaves the roster default alone.
+   */
+  skin: SkinId;
+  hull: string | null;
+  accent: string | null;
+  /**
+   * Override how many animation steps the subject wants. Null keeps what the elements
+   * declare. It exists for skins: every shipped element is static (`frames: 1`) or a
+   * few ticks long, so `--anim` on a tank had nothing to step and a scrolling skin had
+   * no timeline to scroll along.
+   *
+   * DISCLOSED SURVIVING MUTANT: `buildGallery` ignoring this field entirely (returning
+   * `frames: layout.frames`) passes 1741 of 1743 vitest cases (2 skipped) and 50 of 50
+   * GL checks --
+   * measured, both. `--frames N` would silently do nothing and only the runner would
+   * show it. It is not killed here because the only observer is `run.mjs`, which writes
+   * files from a real browser; nothing under `npm test` or `npm run test:gl` reads the
+   * returned `frames`. Verified by hand instead, WITH its control: `--elements tank
+   * --view low --skin flow --anim --frames 8 --subdiv 1` writes 8 frames with 8 distinct
+   * md5s; under the mutation the same command writes 1 frame (`tank` declares
+   * `frames: 1`), so the by-hand check really does discriminate.
+   */
+  frames: number | null;
 }
 
 export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, opts: GalleryOptions) {
@@ -185,6 +246,11 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   scene.add(ground);
 
   const views = createEntityViews(scene);
+  // Same call the game makes (renderer.ts's setPlayerStyle) and the Customize preview
+  // makes -- the gallery has no skin machinery of its own to drift from it.
+  if (opts.skin !== 'solid' || opts.hull || opts.accent) {
+    views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null);
+  }
   const debug = createMineDebug(scene, { reach: opts.reach, timer: opts.timer });
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
@@ -203,11 +269,25 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   const dir = new THREE.Vector3(...v.dir).normalize();
   cam.position.copy(focus).addScaledVector(dir, dist);
   cam.lookAt(focus);
+  // Where on the timeline the last draw left off, in ticks. Null until the first draw,
+  // which therefore advances nothing -- see timelineDt.
+  let clock: number | null = null;
   function draw(age: number, alpha: number): void {
+    const at = age + alpha;
+    const dt = clock === null ? 0 : timelineDt(clock, at);
+    clock = at;
     // prev/curr one tick apart, so interpolated quantities animate rather than step.
-    views.sync(compose(opts.elements, age - 1).world, compose(opts.elements, age).world, alpha);
+    views.sync(compose(opts.elements, age - 1).world, compose(opts.elements, age).world, alpha, dt);
     debug.sync(compose(opts.elements, age).world);
     renderer.render(scene, cam);
   }
-  return { draw, frames: layout.frames };
+  // The page itself never calls this -- it builds one gallery and lives as long as the
+  // tab. It exists for tools/gl/harness.ts, which builds galleries inside a browser that
+  // already holds other live contexts and must not leak one per check.
+  function dispose(): void {
+    views.dispose();
+    debug.dispose();
+    renderer.dispose();
+  }
+  return { draw, frames: opts.frames ?? layout.frames, dispose };
 }

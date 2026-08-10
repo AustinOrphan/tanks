@@ -87,6 +87,16 @@ export const SKINS: readonly SkinDef[] = Object.freeze([
 
 export const DEFAULT_SKIN: SkinId = 'solid';
 
+/**
+ * The scroll a skin carries, or null. THE one place "is this skin animated?" is
+ * answered -- `render/entities.ts` needs the vector to advance the texture offset and
+ * `render/preview.ts` needs the boolean to decide whether to run a repaint loop, and
+ * two `SKINS.find(...)` calls in two files would be two things to keep in step.
+ */
+export function skinScroll(id: SkinId): { u: number; v: number } | null {
+  return SKINS.find((s) => s.id === id)?.scroll ?? null;
+}
+
 const IDS = new Set<string>(PALETTE.map((s) => s.id));
 const SKIN_IDS = new Set<string>(SKINS.map((s) => s.id));
 const ACCENT_IDS = new Set<string>(ACCENTS.map((s) => s.id));

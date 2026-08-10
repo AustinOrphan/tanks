@@ -10,6 +10,12 @@
  *   npm run gallery -- --subject mine --view low
  *   npm run gallery -- --subject blast --anim --out blast.gif
  *   npm run gallery -- --subject mine --view low --sweep MINE_DOME_H --values 0.04,0.08,0.12
+ *   npm run gallery -- --elements tank --view close --skin flow --hull '#3d7bd6'
+ *   npm run gallery -- --elements tank --skin flow --anim --frames 90 --out flow.gif
+ *
+ * --skin/--hull/--accent dress the PLAYER tank through the game's own setPlayerStyle.
+ * --frames gives an animated skin a timeline: every shipped element is static or a few
+ * ticks long, and one age step is one sim tick (see subjects.ts's timelineDt).
  *
  * --sweep patches a constant in src/ between passes. The original is restored in a
  * finally block, and the runner refuses to start if the file is already dirty, so an
@@ -141,8 +147,24 @@ async function run(browser) {
     if (args.reach) p.set('reach', '1');
     if (args.timer) p.set('timer', '1');
     if (args.fill) p.set('fill', '1');
+    if (args.skin !== 'solid') p.set('skin', args.skin);
+    if (args.hull) p.set('hull', args.hull);
+    if (args.accent) p.set('accent', args.accent);
+    if (args.frames !== null) p.set('frames', String(args.frames));
     return `http://localhost:${PORT}/tools/gallery/index.html?${p}`;
   };
+
+  /**
+   * The GAME's canvas, not the Customize panel's.
+   *
+   * A bare `locator('canvas')` matched two elements the moment the HUD gained its
+   * persistent `.hud-preview` canvas, and Playwright's strict mode then failed EVERY
+   * `--scene game` run with "resolved to 2 elements" while waiting for the page --
+   * which reads as a page that never loaded. The preview canvas is hidden and empty
+   * until Customize is opened, so it was never a candidate; it just made the selector
+   * ambiguous.
+   */
+  const GAME_CANVAS = 'canvas:not(.hud-preview)';
 
   /**
    * Shoot the REAL game at its REAL camera: load it, leave the title screen, wait out
@@ -163,7 +185,7 @@ async function run(browser) {
     for (let attempt = 0; ; attempt++) {
       try {
         await page.goto(`http://localhost:${PORT}/${qs}`, { waitUntil: 'domcontentloaded' });
-        await page.locator('canvas').waitFor({ state: 'attached', timeout: 30000 });
+        await page.locator(GAME_CANVAS).waitFor({ state: 'attached', timeout: 30000 });
         break;
       } catch (e) {
         if (attempt >= 1) throw e;
@@ -204,12 +226,12 @@ async function run(browser) {
       while (Date.now() - s0 < args.settle) await pumpFrame();
       for (let i = 0; i < args.burst; i++) {
         await pumpFrame();
-        await page.locator('canvas').screenshot({ path: `${outDir}/${prefix}-${String(i).padStart(4, '0')}.png` });
+        await page.locator(GAME_CANVAS).screenshot({ path: `${outDir}/${prefix}-${String(i).padStart(4, '0')}.png` });
       }
       return args.burst;
     }
     await page.waitForTimeout(args.settle);
-    await page.locator('canvas').screenshot({ path: `${outDir}/${prefix}.png` });
+    await page.locator(GAME_CANVAS).screenshot({ path: `${outDir}/${prefix}.png` });
     return 1;
   }
 
