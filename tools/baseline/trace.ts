@@ -43,7 +43,7 @@ import { step } from '../../src/sim/world';
  *     branch outright (`if (false && walls.some(...))`, collision.ts) leaves all 7 tests
  *     green. The seeded replay never drives a hull inside a wall.
  *   - Neither are the multi-input pairing rules in world.ts. This drives ONE player, so
- *     all 7 mutations swept in src/sim/step-inputs.test.ts leave the hash untouched --
+ *     all 8 mutations swept in src/sim/step-inputs.test.ts leave the hash untouched --
  *     which is why that file exists.
  *
  * Lesson: a coverage claim recorded at one commit can go stale as later changes alter
