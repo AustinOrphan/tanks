@@ -552,8 +552,8 @@ the cheapest route that does not introduce this tree's first shader?
 
 ## Follow-ups from "game data plumbing" (storage resolver, save export/import, replay recorder)
 
-**Raised 2026-08-10**, shipping issues #109, #110 and #118. All three were consciously
-deferred, not missed.
+**Raised 2026-08-10** by #127, which shipped issues #109, #110 and #118. All three were
+consciously deferred, not missed.
 
 **Deliberately NOT ledger lines.** The Ledger below states a measured provenance — how many
 of its lines came from the PR-description harvest — and `tools/backlog.test.ts` recomputes
