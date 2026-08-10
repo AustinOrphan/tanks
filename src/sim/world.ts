@@ -118,10 +118,15 @@ export function stepMovement(world: World, dt: number): void {
   }
 }
 
-export function applyPlayerInput(world: World, input: InputState, events: SimEvent[]): void {
-  const player = world.tanks.find((t) => t.kind === 'player');
-  if (!player || !player.alive) return;
-
+/**
+ * Drives ONE named player tank from ONE input. Split out of applyPlayerInput so the
+ * multi-input path (applyPlayerInputs) reuses the identical body rather than a second
+ * copy of it: the single-player behaviour this function encodes is pinned by the golden
+ * trace (tools/baseline/trace.test.ts), and a second copy would not be.
+ *
+ * The caller decides WHICH tank; nothing here searches for one.
+ */
+function driveTank(world: World, player: Tank, input: InputState, events: SimEvent[]): void {
   // The player's weapon (bullet type + fire cadence) and abilities come from the
   // same resolved config as every enemy -- no 'normal'/cooldown literals here.
   const pcfg = configFor(player.kind);
@@ -169,6 +174,47 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
       player.mineCooldown = MINE_COOLDOWN_TICKS;
     }
   }
+}
+
+/**
+ * Applies one input per human-controlled tank, pairing `inputs[i]` with the i-th
+ * `kind === 'player'` tank in TANK-ARRAY ORDER.
+ *
+ * Three rules, each with a test in step-inputs.test.ts, because each is a decision and
+ * not a consequence:
+ *
+ *  - The pairing indexes over EVERY player tank, alive or not. A dead player still
+ *    consumes its slot, so one player dying cannot shift another player's input onto a
+ *    different tank mid-round. (Filtering to the living first would do exactly that.)
+ *  - Surplus inputs are ignored, and players past the end of the list get no input at
+ *    all -- not a synthesised idle one. Those differ: an idle input still decrements
+ *    cooldowns and still slews the turret toward `aim`.
+ *  - Order comes from `world.tanks`, which loadArena builds from `world.spawns` in grid
+ *    order and never reorders (see resetArena's comment) -- so slot i is stable for the
+ *    whole game, which is what makes a recorded input list replayable.
+ *
+ * With one player and one input this is exactly what applyPlayerInput did, and the
+ * golden trace (tools/baseline/trace.test.ts) is what proves it.
+ */
+export function applyPlayerInputs(world: World, inputs: InputState[], events: SimEvent[]): void {
+  const players = world.tanks.filter((t) => t.kind === 'player');
+  const n = Math.min(players.length, inputs.length);
+  for (let i = 0; i < n; i++) {
+    const player = players[i];
+    if (!player.alive) continue;
+    driveTank(world, player, inputs[i], events);
+  }
+}
+
+/**
+ * The one-player form: drives the FIRST player tank. Kept because it is what every
+ * caller in the tree means, and because `stepInputs` reaching it through a
+ * one-element list is the whole argument that the list refactor changed nothing.
+ */
+export function applyPlayerInput(world: World, input: InputState, events: SimEvent[]): void {
+  const player = world.tanks.find((t) => t.kind === 'player');
+  if (!player || !player.alive) return;
+  driveTank(world, player, input, events);
 }
 
 // A life loss restarts the WHOLE arena (spec §4: "restart arena on death"): every
@@ -239,13 +285,24 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
   }
 }
 
-export function step(world: World, input: InputState): StepResult {
+/**
+ * Advances the world one tick from a LIST of inputs -- one per human-controlled tank,
+ * paired by position (see applyPlayerInputs). This is the primitive; `step` below is the
+ * one-argument adapter every caller in the tree still uses.
+ *
+ * Two names rather than one overloaded `step(world, input | inputs)`: a union parameter
+ * would put an `Array.isArray` branch in the pure core's hot path and would let a caller
+ * silently pass the wrong shape at a call site that still typechecks. Nothing here is
+ * multiplayer -- no second player spawn, no win/lose rule for one (config/validate.ts
+ * still hard-fails any grid without exactly one `P`). It is only the seam.
+ */
+export function stepInputs(world: World, inputs: InputState[]): StepResult {
   const draft = cloneWorld(world);
   draft.tick += 1;
   const events: SimEvent[] = [];
 
   if (draft.status === 'playing') {
-    applyPlayerInput(draft, input, events);
+    applyPlayerInputs(draft, inputs, events);
     stepAi(draft, events);
     stepBlasts(draft, events);
     stepMovement(draft, DT);
@@ -256,4 +313,17 @@ export function step(world: World, input: InputState): StepResult {
   }
 
   return { world: draft, events };
+}
+
+/**
+ * One tick from one player's input: the shipped game's shape, and every caller in the
+ * tree today (game/driver.ts, the gallery and every test).
+ *
+ * It is an ADAPTER, not a second implementation -- `[input]` and nothing else. That is
+ * deliberate: it means the single-player behaviour cannot drift from the list path, and
+ * it is why the golden trace hash in tools/baseline/trace.test.ts is unchanged by this
+ * refactor. If this ever grows a branch of its own, that argument is gone.
+ */
+export function step(world: World, input: InputState): StepResult {
+  return stepInputs(world, [input]);
 }

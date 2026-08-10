@@ -44,4 +44,24 @@ describe('index.html carries the rules touch input depends on', () => {
     // is measured against the wrong viewport -- including the left/right thumb split.
     expect(html).toMatch(/name="viewport"[^>]*width=device-width/);
   });
+
+  it('covers the display cutouts, which is what makes the safe-area insets non-zero', () => {
+    // hud.css insets .hud-topbar and .hud-touch by `max(base, env(safe-area-inset-*))`.
+    // Those functions resolve to 0px unless the viewport covers the cutouts, so without
+    // this token every one of those rules quietly falls back to its base spacing -- on
+    // exactly the devices they exist for, and with nothing red anywhere. The assertion
+    // above passes either way: it stops at `width=device-width`.
+    expect(html).toMatch(/name="viewport"[^>]*viewport-fit=cover/);
+  });
+
+  it('links the manifest and the iOS icon, both by RELATIVE href', () => {
+    // Same rule as the favicon comment in the file: this is a /tanks/ project page, so
+    // an origin-absolute href resolves against austinorphan.com's root. For the manifest
+    // it is worse than a 404 -- `start_url` and `scope` resolve against the MANIFEST's
+    // own URL, so a manifest fetched from the root would install a shortcut to the
+    // portfolio. `tools/portability/check.mjs` re-asserts this against the BUILT output,
+    // where the value could differ; this catches it in the source.
+    expect(html).toMatch(/<link[^>]*rel="manifest"[^>]*href="\.\/manifest\.webmanifest"/);
+    expect(html).toMatch(/<link[^>]*rel="apple-touch-icon"[^>]*href="\.\/icons\//);
+  });
 });

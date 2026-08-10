@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is what makes `env(safe-area-inset-*)` mean anything: without
+         it the browser insets the viewport itself and every inset reads as 0px, so the
+         HUD rules in hud.css that reference them silently fall back to their base
+         spacing. With it, the page owns the full display and the HUD does the insetting
+         -- which is the only arrangement in which the board is drawn edge to edge and
+         the Fire/Mine buttons still clear the home-indicator strip. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Tanks!</title>
     <meta
       name="description"
@@ -13,6 +19,20 @@
          resolves a bare /favicon.ico against the ORIGIN root, not the project
          subpath, so dropping a file in public/ is not enough on its own. -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- Same relative-href rule as the favicon above, and it bites harder here: the
+         manifest's own `start_url` and `scope` resolve against the MANIFEST's URL, so an
+         origin-absolute href would install a shortcut that opens austinorphan.com's root
+         (the portfolio) rather than /tanks/. `tools/portability/check.mjs` asserts both
+         against the BUILT output.
+
+         Deliberately no service worker: CLAUDE.md records that the portfolio's
+         root-scoped /sw.js already controls /tanks/ and deletes every CacheStorage entry
+         it does not own, so offline caching needs coordination outside this repo -- and
+         the bundle makes no network requests after load, so it would buy little. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- iOS reads neither the manifest's icons nor an SVG favicon for Add to Home
+         Screen; this PNG is the only icon it will use. -->
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />
     <style>
       html,
       body {

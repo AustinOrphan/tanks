@@ -88,7 +88,10 @@ export interface GameDeps {
    * WebGL context (see render/preview.ts's doc comment) -- the Customize panel still
    * works without one, it just shows no preview.
    */
-  readonly createPreview: (canvas: HTMLCanvasElement) => TankPreview | null;
+  readonly createPreview: (
+    canvas: HTMLCanvasElement,
+    rotateButtons: readonly HTMLElement[],
+  ) => TankPreview | null;
   readonly createInput: (
     target: HTMLElement,
     screenToGround: (clientX: number, clientY: number) => Vec2,
@@ -706,7 +709,7 @@ export function startGameWith(
   // contexts (this one plus the main game's), never three.
   let preview: TankPreview | null = null;
   hud.onCustomizeOpen(() => {
-    preview = deps.createPreview(hud.previewCanvas);
+    preview = deps.createPreview(hud.previewCanvas, hud.previewRotateButtons);
     preview?.setStyle(
       deps.customization.hexFor(deps.customization.hull()),
       deps.customization.skin(),

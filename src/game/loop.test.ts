@@ -94,6 +94,7 @@ interface Recorder {
   refits: Array<[number, number, number]>;
   restyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
   previewCanvasesReceived: HTMLCanvasElement[];
+  previewButtonsReceived: ReadonlyArray<readonly HTMLElement[]>;
   previewRestyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
   previewResizes: number;
   hullSets: string[];
@@ -136,6 +137,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   storage: Storage;
   devConsole: DevConsoleTarget;
   previewCanvas: HTMLCanvasElement;
+  previewButtons: readonly HTMLButtonElement[];
   fireFrame(now: number): void;
   hasFrame(): boolean;
   hud: {
@@ -212,6 +214,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     refits: [],
     restyles: [],
     previewCanvasesReceived: [],
+    previewButtonsReceived: [],
     previewRestyles: [],
     previewResizes: 0,
     hullSets: [],
@@ -265,6 +268,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // fake createPreview below can assert it received the SAME element the HUD exposed --
   // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
   const fakePreviewCanvas = document.createElement('canvas');
+  // Likewise real elements: loop.ts hands the HUD's own button list to createPreview,
+  // and a fake list here would make "it passed the HUD's buttons" untestable.
+  const fakePreviewButtons = [document.createElement('button'), document.createElement('button')];
   // The save layer's two seams, both real objects a test can inspect afterwards.
   const storage = createMemoryStorage();
   for (const [k, v] of Object.entries(opts.savedKeys ?? {})) storage.setItem(k, v);
@@ -310,8 +316,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
-    createPreview: (canvas) => {
+    createPreview: (canvas, rotateButtons) => {
       rec.previewCanvasesReceived.push(canvas);
+      (rec.previewButtonsReceived as Array<readonly HTMLElement[]>).push(rotateButtons);
       if (opts.previewUnavailable) return null; // no spare WebGL context, real code path
       return {
         setStyle(hex: string | null, skin: string, accent: string | null): void {
@@ -528,6 +535,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           onPickAccent = cb;
         },
         previewCanvas: fakePreviewCanvas,
+        previewRotateButtons: fakePreviewButtons,
         onCustomizeOpen: (cb: () => void) => {
           onCustomizeOpen = cb;
         },
@@ -757,6 +765,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     storage,
     devConsole,
     previewCanvas: fakePreviewCanvas,
+    previewButtons: fakePreviewButtons,
     fireFrame(now): void {
       const cb = pending;
       if (!cb) throw new Error('no frame queued');
@@ -2612,6 +2621,11 @@ describe('startGameWith: the live tank preview', () => {
     expect(h.rec.previewCanvasesReceived).toHaveLength(0); // not built merely by booting
     h.hud.openCustomize();
     expect(h.rec.previewCanvasesReceived).toEqual([h.previewCanvas]);
+    // The rotate cluster travels with it, from the SAME HUD. The preview's buttons are
+    // optional in preview-controls.ts (every canvas scheme works without them), so
+    // dropping this argument in loop.ts leaves a working preview with four dead buttons
+    // and nothing else in the suite would notice -- this is the only pin on the wiring.
+    expect(h.rec.previewButtonsReceived).toEqual([h.previewButtons]);
     expect(h.rec.previewRestyles).toEqual([
       { hex: '#hex-purple', skin: 'camo', accent: '#accent-gold' },
     ]);
