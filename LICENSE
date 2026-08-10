@@ -1,0 +1,27 @@
+Copyright (c) 2025-2026 Austin Orphan. All rights reserved.
+
+This repository is source-available, not open source. No licence to use, copy,
+modify, merge, publish, distribute, sublicense or sell this software, or any
+part of it, is granted by its being published here.
+
+You may:
+
+  - read the source, and clone the repository in order to read it;
+  - build and run it locally for the purpose of evaluating it;
+  - submit contributions, on the understanding that a contribution is offered
+    for inclusion in this repository under these same terms.
+
+Any other use requires the copyright holder's written permission.
+
+This software bundles third-party components under their own licences, which
+are reproduced in THIRD-PARTY-NOTICES.md. Nothing above restricts any right
+those licences grant you in respect of those components; equally, nothing in
+them grants you any right in respect of this software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

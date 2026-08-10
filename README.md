@@ -50,6 +50,24 @@ Everything else is a one-way projection of sim state:
 The build sets `base: './'`, so `dist/` is portable to any static host and any
 subpath without reconfiguration.
 
+## Licence
+
+**Source-available, not open source.** See [LICENSE](LICENSE): you may read the code,
+clone it to read it, and build and run it locally to evaluate it. Anything else needs
+written permission. `package.json` carries `"license": "UNLICENSED"` to match, and a test
+fails if the two ever disagree.
+
+That is a deliberate default rather than a settled decision — it is the reversible one,
+since an MIT grant on a published commit cannot be withdrawn from that commit while the
+opposite direction is a one-file change. The reasoning, and what would change it, is in
+[docs/superpowers/backlog.md](docs/superpowers/backlog.md) under "Spike: the repo's own
+licence terms".
+
+The game bundles three.js and howler.js, both MIT; their notices are reproduced in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which is **generated** — run
+`npm run notices` after any dependency change. `npm test` fails if it has drifted from
+the dependency tree, so it cannot go stale unnoticed.
+
 ## Audio assets
 
 None are committed. `public/audio/` holds only a `.gitkeep`, so the manifest

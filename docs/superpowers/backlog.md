@@ -447,7 +447,11 @@ be wrong.
 1. **Steam is unblocked but not close.** The gaps are concrete: zero gamepad code anywhere
    (`grep -rni gamepad` returns 3 doc hits, all "out of scope", and 0 under `src/`), five
    localStorage keys that Steam Auto-Cloud cannot see, 14 achievements with no external
-   write path, no packaging target, and no LICENSE file.
+   write path, and no packaging target. **The LICENSE half of this closed in #116**: the
+   repo now carries a LICENSE and a generated `THIRD-PARTY-NOTICES.md`, so the MIT notice
+   reproduction a distributed binary owes has a file to travel in. What is NOT closed is
+   surfacing it inside the game (issue #117) and the choice of terms itself (the spike
+   below).
 2. **Steam Deck / Machine Verified is UNKNOWN, not a fail.** The criterion binds the default
    *controller configuration*, authored on the partner site — Valve's own recommendations
    page tells developers without native controller support to map one to keyboard/mouse. The
@@ -479,6 +483,53 @@ be wrong.
 **Deliberately unestimated.** Console porting effort and cost are not estimated here: the
 toolchains are NDA'd, and neither Nintendo nor Sony publishes devkit prices or certification
 requirements. Any number would be invented.
+
+---
+
+## Spike: the repo's own licence terms — the default that shipped is reversible, and provisional
+
+**Raised 2026-08-10**, while closing issue #116.
+
+**The question:** under what terms is this repository published? #116 asked for "a LICENSE";
+it did not say which, and that is not a question an implementer should settle quietly.
+
+**What shipped, and why.** `LICENSE` is **source-available, all rights reserved**:
+read/clone/build-locally is permitted, everything else needs written permission.
+`package.json` gained `"license": "UNLICENSED"` to match, and
+`tools/notices/notices.test.ts` fails if the two ever disagree. Four facts drove the
+default:
+
+1. **Nothing forces a choice.** Across the **191** non-root `package-lock.json` entries —
+   the lockfile rather than `node_modules`, because the installed set varies by platform —
+   the declared licences are **162 MIT, 12 MPL-2.0, 4 Apache-2.0, 3 BSD-3-Clause, 3 ISC,
+   2 BSD-2-Clause, 2 MIT-0, 1 0BSD, 1 BlueOak-1.0.0, 1 CC0-1.0**, and **0 undeclared**.
+   No GPL, LGPL or AGPL anywhere. The two packages that actually ship (`three`, `howler`)
+   are both MIT, so no copyleft obligation reaches this repo's own terms and every
+   outbound licence was available. Recomputed by `tools/notices/notices.test.ts`, so this
+   paragraph cannot drift from the lockfile.
+2. **All 12 MPL-2.0 entries are `lightningcss` and its 11 platform binaries**, every one
+   `dev: true`, and MPL's copyleft is per-FILE — it does not reach CSS that tool
+   transforms, and none of it ships. Not a constraint; recorded so nobody re-derives it.
+3. **The asymmetry is the argument.** An MIT grant on a published commit is irrevocable
+   for that commit: proprietary → MIT is a one-file change, MIT → proprietary is not
+   possible for anything already published. Under uncertainty about the owner's intent,
+   the reversible option is the defensible default.
+4. **The stated intent points away from MIT.** Issue #116 raises this because of a possible
+   paid release; MIT would let anyone repackage and sell the same game.
+   `git shortlog -sne --all` reports one author over all 249 commits reachable from any
+   ref, so a later relicence needs no contributor agreement.
+
+**What would answer it:** the owner deciding. It is a genuine preference, not a
+measurement. If the answer is "open source after all", three files change — `LICENSE`,
+`package.json`'s `license` field, and the README section. The test forces the first two to
+move together; the README paragraph is prose and is pinned by nothing.
+
+**Second, smaller question, deliberately not settled here:** the notices file is **not
+copied into `dist/`**, so the deployed build at austinorphan.com/tanks/ still distributes
+three.js and howler with no notice attached. Issue #117 (a HUD credits panel) is the
+in-game answer; a `public/THIRD-PARTY-NOTICES.md` would be the cheap one. Neither was in
+#116's scope. Whether a web page served from a subpath "distributes" the software in the
+sense MIT means is a lawyer question, and nobody here is one.
 
 ---
 

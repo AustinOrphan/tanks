@@ -2,6 +2,7 @@
   "name": "tanks",
   "private": true,
   "version": "0.0.0",
+  "license": "UNLICENSED",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24.0.0"
@@ -17,7 +18,8 @@
     "trace:browser": "node tools/baseline/run.mjs",
     "gallery": "node tools/gallery/run.mjs",
     "audio": "node tools/audio/render.mjs",
-    "mutate": "node tools/mutate/run.mjs"
+    "mutate": "node tools/mutate/run.mjs",
+    "notices": "node tools/notices/notices.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
