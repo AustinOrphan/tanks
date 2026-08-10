@@ -388,6 +388,22 @@ describe('hud.css is syntactically whole', () => {
     // layout choice and 34px is already a documented compromise on a 260px pane.
     expect(parseFloat(style.width)).toBeGreaterThanOrEqual(32);
     expect(parseFloat(style.height)).toBeGreaterThanOrEqual(32);
+
+    // The icon inside it needs its OWN size, and this is the assertion that says so: an
+    // <svg> with a viewBox and no CSS size falls back to the replaced-element default
+    // (300x150 in a real browser), which would put four enormous glyphs in the middle of
+    // the pane. The presence check above cannot see it -- `.hud-rotate-icon` matching a
+    // rule that only sets `pointer-events` reads identically to `toContain` -- and a
+    // mutation deleting exactly those two declarations SURVIVED the whole suite until
+    // this was added.
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('class', 'hud-rotate-icon');
+    b.appendChild(icon);
+    const iconStyle = getComputedStyle(icon);
+    expect(parseFloat(iconStyle.width), 'the icon has no explicit width').toBeGreaterThan(0);
+    expect(parseFloat(iconStyle.height), 'the icon has no explicit height').toBeGreaterThan(0);
+    // ...and it must not swallow the press that the BUTTON is listening for.
+    expect(iconStyle.pointerEvents).toBe('none');
     document.body.innerHTML = '';
   });
 

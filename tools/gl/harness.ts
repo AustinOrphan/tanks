@@ -1083,8 +1083,10 @@ await checkAsync('a rotate button turns the tank in the rendered image', async (
   for (const b of btns) b.remove();
   const moved = bytesDiffering(before, after);
   // One KEY_STEP_RAD nudge is 7.5 degrees of hull, a much smaller silhouette change
-  // than the 90px drag next door. Measured on this harness: 6000-9000 bytes with the
-  // buttons wired, 0 with the rotateButtons argument dropped in preview.ts.
+  // than the 90px drag next door. Both ends measured on this harness: 11828 of 197600
+  // bytes with the buttons wired, and EXACTLY 0 with preview.ts stopping forwarding
+  // rotateButtons to createPreviewControls -- which is the one mutation in that sweep
+  // no vitest case could see, and the reason this check exists.
   if (moved < 1000) return `only ${moved} of ${before.length} bytes changed -- the button did not reach the pixels`;
   return null;
 });

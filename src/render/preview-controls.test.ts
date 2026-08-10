@@ -1061,6 +1061,19 @@ describe('createPreviewControls: the idle spin comes back', () => {
     expect(h.clearedTimers.length).toBeGreaterThanOrEqual(4);
     h.controls.dispose();
     expect(h.timers.size).toBe(0);
+
+    // The path above is cancelled by the PRESS, not by armResume -- so on its own it
+    // says nothing about armResume's own cancel, and a mutation removing that survived
+    // it. This is the sequence with no press in the middle: releasing a rotate button
+    // and then moving the mouse off it ends the interaction twice in a row.
+    const b2 = harness();
+    const btn = b2.button('hull', 'right');
+    btn.dispatchEvent(pointerEvent('pointerdown'));
+    btn.dispatchEvent(pointerEvent('pointerup'));
+    expect(b2.timers.size).toBe(1);
+    btn.dispatchEvent(pointerEvent('pointerleave'));
+    expect(b2.timers.size, 'two resumes are pending at once').toBe(1);
+    b2.controls.dispose();
   });
 });
 
