@@ -606,10 +606,14 @@ the cheapest route that does not introduce this tree's first shader?
   as "skin" or as "this tank is in some state" — the game already uses emissive pulsing to
   mean "armed mine". Answer that with eyes before writing the registry.
 
-**Constraint that shapes any shader answer:** nothing on the deploy path can see a shader.
-`pages.yml` runs `tsc`, `vitest`, `vite build`, `portability` and `npm audit` — **not the
-`visual` job**. A `ShaderMaterial` whose GLSL fails to compile typechecks, passes vitest
-(jsdom has no WebGL), and publishes. Only `npm run test:gl` could catch it.
+**Constraint that shapes any shader answer, now HALF closed.** A `ShaderMaterial` whose
+GLSL fails to compile typechecks and passes vitest (jsdom has no WebGL); only
+`npm run test:gl` catches it. That used to mean it would publish, because `pages.yml` ran
+`tsc`, `vitest`, `vite build`, `portability` and `npm audit` but **not the `visual` job**.
+Since #141 the deploy waits on CI, and `visual` is part of that run — so on the automatic
+path a broken shader now fails CI and never reaches the site. **It remains true of
+`workflow_dispatch`**, which is ungated by construction and still runs only those five
+steps. So: a shader is safe on merge, and a manual re-deploy can still publish one.
 
 
 ## Follow-ups from "game data plumbing" (storage resolver, save export/import, replay recorder)
