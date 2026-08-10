@@ -3,15 +3,19 @@ import type { SimEvent } from '../sim/events';
 import type { Vec2, InputState } from '../sim/types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from '../sim/ai/player-profile';
 import { createLevelSystem, type LevelSystem } from './levels';
-import { createProgressStore, type ProgressStore } from './progress';
-import { createStatsStore, type StatsStore } from './stats';
-import { createCustomizationStore, type CustomizationStore, type SkinId } from './customization';
-import { createTouchSettingsStore, type TouchSettingsStore } from './touch-settings';
+import type { ProgressStore } from './progress';
+import type { StatsStore } from './stats';
+import type { CustomizationStore, SkinId } from './customization';
+import type { TouchSettingsStore } from './touch-settings';
+import type { AchievementsStore, AchievementContext } from './achievements';
+import { resolveStorage, createStores } from './storage';
+import { createSaveApi, type SaveApi } from './save';
 import {
-  createAchievementsStore,
-  type AchievementsStore,
-  type AchievementContext,
-} from './achievements';
+  createRecordingInput,
+  replayMetaFor,
+  type RecordingInput,
+  type ReplayTrace,
+} from './replay';
 import { createInputController, type InputController } from '../input/input';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
@@ -118,6 +122,21 @@ export interface GameDeps {
   /** The right thumb's saved aim scheme. Input-only downstream, unlike customization. */
   readonly touchSettings: TouchSettingsStore;
   readonly achievements: AchievementsStore;
+  /**
+   * The RAW key/value layer the five stores above sit on.
+   *
+   * Deliberately alongside them rather than instead of them: the save
+   * export/import round-trips whole strings, which the typed stores cannot do
+   * (they validate on read and drop what they do not recognise -- exactly the
+   * data an export exists to preserve). Nothing else in this file touches it.
+   */
+  readonly storage: Storage;
+  /**
+   * Where the dev console surface is published, when a dev flag asks for one.
+   * `globalThis` in the browser. Injected so the publish/teardown is assertable
+   * without reaching for a global in a test.
+   */
+  readonly devConsole: DevConsoleTarget;
   /** Monotonic ms for the frame loop. */
   readonly now: () => number;
   /** Wall-clock ms, used ONLY to derive world seeds. Separate from `now` on purpose. */
@@ -132,6 +151,32 @@ export interface GameDeps {
 export interface GameHandle {
   dispose(): void;
 }
+
+/**
+ * The property the dev surface is published under.
+ *
+ * Underscored because this origin is SHARED with every other project page on
+ * austinorphan.com (CLAUDE.md): a bare `tanks` on the global object is a name a
+ * neighbour could plausibly want.
+ */
+export const DEV_CONSOLE_KEY = '__tanks';
+
+/**
+ * What `?dev=1&saveIo=1` / `?dev=1&replay=1` put on the console.
+ *
+ * Each member appears only when its own flag is on, and the whole object is
+ * absent when neither is -- so a shipped build has no dev surface at all, not an
+ * empty one that reads as "the feature is here but broken".
+ */
+export interface DevConsole {
+  /** Export/import the five `tanks.*` keys. Reload after an import -- see save.ts. */
+  save?: SaveApi;
+  /** The input trace for the CURRENT level, replayable through replay.ts. */
+  replay?: () => ReplayTrace;
+}
+
+/** Where the dev surface is published. `globalThis` in the browser; a plain object in tests. */
+export type DevConsoleTarget = Record<string, unknown>;
 
 /**
  * A fresh seed per world. Wall-clock time is illegal inside sim/ -- it would
@@ -263,26 +308,14 @@ function countEnemies(world: World): number {
  * read off globalThis so that a mis-call under node yields undefined at the use
  * site rather than a ReferenceError at import.
  */
-/**
- * localStorage can be absent or throw at ACCESS time in locked-down contexts; the
- * progress store handles throwing METHODS, so only the property access needs guarding.
- */
-function browserStorage(): Storage {
-  try {
-    if (globalThis.localStorage) return globalThis.localStorage;
-  } catch {
-    // fall through to the inert stand-in
-  }
-  return { getItem: () => null, setItem: () => {} } as unknown as Storage;
-}
-
 export function createBrowserDeps(): GameDeps {
   const devFlags = parseDevFlags(globalThis.location?.search ?? '');
-  const progress = createProgressStore(browserStorage());
-  const stats = createStatsStore(browserStorage());
-  const customization = createCustomizationStore(browserStorage());
-  const touchSettings = createTouchSettingsStore(browserStorage());
-  const achievements = createAchievementsStore(browserStorage());
+  // Resolved ONCE and shared by all five stores. It used to be resolved per
+  // store, which was harmless only because localStorage hands back the same
+  // object every time -- with the in-memory fallback it would have given each
+  // store its own private namespace. storage.ts makes that structural.
+  const storage = resolveStorage();
+  const { progress, stats, customization, touchSettings, achievements } = createStores(storage);
   return {
     createRenderer,
     createPreview: createTankPreview,
@@ -297,6 +330,8 @@ export function createBrowserDeps(): GameDeps {
     customization,
     touchSettings,
     achievements,
+    storage,
+    devConsole: globalThis as unknown as DevConsoleTarget,
     now: () => performance.now(),
     wallMs: () => Date.now(),
     raf: {
@@ -393,6 +428,21 @@ export function startGameWith(
         ? decidePlayerInput(driver.world, playerId, autoplayRnd, autoplayState)
         : input.sample(),
   };
+  /**
+   * `?dev=1&replay=1`: remember what was sampled, tick by tick.
+   *
+   * Wraps `effectiveInput`, NOT `input`: effectiveInput is what the driver is
+   * handed, so this captures the stream step() actually saw -- including the
+   * autoplay substitution above. Wrapping `input` instead would record an empty
+   * stream for every autoplay demo while looking correct in a normal session.
+   *
+   * The driver is untouched: it already calls `input.sample()` exactly once per
+   * simulated tick, so a decorator is the whole mechanism. A trace spans ONE
+   * world, so `begin` restarts it on every level switch (see switchTo).
+   */
+  const recorder: RecordingInput | null = deps.devFlags.replay
+    ? createRecordingInput(effectiveInput, replayMetaFor(world, level))
+    : null;
   const director = deps.createDirector(audio, playerId ?? -1);
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
@@ -466,7 +516,7 @@ export function startGameWith(
   const driver = createDriver({
     now: deps.now,
     raf: deps.raf,
-    input: effectiveInput,
+    input: recorder ?? effectiveInput,
     renderer,
     director,
     stateMachine: sm,
@@ -545,6 +595,10 @@ export function startGameWith(
   function switchTo(newLevel: number, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
+    // A new world means a new trace: the recorded inputs only mean anything
+    // applied to the world they were sampled against, so carrying them across a
+    // level switch would produce a trace that replays into a different game.
+    recorder?.begin(replayMetaFor(world, level));
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     // A FRESH world's roundStartTick can equal the old one's (both start at the same
@@ -849,11 +903,28 @@ export function startGameWith(
   deps.host.addEventListener('resize', onResize);
   onResize();
 
+  /**
+   * The dev console surface, published only for the flags that asked for it.
+   *
+   * Console-level and nothing else: no HUD button, no CSS. Whether save
+   * export/import earns a permanent affordance is a product call (issue #110),
+   * and a button shipped here would decide it by accident.
+   */
+  const devApi: DevConsole = {};
+  if (deps.devFlags.saveIo) devApi.save = createSaveApi(deps.storage);
+  if (recorder) devApi.replay = (): ReplayTrace => recorder.trace();
+  const publishedDevApi = Object.keys(devApi).length > 0;
+  if (publishedDevApi) deps.devConsole[DEV_CONSOLE_KEY] = devApi;
+
   driver.start();
 
   return {
     dispose(): void {
       driver.stop();
+      // Guarded on having published it: a teardown that deleted the key
+      // unconditionally would remove whatever a second instance -- or a
+      // neighbouring page on this shared origin -- had put there.
+      if (publishedDevApi) delete deps.devConsole[DEV_CONSOLE_KEY];
       deps.host.removeEventListener('keydown', onKey);
       deps.host.removeEventListener('resize', onResize);
       deps.host.removeEventListener('blur', onBlur);

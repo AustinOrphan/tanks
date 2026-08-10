@@ -86,8 +86,8 @@ all 7)" and swept "all 5040 orderings" (= 7!). An earlier draft said nine; it is
 
 `tanks.progress.v1` (`progress.ts:12`), `tanks.touch.v1` (`touch-settings.ts:11`),
 `tanks.stats.v1` (`stats.ts:10`), `tanks.custom.v1` (`customization.ts:11`),
-`tanks.achievements.v1` (`achievements.ts:16`). **`CLAUDE.md:62` still says "four keys" and
-is stale.**
+`tanks.achievements.v1` (`achievements.ts:16`). **`CLAUDE.md:62` said "four keys" when this
+was written; corrected to five by the PR that closed issue #109.**
 
 Steam Auto-Cloud matches a Root + Subdirectory + wildcard Pattern against files on disk
 ([partner.steamgames.com/doc/features/cloud](https://partner.steamgames.com/doc/features/cloud),
