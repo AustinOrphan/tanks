@@ -262,9 +262,11 @@ describe('runManifest', () => {
     const entries = [entry({ id: 'a' }), entry({ id: 'b' })];
     expect(() => runManifest(entries, deps, applyAt)).toThrow(/RESTORE FAILED/);
     // Only entry 'a' ran; 'b' must never have been attempted on a tree already
-    // known to be in a bad state.
+    // known to be in a bad state. readFile is called twice for 'a' -- once for
+    // the original bytes, once to read back the (failed) restore -- and zero
+    // times for 'b'.
     expect(deps.onResult).toHaveBeenCalledTimes(1);
-    expect(deps.readFile).toHaveBeenCalledTimes(1);
+    expect(deps.readFile).toHaveBeenCalledTimes(2);
   });
 
   it('shouldStop, checked between entries, halts before any of them starts', () => {
