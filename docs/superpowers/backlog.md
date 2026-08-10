@@ -252,7 +252,6 @@ but "some CI job already built this bundle" is not a thing anyone has shown.
 
 ## Customize preview residuals, deferred while shipping the live tank preview
 
-- `preview.ts`'s `FOV` (50) deliberately differs from the arena's `BASE_FOV` (30) so a close-up does not read flat, but the two were never rendered side by side and nothing pins either against the other. The previous comment claimed they matched and went stale silently when #103 changed `BASE_FOV`; review caught it. #102
 **Raised 2026-08-09**, shipping PR #102 (`src/render/preview.ts`, a second WebGL
 context for the Customize panel's live tank preview).
 
@@ -279,6 +278,15 @@ full game; the preview does not, so verifying a future retune still means openin
 the real Customize panel by hand or re-running the GL harness.
 
 ---
+
+**4. The preview's lens and the arena's are deliberately different, and neither is
+pinned.** `preview.ts`'s `FOV` is 50 while `scene.ts`'s `BASE_FOV` is 30 -- a close-up
+at 30 would push the camera far enough out to read flat. But the two were never
+rendered side by side, and mutating `FOV` 50 -> 30 leaves both gates green (1563 tests,
+39 GL checks), so nothing would catch a change either way. The previous comment claimed
+the two matched and went stale silently when #103 moved `BASE_FOV`; review caught it,
+and the comment now asserts no relationship rather than a false one. Needs eyes, not a
+test. #102
 
 ## Ledger: deferred work harvested from PR descriptions
 
