@@ -1,14 +1,33 @@
 /**
- * The harness's own tests. Two layers, on purpose:
+ * The harness's own tests. Three layers, on purpose:
  *
  * - lib.mjs and orchestrate.mjs, exercised with FAKE deps (in-memory strings, no real
  *   fs/git/vitest). Fast, and what makes edge cases like "ambiguous find" or "restore
  *   verification fails" cheap to hit deliberately.
- * - a handful of REAL end-to-end cases that spawn `node tools/mutate/run.mjs` as a
- *   real subprocess against a real fixture file and a real vitest run. Those are what
- *   prove the actual wiring -- git status parsing, the vitest JSON reporter, process
- *   exit codes -- works, not just the orchestration logic around it. Kept to three
- *   cases because each one pays a real vitest-subprocess-boot cost.
+ * - run.mjs's own pure pieces (parseArgs, formatResult, dirtyReport), unit tested
+ *   directly against strings -- no subprocess needed for CLI-argument or
+ *   message-formatting logic.
+ * - a few REAL end-to-end cases that run runOne/runManifest with REAL fs and a REAL
+ *   vitest subprocess (run.mjs's own runTestsReal), against a throwaway fixture
+ *   .test.ts file generated with a unique name for each one and deleted in a finally.
+ *
+ *   That file is deliberately NOT a member of the normal `npm test` suite, and not
+ *   reused by anything else: it is created (with a name unique to this process/run)
+ *   only after `vitest run`'s own one-shot startup glob has already resolved, so this
+ *   suite's own copy of itself never discovers or imports it, and nothing else in the
+ *   tree ever reads it while the harness has it mid-mutation. Earlier drafts of this
+ *   file used a small fixture pair COMMITTED under tools/mutate/fixtures/ -- but a
+ *   committed file matching `tools/**\/*.test.ts` is *also* collected and run by the
+ *   outer `npm test` process as an ordinary test file, in parallel with this one, which
+ *   raced: the outer worker's own copy of that fixture test could import the file while
+ *   THIS test had it mutated on disk mid-flight, and see the mutated (temporarily
+ *   "wrong") content. A uniquely-named, created-then-deleted file has no such sibling
+ *   to race against. The dirty-check (`gitPorcelain`) is stubbed for this one test
+ *   rather than backed by real git, because a freshly-created scratch file is
+ *   necessarily untracked -- `git status --porcelain` on it is never empty, which the
+ *   harness correctly (for real manifest entries, which always target long-committed
+ *   files) treats as "dirty, refuse". That refusal path is covered separately, with
+ *   fakes, in "runOne > refuses a dirty file before touching it" below.
  *
  * "A guard is worth what its own tests prove" (CLAUDE.md) -- so every negative control
  * this tool's own doc comment promises has a test here: a find that does not match
@@ -16,11 +35,11 @@
  * wrong must produce a non-zero exit code.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { findOccurrences, applyAt, validateEntry, validateManifest } from './lib.mjs';
 import { runOne, runManifest, computeExitCode, STATUS } from './orchestrate.mjs';
+import { parseArgs, formatResult, dirtyReport, runTestsReal } from './run.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 
@@ -290,109 +309,175 @@ describe('computeExitCode', () => {
 });
 
 // ---------------------------------------------------------------------------
-// End-to-end: the real CLI, a real fixture file, a real vitest subprocess.
+// run.mjs's own pure pieces: CLI args, result formatting, the dirty-check message
 // ---------------------------------------------------------------------------
 
-const FIXTURE_REL = 'tools/mutate/fixtures/greeter.mjs';
-const FIXTURE_TEST_REL = 'tools/mutate/fixtures/greeter.fixture.test.ts';
-const FIXTURE_PATH = join(ROOT, FIXTURE_REL);
-const RUN_MJS = join(ROOT, 'tools/mutate/run.mjs');
-
-function gitPorcelain(relPath) {
-  return execFileSync('git', ['status', '--porcelain', '--', relPath], { cwd: ROOT }).toString();
-}
-
-function writeTmpManifest(entries) {
-  const p = join(ROOT, `tools/mutate/fixtures/tmp-manifest-${process.pid}-${Date.now()}.json`);
-  writeFileSync(p, JSON.stringify(entries));
-  return p;
-}
-
-function runCli(manifestAbsPath, extraArgs: string[] = []) {
-  const rel = manifestAbsPath.slice(ROOT.length);
-  return spawnSync('node', [RUN_MJS, '--manifest', rel, ...extraArgs], { cwd: ROOT, encoding: 'utf8' });
-}
-
-describe('end-to-end: real CLI against the greeter fixture', () => {
-  it('precondition: the fixture is clean before these tests run', () => {
-    expect(gitPorcelain(FIXTURE_REL).trim()).toBe('');
+describe('parseArgs', () => {
+  it('defaults to the shipped manifest and no --only filter', () => {
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null });
   });
 
-  it('FAILED-TO-APPLY when find does not match -- never SURVIVED, and the file is untouched', () => {
-    const manifest = writeTmpManifest([{
-      id: 'e2e-not-found', file: FIXTURE_REL,
-      find: 'this string is not in greeter.mjs', replace: 'x',
-      why: 'negative control', expect: 'survives', tests: [FIXTURE_TEST_REL],
-    }]);
+  it('accepts --manifest and --only overrides', () => {
+    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id'])).toEqual({ manifest: 'x.json', only: 'my-id' });
+  });
+
+  it('rejects an unknown flag rather than silently ignoring it', () => {
+    expect(() => parseArgs(['--bogus'])).toThrow(/unknown argument/);
+  });
+});
+
+describe('dirtyReport', () => {
+  it('is null (no refusal) for a clean porcelain output', () => {
+    expect(dirtyReport('')).toBeNull();
+    expect(dirtyReport('\n  \n')).toBeNull();
+  });
+
+  it('names the dirty files when porcelain output is non-empty', () => {
+    const report = dirtyReport(' M src/render/skins.ts\n?? scratch.txt\n');
+    expect(report).toMatch(/refusing to start/);
+    expect(report).toMatch(/skins\.ts/);
+    expect(report).toMatch(/scratch\.txt/);
+  });
+});
+
+describe('formatResult', () => {
+  const e = { expect: 'killed', equivalent: false };
+
+  it('reports FAILED-TO-APPLY / ERROR without a match/mismatch tag -- they never carry a declared outcome', () => {
+    const line = formatResult({ id: 'x', status: STATUS.FAILED_TO_APPLY, matches: false, detail: 'find string not present' }, 1, 1, e);
+    expect(line).toMatch(/FAILED-TO-APPLY/);
+    expect(line).toMatch(/find string not present/);
+    expect(line).not.toMatch(/matches declared|MISMATCH/);
+  });
+
+  it('marks a match as "matches declared outcome"', () => {
+    const line = formatResult({ id: 'x', status: STATUS.KILLED, matches: true, detail: '2 of 5 test(s) failed' }, 1, 1, e);
+    expect(line).toMatch(/matches declared outcome/);
+  });
+
+  it('marks a mismatch, naming what the manifest declared', () => {
+    const line = formatResult({ id: 'x', status: STATUS.SURVIVES, matches: false, detail: '0 of 5 test(s) failed' }, 1, 1, e);
+    expect(line).toMatch(/MISMATCH: manifest declared "killed"/);
+  });
+
+  it('tags an equivalent-mutant survive distinctly from a plain survive', () => {
+    const result = { id: 'x', status: STATUS.SURVIVES, matches: true, detail: '0 of 5 test(s) failed' };
+    expect(formatResult(result, 1, 1, { ...e, equivalent: true })).toMatch(/\[equivalent mutant\]/);
+    expect(formatResult(result, 1, 1, { ...e, equivalent: false })).not.toMatch(/\[equivalent mutant\]/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end: real fs + a real vitest subprocess (run.mjs's own runTestsReal),
+// against a throwaway fixture created and destroyed within this one test.
+// ---------------------------------------------------------------------------
+
+describe('end-to-end: real apply -> real vitest subprocess -> real restore', () => {
+  const fixturesDir = join(ROOT, 'tools/mutate/fixtures');
+
+  function makeFixture(greeting: string) {
+    const id = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const rel = `tools/mutate/fixtures/tmp-e2e-${id}.test.ts`;
+    const abs = join(ROOT, rel);
+    mkdirSync(fixturesDir, { recursive: true });
+    const source =
+      "import { describe, it, expect } from 'vitest';\n" +
+      `function greet(name: string) { return \`${greeting} \${name}\`; }\n` +
+      "describe('e2e fixture', () => {\n" +
+      `  it('greets by name', () => { expect(greet('world')).toBe('${greeting} world'); });\n` +
+      '});\n';
+    writeFileSync(abs, source);
+    return { rel, abs, source };
+  }
+
+  // Real fs, real vitest subprocess -- but a stubbed git, since a freshly-created
+  // scratch file is inherently untracked (see the file-level comment above).
+  function realDepsWithStubGit(onResult = () => {}) {
+    return {
+      readFile: (file: string) => readFileSync(join(ROOT, file), 'utf8'),
+      gitPorcelain: () => '',
+      applyToDisk: (file: string, content: string) => writeFileSync(join(ROOT, file), content),
+      restoreToDisk: (file: string, content: string) => writeFileSync(join(ROOT, file), content),
+      runTests: runTestsReal,
+      onResult,
+    };
+  }
+
+  it('a real killed mutation: matches "killed", and an INDEPENDENT fs read (a fresh readFileSync, not the deps the harness itself used) confirms the file is back to its original bytes', () => {
+    const { rel, abs, source } = makeFixture('hello');
     try {
-      const res = runCli(manifest);
-      expect(res.stdout).toMatch(/FAILED-TO-APPLY/);
-      expect(res.stdout).not.toMatch(/SURVIVES/);
-      expect(res.status).not.toBe(0); // FAILED-TO-APPLY always counts as a mismatch
-      expect(gitPorcelain(FIXTURE_REL).trim()).toBe(''); // nothing was ever written
+      const results = runManifest(
+        [{
+          id: 'e2e-killed', file: rel,
+          find: 'function greet(name: string) { return `hello ${name}`; }',
+          replace: 'function greet(name: string) { return `yo ${name}`; }',
+          why: 'the fixture test asserts the exact string "hello world"',
+          expect: 'killed',
+          tests: [rel],
+        }],
+        realDepsWithStubGit(),
+        applyAt,
+      );
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe(STATUS.KILLED);
+      expect(results[0].matches).toBe(true);
+      expect(results[0].detail).toBe('1 of 1 test(s) failed');
+      expect(readFileSync(abs, 'utf8')).toBe(source); // independent re-read, byte-exact
     } finally {
-      rmSync(manifest, { force: true });
+      rmSync(abs, { force: true });
     }
   });
 
-  it('a real killed mutation: correct declared outcome exits 0, and the file is genuinely restored (checked via git, not self-report)', () => {
-    const manifest = writeTmpManifest([{
-      id: 'e2e-killed', file: FIXTURE_REL,
-      find: 'return `hello ${name}`;', replace: 'return `yo ${name}`;',
-      why: 'greeter.fixture.test.ts asserts the exact string "hello world"', expect: 'killed',
-      tests: [FIXTURE_TEST_REL],
-    }]);
+  it('a manifest declaring the WRONG outcome for a real, really-killed mutation is a real mismatch -- and the file is still restored', () => {
+    const { rel, abs, source } = makeFixture('hello');
     try {
-      const res = runCli(manifest);
-      expect(res.stdout).toMatch(/KILLED/);
-      expect(res.stdout).toMatch(/matches declared outcome/);
-      expect(res.status).toBe(0);
-      expect(gitPorcelain(FIXTURE_REL).trim()).toBe('');
-      expect(readFileSync(FIXTURE_PATH, 'utf8')).toContain('hello ${name}');
+      const results = runManifest(
+        [{
+          id: 'e2e-wrong-declared', file: rel,
+          find: 'function greet(name: string) { return `hello ${name}`; }',
+          replace: 'function greet(name: string) { return `yo ${name}`; }',
+          why: 'deliberately wrong: this mutation is killed, declared survives',
+          expect: 'survives', // WRONG on purpose
+          tests: [rel],
+        }],
+        realDepsWithStubGit(),
+        applyAt,
+      );
+      expect(results[0].status).toBe(STATUS.KILLED);
+      expect(results[0].matches).toBe(false);
+      expect(computeExitCode(results)).toBe(1);
+      expect(readFileSync(abs, 'utf8')).toBe(source);
     } finally {
-      rmSync(manifest, { force: true });
+      rmSync(abs, { force: true });
     }
   });
 
-  it('the SAME mutation with the WRONG declared outcome exits non-zero -- this is the whole point', () => {
-    const manifest = writeTmpManifest([{
-      id: 'e2e-wrong-declared', file: FIXTURE_REL,
-      find: 'return `hello ${name}`;', replace: 'return `yo ${name}`;',
-      why: 'deliberately wrong: this mutation is killed, declared survives',
-      expect: 'survives', // WRONG on purpose
-      tests: [FIXTURE_TEST_REL],
-    }]);
+  it('FAILED-TO-APPLY against a real file when find does not match -- never SURVIVED, and vitest is never even spawned', () => {
+    const { rel, abs, source } = makeFixture('hello');
+    const runTests = vi.fn(runTestsReal);
     try {
-      const res = runCli(manifest);
-      expect(res.stdout).toMatch(/KILLED/);
-      expect(res.stdout).toMatch(/MISMATCH/);
-      expect(res.status).not.toBe(0);
-      expect(gitPorcelain(FIXTURE_REL).trim()).toBe(''); // still restored despite the mismatch
+      const results = runManifest(
+        [{
+          id: 'e2e-not-found', file: rel,
+          find: 'this string is not in the fixture', replace: 'x',
+          why: 'negative control', expect: 'survives', tests: [rel],
+        }],
+        { ...realDepsWithStubGit(), runTests },
+        applyAt,
+      );
+      expect(results[0].status).toBe(STATUS.FAILED_TO_APPLY);
+      expect(results[0].matches).toBe(false);
+      expect(runTests).not.toHaveBeenCalled(); // no vitest subprocess for a mutation that never applied
+      expect(readFileSync(abs, 'utf8')).toBe(source); // never touched
     } finally {
-      rmSync(manifest, { force: true });
+      rmSync(abs, { force: true });
     }
   });
 
-  it('refuses to start against a file that is already dirty, and touches nothing', () => {
-    const before = readFileSync(FIXTURE_PATH, 'utf8');
-    writeFileSync(FIXTURE_PATH, before + '\n// manually dirtied by this test\n');
-    const manifest = writeTmpManifest([{
-      id: 'e2e-dirty', file: FIXTURE_REL,
-      find: 'return `hello ${name}`;', replace: 'return `yo ${name}`;',
-      why: 'should never be reached', expect: 'killed', tests: [FIXTURE_TEST_REL],
-    }]);
-    try {
-      const res = runCli(manifest);
-      expect(res.status).toBe(2);
-      expect((res.stderr ?? '') + (res.stdout ?? '')).toMatch(/already dirty|refusing to start/);
-      expect(readFileSync(FIXTURE_PATH, 'utf8')).toBe(before + '\n// manually dirtied by this test\n');
-    } finally {
-      rmSync(manifest, { force: true });
-      writeFileSync(FIXTURE_PATH, before); // clean up the manual dirtying
-    }
-  });
-
-  it('postcondition: the fixture is clean after these tests ran', () => {
-    expect(gitPorcelain(FIXTURE_REL).trim()).toBe('');
+  it('no stray tmp-e2e-* fixtures are left in tools/mutate/fixtures/ after this suite', () => {
+    const left = existsSync(fixturesDir)
+      ? readdirSync(fixturesDir).filter((f) => f.startsWith('tmp-e2e-'))
+      : [];
+    expect(left).toEqual([]);
   });
 });

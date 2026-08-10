@@ -33,7 +33,7 @@ import { runManifest, computeExitCode, STATUS } from './orchestrate.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = { manifest: 'tools/mutate/manifest.json', only: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--manifest') args.manifest = argv[++i];
@@ -47,15 +47,26 @@ function sh(cmd, argv) {
   return execFileSync(cmd, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 }
 
+/** Pure decision on top of a `git status --porcelain` string, so it is testable without
+ *  shelling out to git. Kept separate from assertAllClean's process.exit -- a test can
+ *  assert the message without a real git repo or a real process exit. */
+export function dirtyReport(porcelain) {
+  const dirty = porcelain.trim();
+  if (!dirty) return null;
+  return (
+    'refusing to start: uncommitted changes in files this manifest mutates:\n' +
+    `${dirty}\n` +
+    'commit or stash them first -- a mutation run rewrites these and restores them after.'
+  );
+}
+
 /** Files this run will touch, dirty-checked up front so an interrupted PRIOR run or
  *  unrelated in-progress edit is caught before anything is mutated -- the same
  *  refuse-if-dirty precedent tools/gallery/run.mjs follows for its --sweep. */
 function assertAllClean(files) {
-  const dirty = sh('git', ['status', '--porcelain', '--', ...files]).trim();
-  if (dirty) {
-    console.error('refusing to start: uncommitted changes in files this manifest mutates:');
-    console.error(dirty);
-    console.error('commit or stash them first -- a mutation run rewrites these and restores them after.');
+  const report = dirtyReport(sh('git', ['status', '--porcelain', '--', ...files]));
+  if (report) {
+    console.error(report);
     process.exit(2);
   }
 }
@@ -85,7 +96,7 @@ export function runTestsReal(testFiles) {
   }
 }
 
-function formatResult(result, index, count, entry) {
+export function formatResult(result, index, count, entry) {
   const head = `[${index}/${count}] ${result.id}`;
   if (result.status === STATUS.FAILED_TO_APPLY || result.status === STATUS.ERROR) {
     // Always a mismatch by construction -- these never carry a declared outcome to
@@ -97,31 +108,38 @@ function formatResult(result, index, count, entry) {
   return `${head} ... ${result.status}${equiv} (${result.detail}) -- ${tag}`;
 }
 
-// A blocking spawnSync child (vitest) shares the foreground process group, so
-// Ctrl+C reaches it too and it dies on its own default disposition -- spawnSync
-// then returns to us and runOne's try/finally restores the file exactly as it
-// would on any other exception. Registering a handler here does not (and cannot)
-// interrupt that blocking call; its job is narrower and just as necessary: without
-// ANY handler, Node's default SIGINT action would kill THIS process outright, at
-// the OS's discretion, possibly before spawnSync unblocks and finally runs. With a
-// handler installed, the default action is suppressed and we merely set a flag,
-// checked BETWEEN mutations, so no new (riskier) mutation starts after a Ctrl+C.
+// Registered inside main(), not at module scope: this file is imported (for
+// parseArgs/formatResult/dirtyReport/runTestsReal) by orchestrate.test.ts, which runs
+// inside the NORMAL `npm test` vitest process -- installing a SIGINT/SIGTERM handler at
+// import time would suppress that outer process's own Ctrl+C handling too.
 let interrupted = false;
-function onSignal(sig) {
-  if (interrupted) {
-    // second Ctrl+C: stop being polite and let the default action kill us.
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
-    process.kill(process.pid, sig);
-    return;
+function installSignalHandlers() {
+  // A blocking spawnSync child (vitest) shares the foreground process group, so
+  // Ctrl+C reaches it too and it dies on its own default disposition -- spawnSync
+  // then returns to us and runOne's try/finally restores the file exactly as it
+  // would on any other exception. Registering a handler here does not (and cannot)
+  // interrupt that blocking call; its job is narrower and just as necessary: without
+  // ANY handler, Node's default SIGINT action would kill THIS process outright, at
+  // the OS's discretion, possibly before spawnSync unblocks and finally runs. With a
+  // handler installed, the default action is suppressed and we merely set a flag,
+  // checked BETWEEN mutations, so no new (riskier) mutation starts after a Ctrl+C.
+  function onSignal(sig) {
+    if (interrupted) {
+      // second Ctrl+C: stop being polite and let the default action kill us.
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
+      process.kill(process.pid, sig);
+      return;
+    }
+    interrupted = true;
+    console.error(`\nreceived ${sig} -- letting the in-flight mutation finish and restore, then stopping`);
   }
-  interrupted = true;
-  console.error(`\nreceived ${sig} -- letting the in-flight mutation finish and restore, then stopping`);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 }
-process.on('SIGINT', onSignal);
-process.on('SIGTERM', onSignal);
 
 async function main() {
+  installSignalHandlers();
   const args = parseArgs(process.argv.slice(2));
   const manifestPath = join(ROOT, args.manifest);
   const allEntries = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -176,4 +194,8 @@ async function main() {
   process.exitCode = computeExitCode(results);
 }
 
-main();
+// Guarded so tests can import parseArgs/formatResult/dirtyReport/runTestsReal without
+// running the CLI (and without it fighting the test runner over argv/exit codes).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

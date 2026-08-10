@@ -9,5 +9,7 @@ gallery-out/
 *.gif
 audio-out/
 
-# scratch manifests written by tools/mutate's own end-to-end tests
-tools/mutate/fixtures/tmp-manifest-*.json
+# scratch fixtures written (and deleted) by tools/mutate's own end-to-end test --
+# uniquely named per run, cleaned up in a finally; this is only a safety net for an
+# interrupted test run
+tools/mutate/fixtures/tmp-e2e-*.test.ts

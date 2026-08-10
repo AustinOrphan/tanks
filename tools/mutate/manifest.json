@@ -23,7 +23,7 @@
     "find": "return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];",
     "replace": "return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];",
     "expect": "killed",
-    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written, and fails exactly that one test now. Kept as a manifest entry specifically to guard the guard: if this ever survives again, the weights test regressed.",
+    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. Verified against the scoped run only: 1 of 13 tests fails in src/render/skins.test.ts (not re-verified repo-wide here, though skins.ts's own comment claims exactly 1 repo-wide too). Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
     "tests": ["src/render/skins.test.ts"]
   },
   {
