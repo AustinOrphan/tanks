@@ -161,9 +161,13 @@ the payoff the hardest one does not.
   in reach of `loop.ts` without new plumbing: lives remaining, shells in flight, distance
   to the nearest live enemy, elapsed round ticks. A continuous term also removes the
   dependence on `total`, which is what makes resolution an accident of the grid.
-- **Then listen.** #76 ends "Nobody has listened to any of this." Still true. Any curve
-  chosen here is a guess until someone plays a round with it; the numbers above bound what
-  is *possible* to hear, not what sounds right.
+- **Then listen — and this time write down what you heard.** #76 ended "Nobody has
+  listened to any of this", which is no longer true: the game has been played and the
+  audio has been heard. What is still missing is a *recorded judgement* on the thing this
+  entry is about — whether the intensity transitions above land, and which of the
+  inversions in the last two columns is actually audible in a round. Any curve chosen here
+  stays a guess until someone plays it and states a verdict; the numbers above bound what
+  is *possible* to hear, not what sounds right, and no verdict exists in the tree.
 
 **Constraints that shape any answer:**
 
@@ -345,8 +349,10 @@ pointed at.
 - `IDLE_SPIN_RAD_PER_SEC` (0.35) — **unpinned.** x10 survives both files.
 - `KEY_STEP_RAD` (pi/24) — **unpinned.** x12 survives both files.
 
-Nobody has played with the panel on a phone, and the drag rate is the one most likely to
-be wrong there.
+Nothing in the tree records anyone having used the panel on a phone, and the drag rate is
+the one most likely to be wrong there. The game HAS been played — that is not the gap. The
+gap is that no judgement on these four constants has been stated on any device, and
+`HULL_DRAG_RAD_PER_PX` in particular is a touch constant whose only evidence is a mouse.
 
 **9. `tools/` is not typechecked by anything.** `tsconfig.json`'s `include` is
 `["src", "vite.config.ts"]`, so `npm test`'s `tsc --noEmit` never reads
@@ -643,6 +649,187 @@ same seam a player would use); what is missing is the world-rebuild-from-meta pa
 
 ---
 
+## Spike: should `src/sim/` be Rust compiled to WASM?
+
+**Raised 2026-08-10**, alongside the cross-engine determinism issue.
+
+**The question:** should the deterministic core be rewritten in Rust and compiled to WASM?
+
+**Why it is live now.** Two things it would buy, both real. Rust + WASM gives
+**bit-identical arithmetic across platforms**, and it is worth being exact about the
+mechanism rather than waving at "WASM is deterministic". Two separate reasons combine:
+WASM's core `f32`/`f64` arithmetic (add, sub, mul, div, sqrt) is specified as IEEE-754 and
+correctly rounded, so it cannot vary by engine; and WASM has **no transcendental
+instructions at all** — `sin`, `cos`, `atan2`, `hypot` would come from Rust's `libm`
+compiled *into the module*, so every peer executes the same compiled implementation rather
+than whatever their JS engine ships. It is the second reason that does the work here, and
+it is exactly the property the 21 transcendental occurrences in `src/sim/` do not have
+today (measured 2026-08-10 and re-measured after #128: 18 lines,
+21 occurrences, 4 files — `collision.ts`, `types.ts`, `ai/targeting.ts`, `bullets.ts`; 10
+`hypot`, 4 `sqrt`, 3 `cos`, 3 `sin`, 1 `atan2` — unchanged by the step-inputs refactor).
+Note what that means precisely: it is the *specification* that does not guarantee
+agreement. Three JS engines have since been measured agreeing anyway, which the first
+bullet below takes up. And it opens a **native path** — the same
+crate could back a Steam or console build without a JS engine, which
+`docs/research/console-release.md` records as the blocker CrossCode solved by AOT-compiling
+JS to C++.
+
+**What it would cost is the thing to weigh, and it is not small.** `src/sim/` is the part
+of this codebase that already works. Rewriting it discards, or forces a re-derivation of:
+the golden trace (`tools/baseline/trace.test.ts`, 4 arenas × 6 seeds × 2500 ticks), the
+two-cell-size decomposition guarantees (`decomposition.test.ts`), the purity guard and its
+meta-test (`purity.test.ts`), the arena claim runner (`arena-claims.ts`), and the config
+catalog's load-time validation — plus every sim-side unit file. It also puts a
+serialisation boundary between the sim and its five event consumers, where today
+`SimEvent[]` is a plain array.
+
+**What would answer it:**
+
+- **First, whether the cheap fix is even needed — and the answer has moved since this
+  spike was drafted.** It read "that measurement is issue #121"; #121 closed with #128,
+  which built the rig AND ran it. Chromium 151 (V8), firefox 153 (SpiderMonkey) and
+  Playwright's webkit (JSC) each printed the pinned
+  `015a5d17…`, matching Node, with the 21 transcendental occurrences **untouched**. So the
+  arithmetic argument for Rust is not merely unproven, it is running against a
+  three-engine agreement. What is still open is narrower — shipped Safari, iOS, and any
+  ARM engine, none of which this box can run (see the multiplayer spike's gating bullet
+  above for the method) — and it is one sampled trajectory, not a proof about `Math.hypot`.
+  The replacement work is issue #133, still open; **it should not be pre-empted by a
+  rewrite, and neither should a rewrite be justified by a divergence nobody has observed.**
+- **Second, whether multiplayer is actually being built.** Bit-identical arithmetic is
+  worth a rewrite only if lockstep netcode is a commitment rather than an interest. See the
+  multiplayer spike above — its gating measurement is the same one, and is half answered.
+- **Third, whether a native release is a commitment.** `docs/research/console-release.md`
+  concludes Switch/PlayStation are gated on NDA'd developer status and Steam is unblocked
+  but not close. If no native target is committed, the second reason is hypothetical too.
+- If both answers are yes, price it against a **strangler route** rather than a rewrite:
+  port one leaf module (`collision.ts` is the smallest with real arithmetic) behind the
+  existing TS interface, and check the golden trace hash is unchanged. If the hash cannot
+  be held across the boundary for one module, it will not be held for the whole core, and
+  that is the cheapest possible falsification.
+
+**Constraint that shapes any answer:** the golden trace is the only thing that can tell you
+a sim rewrite preserved behaviour. `determinism.test.ts` cannot — it asserts
+self-consistency, which is invariant under behaviour change (CLAUDE.md says so, with a
+worked mutation). Any port plan that does not carry the trace forward is unfalsifiable.
+
+**Not scheduled.** Recorded because "rewrite the sim in Rust" is the kind of idea that
+recurs, and the case against it — that it discards the one subsystem with no known defects
+— should not have to be re-argued from scratch each time.
+
+---
+
+## Spike: `src/sim/` behind a real package boundary
+
+**Raised 2026-08-10**, from the modularization pass.
+
+**The question:** should `src/sim/` become a workspace package with its own
+`package.json`, so purity is enforced by the module graph rather than by a test that reads
+files?
+
+**Why it is live now.** Purity today is `src/sim/purity.test.ts`, which scans every file
+under `src/sim/` for imports of `three`, `howler` and the DOM. It is a good guard — it has
+a meta-test, added after it reported green for four of five known-bad imports — but it is a
+**string scan**, and this ledger already records two holes it cannot close (see the purity-guard lines under "Unpinned behaviour"): the specifier
+regexes use `['"]` only, so a template-literal import specifier is invisible to it, and it
+matches `Math.random`/`Date.now` as tokens, so an alias or destructure walks past it. A
+package with an empty `dependencies` block closes the first class structurally: the import
+would not resolve.
+
+The second draw is that a package boundary is what would let **the identical sim run
+server-side**. The multiplayer spike's most expensive branch is an authoritative Node
+server; today that would mean importing out of an app's `src/` tree.
+
+**What would answer it:**
+
+- **Count the touched import paths before anything else.** Every file outside `src/sim/`
+  that imports from it changes specifier. That count is the deciding number and nobody has
+  it — `grep -rn "from '.*sim/" src/ tools/ --include="*.ts"` is the whole measurement.
+- **Decide what happens to the files that straddle the line.** `src/sim/arena-claims.ts`
+  imports the AI's `lineOfSight` and is imported only from the test layer; `src/sim/
+  sandbox.ts` is a dev rig. Whether those ship inside the package or stay in the app is a
+  decision, not a lookup.
+- **Check the guards survive the move.** `purity.test.ts`, `decomposition.test.ts` and
+  `tools/baseline/trace.test.ts` all resolve paths relative to the repo root today. A move
+  that quietly stops running one of them is the failure mode to design against — verify by
+  watching each one FAIL under a deliberate mutation after the move, not by a green run.
+- **Check `tsconfig.json`'s `include` first.** It is `["src", "vite.config.ts"]`, so
+  `tools/` is already untypechecked (see the preview residuals above). A workspace layout
+  either fixes that or makes it worse, and which one is not obvious.
+
+**Constraint that shapes any answer:** whatever the layout, `src/sim/` must keep importing
+nothing from `three`, `howler` or the DOM, and a replay must stay an exact function of its
+inputs. A package boundary is a stronger way to say that — it is not a licence to relax it.
+**Do not delete `purity.test.ts` when the boundary lands.** An empty `dependencies` block
+does not catch `Math.random`, `Date.now`, or a relative import that climbs out of the
+package; those are the classes the scan owns, and they are the ones with no structural
+replacement.
+
+**Not scheduled**, and deliberately not an issue: it touches every import path in the tree,
+so the decision has to precede the PR rather than be discovered inside it.
+
+---
+
+## Spike: the campaign's levels — the approved arc says "renumbered", the owner says "rewritten"
+
+**Raised 2026-08-10.** The prompt for this spike was "the campaign's levels need
+rewriting, and there is documentation for it somewhere". Both halves check out, and they
+disagree with each other. That disagreement is the spike.
+
+**What the documentation says.** It exists, and it is approved:
+
+- **`docs/superpowers/specs/2026-08-02-difficulty-curve-design.md`** — "A taught difficulty
+  curve: eleven levels, one idea at a time", marked *Approved 2026-08-02*. It designs an
+  **11-level arc** as a table of (new idea, roster, enemy count, board). Seven boards are
+  marked **new**; the four shipped arenas take slots 6, 7, 8 and 11. Its governing
+  constraint is that there is no tutorial text anywhere in the tree, so **levels teach
+  through geometry alone**. It also records a `bankOnly` claim type that was tried and
+  **withdrawn as geometrically impossible**, and measured bot win-rates per roster that it
+  explicitly refuses to treat as a difficulty ordering.
+- **`docs/superpowers/plans/2026-08-02-difficulty-curve-stretch-1.md`** — the
+  implementation plan for **stretch 1 only**: prepend two 2-brown boards and renumber the
+  existing four. It carries full JSON grids.
+
+**Neither was executed, and the plan has gone stale.** Verified 2026-08-10:
+`src/sim/config/data/arenas.json` holds exactly `arena-01` .. `arena-04` (4 `"id"` keys, no
+`arena-00a`/`arena-00b`). `firstMission` is still only validated as a non-negative integer
+(`config/validate.ts:131`) and copied through `config/resolve.ts:79` — the spec's
+"enforced load-time rule" does not exist and **nothing reads the field**. And the plan's
+boards are specified as `"cols": 9, "rows": 7, "cellSize": 2`, which is pre-#75 geometry:
+shipped arenas are 33x27 at `cellSize` 0.667. Its grids cannot be pasted in as written.
+
+**The disagreement, stated plainly.** The spec's decision line is "the four existing levels
+are **renumbered, not rewritten**", and its Out of scope section forbids "any change to the
+four existing boards' geometry". If the campaign's levels now need *rewriting*, the
+approved spec is the thing being overruled. **Nobody should author a board until that is
+settled**, because the two readings produce different work: renumbering is additive and the
+plan (once re-based onto the current cell size) still describes it, while rewriting
+invalidates the four arenas' `notes`, their `claims`, the cover-ratio table in
+`arena-validation.test.ts`, and the difficulty scores #98 derived for them.
+
+**What would answer it:**
+
+- **An owner decision on one question: are arena-01..04 kept?** Everything else follows.
+  This is not a measurement and no amount of reading settles it.
+- **If kept:** re-base the stretch-1 plan onto `cellSize` 0.667 and re-derive its two grids
+  at 3x, then run it. Its five pin sites are already enumerated in CLAUDE.md.
+- **If rewritten:** the spec needs revising *before* the plan, because its arc assigns
+  specific lessons to specific existing boards (teal's bank corridor to arena-01,
+  breaching to arena-02, rockets to arena-03, green's crossfire to arena-04). Those four
+  rows become vacant and the arc has to say what replaces them.
+- **Either way, play the first two levels before building levels 3-5.** The spec's own
+  residual risk says so, and this file's audio and arena-04 lines say the same thing about
+  their own subjects: the tree carries no recorded playtest judgement about any level.
+
+**Constraint that shapes any answer:** the four shipped arenas are load-validated data with
+machine-checked `claims`. Rewriting a board is not editing a grid — it is re-deriving every
+claim attached to it, and `sightlineAfterBreach` is **all-or-nothing per arena** (declaring
+one commits the arena to declaring one for every enemy spawn). Related: issue #119 asks for
+arena-05 and a measured per-level cost; that number is worth having **before** this decision
+is made, not after, because it prices both branches.
+
+---
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
@@ -775,8 +962,8 @@ Each needs a measurement, a browser, or a person.
 - Whether a suspended-context resume inside a voice's teardown window throws or leaks a gain node. #64
 - The visual gate's thresholds were calibrated against ONE defect pair, on swiftshader rather than a real GPU, so a different regression may pass all six checks and the CI runner's output may differ. #9, #14 *(prose-only PR)*
 - Whether a routine roam change landing seconds after a level ends reads as caused by it. #74 says this wants a decision rather than a quiet change. *(prose-only PR)*
-- **Nobody has played arena-04.** Its geometry, structure and pacifist outcomes are measured; its feel is not. (One quoted figure in `arenas.json` was recomputed by hand and cites `task-4-report.md`, which exists in neither the tree nor any commit.) #67
-- **Nobody has played against the green ricochet sniper, and nobody has heard any of the music.** Every number about them is a headless measurement. #69, #76
+- **No judgement on arena-04's feel has been recorded.** The game has been played, so "nobody has played it" is no longer the claim — but its geometry, structure and pacifist outcomes are the only things measured, and nothing in the tree states whether the crossfire reads as a crossfire. (One quoted figure in `arenas.json` was recomputed by hand and cites `task-4-report.md`, which exists in neither the tree nor any commit.) #67
+- **The green ricochet sniper and the music have been experienced but not adjudicated.** The game has been played and the audio has been heard, so the old form of this line — "nobody has played against green, nobody has heard the music" — is false and is withdrawn. What remains open is narrower and still real: every number in the tree about either is a headless measurement, and no stated verdict exists on whether green's bank shots read as fair or on whether any specific music transition lands. #69, #76
 
 ### Where the numbers went
 

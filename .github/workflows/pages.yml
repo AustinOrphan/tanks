@@ -68,11 +68,35 @@ jobs:
       # and there is no workflow_run edge between the two files. Without these steps a
       # red main would publish.
       #
-      # Be precise about what this is: 5 of ci.yml's 7 checking steps. It does NOT run
-      # the `visual` job -- `tools/gl/run.mjs` and `tools/visual/verify.mjs` -- which
-      # needs a ~130MB chromium download, and which CLAUDE.md records as the ONLY
-      # coverage src/render/ has ("a green npm test is not the whole gate for
-      # src/render/"). A render regression that only those catch will still publish.
+      # Be precise about what this is: 5 of ci.yml's 9 checking steps (verify: 6,
+      # visual: 3).
+      #
+      # Denominator: the named steps of both ci.yml jobs that CHECK -- that can fail
+      # because of the tree -- rather than set up the runner, so checkout, setup-node,
+      # `npm ci`, BOTH Playwright steps (`Install Playwright` and `Install chromium` are
+      # separate named steps), the browser cache and upload-artifact are all
+      # excluded. `verify` contributes 6: Typecheck, Test, Mutation manifest, Build,
+      # portability, audit. `visual` contributes 4 -- Build, GL tests, Baseline trace,
+      # Visual check -- but its Build is the same `npx vite build` already counted, so it
+      # adds 3, for 9 distinct. The 5 run below are all of verify's except Mutation
+      # manifest.
+      #
+      # The construction is spelled out because the bare number went stale twice unnoticed.
+      # It read "5 of 7", which was CORRECT when #80 wrote it -- the same rule over that
+      # ci.yml gives verify 5 and visual 2. Then #104 added `Mutation manifest` (-> 8) and
+      # #128 added `Baseline trace (chromium)` (-> 9), and neither recounted. A denominator
+      # nothing recomputes is a denominator that rots; re-derive it from the rule above
+      # whenever a step is added to either job.
+      #
+      # Two things it does NOT run. The `visual` job -- `tools/gl/run.mjs`,
+      # `tools/baseline/run.mjs` and `tools/visual/verify.mjs` -- which needs a ~130MB
+      # chromium download, and which CLAUDE.md records as the ONLY coverage src/render/
+      # has ("a green npm test is not the whole gate for src/render/"). A render
+      # regression that only those catch will still publish. (The baseline trace is the
+      # one of the three with a twin here: `npx vitest run` pins the same hash under Node,
+      # so what the browser run adds is a Node/V8 divergence and the page harness not
+      # rotting -- neither of which gates the deploy.) And `Mutation manifest`, so a
+      # manifest that has gone stale against the tree does not block a deploy either.
       # Gating on the full run would mean a workflow_run trigger; see the PR discussion.
       - name: Typecheck
         run: npx tsc --noEmit

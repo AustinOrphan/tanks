@@ -60,8 +60,21 @@ the bundle asks for `/assets/…` and the page is blank. `npm run portability`
 call it — it cannot live in `npm test`, because under Vitest `import.meta.env.BASE_URL` is
 `/` even though vitest reads the same config that sets `base: './'`.
 
-The deploy re-runs 5 of `ci.yml`'s 7 checking steps, **not the `visual` job** — so a render
-regression that only `tools/gl/` and `tools/visual/` catch will publish. Nothing gates the
+The deploy re-runs **5 of `ci.yml`'s 9 checking steps** (`verify`: 6, `visual`: 3),
+**not the `visual` job and not `Mutation manifest`** — so a render regression that only
+`tools/gl/` and `tools/visual/` catch will publish, and so will a stale
+`tools/mutate/manifest.json`. (Denominator: the named steps of both `ci.yml` jobs that
+check something — that can fail because of the tree — rather than set up the runner, so
+`checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install Playwright` and
+`Install chromium` are separate named steps), the browser cache and
+`upload-artifact` are all excluded. `verify` contributes 6: Typecheck, Test, Mutation
+manifest, Build, portability, audit. `visual` contributes 4 — Build, GL tests, Baseline
+trace, Visual check — but its `Build` is the same `npx vite build` already counted, so it
+adds 3, for 9 distinct. The deploy runs 5 of them, all from `verify`: Typecheck, Test,
+Build, portability, audit.) The construction is written out because the bare number went
+stale twice unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule over
+that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest` (→ 8)
+and #128 added `Baseline trace (chromium)` (→ 9), and neither recounted. Nothing gates the
 deploy on CI passing; `main` carries no branch protection. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
 one localStorage namespace (the game's **five** keys are all `tanks.*`-prefixed —
