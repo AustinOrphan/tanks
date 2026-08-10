@@ -1343,35 +1343,78 @@ describe('hud: the paint shop', () => {
     const { root } = mount();
     const headings = Array.from(pane(root).querySelectorAll('h2')).map((h) => h.textContent);
     expect(headings).toEqual(['Hull', 'Skin']);
-    // THIS PIN MOVED, deliberately and narrowly. It used to be "no <p> at all". There
-    // is now exactly one, `.hud-preview-hint`, and it is hidden until the preview
-    // canvas has :focus-visible (hud.css, with its own check) -- so the pane still
-    // OPENS as two labelled sections and nothing else, which is the property Austin's
-    // instruction was protecting. A SECOND paragraph, or this one losing its class,
-    // still fails here.
-    //
-    // Why it was worth moving: shift+arrows turn the turret, and a sighted keyboard
-    // user had no way to find that out. title= needs a hovering pointer they do not
-    // have and aria-label= is never rendered, so the one scheme added for keyboard
-    // users was invisible to the keyboard users who can see.
-    const paragraphs = Array.from(pane(root).querySelectorAll('p'));
-    expect(paragraphs.map((p) => p.className)).toEqual(['hud-preview-hint']);
+    // BACK to "no <p> at all". It was briefly relaxed to allow one focus-gated hint
+    // spelling out the keyboard scheme; the rotate cluster teaches the same thing to
+    // everyone, including touch, so the exception is gone with the element. Adding any
+    // paragraph to this pane fails here.
+    expect(Array.from(pane(root).querySelectorAll('p'))).toEqual([]);
+    // ...and the cluster really is icons, with no visible words of its own -- the check
+    // that stops "no prose" being satisfied by moving the prose into the buttons.
+    const cluster = pane(root).querySelector('.hud-preview-rotate') as HTMLElement;
+    expect(cluster.textContent?.trim()).toBe('');
   });
 
-  it('puts the keyboard hint where the focus rule can reach it, and keeps it off the a11y tree', () => {
-    const { hud: h, root } = mount();
-    const hint = pane(root).querySelector('.hud-preview-hint') as HTMLElement;
-    // hud.css reveals it with `.hud-preview:focus-visible + .hud-preview-hint`. CSS has
-    // no parent or previous-sibling combinator, so if anything is ever inserted between
-    // the canvas and this element the hint stops appearing and NOTHING else would say
-    // so -- the panel would simply have an invisible line in it forever.
-    expect(h.previewCanvas.nextElementSibling).toBe(hint);
-    // It names the two things that are otherwise undiscoverable.
-    expect(hint.textContent).toMatch(/arrow/i);
-    expect(hint.textContent).toMatch(/shift/i);
-    expect(hint.textContent).toMatch(/turret/i);
-    // ...and says nothing new to a screen reader, which already got it from aria-label.
-    expect(hint.getAttribute('aria-hidden')).toBe('true');
+  it('gives the preview four rotate buttons, one per part and direction', () => {
+    // The exact four, as ATTRIBUTE PAIRS: preview-controls.ts parses these and drops
+    // anything it does not recognise, so a typo here is an inert button and nothing
+    // else in the tree would say so. Sorted, because the assertion is about the set.
+    const { hud: h } = mount();
+    const pairs = h.previewRotateButtons
+      .map((b) => `${b.dataset.rotatePart}:${b.dataset.rotateDir}`)
+      .sort();
+    expect(pairs).toEqual(['hull:left', 'hull:right', 'turret:left', 'turret:right']);
+    // Real buttons, so they are focusable and announced without a role of their own,
+    // and type=button so they cannot submit anything.
+    for (const b of h.previewRotateButtons) {
+      expect(b.tagName).toBe('BUTTON');
+      expect(b.getAttribute('type')).toBe('button');
+      // An accessible name that says both halves: which part, and which way.
+      const label = b.getAttribute('aria-label') ?? '';
+      expect(label, 'no accessible name').toMatch(/hull|turret/i);
+      expect(label).toMatch(/left|right/i);
+      expect(label.toLowerCase()).toContain(b.dataset.rotatePart!);
+      expect(label.toLowerCase()).toContain(b.dataset.rotateDir!);
+      // The icon must not be read out as well -- the name already says it.
+      const icon = b.querySelector('svg');
+      expect(icon, 'the button has no icon at all').not.toBeNull();
+      expect(icon!.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('orders the cluster hull-pair then turret-pair, left before right', () => {
+    // The order is the layout: hud.css puts the extra gap before the THIRD child, so a
+    // reordering silently moves the visual grouping onto the wrong pair.
+    const { hud: h } = mount();
+    expect(h.previewRotateButtons.map((b) => `${b.dataset.rotatePart}:${b.dataset.rotateDir}`)).toEqual(
+      ['hull:left', 'hull:right', 'turret:left', 'turret:right'],
+    );
+    // ...and they sit under the canvas, in the pane, not somewhere else in the HUD.
+    expect(h.previewCanvas.nextElementSibling).toBe(
+      h.previewRotateButtons[0].parentElement,
+    );
+  });
+
+  it('mirrors the left icon from the right one rather than hand-drawing a second path', () => {
+    // The pair is drawn once and flipped by a transform. A hand-written mirror is where
+    // an asymmetric pair comes from, and nothing else in the suite looks at these
+    // glyphs -- they are exactly the "file no test reads" case. Asserted as the
+    // relationship: the two icons of a pair must differ ONLY by that transform.
+    const { hud: h } = mount();
+    const svg = (part: string, dir: string): string =>
+      h.previewRotateButtons
+        .find((b) => b.dataset.rotatePart === part && b.dataset.rotateDir === dir)!
+        .innerHTML;
+    for (const part of ['hull', 'turret']) {
+      const right = svg(part, 'right');
+      const left = svg(part, 'left');
+      expect(left).not.toBe(right);
+      expect(left).toContain('scale(-1,1)');
+      expect(right).not.toContain('scale(-1,1)');
+      // Strip the wrapper the mirror adds and the two are the same drawing.
+      expect(left.replace(/<g transform="[^"]*">|<\/g>/g, '')).toBe(right);
+    }
+    // ...and the two PARTS are drawn differently, or all four buttons would look alike.
+    expect(svg('hull', 'right')).not.toBe(svg('turret', 'right'));
   });
 
   it('puts the skin buttons AND the accent swatches inside the Skin section', () => {

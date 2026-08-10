@@ -215,7 +215,18 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null {
+/**
+ * @param rotateButtons The HUD's four rotate buttons, in any order. Optional, and the
+ * preview is fully usable without them -- the drag, hover-aim and keyboard schemes are
+ * on the canvas. They are passed in rather than looked up here because hud.ts owns the
+ * markup and this file owns none of it (the same split that keeps `previewCanvas` on
+ * the Hud interface), and because a querySelector against the document would make this
+ * module silently depend on a class name nothing type-checks.
+ */
+export function createTankPreview(
+  canvas: HTMLCanvasElement,
+  rotateButtons?: Iterable<HTMLElement>,
+): TankPreview | null {
   let renderer: THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -304,6 +315,7 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
     camera,
     initialPose: INITIAL_PREVIEW_POSE,
     reducedMotion: prefersReducedMotion(),
+    rotateButtons,
     onPose(pose): void {
       applyPose(world, pose);
       draw();

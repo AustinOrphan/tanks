@@ -706,34 +706,71 @@
   outline-offset: 2px;
 }
 
-/* The keyboard scheme, shown ONLY once someone has tabbed to the canvas.
+/* The rotate cluster under the preview: hull left/right, then turret left/right.
  *
- * Austin asked for no explanatory prose on this screen and the pane is pinned at two
- * labelled sections, so this is a deliberate, narrow exception rather than a drift back
- * to a wall of text: shift+arrows had no discoverability path at all for a sighted
- * keyboard user (title= needs a hovering pointer, aria-label= is never rendered), which
- * made the one scheme added FOR keyboard users invisible to the keyboard users who can
- * see. Nothing is on screen at rest, so the pane still OPENS as two sections.
+ * It replaced a focus-gated line of prose that spelled out the keyboard scheme. Four
+ * visible controls teach the same thing to everyone -- including touch, which the hint
+ * never reached -- and cost the pane no words, so "no prose in this pane" is intact.
  *
- * visibility, not display: the row keeps its box either way, so revealing the hint does
- * not shove the Hull section down the panel the moment focus lands. visibility: hidden
- * also takes it out of the accessibility tree, which is belt-and-braces with the
- * aria-hidden in the markup.
- *
- * :focus-visible, not :focus -- a mouse press on the canvas focuses it (the controls
- * call focus() deliberately, since they preventDefault the press), and a hint aimed at
- * keyboard users must not flash up every time somebody drags the tank. */
-.hud-preview-hint {
-  margin: 0;
-  font-size: 0.72em;
-  opacity: 0;
-  visibility: hidden;
-  color: #a9b6c9;
+ * The pair-of-pairs is spaced, not labelled: a wider gap in the middle is what says
+ * "these two belong together" without adding the words "Hull" and "Turret" to a pane
+ * that already has those as section headings below. */
+.hud-preview-rotate {
+  display: flex;
+  gap: 6px;
 }
 
-.hud-preview:focus-visible + .hud-preview-hint {
-  opacity: 1;
-  visibility: visible;
+.hud-preview-rotate .hud-rotate-btn:nth-child(3) {
+  margin-left: 12px;
+}
+
+/* touch-action/tap-highlight for the same reason the canvas carries them: these are
+ * hold-to-repeat buttons, so a press that the browser decides to treat as the start of
+ * a scroll takes the hold away with it (it sends pointercancel, which ends the hold).
+ * The 34px box is a compromise on a 260px-wide pane -- below the 44px touch target
+ * Apple/WCAG suggest, which is a real cost noted rather than hidden: every one of these
+ * buttons duplicates something the canvas itself can already do, so a mis-tap costs a
+ * miss, not an action the player did not want. */
+.hud-rotate-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #cdd6e3;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hud-rotate-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+/* The pressed state has to be visible while a hold is running: the tank turning is the
+ * other half of the feedback, but the button is where the finger is. */
+.hud-rotate-btn:active {
+  background: rgba(127, 208, 255, 0.28);
+  color: #fff;
+}
+
+.hud-rotate-btn:focus-visible {
+  outline: 2px solid #7fd0ff;
+  outline-offset: 2px;
+}
+
+.hud-rotate-icon {
+  width: 22px;
+  height: 22px;
+  /* The glyph is the whole button; without this it can be dragged out of it as an
+   * image on desktop, which cancels the hold. */
+  pointer-events: none;
 }
 
 .hud-customize-section {
