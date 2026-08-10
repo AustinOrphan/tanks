@@ -999,12 +999,19 @@ await checkAsync('a disposed preview schedules no further frames', async () => {
   // the callback that was already queued. A leak here is a rAF loop running against a
   // disposed renderer for the rest of the session, once per Customize close.
   //
-  // What this pins is a PAIR, and saying so matters. Three things stop the loop --
-  // `cancelFrame()`, `idle = false`, and `disposed` in the frame guard -- and any one
-  // of the last two is sufficient on its own, so no SINGLE-line mutation can fail this
-  // check (both were tried; both survive). Remove both and it fails: 81377 of 197600
-  // bytes change in the 500ms after dispose. Redundant guards are not a defect here,
-  // but a reader should not mistake "no mutation kills it" for "not covered".
+  // WHAT ACTUALLY STOPS THE LOOP IS `cancelFrame()`, and only that. An earlier version of
+  // this comment claimed three co-equal stoppers and attributed a measured 81377 bytes to
+  // removing the `idle = false` / `disposed` pair; review falsified it and the measurement
+  // was re-run here. Removing BOTH guards leaves all 46 GL checks and 57 of 57 vitest
+  // cases green. The 81377 figure belongs to a THREE-line mutation that also drops
+  // `cancelFrame()`; `cancelFrame()` alone dropped fails this check at 81376 (1-byte rAF
+  // jitter between runs).
+  //
+  // The two guards are an UNREACHED backstop rather than redundant stoppers: JS is
+  // single-threaded and `dispose()` is never called from inside a frame callback, so no
+  // frame is ever in flight for them to catch. They cost nothing and are worth keeping
+  // against a future async dispose path -- but nothing can kill them, and a reader should
+  // not mistake "no mutation kills it" for "covered".
   const c = previewCanvas();
   const preview = createTankPreview(c);
   if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
