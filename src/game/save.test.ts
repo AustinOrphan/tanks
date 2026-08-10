@@ -149,9 +149,23 @@ describe('importSave', () => {
     // left the other two disjuncts deletable: with the check cut down to
     // `typeof blob.version !== 'number'`, this file passed 16 of 16.
     //
-    // NOT swept: the further input shapes each branch admits -- a null or array
-    // `keys`, a string or NaN `version`, a missing `format` -- each of which
-    // reaches the same disjunct as a row below rather than one of its own.
+    // ...and, inside the KEYS branch, all three of ITS disjuncts too: a non-object
+    // (`'nope'`, fails `typeof === 'object'`), null (`typeof null` IS `'object'`,
+    // so only the explicit null check rejects it) and an array (`typeof [] `is
+    // `'object'` and it is not null, so only `Array.isArray` rejects it).
+    //
+    // An earlier version of this comment claimed a null or array `keys` "reaches
+    // the same disjunct as a row below". That was FALSE and it hid a live
+    // survivor: cutting the guard to `if (typeof keys !== 'object')` passed this
+    // file 16 of 16, and under it `keys: []` returns `ok: true` on a malformed
+    // blob while `keys: null` throws a TypeError straight out of importSave --
+    // neither of which is the `ok: false` the caller is told to expect. Both are
+    // rows now.
+    //
+    // NOT swept, and this list is what is genuinely left: a string or NaN
+    // `version`, and a missing `format`. Each of those DOES reach a disjunct a row
+    // below already covers -- `typeof blob.version !== 'number'` and
+    // `blob.format !== SAVE_FORMAT` respectively -- rather than one of its own.
     //
     // `reason` is pinned as a LITERAL, not rebuilt from SAVE_FORMAT/SAVE_VERSION:
     // rebuilding it would restate the source expression and pass whatever the
@@ -188,8 +202,20 @@ describe('importSave', () => {
         'save version 2 is newer than 1',
       ],
       [
-        'missing keys object',
+        'keys is a string',
         JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: 'nope' }),
+        'missing keys object',
+      ],
+      [
+        'keys is null',
+        JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: null }),
+        'missing keys object',
+      ],
+      [
+        // Not empty: an array carrying something makes the mutant's behaviour
+        // visible as a WRITE attempt rather than as a no-op that happens to be ok.
+        'keys is an array',
+        JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: ['tanks.progress.v1'] }),
         'missing keys object',
       ],
     ];
