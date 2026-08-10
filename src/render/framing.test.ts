@@ -5,8 +5,11 @@
 // vertical slice.
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { framedBounds, fitCameraToArea, framedAreaFits, FRAME_MARGIN } from './framing';
-import { CURRENT_ARENA, arenaBounds, loadArena } from '../sim/arena';
+import { framedBounds, fitCameraToArea, framedAreaFits, FRAME_MARGIN, VIEW_DIR } from './framing';
+import { CURRENT_ARENA, ARENAS, arenaBounds, loadArena } from '../sim/arena';
+// The SHIPPED field of view, not a copy: a test that hardcoded 30 would keep passing
+// after someone widened the real camera back out, which is the regression this guards.
+import { BASE_FOV } from './scene';
 
 const { width: W, height: H } = arenaBounds(CURRENT_ARENA);
 const BOUNDARY = CURRENT_ARENA.cellSize;
@@ -17,7 +20,10 @@ const TARGET = new THREE.Vector3(W / 2, 0, H / 2);
 const ASPECTS = [0.46, 0.75, 1.0, 1.33, 1.6, 1.78, 2.33, 3.0];
 
 function cameraAt(aspect: number): THREE.PerspectiveCamera {
-  const cam = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+  // BASE_FOV, not a literal: this sweep spent its whole life validating a 50-degree
+  // camera, and when the game moved to 30 it carried on testing the old one. Review
+  // caught that it still passes at 30 -- so no live bug -- but it was unasserted.
+  const cam = new THREE.PerspectiveCamera(BASE_FOV, aspect, 0.1, 1000);
   const { width, height } = framedBounds(W, H, BOUNDARY);
   fitCameraToArea(cam, TARGET, width, height);
   return cam;
@@ -119,5 +125,131 @@ describe('camera framing', () => {
     expect(large.position.distanceTo(TARGET)).toBeGreaterThan(
       small.position.distanceTo(TARGET) * 5,
     );
+  });
+});
+
+describe('the camera elevation is pinned', () => {
+  it('holds the shipped tilt, which nothing else was guarding', () => {
+    // `VIEW_DIR` was imported by NO test -- only its sign was asserted anywhere. Review
+    // measured that swinging it from 51 to 80 degrees, a near-top-down camera and a
+    // different game to look at, passed ALL 1538 tests including this file's own
+    // coverage floor. Of integer tilts 30-89 (population 60), 27 survived that floor.
+    //
+    // Tilt is also the second-strongest lever on coverage after fov, and its optimum is
+    // viewport-dependent (more top-down helps 4:3 and hurts 16:9 locally), so it is
+    // exactly the kind of constant that gets nudged for one aspect and silently costs
+    // another.
+    //
+    // Be clear about what this is: a TRIPWIRE, not coverage. It re-derives 51.0 from
+    // VIEW_DIR and compares it to 51.0, so it asserts no framing property at all -- it
+    // makes changing the tilt deliberate, the way constants.test.ts pins the balance
+    // scalars. The property test that ought to catch tilt is the coverage floor below,
+    // and it demonstrably cannot: 27 of integer tilts 30-89 clear it.
+    const elevationDeg = (Math.atan2(VIEW_DIR.y, VIEW_DIR.z) * 180) / Math.PI;
+    expect(elevationDeg).toBeCloseTo(51.0, 1);
+    // No roll: an x component would tip the board off square to the screen.
+    expect(VIEW_DIR.x).toBe(0);
+    expect(VIEW_DIR.length()).toBeCloseTo(1, 9);
+  });
+});
+
+describe('the board actually fills the screen', () => {
+  /**
+   * Austin, with a Wii Play: Tanks! screenshot for reference: "the play area should take
+   * up the full screen (of course no stretching allowed lol) much like it does in Wii
+   * play tanks".
+   *
+   * The old camera left more than half the frame empty -- 48.5% covered at 16:9, 39.9%
+   * at a phone's landscape aspect. Two things were spending it: FRAME_MARGIN charged on
+   * both sides of both axes, and a 50-degree lens, which converges the board's far edge
+   * hard and wastes the two triangles beside it. Neither is a stretch, so neither shows
+   * up in any existing assertion -- the board simply sat there being small.
+   *
+   * This measures the projected AREA of the framed rect as a fraction of the frame,
+   * through the same projection the renderer uses, and imports the SHIPPED `BASE_FOV`
+   * rather than a copy so that raising the lens back fails here.
+   */
+  const shoelace = (p: THREE.Vector3[]): number => {
+    let a = 0;
+    for (let i = 0; i < p.length; i++) {
+      const q = p[(i + 1) % p.length];
+      a += p[i].x * q.y - q.x * p[i].y;
+    }
+    return Math.abs(a) / 2;
+  };
+
+  /** Fraction of the frame the framed rect covers, at one arena and one aspect. */
+  const coverage = (arena: (typeof ARENAS)[number], aspect: number): number => {
+    const bounds = arenaBounds(arena);
+    const framed = framedBounds(bounds.width, bounds.height, arena.cellSize);
+    const target = new THREE.Vector3(bounds.width / 2, 0, bounds.height / 2);
+    const camera = new THREE.PerspectiveCamera(BASE_FOV, aspect, 0.1, 1000);
+    fitCameraToArea(camera, target, framed.width, framed.height);
+    const hw = framed.width / 2;
+    const hh = framed.height / 2;
+    const corners = [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ].map(([sx, sz]) =>
+      new THREE.Vector3(target.x + sx * hw, 0, target.z + sz * hh).project(camera),
+    );
+    // NDC spans [-1, 1] on both axes, so the whole frame has area 4.
+    return shoelace(corners) / 4;
+  };
+
+  // 16:10 and 4:3 are desktop windows; 2.16 is a phone held sideways, which is the
+  // WORST case here because the board is far taller in proportion than the viewport.
+  const ASPECTS: Array<[string, number]> = [
+    ['16:9', 16 / 9],
+    ['16:10', 1.6],
+    ['4:3', 4 / 3],
+    ['phone landscape', 2.16],
+  ];
+
+  it('covers at least 48% of the frame, on every shipped arena at every common aspect', () => {
+    // Population: all 4 shipped arenas x 4 aspects = 16, every one checked -- not a
+    // sample. The floor sits just under the measured worst case (49.1%, arena-01 on a
+    // phone) and comfortably above what the old camera managed anywhere (39.9% there).
+    const thin: string[] = [];
+    let checked = 0;
+    for (const [i, arena] of ARENAS.entries()) {
+      for (const [label, aspect] of ASPECTS) {
+        checked += 1;
+        const f = coverage(arena, aspect);
+        if (f < 0.48) thin.push(`arena ${i + 1} @ ${label}: ${(f * 100).toFixed(1)}%`);
+      }
+    }
+    // ARENAS.length pinned outright. `checked === ARENAS.length * ASPECTS.length`
+    // below cannot fail from any PRODUCTION change -- both sides move together -- so it
+    // is kept only as a loop-integrity check (it would catch a stray `continue` added
+    // to this test), and it is this line that carries the production sensitivity: it
+    // fails when a level is added, which is exactly when the floor deserves
+    // re-measuring.
+    expect(ARENAS.length, 'a level was added; re-measure the coverage floor').toBe(4);
+    expect(checked).toBe(ARENAS.length * ASPECTS.length);
+    expect(thin).toEqual([]);
+  });
+
+  it('still contains the whole board -- filling the screen must never crop it', () => {
+    // The counterweight to the test above: coverage is trivially maximised by flying
+    // the camera in until the board overflows the frame. Every corner must stay inside
+    // NDC, which is the same property fitCameraToArea solves for, checked here at the
+    // shipped fov across the same 16 combinations.
+    const cropped: string[] = [];
+    for (const [i, arena] of ARENAS.entries()) {
+      for (const [label, aspect] of ASPECTS) {
+        const bounds = arenaBounds(arena);
+        const framed = framedBounds(bounds.width, bounds.height, arena.cellSize);
+        const target = new THREE.Vector3(bounds.width / 2, 0, bounds.height / 2);
+        const camera = new THREE.PerspectiveCamera(BASE_FOV, aspect, 0.1, 1000);
+        fitCameraToArea(camera, target, framed.width, framed.height);
+        if (!framedAreaFits(camera, target, framed.width, framed.height, 0)) {
+          cropped.push(`arena ${i + 1} @ ${label}`);
+        }
+      }
+    }
+    expect(cropped).toEqual([]);
   });
 });

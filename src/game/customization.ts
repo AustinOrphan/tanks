@@ -60,7 +60,7 @@ export const ACCENTS: readonly AccentSwatch[] = Object.freeze([
 
 export const DEFAULT_ACCENT: AccentId = 'auto';
 
-export type SkinId = 'solid' | 'stripes' | 'camo' | 'checker' | 'flow';
+export type SkinId = 'solid' | 'stripes' | 'camo' | 'clouds' | 'checker' | 'flow';
 
 export interface SkinDef {
   id: SkinId;
@@ -78,6 +78,9 @@ export const SKINS: readonly SkinDef[] = Object.freeze([
   { id: 'solid', label: 'Solid' },
   { id: 'stripes', label: 'Racing stripes' },
   { id: 'camo', label: 'Camo' },
+  // Next to camo deliberately: they are the same blotch painter at different coverage,
+  // so a player comparing them wants them side by side.
+  { id: 'clouds', label: 'Clouds' },
   { id: 'checker', label: 'Checkerplate' },
   { id: 'flow', label: 'Flow', scroll: { u: 0.08, v: 0 } },
 ]);

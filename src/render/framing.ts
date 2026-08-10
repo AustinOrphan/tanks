@@ -36,8 +36,13 @@ export const VIEW_DIR = new THREE.Vector3(0, 1.05, 0.85).normalize();
  * this is a fixed camera with no scrolling: slack here is dead screen for the
  * whole game. The HUD is drawn over the canvas in its corners, so a little is
  * still wanted.
+ *
+ * 0.06 -> 0.03: the margin is charged on BOTH sides of BOTH axes, so 0.06 was
+ * spending 12% of the frame's width and height -- about 11% of its area -- on empty
+ * felt. 0.03 still clears the HUD's top strip: measured at 16:9 the board's top edge
+ * sits below the "Lives / Enemies / Level" line, which is what the margin is for.
  */
-export const FRAME_MARGIN = 0.06;
+export const FRAME_MARGIN = 0.03;
 
 const _corner = new THREE.Vector3();
 
@@ -92,8 +97,13 @@ export function fitCameraToArea(
   const span = Math.max(width, height);
   let lo = span * 0.05; // certainly too close to contain it
   // Far enough for every viewport the game is played at, but NOT validated: below
-  // about aspect 0.147 (a ~300px-wide window on a portrait 4K panel) nothing in the
-  // bracket fits, and the fallback below returns a camera that crops the board.
+  // about aspect 0.249 nothing in the bracket fits, and the fallback below returns a
+  // camera that crops the board. That floor MOVED with the long lens -- it was 0.147
+  // at fov 50 / margin 0.06 -- because a narrower lens needs more distance and runs
+  // out of bracket sooner. Both figures bisected against this function; the 0.147
+  // reproduces the number this comment carried before, which is what says the probe
+  // is measuring the right thing. Still far below any real window: 0.249 is a
+  // ~500px-wide viewport on a 2160-tall portrait panel.
   let hi = span * 8;
 
   const place = (d: number): void => {

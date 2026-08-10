@@ -309,7 +309,7 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **83 lines below** — 17 / 31 / 25 / 10 across four groups. **74** came from the
+Counts: **84 lines below** — 17 / 31 / 25 / 11 across four groups. **75** came from the
 harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
@@ -331,8 +331,8 @@ items triaged; the difference is itemised at the end. All five figures are recom
 - The overlay's outgoing lead is captured once and never re-gated as intensity falls, so it can sound while both tracks' own leads are gated silent — a window now up to a glide long. #76
 - The intensity glide is a rate limiter, not hysteresis: a 1↔0 reversal faster than the 2.0s walk makes a layer flicker MORE than the bare assignment did. Not reachable from the sim today, which moves intensity only on a kill or `resetArena`. #76
 - `tools/visual/verify.mjs:33` resolves Playwright from `/home/dev/.claude/jobs/17681316/...`, a path in a dead session's job directory. When it vanishes the visual gate stops being runnable, and nothing says so. #31 *(prose-only PR)*
-- `fitCameraToArea`'s bisection bracket `hi = span * 8` is unvalidated; below aspect ~0.147 the fallback returns a cropping camera. Test aspects run 0.46–3.0. #5
-- `framedAreaFits` projects the ground plane only (`y = 0` is hardcoded), so nothing above it is inside the fit; the ring starts clipping at wall height **~1.545** at the current `cellSize` (re-derived after #75; it was ~1.721 before). #5
+- `fitCameraToArea`'s bisection bracket `hi = span * 8` is unvalidated; below aspect ~0.249 the fallback returns a cropping camera. Test aspects run 0.46–3.0. Was ~0.147 until the fov 50→30 change: a narrower lens needs more distance and exhausts the bracket sooner, so the unusable region grew ~69%. #5 #103
+- `framedAreaFits` projects the ground plane only (`y = 0` is hardcoded), so nothing above it is inside the fit; the ring starts clipping at wall height **~1.303** at the current `cellSize` (re-derived after #103's fov 50→30, which cost 15.7%; it was ~1.545 after #75 and ~1.721 before). `WALL_H` is 1.0, so headroom over the shipped wall is now 30.3% rather than 54.5%. #5 #103
 
 ### Unpinned behaviour — no test found that would catch the regression
 
@@ -344,8 +344,8 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - The purity guard's specifier regexes use `['"]` only, so a template-literal import specifier is invisible to it. #1
 - The purity guard matches `Math.random` / `Date.now` as tokens, so an alias or destructure walks past it. #1
 - `FRAME_MARGIN` tightness is self-referential: the test imports the constant and uses it on both sides. Routing around the constant *is* caught. #5
-- `VIEW_DIR`'s pitch magnitude is unpinned — only its sign is asserted, and `VIEW_DIR` is imported by no test. The three angles PR #5 reported as passing were measured before #75 changed the framed rect, so the pass-set should be re-derived, not trusted. #5
-- No test varies `fov`; every framing test builds a 50° camera. #5
+- `VIEW_DIR`'s pitch magnitude is now pinned to 51.0° by `framing.test.ts` (#103 added it after review measured that swinging it to 80° — a near-top-down camera — passed all 1538 tests; 27 of integer tilts 30–89 survived the coverage floor). What is still unpinned is whether 51° is the right CHOICE: it is not optimal for any single aspect (43° is +3.49pp at 16:9, fov 30) and was kept because within a playable 40–60° band the best fixed tilt (60°) gains only +1.63pp on a uniform mix of 4 arenas × 4 common aspects — going further means going near-top-down (89° gains +10.07pp and is a different game). #5 #103
+- `framing.test.ts`'s coverage tests now import the shipped `BASE_FOV`, and `cameraAt` was moved onto it too, so the old "every framing test builds a 50° camera" no longer holds. What remains unpinned is fov as a SWEPT variable: no test checks behaviour at more than the one shipped value. #5 #103
 - Aspect coverage is a grid of 8 values (0.46–3.0), and the monotonicity premise `fitCameraToArea` documents is unproven between grid points. #5
 - Embeddings that can set an arbitrary aspect — iframes, devtools responsive mode, kiosk webviews — were never considered; every tested shape is an ordinary window. #5
 - Scene geometry other than the four ground corners — wall tops, tanks, turrets, particles, shadow extents — is never projected against the fit. #5
@@ -402,6 +402,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 
 Each needs a measurement, a browser, or a person.
 
+- How much screen the board SHOULD take is undecided, and it is a taste call rather than a limit. #103 stopped at fov 30 (arena-01 covers 59.6% of a 16:9 frame); the same camera reaches 68.7% at fov 15 and ~82.2% in the long-lens limit at the shipped margin (~87.3% at margin 0), at the cost of flattening depth toward orthographic and moving the camera 64.9 units out. An earlier draft of #103 claimed 68% was a geometric ceiling from the arena's 1.21 aspect — that was WRONG, it ignored the tilt, and the level-design conclusion drawn from it (wider grids) is withdrawn. Needs a person to look at candidates. #103
 - 23 of PR #1's 24 surviving mutations are named only as a count; no catalog was committed. Settling it needs a fresh sweep. #1
 - `framing.ts` mutation coverage left a real gap of 6 (28 applied, 19 killed, 9 survived, 3 proven equivalent). Two of the nine are listed above; the rest were never enumerated. #5
 - Wiring mutation coverage was ~15 hand-picked call-site mutations, not a systematic sweep. #5
