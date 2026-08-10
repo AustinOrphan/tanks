@@ -271,14 +271,19 @@ describe('createSkinTexture', () => {
       expect(banded.length).toBe(20);
     });
 
-    it('camo leaves the hull as the majority tone; clouds deliberately does not', () => {
+    it('camo COVERS the hull; clouds leaves it as the majority tone', () => {
       // The two share `blotches`, and coverage is the whole difference between them.
-      // Getting this wrong is not subtle but IS invisible to a spread metric: at clouds'
-      // density the last tone painted covers 44.4% of the texture and the hull survives
-      // on 27.9%, so camo rendered with those numbers came back as SNOW camo on a blue
-      // hull -- the blotches won and the hull stopped being the tank's colour. Measured
-      // on screen before it was caught. (An earlier draft said 73%, which was the OLD
-      // camo's figure carried across by mistake.)
+      //
+      // THIS TEST USED TO ASSERT THE OPPOSITE, and the assertion was the defect rather
+      // than the guard against it. Austin: "camo and clouds need to be swapped, the
+      // skins appear to have their names reversed." Camouflage is dense interlocking
+      // patches that cover most of a surface; clouds are separated puffs over a field
+      // that stays visible. Camo shipped sparse (hull surviving on 57.8%) and clouds
+      // dense (27.9%), so each read as the other's name, and this test pinned it that
+      // way. The densities are now swapped and the thresholds with them.
+      //
+      // Coverage is invisible to a spread metric, which is why it needs its own test:
+      // both arrangements have identical tone spreads, because only the AREAS moved.
       const share = (skin: 'camo' | 'clouds'): number => {
         const px = pixelsOf(skin, '#3d7bd6', null);
         let base = 0;
@@ -287,8 +292,12 @@ describe('createSkinTexture', () => {
         }
         return base / (px.length / 4);
       };
-      expect(share('camo'), 'camo has stopped being the hull colour').toBeGreaterThan(0.5);
-      expect(share('clouds'), 'clouds is no longer cloud-dominant').toBeLessThan(0.35);
+      // Measured: camo 0.2791, clouds 0.5781, identical on all 6 shipped hulls because
+      // the blotch geometry is seeded and carries no colour dependence. The thresholds
+      // sit either side of the midpoint, so swapping the two skins' parameters back
+      // fails BOTH of these rather than neither.
+      expect(share('camo'), 'camo has stopped covering the hull').toBeLessThan(0.35);
+      expect(share('clouds'), 'clouds has stopped being sky-dominant').toBeGreaterThan(0.5);
     });
   });
 
@@ -516,13 +525,19 @@ describe('createSkinTexture', () => {
       // player's tank. Re-capture these only when you mean to.
       //
       // Population: 6 shipped hulls x 5 patterned skins = 30, the complete set.
+      //
+      // RE-CAPTURED for the camo/clouds density swap. Exactly 12 of the 30 moved -- both
+      // skins on all six hulls -- and the other 18 are byte-for-byte what they were,
+      // which is the check that the swap touched coverage and nothing else. If a
+      // stripes, checker or flow hash ever moves in the same commit as a camo/clouds
+      // one, that is a second change riding along and it needs its own reason.
       const GOLDEN: Record<string, string> = {
-        'blue/stripes': '68c745c5', 'blue/camo': '641f4f52', 'blue/clouds': 'c1aeb8e5', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06',
-        'red/stripes': '44d265c5', 'red/camo': 'dcf08c54', 'red/clouds': '50f418d9', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845',
-        'orange/stripes': '3678b9c5', 'orange/camo': 'f60cb930', 'orange/clouds': '72987c29', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70',
-        'purple/stripes': '8f6df1c5', 'purple/camo': '462c00c5', 'purple/clouds': '61134c25', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5',
-        'green/stripes': '8a012dc5', 'green/camo': '7e2271eb', 'green/clouds': 'fde43ddd', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82',
-        'white/stripes': 'f8ded5c5', 'white/camo': '88795436', 'white/clouds': 'a0adc599', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2',
+        'blue/stripes': '68c745c5', 'blue/camo': '30966f85', 'blue/clouds': 'cbe3c968', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06',
+        'red/stripes': '44d265c5', 'red/camo': '1c4bdc11', 'red/clouds': 'a1a5fa27', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845',
+        'orange/stripes': '3678b9c5', 'orange/camo': 'c0d47715', 'orange/clouds': '740aace5', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70',
+        'purple/stripes': '8f6df1c5', 'purple/camo': '855539e9', 'purple/clouds': 'c1836e39', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5',
+        'green/stripes': '8a012dc5', 'green/camo': 'bd3e8529', 'green/clouds': '40761c41', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82',
+        'white/stripes': 'f8ded5c5', 'white/camo': 'b3e6c6f1', 'white/clouds': 'e228941b', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2',
       };
       let checked = 0;
       for (const hull of PALETTE) {

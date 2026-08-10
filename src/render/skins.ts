@@ -265,14 +265,19 @@ function cloudTone(base: RGB, delta: number): RGB {
  * point of sharing it. The seed is fixed so a given hull always paints the same pattern.
  *
  * COVERAGE IS THE PARAMETER THAT MATTERS, and it is easy to get wrong: the tones are
- * painted in order, so the second buries the first wherever they overlap. At clouds'
- * density the base survives on 27.9% of the texture and the second tone takes 44.4%,
- * which is what makes it read as sky behind cloud; camo needs the opposite -- the hull
- * has to stay the tank's colour, and survives on 57.8% -- so it runs far fewer and
- * smaller blotches. Those three figures are identical on all 6 shipped hulls, because
- * the blotch geometry is seeded and carries no colour dependence at all; an earlier
- * draft of this comment quoted 19% and 73%, which were the OLD camo's numbers, and
- * claimed coverage varied by hull, which it does not.
+ * painted in order, so the second buries the first wherever they overlap. The DENSE
+ * setting (13 blotches, radius 9-18, 4 lobes) leaves the base on 27.9% of the texture
+ * and gives the last tone painted 44.4%; the SPARSE one (7, radius 8-15, 5 lobes)
+ * leaves the base on 57.8% with 22.3% and 19.9% for the two tones. Those figures are
+ * identical on all 6 shipped hulls, because the blotch geometry is seeded and carries
+ * no colour dependence at all.
+ *
+ * WHICH SKIN GETS WHICH WAS BACKWARDS UNTIL NOW, and it is the whole reason Austin
+ * reported that "camo and clouds need to be swapped". Dense interlocking patches that
+ * cover most of a surface are what camouflage IS, so camo takes the dense setting;
+ * separated puffs over a visible field are what clouds are, so clouds takes the sparse
+ * one. Coverage is the only thing that moved -- each skin kept its own tone derivation,
+ * which is what still makes camo muted and clouds light.
  */
 function blotches(
   px: Uint8ClampedArray,
@@ -366,20 +371,37 @@ const PAINTERS: Record<
     // of the hull so camo is a family of one paint, not a clash.
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base, AUTO_ACCENT_DELTA * 0.5);
     const deep = accent ? scale(dark, 0.7) : autoAccent(base, AUTO_ACCENT_DELTA * 0.95);
-    // Sparse and small, so the hull survives as the majority tone.
-    blotches(px, base, dark, deep, 7, 8, 15, 5);
+    // DENSE and interlocking: real camouflage is patches that meet and cover, so the
+    // hull survives on a minority of the surface. These numbers were CLOUDS' until
+    // Austin reported "camo and clouds need to be swapped -- the skins appear to have
+    // their names reversed". The two skins have only ever differed in coverage and in
+    // how far their tones travel, and it was the COVERAGE that was on the wrong one:
+    // camo shipped as 7 small sparse patches leaving 57.8% hull, which reads as a few
+    // puffs, while clouds shipped as 13 large ones leaving 27.9%, which reads as
+    // camouflage. The tones did not move -- camo's muted, close-to-hull pair and
+    // clouds' light `cloudTone` pair were both already right, and the comment above
+    // proves camo's were tuned for the dense coverage it is only now getting.
+    blotches(px, base, dark, deep, 13, 9, 18, 4);
   },
   clouds(px, base, accent) {
     // The same blotch field as camo, taken to the FULL accent delta and beyond. Camo
-    // holds its tones close to the hull so the hull stays the tank's colour; clouds
-    // deliberately does not, and the light tone wins -- a blue tank reads as blue sky
-    // with white cloud rather than as a blue tank with markings.
+    // holds its tones close to the hull so the paint still reads as the tank's colour;
+    // clouds deliberately does not, and its tones go light -- a blue tank reads as blue
+    // sky with white cloud rather than as a blue tank with markings.
+    //
+    // The TONES are what carry that, not the coverage. Since the density swap the hull
+    // is the majority tone here too (57.8%), which is correct for sky: the cloud is the
+    // thing on top of it, not the field itself. An earlier version of this comment said
+    // "the light tone wins", which was true only while clouds held the dense setting.
     //
     // It exists because the unified accent work briefly gave camo these deltas by
     // accident, and the result was better as its own thing than as a broken camo.
     const soft = accent ? ensureContrast(base, accent) : cloudTone(base, AUTO_ACCENT_DELTA);
     const bright = accent ? scale(soft, 0.7) : cloudTone(base, AUTO_ACCENT_DELTA * 1.8);
-    blotches(px, base, soft, bright, 13, 9, 18, 4);
+    // SPARSE and separated -- these were camo's numbers; see the note there. Fewer,
+    // smaller puffs on a hull that stays visible between them is what reads as sky, and
+    // it is the light tones above rather than the density that make them clouds.
+    blotches(px, base, soft, bright, 7, 8, 15, 5);
   },
   checker(px, base, accent) {
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base);
