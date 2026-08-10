@@ -179,7 +179,13 @@ that stretch is built, against this arc.
 
 ## Residual risk
 
-**Nobody has playtested any of this game.** The curve's pacing is designed against measured
-geometry and headless simulation, and the claim that level 1 is "incredibly basic" or that
-level 4 teaches mines is a design judgement no test can make. The first stretch should be
-played before the later stretches are built, or the whole arc is guesswork compounding.
+**Corrected 2026-08-10.** This read "Nobody has playtested any of this game." That is no
+longer true — the game has been played — and the sentence is withdrawn rather than deleted,
+because the risk it was pointing at survives its own premise.
+
+**No playtest judgement has been recorded against this curve.** The pacing is designed
+against measured geometry and headless simulation, and the claim that level 1 is
+"incredibly basic" or that level 4 teaches mines is a design judgement no test can make.
+Nothing in the tree carries such a judgement for any level, and the arc's first five levels
+do not exist to be played at all. The first stretch should be built, played, and its verdict
+written down before the later stretches are built, or the whole arc is guesswork compounding.

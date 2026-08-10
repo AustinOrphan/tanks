@@ -60,8 +60,13 @@ the bundle asks for `/assets/…` and the page is blank. `npm run portability`
 call it — it cannot live in `npm test`, because under Vitest `import.meta.env.BASE_URL` is
 `/` even though vitest reads the same config that sets `base: './'`.
 
-The deploy re-runs 5 of `ci.yml`'s 7 checking steps, **not the `visual` job** — so a render
-regression that only `tools/gl/` and `tools/visual/` catch will publish. Nothing gates the
+The deploy re-runs 5 of `ci.yml`'s 8 checking steps, **not the `visual` job and not
+`Mutation manifest`** — so a render regression that only `tools/gl/` and `tools/visual/`
+catch will publish, and so will a stale `tools/mutate/manifest.json`. (Denominator: the
+named steps of both `ci.yml` jobs that check something rather than set up the runner —
+Typecheck, Test, Mutation manifest, Build, portability, audit, GL tests, Visual check;
+`Build` is counted once though it appears in both jobs. The figure was `5 of 7` until
+`Mutation manifest` landed in #104 and nothing recounted it.) Nothing gates the
 deploy on CI passing; `main` carries no branch protection. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
 one localStorage namespace (the game's **five** keys are all `tanks.*`-prefixed —

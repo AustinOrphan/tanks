@@ -68,11 +68,18 @@ jobs:
       # and there is no workflow_run edge between the two files. Without these steps a
       # red main would publish.
       #
-      # Be precise about what this is: 5 of ci.yml's 7 checking steps. It does NOT run
-      # the `visual` job -- `tools/gl/run.mjs` and `tools/visual/verify.mjs` -- which
-      # needs a ~130MB chromium download, and which CLAUDE.md records as the ONLY
-      # coverage src/render/ has ("a green npm test is not the whole gate for
-      # src/render/"). A render regression that only those catch will still publish.
+      # Be precise about what this is: 5 of ci.yml's 8 checking steps. (Denominator: the
+      # named steps of both ci.yml jobs that CHECK rather than set up the runner --
+      # Typecheck, Test, Mutation manifest, Build, portability, audit, GL tests, Visual
+      # check -- counting Build once though it appears in both jobs. This said "5 of 7"
+      # until `Mutation manifest` landed in #104 and nothing recounted it.)
+      #
+      # Two things it does NOT run. The `visual` job -- `tools/gl/run.mjs` and
+      # `tools/visual/verify.mjs` -- which needs a ~130MB chromium download, and which
+      # CLAUDE.md records as the ONLY coverage src/render/ has ("a green npm test is not
+      # the whole gate for src/render/"). A render regression that only those catch will
+      # still publish. And `Mutation manifest`, so a manifest that has gone stale against
+      # the tree does not block a deploy either.
       # Gating on the full run would mean a workflow_run trigger; see the PR discussion.
       - name: Typecheck
         run: npx tsc --noEmit
