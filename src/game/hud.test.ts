@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type Hud } from './hud';
+import {
+  createHud,
+  levelSelectColumns,
+  primaryActionVerb,
+  LEVEL_GRID_MAX_COLS,
+  type Hud,
+  type LevelSelectState,
+} from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { SKINS, ACCENTS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
@@ -971,69 +978,334 @@ describe('hud: the fire-mode toggle', () => {
   });
 });
 
-describe('hud: level select on the main menu', () => {
-  const row = (root: HTMLElement): HTMLElement => root.querySelector('.hud-levels') as HTMLElement;
-  const buttons = (root: HTMLElement): HTMLButtonElement[] =>
+describe('hud: the Level Select screen', () => {
+  const view = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-levelselect') as HTMLElement;
+  const grid = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-levels') as HTMLElement;
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-levelselect-open') as HTMLButtonElement;
+  const backBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-levelselect-back') as HTMLButtonElement;
+  const actionBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-action') as HTMLButtonElement;
+  const tiles = (root: HTMLElement): HTMLButtonElement[] =>
     Array.from(root.querySelectorAll('.hud-level-btn'));
+  const columns = (root: HTMLElement): number =>
+    Number(grid(root).style.getPropertyValue('--hud-level-cols'));
+  const stateWords = (root: HTMLElement): (string | null)[] =>
+    tiles(root).map((t) => t.querySelector('.hud-level-btn-state')?.textContent ?? null);
+  /** A four-level campaign with nothing cleared, unless the caller says otherwise. */
+  const seq = (over: Partial<LevelSelectState> = {}): LevelSelectState => ({
+    total: 4,
+    unlocked: 1,
+    cleared: 0,
+    resume: 0,
+    ...over,
+  });
 
-  it('renders one button per level, locking those past the unlock line', () => {
+  it('lays the grid out from the level count, at every count swept', () => {
+    // THE assertion that makes the next level free, and the reason this screen is not
+    // a row of four buttons: adding a level is a JSON edit (CLAUDE.md, "Arenas are
+    // data too"), so nothing here may be a four-slot anything.
+    //
+    // Proved before it was written. Two mutations, each applied on its own to hud.ts
+    // and measured against the WHOLE gate (`npx vitest run`, 2008 tests in 96 files):
+    //
+    //   - renderLevelGrid's loop bound hardcoded to `i < 4`: 3 of 2008 fail, all in
+    //     this file -- this test and the two neighbours that happen to render 5 and 2
+    //     levels.
+    //   - the column write hardcoded to `'2'`: 1 of 2008 fails. THIS TEST ALONE. The
+    //     shipped four-level campaign IS a two-column grid, so nothing else anywhere
+    //     in the tree can tell a computed column count from that constant.
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 3); // cleared nothing beyond level 1's unlock
-    const btns = buttons(root);
-    expect(btns.map((b) => b.textContent)).toEqual(['1', '2', '3']);
-    // Population: all 3 buttons. Level 1 open; 2 and 3 locked and DISABLED --
-    // a locked level must be unclickable, not merely grey.
-    expect(btns.map((b) => b.disabled)).toEqual([false, true, true]);
-    expect(btns.map((b) => b.classList.contains('hud-level-btn--locked')))
-      .toEqual([false, true, true]);
+    const seen: Array<{ total: number; tiles: number; cols: number }> = [];
+    // Population: these 12 counts. 1..5 covers every size the game has shipped or is
+    // one arena away from; 11 is the approved difficulty-curve arc
+    // (docs/superpowers/specs/2026-08-02-difficulty-curve-design.md); 9/12/16/25/30/64
+    // reach and pass the column cap.
+    const COUNTS = [1, 2, 3, 4, 5, 9, 11, 12, 16, 25, 30, 64];
+    for (const total of COUNTS) {
+      h.setLevelSelect(seq({ total, unlocked: total }));
+      seen.push({ total, tiles: tiles(root).length, cols: columns(root) });
+      // Every level, once, in order -- not merely the right NUMBER of tiles.
+      expect(tiles(root).map((t) => t.dataset.level), `total ${total}`).toEqual(
+        Array.from({ length: total }, (_, i) => String(i + 1)),
+      );
+    }
+
+    // One tile per level at every count in the sweep.
+    expect(seen.map((r) => r.tiles)).toEqual(COUNTS);
+
+    // ...and the LAYOUT moves with the count rather than the tiles merely piling into
+    // a fixed track list. Pinned exactly, because "it changed at least once" would
+    // pass on a two-valued step function.
+    expect(seen.map((r) => r.cols)).toEqual([1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 6, 6]);
+    // Three properties that vector has to have, stated separately so retuning
+    // levelSelectColumns is a one-line edit rather than a rewrite: never wider than
+    // the cap (a 64-tile row would leave the viewport), never narrower as the count
+    // grows, and never zero, which is not a grid.
+    expect(Math.max(...seen.map((r) => r.cols))).toBeLessThanOrEqual(LEVEL_GRID_MAX_COLS);
+    expect(seen.map((r) => r.cols)).toEqual([...seen.map((r) => r.cols)].sort((a, b) => a - b));
+    expect(Math.min(...seen.map((r) => r.cols))).toBeGreaterThan(0);
+    // And the exported function agrees with what the DOM actually got, which is what
+    // lets hud.css.test.ts reason about the same number.
+    for (const r of seen) expect(levelSelectColumns(r.total), `total ${r.total}`).toBe(r.cols);
+  });
+
+  it('shows each level as cleared, open, locked, or the one Continue resumes', () => {
+    // The per-level identity this screen has without inventing data. A screen that
+    // only numbered its tiles would pass every OTHER test in this block.
+    const { hud: h, root } = mount();
+    // Two cleared of five: 1 and 2 done, 3 is where Continue lands, 4 and 5 locked.
+    h.setLevelSelect({ total: 5, unlocked: 3, cleared: 2, resume: 2 });
+    expect(stateWords(root)).toEqual(['Cleared', 'Cleared', 'Continue', 'Locked', 'Locked']);
+    // Population: all 5 tiles, on each of the three modifiers.
+    expect(tiles(root).map((t) => t.classList.contains('hud-level-btn--cleared'))).toEqual([
+      true, true, false, false, false,
+    ]);
+    expect(tiles(root).map((t) => t.classList.contains('hud-level-btn--resume'))).toEqual([
+      false, false, true, false, false,
+    ]);
+    expect(tiles(root).map((t) => t.classList.contains('hud-level-btn--locked'))).toEqual([
+      false, false, false, true, true,
+    ]);
+    // Locked is DISABLED, not merely grey: a disabled button fires no click handler.
+    expect(tiles(root).map((t) => t.disabled)).toEqual([false, false, false, true, true]);
+    // Spelled out, or the two spans are announced as "3Continue".
+    expect(tiles(root).map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Level 1, cleared',
+      'Level 2, cleared',
+      'Level 3, continue',
+      'Level 4, locked',
+      'Level 5, locked',
+    ]);
+    expect(root.querySelector('.hud-levelselect-count')?.textContent).toBe('2 of 5 cleared');
+  });
+
+  it('never marks a locked level as the one Continue resumes', () => {
+    // `resume` comes from the caller (levels.start). A caller bug must read as a bug,
+    // not as an invitation into a level this same screen shows as locked.
+    const { hud: h, root } = mount();
+    h.setLevelSelect({ total: 4, unlocked: 1, cleared: 0, resume: 3 });
+    expect(tiles(root).map((t) => t.classList.contains('hud-level-btn--resume'))).toEqual([
+      false, false, false, false,
+    ]);
+    expect(stateWords(root)).toEqual(['Open', 'Locked', 'Locked', 'Locked']);
+  });
+
+  it('marks the resume tile with the primary action’s OWN word, not a fixed one', () => {
+    // Caught in a real browser, not by a test: on a fresh save the button read "Start"
+    // and the tile directly under it read "CONTINUE". Two views of one fact, and they
+    // disagreed -- which is the defect this whole screen exists to remove. Both now
+    // come from primaryActionVerb.
+    const { hud: h, root } = mount();
+    const action = root.querySelector('.hud-action') as HTMLButtonElement;
+    for (const resume of [0, 1, 2, 3]) {
+      h.setLevelSelect({ total: 4, unlocked: resume + 1, cleared: resume, resume });
+      h.setState('title');
+      const marked = tiles(root).find((t) => t.classList.contains('hud-level-btn--resume'));
+      const word = marked?.querySelector('.hud-level-btn-state')?.textContent ?? '(none)';
+      expect(word, `resume ${resume}`).toBe(primaryActionVerb(resume));
+      // ...and the button's own label starts with that same word.
+      expect(action.textContent?.startsWith(word), `resume ${resume}`).toBe(true);
+    }
   });
 
   it('reports a click on an unlocked level, 0-based, and nothing for a locked one', () => {
     const { hud: h, root } = mount();
     const picks: number[] = [];
     h.onLevelSelect((i) => picks.push(i));
-    h.setLevelSelect(2, 3);
+    h.setLevelSelect(seq({ unlocked: 2 }));
     h.setState('title');
-    buttons(root)[1].dispatchEvent(new MouseEvent('click'));
-    buttons(root)[2].dispatchEvent(new MouseEvent('click')); // locked: disabled anyway
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    tiles(root)[1].dispatchEvent(new MouseEvent('click'));
+    tiles(root)[2].dispatchEvent(new MouseEvent('click')); // locked: disabled anyway
     expect(picks).toEqual([1]);
   });
 
-  it('shows the row on the title panel only', () => {
+  it('opens from the menu button and closes on Back, like every other pane', () => {
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 2);
+    h.setLevelSelect(seq());
     h.setState('title');
-    expect(row(root).classList.contains('hud-levels--hidden')).toBe(false);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    const panel = root.querySelector('.hud-panel') as HTMLElement;
+    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
+
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(false);
+    // The menu goes away behind it, or the two panels stack.
+    expect(panel.classList.contains('hud-panel--hidden')).toBe(true);
+
+    backBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
+    expect(panel.classList.contains('hud-panel--hidden')).toBe(false);
+  });
+
+  it('is closed by ANY state change, so it cannot sit over a live game', () => {
+    // The setState chokepoint, same as stats/customize/achievements. Without it the
+    // pane survives Start and the player is looking at a menu over their own game.
+    // Population: all four states reachable from a pane opened on the title screen.
+    //
+    // Proved: deleting setState's `levelSelectView.classList.add(...)` line fails 1 of
+    // this file's 105 tests -- this one. Scoped to this file; the rest of the tree was
+    // not swept for that mutation.
+    for (const s of ['playing', 'paused', 'win', 'lose'] as const) {
+      const { hud: h, root } = mount();
+      h.setLevelSelect(seq());
+      h.setState('title');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(view(root).classList.contains('hud-levelselect--hidden'), s).toBe(false);
       h.setState(s);
-      expect(row(root).classList.contains('hud-levels--hidden'), s).toBe(true);
+      expect(view(root).classList.contains('hud-levelselect--hidden'), s).toBe(true);
+      h.dispose();
+      document.body.innerHTML = '';
     }
   });
 
-  it('hides the row entirely for a one-level sequence (the sandbox)', () => {
+  it('offers the button on the title panel only, and only when there is a choice', () => {
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 1);
+    h.setLevelSelect(seq());
     h.setState('title');
-    expect(row(root).classList.contains('hud-levels--hidden')).toBe(true);
+    expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(false);
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(openBtn(root).classList.contains('hud-levelselect-open--hidden'), s).toBe(true);
+    }
+    // A one-level sequence is the sandbox: there is nothing to select between.
+    h.setState('title');
+    h.setLevelSelect(seq({ total: 1, unlocked: 1 }));
+    expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(true);
   });
 
-  it('a re-render while another panel is up must not splash the row onto it', () => {
-    // The natural call order: the loop records an unlock AT the win event and
-    // refreshes the select -- while the WIN panel is showing.
+  it('re-rendering after an unlock replaces the tiles rather than appending', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(seq({ total: 2, unlocked: 1 }));
+    h.setLevelSelect(seq({ total: 2, unlocked: 2, cleared: 1, resume: 1 }));
+    expect(tiles(root)).toHaveLength(2);
+    expect(tiles(root)[1].disabled).toBe(false);
+  });
+
+  it('a push while another panel is up must not open the screen or relabel that panel', () => {
+    // The natural call order: the loop records an unlock AT the win event and pushes
+    // the new state -- while the WIN panel is showing. Neither the Level Select button
+    // nor a Continue label belongs on a win screen.
     const { hud: h, root } = mount();
     h.setState('win');
-    h.setLevelSelect(2, 2);
-    expect(row(root).classList.contains('hud-levels--hidden')).toBe(true);
+    h.setLevelSelect(seq({ total: 2, unlocked: 2, cleared: 1, resume: 1 }));
+    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
+    expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(true);
+    expect(actionBtn(root).textContent).toBe('Play Again');
+    // ...and the title screen picks it all up when it next renders.
     h.setState('title');
-    expect(row(root).classList.contains('hud-levels--hidden')).toBe(false);
+    expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(false);
+    expect(actionBtn(root).textContent).toBe('Continue — Level 2');
+  });
+});
+
+describe('hud: the Continue / New Game split', () => {
+  const actionBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-action') as HTMLButtonElement;
+  const newGameBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-newgame') as HTMLButtonElement;
+  const newGameHidden = (root: HTMLElement): boolean =>
+    newGameBtn(root).classList.contains('hud-newgame--hidden');
+
+  it('names the level it resumes, so the button says what it does', () => {
+    // The defect in the issue's title: the button read "Start" and started level 3.
+    // Population: every 0-based resume a four-level campaign can produce.
+    //
+    // Proved: forcing `actionBtn.textContent = 'Start'` unconditionally fails 2 of the
+    // 291 tests in hud.test.ts + loop.test.ts + hud.css.test.ts -- this one and the
+    // "push while another panel is up" neighbour.
+    const { hud: h, root } = mount();
+    const labels: string[] = [];
+    for (const resume of [0, 1, 2, 3]) {
+      h.setLevelSelect({ total: 4, unlocked: resume + 1, cleared: resume, resume });
+      h.setState('title');
+      labels.push(actionBtn(root).textContent ?? '');
+    }
+    expect(labels).toEqual([
+      'Start', // nothing cleared: "Continue - Level 1" is a fresh start dressed up
+      'Continue — Level 2',
+      'Continue — Level 3',
+      'Continue — Level 4',
+    ]);
   });
 
-  it('re-rendering after an unlock replaces the buttons rather than appending', () => {
+  it('says Start, and offers no New Game, when there is nothing to continue', () => {
+    // Deliberate: with nothing cleared, Start and New Game are the same action, and a
+    // menu offering one action twice teaches the player that the words mean nothing.
+    //
+    // Proved: showing New Game unconditionally fails 2 of those same 291 -- this one
+    // and "defaults to Start when nothing has told it about levels at all".
     const { hud: h, root } = mount();
-    h.setLevelSelect(1, 2);
-    h.setLevelSelect(2, 2); // level 1 cleared -> level 2 unlocks
-    expect(buttons(root)).toHaveLength(2);
-    expect(buttons(root)[1].disabled).toBe(false);
+    h.setLevelSelect({ total: 4, unlocked: 1, cleared: 0, resume: 0 });
+    h.setState('title');
+    expect(actionBtn(root).textContent).toBe('Start');
+    expect(newGameHidden(root)).toBe(true);
+  });
+
+  it('offers New Game once there is progress, and fires it', () => {
+    const { hud: h, root } = mount();
+    const fired: string[] = [];
+    h.onNewGame(() => fired.push('new'));
+    h.setLevelSelect({ total: 4, unlocked: 3, cleared: 2, resume: 2 });
+    h.setState('title');
+    expect(newGameHidden(root)).toBe(false);
+    newGameBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(fired).toEqual(['new']);
+  });
+
+  it('keeps New Game off every panel that is not the title screen', () => {
+    // It is a menu affair, like Level Select. On the pause panel it would be a second
+    // untested path out of a live game; on win/lose it duplicates the action button.
+    const { hud: h, root } = mount();
+    h.setLevelSelect({ total: 4, unlocked: 3, cleared: 2, resume: 2 });
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(newGameHidden(root), s).toBe(true);
+    }
+    h.setState('title');
+    expect(newGameHidden(root)).toBe(false);
+  });
+
+  it('leaves the other panels’ action labels alone', () => {
+    // Only the title branch changed. Population: the pause panel, the lose panel and
+    // both win variants.
+    const { hud: h, root } = mount();
+    h.setLevelSelect({ total: 4, unlocked: 3, cleared: 2, resume: 2 });
+    h.setLevel(2, 4);
+    h.setState('paused');
+    expect(actionBtn(root).textContent).toBe('Resume');
+    h.setState('win');
+    expect(actionBtn(root).textContent).toBe('Next Level');
+    h.setLevel(4, 4);
+    h.setState('win');
+    expect(actionBtn(root).textContent).toBe('Play Again');
+    h.setState('lose');
+    expect(actionBtn(root).textContent).toBe('Retry');
+  });
+
+  it('defaults to Start when nothing has told it about levels at all', () => {
+    // A HUD constructed and shown without a setLevelSelect push -- loop.ts's boot
+    // order puts hud.setState BEFORE the first push. Reading `resume` off a null
+    // state must not render "Continue - Level NaN".
+    const { hud: h, root } = mount();
+    h.setState('title');
+    expect(actionBtn(root).textContent).toBe('Start');
+    expect(newGameHidden(root)).toBe(true);
+  });
+
+  it('stops firing New Game after dispose', () => {
+    const { hud: h, root } = mount();
+    const fired: string[] = [];
+    h.onNewGame(() => fired.push('new'));
+    h.setLevelSelect({ total: 4, unlocked: 3, cleared: 2, resume: 2 });
+    h.setState('title');
+    const btn = newGameBtn(root);
+    h.dispose();
+    btn.dispatchEvent(new MouseEvent('click'));
+    expect(fired).toEqual([]);
   });
 });
 

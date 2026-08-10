@@ -38,6 +38,7 @@ import {
   type DevConsole,
   type DevConsoleTarget,
 } from './loop';
+import type { LevelSelectState } from './hud';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeInput, replayTrace, checkTrace } from './replay';
@@ -87,7 +88,7 @@ interface Recorder {
   statRunStarts: number;
   statResets: number;
   statPushes: number;
-  levelSelects: Array<[number, number]>;
+  levelSelects: LevelSelectState[];
   builtWorlds: World[];
   volumes: number[];
   resizes: Array<[number, number]>;
@@ -151,6 +152,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     toggleScheme(s: TouchScheme): void;
     toggleFireMode(m: FireMode): void;
     pickLevel(i: number): void;
+    newGame(): void;
     resetStats(): void;
     resetProgress(): void;
     pickHull(id: HullColorId): void;
@@ -262,6 +264,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onPickAccent = (_id: AccentId): void => {};
   let onResetProgress = (): void => {};
   let onPickLevel = (_i: number): void => {};
+  let onNewGame = (): void => {};
+  // Mutable, so reset() models the real store: everything re-locks, including clears
+  // that predate this session. SHARED between the progress fake and the levels fake,
+  // because the real `levels.start` reads the real progress store -- see its getter.
+  let progressBase = opts.progressHighest ?? 0;
   let onCustomizeOpen = (): void => {};
   let onCustomizeClose = (): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
@@ -554,9 +561,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onResetProgress: (cb: () => void) => {
           onResetProgress = cb;
         },
-        setLevelSelect: (u: number, t: number) => rec.levelSelects.push([u, t]),
+        setLevelSelect: (s: LevelSelectState) => rec.levelSelects.push({ ...s }),
         onLevelSelect: (cb: (i: number) => void) => {
           onPickLevel = cb;
+        },
+        onNewGame: (cb: () => void) => {
+          onNewGame = cb;
         },
         dispose: () => rec.disposed.push('hud'),
       };
@@ -669,22 +679,17 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     })(),
-    progress: (() => {
-      // Mutable base so reset() models the real store: everything re-locks,
-      // including clears that predate this session.
-      let base = opts.progressHighest ?? 0;
-      return {
-        highestCleared: () => Math.max(base, ...rec.cleared, 0),
-        recordCleared: (level: number) => {
-          rec.cleared.push(level);
-        },
-        reset: () => {
-          rec.progressResets += 1;
-          rec.cleared.length = 0;
-          base = 0;
-        },
-      };
-    })(),
+    progress: {
+      highestCleared: () => Math.max(progressBase, ...rec.cleared, 0),
+      recordCleared: (level: number) => {
+        rec.cleared.push(level);
+      },
+      reset: () => {
+        rec.progressResets += 1;
+        rec.cleared.length = 0;
+        progressBase = 0;
+      },
+    },
     levels: {
       // Defaults to a ONE-level sequence: every pre-progression test in this file was
       // written against "restart rebuilds the same arena", which is exactly what a
@@ -694,7 +699,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // session's start. A fixed opts.levelStart models a dev-flag jump.
       get start(): number {
         if (opts.levelStart !== undefined) return opts.levelStart;
-        const cleared = Math.max(opts.progressHighest ?? 0, ...rec.cleared, 0);
+        // Through the PROGRESS STORE, not through `opts.progressHighest`, because the
+        // real one is `min(progress.highestCleared(), count - 1)` and the store is
+        // mutable: Reset progress zeroes it. Reading the frozen option instead left
+        // this fake reporting a resume level of 1 after a reset that had re-locked
+        // every level -- a divergence from production that only showed up once
+        // something (the Continue label) actually read `start` after a reset.
+        const cleared = Math.max(progressBase, ...rec.cleared, 0);
         return Math.min(cleared, (opts.levelCount ?? 1) - 1);
       },
       tracksProgress: opts.tracksProgress ?? true,
@@ -784,6 +795,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       toggleScheme: (s: TouchScheme) => onTouchSchemeChange(s),
       toggleFireMode: (m: FireMode) => onFireModeChange(m),
       pickLevel: (i) => onPickLevel(i),
+      newGame: () => onNewGame(),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
       pickSkin: (id: SkinId) => onPickSkin(id),
@@ -2211,11 +2223,32 @@ describe('startGameWith: quit is pause-only', () => {
 describe('startGameWith: the main menu', () => {
   it('tells the HUD the unlock state at boot: cleared+1 pickable, capped at the count', () => {
     const h = boot(makeDeps({ levelCount: 2, progressHighest: 0 }));
-    expect(h.rec.levelSelects[0]).toEqual([1, 2]);
+    expect(h.rec.levelSelects[0]).toEqual({ total: 2, unlocked: 1, cleared: 0, resume: 0 });
     h.handle.dispose();
     const h2 = boot(makeDeps({ levelCount: 2, progressHighest: 5 }));
-    expect(h2.rec.levelSelects[0]).toEqual([2, 2]); // capped: 6 of 2 is nonsense
+    // Capped, on all three counts: 6 of 2 is nonsense, and so is resuming level 6.
+    expect(h2.rec.levelSelects[0]).toEqual({ total: 2, unlocked: 2, cleared: 2, resume: 1 });
     h2.handle.dispose();
+  });
+
+  it('tells the HUD which level Continue resumes, including a dev-flag jump', () => {
+    // The Continue button's whole claim is that it names where it lands, and where it
+    // lands is `levels.start` -- which a `?dev=1&level=N` jump moves with NOTHING
+    // cleared. Pushing `highestCleared` in its place would label that session "Start"
+    // and then drop the player into level 3.
+    //
+    // Proved: hardcoding `resume: 0` fails 4 of this file's 165 tests, this one among
+    // them -- and it is the only one of the four a dev-flag jump reaches.
+    const h = boot(makeDeps({ levelCount: 3, levelStart: 2, progressHighest: 0 }));
+    expect(h.rec.levelSelects[0]).toEqual({ total: 3, unlocked: 1, cleared: 0, resume: 2 });
+    h.handle.dispose();
+  });
+
+  it('reports no progress at all for a sequence that does not track it (the sandbox)', () => {
+    // A campaign unlock must not decorate a test rig's single level as cleared.
+    const h = boot(makeDeps({ levelCount: 1, tracksProgress: false, progressHighest: 3 }));
+    expect(h.rec.levelSelects[0]).toEqual({ total: 1, unlocked: 1, cleared: 0, resume: 0 });
+    h.handle.dispose();
   });
 
   it('records the cleared level AT the win, and refreshes the unlock state', () => {
@@ -2225,7 +2258,48 @@ describe('startGameWith: the main menu', () => {
     h.setState('playing');
     h.setState('win');
     expect(h.rec.cleared).toEqual([1]);
-    expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]);
+    // `resume` moves with it, in the SAME push: `levels.start` is a live getter, so a
+    // Continue button that were told only about `unlocked` would keep naming level 1
+    // for the rest of the session.
+    expect(h.rec.levelSelects.at(-1)).toEqual({ total: 2, unlocked: 2, cleared: 1, resume: 1 });
+    h.handle.dispose();
+  });
+
+  it('starts level 1 on New Game, and leaves the unlocks alone', () => {
+    // The other half of the split. `recordCleared` keeps a maximum (progress.ts), so a
+    // fresh run must not re-lock anything -- and the player must not have to choose
+    // between starting over and keeping what they earned.
+    //
+    // Proved: swapping `switchTo(0)` for `switchTo(deps.levels.start)` -- i.e. making
+    // New Game a second Continue -- fails 1 of this file's 165 tests, this one.
+    const h = boot(makeDeps({ levelCount: 3, progressHighest: 2 }));
+    const buildsBefore = h.rec.levelBuilds.length;
+    h.hud.newGame();
+    // Level 1 (0-based 0) with FRESH lives, not the run's remainder: this is a new
+    // game, and `undefined` is what buildWorld reads as "the arena's own default".
+    expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 0, lives: undefined });
+    expect(h.rec.levelBuilds.length).toBe(buildsBefore + 1);
+    expect(h.getState()).toBe('playing');
+    // Progress untouched: nothing cleared, nothing reset, and the unlock state the HUD
+    // was last told is still the full one.
+    expect(h.rec.cleared).toEqual([]);
+    expect(h.rec.progressResets).toBe(0);
+    expect(h.rec.levelSelects.at(-1)?.unlocked).toBe(3);
+    h.handle.dispose();
+  });
+
+  it('ignores a New Game that arrives outside the title screen', () => {
+    // The HUD hides the button everywhere else, but a handler that rebuilds the world
+    // deserves its own guard -- the same rule Quit and the level tiles follow.
+    //
+    // Proved: deleting the `sm.state !== 'title'` line fails 1 of this file's 165, this
+    // one.
+    const h = boot(makeDeps({ levelCount: 3, progressHighest: 2 }));
+    h.setState('playing');
+    const buildsBefore = h.rec.levelBuilds.length;
+    h.hud.newGame();
+    expect(h.rec.levelBuilds.length).toBe(buildsBefore);
+    expect(h.getState()).toBe('playing');
     h.handle.dispose();
   });
 
@@ -2384,10 +2458,14 @@ describe('startGameWith: stats wiring', () => {
 
   it('Reset progress re-locks levels and refreshes the level select', () => {
     const h = boot(makeDeps({ levelCount: 2, progressHighest: 1 }));
-    expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]); // level 2 open at boot
+    // Level 2 open at boot, and Continue naming it.
+    expect(h.rec.levelSelects.at(-1)).toEqual({ total: 2, unlocked: 2, cleared: 1, resume: 1 });
     h.hud.resetProgress();
     expect(h.rec.progressResets).toBe(1);
-    expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]); // re-locked
+    // Re-locked, uncleared, and Continue back to a plain Start at level 1 -- all three
+    // in the one push, so the menu cannot keep offering a level the save no longer
+    // justifies.
+    expect(h.rec.levelSelects.at(-1)).toEqual({ total: 2, unlocked: 1, cleared: 0, resume: 0 });
     h.handle.dispose();
   });
 });

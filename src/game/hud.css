@@ -180,6 +180,7 @@
 .hud-stats,
 .hud-customize,
 .hud-achievements,
+.hud-levelselect,
 .hud-splash {
   touch-action: pan-y;
 }
@@ -522,9 +523,12 @@
  * A new button joins by adding its selector here. `hud.css.test.ts` mounts the HUD and
  * fails if any button it renders has no base rule, so forgetting is a red suite. */
 .hud-quit,
+.hud-newgame,
+.hud-levelselect-open,
 .hud-stats-open,
 .hud-achievements-open,
 .hud-customize-open,
+.hud-levelselect-back,
 .hud-stats-back,
 .hud-customize-back,
 .hud-achievements-back {
@@ -541,11 +545,20 @@
 /* The panel buttons stack under a heading, so they carry the gap and a fixed size.
  * The Back buttons sit alone at the foot of their pane and take neither. */
 .hud-quit,
+.hud-newgame,
+.hud-levelselect-open,
 .hud-stats-open,
 .hud-achievements-open,
 .hud-customize-open {
   margin-top: 2px;
   font-size: 15px;
+}
+
+/* New Game is the alternative to Continue, not a pane -- it sits directly under the
+ * action button and reads as the second half of one decision. */
+.hud-newgame--hidden,
+.hud-levelselect-open--hidden {
+  display: none;
 }
 
 /* Quitting is the pause panel's secondary path -- pushed further off the action button. */
@@ -980,30 +993,118 @@
   }
 }
 
-/* ---- Main menu: level select ---------------------------------------------------- */
+/* ---- Level Select screen ---------------------------------------------------------- */
 
-.hud-levels {
+/* A full overlay like stats and achievements; without the hidden rule it covers the
+ * game from load. */
+.hud-levelselect {
   pointer-events: auto;
+  position: absolute;
+  /* Below the topbar, like .hud-stats: review caught that overlay painting OVER the
+   * topbar and eating mute/volume clicks. Same shape, same guard. */
+  z-index: 0;
+  inset: 0;
   display: flex;
-  gap: 10px;
-  margin-bottom: 4px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(11, 14, 20, 0.86);
+  color: #d8dde6;
+  text-align: center;
 }
 
-.hud-levels--hidden {
+.hud-levelselect--hidden {
   display: none;
+}
+
+.hud-levelselect-count {
+  margin: -6px 0 0;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* THE SCALING RULE, and it answers to TWO limits rather than one.
+ *
+ * `--hud-level-cols` is written by hud.ts from the level COUNT (levelSelectColumns) --
+ * not a number typed here, because adding a level is a JSON edit and a grid with four
+ * hardcoded tracks stops being right that day. It caps the grid's WIDTH at that many
+ * tiles rather than naming the tracks directly, which is what leaves room for the
+ * second limit: `auto-fit` drops to fewer columns when the viewport cannot hold that
+ * many at `--hud-level-tile`.
+ *
+ * The two-limit form is not tidiness. With `repeat(var(--hud-level-cols), minmax(0,
+ * 1fr))` the tracks shrank below the tile's own min-width and the tiles OVERLAPPED --
+ * measured at 320x568 with 30 levels, where 6 columns do not fit. Now the same case
+ * lands on 3 columns and scrolls.
+ *
+ * The height cap is the third part: past a screenful the grid scrolls rather than
+ * pushing Back off the bottom. */
+.hud-levels {
+  --hud-level-tile: 72px;
+  --hud-level-gap: 10px;
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--hud-level-tile), 1fr));
+  gap: var(--hud-level-gap);
+  max-width: min(
+    calc(var(--hud-level-cols, 4) * (var(--hud-level-tile) + var(--hud-level-gap))),
+    92vw
+  );
+  max-height: 56vh;
+  overflow-y: auto;
+  padding: 4px;
 }
 
 .hud-level-btn {
   pointer-events: auto;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   border: none;
   border-radius: 10px;
-  width: 44px;
-  height: 44px;
+  /* A floor, not a fixed width: the grid's `1fr` tracks decide the real width, so the
+   * same tile works at 2 columns and at 6. It must match `--hud-level-tile`, which is
+   * what the track floor is set from -- a tile wider than its own track is how the
+   * 320px/30-level overlap happened. */
+  min-width: 72px;
+  min-height: 64px;
   font-size: 18px;
   font-weight: 800;
   background: rgba(216, 221, 230, 0.16);
   color: #d8dde6;
+}
+
+.hud-level-btn-num {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+/* The only per-level identity this screen can show without inventing data: where the
+ * player stands in it. */
+.hud-level-btn-state {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+/* Cleared levels read as cleared -- without this rule the screen says nothing about
+ * progress that the lock state does not already say. */
+.hud-level-btn--cleared {
+  background: rgba(79, 208, 106, 0.18);
+  color: #b8ecc4;
+}
+
+/* Where Continue goes. The ring is the ONLY thing tying the menu's primary action to a
+ * tile on this screen. */
+.hud-level-btn--resume {
+  outline: 2px solid #4fd06a;
+  outline-offset: -2px;
 }
 
 /* Locked levels read as locked, and the disabled attribute makes them unclickable --

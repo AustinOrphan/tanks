@@ -25,7 +25,7 @@ import type { SuiteContext } from '../audio/suites';
 import type { GameState } from './state';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createGameStateMachine, type GameStateMachine } from './state';
-import { createHud, type Hud } from './hud';
+import { createHud, type Hud, type LevelSelectState } from './hud';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
@@ -621,9 +621,28 @@ export function startGameWith(
     hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   }
 
-  /** How many levels are pickable: everything cleared plus the next one, capped. */
-  const unlockedLevels = (): number =>
-    Math.min(deps.progress.highestCleared() + 1, deps.levels.count);
+  /**
+   * Everything the menu knows about the sequence, in one object: which levels are
+   * pickable, which are cleared, and which one the primary action lands on.
+   *
+   * Recomputed at every push rather than cached, because `levels.start` is a LIVE
+   * getter (levels.ts) -- an unlock earned this session moves it, and a Continue
+   * button reading a boot-time snapshot would name the wrong level for the rest of
+   * the session.
+   *
+   * The sandbox reports NO progress: `tracksProgress` is false there, so a campaign
+   * unlock must not decorate a test rig's single level as cleared.
+   */
+  const levelSelectState = (): LevelSelectState => ({
+    total: deps.levels.count,
+    unlocked: deps.levels.tracksProgress
+      ? Math.min(deps.progress.highestCleared() + 1, deps.levels.count)
+      : deps.levels.count,
+    cleared: deps.levels.tracksProgress
+      ? Math.min(deps.progress.highestCleared(), deps.levels.count)
+      : 0,
+    resume: deps.levels.start,
+  });
 
   hud.onLevelSelect((picked) => {
     // Panel-only control, guarded like Quit: CSS hiding is not the only defence --
@@ -634,6 +653,26 @@ export function startGameWith(
     switchTo(picked);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.
+    audio.unlock();
+    sm.startPlaying();
+  });
+
+  /**
+   * New Game: level 1, whatever the save says.
+   *
+   * The other half of the Continue split. Progress is DELIBERATELY untouched --
+   * `recordCleared` keeps a maximum (progress.ts), so replaying level 1 cannot
+   * re-lock level 3, and a player who wants a fresh run must not be made to choose
+   * between that and keeping their unlocks. Wiping progress is what Reset progress
+   * on the stats page is for, and it is two-click confirmed.
+   *
+   * Guarded on the title state like Quit and the level tiles: the button is hidden
+   * elsewhere, but a handler that rebuilds the world deserves better than a CSS class
+   * as its only defence.
+   */
+  hud.onNewGame(() => {
+    if (sm.state !== 'title') return;
+    switchTo(0);
     audio.unlock();
     sm.startPlaying();
   });
@@ -766,7 +805,7 @@ export function startGameWith(
     hud.setAchievements(deps.achievements.earned());
     // Levels re-lock immediately: the select the player is looking at must not keep
     // offering a level the save no longer justifies.
-    hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+    hud.setLevelSelect(levelSelectState());
   });
 
   /**
@@ -816,7 +855,7 @@ export function startGameWith(
     // unlock real levels.
     if (s === 'win' && deps.levels.tracksProgress) {
       deps.progress.recordCleared(level + 1);
-      hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+      hud.setLevelSelect(levelSelectState());
     }
     // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
     // guard on purpose: the sandbox unlocks no levels but a feat performed there is
@@ -838,7 +877,7 @@ export function startGameWith(
   hud.setState(sm.state); // initial title panel
   followMusic(sm.state); // ...and its music: this path bypasses sm.onChange
   hud.setLevel(level + 1, deps.levels.count);
-  hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+  hud.setLevelSelect(levelSelectState());
   deps.stats.startRun();
   hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
   hud.setHullColor(deps.customization.hull());

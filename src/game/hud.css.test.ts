@@ -83,7 +83,7 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   // a setter not called here is invisible to the guard, and the pinned count below
   // will not notice either, because it never appears. If you add a button-building
   // path, drive it here.
-  hud.setLevelSelect(2, 4);
+  hud.setLevelSelect({ total: 4, unlocked: 2, cleared: 1, resume: 1 });
   hud.setAchievements(new Set());
   hud.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
   return {
@@ -172,7 +172,17 @@ describe('hud.css is syntactically whole', () => {
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle', // the settings row's controls
-      '.hud-levels', '.hud-levels--hidden', '.hud-level-btn', '.hud-level-btn--locked', // level select
+      // Level Select: the pane's own hidden rule, the tiles, and the three states a
+      // tile can be in -- without --cleared and --resume the screen says nothing about
+      // progress that the lock state does not already say, and the Continue button
+      // points at a tile with no mark on it
+      '.hud-levelselect--hidden', '.hud-levelselect-count',
+      '.hud-levels', '.hud-level-btn', '.hud-level-btn-num', '.hud-level-btn-state',
+      '.hud-level-btn--locked', '.hud-level-btn--cleared', '.hud-level-btn--resume',
+      // ...and the two menu buttons the split added. Both are `display: none` rules:
+      // without them New Game shows on every panel and Level Select shows in the
+      // sandbox, where there is nothing to select between
+      '.hud-newgame--hidden', '.hud-levelselect-open--hidden',
       // stats: without the hidden rules the page covers everything from load
       '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
       '.hud-danger', '.hud-danger--armed', '.hud-run-summary', '.hud-run-summary--hidden',
@@ -244,7 +254,11 @@ describe('hud.css is syntactically whole', () => {
     // 42 since the preview's rotate cluster landed: 38 + its four icon buttons, which
     // are themed by `.hud-rotate-btn` and would show as stock grey browser buttons in
     // the middle of the pane without it.
-    expect(buttons.length).toBe(42);
+    // 45 since the Level Select screen landed: 42 + New Game, + the Level Select open
+    // button, + that pane's Back button. The four level TILES were already in the 42
+    // and still are -- mountEveryButton's fixture asks for four levels explicitly, so
+    // this count does NOT move when an arena is added to arenas.json.
+    expect(buttons.length).toBe(45);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -264,8 +278,13 @@ describe('hud.css is syntactically whole', () => {
       document.body.appendChild(b);
       return getComputedStyle(b);
     };
-    const panel = ['hud-stats-open', 'hud-achievements-open', 'hud-customize-open'];
-    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back'];
+    const panel = [
+      'hud-stats-open', 'hud-achievements-open', 'hud-customize-open',
+      'hud-levelselect-open', 'hud-newgame',
+    ];
+    const back = [
+      'hud-stats-back', 'hud-customize-back', 'hud-achievements-back', 'hud-levelselect-back',
+    ];
 
     // Quitting is pushed further off the action button than its neighbours are off
     // each other. Asserted as the relationship, so retuning either value is free.
@@ -306,6 +325,54 @@ describe('hud.css is syntactically whole', () => {
     expect(accentsStyle.display).toBe(swatchesStyle.display);
     expect(accentsStyle.gap).toBe(swatchesStyle.gap);
 
+    document.body.innerHTML = '';
+  });
+
+  it('lets the level grid take its column count from the level count', () => {
+    // The other half of the scaling requirement, and the half that lives in CSS.
+    // hud.ts writes `--hud-level-cols` from the number of levels (proved in
+    // hud.test.ts); if the stylesheet does not READ it, that write is dead code and
+    // the grid renders at whatever the sheet hardcodes -- which is exactly the
+    // "class alone does nothing" failure this file exists for. Nothing in jsdom can
+    // measure the resulting layout, so this asserts the wiring at both ends.
+    const grid = document.createElement('div');
+    grid.className = 'hud-levels';
+    document.body.appendChild(grid);
+    const style = getComputedStyle(grid);
+    expect(style.display, 'the level tiles no longer lay out as a grid').toBe('grid');
+    // Read from the TEXT, because cssstyle does not resolve var() in a track list:
+    // measured here, `gridTemplateColumns` computes to '' whether the declaration
+    // names the custom property or a literal `repeat(4, ...)`.
+    const src = stripComments(css);
+    const start = src.indexOf('.hud-levels {');
+    expect(start, '.hud-levels has no rule of its own').toBeGreaterThan(-1);
+    const rule = src.slice(start, src.indexOf('}', start));
+    expect(rule, 'the grid ignores the count hud.ts computes').toContain('var(--hud-level-cols');
+    // ...and it does so through a width cap over `auto-fit`, not by naming the tracks:
+    // naming them let a track shrink below the tile's own min-width and the tiles
+    // overlapped, measured at 320x568 with 30 levels.
+    expect(rule, 'the track list no longer falls back to fewer columns when narrow').toContain(
+      'auto-fit',
+    );
+    // ...and the grid stays on screen once it is taller than one: an 11-level arc at
+    // 4 columns is three rows, and a 30-level one would run off the viewport.
+    expect(style.overflowY, 'a tall level grid cannot scroll').toBe('auto');
+    expect(rule, 'the level grid has no height cap').toContain('max-height');
+
+    document.body.innerHTML = '';
+  });
+
+  it('keeps the Level Select pane hidden until it is opened, and full-bleed when it is', () => {
+    // Same shape as `.hud-stats--hidden` and for the same reason: the class alone does
+    // nothing, so without the rule the pane covers the game from page load. A presence
+    // check cannot see it -- `.hud-levelselect--hidden` matching an EMPTY rule reads
+    // identically to `toContain`.
+    const pane = document.createElement('div');
+    pane.className = 'hud-levelselect';
+    document.body.appendChild(pane);
+    expect(getComputedStyle(pane).display).toBe('flex');
+    pane.classList.add('hud-levelselect--hidden');
+    expect(getComputedStyle(pane).display).toBe('none');
     document.body.innerHTML = '';
   });
 
@@ -470,7 +537,9 @@ describe('hud.css is syntactically whole', () => {
     // 8 sites, and the list still scrolls.
     const src = stripComments(css);
     const rule = src.slice(0, src.indexOf('touch-action: pan-y'));
-    for (const sel of ['.hud-panel', '.hud-stats', '.hud-customize', '.hud-achievements']) {
+    for (const sel of [
+      '.hud-panel', '.hud-stats', '.hud-customize', '.hud-achievements', '.hud-levelselect',
+    ]) {
       expect(rule, `${sel} can still be pinched into a zoom trap`).toContain(sel);
     }
     expect(src, 'the pan-y rule is gone').toContain('touch-action: pan-y');
@@ -601,7 +670,9 @@ describe('hud.css is syntactically whole', () => {
       stripComments(css).split(sel)[1]?.split('}')[0] ?? '';
     expect(block('.hud-topbar')).toContain('z-index: 1');
     expect(block('.hud-toasts')).toContain('z-index: 2'); // above topbar and panel
-    for (const overlay of ['.hud-stats ', '.hud-customize ', '.hud-achievements ']) {
+    for (const overlay of [
+      '.hud-stats ', '.hud-customize ', '.hud-achievements ', '.hud-levelselect ',
+    ]) {
       expect(block(overlay), overlay).toContain('z-index: 0'); // under the topbar
     }
   });
