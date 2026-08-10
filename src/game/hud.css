@@ -671,6 +671,35 @@
   width: 260px;
   height: 190px;
   border-radius: 12px;
+  /* The preview is a turntable (render/preview-controls.ts), so a drag on it must
+   * reach pointermove instead of being taken by the browser as a scroll. index.html
+   * already sets `touch-action: none` on every canvas, and its own test guards that
+   * rule -- but that rule exists for the GAME board, its comment says so, and scoping
+   * it back to the board would silently kill this drag. Stated here so this element
+   * carries its own requirement, and so hud.css.test.ts guards it independently.
+   *
+   * The enclosing .hud-customize is `touch-action: pan-y` (it scrolls); this wins on
+   * the canvas itself, which is the whole point of scoping touch-action per element.
+   *
+   * user-select/tap-highlight: a drag on a canvas is otherwise a text selection on
+   * desktop and a grey flash on mobile. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+}
+
+.hud-preview:active {
+  cursor: grabbing;
+}
+
+/* It is in the tab order now (hud.ts gives it tabindex), so it needs a visible focus
+ * ring -- a focusable control whose focus cannot be seen is worse than one that is not
+ * focusable. */
+.hud-preview:focus-visible {
+  outline: 2px solid #7fd0ff;
+  outline-offset: 2px;
 }
 
 .hud-customize-section {

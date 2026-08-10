@@ -797,4 +797,137 @@ check('repeated open/close cycles on the SAME canvas keep drawing a tank', () =>
   return null;
 });
 
+// ---------------------------------------------------------------------------
+// render/preview-controls.ts, through the renderer it drives.
+//
+// The angle maths is asserted headlessly in preview-controls.test.ts, against the
+// production camera -- there is no need to repeat it here, and pixels are a poor way
+// to measure an angle. What ONLY a browser can show is the wiring: a real
+// getBoundingClientRect (jsdom's is all zeros, which the production code correctly
+// reads as "no layout box" and refuses to aim through), a real camera fitted to a real
+// canvas size, and whether the pose actually reaches the FRAMEBUFFER instead of
+// stopping at a JS-side number.
+// ---------------------------------------------------------------------------
+
+/** The whole framebuffer, as bytes. */
+function grab(gl: WebGLRenderingContext, w: number, h: number): Uint8Array {
+  const px = new Uint8Array(w * h * 4);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  return px;
+}
+
+/** How many of the sampled bytes differ. Pixel counts are not compared to a threshold
+ * chosen by eye: "the tank moved" is a change of tens of thousands of bytes and "it did
+ * not" is zero, so the two are separated by orders of magnitude, not by a margin. */
+function bytesDiffering(a: Uint8Array, b: Uint8Array): number {
+  let n = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++;
+  return n;
+}
+
+function pointerAt(type: string, c: HTMLCanvasElement, dx: number, dy: number): PointerEvent {
+  const r = c.getBoundingClientRect();
+  return new PointerEvent(type, {
+    clientX: r.left + r.width / 2 + dx,
+    clientY: r.top + r.height / 2 + dy,
+    pointerId: 1,
+    pointerType: 'mouse',
+    button: 0,
+    buttons: type === 'pointerdown' ? 1 : 0,
+    bubbles: true,
+    cancelable: true,
+  });
+}
+
+check('a drag on the preview canvas turns the tank in the rendered image', () => {
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const before = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointerdown', c, 0, 0));
+  c.dispatchEvent(pointerAt('pointermove', c, 90, 0));
+  const after = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointerup', c, 90, 0));
+  preview.dispose();
+  c.remove();
+  const moved = bytesDiffering(before, after);
+  // 1% of the buffer is far below what a 90px drag actually moves and far above the
+  // zero a missing hookup gives. Measured on this harness: ~46000 bytes of 197600.
+  if (moved < c.width * c.height * 4 * 0.01) {
+    return `only ${moved} of ${before.length} bytes changed -- the drag did not reach the pixels`;
+  }
+  return null;
+});
+
+check('a hover over the preview canvas aims the turret in the rendered image', () => {
+  // Distinct from the drag above, and not implied by it: this presses nothing, so it
+  // exercises the desktop hover-aim path alone. If only the drag were checked, wiring
+  // that handled pointerdown and ignored a bare pointermove would pass.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  // Aim left first, then far right: two hovers, so the comparison cannot be against
+  // the opening pose (which the idle spin may already have nudged).
+  c.dispatchEvent(pointerAt('pointermove', c, -100, 0));
+  const left = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointermove', c, 100, 0));
+  const right = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  const moved = bytesDiffering(left, right);
+  // A turret swinging through 180 degrees is a smaller silhouette change than a hull
+  // turn, so the floor is lower -- still three orders of magnitude above zero.
+  if (moved < 2000) {
+    return `only ${moved} of ${left.length} bytes changed -- the hover did not aim the turret`;
+  }
+  return null;
+});
+
+check('a reopened preview on the SAME canvas is interactive again', () => {
+  // The production path: open, drag, Back, open, drag. The existing 3-cycle check
+  // proves a reopened preview still DRAWS; this proves it still LISTENS. The failure
+  // it is aimed at is a dispose that tears the controls down and a create that does
+  // not build them back -- which draws a perfectly good static tank.
+  const c = previewCanvas();
+  createTankPreview(c)?.dispose();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'the reopened createTankPreview returned null'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const before = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointerdown', c, 0, 0));
+  c.dispatchEvent(pointerAt('pointermove', c, 90, 0));
+  const after = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointerup', c, 90, 0));
+  preview.dispose();
+  c.remove();
+  const moved = bytesDiffering(before, after);
+  if (moved < c.width * c.height * 4 * 0.01) {
+    return `only ${moved} of ${before.length} bytes changed after reopen -- not interactive`;
+  }
+  return null;
+});
+
+check('a disposed preview stops listening to the canvas it no longer owns', () => {
+  // The integration half of preview-controls.test.ts's listener check: that one proves
+  // controls.dispose() unbinds what it bound, this proves preview.dispose() CALLS it.
+  // The panel closing while a finger is still down is the ordinary way to reach this,
+  // and what a leaked listener does is draw through a disposed renderer.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  preview.dispose();
+  const before = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointerdown', c, 0, 0));
+  c.dispatchEvent(pointerAt('pointermove', c, 90, 0));
+  c.dispatchEvent(pointerAt('pointerup', c, 90, 0));
+  const after = grab(gl, c.width, c.height);
+  c.remove();
+  const moved = bytesDiffering(before, after);
+  if (moved !== 0) return `${moved} bytes changed after dispose -- something is still drawing`;
+  return null;
+});
+
 window.__glResults = results;

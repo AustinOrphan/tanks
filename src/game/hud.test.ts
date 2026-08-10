@@ -1363,6 +1363,28 @@ describe('hud: the paint shop', () => {
     expect(root.contains(h.previewCanvas)).toBe(true);
   });
 
+  it('makes the preview a focusable, named control rather than decoration', () => {
+    // It became interactive in the "rotate the tank" change (render/preview-controls.ts
+    // gives it a keyboard scheme), and three markup facts carry that:
+    //
+    // - tabindex, because a canvas element has NO default tab stop, so without it the
+    //   keyboard scheme is unreachable and the whole feature is mouse-only;
+    // - no aria-hidden, because the canvas used to carry it and a FOCUSABLE element
+    //   inside an aria-hidden subtree is a tab stop a screen reader cannot announce;
+    // - an accessible name that states the scheme, which for a keyboard-only player is
+    //   the only place it is written down (the pane carries no prose -- see the
+    //   two-sections test above).
+    const { hud: h } = mount();
+    expect(h.previewCanvas.getAttribute('tabindex')).toBe('0');
+    expect(h.previewCanvas.hasAttribute('aria-hidden')).toBe(false);
+    const label = h.previewCanvas.getAttribute('aria-label') ?? '';
+    expect(label).toMatch(/drag/i);
+    expect(label).toMatch(/arrow/i);
+    expect(label).toMatch(/turret/i);
+    // The sighted-mouse equivalent of the same sentence.
+    expect(h.previewCanvas.getAttribute('title') ?? '').toMatch(/drag/i);
+  });
+
   it('fires onCustomizeOpen/onCustomizeClose exactly on the Back-button round trip', () => {
     const { hud: h, root } = mount();
     const opens: number[] = [];

@@ -52,6 +52,7 @@ import * as THREE from 'three';
 import { createEntityViews, type EntityViews } from './entities';
 import { createEnvironmentMap } from './scene';
 import { fitCameraToArea } from './framing';
+import { createPreviewControls, type PreviewControls, type PreviewPose } from './preview-controls';
 import type { SkinId } from '../game/customization';
 import type { World } from '../sim/world';
 import type { Tank } from '../sim/types';
@@ -94,14 +95,56 @@ const PREVIEW_MARGIN = 0.1;
 
 // A neutral 3/4 pose: hull turned off dead-on so both a flank and the front plate
 // read, turret aligned with the hull rather than off aiming at nothing in particular.
-const PREVIEW_BODY_ANGLE = Math.PI * 0.15;
+// The pose the preview OPENS at -- it is no longer where the tank stays, since
+// preview-controls.ts drives it from there.
+export const PREVIEW_BODY_ANGLE = Math.PI * 0.15;
+
+/** The pose a freshly opened preview shows. */
+export const INITIAL_PREVIEW_POSE: PreviewPose = {
+  bodyAngle: PREVIEW_BODY_ANGLE,
+  turretAngle: PREVIEW_BODY_ANGLE,
+};
+
+/**
+ * The camera `createTankPreview` draws through, built standalone.
+ *
+ * Exported (and constructed here rather than inline) so `preview-controls.test.ts` can
+ * unproject the pointer through the PRODUCTION camera instead of a stand-in built to
+ * match it. A stand-in would pass happily after FOV or PREVIEW_AREA_W changed and left
+ * the real aim pointing somewhere else -- the whole class of drift this repo's "prove
+ * the assertion can fail" rule exists to catch. Needs no GL: a PerspectiveCamera and
+ * `fitCameraToArea` are CPU maths, which is why framing.ts was split out in the first
+ * place.
+ */
+export function createPreviewCamera(aspect: number): THREE.PerspectiveCamera {
+  const camera = new THREE.PerspectiveCamera(FOV, aspect, 0.05, 100);
+  camera.aspect = aspect;
+  fitCameraToArea(
+    camera,
+    new THREE.Vector3(0, 0, 0),
+    PREVIEW_AREA_W,
+    PREVIEW_AREA_H,
+    PREVIEW_MARGIN,
+  );
+  return camera;
+}
+
+/** Write a pose onto the preview's single tank. The turret angle is stored ABSOLUTE,
+ * which is what `entities.ts` reads (it subtracts the body angle itself when it
+ * orients the turret group -- see the composition note there). Exported so
+ * preview.test.ts can run the result through `createEntityViews` and read the barrel's
+ * real world heading, without a GL context. */
+export function applyPose(world: World, pose: PreviewPose): void {
+  world.tanks[0].bodyAngle = pose.bodyAngle;
+  world.tanks[0].turretAngle = pose.turretAngle;
+}
 
 /** A single, motionless player tank. Not built through sim/world.ts's `createWorld` --
  * that pulls collision/bullets/mines/ai into the render bundle for a static prop this
  * module never simulates. `World`/`Tank` are TYPE-ONLY imports (see the import above),
  * so this file reaches sim only at the type level, the same way renderer.ts already
  * does for `World`. */
-function previewWorld(): World {
+export function previewWorld(): World {
   const tank: Tank = {
     id: 1,
     kind: 'player',
@@ -131,6 +174,20 @@ function previewWorld(): World {
     lives: 1,
     roundStartTick: 1,
   };
+}
+
+/**
+ * True when the player has asked the platform for less motion, in which case the idle
+ * spin does not run at all.
+ *
+ * Read once per preview rather than subscribed to: the preview lives only while the
+ * Customize panel is open, so a change taking effect on the next open is soon enough,
+ * and a `matchMedia` subscription is one more listener to leak. Guarded because
+ * `matchMedia` is not universally present (jsdom does not implement it), and losing
+ * the preview to a missing media-query API would be an absurd trade.
+ */
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
 export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null {
@@ -215,6 +272,18 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
   }
   draw();
 
+  // The interaction layer. It owns the pose and calls back only when it actually
+  // changes, so `onPose` is a redraw request with no filtering of its own.
+  const controls: PreviewControls = createPreviewControls(canvas, {
+    camera,
+    initialPose: INITIAL_PREVIEW_POSE,
+    reducedMotion: prefersReducedMotion(),
+    onPose(pose): void {
+      applyPose(world, pose);
+      draw();
+    },
+  });
+
   return {
     setStyle(hex, skin, accentHex): void {
       entities.setPlayerStyle(hex, skin, accentHex);
@@ -225,6 +294,10 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
       draw();
     },
     dispose(): void {
+      // First, so nothing can schedule a frame or draw into a torn-down renderer
+      // afterwards. The Customize panel closing disposes the preview while a finger
+      // may still be down on the canvas, which is exactly that race.
+      controls.dispose();
       entities.dispose();
       key.dispose();
       fill.dispose();

@@ -248,10 +248,27 @@ export function createHud(root: HTMLElement): Hud {
            textures (render/skins.ts) the game itself uses -- not a depiction of the
            tank, the tank. Owned as markup here, driven from game/loop.ts via
            onCustomizeOpen/onCustomizeClose (hud.ts stays free of three.js, see the Hud
-           interface doc comment on previewCanvas). aria-hidden: it is a repaint of
-           choices already exposed as labelled, focusable buttons below; a screen
-           reader gains nothing from the canvas itself. -->
-      <canvas class="hud-preview" aria-hidden="true"></canvas>
+           interface doc comment on previewCanvas).
+
+           It USED to be aria-hidden, on the reasoning that it only repaints choices
+           already exposed as labelled buttons below. That stopped being true when it
+           became interactive: render/preview-controls.ts gives it a keyboard scheme,
+           and a focusable element inside an aria-hidden subtree is a focus trap for a
+           screen-reader user -- tabbable but unannounced. So it is now a labelled,
+           focusable control instead, and the label states the scheme, which is also
+           the only place a keyboard-only player could learn it. tabindex is what puts
+           it in the pane's tab order at all; a canvas element has none by default.
+           No explicit role: it is a focusable element with an accessible name, which
+           is enough to be announced. An img role would contradict the tabindex (an
+           image is not interactive) and an application role hands the whole key
+           stream over for the sake of two arrows.
+
+           The scheme is carried by title= and aria-label= rather than by a line of
+           text under the canvas, deliberately: the pane is pinned at exactly two
+           labelled sections and NO prose paragraphs (see the note above that test in
+           hud.test.ts, which records Austin asking for it). The visible affordances
+           are the grab cursor and the idle spin instead. -->
+      <canvas class="hud-preview" tabindex="0" title="Drag to turn the hull. Point to aim the turret. Arrow keys turn the hull, shift+arrows turn the turret." aria-label="Tank preview. Drag to turn the hull, or use the left and right arrow keys. Move the pointer over it to aim the turret, or hold shift with the arrow keys."></canvas>
       <section class="hud-customize-section">
         <h2>Hull</h2>
         <div class="hud-swatches"></div>
