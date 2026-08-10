@@ -330,6 +330,16 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
       entities.setPlayerStyle(hex, skin, accentHex);
       // Picking an animated skin starts the clock; picking a static one stops it, so an
       // untouched panel showing `solid` costs no frames at all once the idle spin ends.
+      //
+      // DISCLOSED SURVIVING MUTANT, and it sits directly under that sentence:
+      // `controls.setAnimating(true)` unconditionally -- a static skin repainting for the
+      // life of the session -- passes 1741 of 1741 vitest cases and 50 of 50 GL checks
+      // (measured, both). The GL check's `afterStatic === 0` half cannot see it for the
+      // same reason the stale-`playerScroll` mutant beside it survives: a static skin
+      // repainted forever changes zero bytes, and zero bytes is exactly what that half
+      // asserts. Killing it needs an observable the preview does not currently expose
+      // (whether its clock is running), so the cost claim above is held by review, not by
+      // a test. Read it as a design intent that is checked by eye.
       controls.setAnimating(skinScroll(skin) !== null);
       draw();
     },

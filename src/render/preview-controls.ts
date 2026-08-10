@@ -329,6 +329,13 @@ export function createPreviewControls(
       // the pose the spin may just have moved. `lastBody`/`lastTurret` are advanced by
       // hand because `emit()` is being skipped: without that, the next pointer event
       // that happens to land on this exact pose would be filtered out as "no change".
+      //
+      // DISCLOSED SURVIVING MUTANT: deleting these TWO LINES on their own, keeping the
+      // `onAnimate` call, passes 1741 of 1741 vitest cases (measured). What the test
+      // suite kills is the COMBINATION -- `emit()` alongside `onAnimate` without the
+      // sync -- so the reason given in the sentence above is argued, not tested. The
+      // state it protects against needs a pointer event landing on the exact pose a
+      // spin frame just produced, which no test constructs.
       lastBody = bodyAngle;
       lastTurret = turretAngle;
       deps.onAnimate?.(dt, { bodyAngle, turretAngle });

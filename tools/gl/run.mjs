@@ -91,7 +91,15 @@ try {
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(String(e)));
   await page.goto(`${BASE}tools/gl/harness.html`, { waitUntil: 'load' });
-  await page.waitForFunction(() => !!window.__glResults, { timeout: 30000 });
+  // A LIVENESS guard, not an assertion: nothing about the checks depends on this number,
+  // and a harness that hangs is caught just as well at 90s as at 30s. Raised from 30s
+  // because the margin got thin. Measured on this box (4 GB, swiftshader, no GPU) with a
+  // temporary probe around this call: 15676 / 15937 / 15977 ms (n=3, this branch), so 30s
+  // was ~1.9x the span -- against a 2-vCPU CI runner that is not a comfortable ratio, and
+  // an overrun surfaces as a bare TimeoutError with no check output, which reads as a
+  // broken harness rather than a slow one. Not a claim that the branch is fast: it added
+  // three WebGL contexts and ~1.8s of deliberate idle() waits, and that cost is real.
+  await page.waitForFunction(() => !!window.__glResults, { timeout: 90000 });
   const results = await page.evaluate(() => window.__glResults);
 
   let failed = 0;

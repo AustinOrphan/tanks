@@ -636,6 +636,24 @@ describe('createPreviewControls: the animated-skin clock', () => {
     h.controls.dispose();
   });
 
+  it('starts ONE loop, not a second one, when the skin joins the spin', () => {
+    // The test above pins that `onPose` and `onAnimate` do not BOTH fire on a frame. It
+    // does not pin that there is one frame to fire on. `startFrames`' re-entrancy guard
+    // is what makes that true, and it was unpinned: `if (disposed || frameHandle !==
+    // null) return` -> `if (disposed) return` passed this whole file, all 1740 vitest
+    // cases and all 50 GL checks.
+    //
+    // The live path reaches it: loop.ts calls `preview.setStyle` when Customize opens,
+    // while the idle spin already has a frame pending, so `setAnimating(true)` would
+    // schedule a SECOND rAF callback -- and each callback reschedules itself, so it is
+    // two parallel loops for the rest of the session for anyone wearing `flow`.
+    const h = harness(); // the idle spin already scheduled frames[0]
+    expect(h.frames).toHaveLength(1);
+    h.controls.setAnimating(true);
+    expect(h.frames).toHaveLength(1); // hung on the running loop; 2 without the guard
+    h.controls.dispose();
+  });
+
   it('keeps the loop alive when the interaction ends the spin', () => {
     // The two stopping conditions really are separate: `stopIdle` cancels the pending
     // frame when nothing else needs it, and must NOT when the skin does. Asserted on

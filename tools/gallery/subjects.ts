@@ -211,6 +211,16 @@ export interface GalleryOptions {
    * declare. It exists for skins: every shipped element is static (`frames: 1`) or a
    * few ticks long, so `--anim` on a tank had nothing to step and a scrolling skin had
    * no timeline to scroll along.
+   *
+   * DISCLOSED SURVIVING MUTANT: `buildGallery` ignoring this field entirely (returning
+   * `frames: layout.frames`) passes 1741 of 1741 vitest cases and 50 of 50 GL checks --
+   * measured, both. `--frames N` would silently do nothing and only the runner would
+   * show it. It is not killed here because the only observer is `run.mjs`, which writes
+   * files from a real browser; nothing under `npm test` or `npm run test:gl` reads the
+   * returned `frames`. Verified by hand instead, WITH its control: `--elements tank
+   * --view low --skin flow --anim --frames 8 --subdiv 1` writes 8 frames with 8 distinct
+   * md5s; under the mutation the same command writes 1 frame (`tank` declares
+   * `frames: 1`), so the by-hand check really does discriminate.
    */
   frames: number | null;
 }
