@@ -100,5 +100,35 @@
     "expectFailures": 1,
     "why": "The trap the custom properties exist to remove, and the one a presence-only assertion cannot see: the base rule still carries every env(safe-area-inset-*) it ever did, so 'the topbar insets itself' still reads as true -- but a padding SHORTHAND in a later @media wins outright, and this one matches at 360px, which is a phone. Exactly one test fails, and it is the one written for this: 'lets no later rule quietly override the safe-area insets'.",
     "tests": ["src/game/hud.css.test.ts"]
+  },
+  {
+    "id": "storage-resolver-ignores-the-host",
+    "file": "src/game/storage.ts",
+    "find": "    if (host.localStorage) return host.localStorage;",
+    "replace": "    if (false as boolean) return host.localStorage!;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "resolveStorage must hand back the host's REAL localStorage when there is one; returning the in-memory shim instead means the shipped game silently persists nothing, and every round-trip assertion still passes on the shim. Only an IDENTITY assertion can see it, which is what storage.test.ts's 'returns the host storage ITSELF' case is. Verified through this harness at the commit that added the entry.",
+    "tests": ["src/game/storage.test.ts"]
+  },
+  {
+    "id": "save-import-drops-the-allow-list",
+    "file": "src/game/save.ts",
+    "find": "    if (!SAVE_KEYS.includes(key) || typeof value !== 'string') {",
+    "replace": "    if (typeof value !== 'string') {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "importSave writes only keys on SAVE_KEYS. That is a security property, not tidiness: austinorphan.com's localStorage namespace is shared with every other project page on the origin (CLAUDE.md), so a blob a player was talked into pasting must not be able to set a neighbour's key. Dropping the allow-list leaves every round-trip test green -- the keys a real export carries are all on the list -- and is caught only by the case that imports a blob carrying a foreign key. Verified through this harness at the commit that added the entry.",
+    "tests": ["src/game/save.test.ts"]
+  },
+  {
+    "id": "replay-recorder-wraps-the-raw-controller",
+    "file": "src/game/loop.ts",
+    "find": "    ? createRecordingInput(effectiveInput, replayMetaFor(world, level))",
+    "replace": "    ? createRecordingInput(input, replayMetaFor(world, level))",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The recorder must decorate `effectiveInput` -- what the driver is actually handed -- and not the raw input controller, or an autoplay session records an empty stream while a normal session looks perfect. Both wirings pass every tick-count assertion, because with autoplay off the two are the same object's behaviour; the discriminating case is the one that turns autoplay on and asserts the trace still filled. Verified through this harness at the commit that added the entry.",
+    "tests": ["src/game/loop.test.ts"]
   }
 ]

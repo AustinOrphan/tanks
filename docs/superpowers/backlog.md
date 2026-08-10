@@ -218,8 +218,9 @@ derived from the spec and the absent header, not measured in a browser —
 `navigator.serviceWorker.getRegistrations()` on a deployed `/tanks/` page would settle it.
 
 **3. HTTPS cannot be enforced through GitHub, because Cloudflare proxies the domain.**
-`http://` and `https://` are different localStorage origins, and all four save keys
-(`tanks.progress.v1`, `tanks.stats.v1`, `tanks.achievements.v1`, `tanks.custom.v1`) are
+`http://` and `https://` are different localStorage origins, and all five save keys
+(`tanks.progress.v1`, `tanks.stats.v1`, `tanks.achievements.v1`, `tanks.custom.v1`,
+`tanks.touch.v1`) are
 origin-scoped, so anything built on the http origin vanishes when HTTPS is enforced. The
 obvious fix does not work: `PUT /repos/AustinOrphan/tanks/pages -F https_enforced=true`
 returns `"The certificate has not finished being issued"`. The reason is structural, not
@@ -577,6 +578,43 @@ the cheapest route that does not introduce this tree's first shader?
 `visual` job**. A `ShaderMaterial` whose GLSL fails to compile typechecks, passes vitest
 (jsdom has no WebGL), and publishes. Only `npm run test:gl` could catch it.
 
+
+## Follow-ups from "game data plumbing" (storage resolver, save export/import, replay recorder)
+
+**Raised 2026-08-10** by #127, which shipped issues #109, #110 and #118. All three were
+consciously deferred, not missed.
+
+**Deliberately NOT ledger lines.** The Ledger below states a measured provenance — how many
+of its lines came from the PR-description harvest — and `tools/backlog.test.ts` recomputes
+that split by treating every unmarked line as harvested. Appending new work there would
+make that sentence say something false about where these came from, so they sit here, in
+the same shape as the "walls as geometry" follow-ups above.
+
+**1. The replay stamp cannot see CODE.** `simDataFingerprint()` (`src/game/replay.ts`) is a
+canonical FNV-1a over the sim's four JSON data files — balance, tank-defs, ai-profiles,
+arenas — so any DATA change invalidates a trace. A change to `targeting.ts` or
+`collision.ts` diverges a replay with the fingerprint unchanged. So a mismatch proves a
+trace is stale; a match does not prove it is fresh. Closing it means stamping a build
+identity (a commit sha injected through `vite`'s `define`), which is a build-pipeline
+change this PR did not make. Until then, treat a matching stamp as necessary and not
+sufficient.
+
+**2. An imported save is invisible until reload, and nothing enforces the reload.** Every
+store snapshots its key into an in-memory shadow at CONSTRUCTION and writes back from that
+shadow, so `__tanks.save.import(...)` mid-session changes nothing on screen — and the next
+write from a live store overwrites what was just imported. `save.ts`'s doc comment says so
+and the API is dev-flag-gated, which is the whole of the mitigation. A real fix is either a
+`location.reload()` inside `import`, or a re-read path on the five stores; both are product
+decisions about what an import is allowed to do to a session in progress.
+
+**3. Nothing REPLAYS a trace back into the running game.** `replayTrace(trace, world)`
+re-simulates headlessly and is what the tests use, but the loop has no path that feeds a
+recorded trace to the driver in place of live input — so there is no attract-mode demo and
+no "watch the bug happen" viewer yet. The pieces are in place (the decorator seam is the
+same seam a player would use); what is missing is the world-rebuild-from-meta path in
+`loop.ts` and a decision about what the HUD shows while one is playing.
+
+---
 
 ## Ledger: deferred work harvested from PR descriptions
 

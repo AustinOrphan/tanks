@@ -60,7 +60,9 @@ The deploy re-runs 5 of `ci.yml`'s 7 checking steps, **not the `visual` job** �
 regression that only `tools/gl/` and `tools/visual/` catch will publish. Nothing gates the
 deploy on CI passing; `main` carries no branch protection. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
-one localStorage namespace (the game's four keys are all `tanks.*`-prefixed), and the
+one localStorage namespace (the game's **five** keys are all `tanks.*`-prefixed —
+`progress`, `touch`, `stats`, `custom`, `achievements`, each `.v1`; this sentence said
+"four" until the mobile-release investigation counted them), and the
 portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
 CacheStorage entry it does not own — so an offline feature here needs coordination first.
 
@@ -94,6 +96,33 @@ ignored; a player past the end of the list gets NO input, which differs from an 
 are unreachable from gameplay today and are pinned ONLY by
 `src/sim/step-inputs.test.ts` — the trace drives one player and cannot see them, measured:
 all 7 mutations swept there leave the hash unchanged.
+
+**Persistence is one seam, `src/game/storage.ts`.** All five stores take an injected
+`Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the old
+inline stand-in was `{getItem, setItem}` cast to `Storage`, so `removeItem`/`clear`/`key`
+were TypeErrors waiting), and `createStores(storage)` gives all five the SAME one **by
+signature** — resolving per store was harmless only because localStorage returns the same
+object every time, and would have given each store a private namespace under the shim.
+Pointing the game at Capacitor Preferences or a file-backed desktop shim is a one-file
+change with a test that can fail. `src/game/save.ts` serialises those five keys as one
+blob at the RAW key/value layer, deliberately not through the typed stores: they validate
+on read and drop what they do not recognise, which is exactly the data an export exists to
+preserve. Import writes only keys on the `SAVE_KEYS` allow-list — the origin is shared, so
+a pasted blob must not be able to set a neighbour's key — and an imported save is
+**invisible until reload**, because every store snapshots its key into an in-memory shadow
+at construction.
+
+**A run is recordable because the sim is pure, and the recorder is a DECORATOR.**
+`src/game/replay.ts` wraps the input collaborator `loop.ts` hands the driver — `driver.ts`
+already calls `input.sample()` exactly once per simulated tick, so nothing in the driver
+changed. It wraps `effectiveInput`, not `input`, so an autoplay demo records the stream
+`step` actually saw. A trace spans ONE world and restarts on every level switch.
+**The stamp is two things**: `schema` (can this build parse it?) and a canonical, key-sorted
+FNV-1a fingerprint of all four sim data files — balance, tank-defs, ai-profiles, arenas
+(can this build reproduce it?). Key-sorted because JSON module property order is a bundler
+artefact. It does **not** cover CODE: a change to `targeting.ts` diverges a replay with the
+fingerprint unchanged, so a mismatch proves a trace is stale while a match does not prove
+it is fresh.
 
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
@@ -395,7 +424,8 @@ only when someone updates it. `round-ux` passes today, and nobody would learn th
 stopped.
 
 The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
-`invincible`, `level` (a 1-based jump, or `level=sandbox`), and the sandbox knobs
+`invincible`, `autoplay`, `saveIo`, `replay`, `level` (a 1-based jump, or `level=sandbox`),
+and the sandbox knobs
 `tanks`, `disarmed`, `walls`. `playtest=1` is a parse-time BUNDLE, not a field: it
 expands to invincible + shellCount + mineReach + mineTimer. `parseDevFlags` derives the
 boolean list from `DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what

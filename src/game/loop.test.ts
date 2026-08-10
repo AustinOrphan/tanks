@@ -31,9 +31,17 @@ import {
   isMuteHotkey,
   musicIntensity,
   isPauseHotkey,
+  DEV_CONSOLE_KEY,
+  createBrowserDeps,
   type GameDeps,
   type HostWindow,
+  type DevConsole,
+  type DevConsoleTarget,
 } from './loop';
+import { createMemoryStorage } from './storage';
+import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
+import { decodeInput, replayTrace, checkTrace } from './replay';
+import { createWorldFor, ARENAS } from '../sim/arena';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -123,9 +131,11 @@ interface Recorder {
   hudRoots: HTMLElement[];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string> } = {}): {
   deps: GameDeps;
   rec: Recorder;
+  storage: Storage;
+  devConsole: DevConsoleTarget;
   previewCanvas: HTMLCanvasElement;
   previewButtons: readonly HTMLButtonElement[];
   fireFrame(now: number): void;
@@ -261,6 +271,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // Likewise real elements: loop.ts hands the HUD's own button list to createPreview,
   // and a fake list here would make "it passed the HUD's buttons" untestable.
   const fakePreviewButtons = [document.createElement('button'), document.createElement('button')];
+  // The save layer's two seams, both real objects a test can inspect afterwards.
+  const storage = createMemoryStorage();
+  for (const [k, v] of Object.entries(opts.savedKeys ?? {})) storage.setItem(k, v);
+  const devConsole: DevConsoleTarget = {};
 
   function emit(): void {
     for (const cb of changeCbs) cb(state);
@@ -737,12 +751,19 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       cancel(): void {},
     },
     host,
+    // A REAL storage (the in-memory one the game itself falls back to), not a
+    // mock: the save export/import writes and reads whole strings, and a mock
+    // would let a wiring bug that never touches storage look correct.
+    storage,
+    devConsole,
     devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
   };
 
   return {
     deps,
     rec,
+    storage,
+    devConsole,
     previewCanvas: fakePreviewCanvas,
     previewButtons: fakePreviewButtons,
     fireFrame(now): void {
@@ -2697,5 +2718,207 @@ describe('startGameWith: the live tank preview', () => {
     expect(disposedCountAtClose).toBe(1);
     h.handle.dispose();
     expect(h.rec.disposed.filter((d) => d === 'preview')).toHaveLength(1); // still 1, not 2
+  });
+});
+
+describe('createBrowserDeps', () => {
+  // The one function in this module that reads the real globals. Callable under
+  // jsdom because every heavyweight collaborator is a FACTORY -- nothing is
+  // constructed here -- so the storage wiring the browser actually gets is
+  // assertable rather than assumed. Everything below it is injected in tests, so
+  // without this the real resolution is exercised by nothing.
+  it('puts the browser localStorage on deps.storage AND under the stores', () => {
+    globalThis.localStorage.clear();
+    globalThis.localStorage.setItem('tanks.progress.v1', '2');
+    try {
+      const deps = createBrowserDeps();
+      // Identity: a shim here would mean the shipped game persists nothing.
+      expect(deps.storage).toBe(globalThis.localStorage);
+      // ...and the stores read through the same one, which is the half a storage
+      // identity check cannot see.
+      expect(deps.progress.highestCleared()).toBe(2);
+      expect(deps.devConsole).toBe(globalThis);
+    } finally {
+      globalThis.localStorage.clear();
+    }
+  });
+});
+
+describe('startGameWith: the dev console surface', () => {
+  // driver.test.ts and the sibling unit files (save.test.ts, replay.test.ts) prove
+  // each piece against fakes. Only a test HERE can see whether loop.ts publishes
+  // them, behind the right flags, from the right storage -- the composition
+  // blindness CLAUDE.md names.
+  function api(h: ReturnType<typeof boot>): DevConsole {
+    return h.devConsole[DEV_CONSOLE_KEY] as DevConsole;
+  }
+
+  it('publishes NOTHING with both flags off', () => {
+    // The whole property, not an empty object: a shipped build must carry no dev
+    // surface at all.
+    const h = boot();
+    expect(DEV_CONSOLE_KEY in h.devConsole).toBe(false);
+    h.handle.dispose();
+  });
+
+  it('publishes only save with saveIo on, and only replay with replay on', () => {
+    // One at a time, so a wiring that publishes both together -- or crosses them --
+    // fails rather than passing on the aggregate. Population: the 2 flags that can
+    // publish, alone and together.
+    const s = boot(makeDeps({ devFlags: { saveIo: true } }));
+    expect(Object.keys(api(s)).sort()).toEqual(['save']);
+    s.handle.dispose();
+
+    const r = boot(makeDeps({ devFlags: { replay: true } }));
+    expect(Object.keys(api(r)).sort()).toEqual(['replay']);
+    r.handle.dispose();
+
+    const both = boot(makeDeps({ devFlags: { saveIo: true, replay: true } }));
+    expect(Object.keys(api(both)).sort()).toEqual(['replay', 'save']);
+    both.handle.dispose();
+  });
+
+  it('removes what it published on dispose', () => {
+    const h = boot(makeDeps({ devFlags: { saveIo: true } }));
+    expect(DEV_CONSOLE_KEY in h.devConsole).toBe(true);
+    h.handle.dispose();
+    expect(DEV_CONSOLE_KEY in h.devConsole).toBe(false);
+  });
+
+  it('leaves a foreign entry alone when it published nothing itself', () => {
+    // The shared-origin case: another page's object under the same key must survive
+    // this game's teardown.
+    const h = boot();
+    h.devConsole[DEV_CONSOLE_KEY] = { notOurs: true };
+    h.handle.dispose();
+    expect(h.devConsole[DEV_CONSOLE_KEY]).toEqual({ notOurs: true });
+  });
+});
+
+describe('startGameWith: save export/import reaches the real storage', () => {
+  it('exports what is actually in deps.storage, not a snapshot of the stores', () => {
+    // Seeded through the raw key layer: if loop.ts built the api from some other
+    // storage (a fresh one, or the stores' own reads) this export would be empty.
+    const h = boot(
+      makeDeps({
+        devFlags: { saveIo: true },
+        savedKeys: { 'tanks.progress.v1': '2', 'tanks.custom.v1': '{"hull":"red"}' },
+      }),
+    );
+    const save = (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).save!;
+    const blob = JSON.parse(save.export()) as SaveBlob;
+    expect(blob.format).toBe(SAVE_FORMAT);
+    expect(blob.keys['tanks.progress.v1']).toBe('2');
+    expect(blob.keys['tanks.custom.v1']).toBe('{"hull":"red"}');
+    expect(save.keys).toEqual(SAVE_KEYS);
+    h.handle.dispose();
+  });
+
+  it('imports into that same storage', () => {
+    const h = boot(makeDeps({ devFlags: { saveIo: true } }));
+    const save = (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).save!;
+    const other = createMemoryStorage();
+    other.setItem('tanks.progress.v1', '4');
+    const result = save.import(exportSave(other));
+    expect(result.ok).toBe(true);
+    // Read back off the storage the deps were built with, not off the API.
+    expect(h.storage.getItem('tanks.progress.v1')).toBe('4');
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the input recorder', () => {
+  function trace(h: ReturnType<typeof boot>): ReturnType<NonNullable<DevConsole['replay']>> {
+    return (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).replay!();
+  }
+
+  it('records exactly one tick per simulated tick, and leaves sampling untouched', () => {
+    const h = boot(makeDeps({ devFlags: { replay: true } }));
+    h.setState('playing');
+    h.fireFrame(100); // 6 ticks, same arithmetic as the autoplay block above
+    expect(h.rec.samples).toBe(6);
+    expect(trace(h).ticks).toHaveLength(6);
+    h.handle.dispose();
+  });
+
+  it('records nothing while the game is not simulating', () => {
+    // The driver only samples while 'playing'. A recorder that appended per FRAME
+    // would pad the trace with ticks the sim never took, and every replay would
+    // diverge.
+    const h = boot(makeDeps({ devFlags: { replay: true } }));
+    h.fireFrame(100); // still on the title screen
+    expect(trace(h).ticks).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('captures the AUTOPLAY stream, which is what wrapping effectiveInput buys', () => {
+    // Wrapping `input` instead of `effectiveInput` would record the real
+    // controller's samples -- of which autoplay takes none -- so the trace would be
+    // empty here while looking perfect in a normal session.
+    const h = boot(makeDeps({ devFlags: { replay: true, autoplay: true } }));
+    h.setState('playing');
+    for (let i = 1; i <= 60; i++) h.fireFrame(i * 100);
+    const t = trace(h);
+    expect(h.rec.samples).toBe(0); // the real controller was never asked
+    expect(t.ticks.length).toBeGreaterThan(COUNTDOWN_TICKS);
+    // and the scripted player really moved: an all-zero move stream would replay
+    // as a tank standing still, which no assertion on LENGTH can see.
+    expect(t.ticks.some((tick) => decodeInput(tick).move.x !== 0)).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('stamps the world it is recording against, and restarts on a level switch', () => {
+    // A trace spans ONE world. After an advance the meta must describe the NEW
+    // level, or the trace replays into a different game.
+    const h = boot(makeDeps({ devFlags: { replay: true }, levelCount: 3 }));
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(trace(h).meta.level).toBe(0);
+    expect(trace(h).ticks).toHaveLength(6);
+    expect(trace(h).meta.seed).toBe(h.rec.seeds[0]);
+
+    h.setState('win');
+    h.hud.startRestart(); // advance to level 2
+    const after = trace(h);
+    expect(after.meta.level).toBe(1);
+    expect(after.meta.seed).toBe(h.rec.seeds[1]);
+    expect(after.ticks).toHaveLength(0);
+    h.handle.dispose();
+  });
+
+  it('produces a trace that replays the recorded run exactly', () => {
+    // The end-to-end claim: what the shipped loop captures is enough to rebuild the
+    // run. The fake level system builds a REAL arena world, so the rebuild below is
+    // the same construction the game used.
+    const h = boot(
+      makeDeps({ devFlags: { replay: true, autoplay: true, seed: 4242 }, staticRoundStart: true }),
+    );
+    h.setState('playing');
+    for (let i = 1; i <= 40; i++) h.fireFrame(i * 100);
+    const t = trace(h);
+    expect(checkTrace(t)).toEqual({ ok: true, reason: null });
+
+    const live = h.rec.renders[h.rec.renders.length - 1].curr;
+    const rebuilt = createWorldFor(
+      ARENAS[t.meta.level],
+      t.meta.seed,
+      t.meta.unarmedTrigger,
+      t.meta.lives,
+    );
+    const replayed = replayTrace(t, rebuilt);
+    expect(replayed.world.tick).toBe(live.tick);
+    expect(replayed.world.tanks.map((tk) => tk.pos)).toEqual(live.tanks.map((tk) => tk.pos));
+    // Non-vacuous: the recorded run has to have gone somewhere.
+    expect(live.tick).toBeGreaterThan(COUNTDOWN_TICKS);
+    h.handle.dispose();
+  });
+
+  it('does not record at all with the flag off', () => {
+    const h = boot();
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.samples).toBe(6); // the game is unchanged
+    expect(DEV_CONSOLE_KEY in h.devConsole).toBe(false);
+    h.handle.dispose();
   });
 });
