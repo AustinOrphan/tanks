@@ -1,9 +1,36 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
+  # NOT `push`. The deploy is gated on CI having passed for the commit, which means
+  # waiting for CI's run to finish and reacting to its conclusion.
+  #
+  # `branches` filters on the CI RUN's head branch. THAT IS NOT THE SAME AS "only the
+  # push to main", and an earlier version of this comment claimed it was. A fork PR's
+  # head branch is the FORK's branch name, and opening a PR from a fork's own `main` is
+  # ordinary practice -- such a run appears in THIS repo with `event: pull_request`,
+  # `head_branch: main` and `name: CI`, which is every field this filter looks at.
+  # Verified against a public repo that takes fork PRs:
+  #
+  #   gh api "repos/vitest-dev/vitest/actions/runs?event=pull_request&branch=main" \
+  #     --jq '[.workflow_runs[] | select(.head_repository.full_name != "vitest-dev/vitest")]'
+  #   -> [{"event":"pull_request","head_branch":"main","head_repo":"malobre/vitest","name":"CI"}, ...]
+  #
+  # Left there, this workflow would check out `head_sha` -- the FORK's commit -- and
+  # publish it to the live apex domain. That is the exact pattern GitHub's hardening
+  # guide warns about: "Avoid using the pull_request_target and workflow_run workflow
+  # triggers with untrusted pull requests... must not explicitly check out untrusted
+  # code". The `github-pages` environment is NOT a backstop, because under workflow_run
+  # the run's ref is the default branch, so its `main`-only branch policy sees `main`
+  # and admits it. The `if` on `build` is what actually closes this.
+  #
+  # `types: [completed]` is the only type that carries a conclusion; `requested` fires
+  # at the start and would deploy before CI had checked anything.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-  # A manual re-run, for when a deploy needs redoing without a commit.
+  # A manual re-run, for when a deploy needs redoing without a commit. This path is
+  # UNGATED -- see the `if` on `build`, and the note on the checks it still runs.
   workflow_dispatch:
 
 # Least privilege at the WORKFLOW level, then the one scope each job actually needs.
@@ -20,10 +47,19 @@ permissions:
 # a half-finished deploy leaves the live site on the previous commit.
 #
 # Note what this does NOT do: it is not a queue. GitHub cancels any run already PENDING
-# in the group when a newer one arrives, so a push landing during a deploy can be
-# superseded by the next push. Only the in-progress run is protected. The latest commit
-# always wins, which is the behaviour we want -- but "everything eventually deploys" is
-# not what is being promised here.
+# in the group when a newer one arrives, so a run landing during a deploy can be
+# superseded by the next one. Only the in-progress run is protected -- "everything
+# eventually deploys" is not what is being promised here.
+#
+# WHAT THE workflow_run CHANGE COST: "the latest commit always wins" used to follow from
+# the trigger being the push itself, and it no longer does. These runs are ordered by CI
+# COMPLETION time, not by commit order, so a slower CI on an older commit can finish
+# after a faster one on a newer commit and publish the older tree. Measured over the 25
+# most recent push-to-main CI runs (workflow 320605905, sorted by start): 0 inversions of
+# 24 consecutive pairs, with the closest two starts 8 seconds apart. So this is a
+# mechanism that exists, not one observed here -- and 25 runs is a sample, not the
+# population. Re-running an old CI run does the same thing on purpose; see the note under
+# the checking steps.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -31,10 +67,40 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # The github-pages environment admits only `main`, so a workflow_dispatch from any
-    # other branch would run the whole build and then be rejected at the deploy job.
-    # Fail before spending the runner instead.
-    if: github.ref == 'refs/heads/main'
+    # The ref check: the github-pages environment admits only `main`, so a
+    # workflow_dispatch from any other branch would run the whole build and then be
+    # rejected at the deploy job. Fail before spending the runner instead. Under
+    # `workflow_run` this is always true -- the event fires against the default branch --
+    # so it is really the dispatch path it constrains, and it is NOT a fork guard.
+    #
+    # The workflow_run clause is three tests, and it needs all three:
+    #
+    #   conclusion  a workflow_run fires on ANY completion, failure included, so without
+    #               this a red CI deploys exactly as it used to.
+    #   event       the triggering run must be a PUSH. THIS is what shuts the fork-PR
+    #               hole described on the trigger above -- a fork PR's CI run is
+    #               `pull_request`, and no `branches` filter can separate it from the
+    #               push to main when the fork's own branch is also called `main`.
+    #   head_repo   belt and braces. A run with `event: push` can only have come from
+    #               this repository -- a fork's pushes run in the FORK, not here -- so
+    #               it adds no coverage the line above does not already give. It is kept
+    #               because it states the actual intent (code we control), and because it
+    #               fails loudly if a later edit relaxes the event test.
+    #
+    # None of the three can be written bare: on the dispatch path there is no
+    # workflow_run object, every one of them dereferences to null, and a manual deploy
+    # would never run. Hence the `||` against the event name.
+    #
+    # Kept flush at one indent level on purpose: in a YAML folded scalar a MORE-indented
+    # continuation line is preserved literally, newline and all, instead of being folded
+    # to a space. Parsed both ways to check -- the indented form yields an `if` string
+    # containing "\n    ", this one yields a single line.
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_repository.full_name == github.repository))
     timeout-minutes: 15
     permissions:
       contents: read
@@ -45,7 +111,18 @@ jobs:
       # four are three majors behind (current v7 / v7 / v7); `cache` is two behind,
       # because actions/cache has no v7 -- its current major is v6. Bumping ci.yml is
       # separate work with its own gate to watch.
+      # THE `workflow_run` TRAP THAT SILENTLY PUBLISHES THE WRONG COMMIT. Under
+      # `workflow_run`, checkout's default ref is the DEFAULT BRANCH'S HEAD, not the
+      # commit CI ran on. Those differ whenever a second merge lands while the first
+      # commit's CI is still running -- the deploy would then publish a commit whose CI
+      # has not finished, on the strength of an older commit's green run.
+      #
+      # `head_sha` is the commit CI actually checked. On the dispatch path there is no
+      # workflow_run object, so `||` falls through to `github.sha` -- main's HEAD, which
+      # is what a manual re-deploy means.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # First, not last: with `enablement` defaulted off this step's only real function
       # is to fail early if Pages is not configured for the Actions source. Its outputs
@@ -63,10 +140,18 @@ jobs:
 
       - run: npm ci
 
-      # CI runs on this same push, but it does not GATE the deploy: main carries no
-      # branch protection and no ruleset (`gh api .../branches/main/protection` -> 404),
-      # and there is no workflow_run edge between the two files. Without these steps a
-      # red main would publish.
+      # CI now GATES this workflow -- see the `workflow_run` trigger and the conclusion
+      # check on this job -- so on the automatic path all 9 of ci.yml's checking steps
+      # have already passed for this exact commit before anything below runs.
+      #
+      # THESE STEPS STAY ANYWAY, AND THE REASON IS THE DISPATCH PATH. `workflow_dispatch`
+      # has no CI run behind it and cannot have one: it is the escape hatch for
+      # re-deploying without a commit, so its `if` admits it unconditionally. On that
+      # path these five steps are the only checking that happens at all. Deleting them as
+      # "redundant now" would be true of the automatic path and false of the manual one.
+      #
+      # On the automatic path they are genuinely duplicated work (~4 min). That is the
+      # price of one workflow serving both paths, and it is paid knowingly.
       #
       # Be precise about what this is: 5 of ci.yml's 9 checking steps (verify: 6,
       # visual: 3).
@@ -88,16 +173,37 @@ jobs:
       # nothing recomputes is a denominator that rots; re-derive it from the rule above
       # whenever a step is added to either job.
       #
-      # Two things it does NOT run. The `visual` job -- `tools/gl/run.mjs`,
-      # `tools/baseline/run.mjs` and `tools/visual/verify.mjs` -- which needs a ~130MB
-      # chromium download, and which CLAUDE.md records as the ONLY coverage src/render/
-      # has ("a green npm test is not the whole gate for src/render/"). A render
-      # regression that only those catch will still publish. (The baseline trace is the
-      # one of the three with a twin here: `npx vitest run` pins the same hash under Node,
-      # so what the browser run adds is a Node/V8 divergence and the page harness not
-      # rotting -- neither of which gates the deploy.) And `Mutation manifest`, so a
-      # manifest that has gone stale against the tree does not block a deploy either.
-      # Gating on the full run would mean a workflow_run trigger; see the PR discussion.
+      # Two things it does NOT run, and the gating changes what that costs. The `visual`
+      # job -- `tools/gl/run.mjs`, `tools/baseline/run.mjs` and `tools/visual/verify.mjs`
+      # -- which needs a ~130MB chromium download, and which CLAUDE.md records as the ONLY
+      # coverage src/render/ has ("a green npm test is not the whole gate for
+      # src/render/"). (The baseline trace is the one of the three with a twin here: `npx
+      # vitest run` pins the same hash under Node, so what the browser run adds is a
+      # Node/V8 divergence and the page harness not rotting.) And `Mutation manifest`, so
+      # a stale manifest is not caught here either.
+      #
+      # TWO COSTS OF GATING, WRITTEN DOWN BECAUSE THE BENEFIT WAS.
+      #
+      # Re-running an OLD CI run republishes that commit. Re-running a prior successful
+      # deploy is the rollback story and the main thing gating buys -- but "re-run" on an
+      # old CI run (or "re-run failed jobs" on an old red one that then goes green) fires
+      # workflow_run with that run's head_sha, and `ref: head_sha` faithfully publishes
+      # the old tree. Deliberate rollback and accidental rollback are the SAME mechanism.
+      # Inferred from the docs ("the workflow will also use the same GITHUB_SHA and
+      # GITHUB_REF of the original event"), not executed -- there was no way to test it
+      # without publishing.
+      #
+      # A flaky `visual` now stops the site updating. ci.yml's own comment calls that job
+      # the one thing that "can fail for reasons unrelated to the code". Under `on: push`
+      # a flake never blocked publishing; now it does, and the symptom is a pages run with
+      # every job SKIPPED -- not a red run, not a notification. If the site looks stale,
+      # check whether CI went red before assuming the deploy is broken.
+      #
+      # ON THE AUTOMATIC PATH THAT NO LONGER MATTERS: `visual` and `Mutation manifest` are
+      # part of the CI run this workflow now waits on, so a render regression they catch
+      # fails CI and the deploy never starts. ON THE DISPATCH PATH IT STILL DOES -- a
+      # manual re-deploy runs the five below and nothing else, so it can publish a render
+      # regression. Reaching for `workflow_dispatch` means accepting that.
       - name: Typecheck
         run: npx tsc --noEmit
 

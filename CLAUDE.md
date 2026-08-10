@@ -60,13 +60,35 @@ the bundle asks for `/assets/…` and the page is blank. `npm run portability`
 call it — it cannot live in `npm test`, because under Vitest `import.meta.env.BASE_URL` is
 `/` even though vitest reads the same config that sets `base: './'`.
 
-The deploy re-runs **5 of `ci.yml`'s 9 checking steps** (`verify`: 6, `visual`: 3),
-**not the `visual` job and not `Mutation manifest`** — so a render regression that only
-`tools/gl/` and `tools/visual/` catch will publish, and so will a stale
-`tools/mutate/manifest.json`. (Denominator: the named steps of both `ci.yml` jobs that
-check something — that can fail because of the tree — rather than set up the runner, so
-`checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install Playwright` and
-`Install chromium` are separate named steps), the browser cache and
+**The deploy waits for CI.** `pages.yml` triggers on `workflow_run` for the `CI` workflow
+and its `build` job requires `conclusion == 'success'`, so on the automatic path all 9 of
+`ci.yml`'s checking steps have passed for that exact commit before a deploy starts. It
+checks out `github.event.workflow_run.head_sha` rather than the branch head — under
+`workflow_run` checkout defaults to the DEFAULT BRANCH'S head, which is a different commit
+whenever a second merge lands while the first is still in CI.
+
+**Three landmines that come with that**, all recorded at the point of decision in
+`pages.yml` and repeated here because this is the file people read first. **A fork PR can
+match the trigger**: `branches: [main]` filters on the CI RUN's head branch, and a PR from
+a fork's own `main` produces a run here with `event: pull_request`, `head_branch: main`,
+`name: CI`. The `github-pages` environment is NOT a backstop — under `workflow_run` the ref
+is the default branch, so its `main`-only policy admits it. The `if` requires the
+triggering run to be a **push from this repository**; do not relax that. **Re-running an
+OLD CI run republishes that commit** — deliberate rollback and accidental rollback are the
+same mechanism. **A flaky `visual` now stops the site updating**, and the symptom is a
+pages run with every job SKIPPED, not a red run: if the site looks stale, check whether CI
+went red before assuming the deploy is broken.
+
+**`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
+re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
+`ci.yml`'s 9 checking steps** (`verify`: 6, `visual`: 3), **not the `visual` job and not
+`Mutation manifest`**, so a manual deploy can still publish a render regression that only
+`tools/gl/` and `tools/visual/` catch, and a stale `tools/mutate/manifest.json`. Those
+five steps are duplicated work on the automatic path; they are kept because deleting them
+would leave the manual path checking nothing. (Denominator: the named steps of both
+`ci.yml` jobs that check something — that can fail because of the tree — rather than set
+up the runner, so `checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install
+Playwright` and `Install chromium` are separate named steps), the browser cache and
 `upload-artifact` are all excluded. `verify` contributes 6: Typecheck, Test, Mutation
 manifest, Build, portability, audit. `visual` contributes 4 — Build, GL tests, Baseline
 trace, Visual check — but its `Build` is the same `npx vite build` already counted, so it
@@ -74,8 +96,10 @@ adds 3, for 9 distinct. The deploy runs 5 of them, all from `verify`: Typecheck,
 Build, portability, audit.) The construction is written out because the bare number went
 stale twice unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule over
 that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest` (→ 8)
-and #128 added `Baseline trace (chromium)` (→ 9), and neither recounted. Nothing gates the
-deploy on CI passing; `main` carries no branch protection. Two consequences of the shared
+and #128 added `Baseline trace (chromium)` (→ 9), and neither recounted. **`main` still
+carries no branch protection and no ruleset** — nothing forces work through a PR, and
+nothing stops a direct push. The CI gate above is on the DEPLOY, not on the branch: a red
+commit can still land on `main`, it just will not publish. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
 one localStorage namespace (the game's **five** keys are all `tanks.*`-prefixed —
 `progress`, `touch`, `stats`, `custom`, `achievements`, each `.v1`; this sentence said
