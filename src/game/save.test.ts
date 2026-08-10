@@ -141,22 +141,64 @@ describe('importSave', () => {
   });
 
   it('refuses a blob that is not a save, and writes NOTHING when it does', () => {
-    // Population: the 6 rejection branches importSave has -- unparseable, non-object,
-    // wrong format, missing/invalid version, newer version, missing keys object.
-    const cases: Array<[string, string]> = [
-      ['not JSON', '{oops'],
-      ['not a save object', '[1,2,3]'],
-      ['not a tanks.save blob', JSON.stringify({ format: 'something.else', version: 1, keys: {} })],
-      ['missing or invalid version', JSON.stringify({ format: SAVE_FORMAT, keys: {} })],
-      ['newer version', JSON.stringify({ format: SAVE_FORMAT, version: SAVE_VERSION + 1, keys: {} })],
-      ['missing keys object', JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: 'nope' })],
+    // Population: all 6 rejection branches importSave has -- unparseable,
+    // non-object, wrong format, invalid version, newer version, missing keys
+    // object -- and, INSIDE the version branch, all three of the disjuncts that
+    // reach it: absent (fails `typeof === 'number'`), fractional (fails
+    // `Number.isInteger`), and zero (fails `>= 1`). Sweeping only the absent case
+    // left the other two disjuncts deletable: with the check cut down to
+    // `typeof blob.version !== 'number'`, this file passed 16 of 16.
+    //
+    // NOT swept: the further input shapes each branch admits -- a null or array
+    // `keys`, a string or NaN `version`, a missing `format` -- each of which
+    // reaches the same disjunct as a row below rather than one of its own.
+    //
+    // `reason` is pinned as a LITERAL, not rebuilt from SAVE_FORMAT/SAVE_VERSION:
+    // rebuilding it would restate the source expression and pass whatever the
+    // source produced. It is the string a player sees in the console, so a silent
+    // change to it should be a failure here. That makes the `newer version` row
+    // fail the day SAVE_VERSION moves off 1, which is intended: bumping the wire
+    // version should be a deliberate edit here too.
+    const cases: Array<[string, string, string]> = [
+      ['not JSON', '{oops', 'not JSON'],
+      ['not a save object', '[1,2,3]', 'not a save object'],
+      [
+        'not a tanks.save blob',
+        JSON.stringify({ format: 'something.else', version: 1, keys: {} }),
+        'not a tanks.save blob',
+      ],
+      [
+        'version absent',
+        JSON.stringify({ format: SAVE_FORMAT, keys: {} }),
+        'missing or invalid version',
+      ],
+      [
+        'version 0',
+        JSON.stringify({ format: SAVE_FORMAT, version: 0, keys: {} }),
+        'missing or invalid version',
+      ],
+      [
+        'version 1.5',
+        JSON.stringify({ format: SAVE_FORMAT, version: 1.5, keys: {} }),
+        'missing or invalid version',
+      ],
+      [
+        'newer version',
+        JSON.stringify({ format: SAVE_FORMAT, version: SAVE_VERSION + 1, keys: {} }),
+        'save version 2 is newer than 1',
+      ],
+      [
+        'missing keys object',
+        JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: 'nope' }),
+        'missing keys object',
+      ],
     ];
-    for (const [what, text] of cases) {
+    for (const [what, text, reason] of cases) {
       const to = seeded();
       const before = exportSave(to);
       const result = importSave(to, text);
       expect(result.ok, what).toBe(false);
-      expect(result.reason, what).not.toBeNull();
+      expect(result.reason, what).toBe(reason);
       expect(result.applied, what).toEqual([]);
       // and the existing save is untouched
       expect(exportSave(to), what).toBe(before);

@@ -168,7 +168,8 @@ Because Play forces API 36 from 2026-08-31 (below), the condition is met in prac
      as written, since it is what the investigation measured. -->
 
 
-`grep -rn "_KEY = " src/ --include=*.ts` returns exactly five declarations:
+`grep -rn "_KEY = " src/ --include=*.ts` returned exactly five declarations **when this was
+measured, against `d5cb2b3`** (re-run at that commit to confirm: still five):
 
 | key | file |
 |---|---|
@@ -182,6 +183,25 @@ Because Play forces API 36 from 2026-08-31 (below), the condition is met in prac
 is wrong. (Population caveat: this grep finds keys declared as `_KEY = `; a key declared
 some other way would be missed. A second grep for the literal string `tanks.` across
 non-test `src/` found the same five.)
+
+<!-- Correction, added by the PR that closed #109/#110/#118. -->
+**Both greps above are falsified by that same PR, and the wording is corrected rather than
+the finding.** Neither grep is a predicate for "localStorage key"; both were reported as
+counts, so both went stale the moment this branch added constants that match them:
+
+- `grep -rn "_KEY = " src/ --include=*.ts` now returns **six**, the sixth being
+  `DEV_CONSOLE_KEY = '__tanks'` (`src/game/loop.ts:159`) — a `globalThis` property name,
+  not a storage key, and not even `tanks.*`-prefixed.
+- `grep -rn "'tanks\." src --include=*.ts | grep -v '\.test\.ts'` now returns **seven**: the
+  five keys plus `SAVE_FORMAT = 'tanks.save'` (`src/game/save.ts:29`) and
+  `REPLAY_FORMAT = 'tanks.replay'` (`src/game/replay.ts:29`), both of which are wire-format
+  discriminators inside a blob, not keys anything stores under.
+
+The finding itself stands: there are still exactly **five** `tanks.*` localStorage keys, and
+they are the five in the table. What is now pinned rather than grepped is that list —
+`SAVE_KEYS` in `src/game/save.ts` is asserted equal to those five literals in
+`save.test.ts`, and a second test drives all five stores and checks the keys that actually
+appear in storage match it. A sixth store added without a `SAVE_KEYS` entry fails there.
 
 ### Swapping storage backends is already cheap
 
