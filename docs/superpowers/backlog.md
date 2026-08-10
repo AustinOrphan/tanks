@@ -730,7 +730,7 @@ files?
 **Why it is live now.** Purity today is `src/sim/purity.test.ts`, which scans every file
 under `src/sim/` for imports of `three`, `howler` and the DOM. It is a good guard — it has
 a meta-test, added after it reported green for four of five known-bad imports — but it is a
-**string scan**, and CLAUDE.md already records two holes it cannot close: the specifier
+**string scan**, and this ledger already records two holes it cannot close (see the purity-guard lines under "Unpinned behaviour"): the specifier
 regexes use `['"]` only, so a template-literal import specifier is invisible to it, and it
 matches `Math.random`/`Date.now` as tokens, so an alias or destructure walks past it. A
 package with an empty `dependencies` block closes the first class structurally: the import

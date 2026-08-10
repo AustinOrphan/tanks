@@ -65,7 +65,8 @@ The deploy re-runs **5 of `ci.yml`'s 9 checking steps** (`verify`: 6, `visual`: 
 `tools/gl/` and `tools/visual/` catch will publish, and so will a stale
 `tools/mutate/manifest.json`. (Denominator: the named steps of both `ci.yml` jobs that
 check something — that can fail because of the tree — rather than set up the runner, so
-`checkout`, `setup-node`, `npm ci`, the Playwright install, the browser cache and
+`checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install Playwright` and
+`Install chromium` are separate named steps), the browser cache and
 `upload-artifact` are all excluded. `verify` contributes 6: Typecheck, Test, Mutation
 manifest, Build, portability, audit. `visual` contributes 4 — Build, GL tests, Baseline
 trace, Visual check — but its `Build` is the same `npx vite build` already counted, so it
