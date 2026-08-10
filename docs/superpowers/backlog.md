@@ -288,6 +288,65 @@ the two matched and went stale silently when #103 moved `BASE_FOV`; review caugh
 and the comment now asserts no relationship rather than a false one. Needs eyes, not a
 test. #102
 
+---
+
+**Raised while making the preview interactive** (`src/render/preview-controls.ts`, the
+hull turntable and the turret aim).
+
+**5. The idle spin is an indefinite render loop, and its COST is unmeasured.** Its
+behaviour is now gated — three async checks in `tools/gl/harness.ts` run on the real
+`requestAnimationFrame` and measure that it turns the tank (23069 of 197600 bytes in
+500ms), that a hover stops it permanently, and that nothing repaints after dispose. What
+none of them says is what it costs: while the Customize panel is open and untouched, a
+second WebGL context repaints a 260x190 canvas every frame, indefinitely, with no
+timeout and no `document.hidden` check. Nobody has measured that against battery or
+against a low-end device, and "stop after N seconds" was considered and not done because
+the stopping condition would then be invisible to the player. (This entry replaces an
+earlier one saying the spin ran under no gate at all; that was true when it was written.)
+
+**6. `prefers-reduced-motion` is read in `preview.ts` and nothing covers that read.**
+`createPreviewControls` takes the flag as a parameter and both branches are tested; the
+`window.matchMedia` call that supplies it lives inside `createTankPreview`, which returns
+null under jsdom, so no test reaches it. The optional-chaining fallback for an absent
+`matchMedia` is likewise unexercised.
+
+**7. Pointer capture is unverified.** `setPointerCapture` is what keeps a drag alive once
+it leaves the 260px canvas, and neither gate can see it: jsdom does not implement capture
+semantics (the call is inside a try/catch for exactly that reason), and the GL harness
+dispatches events directly at the canvas, which needs no capture. "A drag that runs off
+the preview keeps turning the hull" is therefore claimed by construction, not measured.
+The `groundPointFromPointer` null-on-miss path exists for that case and IS tested.
+
+**8. Four more feel constants, two of them partly pinned and two not at all.** An
+earlier draft of this entry called all four unpinned; review disproved it, and the
+corrected version is below. Each is swept against `preview-controls.test.ts` AND
+`preview.test.ts` — the first draft ran only the former, which is how it got the answer
+wrong, and is a reminder that a mutation sweep's denominator includes the files it was
+pointed at.
+
+- `HULL_DRAG_RAD_PER_PX` (0.012) — **bounded on both sides**, by the scene-graph
+  turntable check in `preview.test.ts`: a 100px drag has to leave the hull's near face
+  at `x > 0.2` and `z > 0`, which is true only for roughly 0.0021 to 0.0157 rad/px.
+  0.0005 and 0.018 both fail. Inside that band it is free.
+- `TURRET_AIM_DEAD_RADIUS` (0.12) — **pinned against zero only.** Setting it to 0 kills
+  2 cases; 0.36 survives, because the sweep test derives the boundary from the constant.
+  What is pinned is that a dead zone exists, not how big it is.
+- `IDLE_SPIN_RAD_PER_SEC` (0.35) — **unpinned.** x10 survives both files.
+- `KEY_STEP_RAD` (pi/24) — **unpinned.** x12 survives both files.
+
+Nobody has played with the panel on a phone, and the drag rate is the one most likely to
+be wrong there.
+
+**9. `tools/` is not typechecked by anything.** `tsconfig.json`'s `include` is
+`["src", "vite.config.ts"]`, so `npm test`'s `tsc --noEmit` never reads
+`tools/gl/harness.ts`, `tools/gallery/`, `tools/baseline/` or the rest — and vitest
+transforms without typechecking. This is not new, but it was found the hard way while
+adding the async GL checks above: a duplicate `checkAsync` declaration passed `npm test`
+cleanly and surfaced only as a vite 500 when the harness was actually loaded, which
+`npm run test:gl` reports as a bare timeout with no error text. So the GL harness is
+checked only by running it, and a typo there costs a 30-second timeout to diagnose.
+Widening `include` was not attempted here and may surface pre-existing errors.
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not

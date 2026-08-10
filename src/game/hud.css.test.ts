@@ -298,6 +298,79 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('keeps the preview canvas out of the browser gesture system', () => {
+    // The preview is a turntable (render/preview-controls.ts): a touch drag on it has
+    // to reach pointermove, and left at the default the browser claims it as a scroll
+    // and sends pointercancel instead -- measured on the GAME canvas at 16px of
+    // horizontal travel, which is the whole reason index.html carries the same rule.
+    //
+    // index.html's `canvas { touch-action: none }` does cover this element today, and
+    // index-html.test.ts guards it -- but that rule's own comment scopes its REASON to
+    // the board's thumbstick, so narrowing it to `#app canvas` some day is an edit
+    // nothing would flag. This asserts the requirement where the element is defined.
+    //
+    // Computed, not text-matched: this resolves the CASCADE onto a real element, so it
+    // still holds if the declaration moves to another selector that covers the canvas,
+    // and it fails if a later rule overrides it. jsdom does implement both of these
+    // properties (measured: a `.hud-preview` canvas reports 'none'/'none' here) --
+    // `touch-action` is the one that had to be checked, since cssstyle drops properties
+    // it does not model and would then report '' whatever the sheet said.
+    const preview = document.createElement('canvas');
+    preview.className = 'hud-preview';
+    document.body.appendChild(preview);
+    const style = getComputedStyle(preview);
+
+    expect(style.touchAction, 'a drag on the preview can be stolen as a scroll').toBe('none');
+    // Not gesture handling, but the same class of defect: a drag on a canvas is a text
+    // selection on desktop unless this says otherwise.
+    expect(style.userSelect, 'a drag selects the panel text instead of turning the tank').toBe(
+      'none',
+    );
+    // It is a turntable, so it should look draggable before it is dragged.
+    expect(style.cursor).toBe('grab');
+
+    document.body.innerHTML = '';
+  });
+
+  it('shows focus on the preview, which is now in the tab order', () => {
+    // hud.ts gives the canvas tabindex="0" for the keyboard scheme. A focusable
+    // control whose focus ring is invisible is worse than one that cannot be focused:
+    // the keyboard user cannot tell where they are.
+    const src = stripComments(css);
+    expect(src, 'the preview has no focus ring').toContain('.hud-preview:focus-visible');
+    const start = src.indexOf('.hud-preview:focus-visible {');
+    expect(src.slice(start, src.indexOf('}', start))).toContain('outline:');
+  });
+
+  it('keeps the keyboard hint off the screen until the preview is focused', () => {
+    // The two halves of the exception to "no prose in this pane", and they have to hold
+    // TOGETHER: hidden at rest is what keeps the pane opening as two labelled sections,
+    // and the reveal rule is the only reason the hint is worth having at all. Assert
+    // one without the other and you get either a permanently visible line or a
+    // permanently invisible one, both of them green.
+    const hint = document.createElement('p');
+    hint.className = 'hud-preview-hint';
+    document.body.appendChild(hint);
+    const style = getComputedStyle(hint);
+    // Computed, so it resolves the cascade: another rule making it visible fails here.
+    expect(style.visibility, 'the hint is on screen before anyone focuses the preview').toBe(
+      'hidden',
+    );
+    // visibility, not display: revealing it must not shove the Hull section down the
+    // panel the moment focus lands, so it keeps its box at rest.
+    expect(style.display).not.toBe('none');
+    document.body.innerHTML = '';
+
+    // jsdom cannot evaluate :focus-visible in a selector match, so the reveal is
+    // asserted as text. Weak on purpose and stated as such -- it catches the rule being
+    // deleted or the combinator being changed, which is the regression that happens.
+    const src = stripComments(css);
+    const reveal = '.hud-preview:focus-visible + .hud-preview-hint';
+    expect(src, 'nothing ever shows the hint').toContain(reveal);
+    const start = src.indexOf(reveal);
+    expect(src.slice(start, src.indexOf('}', start))).toContain('visibility: visible');
+  });
+
   it('keeps the narrow-viewport rules the phone layout needs', () => {
     // Measured on a 393px-wide phone before this existed: the volume slider ran 35px
     // PAST the viewport edge and the topbar wrapped to 72px tall, eating the top of the

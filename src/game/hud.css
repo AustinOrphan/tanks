@@ -671,6 +671,69 @@
   width: 260px;
   height: 190px;
   border-radius: 12px;
+  /* The preview is a turntable (render/preview-controls.ts), so a drag on it must
+   * reach pointermove instead of being taken by the browser as a scroll. index.html
+   * already sets `touch-action: none` on every canvas, and its own test guards that
+   * rule -- but that rule exists for the GAME board, its comment says so, and scoping
+   * it back to the board would silently kill this drag. Stated here so this element
+   * carries its own requirement, and so hud.css.test.ts guards it independently.
+   *
+   * The enclosing .hud-customize is `touch-action: pan-y`; this wins on the canvas
+   * itself, which is the whole point of scoping touch-action per element. (An earlier
+   * version of this comment said the pane was pan-y "because it scrolls". It does not:
+   * the only `overflow-y: auto` in this file is on .hud-achievement-list. That rule's
+   * own comment gives the real reason -- it keeps a two-finger gesture on a panel from
+   * becoming a zoom trap the board's `touch-action: none` then cannot undo.)
+   *
+   * user-select/tap-highlight: a drag on a canvas is otherwise a text selection on
+   * desktop and a grey flash on mobile. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+}
+
+.hud-preview:active {
+  cursor: grabbing;
+}
+
+/* It is in the tab order now (hud.ts gives it tabindex), so it needs a visible focus
+ * ring -- a focusable control whose focus cannot be seen is worse than one that is not
+ * focusable. */
+.hud-preview:focus-visible {
+  outline: 2px solid #7fd0ff;
+  outline-offset: 2px;
+}
+
+/* The keyboard scheme, shown ONLY once someone has tabbed to the canvas.
+ *
+ * Austin asked for no explanatory prose on this screen and the pane is pinned at two
+ * labelled sections, so this is a deliberate, narrow exception rather than a drift back
+ * to a wall of text: shift+arrows had no discoverability path at all for a sighted
+ * keyboard user (title= needs a hovering pointer, aria-label= is never rendered), which
+ * made the one scheme added FOR keyboard users invisible to the keyboard users who can
+ * see. Nothing is on screen at rest, so the pane still OPENS as two sections.
+ *
+ * visibility, not display: the row keeps its box either way, so revealing the hint does
+ * not shove the Hull section down the panel the moment focus lands. visibility: hidden
+ * also takes it out of the accessibility tree, which is belt-and-braces with the
+ * aria-hidden in the markup.
+ *
+ * :focus-visible, not :focus -- a mouse press on the canvas focuses it (the controls
+ * call focus() deliberately, since they preventDefault the press), and a hint aimed at
+ * keyboard users must not flash up every time somebody drags the tank. */
+.hud-preview-hint {
+  margin: 0;
+  font-size: 0.72em;
+  opacity: 0;
+  visibility: hidden;
+  color: #a9b6c9;
+}
+
+.hud-preview:focus-visible + .hud-preview-hint {
+  opacity: 1;
+  visibility: visible;
 }
 
 .hud-customize-section {
