@@ -260,28 +260,34 @@ function cloudTone(base: RGB, delta: number): RGB {
 }
 
 /**
- * WHY CAMO AND CLOUDS NO LONGER SHARE A GENERATOR.
+ * WHY CAMO AND CLOUDS NO LONGER SHARE A GENERATOR -- and why only ONE of them moved.
  *
- * They used to: one `blotches` helper drew lobed clusters of circles, and the two skins
- * differed only in count, radius and lobe count. That is why Austin kept reporting them
- * as swapped. Coverage WAS wrong and swapping it helped -- he confirmed the dense/sparse
- * split is now the right way round -- but it could never be enough on its own, because
- * two skins cut from one silhouette generator read as each other at different densities.
- * His verdict after the swap: "Clouds turret top could be made to look a bit more
- * cloudlike in shape. Same with some spots on the hull. Camo also could use some
- * shape-improvement on the hull."
+ * They used to share `blotches`, differing only in count, radius and lobe count. That is
+ * why Austin kept reporting them as swapped. Coverage WAS wrong and swapping it helped --
+ * he confirmed the dense/sparse split is now the right way round -- but it could never be
+ * enough on its own, because two skins cut from one silhouette generator read as each
+ * other at different densities. His verdict after the swap: "Clouds turret top could be
+ * made to look a bit more cloudlike in shape. Same with some spots on the hull. Camo also
+ * could use some shape-improvement on the hull."
  *
- * So the difference is now SHAPE LANGUAGE, which is the thing the eye actually names:
+ * CAMO got a new generator and KEPT it. `camoCells` is a seeded power diagram: hard-edged
+ * interlocking polygons, straight edges meeting at corners, no arcs anywhere, which a
+ * circle-based generator cannot produce at any parameter setting.
  *
- *   camo    hard-edged interlocking polygons, from a seeded power diagram. Straight
- *           edges, corners, no arcs anywhere. A circle-based generator cannot make this
- *           at any parameter setting, which is the whole point.
- *   clouds  soft-edged bulbous puffs, from a union of varying-radius lobes with a
- *           smooth falloff and a flattened underside. No hard edge anywhere.
+ * CLOUDS got one too and it was REJECTED ON LOOK. `cumulus` drew soft-edged bulbous puffs
+ * with a ramped rim; shown the pair, Austin said "before clouds looks better actually".
+ * So clouds is back on `blotches` at the sparse post-swap setting -- exactly the texture
+ * he was comparing against, which is `tiles/A-current.png`'s bottom row and the BEFORE
+ * panel of `compare/swap-*-clouds.png`. `cumulus` is DELETED rather than parked behind a
+ * switch, because a generator nothing calls rots. If a later reader thinks "clouds should
+ * be puffier": it was built, rendered and rejected -- see PR #139.
  *
- * Both still tile seamlessly (every distance below wraps toroidally) and both are still
- * deterministic from a fixed seed. Neither touches its tone derivation: camo stays muted
- * via `autoAccent` and clouds stays light via `cloudTone`.
+ * The two shape languages still differ, and the surviving difference is the one the eye
+ * names first: camo is straight-edged polygons that PARTITION the tile, clouds is a union
+ * of circular lobes over a field that stays visible between them. Both tile seamlessly
+ * (every distance below wraps toroidally) and both are deterministic from a fixed seed.
+ * Neither touches its tone derivation: camo stays muted via `autoAccent` and clouds stays
+ * light via `cloudTone`.
  */
 
 /** Toroidal component distance -- the tile's left edge is adjacent to its right. */
@@ -349,37 +355,21 @@ function camoCells(
   }
 }
 
-/** Linear blend of `tone` into whatever is already at `i`, by coverage `t` in [0,1]. */
-function blendPixel(px: Uint8ClampedArray, i: number, tone: RGB, t: number): void {
-  px[i] = Math.round(px[i] + (tone[0] - px[i]) * t);
-  px[i + 1] = Math.round(px[i + 1] + (tone[1] - px[i + 1]) * t);
-  px[i + 2] = Math.round(px[i + 2] + (tone[2] - px[i + 2]) * t);
-  px[i + 3] = 255;
-}
-
 /**
- * CLOUDS: soft-edged cumulus puffs.
+ * CLOUDS: a seamless field of round blotches in two tones over a base.
  *
- * Each puff is a union of overlapping lobes whose radii VARY widely, which is what gives
- * the bulging cauliflower outline rather than the even scallop a constant radius makes.
- * The union is taken as a MAXIMUM of per-lobe coverage fields, not by painting each lobe
- * in turn: painting would leave every lobe's own rim visible inside the puff, and the
- * whole point is that a cloud has no internal edges.
+ * CLOUDS ONLY, now. Camo shared this until the shape split above, and the sharing is what
+ * made the two skins read as versions of each other -- so nothing else may call it again
+ * without re-opening that.
  *
- * Coverage ramps over `SOFT` pixels at the rim instead of switching, which is the single
- * biggest difference from camo and the thing Austin asked for. It costs the pattern its
- * flat-tone property -- a soft rim is a gradient, so these textures carry many more than
- * three colours -- and the coverage test below counts only EXACT base pixels, so the
- * rims read as "not base" there.
- *
- * The underside is flattened rather than clipped. Real cumulus sits on a definite flat
- * base, but the tile's y axis is not consistently "up" on the tank: it runs along the
- * lathe profile on the turret (so roughly vertical there) and across the hull's WIDTH
- * once the body is projected from above. A hard flat base would look right on the turret
- * and lie on its side on the hull, so the flattening is gentle enough to shape the puff
- * without reading as a cut when the texture arrives rotated.
+ * The tones are painted in order, so the second buries the first wherever they overlap.
+ * At the sparse setting clouds ships -- 7 blotches, radius 8-15, 5 lobes -- the base
+ * survives on 57.8% of the texture with 22.3% and 19.9% for the two tones, identical on
+ * all 6 shipped hulls because the geometry is seeded and carries no colour dependence at
+ * all. The dense setting camo used to take (13, radius 9-18, 4 lobes) left the base on
+ * 27.9%; it has no caller now.
  */
-function cumulus(
+function blotches(
   px: Uint8ClampedArray,
   base: RGB,
   first: RGB,
@@ -391,46 +381,27 @@ function cumulus(
 ): void {
   for (let i = 0; i < SIZE * SIZE * 4; i += 4) fill(px, i, base);
   const rnd = xorshift(0xc4310);
-  /** Width of the soft rim, in pixels. Below ~2 it reads as a hard edge again. */
-  const SOFT = 3.5;
-  /** How much the underside is pulled in, as a fraction of a lobe's radius. */
-  const FLATTEN = 0.55;
   for (const tone of [first, second]) {
     for (let b = 0; b < count; b++) {
       const cx = rnd() * SIZE;
       const cy = rnd() * SIZE;
       const r = rMin + rnd() * (rMax - rMin);
-      const ox: number[] = [];
-      const oy: number[] = [];
-      const or: number[] = [];
+      // Each patch is a CLUSTER of overlapping circles rather than one circle. A single
+      // circle per patch reads as polka dots -- Austin's "camo still doesn't look camo"
+      // -- because real camouflage is irregular and interlocking. Overlapping lobes cost
+      // nothing and are what turn a dot into a blob.
       for (let lobe = 0; lobe < lobes; lobe++) {
-        // Lobes are strung along the puff's width and lifted ABOVE its base line, so the
-        // mass bulges upward off a settled underside.
-        const t = lobes === 1 ? 0.5 : lobe / (lobes - 1);
-        const lr = r * (0.4 + rnd() * 0.75);
-        ox.push(cx + (t - 0.5) * r * 2.1 + (rnd() * 2 - 1) * r * 0.25);
-        oy.push(cy - lr * FLATTEN - rnd() * r * 0.3);
-        or.push(lr);
-      }
-      let maxR = 0;
-      for (const v of or) maxR = Math.max(maxR, v);
-      const reach = r * 1.6 + maxR + SOFT;
-      for (let y = Math.floor(cy - reach); y <= cy + reach; y++) {
-        for (let x = Math.floor(cx - reach); x <= cx + reach; x++) {
-          let cov = 0;
-          for (let l = 0; l < lobes; l++) {
-            const dx = x - ox[l];
-            const dy = y - oy[l];
-            const d = Math.sqrt(dx * dx + dy * dy);
-            // 1 well inside, ramping to 0 over SOFT pixels at the rim.
-            const c = (or[l] - d) / SOFT;
-            if (c > cov) cov = c;
+        const ox = cx + (rnd() * 2 - 1) * r * 0.8;
+        const oy = cy + (rnd() * 2 - 1) * r * 0.8;
+        const lr = r * (0.45 + rnd() * 0.55);
+        for (let y = Math.floor(oy - lr); y < oy + lr; y++) {
+          for (let x = Math.floor(ox - lr); x < ox + lr; x++) {
+            if ((x - ox) ** 2 + (y - oy) ** 2 > lr * lr) continue;
+            // Wrap so patches crossing an edge tile seamlessly.
+            const wx = ((x % SIZE) + SIZE) % SIZE;
+            const wy = ((y % SIZE) + SIZE) % SIZE;
+            fill(px, (wy * SIZE + wx) * 4, tone);
           }
-          if (cov <= 0) continue;
-          if (cov > 1) cov = 1;
-          const wx = ((x % SIZE) + SIZE) % SIZE;
-          const wy = ((y % SIZE) + SIZE) % SIZE;
-          blendPixel(px, (wy * SIZE + wx) * 4, tone, cov);
         }
       }
     }
@@ -494,19 +465,21 @@ const PAINTERS: Record<
     // on a minority of the surface, which is what camouflage does and what the sparse
     // arrangement this skin used to carry could not.
     //
-    // 22 cells over a 128px tile is about 27px across each before the same-tone merging
+    // 44 cells over a 128px tile is about 19px across each before the same-tone merging
     // that makes the visible patches bigger; the shares are tuned so the base stays the
-    // minority without either accent tone dominating.
+    // minority without either accent tone dominating. (This comment said 22 while the
+    // call already passed 44 -- the count was doubled mid-tuning, see tiles/C-camo44.png,
+    // and only the literal moved.)
     camoCells(px, base, dark, deep, 44, 0.3, 0.37);
   },
   clouds(px, base, accent) {
-    // The same blotch field as camo, taken to the FULL accent delta and beyond. Camo
-    // holds its tones close to the hull so the paint still reads as the tank's colour;
-    // clouds deliberately does not, and its tones go light -- a blue tank reads as blue
-    // sky with white cloud rather than as a blue tank with markings.
+    // A blotch field taken to the FULL accent delta and beyond. Camo holds its tones
+    // close to the hull so the paint still reads as the tank's colour; clouds
+    // deliberately does not, and its tones go light -- a blue tank reads as blue sky with
+    // white cloud rather than as a blue tank with markings.
     //
     // The TONES are what carry that, not the coverage. Since the density swap the hull
-    // is the majority tone here too (57.8%), which is correct for sky: the cloud is the
+    // is the majority tone here (57.8%), which is correct for sky: the cloud is the
     // thing on top of it, not the field itself. An earlier version of this comment said
     // "the light tone wins", which was true only while clouds held the dense setting.
     //
@@ -514,11 +487,13 @@ const PAINTERS: Record<
     // accident, and the result was better as its own thing than as a broken camo.
     const soft = accent ? ensureContrast(base, accent) : cloudTone(base, AUTO_ACCENT_DELTA);
     const bright = accent ? scale(soft, 0.7) : cloudTone(base, AUTO_ACCENT_DELTA * 1.8);
-    // SPARSE and separated, in SOFT-EDGED puffs -- see cumulus. Fewer, larger, rounder
-    // shapes on a hull that stays visible between them is what reads as sky; the soft
-    // rim is what stops them reading as light-coloured camouflage, which is exactly
-    // what they did while both skins shared one hard-edged generator.
-    cumulus(px, base, soft, bright, 6, 8, 13, 5);
+    // SPARSE and separated -- these were camo's numbers before the swap; see `blotches`.
+    // Fewer, smaller puffs on a hull that stays visible between them is what reads as
+    // sky, and it is the light tones above rather than the density that make them clouds.
+    //
+    // A SOFT-EDGED replacement (`cumulus`) was built for this call and rejected on look:
+    // "before clouds looks better actually". These are the parameters that render is of.
+    blotches(px, base, soft, bright, 7, 8, 15, 5);
   },
   checker(px, base, accent) {
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base);

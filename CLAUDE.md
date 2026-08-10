@@ -196,21 +196,50 @@ half-width (0.084 / 0.069 / 0.025 on hull / turret / barrel) and was rejected be
 three sets do not line up. Pinned through the behaviour — all three parts must share one
 v scale — not through the constant alone.
 
-**CAMO AND CLOUDS ARE DIFFERENT SHAPE LANGUAGES, and that is the fix that finally
-worked.** They shared one `blotches` generator (lobed clusters of circles) and differed
-only in count, radius and lobes, so Austin twice reported them as swapped. The coverage
-WAS backwards and swapping it was necessary — camo covers, clouds does not — but it was
-not sufficient, because two skins cut from one silhouette generator read as versions of
-each other at any density. `camoCells` is now a seeded power diagram: hard-edged
-interlocking polygons, straight edges, no arcs, which a circle-based generator cannot
-produce at any parameter setting. `cumulus` is soft-edged bulbous puffs, a MAX of
-per-lobe coverage fields so the union has no internal rims. Edge hardness is pinned
-directly (camo 0.0000 of pixels off-tone, clouds 0.1802). Both still tile toroidally and
-both stay deterministic from one seed. Neither touches its tone derivation: `autoAccent`
-keeps camo muted, `cloudTone` keeps clouds light, and the white hull's deliberate
-darkening survives. Coverage is measured by NEAREST TONE, not exact hull-hex equality —
-a soft rim equals no tone exactly, so exact matching penalises a skin for having the
-property it is supposed to have.
+**CAMO AND CLOUDS ARE DIFFERENT SHAPE LANGUAGES — but only camo got a new generator.**
+They shared one `blotches` helper (lobed clusters of circles) and differed only in count,
+radius and lobes, so Austin twice reported them as swapped. The coverage WAS backwards
+and swapping it was necessary — camo covers, clouds does not — but it was not sufficient,
+because two skins cut from one silhouette generator read as versions of each other at any
+density. `camoCells` is now a seeded power diagram: hard-edged interlocking polygons,
+straight edges, no arcs, which a circle-based generator cannot produce at any parameter
+setting.
+
+**A soft-edged clouds generator (`cumulus`) was built for the other half of that split
+and REJECTED ON LOOK** — "before clouds looks better actually" — so clouds is back on
+`blotches` at the sparse post-swap setting, byte-identical to the texture it had at
+`76ef38a`. `cumulus` is deleted rather than parked behind a switch; a generator nothing
+calls rots. Do not rebuild it without new evidence: PR #139 carries the tile render it
+lost on.
+
+Two pins moved with it, and both had said something that stopped being true:
+
+- **Coverage is measured by EXACT hull-hex equality.** It briefly used a nearest-tone
+  classifier, which was genuinely forced by `cumulus`'s rim pixels (they equal no tone
+  exactly, scoring 0.5913 exact against 0.6484 nearest). With both skins hard-edged again
+  the two metrics are the same function — measured equal to 4 dp on all 12 (skin, hull)
+  pairs — and exact is the one that cannot be fooled, since nearest has to guess the
+  three flat tones by taking the three commonest.
+- **The shape discriminator is EDGE GEOMETRY, not edge hardness.** Hardness now reads
+  0.0000 for both. The test measures the share of boundary pixels lying on a locally
+  straight run (7px window, 0.6px RMS): camo 0.2855, clouds 0.0355. Three cheaper
+  candidates — base-region connectivity, triple-junction count, accent-meets-accent
+  boundary share — were tried first and all three collapsed under a coverage-matched
+  control, scoring camo's generator at clouds' coverage the same as clouds. The straight-
+  run metric does not (0.2651 there), which is what makes it a shape metric rather than a
+  density one wearing a shape's name.
+
+Both skins still tile toroidally and stay deterministic from one seed, and neither tone
+derivation moved: `autoAccent` keeps camo muted, `cloudTone` keeps clouds light, and the
+white hull's deliberate darkening survives.
+
+**`clouds is LIGHT on every hull that has room to be` was a tautology for two commits**,
+which is worth knowing because nothing announced it. It read the tile's commonest colour
+as "the dominant tone, the second one painted" — true only at the DENSE setting. The
+density swap made the hull itself the majority tone, so that colour became the hull, and
+the comparison became `hullL < hullL`. Forcing `cloudTone` to darken unconditionally left
+it green. It now excludes the hull before taking the commonest, and the same mutation
+fails it on 5 of the 6 hulls (all but white, which is allowed to darken).
 
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
