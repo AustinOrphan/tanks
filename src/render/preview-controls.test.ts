@@ -12,12 +12,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   createPreviewControls,
+  parseRotateButtons,
   groundPointFromPointer,
   turretAngleFromPointer,
   normalizeAngle,
   HULL_DRAG_RAD_PER_PX,
   KEY_STEP_RAD,
   IDLE_SPIN_RAD_PER_SEC,
+  IDLE_SPIN_MAX_RAD,
+  IDLE_RESUME_DELAY_MS,
+  HOLD_RAD_PER_SEC,
+  HOLD_REPEAT_DELAY_MS,
   TURRET_AIM_DEAD_RADIUS,
   type PreviewPose,
 } from './preview-controls';
@@ -76,6 +81,22 @@ function pointerEvent(
   return e as unknown as PointerEvent;
 }
 
+/** The four buttons hud.ts ships, as far as this module is concerned: the two data
+ * attributes and nothing else. */
+function makeRotateButtons(): HTMLButtonElement[] {
+  const out: HTMLButtonElement[] = [];
+  for (const part of ['hull', 'turret'] as const) {
+    for (const dir of ['left', 'right'] as const) {
+      const b = document.createElement('button');
+      b.dataset.rotatePart = part;
+      b.dataset.rotateDir = dir;
+      document.body.appendChild(b);
+      out.push(b);
+    }
+  }
+  return out;
+}
+
 interface Harness {
   canvas: HTMLCanvasElement;
   controls: ReturnType<typeof createPreviewControls>;
@@ -83,6 +104,14 @@ interface Harness {
   animates: Array<{ dt: number; pose: PreviewPose }>;
   frames: Array<(t: number) => void>;
   cancelled: number[];
+  buttons: HTMLButtonElement[];
+  /** The rotate button for a part/direction, by the same attributes hud.ts writes. */
+  button(part: 'hull' | 'turret', dir: 'left' | 'right'): HTMLButtonElement;
+  /** Pending resume timers, as [handle, callback]. Fire one with `fireTimer`. */
+  timers: Map<number, () => void>;
+  timerDelays: number[];
+  clearedTimers: number[];
+  fireTimer(): void;
 }
 
 function harness(opts: { reducedMotion?: boolean; rect?: typeof RECT } = {}): Harness {
@@ -91,6 +120,11 @@ function harness(opts: { reducedMotion?: boolean; rect?: typeof RECT } = {}): Ha
   const animates: Array<{ dt: number; pose: PreviewPose }> = [];
   const frames: Array<(t: number) => void> = [];
   const cancelled: number[] = [];
+  const buttons = makeRotateButtons();
+  const timers = new Map<number, () => void>();
+  const timerDelays: number[] = [];
+  const clearedTimers: number[] = [];
+  let nextTimer = 1;
   const controls = createPreviewControls(canvas, {
     camera,
     initialPose: INITIAL_PREVIEW_POSE,
@@ -102,8 +136,38 @@ function harness(opts: { reducedMotion?: boolean; rect?: typeof RECT } = {}): Ha
       return frames.length; // 1-based, so 0 is never a valid handle
     },
     cancelRaf: (h) => cancelled.push(h),
+    rotateButtons: buttons,
+    setTimer: (cb, ms) => {
+      timerDelays.push(ms);
+      const h = nextTimer++;
+      timers.set(h, cb);
+      return h;
+    },
+    clearTimer: (h) => {
+      clearedTimers.push(h);
+      timers.delete(h);
+    },
   });
-  return { canvas, controls, poses, animates, frames, cancelled };
+  return {
+    canvas,
+    controls,
+    poses,
+    animates,
+    frames,
+    cancelled,
+    buttons,
+    button: (part, dir) =>
+      buttons.find((b) => b.dataset.rotatePart === part && b.dataset.rotateDir === dir)!,
+    timers,
+    timerDelays,
+    clearedTimers,
+    fireTimer(): void {
+      const live = [...timers.entries()];
+      if (live.length !== 1) throw new Error(`expected exactly 1 pending timer, saw ${live.length}`);
+      timers.delete(live[0][0]);
+      live[0][1]();
+    },
+  };
 }
 
 describe('normalizeAngle', () => {
@@ -543,7 +607,9 @@ describe('createPreviewControls: the idle spin', () => {
     h.controls.dispose();
   });
 
-  it('stops for good at the first interaction, and cancels the pending frame', () => {
+  it('stops at the first interaction, and cancels the pending frame', () => {
+    // A HOVER, which arms no resume (see the resume block below: a mouse resting on the
+    // canvas is still aiming), so "stopped" here also means "stays stopped".
     const h = harness();
     h.frames[0](0);
     h.frames[1](100);
@@ -551,11 +617,83 @@ describe('createPreviewControls: the idle spin', () => {
     h.canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 80, clientY: CY }));
     expect(h.controls.idleRunning()).toBe(false);
     expect(h.cancelled).toEqual([scheduled]); // the handle raf handed back, not a guess
+    expect(h.timers.size, 'a hover armed a resume').toBe(0);
     const settled = h.controls.pose();
     // A frame callback already in flight must be inert, not one more nudge.
     h.frames[scheduled - 1](5000);
     expect(h.controls.pose()).toEqual(settled);
     expect(h.frames).toHaveLength(scheduled);
+    h.controls.dispose();
+  });
+
+  it('stops itself after exactly one revolution, back where it started', () => {
+    // The cost bound (IDLE_SPIN_MAX_RAD), and it has to be exact in both directions:
+    // stopping early leaves a face unshown, and overshooting is a spin that never ends
+    // at a meaningful pose. Driven in 0.1s frames -- the gap clamp's own limit -- so
+    // the run takes a bounded number of steps.
+    const h = harness();
+    const totalSec = IDLE_SPIN_MAX_RAD / IDLE_SPIN_RAD_PER_SEC;
+    let t = 0;
+    h.frames[0](t); // establishes the clock, moves nothing
+    // One frame past the revolution, so the LAST step is the partial one.
+    const steps = Math.ceil(totalSec / 0.1) + 1;
+    for (let i = 0; i < steps && h.controls.idleRunning(); i++) {
+      t += 100;
+      h.frames[h.frames.length - 1](t);
+    }
+    expect(h.controls.idleRunning(), 'the spin never stopped').toBe(false);
+    // Exactly one turn: the pose is the pose it opened at, not a frame past it.
+    const p = h.controls.pose();
+    expect(Math.cos(p.bodyAngle)).toBeCloseTo(Math.cos(INITIAL_PREVIEW_POSE.bodyAngle), 9);
+    expect(Math.sin(p.bodyAngle)).toBeCloseTo(Math.sin(INITIAL_PREVIEW_POSE.bodyAngle), 9);
+    expect(Math.cos(p.turretAngle)).toBeCloseTo(Math.cos(INITIAL_PREVIEW_POSE.turretAngle), 9);
+    expect(Math.sin(p.turretAngle)).toBeCloseTo(Math.sin(INITIAL_PREVIEW_POSE.turretAngle), 9);
+    // ...and it really did turn all the way round on the way, rather than stopping at
+    // the first frame: at 0.35 rad/s a revolution is ~18s, so ~180 frames of 0.1s.
+    expect(h.frames.length).toBeGreaterThan(100);
+    // Nothing is scheduled once the budget is gone -- that is the whole point of it.
+    const after = h.frames.length;
+    expect(h.frames).toHaveLength(after);
+    h.controls.dispose();
+  });
+
+  it('stops while the document is hidden and picks up again when it comes back', () => {
+    // Unverifiable-by-measurement territory (see preview-controls.ts's doc comment):
+    // headless chromium would not report a hidden document, so this is asserted at the
+    // event level. `visibilityState` is a prototype getter, so it is overridden here
+    // rather than set.
+    const h = harness();
+    h.frames[0](0);
+    h.frames[1](100);
+    const pending = h.frames.length;
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(h.cancelled, 'the loop kept running into a hidden tab').toEqual([pending]);
+    // ...and it SAYS so. This read used to be `idle && !disposed`, which reported a
+    // hidden, frame-less preview as spinning and contradicted its own doc comment.
+    expect(h.controls.idleRunning(), 'reports a hidden preview as spinning').toBe(false);
+    const parked = h.controls.pose();
+    // A callback already in flight must not restart it either.
+    h.frames[pending - 1](5000);
+    expect(h.controls.pose()).toEqual(parked);
+    expect(h.frames).toHaveLength(pending);
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(h.frames.length).toBe(pending + 1);
+    expect(h.controls.idleRunning()).toBe(true);
+    // THE CLOCK IS FRESH, and that is asserted rather than assumed: the first frame back
+    // must move NOTHING, because the minutes spent hidden are not time the animation
+    // ran. Without the reset it differences against the pre-hide stamp and lands a
+    // clamped 0.1s step -- about 2 degrees -- at the exact moment the player looks at it.
+    h.frames[h.frames.length - 1](600_000);
+    expect(h.controls.pose(), 'the tank jumped on the way back').toEqual(parked);
+    // ...and it really is running again, rather than merely rescheduled.
+    h.frames[h.frames.length - 1](600_100);
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(
+      normalizeAngle(parked.bodyAngle + IDLE_SPIN_RAD_PER_SEC * 0.1),
+      9,
+    );
     h.controls.dispose();
   });
 
@@ -754,6 +892,472 @@ describe('createPreviewControls: the animated-skin clock', () => {
   });
 });
 
+describe('parseRotateButtons', () => {
+  function el(part?: string, dir?: string): HTMLElement {
+    const b = document.createElement('button');
+    if (part !== undefined) b.dataset.rotatePart = part;
+    if (dir !== undefined) b.dataset.rotateDir = dir;
+    return b;
+  }
+
+  it('reads the four pairs hud.ts ships, right as +1 and left as -1', () => {
+    // +1 is rightward on screen, which is the sign the drag and ArrowRight already use.
+    // Getting this backwards is a button that turns the tank the way its icon does not.
+    const parsed = parseRotateButtons([
+      el('hull', 'left'),
+      el('hull', 'right'),
+      el('turret', 'left'),
+      el('turret', 'right'),
+    ]);
+    expect(parsed.map((p) => [p.part, p.dir])).toEqual([
+      ['hull', -1],
+      ['hull', 1],
+      ['turret', -1],
+      ['turret', 1],
+    ]);
+  });
+
+  it('drops anything it does not recognise rather than guessing', () => {
+    // The negative control. A typo has to make a button INERT: guessing a default would
+    // give "turn turret left" a button that turns the hull, which looks like it works.
+    expect(parseRotateButtons([el('hull')])).toEqual([]);
+    expect(parseRotateButtons([el(undefined, 'left')])).toEqual([]);
+    expect(parseRotateButtons([el('gun', 'left')])).toEqual([]);
+    expect(parseRotateButtons([el('hull', 'up')])).toEqual([]);
+    expect(parseRotateButtons([el('Hull', 'Left')])).toEqual([]);
+    expect(parseRotateButtons([document.createElement('div')])).toEqual([]);
+    // ...and one bad entry does not take the good ones with it.
+    expect(parseRotateButtons([el('hull', 'up'), el('turret', 'right')]).map((p) => p.part)).toEqual(
+      ['turret'],
+    );
+  });
+});
+
+describe('createPreviewControls: the rotate buttons', () => {
+  it.each([
+    ['hull', 'right', 'bodyAngle', -1],
+    ['hull', 'left', 'bodyAngle', 1],
+    ['turret', 'right', 'turretAngle', -1],
+    ['turret', 'left', 'turretAngle', 1],
+  ] as const)('a press on %s %s nudges %s by one key step', (part, dir, field, sign) => {
+    const h = harness();
+    const other = field === 'bodyAngle' ? 'turretAngle' : 'bodyAngle';
+    h.button(part, dir).dispatchEvent(pointerEvent('pointerdown'));
+    expect(h.controls.pose()[field]).toBeCloseTo(
+      normalizeAngle(INITIAL_PREVIEW_POSE[field] + sign * KEY_STEP_RAD),
+      9,
+    );
+    // The other part must not move: four buttons that all turn the whole tank is the
+    // defect this cluster exists to avoid.
+    expect(h.controls.pose()[other]).toBeCloseTo(INITIAL_PREVIEW_POSE[other], 12);
+    h.controls.dispose();
+  });
+
+  it('agrees with the arrow keys, button for key', () => {
+    // The three schemes have to move the tank the same way, and this is the only place
+    // that compares two of them directly: flipping the button sign passes every
+    // assertion above (they were written from the same constant) and fails here.
+    const viaKey = harness();
+    viaKey.canvas.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }),
+    );
+    viaKey.canvas.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    const keyed = viaKey.controls.pose();
+    viaKey.controls.dispose();
+
+    const viaButton = harness();
+    viaButton.button('hull', 'right').dispatchEvent(pointerEvent('pointerdown'));
+    viaButton.button('turret', 'left').dispatchEvent(pointerEvent('pointerdown'));
+    expect(viaButton.controls.pose().bodyAngle).toBeCloseTo(keyed.bodyAngle, 12);
+    expect(viaButton.controls.pose().turretAngle).toBeCloseTo(keyed.turretAngle, 12);
+    viaButton.controls.dispose();
+  });
+
+  it('holds still for the repeat delay, then turns at the hold rate', () => {
+    // Both halves matter. Without the delay a tap is a spin; without the rate ramp a
+    // hold is one nudge. The boundary is asserted at the constant, so retuning either
+    // does not mean rewriting this.
+    // Frames 50ms apart on purpose: the loop clamps any gap over 100ms, so a test that
+    // jumped straight to the boundary would be measuring the CLAMP, not the delay --
+    // which is exactly what a first draft of this did, and it failed for that reason.
+    const h = harness({ reducedMotion: true });
+    const b = h.button('hull', 'right');
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    const afterPress = h.controls.pose().bodyAngle;
+    const next = (): ((t: number) => void) => h.frames[h.frames.length - 1];
+    next()(0); // establishes the clock
+    // Right up to the boundary: still nothing beyond the press's own nudge.
+    for (let t = 50; t <= HOLD_REPEAT_DELAY_MS; t += 50) next()(t);
+    expect(h.controls.pose().bodyAngle, 'the hold started early').toBeCloseTo(afterPress, 12);
+    // A frame that STRADDLES the boundary turns by the part of it that is past the
+    // boundary (30ms of an 80ms frame), not by the whole frame.
+    next()(HOLD_REPEAT_DELAY_MS + 30);
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(
+      normalizeAngle(afterPress - HOLD_RAD_PER_SEC * 0.03),
+      9,
+    );
+    // ...and a whole frame past it turns by the whole frame.
+    next()(HOLD_REPEAT_DELAY_MS + 80);
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(
+      normalizeAngle(afterPress - HOLD_RAD_PER_SEC * 0.08),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('measures the repeat delay from the press, not from the spin frame before it', () => {
+    // Found in review. The press resets `lastFrameMs`, and without that the first frame
+    // after it differences against the timestamp the IDLE SPIN last stamped -- so
+    // `heldSec` starts pre-loaded with up to a whole clamped frame (0.1s) and the ramp
+    // begins up to a third of the way into a 300ms delay. A tap while the tank was
+    // spinning would then turn further than the same tap on a still tank, which is a
+    // control whose step depends on what it interrupted.
+    //
+    // Driven with the spin RUNNING, which is the only state that can pre-load it.
+    const h = harness();
+    h.frames[0](0);
+    h.frames[1](100); // the spin stamps lastFrameMs = 100
+    const b = h.button('hull', 'right');
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    const afterPress = h.controls.pose().bodyAngle;
+    const next = (): ((t: number) => void) => h.frames[h.frames.length - 1];
+    // Frames 50ms apart from 200: with the reset, heldSec reaches exactly the delay at
+    // t=500 and the ramp has still turned nothing. Without it, heldSec is 0.1 ahead and
+    // the ramp has been running since t=450.
+    for (let t = 200; t <= 500; t += 50) next()(t);
+    expect(h.controls.pose().bodyAngle, 'the ramp started early').toBeCloseTo(afterPress, 12);
+    h.controls.dispose();
+  });
+
+  it('turns the turret alone on a turret hold, and the hull alone on a hull hold', () => {
+    for (const [part, moved, still] of [
+      ['turret', 'turretAngle', 'bodyAngle'],
+      ['hull', 'bodyAngle', 'turretAngle'],
+    ] as const) {
+      const h = harness({ reducedMotion: true });
+      h.button(part, 'right').dispatchEvent(pointerEvent('pointerdown'));
+      const next = (): ((t: number) => void) => h.frames[h.frames.length - 1];
+      next()(0);
+      const held = h.controls.pose();
+      for (let t = 50; t <= HOLD_REPEAT_DELAY_MS + 200; t += 50) next()(t);
+      expect(h.controls.pose()[moved], part).not.toBeCloseTo(held[moved], 6);
+      expect(h.controls.pose()[still], part).toBeCloseTo(held[still], 12);
+      h.controls.dispose();
+    }
+  });
+
+  it.each(['pointerup', 'pointercancel', 'pointerleave'])('stops the hold on %s', (endEvent) => {
+    // A hold that outlives the press is a tank that never stops turning. pointerleave
+    // is in the list because that is what a lifted finger sends, and what dragging off
+    // the button sends on desktop.
+    const h = harness({ reducedMotion: true });
+    const b = h.button('hull', 'right');
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    const next = (): ((t: number) => void) => h.frames[h.frames.length - 1];
+    next()(0);
+    for (let t = 50; t <= HOLD_REPEAT_DELAY_MS + 100; t += 50) next()(t);
+    const turning = h.controls.pose().bodyAngle;
+    const scheduled = h.frames.length;
+    b.dispatchEvent(pointerEvent(endEvent));
+    // Nothing more is scheduled, and a callback already in flight is inert.
+    h.frames[scheduled - 1](HOLD_REPEAT_DELAY_MS + 2000);
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(turning, 12);
+    expect(h.frames).toHaveLength(scheduled);
+    h.controls.dispose();
+  });
+
+  it('stops the hold on dispose, mid-press', () => {
+    // The Customize panel closing while a finger is still down on a button -- the same
+    // race dispose() already handles for the canvas.
+    const h = harness({ reducedMotion: true });
+    h.button('turret', 'left').dispatchEvent(pointerEvent('pointerdown'));
+    const next = (): ((t: number) => void) => h.frames[h.frames.length - 1];
+    next()(0);
+    const scheduled = h.frames.length;
+    h.controls.dispose();
+    const settled = h.controls.pose();
+    h.frames[scheduled - 1](HOLD_REPEAT_DELAY_MS + 2000);
+    expect(h.controls.pose()).toEqual(settled);
+    expect(h.frames).toHaveLength(scheduled);
+    expect(h.timers.size, 'a resume timer outlived the panel').toBe(0);
+    // ...and the buttons are dead afterwards, not merely quiet.
+    h.button('turret', 'left').dispatchEvent(pointerEvent('pointerdown'));
+    h.button('turret', 'left').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose()).toEqual(settled);
+  });
+
+  it('still answers a bare click after an Enter activation', () => {
+    // REGRESSION, found in review. `suppressClick` used to be armed by the key handler
+    // too -- but that handler calls preventDefault(), which is what stops the browser
+    // synthesising a click, so no click ever arrived to consume the flag. It stayed on
+    // and swallowed the NEXT bare click: one keyboard press left the assistive-
+    // technology path dead for the rest of the panel's life. Measured on the broken
+    // code, the pose after the click was 0.34034 where a second step gives 0.20944.
+    const h = harness();
+    const b = h.button('hull', 'right');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start - KEY_STEP_RAD), 9);
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle, 'the click was swallowed').toBeCloseTo(
+      normalizeAngle(start - 2 * KEY_STEP_RAD),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('still answers a bare click after a press that ended off the button', () => {
+    // The other half of the same defect, and a different sequence: pointerdown then
+    // pointerleave (the pointer wandered off and was released somewhere else) produces
+    // no click at all, so a flag armed at PRESS time was never consumed either.
+    const h = harness();
+    const b = h.button('turret', 'left');
+    const start = h.controls.pose().turretAngle;
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    b.dispatchEvent(pointerEvent('pointerleave'));
+    expect(h.controls.pose().turretAngle).toBeCloseTo(normalizeAngle(start + KEY_STEP_RAD), 9);
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().turretAngle, 'the click was swallowed').toBeCloseTo(
+      normalizeAngle(start + 2 * KEY_STEP_RAD),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('does not turn twice when the pointer leaves the button and comes back to release', () => {
+    // The case that decides WHERE the flag is armed. A pointer that leaves and returns
+    // still produces a click on release, so arming only at pointerup -- and not clearing
+    // on leave -- is what keeps this from double-stepping while the two cases above stay
+    // fixed. Clearing the flag on pointerleave passes both of those and fails this.
+    const h = harness();
+    const b = h.button('hull', 'left');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    b.dispatchEvent(pointerEvent('pointerleave'));
+    b.dispatchEvent(pointerEvent('pointerup'));
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start + KEY_STEP_RAD), 9);
+    h.controls.dispose();
+  });
+
+  it('does not let a release from some OTHER pointer arm the click suppression', () => {
+    // A pointerup on the button that no press of ours started -- a drag begun on the
+    // canvas and released over the cluster, when pointer capture is unavailable. It must
+    // not swallow the bare click that follows it from an unrelated activation.
+    const h = harness();
+    const b = h.button('hull', 'right');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(pointerEvent('pointerup', { pointerId: 9 }));
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start - KEY_STEP_RAD), 9);
+    h.controls.dispose();
+  });
+
+  it('does not turn twice for one mouse press, but still answers a bare click', () => {
+    // A pointer press is followed by a click, and both would nudge. The suppression has
+    // to be narrow: an assistive technology can activate a button with a click alone,
+    // and swallowing that leaves four dead buttons for exactly the users the cluster
+    // was added for.
+    const h = harness();
+    const b = h.button('hull', 'right');
+    const start = h.controls.pose().bodyAngle;
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    b.dispatchEvent(pointerEvent('pointerup'));
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start - KEY_STEP_RAD), 9);
+    // A click with no press in front of it is a real activation.
+    b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(normalizeAngle(start - 2 * KEY_STEP_RAD), 9);
+    h.controls.dispose();
+  });
+
+  it('answers Enter and Space, swallowing the default so the browser does not click too', () => {
+    const h = harness();
+    const b = h.button('turret', 'right');
+    const start = h.controls.pose().turretAngle;
+    for (const key of ['Enter', ' ']) {
+      const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      b.dispatchEvent(e);
+      expect(e.defaultPrevented, `${key} was left to the browser`).toBe(true);
+    }
+    expect(h.controls.pose().turretAngle).toBeCloseTo(normalizeAngle(start - 2 * KEY_STEP_RAD), 9);
+    h.controls.dispose();
+  });
+
+  it('leaves every other key on a button alone, including the canvas arrows', () => {
+    // The negative control for the case above, and the one that says the cluster has
+    // not stolen the canvas's scheme: arrows pressed on a BUTTON must do nothing here
+    // (the canvas turns them into rotation only when the canvas has focus).
+    const h = harness();
+    const b = h.button('hull', 'left');
+    const before = h.controls.pose();
+    for (const key of ['ArrowLeft', 'ArrowRight', 'Escape', 'Tab', 'a']) {
+      const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      b.dispatchEvent(e);
+      expect(e.defaultPrevented, `${key} was swallowed`).toBe(false);
+    }
+    expect(h.controls.pose()).toEqual(before);
+    h.controls.dispose();
+  });
+
+  it('leaves the right mouse button on a rotate button to the browser', () => {
+    const h = harness();
+    const before = h.controls.pose();
+    h.button('hull', 'right').dispatchEvent(pointerEvent('pointerdown', { button: 2 }));
+    expect(h.controls.pose()).toEqual(before);
+    h.controls.dispose();
+  });
+
+  it('builds a working turntable with no buttons at all', () => {
+    // The buttons are optional in the deps, and preview.ts's caller may not pass them.
+    // Nothing about the canvas schemes may depend on them existing.
+    const canvas = makeCanvas();
+    let seen: PreviewPose | null = null;
+    const controls = createPreviewControls(canvas, {
+      camera,
+      initialPose: INITIAL_PREVIEW_POSE,
+      reducedMotion: true,
+      onPose: (p) => {
+        seen = p;
+      },
+      raf: () => 0,
+      cancelRaf: () => {},
+    });
+    canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 80, clientY: CY }));
+    expect(seen!.turretAngle).toBeCloseTo(0, 4);
+    controls.dispose();
+  });
+});
+
+describe('createPreviewControls: the idle spin comes back', () => {
+  it('arms a resume when a drag ENDS, and the resume turns the tank again', () => {
+    const h = harness();
+    h.canvas.dispatchEvent(pointerEvent('pointerdown', { clientX: CX, clientY: CY }));
+    h.canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 60, clientY: CY }));
+    expect(h.controls.idleRunning()).toBe(false);
+    expect(h.timers.size, 'a resume was armed while the drag was still running').toBe(0);
+    h.canvas.dispatchEvent(pointerEvent('pointerup', { clientX: CX + 60, clientY: CY }));
+    expect(h.timerDelays.at(-1)).toBe(IDLE_RESUME_DELAY_MS);
+    const parked = h.controls.pose();
+    h.fireTimer();
+    expect(h.controls.idleRunning()).toBe(true);
+    // ...and it really turns, rather than merely reporting that it is running.
+    h.frames[h.frames.length - 1](0);
+    h.frames[h.frames.length - 1](100);
+    expect(h.controls.pose().bodyAngle).toBeCloseTo(
+      normalizeAngle(parked.bodyAngle + IDLE_SPIN_RAD_PER_SEC * 0.1),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('resumes at once when a MOUSE leaves the canvas, and not when a finger lifts off it', () => {
+    // Desktop's resume is pointerleave; touch has no hover to leave, and its
+    // pointerleave arrives the instant the finger comes up -- resuming there would
+    // start the tank turning under a player who has just let go.
+    const mouse = harness();
+    mouse.canvas.dispatchEvent(pointerEvent('pointerenter'));
+    mouse.canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 80, clientY: CY }));
+    expect(mouse.controls.idleRunning()).toBe(false);
+    mouse.canvas.dispatchEvent(pointerEvent('pointerleave'));
+    expect(mouse.controls.idleRunning()).toBe(true);
+    mouse.controls.dispose();
+
+    const touch = harness();
+    touch.canvas.dispatchEvent(pointerEvent('pointerenter', { pointerType: 'touch' }));
+    touch.canvas.dispatchEvent(
+      pointerEvent('pointerdown', { clientX: CX + 80, clientY: CY, pointerType: 'touch' }),
+    );
+    touch.canvas.dispatchEvent(
+      pointerEvent('pointerup', { clientX: CX + 80, clientY: CY, pointerType: 'touch' }),
+    );
+    touch.canvas.dispatchEvent(pointerEvent('pointerleave', { pointerType: 'touch' }));
+    expect(touch.controls.idleRunning(), 'a lifted finger resumed the spin at once').toBe(false);
+    // The timer is what covers touch, and it is armed.
+    touch.fireTimer();
+    expect(touch.controls.idleRunning()).toBe(true);
+    touch.controls.dispose();
+  });
+
+  it('will not resume under a pointer that is still on the canvas', () => {
+    // A hovering mouse IS the aim. The timer fires, finds the pointer still there, and
+    // leaves the tank alone; leaving is what brings the spin back.
+    const h = harness();
+    h.canvas.dispatchEvent(pointerEvent('pointerenter'));
+    h.canvas.dispatchEvent(pointerEvent('pointerdown', { clientX: CX, clientY: CY }));
+    h.canvas.dispatchEvent(pointerEvent('pointerup', { clientX: CX, clientY: CY }));
+    h.fireTimer();
+    expect(h.controls.idleRunning()).toBe(false);
+    h.canvas.dispatchEvent(pointerEvent('pointerleave'));
+    expect(h.controls.idleRunning()).toBe(true);
+    h.controls.dispose();
+  });
+
+  it('will not resume in the middle of a held button', () => {
+    // The reachable path, spelled out because it is not the obvious one: a press CANCELS
+    // any pending resume, so the timer cannot fire mid-hold. What can is the mouse
+    // leaving the CANVAS while a button is held -- the pointer moved off the canvas onto
+    // the button, and that leave would otherwise start the spin turning against the hold.
+    const h = harness();
+    const b = h.button('hull', 'right');
+    b.dispatchEvent(pointerEvent('pointerdown'));
+    expect(h.timers.size, 'a press armed a resume against itself').toBe(0);
+    h.canvas.dispatchEvent(pointerEvent('pointerenter'));
+    h.canvas.dispatchEvent(pointerEvent('pointerleave'));
+    expect(h.controls.idleRunning(), 'the spin resumed against a held button').toBe(false);
+    // The control: the SAME leave, with nothing held, does resume -- so the case above
+    // is the hold declining it, not the leave failing to work.
+    b.dispatchEvent(pointerEvent('pointerup'));
+    h.canvas.dispatchEvent(pointerEvent('pointerenter'));
+    h.canvas.dispatchEvent(pointerEvent('pointerleave'));
+    expect(h.controls.idleRunning()).toBe(true);
+    h.controls.dispose();
+  });
+
+  it('never resumes under prefers-reduced-motion, on any path', () => {
+    // The population of paths that end an interaction: a release, a mouse leaving, and
+    // the timer. None of them may start a spin the player has asked not to see.
+    const h = harness({ reducedMotion: true });
+    h.canvas.dispatchEvent(pointerEvent('pointerdown', { clientX: CX, clientY: CY }));
+    h.canvas.dispatchEvent(pointerEvent('pointerup', { clientX: CX, clientY: CY }));
+    expect(h.timers.size, 'a resume was armed under reduced motion').toBe(0);
+    h.canvas.dispatchEvent(pointerEvent('pointerleave'));
+    expect(h.controls.idleRunning()).toBe(false);
+    expect(h.frames).toHaveLength(0);
+    h.controls.dispose();
+  });
+
+  it('re-arms rather than stacking: one pending resume, whatever happens', () => {
+    // Each end-of-interaction cancels the previous timer. Without that, a player who
+    // taps five times has five resumes pending, the first of which fires early.
+    const h = harness();
+    for (let i = 0; i < 5; i++) {
+      h.canvas.dispatchEvent(pointerEvent('pointerdown', { clientX: CX, clientY: CY }));
+      h.canvas.dispatchEvent(pointerEvent('pointerup', { clientX: CX, clientY: CY }));
+    }
+    expect(h.timers.size).toBe(1);
+    // ...and the ones it replaced were CANCELLED, not left running.
+    expect(h.clearedTimers.length).toBeGreaterThanOrEqual(4);
+    h.controls.dispose();
+    expect(h.timers.size).toBe(0);
+
+    // The path above is cancelled by the PRESS, not by armResume -- so on its own it
+    // says nothing about armResume's own cancel, and a mutation removing that survived
+    // it. This is the sequence with no press in the middle: releasing a rotate button
+    // and then moving the mouse off it ends the interaction twice in a row.
+    const b2 = harness();
+    const btn = b2.button('hull', 'right');
+    btn.dispatchEvent(pointerEvent('pointerdown'));
+    btn.dispatchEvent(pointerEvent('pointerup'));
+    expect(b2.timers.size).toBe(1);
+    btn.dispatchEvent(pointerEvent('pointerleave'));
+    expect(b2.timers.size, 'two resumes are pending at once').toBe(1);
+    b2.controls.dispose();
+  });
+});
+
 describe('createPreviewControls: it reports changes, and only changes', () => {
   it('does not call back on construction', () => {
     const h = harness();
@@ -804,6 +1408,48 @@ describe('createPreviewControls: teardown', () => {
     expect(added.length).toBeGreaterThan(0);
     controls.dispose();
     expect(removed).toEqual(added);
+  });
+
+  it('removes the DOCUMENT listener too, which nothing else can see', () => {
+    // The one leak in this module with NO behavioural signature. `visibilitychange` is
+    // bound on `document`, not on the canvas, so the canvas-level check above cannot see
+    // it -- and after dispose the handler is inert anyway (`wantsFrame()` is false once
+    // `disposed` is set), so no observable behaviour changes either. What leaks is the
+    // listener and the whole controller closure behind it, once per Customize open, for
+    // the life of the session.
+    //
+    // Measured: registering it outside the teardown list survives the entire suite. This
+    // is the only assertion that kills that.
+    const realAdd = document.addEventListener.bind(document);
+    const realRemove = document.removeEventListener.bind(document);
+    const added: Array<[string, unknown]> = [];
+    const removed: Array<[string, unknown]> = [];
+    document.addEventListener = ((t: string, f: unknown, o?: unknown) => {
+      added.push([t, f]);
+      return realAdd(t, f as EventListener, o as boolean);
+    }) as typeof document.addEventListener;
+    document.removeEventListener = ((t: string, f: unknown, o?: unknown) => {
+      removed.push([t, f]);
+      return realRemove(t, f as EventListener, o as boolean);
+    }) as typeof document.removeEventListener;
+    try {
+      const controls = createPreviewControls(makeCanvas(), {
+        camera,
+        initialPose: INITIAL_PREVIEW_POSE,
+        onPose: () => {},
+        raf: () => 1,
+        cancelRaf: () => {},
+      });
+      // It really did bind one, or the pairing below would hold vacuously.
+      expect(added.map(([t]) => t)).toContain('visibilitychange');
+      controls.dispose();
+      // Paired by type AND identity, like the canvas check: removeEventListener with a
+      // different function is a silent no-op.
+      expect(removed).toEqual(added);
+    } finally {
+      document.addEventListener = realAdd;
+      document.removeEventListener = realRemove;
+    }
   });
 
   it('goes quiet after dispose, on every input it listens for', () => {

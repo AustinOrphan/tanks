@@ -1050,17 +1050,23 @@ await checkAsync('the idle spin actually turns the tank on the real rAF', async 
   return null;
 });
 
-await checkAsync('the idle spin stops for good at the first interaction, for a NON-ANIMATED skin', async () => {
+await checkAsync('the idle spin stops at the first interaction and does not drift back on its own, for a NON-ANIMATED skin', async () => {
   // The claim the whole design rests on -- a preview that resumes drifting under
   // someone trying to look at one face is the failure this is written to avoid --
   // and until now it was asserted only against an injected raf/cancelRaf pair.
   //
-  // THE QUALIFIER IS NEW AND LOAD-BEARING. "0 bytes change after a hover" used to be
+  // "does not drift back" is now bounded rather than permanent: the spin RESUMES, and
+  // the two things that bring it back are a mouse leaving the canvas (checked below)
+  // and IDLE_RESUME_DELAY_MS of quiet. Neither happens inside this window -- no
+  // pointerleave is dispatched and 500ms is far short of the delay -- so a spin that
+  // came back here is one that never stopped.
+  //
+  // THE SKIN QUALIFIER IS ALSO LOAD-BEARING. "0 bytes change after a hover" used to be
   // unconditional, and it was safe to state that way only because `preview.ts` passed a
   // hardwired `dt = 0`: selecting `flow` could not have moved a pixel. Now that it can,
   // this check is about the SPIN, and it says so -- with the static skin selected
   // explicitly rather than relying on a freshly built preview happening to have no skin
-  // at all. The animated case is the next check, and it asserts the opposite.
+  // at all. The animated case is two checks below, and it asserts the opposite.
   const c = previewCanvas();
   const preview = createTankPreview(c);
   if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
@@ -1228,6 +1234,125 @@ await checkAsync('a disposed preview schedules no further frames', async () => {
   c.remove();
   const moved = bytesDiffering(before, after);
   if (moved !== 0) return `${moved} bytes changed 500ms after dispose -- a frame loop outlived the preview`;
+  return null;
+});
+
+/** The HUD's rotate cluster, as far as preview.ts is concerned: four buttons carrying
+ * the two data attributes. Built here rather than mounted from hud.ts so this file keeps
+ * testing the RENDER path -- hud.ts's markup has its own guards under vitest. */
+function rotateButtons(): HTMLButtonElement[] {
+  const out: HTMLButtonElement[] = [];
+  for (const part of ['hull', 'turret']) {
+    for (const dir of ['left', 'right']) {
+      const b = document.createElement('button');
+      b.dataset.rotatePart = part;
+      b.dataset.rotateDir = dir;
+      document.body.appendChild(b);
+      out.push(b);
+    }
+  }
+  return out;
+}
+
+function buttonPointer(type: string): PointerEvent {
+  return new PointerEvent(type, {
+    pointerId: 2,
+    pointerType: 'mouse',
+    button: 0,
+    buttons: type === 'pointerdown' ? 1 : 0,
+    bubbles: true,
+    cancelable: true,
+  });
+}
+
+await checkAsync('a rotate button turns the tank in the rendered image', async () => {
+  // The vitest cases prove the ANGLES move; nothing there can see whether the angle
+  // reaches the pixels, because preview.ts is what wires the controls to a draw. This
+  // is the same gap the drag check next door exists for, one control further along.
+  const c = previewCanvas();
+  const btns = rotateButtons();
+  const preview = createTankPreview(c, btns);
+  if (!preview) { c.remove(); for (const b of btns) b.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  // A press stops the idle spin, so the two grabs below differ only by the button.
+  const hullRight = btns.find((b) => b.dataset.rotatePart === 'hull' && b.dataset.rotateDir === 'right')!;
+  hullRight.dispatchEvent(buttonPointer('pointerdown'));
+  hullRight.dispatchEvent(buttonPointer('pointerup'));
+  await idle(100);
+  const before = grab(gl, c.width, c.height);
+  hullRight.dispatchEvent(buttonPointer('pointerdown'));
+  hullRight.dispatchEvent(buttonPointer('pointerup'));
+  const after = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  for (const b of btns) b.remove();
+  const moved = bytesDiffering(before, after);
+  // One KEY_STEP_RAD nudge is 7.5 degrees of hull, a much smaller silhouette change
+  // than the 90px drag next door. Both ends measured on this harness: 11828 of 197600
+  // bytes with the buttons wired, and EXACTLY 0 with preview.ts stopping forwarding
+  // rotateButtons to createPreviewControls -- which is the one mutation in that sweep
+  // no vitest case could see, and the reason this check exists.
+  if (moved < 1000) return `only ${moved} of ${before.length} bytes changed -- the button did not reach the pixels`;
+  return null;
+});
+
+await checkAsync('holding a rotate button keeps turning it, well past one nudge', async () => {
+  // The hold is a rAF ramp, so it cannot be seen by anything synchronous -- and a
+  // handler that stepped once and never started the ramp passes the check above.
+  const c = previewCanvas();
+  const btns = rotateButtons();
+  const preview = createTankPreview(c, btns);
+  if (!preview) { c.remove(); for (const b of btns) b.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const turret = btns.find((b) => b.dataset.rotatePart === 'turret' && b.dataset.rotateDir === 'right')!;
+  // Tap once to stop the spin and settle, then measure a HELD press against a tap.
+  turret.dispatchEvent(buttonPointer('pointerdown'));
+  turret.dispatchEvent(buttonPointer('pointerup'));
+  await idle(100);
+  const before = grab(gl, c.width, c.height);
+  turret.dispatchEvent(buttonPointer('pointerdown'));
+  await idle(100); // inside HOLD_REPEAT_DELAY_MS: the nudge only
+  const nudged = grab(gl, c.width, c.height);
+  await idle(700); // past the delay: ~0.6s of ramp, about 55 degrees of turret
+  const held = grab(gl, c.width, c.height);
+  turret.dispatchEvent(buttonPointer('pointerup'));
+  await idle(300);
+  const released = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  for (const b of btns) b.remove();
+  const ramp = bytesDiffering(nudged, held);
+  const nudge = bytesDiffering(before, nudged);
+  const afterRelease = bytesDiffering(held, released);
+  if (ramp <= nudge) {
+    return `the hold moved ${ramp} bytes against a single nudge's ${nudge} -- the ramp is not running`;
+  }
+  if (afterRelease !== 0) return `${afterRelease} bytes changed 300ms after release -- the hold outlived the press`;
+  return null;
+});
+
+await checkAsync('the idle spin comes back when the mouse leaves the canvas', async () => {
+  // Desktop's resume path, end to end and on the real clock. The vitest case asserts
+  // idleRunning() flips; this asserts the loop is actually repainting again, which is
+  // the whole point of resuming it.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  c.dispatchEvent(pointerAt('pointerenter', c, 70, 0));
+  c.dispatchEvent(pointerAt('pointermove', c, 70, 0));
+  await idle(100);
+  const stopped = grab(gl, c.width, c.height);
+  await idle(300);
+  const stillStopped = grab(gl, c.width, c.height);
+  c.dispatchEvent(pointerAt('pointerleave', c, 700, 0));
+  await idle(500);
+  const resumed = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  if (bytesDiffering(stopped, stillStopped) !== 0) return 'the spin never stopped, so a resume proves nothing';
+  const moved = bytesDiffering(stillStopped, resumed);
+  if (moved < 1000) return `only ${moved} of ${resumed.length} bytes changed 500ms after the mouse left -- the spin did not come back`;
   return null;
 });
 

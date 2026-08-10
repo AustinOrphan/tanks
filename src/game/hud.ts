@@ -114,6 +114,14 @@ export interface Hud {
    */
   readonly previewCanvas: HTMLCanvasElement;
   /**
+   * The rotate cluster's four buttons, handed out with the canvas for the same reason:
+   * the markup is the HUD's, the behaviour is `render/preview-controls.ts`'s. Each one
+   * carries `data-rotate-part` / `data-rotate-dir`, which is what the controls read --
+   * so this is an element list, not a callback API, and the HUD binds no click of its
+   * own to them.
+   */
+  readonly previewRotateButtons: readonly HTMLButtonElement[];
+  /**
    * The Customize panel just became visible/hidden. This is the ONE chokepoint for
    * both transitions -- the Back button (`showCustomize(false)`) and any OTHER state
    * change, which closes the panel unconditionally (see setState) -- so a caller that
@@ -171,6 +179,43 @@ export interface Hud {
 
 /** How long an unlock toast sits on screen. Feel, not measurement. */
 const TOAST_MS = 3200;
+
+/**
+ * The four rotate buttons' icons, built from two halves so the pairs cannot drift apart:
+ * an arc arrow (mirrored for the left-hand button by a transform, NOT by a second
+ * hand-written path -- a mirrored copy is where an asymmetric pair comes from) over the
+ * silhouette of the part it turns.
+ *
+ * `currentColor` throughout, so the buttons' own hover/active colours carry the icon
+ * with them, and `aria-hidden` because the accessible name lives on the button.
+ */
+const ROTATE_ARROW =
+  '<path d="M5 9a9 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+  '<path d="M19 11.4l-2.3-3.8h4.6z" fill="currentColor"/>';
+const ROTATE_HULL = '<rect x="7" y="13.5" width="10" height="7.5" rx="2" fill="currentColor"/>';
+const ROTATE_TURRET =
+  '<circle cx="10.5" cy="17.2" r="3.4" fill="currentColor"/>' +
+  '<rect x="13" y="16.2" width="6.5" height="2" rx="1" fill="currentColor"/>';
+
+function rotateIcon(part: 'hull' | 'turret', dir: 'left' | 'right'): string {
+  const arrow =
+    dir === 'right'
+      ? ROTATE_ARROW
+      : `<g transform="translate(24,0) scale(-1,1)">${ROTATE_ARROW}</g>`;
+  return (
+    '<svg class="hud-rotate-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    arrow +
+    (part === 'hull' ? ROTATE_HULL : ROTATE_TURRET) +
+    '</svg>'
+  );
+}
+
+const ROTATE_ICON = {
+  hullLeft: rotateIcon('hull', 'left'),
+  hullRight: rotateIcon('hull', 'right'),
+  turretLeft: rotateIcon('turret', 'left'),
+  turretRight: rotateIcon('turret', 'right'),
+};
 
 export function createHud(root: HTMLElement): Hud {
   const el = document.createElement('div');
@@ -263,23 +308,34 @@ export function createHud(root: HTMLElement): Hud {
            image is not interactive) and an application role hands the whole key
            stream over for the sake of two arrows.
 
-           The hint below is shown ONLY while the canvas has :focus-visible (hud.css),
-           and this is the narrow exception to "no prose in this pane". The pointer
-           scheme needs no words -- the grab cursor and the idle spin say it -- but
-           shift+arrows had NO discoverability path at all for a sighted keyboard user:
-           title= needs a hovering pointer they do not have, and aria-label= is never
-           rendered. The one scheme added FOR keyboard users was invisible to the
-           keyboard users who can see. Gating it on focus means nothing is on screen
-           until someone tabs to the canvas, so the pane still opens with two labelled
-           sections and nothing else.
-
-           The hint is aria-hidden because it restates what aria-label already says: a
-           screen reader that announced the scheme on focus must not hear it twice. It
-           has to be the canvas's IMMEDIATE next sibling -- hud.css reveals it with the
-           adjacent-sibling combinator, and CSS has no way back up the tree, so anything
-           inserted between them silently switches it off. -->
+           A focus-gated <p> used to sit here spelling out the keyboard scheme, because
+           shift+arrows had no discoverability path for a sighted keyboard user. The row
+           of buttons below replaces it and does the job better: it is on screen for
+           everyone rather than only for whoever tabs to the canvas, it works for touch
+           (which had no path to the scheme at all), and it teaches the hull/turret split
+           by showing it as four controls. So the pane is back to no prose. -->
       <canvas class="hud-preview" tabindex="0" title="Drag to turn the hull. Point to aim the turret. Arrow keys turn the hull, shift+arrows turn the turret." aria-label="Tank preview. Drag to turn the hull, or use the left and right arrow keys. Move the pointer over it to aim the turret, or hold shift with the arrow keys."></canvas>
-      <p class="hud-preview-hint" aria-hidden="true">Arrows turn the hull &middot; shift+arrows turn the turret</p>
+      <!-- The rotate cluster: hull left/right, turret left/right, in that order, with
+           hold-to-repeat (render/preview-controls.ts, which reads the data attributes
+           below -- an unrecognised pair leaves a button INERT, which is why the exact
+           four are pinned in hud.test.ts).
+
+           Four buttons and not a slider: a slider is a linear control for a circular
+           quantity, so it needs endpoints that do not exist, wraps badly at 0/360, and
+           eats width in a 260px pane.
+
+           Icons only, no visible text: this is a control cluster, not prose, and the
+           pane is pinned at two labelled sections. The accessible name is on the button
+           via aria-label; the SVGs are aria-hidden so a screen reader reads the name
+           once. Each icon carries the SHAPE of what it turns -- a hull plate, or a
+           turret with its barrel -- under an arc arrow pointing the way the tank will
+           go, which is the same direction the matching arrow key and drag send it. -->
+      <div class="hud-preview-rotate">
+        <button class="hud-rotate-btn" type="button" data-rotate-part="hull" data-rotate-dir="left" aria-label="Turn hull left" title="Turn hull left (hold to keep turning)">${ROTATE_ICON.hullLeft}</button>
+        <button class="hud-rotate-btn" type="button" data-rotate-part="hull" data-rotate-dir="right" aria-label="Turn hull right" title="Turn hull right (hold to keep turning)">${ROTATE_ICON.hullRight}</button>
+        <button class="hud-rotate-btn" type="button" data-rotate-part="turret" data-rotate-dir="left" aria-label="Turn turret left" title="Turn turret left (hold to keep turning)">${ROTATE_ICON.turretLeft}</button>
+        <button class="hud-rotate-btn" type="button" data-rotate-part="turret" data-rotate-dir="right" aria-label="Turn turret right" title="Turn turret right (hold to keep turning)">${ROTATE_ICON.turretRight}</button>
+      </div>
       <section class="hud-customize-section">
         <h2>Hull</h2>
         <div class="hud-swatches"></div>
@@ -376,6 +432,9 @@ export function createHud(root: HTMLElement): Hud {
   const customizeOpenBtn = el.querySelector('.hud-customize-open') as HTMLButtonElement;
   const customizeView = el.querySelector('.hud-customize') as HTMLElement;
   const previewCanvasEl = el.querySelector('.hud-preview') as HTMLCanvasElement;
+  const previewRotateBtns = Array.from(
+    el.querySelectorAll('.hud-preview-rotate .hud-rotate-btn'),
+  ) as HTMLButtonElement[];
   const swatchesRow = el.querySelector('.hud-swatches') as HTMLElement;
   const accentsRow = el.querySelector('.hud-accents') as HTMLElement;
   const customizeBackBtn = el.querySelector('.hud-customize-back') as HTMLButtonElement;
@@ -1145,6 +1204,7 @@ export function createHud(root: HTMLElement): Hud {
       pickAccentCbs.push(cb);
     },
     previewCanvas: previewCanvasEl,
+    previewRotateButtons: previewRotateBtns,
     onCustomizeOpen(cb: () => void): void {
       customizeOpenCbs.push(cb);
     },

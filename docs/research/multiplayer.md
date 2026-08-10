@@ -26,10 +26,10 @@ strongest argument for starting local is that the camera already frames the whol
 a fixed position, so couch co-op needs no split-screen work at all.
 
 **The one thing that decides whether online is possible on the cheap — bit-identical floating
-point across Chrome, Firefox and Safari — is UNMEASURED.** No second JS engine is installed
-on this box. That is a task, not a permanent barrier: `playwright` is reachable from npm and
-ships Linux builds of WebKit (JavaScriptCore) and Firefox (SpiderMonkey), though it is not
-currently a dependency and its WebKit is not identical to shipped Safari.
+point across Chrome, Firefox and Safari — was UNMEASURED when this was written.** It is now
+half-measured: see the update under open question 1. Three engines (V8, SpiderMonkey and
+Playwright's JavaScriptCore) agree with the Node baseline on Linux x86-64; shipped Safari,
+iOS and non-x86-64 remain untested.
 
 ---
 
@@ -295,9 +295,22 @@ behaviour under the `/tanks/` deploy are all unverified.
    and rollback are both live options. If they diverge, either quantize the sim's 18
    transcendental lines (bounded) or abandon peer-deterministic netcode for an authoritative
    Node server. **This is THE gating measurement and nothing else should be decided before
-   it.** Practical note: Playwright ships Linux WebKit (JavaScriptCore) and Firefox
-   (SpiderMonkey) builds — but it is not a dependency of this repo, and its WebKit is not
-   identical to shipped Safari, so the iOS half stays open regardless.
+   it.**
+
+   > **PARTIALLY ANSWERED 2026-08-10** (issue #121). The rig exists —
+   > `npm run trace:browser -- --all`, which serves `tools/baseline/page.html` and runs
+   > `tools/baseline/trace.ts` under Playwright. Measured here, one run each:
+   > **chromium 151.0.7922.34 (V8), firefox 153.0 (SpiderMonkey) and Playwright's webkit
+   > (JavaScriptCore, `Version/26.5`) all printed `015a5d17…`** — identical to the Node
+   > baseline. Playwright 1.62.0, Linux x86-64, headless, `--all`.
+   >
+   > **What that does NOT settle**, and the reasons are separate: Playwright's WebKit is a
+   > Linux build of JSC and is not shipped Safari (its UA even claims macOS — read it as
+   > "JSC agrees", not "Safari agrees"); no iOS engine was involved; every run was
+   > x86-64, so ARM is untested; and agreement on one sampled trajectory is evidence
+   > about the code paths that trajectory exercises, not a proof about `Math.hypot`
+   > generally. The Safari/iOS half is now a task with a known method — open the page on
+   > the device — rather than an unknown.
 2. **Should a second player be a new `TankKind` (`'player2'`) or a new field on `Tank`
    (e.g. `controlledBy`)?** Prototype both far enough to count touched files. The `TankKind`
    route gets compiler help — a new kind is a compile error until `TANK_KINDS` lists it,

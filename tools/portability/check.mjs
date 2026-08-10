@@ -144,31 +144,142 @@ export function portabilityFailures(indexHtml, bundles) {
   return failures;
 }
 
-/** Read a built dist/ into the shape `portabilityFailures` takes. */
-export function readDist(dir) {
-  const assetDir = join(dir, 'assets');
+/**
+ * The same rule, one layer out: the PWA shell.
+ *
+ * A web app manifest carries two more URLs that resolve against an origin, and both are
+ * silent when wrong. `start_url: "/"` installs a shortcut that opens the origin ROOT --
+ * austinorphan.com's portfolio, not /tanks/ -- and `scope: "/"` claims every other
+ * project page on the domain. Neither shows up in the browser, in the bundle, or in any
+ * unit test: the game plays fine and only the INSTALLED copy is wrong.
+ *
+ * Presence is asserted, not merely shape. `hud.css.test.ts`'s lesson is that a guard
+ * which finds nothing must say so rather than report success -- so removing the manifest
+ * fails here, deliberately, and removing it on purpose means deleting this check too.
+ *
+ * @param {string} indexHtml
+ * @param {{files: string[], texts: Record<string, string>}} dist  every file in the
+ *   built tree (posix-relative), and the text of the ones worth reading
+ * @returns {string[]}
+ */
+export function manifestFailures(indexHtml, dist) {
+  const failures = [];
+  /** `./icons/x.png` -> `icons/x.png`; anything not relative is reported by the caller. */
+  const toPath = (href) => href.replace(/^\.\//, '');
+  const link = (rel) =>
+    indexHtml.match(new RegExp(`<link[^>]*rel="${rel}"[^>]*href="([^"]+)"`)) ??
+    indexHtml.match(new RegExp(`<link[^>]*href="([^"]+)"[^>]*rel="${rel}"`));
+
+  const manifestLink = link('manifest');
+  if (!manifestLink) {
+    failures.push(
+      'index.html links no web app manifest -- Add to Home Screen is silently unavailable. ' +
+        'If that is deliberate, delete this check with it.',
+    );
+    return failures;
+  }
+  const href = manifestLink[1];
+  if (!href.startsWith('./')) {
+    failures.push(
+      `index.html links the manifest as ${JSON.stringify(href)}, which resolves against the ` +
+        `origin root rather than the deploy subpath.`,
+    );
+  }
+  const manifestPath = toPath(href);
+  const text = dist.texts[manifestPath];
+  if (text === undefined) {
+    failures.push(`${manifestPath} is linked by index.html but is not in the built output`);
+    return failures;
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(text);
+  } catch (e) {
+    failures.push(`${manifestPath} is not valid JSON: ${e.message}`);
+    return failures;
+  }
+
+  for (const field of ['start_url', 'scope']) {
+    const value = manifest[field];
+    if (typeof value !== 'string' || !value.startsWith('./')) {
+      failures.push(
+        `${manifestPath}: ${field} is ${JSON.stringify(value)} -- it resolves against the ` +
+          `manifest's URL, so anything not relative launches the origin root instead of the game.`,
+      );
+    }
+  }
+
+  // Icons, and the iOS tile, which is a link rather than a manifest entry.
+  const referenced = [
+    ...(Array.isArray(manifest.icons) ? manifest.icons.map((i) => i && i.src) : []),
+    link('apple-touch-icon')?.[1],
+  ];
+  if (!Array.isArray(manifest.icons) || manifest.icons.length === 0) {
+    failures.push(`${manifestPath} declares no icons, so nothing is installable`);
+  }
+  if (!link('apple-touch-icon')) {
+    failures.push('index.html links no apple-touch-icon -- iOS reads no other icon source');
+  }
+  for (const src of referenced) {
+    if (typeof src !== 'string') continue;
+    if (!src.startsWith('./')) {
+      failures.push(`${manifestPath}: icon ${JSON.stringify(src)} is not relative`);
+      continue;
+    }
+    if (!dist.files.includes(toPath(src))) {
+      failures.push(`${src} is referenced but missing from the built output`);
+    }
+  }
+  return failures;
+}
+
+/** Every file under `dir`, as posix-relative paths. */
+function walk(dir, prefix = '') {
   let entries = [];
   try {
-    entries = readdirSync(assetDir);
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
-    entries = [];
+    return [];
+  }
+  return entries.flatMap((e) =>
+    e.isDirectory()
+      ? walk(join(dir, e.name), `${prefix}${e.name}/`)
+      : [`${prefix}${e.name}`],
+  );
+}
+
+/** Read a built dist/ into the shape the two checkers take. */
+export function readDist(dir) {
+  const files = walk(dir);
+  const texts = {};
+  for (const f of files) {
+    if (f.endsWith('.webmanifest') || f.endsWith('.json')) {
+      texts[f] = readFileSync(join(dir, f), 'utf8');
+    }
   }
   return {
     indexHtml: readFileSync(join(dir, 'index.html'), 'utf8'),
-    bundles: entries
-      .filter((f) => f.endsWith('.js'))
-      .map((f) => ({ name: `assets/${f}`, source: readFileSync(join(assetDir, f), 'utf8') })),
+    bundles: files
+      .filter((f) => f.startsWith('assets/') && f.endsWith('.js'))
+      .map((f) => ({ name: f, source: readFileSync(join(dir, f), 'utf8') })),
+    dist: { files, texts },
   };
 }
 
 // CLI only when invoked directly, so the test can import the pure functions.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dir = process.argv[2] ?? 'dist';
-  const { indexHtml, bundles } = readDist(dir);
-  const failures = portabilityFailures(indexHtml, bundles);
+  const { indexHtml, bundles, dist } = readDist(dir);
+  const failures = [
+    ...portabilityFailures(indexHtml, bundles),
+    ...manifestFailures(indexHtml, dist),
+  ];
   if (failures.length) {
     console.error(failures.join('\n'));
     process.exit(1);
   }
-  console.log(`subpath-portable: ${dir}/index.html + ${bundles.length} bundle(s) checked`);
+  console.log(
+    `subpath-portable: ${dir}/index.html + ${bundles.length} bundle(s) + the PWA shell checked`,
+  );
 }

@@ -42,6 +42,16 @@
     "tests": ["src/render/skins.test.ts"]
   },
   {
+    "id": "preview-drops-the-rotate-buttons",
+    "file": "src/render/preview.ts",
+    "find": "    rotateButtons,\n",
+    "replace": "    rotateButtons: rotateButtons ? undefined : undefined,\n",
+    "expect": "survives",
+    "expectFailures": 0,
+    "why": "A DISCLOSED SURVIVOR, and not an equivalent mutant -- the shipped behaviour it removes is real: the Customize pane's four rotate buttons stop working entirely. It survives because nothing vitest can run reaches it. createTankPreview builds a WebGLRenderer, which jsdom cannot provide (preview.test.ts exercises only the null-return branch for exactly that reason), so no vitest case can observe whether the buttons were forwarded to createPreviewControls; preview-controls.test.ts constructs the controls itself and so never goes through this line at all. What DOES kill it is tools/gl/harness.ts's 'a rotate button turns the tank in the rendered image', in a real browser, measured at both ends: 11828 of 197600 bytes differ with the argument wired and EXACTLY 0 with it dropped. Recorded here rather than left as a number in a PR body so the claim is re-derivable -- and so that if someone ever finds a way to cover this under vitest, the harness flips it to a mismatch instead of letting the entry go quietly stale. The replacement keeps the parameter read so the mutation compiles: a tsc failure would prove nothing about test coverage.",
+    "tests": ["src/render/preview.test.ts", "src/render/preview-controls.test.ts"]
+  },
+  {
     "id": "framing-bounds-multiplier-3",
     "file": "src/render/framing.ts",
     "find": "return { width: worldWidth + boundary * 2, height: worldHeight + boundary * 2 };",
@@ -60,5 +70,35 @@
     "expectFailures": 1,
     "why": "HISTORY, not the current story: when this entry was first written (against an earlier commit, FRAME_MARGIN 0.06), it was a documented SURVIVING gap -- framing.test.ts imported FRAME_MARGIN and used the same constant on both sides of its own assertion (to drive fitCameraToArea AND to compute the test's expected screen-space bound), so doubling it moved both sides together and passed regardless of value. PR #103 ('give the board the screen back') independently added a coverage-ratio floor (`covers at least 48% of the frame...`) that does NOT reference FRAME_MARGIN at all -- it measures the framed rect's actual projected area against a hardcoded 0.48 threshold. Re-verifying this entry against current main (as this manifest's own re-verification process requires) found the gap CLOSED: doubling FRAME_MARGIN now fails that coverage floor (46.5% < 48% at 'phone landscape' on 3 of 4 arenas), one test, moved from SURVIVES to KILLED by a change that never touched this mutation. Left in the manifest as a killed entry rather than dropped, specifically because the reversal is itself the lesson: a stale 'known gap' claim in a comment or a PR body would have been WRONG here had it not been re-run.",
     "tests": ["src/render/framing.test.ts"]
+  },
+  {
+    "id": "framing-fit-bracket-4.5",
+    "file": "src/render/framing.ts",
+    "find": "let hi = span * 8;",
+    "replace": "let hi = span * 4.5;",
+    "expect": "killed",
+    "expectFailures": 9,
+    "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 9 -- 4 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire. NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here.",
+    "tests": ["src/render/framing.test.ts"]
+  },
+  {
+    "id": "hud-topbar-safe-area-dropped",
+    "file": "src/game/hud.css",
+    "find": "max(var(--hud-topbar-pad-y), env(safe-area-inset-top))",
+    "replace": "var(--hud-topbar-pad-y)",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The topbar's top inset is what keeps the score row out from under a portrait status bar / Dynamic Island. CSS is typechecked by nothing and read by no other test, so dropping this is invisible everywhere else -- the same class of silent loss that killed the losing-a-life vignette. Two tests fail: the presence check and the single-source-of-padding check, which reads the same declaration.",
+    "tests": ["src/game/hud.css.test.ts"]
+  },
+  {
+    "id": "hud-narrow-block-overrides-padding",
+    "file": "src/game/hud.css",
+    "find": "    --hud-topbar-pad-y: 6px;\n    --hud-topbar-pad-x: 8px;",
+    "replace": "    padding: 6px 8px;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The trap the custom properties exist to remove, and the one a presence-only assertion cannot see: the base rule still carries every env(safe-area-inset-*) it ever did, so 'the topbar insets itself' still reads as true -- but a padding SHORTHAND in a later @media wins outright, and this one matches at 360px, which is a phone. Exactly one test fails, and it is the one written for this: 'lets no later rule quietly override the safe-area insets'.",
+    "tests": ["src/game/hud.css.test.ts"]
   }
 ]

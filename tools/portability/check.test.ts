@@ -9,9 +9,13 @@
  * catching anything when the toolchain moved.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the workflows can run it
-import { portabilityFailures } from './check.mjs';
+import { portabilityFailures, manifestFailures } from './check.mjs';
 
 const RELATIVE_HTML = '<script type="module" crossorigin src="./assets/index-abc.js"></script>';
 const ABSOLUTE_HTML = '<script type="module" crossorigin src="/assets/index-abc.js"></script>';
@@ -132,5 +136,155 @@ describe('subpath portability checker', () => {
       );
       expect(text, `${workflow} has re-inlined the assertion`).not.toContain("grep -q 'src=");
     }
+  });
+});
+
+/**
+ * The PWA shell's own negative controls. Every failure below is silent in the browser:
+ * the game loads and plays, and only the INSTALLED copy is broken -- which is why none
+ * of them can be left to review.
+ */
+describe('web app manifest portability', () => {
+  const HTML =
+    '<link rel="manifest" href="./manifest.webmanifest" />' +
+    '<link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />';
+  const GOOD = {
+    start_url: './',
+    scope: './',
+    icons: [{ src: './icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
+  };
+  /** A dist/ shaped like the real one: the files that exist, and the manifest's text. */
+  const dist = (manifest: unknown, files = ['icons/icon-192.png', 'icons/apple-touch-icon-180.png']) => ({
+    files: [...files, 'manifest.webmanifest', 'index.html'],
+    texts: { 'manifest.webmanifest': JSON.stringify(manifest) },
+  });
+
+  it('passes the shape this repo actually ships', () => {
+    // Fails if any check below gains a false positive on real output, which would make
+    // the deploy workflow unmergeable rather than merely unhelpful.
+    expect(manifestFailures(HTML, dist(GOOD))).toEqual([]);
+  });
+
+  it('catches an origin-absolute start_url, which opens the portfolio instead', () => {
+    const failures = manifestFailures(HTML, dist({ ...GOOD, start_url: '/' }));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/start_url is "\/"/);
+  });
+
+  it('catches an origin-absolute scope, which claims every page on the domain', () => {
+    const failures = manifestFailures(HTML, dist({ ...GOOD, scope: '/tanks/' }));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/scope is "\/tanks\/"/);
+  });
+
+  it('catches an origin-absolute manifest href', () => {
+    const html = HTML.replace('./manifest.webmanifest', '/manifest.webmanifest');
+    // Two failures, and both are the point: the href is wrong AND the file it names is
+    // not where it looked, so a reader is told the cause and the symptom.
+    const failures = manifestFailures(html, dist(GOOD));
+    expect(failures.some((f: string) => /resolves against the origin root/.test(f))).toBe(true);
+  });
+
+  it('catches an icon the build did not emit', () => {
+    // The realistic version of this: an icon renamed in the manifest and not on disk.
+    // vite copies public/ verbatim, so nothing else notices.
+    const failures = manifestFailures(HTML, dist(GOOD, ['icons/apple-touch-icon-180.png']));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/icon-192\.png is referenced but missing/);
+  });
+
+  it('catches the iOS tile going missing while the manifest stays', () => {
+    // iOS reads neither the manifest's icons nor an SVG favicon, so losing this link
+    // loses the home-screen icon on one whole platform and nothing else changes.
+    const failures = manifestFailures(HTML.split('<link rel="apple-touch-icon"')[0], dist(GOOD));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/links no apple-touch-icon/);
+  });
+
+  it('refuses to go quiet when there is no manifest at all', () => {
+    // The hud.css lesson, applied: a guard that finds nothing must say so. Deleting the
+    // manifest must be a deliberate act that also deletes this check.
+    const failures = manifestFailures('<title>Tanks!</title>', dist(GOOD));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/links no web app manifest/);
+  });
+
+  it('catches a manifest that is linked but never built', () => {
+    const failures = manifestFailures(HTML, { files: ['index.html'], texts: {} });
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/is not in the built output/);
+  });
+
+  it('catches a manifest that does not parse', () => {
+    const failures = manifestFailures(HTML, {
+      files: ['manifest.webmanifest'],
+      texts: { 'manifest.webmanifest': '{ "start_url": "./", }' },
+    });
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/is not valid JSON/);
+  });
+});
+
+describe('the CLI runs both checkers over a real directory', () => {
+  // Composition blindness, one layer up from the unit cases above: every assertion in
+  // this file so far calls the pure functions directly, so DELETING the manifestFailures
+  // call from the CLI -- or the whole `readDist` change that feeds it -- leaves all of
+  // them green while `npm run portability` checks nothing. Measured, with the call
+  // removed from the CLI's `failures` array: 23 of the 24 cases in this file still pass,
+  // including every unit case for `manifestFailures` itself. The one that fails is the
+  // second case below.
+  const CHECK = fileURLToPath(new URL('./check.mjs', import.meta.url));
+  const write = (manifest: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'portability-'));
+    mkdirSync(join(dir, 'assets'));
+    mkdirSync(join(dir, 'icons'));
+    writeFileSync(
+      join(dir, 'index.html'),
+      '<script type="module" crossorigin src="./assets/index-abc.js"></script>' +
+        '<link rel="manifest" href="./manifest.webmanifest" />' +
+        '<link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />',
+    );
+    writeFileSync(join(dir, 'assets/index-abc.js'), 'const ch=`./`;');
+    writeFileSync(join(dir, 'manifest.webmanifest'), manifest);
+    writeFileSync(join(dir, 'icons/icon-192.png'), '');
+    writeFileSync(join(dir, 'icons/apple-touch-icon-180.png'), '');
+    return dir;
+  };
+  const run = (dir: string): { status: number; output: string } => {
+    try {
+      // stdio pipes stderr too: left at the default it is inherited, and the failing
+      // case below would print its (expected) complaint into the test run's output.
+      return {
+        status: 0,
+        output: execFileSync('node', [CHECK, dir], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }),
+      };
+    } catch (e) {
+      const err = e as { status: number; stderr: string; stdout: string };
+      return { status: err.status, output: `${err.stdout}${err.stderr}` };
+    }
+  };
+  const ICONS = [
+    { src: './icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+  ];
+
+  it('exits 0 on a well-formed tree, and says what it checked', () => {
+    const dir = write(JSON.stringify({ start_url: './', scope: './', icons: ICONS }));
+    const { status, output } = run(dir);
+    expect(output).toContain('the PWA shell checked');
+    expect(status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits non-zero when only the MANIFEST is wrong', () => {
+    // The discriminating case: everything the original checker looks at is fine here,
+    // so a CLI that forgot the new call would exit 0 and CI would stay green.
+    const dir = write(JSON.stringify({ start_url: '/', scope: './', icons: ICONS }));
+    const { status, output } = run(dir);
+    expect(output).toMatch(/start_url is "\/"/);
+    expect(status).toBe(1);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
