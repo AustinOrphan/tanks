@@ -664,9 +664,12 @@ instructions at all** — `sin`, `cos`, `atan2`, `hypot` would come from Rust's 
 compiled *into the module*, so every peer executes the same compiled implementation rather
 than whatever their JS engine ships. It is the second reason that does the work here, and
 it is exactly the property the 21 transcendental occurrences in `src/sim/` do not have
-today (measured 2026-08-10: 18 lines,
+today (measured 2026-08-10 and re-measured after #128: 18 lines,
 21 occurrences, 4 files — `collision.ts`, `types.ts`, `ai/targeting.ts`, `bullets.ts`; 10
-`hypot`, 4 `sqrt`, 3 `cos`, 3 `sin`, 1 `atan2`). And it opens a **native path** — the same
+`hypot`, 4 `sqrt`, 3 `cos`, 3 `sin`, 1 `atan2` — unchanged by the step-inputs refactor).
+Note what that means precisely: it is the *specification* that does not guarantee
+agreement. Three JS engines have since been measured agreeing anyway, which the first
+bullet below takes up. And it opens a **native path** — the same
 crate could back a Steam or console build without a JS engine, which
 `docs/research/console-release.md` records as the blocker CrossCode solved by AOT-compiling
 JS to C++.
@@ -682,14 +685,20 @@ serialisation boundary between the sim and its five event consumers, where today
 
 **What would answer it:**
 
-- **First, whether the cheap fix is sufficient.** The transcendental surface is 21
-  occurrences. If replacing them with deterministic implementations makes Chrome, Firefox
-  and Safari agree on the baseline hash, the arithmetic argument for Rust evaporates and
-  only the native-path argument remains. That measurement is issue #121 and the
-  replacement work is issue #133; **neither should be pre-empted by a rewrite.**
+- **First, whether the cheap fix is even needed — and the answer has moved since this
+  spike was drafted.** It read "that measurement is issue #121"; #121 closed with #128,
+  which built the rig AND ran it. Chromium 151 (V8), firefox 153 (SpiderMonkey) and
+  Playwright's webkit (JSC) each printed the pinned
+  `015a5d17…`, matching Node, with the 21 transcendental occurrences **untouched**. So the
+  arithmetic argument for Rust is not merely unproven, it is running against a
+  three-engine agreement. What is still open is narrower — shipped Safari, iOS, and any
+  ARM engine, none of which this box can run (see the multiplayer spike's gating bullet
+  above for the method) — and it is one sampled trajectory, not a proof about `Math.hypot`.
+  The replacement work is issue #133, still open; **it should not be pre-empted by a
+  rewrite, and neither should a rewrite be justified by a divergence nobody has observed.**
 - **Second, whether multiplayer is actually being built.** Bit-identical arithmetic is
   worth a rewrite only if lockstep netcode is a commitment rather than an interest. See the
-  multiplayer spike above — its own gating measurement is the same #121.
+  multiplayer spike above — its gating measurement is the same one, and is half answered.
 - **Third, whether a native release is a commitment.** `docs/research/console-release.md`
   concludes Switch/PlayStation are gated on NDA'd developer status and Steam is unblocked
   but not close. If no native target is committed, the second reason is hypothetical too.
