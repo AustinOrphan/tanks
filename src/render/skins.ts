@@ -260,19 +260,114 @@ function cloudTone(base: RGB, delta: number): RGB {
 }
 
 /**
- * A seamless field of round blotches in two tones over a base -- camo and clouds are the
- * same field at different densities and different distances from the hull, which is the
- * point of sharing it. The seed is fixed so a given hull always paints the same pattern.
+ * WHY CAMO AND CLOUDS NO LONGER SHARE A GENERATOR -- and why only ONE of them moved.
  *
- * COVERAGE IS THE PARAMETER THAT MATTERS, and it is easy to get wrong: the tones are
- * painted in order, so the second buries the first wherever they overlap. At clouds'
- * density the base survives on 27.9% of the texture and the second tone takes 44.4%,
- * which is what makes it read as sky behind cloud; camo needs the opposite -- the hull
- * has to stay the tank's colour, and survives on 57.8% -- so it runs far fewer and
- * smaller blotches. Those three figures are identical on all 6 shipped hulls, because
- * the blotch geometry is seeded and carries no colour dependence at all; an earlier
- * draft of this comment quoted 19% and 73%, which were the OLD camo's numbers, and
- * claimed coverage varied by hull, which it does not.
+ * They used to share `blotches`, differing only in count, radius and lobe count. That is
+ * why Austin kept reporting them as swapped. Coverage WAS wrong and swapping it helped --
+ * he confirmed the dense/sparse split is now the right way round -- but it could never be
+ * enough on its own, because two skins cut from one silhouette generator read as each
+ * other at different densities. His verdict after the swap: "Clouds turret top could be
+ * made to look a bit more cloudlike in shape. Same with some spots on the hull. Camo also
+ * could use some shape-improvement on the hull."
+ *
+ * CAMO got a new generator and KEPT it. `camoCells` is a seeded power diagram: hard-edged
+ * interlocking polygons, straight edges meeting at corners, no arcs anywhere, which a
+ * circle-based generator cannot produce at any parameter setting.
+ *
+ * CLOUDS got one too and it was REJECTED ON LOOK. `cumulus` drew soft-edged bulbous puffs
+ * with a ramped rim; shown the pair, Austin said "before clouds looks better actually".
+ * So clouds is back on `blotches` at the sparse post-swap setting -- exactly the texture
+ * he was comparing against, which is `tiles/A-current.png`'s bottom row and the BEFORE
+ * panel of `compare/swap-*-clouds.png`. `cumulus` is DELETED rather than parked behind a
+ * switch, because a generator nothing calls rots. If a later reader thinks "clouds should
+ * be puffier": it was built, rendered and rejected -- see PR #139.
+ *
+ * The two shape languages still differ, and the surviving difference is the one the eye
+ * names first: camo is straight-edged polygons that PARTITION the tile, clouds is a union
+ * of circular lobes over a field that stays visible between them. Both tile seamlessly
+ * (every distance below wraps toroidally) and both are deterministic from a fixed seed.
+ * Neither touches its tone derivation: camo stays muted via `autoAccent` and clouds stays
+ * light via `cloudTone`.
+ */
+
+/** Toroidal component distance -- the tile's left edge is adjacent to its right. */
+function wrapDelta(a: number, b: number): number {
+  const d = Math.abs(a - b);
+  return d > SIZE / 2 ? SIZE - d : d;
+}
+
+/**
+ * CAMO: a seeded power diagram (an additively weighted Voronoi partition).
+ *
+ * Scatter `points` feature sites, give each a weight and one of the three tones, then
+ * colour every pixel by whichever site wins `d^2 - weight`. That yields cells with
+ * STRAIGHT edges meeting at corners -- subtracting a per-site constant moves a boundary
+ * without bending it, which is exactly what a power diagram buys over the multiplicative
+ * kind, whose bisectors are circular arcs and would have put the arcs straight back.
+ *
+ * Two properties make it read as camouflage rather than as a mosaic. Adjacent sites
+ * drawn the same tone MERGE, so the visible patches are unions of several cells and are
+ * irregular in size and outline rather than one-cell-one-blob. And the weights vary the
+ * cell areas, so nothing reads as a regular grid.
+ *
+ * Coverage is a consequence here, not a parameter: each site independently draws a tone,
+ * so the base's share is the probability it is drawn, up to sampling noise over
+ * `points` cells. That is why the shares below are close to but not exactly the split.
+ */
+function camoCells(
+  px: Uint8ClampedArray,
+  base: RGB,
+  dark: RGB,
+  deep: RGB,
+  points: number,
+  baseShare: number,
+  darkShare: number,
+): void {
+  const rnd = xorshift(0xc4310);
+  const fx: number[] = [];
+  const fy: number[] = [];
+  const fw: number[] = [];
+  const tone: RGB[] = [];
+  for (let i = 0; i < points; i++) {
+    fx.push(rnd() * SIZE);
+    fy.push(rnd() * SIZE);
+    // Weight spread as a fraction of a typical cell's squared radius, so it perturbs
+    // boundaries noticeably without letting one site swallow its neighbours.
+    fw.push((rnd() * 2 - 1) * (SIZE * SIZE) / (points * 14));
+    const r = rnd();
+    tone.push(r < baseShare ? base : r < baseShare + darkShare ? dark : deep);
+  }
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      let best = Infinity;
+      let winner = 0;
+      for (let i = 0; i < points; i++) {
+        const dx = wrapDelta(x, fx[i]);
+        const dy = wrapDelta(y, fy[i]);
+        const d = dx * dx + dy * dy - fw[i];
+        if (d < best) {
+          best = d;
+          winner = i;
+        }
+      }
+      fill(px, (y * SIZE + x) * 4, tone[winner]);
+    }
+  }
+}
+
+/**
+ * CLOUDS: a seamless field of round blotches in two tones over a base.
+ *
+ * CLOUDS ONLY, now. Camo shared this until the shape split above, and the sharing is what
+ * made the two skins read as versions of each other -- so nothing else may call it again
+ * without re-opening that.
+ *
+ * The tones are painted in order, so the second buries the first wherever they overlap.
+ * At the sparse setting clouds ships -- 7 blotches, radius 8-15, 5 lobes -- the base
+ * survives on 57.8% of the texture with 22.3% and 19.9% for the two tones, identical on
+ * all 6 shipped hulls because the geometry is seeded and carries no colour dependence at
+ * all. The dense setting camo used to take (13, radius 9-18, 4 lobes) left the base on
+ * 27.9%; it has no caller now.
  */
 function blotches(
   px: Uint8ClampedArray,
@@ -366,20 +461,39 @@ const PAINTERS: Record<
     // of the hull so camo is a family of one paint, not a clash.
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base, AUTO_ACCENT_DELTA * 0.5);
     const deep = accent ? scale(dark, 0.7) : autoAccent(base, AUTO_ACCENT_DELTA * 0.95);
-    // Sparse and small, so the hull survives as the majority tone.
-    blotches(px, base, dark, deep, 7, 8, 15, 5);
+    // DENSE and interlocking, in HARD-EDGED polygons -- see camoCells. The hull survives
+    // on a minority of the surface, which is what camouflage does and what the sparse
+    // arrangement this skin used to carry could not.
+    //
+    // 44 cells over a 128px tile is about 19px across each before the same-tone merging
+    // that makes the visible patches bigger; the shares are tuned so the base stays the
+    // minority without either accent tone dominating. (This comment said 22 while the
+    // call already passed 44 -- the count was doubled mid-tuning, see tiles/C-camo44.png,
+    // and only the literal moved.)
+    camoCells(px, base, dark, deep, 44, 0.3, 0.37);
   },
   clouds(px, base, accent) {
-    // The same blotch field as camo, taken to the FULL accent delta and beyond. Camo
-    // holds its tones close to the hull so the hull stays the tank's colour; clouds
-    // deliberately does not, and the light tone wins -- a blue tank reads as blue sky
-    // with white cloud rather than as a blue tank with markings.
+    // A blotch field taken to the FULL accent delta and beyond. Camo holds its tones
+    // close to the hull so the paint still reads as the tank's colour; clouds
+    // deliberately does not, and its tones go light -- a blue tank reads as blue sky with
+    // white cloud rather than as a blue tank with markings.
+    //
+    // The TONES are what carry that, not the coverage. Since the density swap the hull
+    // is the majority tone here (57.8%), which is correct for sky: the cloud is the
+    // thing on top of it, not the field itself. An earlier version of this comment said
+    // "the light tone wins", which was true only while clouds held the dense setting.
     //
     // It exists because the unified accent work briefly gave camo these deltas by
     // accident, and the result was better as its own thing than as a broken camo.
     const soft = accent ? ensureContrast(base, accent) : cloudTone(base, AUTO_ACCENT_DELTA);
     const bright = accent ? scale(soft, 0.7) : cloudTone(base, AUTO_ACCENT_DELTA * 1.8);
-    blotches(px, base, soft, bright, 13, 9, 18, 4);
+    // SPARSE and separated -- these were camo's numbers before the swap; see `blotches`.
+    // Fewer, smaller puffs on a hull that stays visible between them is what reads as
+    // sky, and it is the light tones above rather than the density that make them clouds.
+    //
+    // A SOFT-EDGED replacement (`cumulus`) was built for this call and rejected on look:
+    // "before clouds looks better actually". These are the parameters that render is of.
+    blotches(px, base, soft, bright, 7, 8, 15, 5);
   },
   checker(px, base, accent) {
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base);

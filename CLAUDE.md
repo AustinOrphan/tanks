@@ -155,6 +155,105 @@ consequence of the non-playing branch dropping the accumulator but still forward
 the driver applies it, the same split `renderAlpha` has. It must stay out of `src/sim/`:
 a wall clock there would break replay.
 
+**A SKIN'S UV MAPPING IS DECIDED PER PART, and the three parts disagree on purpose.**
+`entities.ts` is the only place this lives, and each rule exists because a render was
+wrong in a way no numeric probe caught.
+
+The HULL must read as one continuous surface — Austin's "the hull should be distinctly
+one piece". `ExtrudeGeometry` carries THREE parameterisations: the caps come from the
+shape's own (x, y), while the bevel ring and side walls come from `generateSideWallUV`,
+which returns `(x, 1 - z)` or `(y, 1 - z)` and **chooses between them per quad** on
+`Math.abs(a_y - b_y) < Math.abs(a_x - b_x)`. So the perimeter's own u axis flipped with
+the direction of that stretch of outline. `projectBodyUV` projects the body from above
+and `unrollSkirtUV` folds the skirt outward by its drop; a plain top-down projection is
+NOT enough on its own, because the near-vertical walls collapse and the skirt renders as
+vertical streaks (checker became columns, camo a picket fence). The unroll averages the
+outward direction over every vertex sharing a position, which is load-bearing rather
+than tidy: the geometry is non-indexed, so facet normals split the UV at every rounded
+corner — per-facet measures 0.102506 over the VISIBLE surface (normal.y > −0.1, 729 of
+1248 vertices) and 0.400000 over all 1248, against 0.000000 either way once averaged and
+1.472500 for the untouched default. **State which population**: an earlier draft quoted
+0.102506 bare and a reviewer reproducing it over all vertices got 0.400000 and could not
+match the figure.
+
+**Three separate guards, because one metric cannot see all three failures.**
+Co-located vertices agreeing pins continuity (negative control: the unmapped enemy hull).
+It is blind to the unroll, since a collapsed skirt is perfectly continuous — so skirt
+TEXEL DENSITY pins that the sides are drawn at authored size, and UV footprint exceeding
+the plan footprint pins that the unroll goes OUTWARD rather than folding back inward.
+Both of those mutations, and collapsing `projectPlanarUV`'s `along` axis, each left the
+full suite green before those tests existed.
+
+The TURRET keeps `LatheGeometry`'s own wrap and **must not be touched**: u around the
+axis is what makes checker a pinwheel and flow a swirl, and Austin asked for both by
+name. The generalisation that "fixes" the hull everywhere is exactly the wrong move
+here; a test compares the dome's position, normal and uv arrays against a freshly built
+reference so that move fails loudly.
+
+The BARREL is a lathe too, and its defect was DENSITY, not topology. Lathe u is one full
+texture repeat around the circumference whatever that circumference is, so the same tile
+was packed 2.8x tighter on the 0.82-unit gun than on the 2.26-unit turret and flow's
+swirl arrived as corduroy; lathe v is INDEX-based, so the 0.05-unit flare step and the
+0.4-unit tube got equal shares. `matchLatheToTurret` scales u by the radius ratio and
+rebuilds v from real arc length, both against the turret. That makes u a FRACTION of a
+repeat, so it no longer meets itself and there is a seam — `BARREL_SEAM_PHI` puts it on
+the gun's underside, and `PI/2` is exactly 4 of the barrel's 16 segments, so the surface
+is unchanged and only the seam moves. Pick an angle that is not a whole number of
+segments and the silhouette rotates with it.
+
+`stripes` is the exception to all of it: a hard-edged band wrapped around a lathe axis
+arrives as pie slices, so its turret and barrel are projected flat. `STRIPE_TURRET_MODE`
+is `'body'` — one field at world scale, 0.084 wide on every part, which Austin chose from
+renders ("I like continuous stripes actually"). `'part'` normalises each part to its own
+half-width (0.084 / 0.069 / 0.025 on hull / turret / barrel) and was rejected because the
+three sets do not line up. Pinned through the behaviour — all three parts must share one
+v scale — not through the constant alone.
+
+**CAMO AND CLOUDS ARE DIFFERENT SHAPE LANGUAGES — but only camo got a new generator.**
+They shared one `blotches` helper (lobed clusters of circles) and differed only in count,
+radius and lobes, so Austin twice reported them as swapped. The coverage WAS backwards
+and swapping it was necessary — camo covers, clouds does not — but it was not sufficient,
+because two skins cut from one silhouette generator read as versions of each other at any
+density. `camoCells` is now a seeded power diagram: hard-edged interlocking polygons,
+straight edges, no arcs, which a circle-based generator cannot produce at any parameter
+setting.
+
+**A soft-edged clouds generator (`cumulus`) was built for the other half of that split
+and REJECTED ON LOOK** — "before clouds looks better actually" — so clouds is back on
+`blotches` at the sparse post-swap setting, byte-identical to the texture it had at
+`76ef38a`. `cumulus` is deleted rather than parked behind a switch; a generator nothing
+calls rots. Do not rebuild it without new evidence: PR #139 carries the tile render it
+lost on.
+
+Two pins moved with it, and both had said something that stopped being true:
+
+- **Coverage is measured by EXACT hull-hex equality.** It briefly used a nearest-tone
+  classifier, which was genuinely forced by `cumulus`'s rim pixels (they equal no tone
+  exactly, scoring 0.5913 exact against 0.6484 nearest). With both skins hard-edged again
+  the two metrics are the same function — measured equal to 4 dp on all 12 (skin, hull)
+  pairs — and exact is the one that cannot be fooled, since nearest has to guess the
+  three flat tones by taking the three commonest.
+- **The shape discriminator is EDGE GEOMETRY, not edge hardness.** Hardness now reads
+  0.0000 for both. The test measures the share of boundary pixels lying on a locally
+  straight run (7px window, 0.6px RMS): camo 0.2855, clouds 0.0355. Three cheaper
+  candidates — base-region connectivity, triple-junction count, accent-meets-accent
+  boundary share — were tried first and all three collapsed under a coverage-matched
+  control, scoring camo's generator at clouds' coverage the same as clouds. The straight-
+  run metric does not (0.2651 there), which is what makes it a shape metric rather than a
+  density one wearing a shape's name.
+
+Both skins still tile toroidally and stay deterministic from one seed, and neither tone
+derivation moved: `autoAccent` keeps camo muted, `cloudTone` keeps clouds light, and the
+white hull's deliberate darkening survives.
+
+**`clouds is LIGHT on every hull that has room to be` was a tautology for two commits**,
+which is worth knowing because nothing announced it. It read the tile's commonest colour
+as "the dominant tone, the second one painted" — true only at the DENSE setting. The
+density swap made the hull itself the majority tone, so that colour became the hull, and
+the comparison became `hullL < hullL`. Forcing `cloudTone` to darken unconditionally left
+it green. It now excludes the hull before taking the commonest, and the same mutation
+fails it on 5 of the 6 hulls (all but white, which is allowed to darken).
+
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
 AI profiles come from `data/ai-profiles.json`) → `resolveTankConfig` →

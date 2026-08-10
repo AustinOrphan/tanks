@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
+  STRIPE_TURRET_MODE,
 } from './entities';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
@@ -836,6 +837,19 @@ describe('skins (player texture override)', () => {
     // "I liked the flow skin turret previously"), so every skin except `stripes` keeps
     // the lathe's own wrap. This test pins BOTH halves of that -- a fix applied to all
     // skins would fail the second half.
+    //
+    // The HULL is deliberately not checked here any more. It used to be, and the
+    // property it was checked against -- v is a function of z alone -- was a proxy for
+    // "the stripe runs straight along the tank" that only held while the hull was
+    // projected flat. The hull's skirt is now unrolled outward (entities.ts's
+    // `unrollSkirtUV`), so a flank vertex 0.2 units down carries v = z + 0.2 and the
+    // proxy is false while the stripe still runs perfectly straight -- confirmed by
+    // render. NOT pixel-unchanged, which an earlier draft of this comment claimed: at
+    // the time of that claim 192 of 630,000 pixels differed, all of them antialiasing
+    // along the stripe edges on the hull's shoulders. "Visually unchanged" is what the
+    // evidence supports, and the hull has since changed deliberately anyway, because
+    // STRIPE_TURRET_MODE is now 'body'. The property that actually matters
+    // for the hull is continuity, and it has its own test below.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();
@@ -843,7 +857,7 @@ describe('skins (player texture override)', () => {
 
     views.setPlayerStyle('#3d7bd6', 'stripes', null);
     views.sync(w, w, 0);
-    for (const part of ['hull', 'turret', 'barrel'] as const) {
+    for (const part of ['turret', 'barrel'] as const) {
       const geo = geoOf(scene, 3, part);
       expect(vIsFunctionOfZ(geo), `striped ${part} is not planar`).toBe(true);
       // ...and v must actually MOVE with z. Without this the assertion above passes on a
@@ -867,6 +881,393 @@ describe('skins (player texture override)', () => {
     views.setPlayerStyle('#3d7bd6', 'stripes', null);
     views.sync(w, w, 0);
     expect(vIsFunctionOfZ(geoOf(scene, 7, 'turret')), 'an enemy turret was re-projected').toBe(false);
+  });
+
+  /**
+   * The hull's UV must be a CONTINUOUS FUNCTION OF POSITION -- which is exactly Austin's
+   * "the hull should be distinctly one piece", stated so a machine can check it.
+   *
+   * ExtrudeGeometry is non-indexed, so the ring of positions where the top cap meets the
+   * bevel, and where the bevel meets the side wall, exists several times over with a
+   * different UV each. If those copies disagree, the texture jumps at that edge and the
+   * hull reads as panels. If they agree everywhere, there is one unbroken surface.
+   *
+   * Measured on the shipped hull: 0.000000 with the projection, against 1.472500 with
+   * ExtrudeGeometry's own UVs. The mutation that kills this is deleting the
+   * `if (mapped) projectBodyUV(bodyGeo)` call -- verified by doing it.
+   */
+  const maxCoincidentUvGap = (geo: THREE.BufferGeometry): number => {
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+    const seen = new Map<string, [number, number]>();
+    let worst = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${pos.getX(i).toFixed(5)},${pos.getY(i).toFixed(5)},${pos.getZ(i).toFixed(5)}`;
+      const here: [number, number] = [uv.getX(i), uv.getY(i)];
+      const first = seen.get(key);
+      if (!first) seen.set(key, here);
+      else worst = Math.max(worst, Math.abs(first[0] - here[0]), Math.abs(first[1] - here[1]));
+    }
+    return worst;
+  };
+
+  it('gives the hull ONE continuous surface, for every skin', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+
+    for (const skin of ['stripes', 'checker', 'flow', 'camo', 'clouds'] as const) {
+      views.setPlayerStyle('#3d7bd6', skin, null);
+      views.sync(w, w, 0);
+      expect(
+        maxCoincidentUvGap(geoOf(scene, 3, 'hull')),
+        `${skin}'s hull is split at an edge -- it will render as panels`,
+      ).toBeLessThan(1e-6);
+    }
+
+    // The negative control, and the reason the threshold above means anything: the
+    // enemy hull carries no skin map and is left with ExtrudeGeometry's own UVs, which
+    // fail the same check by six orders of magnitude. Without this the assertion could
+    // be passing because the metric is broken rather than because the hull is whole.
+    expect(
+      maxCoincidentUvGap(geoOf(scene, 7, 'hull')),
+      'the default extrude UVs suddenly look continuous -- is the metric wired?',
+    ).toBeGreaterThan(1);
+  });
+
+  /**
+   * Texel density per triangle: UV area divided by world area, in repeats^2 per unit^2.
+   *
+   * 1.0 means the texture is drawn at its authored size. Near 0 means the triangle has
+   * been squashed to nothing in UV space and its texture is smeared across it.
+   */
+  const triangleDensities = (geo: THREE.BufferGeometry, minNy: number, maxNy: number): number[] => {
+    const pos = geo.attributes.position;
+    const nrm = geo.attributes.normal;
+    const uv = geo.attributes.uv;
+    const out: number[] = [];
+    for (let t = 0; t < pos.count; t += 3) {
+      const ny = (nrm.getY(t) + nrm.getY(t + 1) + nrm.getY(t + 2)) / 3;
+      if (ny < minNy || ny > maxNy) continue;
+      const ax = pos.getX(t + 1) - pos.getX(t), ay = pos.getY(t + 1) - pos.getY(t), az = pos.getZ(t + 1) - pos.getZ(t);
+      const bx = pos.getX(t + 2) - pos.getX(t), by = pos.getY(t + 2) - pos.getY(t), bz = pos.getZ(t + 2) - pos.getZ(t);
+      const world = 0.5 * Math.hypot(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
+      if (world < 1e-9) continue;
+      const au = uv.getX(t + 1) - uv.getX(t), av = uv.getY(t + 1) - uv.getY(t);
+      const bu = uv.getX(t + 2) - uv.getX(t), bv = uv.getY(t + 2) - uv.getY(t);
+      out.push(Math.abs(au * bv - av * bu) * 0.5 / world);
+    }
+    return out;
+  };
+
+  it('unrolls the hull SKIRT, so the sides carry the pattern at its true size', () => {
+    // THE HALF OF THE HULL FIX THAT NOTHING ELSE PINS, and it took two attempts to get
+    // right, so it gets its own test. Projecting the body from above alone leaves the
+    // skirt continuous but DEGENERATE: a near-vertical wall has almost no extent when
+    // projected onto the ground plane, so its whole height collapses onto the single
+    // line of texels at the hull's outline and renders as vertical smears -- checker
+    // became columns instead of squares, camo a picket fence.
+    //
+    // The continuity test above cannot see this, by construction: a collapsed skirt is
+    // perfectly continuous. Neither can it see the unroll being applied INWARD. Both of
+    // those mutations left the whole suite green before this test existed.
+    //
+    // Two properties, stating different halves of the claim -- the skirt is drawn at the
+    // right SIZE, and it is folded the right WAY:
+    //
+    //   density  the side walls must be drawn at roughly the authored texel size.
+    //   outward  the UV footprint must be BIGGER than the hull's plan footprint, by
+    //            about the body's height on each side, because that is what unrolling a
+    //            skirt outward does.
+    //
+    // An earlier version of this comment claimed a division of labour -- that density
+    // catches the zeroed drop and outward catches the reversal, "because no single one
+    // catches both". That is FALSE. Measured by disarming each assertion in turn and
+    // running the other; population: 3 mutations x 2 assertions, all 6 cells run.
+    //
+    //                        density (> 0.5)    outward (> 0.3)
+    //     drop = 0               0.0000  fail      0.0000  fail
+    //     drop reversed          0.1048  fail     -0.0205  fail
+    //     drop x 0.6             0.6010  PASS      0.2236  fail
+    //
+    // So the real division of labour is the other way round from the one claimed:
+    // `outward` is the load-bearing one. It catches a partial unroll -- the skirt folded
+    // the right way but not far enough -- which density passes, because density only
+    // asserts a lower bound and 0.6 clears it.
+    //
+    // `density` is NOT proven load-bearing by this sweep: no mutation was found that it
+    // catches and `outward` misses. It is kept because it states the size half of the
+    // claim directly, and because an over-unroll (drop scaled UP) passes both -- a gap
+    // neither assertion closes, since both are lower bounds.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+    views.setPlayerStyle('#3d7bd6', 'checker', null);
+    views.sync(w, w, 0);
+    const hull = geoOf(scene, 3, 'hull');
+
+    // Side walls only: |normal.y| small. The caps are excluded because a cap is exactly
+    // the flat projection and would pass trivially.
+    const walls = triangleDensities(hull, -0.3, 0.3);
+    expect(walls.length, 'no side-wall triangles found -- is the probe wired?').toBeGreaterThan(20);
+    const worst = Math.min(...walls);
+    // Measured 1.000 on every side-wall triangle: an unrolled skirt is an isometry, so
+    // its texel density is exactly the top face's. Zeroing the drop measures 0.000.
+    expect(worst, 'the hull skirt is squashed in UV -- it will render as vertical smears')
+      .toBeGreaterThan(0.5);
+
+    const pos = hull.attributes.position;
+    const uv = hull.attributes.uv;
+    let planX = 0;
+    let uvU = 0;
+    for (let i = 0; i < pos.count; i++) {
+      planX = Math.max(planX, Math.abs(pos.getX(i)));
+      uvU = Math.max(uvU, Math.abs(uv.getX(i)));
+    }
+    // The body is TANK_BODY_H (0.4) deep, so unrolling adds that much beyond the plan at
+    // the nose and tail. Measured: plan half-length 0.500, u half-extent 0.900.
+    expect(uvU - planX, 'the skirt is not unrolled OUTWARD past the hull outline')
+      .toBeGreaterThan(0.3);
+  });
+
+  it('keeps the hull\'s u axis running along the tank', () => {
+    // `projectPlanarUV`'s `along` argument used to be documented as carrying no pattern
+    // information, on the grounds that the stripe painter ignores u. That stopped being
+    // true the moment the hull was projected for EVERY skin: u is now where checker's
+    // squares, camo's patches and flow's bands read their position along the tank from.
+    // Collapsing it (`get(i, along) * 0`) turns the checker hull into horizontal bands
+    // and left the entire suite green.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+
+    for (const skin of ['checker', 'flow', 'camo', 'clouds', 'stripes'] as const) {
+      views.setPlayerStyle('#3d7bd6', skin, null);
+      views.sync(w, w, 0);
+      const hull = geoOf(scene, 3, 'hull');
+      const pos = hull.attributes.position;
+      const uv = hull.attributes.uv;
+      let lo = Infinity;
+      let hi = -Infinity;
+      // u must MOVE with x, not merely vary: a u that tracked z would also have extent.
+      let sumXU = 0;
+      let sumXX = 0;
+      for (let i = 0; i < uv.count; i++) {
+        lo = Math.min(lo, uv.getX(i));
+        hi = Math.max(hi, uv.getX(i));
+        sumXU += pos.getX(i) * uv.getX(i);
+        sumXX += pos.getX(i) * pos.getX(i);
+      }
+      // Slope of u against x through the origin. 1.0 is "u IS the length coordinate".
+      expect(sumXU / sumXX, `${skin}'s hull u no longer tracks the tank's length`)
+        .toBeGreaterThan(0.8);
+      expect(hi - lo, `${skin}'s hull u has collapsed`).toBeGreaterThan(HULL_LEN * 0.9);
+    }
+  });
+
+  it('runs ONE stripe field across the whole tank, at a single width', () => {
+    // STRIPE_TURRET_MODE is 'body' -- Austin, having seen both rendered: "I like
+    // continuous stripes actually." Nothing outside entities.ts referred to it, so the
+    // shipped choice was pinned by nothing and the rejected mode exercised by nothing.
+    //
+    // Asserted through the BEHAVIOUR rather than the constant: every part must carry the
+    // stripe at the same world width, which is what 'body' means and what 'part'
+    // (0.084 / 0.069 / 0.025 on hull / turret / barrel) fails.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+    views.setPlayerStyle('#3d7bd6', 'stripes', null);
+    views.sync(w, w, 0);
+
+    /**
+     * Repeats of v per world unit across the part -- so 1 means "the stripe is drawn at
+     * the width the painter authored".
+     *
+     * `minNy` restricts which vertices count, and the hull NEEDS it: its skirt is
+     * unrolled, which deliberately pushes v beyond z and inflates the slope. Measuring
+     * the hull's TOP CAP alone (normal.y > 0.999, where the drop is zero) isolates the
+     * flat projection, which is the thing being compared across parts. Signed, not
+     * absolute: the bottom cap's outer ring carries the full body height of offset and
+     * inflates the slope to 1.364 if it is let in. The turret and barrel are not
+     * unrolled, so every one of their vertices is already in that space.
+     */
+    const vScale = (geo: THREE.BufferGeometry, minNy: number): number => {
+      const pos = geo.attributes.position;
+      const nrm = geo.attributes.normal;
+      const uv = geo.attributes.uv;
+      let sumAV = 0;
+      let sumAA = 0;
+      for (let i = 0; i < uv.count; i++) {
+        if (nrm.getY(i) < minNy) continue;
+        const a = pos.getZ(i);
+        sumAV += a * uv.getY(i);
+        sumAA += a * a;
+      }
+      return sumAV / sumAA;
+    };
+
+    const hull = vScale(geoOf(scene, 3, 'hull'), 0.999);
+    const turret = vScale(geoOf(scene, 3, 'turret'), -1);
+    const barrel = vScale(geoOf(scene, 3, 'barrel'), -1);
+    expect(hull).toBeCloseTo(1, 5);
+    expect(turret, 'the turret stripe is scaled to the turret, not to the tank').toBeCloseTo(1, 5);
+    expect(barrel, 'the barrel stripe is scaled to the barrel, not to the tank').toBeCloseTo(1, 5);
+    expect(STRIPE_TURRET_MODE).toBe('body');
+  });
+
+  it('leaves the turret geometry EXACTLY as it was, which is what Austin asked for', () => {
+    // "The turret looks great on flow and checkerplate so don't change the turret."
+    //
+    // Rebuilt here from the profile as it stands, and compared against the mesh the tank
+    // is actually wearing, attribute by attribute. This is the strongest form of the
+    // claim available headlessly: same positions, same normals, same UVs means the dome
+    // cannot render differently, whatever changed around it.
+    //
+    // It fails if anyone projects the turret for a non-stripe skin -- the obvious
+    // "fix it everywhere" generalisation of the hull change, and the one thing here
+    // Austin explicitly ruled out.
+    //
+    // The three literals below DUPLICATE TURRET_H, TURRET_R and TURRET_FILLET, which is
+    // a second home for those numbers and is deliberate: importing production's own
+    // profile would compare it against itself and pass however the turret was rebuilt.
+    // An independent reconstruction is the whole value here. The cost is real -- retune
+    // the turret and this test fails until the literals are updated too -- and that
+    // failure is the correct signal, because retuning the turret IS the change Austin
+    // asked not to happen by accident.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+
+    const half = 0.28 / 2;
+    const R = 0.36;
+    const FILLET = 0.09;
+    const pts = [
+      new THREE.Vector2(0, -half),
+      new THREE.Vector2(R, -half),
+      new THREE.Vector2(R, half - FILLET),
+    ];
+    for (let i = 1; i <= 5; i++) {
+      const a = (i / 5) * (Math.PI / 2);
+      pts.push(new THREE.Vector2(
+        R - FILLET + FILLET * Math.cos(a),
+        half - FILLET + FILLET * Math.sin(a),
+      ));
+    }
+    pts.push(new THREE.Vector2(0, half));
+    const reference = new THREE.LatheGeometry(pts, 20);
+
+    for (const skin of ['checker', 'flow', 'camo', 'clouds'] as const) {
+      views.setPlayerStyle('#3d7bd6', skin, null);
+      views.sync(w, w, 0);
+      const dome = geoOf(scene, 3, 'turret');
+      for (const attr of ['position', 'normal', 'uv'] as const) {
+        expect(
+          Array.from(dome.attributes[attr].array),
+          `${skin} moved the turret's ${attr}`,
+        ).toEqual(Array.from(reference.attributes[attr].array));
+      }
+    }
+  });
+
+  it('paints the barrel at the TURRET\'s texel density, so the two mesh', () => {
+    // Austin: "just change the barrel skin so it meshes with the existing turret
+    // appearances of those skins."
+    //
+    // Both parts are lathes, and LatheGeometry normalises u to one full texture repeat
+    // around the circumference WHATEVER that circumference is. The turret is 2*PI*0.36 =
+    // 2.26 world units around and the barrel tube 2*PI*0.13 = 0.82, so the same tile was
+    // packed 2.8x tighter on the gun -- flow's soft swirl arrived there as fine corduroy.
+    //
+    // Asserted as a RATIO of world densities rather than against the literal 0.361, so
+    // it keeps meaning the right thing if TURRET_R or BARREL_R is retuned. The mutation
+    // that kills it is dropping the matchLatheToTurret call, which takes the ratio from
+    // 0.714 to 1.978 -- verified by doing it.
+    //
+    // 1.978 rather than the 2.77 the tube circumferences alone would suggest, because
+    // the density below is measured against each part's WIDEST radius and the barrel's
+    // is the muzzle flare (0.182) rather than the tube (0.13). Both numbers are real;
+    // they answer different questions, and this is the one this test can see.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
+    views.setPlayerStyle('#3d7bd6', 'checker', null);
+    views.sync(w, w, 0);
+
+    /** Texture repeats per world unit, around the part's circumference. */
+    const uDensity = (geo: THREE.BufferGeometry): number => {
+      const pos = geo.attributes.position;
+      const uv = geo.attributes.uv;
+      let lo = Infinity;
+      let hi = -Infinity;
+      let maxR = 0;
+      for (let i = 0; i < uv.count; i++) {
+        lo = Math.min(lo, uv.getX(i));
+        hi = Math.max(hi, uv.getX(i));
+        maxR = Math.max(maxR, Math.hypot(pos.getX(i), pos.getZ(i)));
+      }
+      return (hi - lo) / (2 * Math.PI * maxR);
+    };
+
+    const turret = uDensity(geoOf(scene, 3, 'turret'));
+    const barrel = uDensity(geoOf(scene, 3, 'barrel'));
+    // The barrel's widest radius is the muzzle flare (BARREL_R * 1.40), not the tube the
+    // scale is set from, so the matched density lands a shade UNDER the turret's rather
+    // than exactly on it. 0.71 is that ratio; the point is that it is near 1 and nowhere
+    // near the 2.77 an unscaled lathe gives.
+    expect(barrel / turret).toBeGreaterThan(0.6);
+    expect(barrel / turret).toBeLessThan(1.05);
+
+    // The enemy is the control: untouched, it shows the defect this test describes.
+    const bare = uDensity(geoOf(scene, 7, 'barrel')) / uDensity(geoOf(scene, 7, 'turret'));
+    expect(bare, 'an unmapped barrel should still carry the raw lathe wrap').toBeGreaterThan(1.9);
+  });
+
+  it('puts the barrel\'s UV seam underneath, where the camera never looks', () => {
+    // Scaling u to a fraction of a repeat means it no longer meets itself where the
+    // lathe closes, so there is a seam. BARREL_SEAM_PHI rotates the lathe by exactly 4
+    // of its 16 segments -- a relabelling that leaves the surface identical -- to put
+    // that seam on the gun's underside.
+    //
+    // Checked in the barrel's LOCAL frame, then through the mesh's own rotation, so it
+    // is the seam's real world direction being asserted and not a coordinate convention.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+    views.setPlayerStyle('#3d7bd6', 'checker', null);
+    views.sync(w, w, 0);
+
+    let barrel: THREE.Mesh | null = null;
+    scene.traverse((o) => { if (o.name === 'barrel') barrel = o as THREE.Mesh; });
+    const mesh = barrel!;
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+
+    // The seam is the u = 0 meridian. Take its vertices at a real radius (skip the two
+    // poles, which sit on the axis and have no direction) and average which way they
+    // face. It is the RADIAL part that carries the seam's direction -- a lathe vertex's
+    // full position is mostly its distance ALONG the gun, which would swamp the signal
+    // and read as -0.36 for a seam that is in fact pointing straight down.
+    let sumY = 0;
+    let n = 0;
+    for (let i = 0; i < uv.count; i++) {
+      if (uv.getX(i) > 1e-9) continue;
+      const radial = new THREE.Vector3(pos.getX(i), 0, pos.getZ(i));
+      if (radial.length() < 1e-6) continue; // on the lathe axis
+      radial.normalize().applyEuler(mesh.rotation);
+      sumY += radial.y;
+      n++;
+    }
+    expect(n, 'no off-axis seam vertices found -- is the probe wired?').toBeGreaterThan(0);
+    // -1 is straight down. Anything above 0 would put the seam on the visible top.
+    expect(sumY / n).toBeLessThan(-0.99);
   });
 
   it('dresses hull AND turret in the map, leaves tracks solid and enemies bare', () => {

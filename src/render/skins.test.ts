@@ -214,13 +214,26 @@ describe('createSkinTexture', () => {
       // Population: all 6 shipped hulls, the complete set. Only the white hull may go
       // dark, and only because lightening it cannot clear the delta at all (19 luma of
       // headroom against a 64 target).
+      //
+      // THE DOMINANT TONE HERE MEANS THE DOMINANT CLOUD TONE -- the commonest colour that
+      // is NOT the hull -- and the exclusion is what makes this test able to fail at all.
+      // It used to take the commonest colour outright, on the stated reasoning that this
+      // was "the second one painted, which covers the most texture". That was true only
+      // while clouds held the DENSE setting; the density swap made the hull itself the
+      // majority tone (0.5781), so `top` became the hull, `toneL` became `hullL` exactly,
+      // and `toneL < hullL` could never hold. MEASURED, not inferred: forcing `cloudTone`
+      // to darken unconditionally (`stepLightness(base, delta, false)`) left this test
+      // GREEN in the old form -- the whole property it exists to guard, inverted, and it
+      // did not notice. With the hull excluded the same mutation fails it on 5 of the 6
+      // hulls (every one but white, which is allowed to darken).
       const wrong: string[] = [];
       for (const hull of PALETTE) {
         const px = pixelsOf('clouds', hull.hex, null);
-        const hullL = luma(...rgbOfHexTop(hull.hex));
-        // The dominant tone: the second one painted, which covers the most texture.
+        const base = rgbOfHexTop(hull.hex);
+        const hullL = luma(...base);
         const counts = new Map<string, number>();
         for (let i = 0; i < px.length; i += 4) {
+          if (px[i] === base[0] && px[i + 1] === base[1] && px[i + 2] === base[2]) continue;
           const k = `${px[i]},${px[i + 1]},${px[i + 2]}`;
           counts.set(k, (counts.get(k) ?? 0) + 1);
         }
@@ -271,24 +284,213 @@ describe('createSkinTexture', () => {
       expect(banded.length).toBe(20);
     });
 
-    it('camo leaves the hull as the majority tone; clouds deliberately does not', () => {
-      // The two share `blotches`, and coverage is the whole difference between them.
-      // Getting this wrong is not subtle but IS invisible to a spread metric: at clouds'
-      // density the last tone painted covers 44.4% of the texture and the hull survives
-      // on 27.9%, so camo rendered with those numbers came back as SNOW camo on a blue
-      // hull -- the blotches won and the hull stopped being the tank's colour. Measured
-      // on screen before it was caught. (An earlier draft said 73%, which was the OLD
-      // camo's figure carried across by mistake.)
-      const share = (skin: 'camo' | 'clouds'): number => {
-        const px = pixelsOf(skin, '#3d7bd6', null);
-        let base = 0;
+    it('camo COVERS the hull; clouds leaves it as the majority tone', () => {
+      // THIS TEST USED TO ASSERT THE OPPOSITE, and the assertion was the defect rather
+      // than the guard against it. Austin: "camo and clouds need to be swapped, the
+      // skins appear to have their names reversed." Camouflage is dense interlocking
+      // patches that cover most of a surface; clouds are separated puffs over a field
+      // that stays visible. Camo shipped sparse (hull surviving on 57.8%) and clouds
+      // dense (27.9%), so each read as the other's name, and this test pinned it that
+      // way. He confirmed the swap after seeing it rendered, so these thresholds are
+      // now the right way round.
+      //
+      // Coverage is invisible to a spread metric, which is why it needs its own test:
+      // both arrangements have identical tone spreads, because only the AREAS moved.
+      //
+      // MEASURED BY EXACT EQUALITY with the hull hex, which is a DELIBERATE revert. A
+      // nearest-tone classifier shipped here briefly, to accommodate a soft-edged clouds
+      // generator (`cumulus`) whose rim pixels equal no tone exactly and so scored as
+      // "not hull" -- 0.5913 exact against 0.6484 nearest. That generator was rejected on
+      // look and deleted, so both skins are three flat tones again, and the two metrics
+      // are then the SAME FUNCTION: measured over all 12 (skin, hull) pairs the shipped
+      // pair can produce, exact and nearest agree to four decimals everywhere (camo
+      // 0.2922 / 0.2922, clouds 0.5781 / 0.5781). Exact is kept because it is the one
+      // that cannot be fooled -- nearest has to GUESS which three colours are the flat
+      // tones, by taking the three commonest, and would quietly mis-measure any tile that
+      // carried more than three. If a soft-edged skin ever lands, bring nearest back with
+      // it and say so here.
+      const share = (skin: 'camo' | 'clouds', hex: string): number => {
+        const px = pixelsOf(skin, hex, null);
+        const [r, g, b] = rgbOfHexTop(hex);
+        let hull = 0;
         for (let i = 0; i < px.length; i += 4) {
-          if (px[i] === 0x3d && px[i + 1] === 0x7b && px[i + 2] === 0xd6) base += 1;
+          if (px[i] === r && px[i + 1] === g && px[i + 2] === b) hull += 1;
         }
-        return base / (px.length / 4);
+        return hull / (px.length / 4);
       };
-      expect(share('camo'), 'camo has stopped being the hull colour').toBeGreaterThan(0.5);
-      expect(share('clouds'), 'clouds is no longer cloud-dominant').toBeLessThan(0.35);
+      // Swept over ALL SIX shipped hulls, not one: camo lands on 0.2922 for every hull
+      // and clouds on 0.5781, because both generators are seeded and carry no colour
+      // dependence at all. The thresholds sit either side of the midpoint, so swapping
+      // the two skins' parameters back fails BOTH of them rather than neither.
+      let checked = 0;
+      for (const hull of PALETTE) {
+        checked++;
+        expect(share('camo', hull.hex), `camo has stopped covering the ${hull.id} hull`)
+          .toBeLessThan(0.35);
+        expect(share('clouds', hull.hex), `clouds has stopped being sky-dominant on ${hull.id}`)
+          .toBeGreaterThan(0.5);
+      }
+      expect(checked).toBe(6);
+    });
+
+    it('gives camo and clouds DIFFERENT shape languages, not one shape at two densities', () => {
+      // This is the test that would have caught what two rounds of density-swapping
+      // could not. Austin reported the two as swapped, the coverage WAS backwards, it
+      // was fixed -- and he still said "clouds turret top could be made to look a bit
+      // more cloudlike in shape. Same with some spots on the hull." They shared one
+      // generator, so they were one silhouette at two densities and could only ever read
+      // as versions of each other.
+      //
+      // THE DISCRIMINATOR CHANGED, because the first one measured a property that no
+      // longer ships. It was EDGE HARDNESS -- the share of pixels off the three flat
+      // tones -- which worked only while clouds was `cumulus`, whose ramped rim put 18%
+      // of the tile on a gradient. `cumulus` was rejected on look ("before clouds looks
+      // better actually") and clouds is back on `blotches`, so both skins are hard-edged
+      // and that metric now reads 0.0000 for BOTH: it would have to be asserted as equal,
+      // which discriminates nothing.
+      //
+      // What still differs is EDGE GEOMETRY, and it is the thing the eye names: camo's
+      // boundaries are straight lines meeting at corners (a power diagram), clouds' are
+      // circular arcs (unions of discs). Measured as the share of boundary pixels whose
+      // neighbouring boundary pixels, within a 7px radius, fit a straight line to better
+      // than 0.6px RMS.
+      //
+      // THIS IS A SHAPE METRIC, NOT A DENSITY ONE, and that had to be proved rather than
+      // assumed -- three cheaper candidates (base-region connectivity, triple-junction
+      // count, accent-meets-accent boundary share) all collapsed under a coverage-matched
+      // control, scoring camo's generator at clouds' coverage the same as clouds. This
+      // one does not: `camoCells` re-tuned to leave 0.578 of the tile as hull, which is
+      // clouds' exact coverage, still measures 0.2651 -- camo-like, and far above the
+      // 0.10 ceiling below. See the CONTROLS listed under the assertions.
+      //
+      // It IS scale-relative, and that is stated rather than hidden: "straight over 7px"
+      // is a claim about the shipped feature sizes. A power diagram of 120 tiny cells
+      // measures 0.0347, i.e. cloud-like, because nothing is straight for 7px.
+      const straightEdgeShare = (skin: 'camo' | 'clouds'): number => {
+        const SZ = 128;
+        const px = pixelsOf(skin, '#3d7bd6', null);
+        const at = (x: number, y: number): string => {
+          const i = (((y % SZ) + SZ) % SZ) * SZ * 4 + (((x % SZ) + SZ) % SZ) * 4;
+          return `${px[i]},${px[i + 1]},${px[i + 2]}`;
+        };
+        const onEdge = new Uint8Array(SZ * SZ);
+        const edges: Array<[number, number]> = [];
+        for (let y = 0; y < SZ; y++) {
+          for (let x = 0; x < SZ; x++) {
+            const c = at(x, y);
+            if (c !== at(x + 1, y) || c !== at(x - 1, y) || c !== at(x, y + 1) || c !== at(x, y - 1)) {
+              onEdge[y * SZ + x] = 1;
+              edges.push([x, y]);
+            }
+          }
+        }
+        const R = 7;
+        let straight = 0;
+        for (const [cx, cy] of edges) {
+          const dxs: number[] = [];
+          const dys: number[] = [];
+          for (let dy = -R; dy <= R; dy++) {
+            for (let dx = -R; dx <= R; dx++) {
+              if (dx * dx + dy * dy > R * R) continue;
+              if (!onEdge[(((cy + dy) % SZ + SZ) % SZ) * SZ + (((cx + dx) % SZ + SZ) % SZ)]) continue;
+              dxs.push(dx);
+              dys.push(dy);
+            }
+          }
+          if (dxs.length < 5) { straight += 1; continue; } // too few points to be curved
+          const mx = dxs.reduce((s, v) => s + v, 0) / dxs.length;
+          const my = dys.reduce((s, v) => s + v, 0) / dys.length;
+          let sxx = 0, syy = 0, sxy = 0;
+          for (let i = 0; i < dxs.length; i++) {
+            const a = dxs[i] - mx, b = dys[i] - my;
+            sxx += a * a; syy += b * b; sxy += a * b;
+          }
+          sxx /= dxs.length; syy /= dxs.length; sxy /= dxs.length;
+          // The smaller eigenvalue of the 2x2 covariance IS the mean squared
+          // perpendicular residual of the best-fit line.
+          const half = (sxx + syy) / 2;
+          const det = sxx * syy - sxy * sxy;
+          const lo = half - Math.sqrt(Math.max(0, half * half - det));
+          if (Math.sqrt(Math.max(0, lo)) < 0.6) straight += 1;
+        }
+        return straight / edges.length;
+      };
+      // MEASURED, and identical on all 6 shipped hulls (both generators are seeded and
+      // colour-free; checked, not assumed): camo 0.2855, clouds 0.0355 -- an 8x ratio.
+      //
+      // CONTROLS, each run against these same thresholds:
+      //   camoCells at clouds' coverage (44 sites, 0.578 base)   0.2651  -> fails <0.10
+      //   camoCells with sparse sites   (14 sites, 0.578 base)   0.5460  -> fails <0.10
+      //   blotches at camo's old density (13, 9-18, 4 lobes)     0.0347  -> fails >0.15
+      //   blotches at a larger radius    (7, 18-30, 5 lobes)     0.1767  -> fails >0.15
+      // So handing either skin the other's generator dies here, at either coverage.
+      expect(straightEdgeShare('camo'), 'camo has lost its straight edges -- it will read as blobs')
+        .toBeGreaterThan(0.15);
+      expect(straightEdgeShare('clouds'), 'clouds has grown straight edges -- it will read as pale camo')
+        .toBeLessThan(0.10);
+    });
+
+    it('camo and clouds TILE: the wrap seam is no busier than the interior', () => {
+      // `skins.ts` says of both generators "Both tile seamlessly", and until this test
+      // that sentence was pinned by nothing but the golden hash -- which fails on ANY
+      // pixel change, so it cannot tell a broken wrap from a re-tune. A tank's hull is
+      // one continuous UV projection, so a tile that does not wrap draws a hard line
+      // across it.
+      //
+      // The measure is the number of tone CHANGES along the joining pair of lines. A
+      // wrapped generator's seam is an ordinary interior boundary and should be in line
+      // with the interior mean; an unwrapped one cuts every feature that crosses it, so
+      // the seam becomes the busiest line in the tile.
+      const seam = (skin: 'camo' | 'clouds', axis: 'col' | 'row'): { wrap: number; interior: number } => {
+        const SZ = 128;
+        const px = pixelsOf(skin, '#3d7bd6', null);
+        const at = (x: number, y: number): string => {
+          const i = (y * SZ + x) * 4;
+          return `${px[i]},${px[i + 1]},${px[i + 2]}`;
+        };
+        // changes between line `a` and the line one step along the axis from it
+        const changes = (a: number): number => {
+          let n = 0;
+          for (let k = 0; k < SZ; k++) {
+            const p = axis === 'col' ? at(a, k) : at(k, a);
+            const q = axis === 'col' ? at((a + 1) % SZ, k) : at(k, (a + 1) % SZ);
+            if (p !== q) n++;
+          }
+          return n;
+        };
+        let sum = 0;
+        for (let a = 0; a < SZ - 1; a++) sum += changes(a);
+        return { wrap: changes(SZ - 1), interior: sum / (SZ - 1) };
+      };
+      // MEASURED on the shipped generators, and on the wrap-broken controls below.
+      //
+      // Every figure below was run; seam count / interior mean, so the ratio is the
+      // number the assertion compares against 4.
+      //
+      //                             camo col    camo row   clouds col  clouds row
+      //   shipped                    7 / 5.86    2 / 5.83    9 / 4.24    1 / 3.93
+      //                                  1.19x       0.34x       2.12x       0.25x
+      //   camo control               75 / 4.91   87 / 4.98    (unmoved)  (unmoved)
+      //     `wrapDelta` returns d       15.3x       17.5x
+      //   clouds control              (unmoved)   (unmoved)  52 / 3.88   33 / 3.49
+      //     `blotches` clips instead                             13.4x       9.5x
+      //     of wrapping
+      //
+      // Both controls are listed because each breaks only its OWN skin -- camo's wrap is
+      // `wrapDelta`, clouds' is the modulo in the lobe loop -- so one control cannot
+      // stand in for the other, and a table with one row would leave the other generator
+      // pinned by nothing again.
+      //
+      // The 4x ceiling sits in the gap: worst shipped is 2.12x, best broken is 9.5x.
+      // Note camo's own row seam (0.34x) is BELOW its interior mean, which is what a
+      // properly wrapped hard-edged tile looks like -- the seam is an ordinary line.
+      for (const skin of ['camo', 'clouds'] as const) {
+        for (const axis of ['col', 'row'] as const) {
+          const { wrap, interior } = seam(skin, axis);
+          expect(wrap, `${skin} does not tile along ${axis}: the seam will draw a line across the hull`)
+            .toBeLessThanOrEqual(4 * interior);
+        }
+      }
     });
   });
 
@@ -516,13 +718,28 @@ describe('createSkinTexture', () => {
       // player's tank. Re-capture these only when you mean to.
       //
       // Population: 6 shipped hulls x 5 patterned skins = 30, the complete set.
+      //
+      // RE-CAPTURED THREE TIMES on this branch, for three deliberate changes to the same
+      // pair: the camo/clouds density swap (12 of 30 moved), the shape-language split
+      // that gave each its own generator (12 of 30 again), and then the reversion of
+      // clouds alone to `blotches` after `cumulus` was rejected on look (6 of 30 -- the
+      // six clouds entries and nothing else). The 18 stripes/checker/flow hashes are
+      // byte-for-byte what they were before any of the three. That invariance is the
+      // check that none of them touched anything but camo and clouds. If a stripes,
+      // checker or flow hash ever moves in the same commit as a camo/clouds one, that is
+      // a second change riding along and it needs its own reason.
+      //
+      // The six clouds entries below are not newly captured: they are byte-identical to
+      // what this table held at 76ef38a, before `cumulus` existed. That equality is the
+      // evidence that the revert landed on the exact texture Austin compared against,
+      // rather than on something merely similar to it.
       const GOLDEN: Record<string, string> = {
-        'blue/stripes': '68c745c5', 'blue/camo': '641f4f52', 'blue/clouds': 'c1aeb8e5', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06',
-        'red/stripes': '44d265c5', 'red/camo': 'dcf08c54', 'red/clouds': '50f418d9', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845',
-        'orange/stripes': '3678b9c5', 'orange/camo': 'f60cb930', 'orange/clouds': '72987c29', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70',
-        'purple/stripes': '8f6df1c5', 'purple/camo': '462c00c5', 'purple/clouds': '61134c25', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5',
-        'green/stripes': '8a012dc5', 'green/camo': '7e2271eb', 'green/clouds': 'fde43ddd', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82',
-        'white/stripes': 'f8ded5c5', 'white/camo': '88795436', 'white/clouds': 'a0adc599', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2',
+        'blue/stripes': '68c745c5', 'blue/camo': '892c9da9', 'blue/clouds': 'cbe3c968', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06',
+        'red/stripes': '44d265c5', 'red/camo': '7504e4e5', 'red/clouds': 'a1a5fa27', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845',
+        'orange/stripes': '3678b9c5', 'orange/camo': '29f15911', 'orange/clouds': '740aace5', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70',
+        'purple/stripes': '8f6df1c5', 'purple/camo': 'a75fc0dd', 'purple/clouds': 'c1836e39', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5',
+        'green/stripes': '8a012dc5', 'green/camo': '27573ce1', 'green/clouds': '40761c41', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82',
+        'white/stripes': 'f8ded5c5', 'white/camo': 'e71c4aed', 'white/clouds': 'e228941b', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2',
       };
       let checked = 0;
       for (const hull of PALETTE) {
