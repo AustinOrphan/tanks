@@ -40,6 +40,12 @@ export const REPLAY_SCHEMA = 1;
  * someone leaves on; recording stops here and says so (`truncated`) rather than
  * dropping the oldest ticks, because a replay must start at tick 0 to mean
  * anything.
+ *
+ * Its MAGNITUDE is pinned by no test, deliberately: halving it to five minutes
+ * leaves replay.test.ts green, because the limit tests pass an explicit `limit`
+ * rather than exercising this number. What IS pinned is that the default gets
+ * APPLIED at all -- setting it to 0 fails several of those tests. Retune it
+ * freely; that is the same treatment CLAUDE.md gives its other feel constants.
  */
 export const DEFAULT_TICK_LIMIT = TICK_HZ * 60 * 10;
 

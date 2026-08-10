@@ -561,7 +561,7 @@ that split by treating every unmarked line as harvested. Appending new work ther
 make that sentence say something false about where these came from, so they sit here, in
 the same shape as the "walls as geometry" follow-ups above.
 
-**1. The replay stamp cannot see CODE.** `SIM_DATA_FINGERPRINT` (`src/game/replay.ts`) is a
+**1. The replay stamp cannot see CODE.** `simDataFingerprint()` (`src/game/replay.ts`) is a
 canonical FNV-1a over the sim's four JSON data files — balance, tank-defs, ai-profiles,
 arenas — so any DATA change invalidates a trace. A change to `targeting.ts` or
 `collision.ts` diverges a replay with the fingerprint unchanged. So a mismatch proves a
