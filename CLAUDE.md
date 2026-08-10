@@ -142,6 +142,48 @@ consequence of the non-playing branch dropping the accumulator but still forward
 the driver applies it, the same split `renderAlpha` has. It must stay out of `src/sim/`:
 a wall clock there would break replay.
 
+**A SKIN'S UV MAPPING IS DECIDED PER PART, and the three parts disagree on purpose.**
+`entities.ts` is the only place this lives, and each rule exists because a render was
+wrong in a way no numeric probe caught.
+
+The HULL must read as one continuous surface — Austin's "the hull should be distinctly
+one piece". `ExtrudeGeometry` carries THREE parameterisations: the caps come from the
+shape's own (x, y), while the bevel ring and side walls come from `generateSideWallUV`,
+which returns `(x, 1 - z)` or `(y, 1 - z)` and **chooses between them per quad** on
+`Math.abs(a_y - b_y) < Math.abs(a_x - b_x)`. So the perimeter's own u axis flipped with
+the direction of that stretch of outline. `projectBodyUV` projects the body from above
+and `unrollSkirtUV` folds the skirt outward by its drop; a plain top-down projection is
+NOT enough on its own, because the near-vertical walls collapse and the skirt renders as
+vertical streaks (checker became columns, camo a picket fence). The unroll averages the
+outward direction over every vertex sharing a position, which is load-bearing rather
+than tidy: the geometry is non-indexed, so facet normals split the UV at every rounded
+corner — measured 0.102 of a tile before averaging, 0.000000 after, against 1.472500 for
+the untouched default. `entities.test.ts` asserts co-located vertices agree, with the
+unmapped enemy hull as the negative control.
+
+The TURRET keeps `LatheGeometry`'s own wrap and **must not be touched**: u around the
+axis is what makes checker a pinwheel and flow a swirl, and Austin asked for both by
+name. The generalisation that "fixes" the hull everywhere is exactly the wrong move
+here; a test compares the dome's position, normal and uv arrays against a freshly built
+reference so that move fails loudly.
+
+The BARREL is a lathe too, and its defect was DENSITY, not topology. Lathe u is one full
+texture repeat around the circumference whatever that circumference is, so the same tile
+was packed 2.8x tighter on the 0.82-unit gun than on the 2.26-unit turret and flow's
+swirl arrived as corduroy; lathe v is INDEX-based, so the 0.05-unit flare step and the
+0.4-unit tube got equal shares. `matchLatheToTurret` scales u by the radius ratio and
+rebuilds v from real arc length, both against the turret. That makes u a FRACTION of a
+repeat, so it no longer meets itself and there is a seam — `BARREL_SEAM_PHI` puts it on
+the gun's underside, and `PI/2` is exactly 4 of the barrel's 16 segments, so the surface
+is unchanged and only the seam moves. Pick an angle that is not a whole number of
+segments and the silhouette rotates with it.
+
+`stripes` is the exception to all of it: a hard-edged band wrapped around a lathe axis
+arrives as pie slices, so its turret and barrel are projected flat.
+`STRIPE_TURRET_MODE` chooses whether they are normalised per part (as shipped: 0.084
+wide on the hull, 0.069 on the turret, 0.025 on the barrel) or at world scale
+(continuous, 0.084 throughout).
+
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
 AI profiles come from `data/ai-profiles.json`) → `resolveTankConfig` →
