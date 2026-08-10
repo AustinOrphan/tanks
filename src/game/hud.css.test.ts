@@ -23,6 +23,30 @@ function stripComments(text: string): string {
 }
 
 /**
+ * Split a shorthand value into its top-level components, so `max(a, env(b))` counts as
+ * ONE component rather than splitting on the whitespace inside it. A naive
+ * `.split(/\s+/)` turns the topbar's four-part padding into eight fragments and makes
+ * every positional assertion meaningless.
+ */
+function splitShorthand(value: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of value.trim()) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (depth === 0 && /\s/.test(ch)) {
+      if (cur) out.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/**
  * Four properties every themed button in the HUD sets and a browser-default one does
  * not. Chosen by measurement, not taste, but state the measurement precisely: all 27
  * buttons differ from a bare `<button>` on THIRTEEN properties, and these are four of
@@ -444,11 +468,42 @@ describe('hud.css is syntactically whole', () => {
         `env(safe-area-inset-${side})`,
       );
     }
+    // ...and each inset on the side it is FOR. The presence checks above are exactly
+    // the "close to worthless" shape CLAUDE.md names, and it was not hypothetical here:
+    // swapping `env(safe-area-inset-right)` and `env(safe-area-inset-left)` in the
+    // shorthand -- so each pads the opposite edge -- passed all 17 tests in this file.
+    // Measured in Chromium at 844x390 with the notch on the left (inset-left 59px),
+    // shipped computes `12px 18px 12px 59px` and swapped computes `12px 59px 12px 18px`:
+    // the score row stays under the camera housing and gains dead space on the far side.
+    //
+    // The shorthand is top/right/bottom/left, so the position IS the meaning.
+    const paddingDecl = topbarRule
+      .split(';')
+      .map((d) => d.trim())
+      .find((d) => d.startsWith('padding:') && d.includes('env('));
+    expect(paddingDecl, 'the topbar has no safe-area padding declaration at all').toBeDefined();
+    const sides = splitShorthand(paddingDecl!.slice('padding:'.length));
+    // Four components, not two or three: a shorthand with fewer mirrors its opposite
+    // edge, which would silently give the left inset to the right side.
+    expect(sides, `not a four-part shorthand: ${paddingDecl}`).toHaveLength(4);
+    expect(sides[0], 'top').toContain('env(safe-area-inset-top)');
+    expect(sides[1], 'right').toContain('env(safe-area-inset-right)');
+    expect(sides[2], 'bottom is deliberately plain').not.toContain('env(');
+    expect(sides[3], 'left').toContain('env(safe-area-inset-left)');
+
     const touch = src.slice(src.indexOf('.hud-touch {'));
     const touchRule = touch.slice(0, touch.indexOf('}'));
-    // Fire and Mine sit in the home-indicator swipe strip at `bottom: 14px`.
+    // Fire and Mine sit in the home-indicator swipe strip at `bottom: 14px`. These are
+    // LONGHANDS, so pair each property with its own inset for the same reason as above
+    // -- `right: max(14px, env(safe-area-inset-bottom))` contains both strings and would
+    // pass a presence check.
     for (const side of ['right', 'bottom']) {
-      expect(touchRule, `the touch row ignores the ${side} inset`).toContain(
+      const decl = touchRule
+        .split(';')
+        .map((d) => d.trim())
+        .find((d) => d.startsWith(`${side}:`) && d.includes('env('));
+      expect(decl, `the touch row ignores the ${side} inset`).toBeDefined();
+      expect(decl, `${side} is padded by the wrong inset`).toContain(
         `env(safe-area-inset-${side})`,
       );
     }

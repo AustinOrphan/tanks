@@ -62,6 +62,32 @@ describe('the web app manifest', () => {
     for (const icon of manifest.icons) expect(icon.src.startsWith('./')).toBe(true);
   });
 
+  it('installs as an APP, not as a browser tab, and is installable at all', () => {
+    // Both of these were unpinned, and both were proved so before this case was
+    // written: `"display": "standalone"` -> `"browser"` passed all 30 tests across
+    // this file and `tools/portability/check.test.ts`, and `"name": "Tanks!"` -> `""`
+    // passed all 6 here.
+    //
+    // `display` is the single field that decides whether the installed icon opens a
+    // chromeless app or a browser tab -- which is the whole of issue #107 -- and
+    // `name`/`short_name` are Chrome's installability floor: an empty `name` makes the
+    // manifest silently uninstallable, with the page still loading and playing
+    // perfectly, which is exactly the failure mode this file exists to catch.
+    //
+    // `standalone` is a DECISION, recorded in the PR and in the backlog: both platforms
+    // honour it predictably, where iOS's handling of `fullscreen` was not verified. So
+    // this is pinned as the literal rather than as "one of the app-like values" -- a
+    // change to `fullscreen` should be deliberate and should land with the verification
+    // that is currently missing.
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.name.length).toBeGreaterThan(0);
+    expect(manifest.short_name.length).toBeGreaterThan(0);
+    // Chrome truncates `short_name` on a home screen at around a dozen characters; the
+    // bound is generous rather than exact, and its job is to catch a name pasted in from
+    // the description field, not to pick a length.
+    expect(manifest.short_name.length).toBeLessThanOrEqual(12);
+  });
+
   it('agrees with index.html on the colours the launch screen is painted in', () => {
     // `background_color` is what the platform paints while the bundle boots, before a
     // single frame is drawn. If it disagrees with the page's own background the launch
