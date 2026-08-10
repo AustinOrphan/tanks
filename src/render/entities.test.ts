@@ -989,8 +989,13 @@ describe('skins (player texture override)', () => {
     //
     // Asserted as a RATIO of world densities rather than against the literal 0.361, so
     // it keeps meaning the right thing if TURRET_R or BARREL_R is retuned. The mutation
-    // that kills it is dropping the matchLatheToTurret call, which sends the ratio to
-    // 2.77 -- verified by doing it.
+    // that kills it is dropping the matchLatheToTurret call, which takes the ratio from
+    // 0.714 to 1.978 -- verified by doing it.
+    //
+    // 1.978 rather than the 2.77 the tube circumferences alone would suggest, because
+    // the density below is measured against each part's WIDEST radius and the barrel's
+    // is the muzzle flare (0.182) rather than the tube (0.13). Both numbers are real;
+    // they answer different questions, and this is the one this test can see.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();

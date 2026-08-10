@@ -135,13 +135,15 @@ export const TURRET_R = 0.36;
  *
  *   'part'  As shipped. Each part's stripe is normalised to that part's own half-width,
  *           so the pair covers the same FRACTION of the hull, the turret and the barrel.
- *           The three sets of stripes are the same size relative to their part and do
- *           NOT line up with each other -- the barrel's are 3.4x wider in world units
- *           than the hull's. It reads as three striped components.
+ *           The three sets are the same size relative to their part and so do NOT line
+ *           up with each other: measured in world units the stripe is 0.084 wide on the
+ *           hull, 0.069 on the turret and 0.025 on the barrel -- the gun's are 3.4x
+ *           NARROWER than the hull's, and the mismatch steps visibly where the barrel
+ *           leaves the turret (see the `top` render). It reads as three striped parts.
  *
  *   'body'  One continuous field. Every part is projected at world scale (k = 1), so the
  *           SAME pair of stripes runs from the nose, up over the turret and out along
- *           the gun, at one constant width. It reads as one striped object.
+ *           the gun, at one constant 0.084. It reads as one striped object.
  *
  * Normalising to HULL_HALF_W is what makes 'body' work: `projectStripeUV` divides by
  * `acrossHalf`, so handing it the hull's own half-width leaves the scale factor at 1 and
