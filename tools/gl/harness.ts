@@ -1080,6 +1080,55 @@ await checkAsync('the idle spin stops for good at the first interaction, for a N
   return null;
 });
 
+await checkAsync('a STATIC skin schedules NO frames once the spin has stopped', async () => {
+  // The check above says the pixels come to rest. This one says the panel stops ASKING
+  // for frames, which is a different fact and the one `preview.ts` actually claims:
+  // "picking a static one stops it, so an untouched panel showing `solid` costs no
+  // frames at all once the idle spin ends" (and `backlog.md` entry 5 says the same).
+  //
+  // Nothing pinned it, and the gap was real: `controls.setAnimating(true)` written
+  // unconditionally in `preview.ts` passed 1741 of 1743 vitest cases (2 skipped) and all
+  // 50 GL checks. Every byte-level probe is blind to it by construction -- a static skin
+  // repainted forever changes zero bytes, which is exactly what `afterStatic === 0`
+  // asserts next door. The observable that is NOT blind is the frame request itself.
+  //
+  // An earlier draft of the disclosure claimed this needed an observable `TankPreview`
+  // does not expose. That was wrong: `window.requestAnimationFrame` is the observable,
+  // and it is already reachable from here. UNTESTED and UNFALSIFIABLE are different
+  // claims and this one was only the former.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  preview.setStyle('#3d7bd6', 'checker', null);
+  c.dispatchEvent(pointerAt('pointermove', c, 70, 0));
+  // The spin's cancel happens inside the event handler, but a callback already scheduled
+  // for this frame may still be in flight and will reschedule once before it sees the
+  // stop. Counting starts after that has settled -- same reason as the check above.
+  await idle(100);
+  const real = window.requestAnimationFrame;
+  let scheduled = 0;
+  window.requestAnimationFrame = function (cb: FrameRequestCallback): number {
+    scheduled++;
+    return real.call(window, cb);
+  };
+  try {
+    await idle(400);
+  } finally {
+    // Restored in a finally: leaving a counting wrapper on `window` would silently
+    // follow every later check in this file.
+    window.requestAnimationFrame = real;
+  }
+  preview.dispose();
+  c.remove();
+  // Measured on this harness, both ends: 0 as shipped, 24 with `setAnimating(true)`
+  // written unconditionally. Asserted at exactly 0 rather than at a threshold, because
+  // "stops asking" is the claim -- one frame per 400ms would still be a live loop.
+  if (scheduled !== 0) {
+    return `${scheduled} frames scheduled in 400ms with a static skin -- the panel never stops repainting`;
+  }
+  return null;
+});
+
 await checkAsync('an ANIMATED skin keeps repainting after the spin has stopped', async () => {
   // The whole of issue #122, measured where it lives. `flow` is the one animated skin
   // the game ships, and the panel where a player decides whether to wear it showed it

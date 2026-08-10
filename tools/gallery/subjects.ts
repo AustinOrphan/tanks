@@ -213,7 +213,8 @@ export interface GalleryOptions {
    * no timeline to scroll along.
    *
    * DISCLOSED SURVIVING MUTANT: `buildGallery` ignoring this field entirely (returning
-   * `frames: layout.frames`) passes 1741 of 1741 vitest cases and 50 of 50 GL checks --
+   * `frames: layout.frames`) passes 1741 of 1743 vitest cases (2 skipped) and 50 of 50
+   * GL checks --
    * measured, both. `--frames N` would silently do nothing and only the runner would
    * show it. It is not killed here because the only observer is `run.mjs`, which writes
    * files from a real browser; nothing under `npm test` or `npm run test:gl` reads the

@@ -331,7 +331,8 @@ export function createPreviewControls(
       // that happens to land on this exact pose would be filtered out as "no change".
       //
       // DISCLOSED SURVIVING MUTANT: deleting these TWO LINES on their own, keeping the
-      // `onAnimate` call, passes 1741 of 1741 vitest cases (measured). What the test
+      // `onAnimate` call, passes 1741 of 1743 vitest cases (2 skipped; measured with
+      // the one-loop test present). What the test
       // suite kills is the COMBINATION -- `emit()` alongside `onAnimate` without the
       // sync -- so the reason given in the sentence above is argued, not tested. The
       // state it protects against needs a pointer event landing on the exact pose a

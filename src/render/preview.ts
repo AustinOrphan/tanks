@@ -331,15 +331,20 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
       // Picking an animated skin starts the clock; picking a static one stops it, so an
       // untouched panel showing `solid` costs no frames at all once the idle spin ends.
       //
-      // DISCLOSED SURVIVING MUTANT, and it sits directly under that sentence:
-      // `controls.setAnimating(true)` unconditionally -- a static skin repainting for the
-      // life of the session -- passes 1741 of 1741 vitest cases and 50 of 50 GL checks
-      // (measured, both). The GL check's `afterStatic === 0` half cannot see it for the
-      // same reason the stale-`playerScroll` mutant beside it survives: a static skin
-      // repainted forever changes zero bytes, and zero bytes is exactly what that half
-      // asserts. Killing it needs an observable the preview does not currently expose
-      // (whether its clock is running), so the cost claim above is held by review, not by
-      // a test. Read it as a design intent that is checked by eye.
+      // That sentence is PINNED, and was not until review caught it. Writing
+      // `controls.setAnimating(true)` unconditionally here -- a static skin repainting
+      // for the life of the session -- passed 1741 of 1743 vitest cases (2 skipped) and
+      // all 50 GL checks, measured with the one-loop test already present. It is killed now by `a STATIC skin schedules NO frames once
+      // the spin has stopped` in tools/gl/harness.ts: 0 frames as shipped, 24 under the
+      // mutation, over a 400ms window.
+      //
+      // Why every byte-level probe was blind to it, since that is the reusable part: a
+      // static skin repainted forever changes ZERO bytes, and zero bytes is exactly what
+      // the neighbouring check's `afterStatic === 0` half asserts. The observable that
+      // works is the frame REQUEST, not the pixels. An earlier draft of this comment said
+      // killing it needed an observable the preview does not expose; that was wrong --
+      // `window.requestAnimationFrame` was reachable from the harness the whole time, and
+      // "untested" had been written down as "unfalsifiable".
       controls.setAnimating(skinScroll(skin) !== null);
       draw();
     },

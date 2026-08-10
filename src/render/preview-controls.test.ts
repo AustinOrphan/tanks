@@ -640,8 +640,8 @@ describe('createPreviewControls: the animated-skin clock', () => {
     // The test above pins that `onPose` and `onAnimate` do not BOTH fire on a frame. It
     // does not pin that there is one frame to fire on. `startFrames`' re-entrancy guard
     // is what makes that true, and it was unpinned: `if (disposed || frameHandle !==
-    // null) return` -> `if (disposed) return` passed this whole file, all 1740 vitest
-    // cases and all 50 GL checks.
+    // null) return` -> `if (disposed) return` passed this whole file, 1740 of 1742 vitest
+    // cases (2 skipped -- the gate BEFORE this test existed) and all 50 GL checks.
     //
     // The live path reaches it: loop.ts calls `preview.setStyle` when Customize opens,
     // while the idle spin already has a frame pending, so `setAnimating(true)` would
