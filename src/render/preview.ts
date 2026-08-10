@@ -64,10 +64,23 @@ export interface TankPreview {
   dispose(): void;
 }
 
-// Matches scene.ts's BASE_FOV: not imported (that one is a local const, not exported,
-// and reaching in just for a shared literal is not worth widening scene.ts's surface
-// for) but kept equal on purpose, so the preview's perspective distortion reads the
-// same as the tank the player is used to seeing in the arena.
+// The preview deliberately uses a WIDER lens than the arena, and that divergence is
+// now the point rather than an accident.
+//
+// This comment used to say the value matched scene.ts's BASE_FOV, and that BASE_FOV was
+// a local const not worth exporting. Both stopped being true the moment PR #103 merged:
+// BASE_FOV is exported now, and it is 30, chosen so the arena's whole board fills more
+// of the screen without its far edge converging hard.
+//
+// That reasoning does not carry over to a close-up of ONE tank. A 30-degree lens here
+// would push the camera far enough out that the tank reads nearly flat -- the opposite
+// of what a preview is for, since the whole job of this panel is to show the model with
+// some dimensionality. So 50 stays and the two are meant to differ.
+//
+// FEEL, not measurement: 30 vs 50 was never rendered side by side here, nothing pins
+// this constant, and no test would notice it changing. Retune by looking, not by
+// reasoning -- and if the arena's fov moves again, this comment does NOT automatically
+// go stale with it, because it no longer claims to track it.
 const FOV = 50;
 
 // The area fitCameraToArea frames, in world units -- the hull is 1x1 (HULL_WIDTH /

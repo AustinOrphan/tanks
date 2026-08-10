@@ -252,6 +252,7 @@ but "some CI job already built this bundle" is not a thing anyone has shown.
 
 ## Customize preview residuals, deferred while shipping the live tank preview
 
+- `preview.ts`'s `FOV` (50) deliberately differs from the arena's `BASE_FOV` (30) so a close-up does not read flat, but the two were never rendered side by side and nothing pins either against the other. The previous comment claimed they matched and went stale silently when #103 changed `BASE_FOV`; review caught it. #102
 **Raised 2026-08-09**, shipping PR #102 (`src/render/preview.ts`, a second WebGL
 context for the Customize panel's live tank preview).
 
