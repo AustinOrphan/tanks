@@ -80,6 +80,7 @@ interface Harness {
   canvas: HTMLCanvasElement;
   controls: ReturnType<typeof createPreviewControls>;
   poses: PreviewPose[];
+  animates: Array<{ dt: number; pose: PreviewPose }>;
   frames: Array<(t: number) => void>;
   cancelled: number[];
 }
@@ -87,6 +88,7 @@ interface Harness {
 function harness(opts: { reducedMotion?: boolean; rect?: typeof RECT } = {}): Harness {
   const canvas = makeCanvas(opts.rect);
   const poses: PreviewPose[] = [];
+  const animates: Array<{ dt: number; pose: PreviewPose }> = [];
   const frames: Array<(t: number) => void> = [];
   const cancelled: number[] = [];
   const controls = createPreviewControls(canvas, {
@@ -94,13 +96,14 @@ function harness(opts: { reducedMotion?: boolean; rect?: typeof RECT } = {}): Ha
     initialPose: INITIAL_PREVIEW_POSE,
     reducedMotion: opts.reducedMotion,
     onPose: (p) => poses.push(p),
+    onAnimate: (dt, pose) => animates.push({ dt, pose }),
     raf: (cb) => {
       frames.push(cb);
       return frames.length; // 1-based, so 0 is never a valid handle
     },
     cancelRaf: (h) => cancelled.push(h),
   });
-  return { canvas, controls, poses, frames, cancelled };
+  return { canvas, controls, poses, animates, frames, cancelled };
 }
 
 describe('normalizeAngle', () => {
@@ -574,6 +577,161 @@ describe('createPreviewControls: the idle spin', () => {
     // ...and the controls still work, which is the point of suppressing only the spin.
     h.canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 80, clientY: CY }));
     expect(h.controls.pose().turretAngle).toBeCloseTo(0, 4);
+    h.controls.dispose();
+  });
+});
+
+describe('createPreviewControls: the animated-skin clock', () => {
+  /** Get past the idle spin, the way a player does, so what is left is the skin's own
+   * loop and nothing else. */
+  function interacted(): Harness {
+    const h = harness();
+    h.canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 80, clientY: CY }));
+    expect(h.controls.idleRunning()).toBe(false);
+    return h;
+  }
+
+  it('runs a loop of its own once an animated skin is worn, and hands it real seconds', () => {
+    // Without this the panel has no clock at all after the first interaction: the
+    // preview's only other redraws are pose changes and restyles, neither of which is
+    // time passing. `flow` was frozen in the panel that sells it.
+    const h = interacted();
+    const before = h.frames.length;
+    h.controls.setAnimating(true);
+    expect(h.controls.animating()).toBe(true);
+    expect(h.frames.length).toBe(before + 1); // a frame really was scheduled
+    h.frames[before](1000); // establishes the clock; credits no time
+    expect(h.animates).toHaveLength(0);
+    h.frames[before + 1](1050);
+    expect(h.animates).toHaveLength(1);
+    expect(h.animates[0].dt).toBeCloseTo(0.05, 9);
+    h.controls.dispose();
+  });
+
+  it('clamps a backgrounded tab, so returning to it does not jump the scroll', () => {
+    const h = interacted();
+    h.controls.setAnimating(true);
+    const i = h.frames.length - 1;
+    h.frames[i](0);
+    h.frames[i + 1](60_000); // a minute in another tab
+    expect(h.animates[0].dt).toBeCloseTo(0.1, 9); // the same clamp the spin uses
+    h.controls.dispose();
+  });
+
+  it('asks for ONE repaint per frame while the spin is also running, not two', () => {
+    // Both behaviours want the frame. Firing onPose as well would draw the same
+    // 260x190 canvas twice per frame for as long as an untouched panel shows `flow`.
+    const h = harness();
+    h.controls.setAnimating(true);
+    expect(h.controls.idleRunning()).toBe(true);
+    h.frames[0](0);
+    h.frames[1](50);
+    expect(h.animates).toHaveLength(1);
+    expect(h.poses).toHaveLength(0);
+    // ...and the spin still turned the tank: the pose came through onAnimate instead.
+    expect(h.animates[0].pose.bodyAngle).toBeCloseTo(
+      normalizeAngle(INITIAL_PREVIEW_POSE.bodyAngle + IDLE_SPIN_RAD_PER_SEC * 0.05),
+      9,
+    );
+    h.controls.dispose();
+  });
+
+  it('keeps the loop alive when the interaction ends the spin', () => {
+    // The two stopping conditions really are separate: `stopIdle` cancels the pending
+    // frame when nothing else needs it, and must NOT when the skin does. Asserted on
+    // `cancelled` rather than on later frames firing, because the fake raf will happily
+    // invoke a callback the production code cancelled -- a real browser would not, so
+    // an "it kept animating" assertion passes against the very bug it is aimed at.
+    const h = harness();
+    h.controls.setAnimating(true);
+    h.frames[0](0);
+    h.canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 80, clientY: CY }));
+    expect(h.controls.idleRunning()).toBe(false);
+    expect(h.cancelled).toEqual([]); // the frame the skin still needs was left alone
+    const i = h.frames.length - 1;
+    h.frames[i](50);
+    h.frames[i + 1](100);
+    expect(h.animates.length).toBeGreaterThan(0);
+    const spun = h.animates[h.animates.length - 1].pose.bodyAngle;
+    h.frames[h.frames.length - 1](150);
+    // Still repainting, and the hull is NOT turning any more.
+    expect(h.animates[h.animates.length - 1].pose.bodyAngle).toBe(spun);
+    h.controls.dispose();
+  });
+
+  it('stops for good when a static skin is picked, leaving no loop behind', () => {
+    const h = interacted();
+    h.controls.setAnimating(true);
+    const scheduled = h.frames.length;
+    h.controls.setAnimating(false);
+    expect(h.controls.animating()).toBe(false);
+    expect(h.cancelled).toContain(scheduled); // the handle raf handed back, not a guess
+    // A callback the browser had already committed to must be inert.
+    h.frames[scheduled - 1](5000);
+    expect(h.animates).toHaveLength(0);
+    expect(h.frames).toHaveLength(scheduled);
+    h.controls.dispose();
+  });
+
+  it('picking a static skin does not take the idle spin down with it', () => {
+    const h = harness();
+    h.controls.setAnimating(true);
+    h.controls.setAnimating(false);
+    expect(h.controls.idleRunning()).toBe(true);
+    // On `cancelled`, for the same reason as above: the fake raf still invokes a
+    // callback the production code cancelled, so firing frames cannot see this.
+    expect(h.cancelled).toEqual([]);
+    h.frames[h.frames.length - 1](0);
+    h.frames[h.frames.length - 1](50);
+    expect(h.poses).toHaveLength(1); // the spin is still turning it
+    h.controls.dispose();
+  });
+
+  it('re-enabling drops the stale timestamp instead of crediting the whole gap', () => {
+    // The loop can sit stopped for minutes between two skin picks. Differencing against
+    // the timestamp it stopped on would hand the skin the entire gap in one frame.
+    const h = interacted();
+    h.controls.setAnimating(true);
+    let i = h.frames.length - 1;
+    h.frames[i](1000);
+    h.frames[i + 1](1050);
+    h.controls.setAnimating(false);
+    h.controls.setAnimating(true);
+    i = h.frames.length - 1;
+    h.frames[i](600_000); // ten minutes later
+    expect(h.animates).toHaveLength(1); // that frame only re-established the clock
+    h.frames[i + 1](600_050);
+    expect(h.animates[1].dt).toBeCloseTo(0.05, 9);
+    h.controls.dispose();
+  });
+
+  it('still animates under prefers-reduced-motion, where the idle spin does not', () => {
+    // THE DECISION, and it is a decision rather than an oversight: the spin is motion
+    // the panel invents, the scroll is what the skin IS -- and the game scrolls it in
+    // play whatever the media query says. Suppressing it here would make the preview
+    // misrepresent the thing being chosen.
+    const h = harness({ reducedMotion: true });
+    expect(h.frames).toHaveLength(0);
+    h.controls.setAnimating(true);
+    expect(h.frames).toHaveLength(1);
+    h.frames[0](0);
+    h.frames[1](50);
+    expect(h.animates).toHaveLength(1);
+    // ...and the pose is untouched: no spin was smuggled in with it.
+    expect(h.animates[0].pose).toEqual(INITIAL_PREVIEW_POSE);
+    h.controls.dispose();
+  });
+
+  it('schedules nothing more after dispose, however the skin was left', () => {
+    const h = interacted();
+    h.controls.setAnimating(true);
+    const scheduled = h.frames.length;
+    h.controls.dispose();
+    expect(h.controls.animating()).toBe(false);
+    expect(h.cancelled).toContain(scheduled);
+    h.frames[scheduled - 1](5000);
+    expect(h.frames).toHaveLength(scheduled);
+    expect(h.animates).toHaveLength(0);
     h.controls.dispose();
   });
 });

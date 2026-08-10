@@ -1,4 +1,5 @@
 import { DT } from '../sim/constants';
+import type { GameState } from './state';
 
 /**
  * Fixed-timestep bookkeeping, kept OUT of the loop on purpose.
@@ -72,4 +73,39 @@ export function planFrame(acc: number, dtReal: number): FramePlan {
  */
 export function renderAlpha(acc: number, simulating: boolean): number {
   return simulating ? acc / DT : 1;
+}
+
+/**
+ * THE RENDER ANIMATION CLOCK: how many real seconds the RENDER layer may advance
+ * this frame. Distinct from the sim clock, which is fixed-step and never sees wall
+ * time at all -- this one is wall time, and it drives everything that moves without
+ * a tick behind it.
+ *
+ * Two consumers today, and the decision below is made for BOTH, not for skins alone:
+ * `entities.sync` (an animated skin's texture offset, `entities.ts`'s `dt > 0` gate)
+ * and `particles.update` (every explosion, spark and smoke puff in flight).
+ *
+ * THE DECISION: the clock runs whenever the game is not PAUSED.
+ *
+ * Pausing is the one non-simulating state a player enters deliberately, mid-game,
+ * to make the board hold still -- usually to read it. Debris that keeps expanding
+ * and fading through a pause takes away the thing they paused to look at, and a
+ * skin that keeps scrolling makes the freeze read as half-applied. So `paused`
+ * freezes the cosmetics too.
+ *
+ * The other non-simulating states keep it running, and each for its own reason.
+ * `splash`/`title` render the arena behind the menu, and a dead-still board there
+ * reads as a broken game rather than a stopped one. `win`/`lose` arrive DURING the
+ * explosion that ended the round: freezing on that frame hangs the debris in mid
+ * air permanently, where letting it run lets the round settle under the game-over
+ * panel.
+ *
+ * Before this existed the answer was "always, silently" -- an unstated consequence
+ * of the non-playing branch dropping the accumulator but still forwarding
+ * `plan.dt`. Nothing asserted it either way. `frame.test.ts` pins the rule and
+ * `driver.test.ts` pins that the driver applies it, which is the same split
+ * `renderAlpha` already has.
+ */
+export function animationDt(dt: number, state: GameState): number {
+  return state === 'paused' ? 0 : dt;
 }

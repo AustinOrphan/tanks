@@ -38,6 +38,13 @@
  *   wrong even though the conclusion holds.) Shift is the modifier because it reads as
  *   "the same rotation, other part"; it is the less guessable half of the scheme,
  *   which is why hud.css shows a hint the moment the canvas takes focus.
+ * - **An animated skin keeps scrolling**, for as long as one is worn. This module owns
+ *   the panel's only rAF loop, so `setAnimating` hangs the skin's clock on it rather
+ *   than starting a second indefinite repaint. It is NOT suppressed under
+ *   `prefers-reduced-motion`, and the idle spin is: the spin is motion the PANEL
+ *   invents, while the scroll is a property of the thing being previewed and the game
+ *   shows it in play regardless. Suppressing it here would make the preview
+ *   misrepresent what the player would be choosing.
  * - **An idle spin** turns the whole tank slowly so it advertises that it is live
  *   before anything is touched, and stops PERMANENTLY at the first interaction --
  *   a preview that keeps drifting under a player who is trying to look at one face is
@@ -180,6 +187,16 @@ export interface PreviewControlsDeps {
   /** Called only when the pose ACTUALLY changes, so the caller can treat it as a
    * redraw request without filtering. */
   readonly onPose: (pose: PreviewPose) => void;
+  /**
+   * Called once per rAF frame while `setAnimating(true)` is in force, with the elapsed
+   * seconds and the pose as it stands. A redraw request like `onPose`, but one that
+   * carries a CLOCK -- an animated skin scrolls by seconds, not by pose changes.
+   *
+   * It REPLACES `onPose` for the duration, rather than firing alongside it: while both
+   * the idle spin and an animated skin are live the frame has exactly one repaint to
+   * ask for, and two callbacks would draw the same 260x190 canvas twice per frame.
+   */
+  readonly onAnimate?: (dt: number, pose: PreviewPose) => void;
   /** True to suppress the idle spin entirely. preview.ts passes
    * `prefers-reduced-motion`; injected rather than read here so a test can drive both
    * branches without touching matchMedia. */
@@ -194,6 +211,18 @@ export interface PreviewControls {
   /** False once the player has touched the preview -- the idle spin is over for the
    * life of this controller. */
   idleRunning(): boolean;
+  /**
+   * Turn the per-frame `onAnimate` clock on or off. The preview calls this from
+   * `setStyle` with "does this skin scroll?", so the loop runs while an animated skin
+   * is worn and stops when a static one is picked.
+   *
+   * Deliberately NOT tied to the idle spin, which stops at the first interaction and
+   * never resumes: these are two behaviours with different stopping conditions sharing
+   * one rAF loop. See the design note in `frame`.
+   */
+  setAnimating(on: boolean): void;
+  /** True while the animation clock is running -- for the caller and for tests. */
+  animating(): boolean;
   /** Removes every listener it added and cancels any pending frame. Safe twice. */
   dispose(): void;
 }
@@ -222,6 +251,7 @@ export function createPreviewControls(
 
   let drag: Drag | null = null;
   let idle = !deps.reducedMotion;
+  let animating = false;
   let frameHandle: number | null = null;
   let lastFrameMs: number | null = null;
   let disposed = false;
@@ -239,21 +269,45 @@ export function createPreviewControls(
     frameHandle = null;
   }
 
+  /** Start the rAF loop if it is not already running. `lastFrameMs` is dropped, not
+   * kept: the loop may have been stopped for minutes, and differencing against a stale
+   * timestamp would credit all of it to the first frame. */
+  function startFrames(): void {
+    if (disposed || frameHandle !== null) return;
+    lastFrameMs = null;
+    frameHandle = raf(frame);
+  }
+
   /** The first interaction ends the idle spin for good. Not a pause: a preview that
    * resumes drifting a moment after the player stops moving is the behaviour this is
-   * written to avoid. */
+   * written to avoid.
+   *
+   * It does NOT stop the loop when an animated skin is worn -- the spin and the skin
+   * share the loop but not the stopping condition. */
   function stopIdle(): void {
     if (!idle) return;
     idle = false;
-    cancelFrame();
+    if (!animating) cancelFrame();
   }
 
+  /**
+   * THE ONE INDEFINITE REPAINT, shared.
+   *
+   * Two behaviours want per-frame time and they stop at different moments: the idle
+   * spin ends for good at the first interaction, and the skin animation runs as long as
+   * an animated skin is selected. This is deliberately ONE loop rather than a second
+   * one hung off `setAnimating`, on two grounds: the panel's repaint cost is one canvas
+   * per frame either way, and `docs/superpowers/backlog.md` spike 5 records the cost of
+   * the existing indefinite repaint as UNMEASURED -- adding a second while that is
+   * still true would double an unknown rather than an known-small number. Nothing here
+   * claims either arrangement is cheap; what it avoids is claiming it twice.
+   */
   function frame(nowMs: number): void {
     frameHandle = null;
-    if (disposed || !idle) return;
+    if (disposed || (!idle && !animating)) return;
     // The first frame has no previous timestamp to difference against, and a tab
     // restored from the background hands back a huge one -- clamped so neither
-    // teleports the tank.
+    // teleports the tank (nor jumps the skin's scroll).
     const dt = lastFrameMs === null ? 0 : Math.min((nowMs - lastFrameMs) / 1000, 0.1);
     lastFrameMs = nowMs;
     if (dt === 0) {
@@ -263,12 +317,24 @@ export function createPreviewControls(
       frameHandle = raf(frame);
       return;
     }
-    const step = IDLE_SPIN_RAD_PER_SEC * dt;
-    // Hull AND turret together: the idle spin is a turntable showing the whole model,
-    // not a demonstration of independence -- that is what the controls are for.
-    bodyAngle = normalizeAngle(bodyAngle + step);
-    turretAngle = normalizeAngle(turretAngle + step);
-    emit();
+    if (idle) {
+      const step = IDLE_SPIN_RAD_PER_SEC * dt;
+      // Hull AND turret together: the idle spin is a turntable showing the whole model,
+      // not a demonstration of independence -- that is what the controls are for.
+      bodyAngle = normalizeAngle(bodyAngle + step);
+      turretAngle = normalizeAngle(turretAngle + step);
+    }
+    if (animating) {
+      // One repaint for the frame, carrying both the elapsed seconds the skin needs and
+      // the pose the spin may just have moved. `lastBody`/`lastTurret` are advanced by
+      // hand because `emit()` is being skipped: without that, the next pointer event
+      // that happens to land on this exact pose would be filtered out as "no change".
+      lastBody = bodyAngle;
+      lastTurret = turretAngle;
+      deps.onAnimate?.(dt, { bodyAngle, turretAngle });
+    } else {
+      emit();
+    }
     frameHandle = raf(frame);
   }
 
@@ -352,7 +418,7 @@ export function createPreviewControls(
   canvas.addEventListener('pointercancel', onPointerEnd);
   canvas.addEventListener('keydown', onKeyDown);
 
-  if (idle) frameHandle = raf(frame);
+  if (idle) startFrames();
 
   return {
     pose(): PreviewPose {
@@ -361,9 +427,19 @@ export function createPreviewControls(
     idleRunning(): boolean {
       return idle && !disposed;
     },
+    animating(): boolean {
+      return animating && !disposed;
+    },
+    setAnimating(on: boolean): void {
+      if (on === animating) return;
+      animating = on;
+      if (on) startFrames();
+      else if (!idle) cancelFrame();
+    },
     dispose(): void {
       disposed = true;
       idle = false;
+      animating = false;
       cancelFrame();
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);

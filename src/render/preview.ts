@@ -53,7 +53,7 @@ import { createEntityViews, type EntityViews } from './entities';
 import { createEnvironmentMap } from './scene';
 import { fitCameraToArea } from './framing';
 import { createPreviewControls, type PreviewControls, type PreviewPose } from './preview-controls';
-import type { SkinId } from '../game/customization';
+import { skinScroll, type SkinId } from '../game/customization';
 import type { World } from '../sim/world';
 import type { Tank } from '../sim/types';
 
@@ -292,14 +292,25 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
 
   const world = previewWorld();
 
-  function draw(): void {
-    entities.sync(world, world, 1, 0);
+  /**
+   * `dt` is the render animation clock, in seconds -- `entities.sync` gates an animated
+   * skin's texture scroll on `dt > 0`.
+   *
+   * It defaulted to a hardwired literal `0` here, which froze `flow` -- the one animated
+   * skin the game ships -- in the exact panel where a player decides whether to wear it.
+   * A pose change or a restyle still passes 0: those redraws are not time passing, and
+   * crediting them with any would drift the scroll by however often the player moved the
+   * mouse. Time only comes from the controls' rAF loop, via `onAnimate`.
+   */
+  function draw(dt = 0): void {
+    entities.sync(world, world, 1, dt);
     renderer.render(scene, camera);
   }
   draw();
 
   // The interaction layer. It owns the pose and calls back only when it actually
-  // changes, so `onPose` is a redraw request with no filtering of its own.
+  // changes, so `onPose` is a redraw request with no filtering of its own -- and it owns
+  // the panel's one rAF loop, which is why the skin's clock hangs off it too.
   const controls: PreviewControls = createPreviewControls(canvas, {
     camera,
     initialPose: INITIAL_PREVIEW_POSE,
@@ -308,11 +319,18 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
       applyPose(world, pose);
       draw();
     },
+    onAnimate(dt, pose): void {
+      applyPose(world, pose);
+      draw(dt);
+    },
   });
 
   return {
     setStyle(hex, skin, accentHex): void {
       entities.setPlayerStyle(hex, skin, accentHex);
+      // Picking an animated skin starts the clock; picking a static one stops it, so an
+      // untouched panel showing `solid` costs no frames at all once the idle spin ends.
+      controls.setAnimating(skinScroll(skin) !== null);
       draw();
     },
     resize(): void {

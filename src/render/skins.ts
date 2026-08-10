@@ -410,6 +410,59 @@ const PAINTERS: Record<
   },
 };
 
+// ---------------------------------------------------------------------------
+// How a skin tile is SAMPLED. Named constants rather than literals at the call site
+// so `npm run gallery --sweep SKIN_MIN_FILTER,SKIN_MIPMAPS` can render the candidates
+// side by side, which is how the values below were picked.
+//
+// A skin is a `DataTexture`, and that class defaults `magFilter`/`minFilter` to
+// `NearestFilter` and `generateMipmaps` to `false` (three 0.169.0,
+// `src/textures/DataTexture.js:6,14`). Those defaults were INHERITED here, never
+// chosen -- which matters because a 128px tile maps to a whole UV face of a ~1-unit
+// hull with no `repeat`, so at play distance it is minified several-fold.
+// ---------------------------------------------------------------------------
+
+/**
+ * MINIFICATION -- changed from the inherited default, on a comparison.
+ *
+ * At play distance the whole 128px tile lands on a tank about 30 screen pixels wide
+ * (measured: `npm run gallery -- --scene game --w 640 --h 480`, arena-01, the player's
+ * hull spans ~30 of 640), so roughly 4 texels fall in every pixel. Point-sampling one
+ * of them is the textbook recipe for aliasing, and it shows: rendering the same tank at
+ * the same texel density (`--elements tank --view game --w 72 --h 54`) with `checker`,
+ * the two settings differ at **33.2 dB PSNR**, and the difference is exactly where the
+ * theory says -- the turret dome, where the UV is compressed hardest, breaks into
+ * irregular high-contrast wedges without mipmaps and reads as an even pattern with
+ * them. `flow`, a soft gradient tile, differs by only 43.0 dB.
+ *
+ * STATED AS MEASURED: those are STILLS. Shimmer is a temporal artefact and no still can
+ * show it; what was measured is the spatial aliasing that causes it.
+ */
+const SKIN_MIN_FILTER = THREE.LinearMipmapLinearFilter;
+
+/**
+ * MAGNIFICATION -- deliberately LEFT at `DataTexture`'s default, which is not the same
+ * as inheriting it.
+ *
+ * The largest a skin is ever drawn is the Customize preview, and even there the tile is
+ * barely magnified: 128 texels over a hull about 400 device pixels across. Swept at the
+ * preview's real device-pixel size, nearest vs linear differ by **60.7 dB PSNR** on
+ * `flow` and **51.2 dB** on `checker` -- i.e. not visibly. With nothing to gain,
+ * `NearestFilter` keeps `checker`'s and `stripes`' edges exactly as authored.
+ */
+const SKIN_MAG_FILTER = THREE.NearestFilter;
+
+/**
+ * Required by `SKIN_MIN_FILTER`: a mipmap minification filter with no mipmaps to sample
+ * is an INCOMPLETE texture, which samples black. The two constants must move together,
+ * and `skins.test.ts` asserts that coupling rather than the literals alone.
+ *
+ * Cost: 4/3 of the texture's 64 kB, once per style change, plus one `glGenerateMipmap`
+ * on a 128x128 image -- against the per-frame texture-matrix upload three already does
+ * for every mapped material.
+ */
+const SKIN_MIPMAPS = true;
+
 /**
  * A tiling colour texture for the skin, tinted from `baseHex` -- or null for the
  * solid default, which stays a plain material colour. `accentHex` is the paint shop's
@@ -429,6 +482,9 @@ export function createSkinTexture(
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
+  t.minFilter = SKIN_MIN_FILTER;
+  t.magFilter = SKIN_MAG_FILTER;
+  t.generateMipmaps = SKIN_MIPMAPS;
   t.needsUpdate = true;
   return t;
 }
