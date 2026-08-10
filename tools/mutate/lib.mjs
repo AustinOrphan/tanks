@@ -110,3 +110,25 @@ export function validateManifest(entries) {
     seen.add(entry.id);
   });
 }
+
+/**
+ * Finds manifest entries whose declared `tests` cannot possibly exercise their
+ * `file` -- a scope that never runs the mutated code cannot tell "not caught" from
+ * "not measured", and a mutation like that reports SURVIVES no matter what it does.
+ *
+ * `relatedFilesFor(file)` returns the Set of test files vitest's own dependency graph
+ * says are related to `file` (real implementation: `vitest related`, in run.mjs). This
+ * function is pure given that collaborator, so it is testable with a fake graph
+ * instead of a real vitest subprocess per case.
+ */
+export function findUnreachableEntries(entries, relatedFilesFor) {
+  const problems = [];
+  for (const entry of entries) {
+    const related = relatedFilesFor(entry.file);
+    const reachable = entry.tests.some((t) => related.has(t));
+    if (!reachable) {
+      problems.push({ id: entry.id, file: entry.file, tests: entry.tests, related: [...related] });
+    }
+  }
+  return problems;
+}

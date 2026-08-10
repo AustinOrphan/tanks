@@ -5,18 +5,19 @@
     "find": "export const MIN_ACCENT_DELTA = 43;",
     "replace": "export const MIN_ACCENT_DELTA = 200;",
     "expect": "killed",
-    "expectFailures": 5,
-    "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch. expectFailures pins the count itself, not just the killed/survives outcome: a test added later that also breaks under this mutation should move this number, and a stale number here is what the harness's exit code exists to catch.",
+    "expectFailures": 4,
+    "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch. expectFailures pins the count itself, not just the killed/survives outcome: a test added later that also breaks under this mutation should move this number, and a stale number here is what the harness's exit code exists to catch. Re-verified via the harness itself against skins.test.ts as it stands after PR #101 (which added Clouds and grew the file to 19 tests): 4 failures, down from 5 at this entry's original count.",
     "tests": ["src/render/skins.test.ts"]
   },
   {
     "id": "skins-ensure-contrast-iteration-budget-1",
     "file": "src/render/skins.ts",
-    "find": "for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < MIN_ACCENT_DELTA; i++) {",
-    "replace": "for (let i = 0; i < 1 && Math.abs(luma(base) - luma(t)) < MIN_ACCENT_DELTA; i++) {",
+    "find": "for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < delta; i++) {",
+    "replace": "for (let i = 0; i < 1 && Math.abs(luma(base) - luma(t)) < delta; i++) {",
+    "occurrence": 1,
     "expect": "killed",
     "expectFailures": 2,
-    "why": "ensureContrast steps lightness toward whichever pole increases the luma gap, up to 20 times, until it clears MIN_ACCENT_DELTA. Capping the budget at 1 step leaves most pairs under-separated -- caught by the 33,696-pair sweep that asserts every pair reaches the required separation.",
+    "why": "ensureContrast steps lightness toward whichever pole increases the luma gap, up to 20 times, until it clears its delta parameter (MIN_ACCENT_DELTA by default). Capping the budget at 1 step leaves most pairs under-separated -- caught by the 33,696-pair sweep that asserts every pair reaches the required separation. `delta` was `MIN_ACCENT_DELTA` directly until PR #101 parameterised it (autoAccent/stepLightness now share the same loop shape) -- this same loop text now occurs TWICE in skins.ts (ensureContrast and stepLightness), so `occurrence: 1` picks ensureContrast specifically, which is the one the sweep above measures.",
     "tests": ["src/render/skins.test.ts"]
   },
   {
@@ -25,8 +26,8 @@
     "find": "return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];",
     "replace": "return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. expectFailures (1) is verified against the SCOPED run (src/render/skins.test.ts) only -- not re-verified repo-wide here, though skins.ts's own comment separately claims exactly 1 repo-wide too. Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
+    "expectFailures": 2,
+    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. expectFailures is verified against the SCOPED run (src/render/skins.test.ts) only -- not re-verified repo-wide here. Re-verified via the harness itself after PR #101 (which added Clouds and reworked the auto-accent derivation): now 2 failures against skins.test.ts, up from 1 at this entry's original count -- the count moved because the suite gained coverage, not because this stayed stale. Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
     "tests": ["src/render/skins.test.ts"]
   },
   {
@@ -53,11 +54,11 @@
   {
     "id": "framing-frame-margin-doubled",
     "file": "src/render/framing.ts",
-    "find": "export const FRAME_MARGIN = 0.06;",
-    "replace": "export const FRAME_MARGIN = 0.12;",
-    "expect": "survives",
-    "expectFailures": 0,
-    "why": "REAL coverage gap, not equivalent: framing.test.ts imports FRAME_MARGIN directly and uses the SAME constant both to drive fitCameraToArea (via its default parameter) and to compute the test's own expected screen-space bound (`1 - FRAME_MARGIN`). Doubling the margin moves both sides of the assertion together, so the test stays self-consistent and passes regardless of the constant's value. Left in the manifest on purpose as a documented gap rather than fixed here -- fixing framing.test.ts is a separate change, and this entry is what stops that gap from being silently declared closed.",
+    "find": "export const FRAME_MARGIN = 0.03;",
+    "replace": "export const FRAME_MARGIN = 0.06;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "HISTORY, not the current story: when this entry was first written (against an earlier commit, FRAME_MARGIN 0.06), it was a documented SURVIVING gap -- framing.test.ts imported FRAME_MARGIN and used the same constant on both sides of its own assertion (to drive fitCameraToArea AND to compute the test's expected screen-space bound), so doubling it moved both sides together and passed regardless of value. PR #103 ('give the board the screen back') independently added a coverage-ratio floor (`covers at least 48% of the frame...`) that does NOT reference FRAME_MARGIN at all -- it measures the framed rect's actual projected area against a hardcoded 0.48 threshold. Re-verifying this entry against current main (as this manifest's own re-verification process requires) found the gap CLOSED: doubling FRAME_MARGIN now fails that coverage floor (46.5% < 48% at 'phone landscape' on 3 of 4 arenas), one test, moved from SURVIVES to KILLED by a change that never touched this mutation. Left in the manifest as a killed entry rather than dropped, specifically because the reversal is itself the lesson: a stale 'known gap' claim in a comment or a PR body would have been WRONG here had it not been re-run.",
     "tests": ["src/render/framing.test.ts"]
   }
 ]

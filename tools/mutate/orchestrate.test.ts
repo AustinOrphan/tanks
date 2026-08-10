@@ -31,15 +31,19 @@
  *
  * "A guard is worth what its own tests prove" (CLAUDE.md) -- so every negative control
  * this tool's own doc comment promises has a test here: a find that does not match
- * must report FAILED-TO-APPLY, not SURVIVED; and a manifest whose declared outcome is
- * wrong must produce a non-zero exit code.
+ * must report FAILED-TO-APPLY, not SURVIVED; a manifest whose declared outcome is
+ * wrong must produce a non-zero exit code; a pre-existing red test in scope must
+ * report BASELINE-RED rather than blaming the mutation (proven fake AND real); a
+ * mutation scoped to test files that do not reach it must refuse to start rather than
+ * report SURVIVES; and a suite that fails to COLLECT under a mutation must count as
+ * killed even when it drives `failed`/`total` to 0.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { findOccurrences, applyAt, validateEntry, validateManifest } from './lib.mjs';
-import { runOne, runManifest, computeExitCode, STATUS } from './orchestrate.mjs';
-import { parseArgs, formatResult, dirtyReport, runTestsReal } from './run.mjs';
+import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreachableEntries } from './lib.mjs';
+import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
+import { parseArgs, formatResult, dirtyReport, unreachableReport, resolveManifestPath, runTestsReal } from './run.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 
@@ -173,9 +177,21 @@ describe('validateManifest', () => {
 // orchestrate.mjs: runOne / runManifest / computeExitCode, against fake deps
 // ---------------------------------------------------------------------------
 
+/**
+ * `runTests` is now called (at least) TWICE per entry that gets far enough to run
+ * it -- once for the pre-mutation baseline, once after the mutation is applied -- so
+ * the fake distinguishes them by call order rather than assuming one shared shape:
+ *   - `overrides.baseline`: the FIRST call's result (default: a healthy 3-test run).
+ *   - `overrides.baselineThrow`: an Error to throw on the first call instead.
+ *   - `overrides.runTests`: the function used for every call AFTER the first (the
+ *     post-mutation check) -- this is what most existing tests already set, and
+ *     keeping it as "the post-mutation result" is what lets them stay unchanged.
+ */
 function fakeDeps(overrides = {}) {
   const files = new Map(overrides.initialFiles ?? [['f.ts', 'const X = 1;']]);
   const calls = { readFile: 0, applyToDisk: 0, restoreToDisk: 0, runTests: 0 };
+  const post = overrides.runTests ?? (() => ({ failed: 1, total: 3, failedSuites: 0 }));
+  let runTestsCalls = 0;
   return {
     calls,
     files,
@@ -192,10 +208,15 @@ function fakeDeps(overrides = {}) {
       calls.restoreToDisk++;
       files.set(file, overrides.corruptRestore ? content + '\n// corrupted' : content);
     }),
-    runTests: vi.fn(overrides.runTests ?? (() => {
+    runTests: vi.fn((tests) => {
       calls.runTests++;
-      return { failed: 1, total: 3 };
-    })),
+      runTestsCalls++;
+      if (runTestsCalls === 1) {
+        if (overrides.baselineThrow) throw overrides.baselineThrow;
+        return overrides.baseline ?? { failed: 0, total: 3, failedSuites: 0 };
+      }
+      return post(tests);
+    }),
     onResult: vi.fn(),
     ...overrides.extraDeps,
   };
@@ -301,6 +322,135 @@ describe('runOne', () => {
     const deps = fakeDeps({ corruptRestore: true });
     expect(() => runOne(entry(), deps, applyAt)).toThrow(/RESTORE FAILED/);
   });
+
+  it('the restore-failure throw is specifically a RestoreFailedError, not a generic Error', () => {
+    const deps = fakeDeps({ corruptRestore: true });
+    let caught: unknown;
+    try {
+      runOne(entry(), deps, applyAt);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(RestoreFailedError);
+  });
+
+  describe('baseline check (the scoped tests must be green BEFORE any mutation)', () => {
+    it('a pre-existing failure in scope is BASELINE-RED, not attributed to the mutation -- and nothing is ever written to disk', () => {
+      // This is the reviewer's own proof case: append one unrelated failing test to
+      // the scoped file, and an otherwise-equivalent mutation must not read as KILLED.
+      const deps = fakeDeps({ baseline: { failed: 1, total: 14, failedSuites: 0 } });
+      const r = runOne(entry({ expect: 'killed' }), deps, applyAt);
+      expect(r.status).toBe(STATUS.BASELINE_RED);
+      expect(r.matches).toBe(false);
+      expect(r.detail).toMatch(/baseline is red before any mutation: 1 of 14 failing/);
+      expect(deps.applyToDisk).not.toHaveBeenCalled();
+      expect(deps.calls.runTests).toBe(1); // only the baseline call -- no post-mutation run at all
+    });
+
+    it('a baseline where a whole suite fails to collect is BASELINE-RED even if failed === 0', () => {
+      const deps = fakeDeps({ baseline: { failed: 0, total: 20, failedSuites: 1 } });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.status).toBe(STATUS.BASELINE_RED);
+      expect(r.detail).toMatch(/1 suite\(s\) failed to collect/);
+      expect(deps.applyToDisk).not.toHaveBeenCalled();
+    });
+
+    it('a baseline that matches zero tests is ERROR (a manifest path problem), not BASELINE-RED', () => {
+      const deps = fakeDeps({ baseline: { failed: 0, total: 0, failedSuites: 0 } });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.status).toBe(STATUS.ERROR);
+      expect(r.detail).toMatch(/0 tests ran for baseline/);
+      expect(deps.applyToDisk).not.toHaveBeenCalled();
+    });
+
+    it('a healthy baseline proceeds to apply and run the post-mutation check (two runTests calls)', () => {
+      const deps = fakeDeps({ runTests: () => ({ failed: 1, total: 3, failedSuites: 0 }) });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.status).toBe(STATUS.KILLED);
+      expect(deps.calls.runTests).toBe(2);
+    });
+  });
+
+  describe('a suite that fails to COLLECT under the mutation counts as killed', () => {
+    it('failedSuites > 0 is killed even when failed === 0 (the "multi-file, one file will not collect" case)', () => {
+      const deps = fakeDeps({ runTests: () => ({ failed: 0, total: 22, failedSuites: 1 }) });
+      const r = runOne(entry({ expect: 'killed' }), deps, applyAt);
+      expect(r.status).toBe(STATUS.KILLED); // NOT survives, even though failed is 0
+      expect(r.matches).toBe(true);
+      expect(r.detail).toMatch(/0 of 22 test\(s\) failed, 1 suite\(s\) failed to collect/);
+    });
+
+    it('failedSuites > 0 is killed even when total is driven to 0 (the "single file will not collect" case)', () => {
+      const deps = fakeDeps({ runTests: () => ({ failed: 0, total: 0, failedSuites: 1 }) });
+      const r = runOne(entry({ expect: 'killed' }), deps, applyAt);
+      expect(r.status).toBe(STATUS.KILLED); // not the "0 tests ran" ERROR path
+      expect(r.matches).toBe(true);
+    });
+
+    it('a genuinely empty result (0 failed, 0 total, 0 failed suites) is ERROR, not survives', () => {
+      const deps = fakeDeps({ runTests: () => ({ failed: 0, total: 0, failedSuites: 0 }) });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.status).toBe(STATUS.ERROR);
+      expect(r.detail).toMatch(/0 tests ran for f\.test\.ts/);
+    });
+
+    it('failedSuites > 0 alongside a real failed > 0 does NOT claim "failed to collect" -- measured directly (see the real end-to-end case below): a file with several describe blocks and ONE real failing test also moves failedSuites, and that is not a collection failure', () => {
+      const deps = fakeDeps({ runTests: () => ({ failed: 4, total: 19, failedSuites: 4 }) });
+      const r = runOne(entry({ expect: 'killed' }), deps, applyAt);
+      expect(r.status).toBe(STATUS.KILLED);
+      expect(r.detail).toBe('4 of 19 test(s) failed'); // no suite-collection claim at all
+      expect(r.detail).not.toMatch(/failed to collect/);
+    });
+  });
+
+  describe('interruption (SIGINT/SIGTERM arriving mid-entry) is reported, not thrown as fatal', () => {
+    // The error itself carries `.interrupted = true`, set by run.mjs's runTestsReal
+    // from the killed subprocess's own res.signal -- NOT inferred from deps.shouldStop()
+    // at catch time. That distinction is load-bearing, not stylistic: shouldStop() is
+    // driven by a SIGINT/SIGTERM handler, and Node dispatches that handler's callback
+    // on the NEXT event-loop tick, not synchronously with a blocking spawnSync call
+    // unblocking -- so a real run was measured landing in the catch block with
+    // shouldStop() still returning false at that exact instant, even though a signal
+    // was unambiguously why runTests threw. Checking the error's own flag has no such
+    // race: it is set at the moment the subprocess result is inspected, using that
+    // subprocess's own res.signal, before control ever returns to caller code that
+    // might race a separately-scheduled callback.
+    function interruptedError(message: string) {
+      const err = new Error(message);
+      (err as Error & { interrupted: boolean }).interrupted = true;
+      return err;
+    }
+
+    it('interrupted during the baseline check returns INTERRUPTED -- nothing was ever mutated', () => {
+      const deps = fakeDeps({ baselineThrow: interruptedError('vitest killed by signal') });
+      const r = runOne(entry(), deps, applyAt);
+      expect(r.status).toBe(STATUS.INTERRUPTED);
+      expect(r.matches).toBe(false);
+      expect(r.detail).toMatch(/nothing was mutated/);
+      expect(deps.applyToDisk).not.toHaveBeenCalled();
+      expect(deps.restoreToDisk).not.toHaveBeenCalled(); // nothing to restore
+    });
+
+    it('interrupted mid-mutation returns INTERRUPTED and still restores -- this is the fix for the "signal reached the child, runTestsReal threw, run ended FATAL" bug', () => {
+      const deps = fakeDeps({
+        runTests: () => { throw interruptedError('vitest killed by signal'); },
+      });
+      const r = runOne(entry(), deps, applyAt); // must NOT throw
+      expect(r.status).toBe(STATUS.INTERRUPTED);
+      expect(r.matches).toBe(false);
+      expect(deps.restoreToDisk).toHaveBeenCalledTimes(1);
+      expect(deps.files.get('f.ts')).toBe('const X = 1;'); // genuinely restored
+    });
+
+    it('a runTests throw WITHOUT .interrupted set is still a real, unexplained failure and still aborts -- even if shouldStop() happens to be true', () => {
+      const deps = fakeDeps({
+        runTests: () => { throw new Error('vitest crashed for an unrelated reason'); }, // no .interrupted
+        extraDeps: { shouldStop: () => true }, // deliberately true, to prove it is NOT consulted here
+      });
+      expect(() => runOne(entry(), deps, applyAt)).toThrow('vitest crashed for an unrelated reason');
+      expect(deps.restoreToDisk).toHaveBeenCalledTimes(1); // still restored
+    });
+  });
 });
 
 describe('runManifest', () => {
@@ -335,6 +485,21 @@ describe('runManifest', () => {
     expect(deps.onResult).not.toHaveBeenCalled();
     expect(deps.readFile).not.toHaveBeenCalled();
   });
+
+  it('an INTERRUPTED result stops the loop WITHOUT throwing -- distinct from a RestoreFailedError, which does throw', () => {
+    const deps = fakeDeps({
+      runTests: () => {
+        const err = new Error('vitest killed by signal');
+        (err as Error & { interrupted: boolean }).interrupted = true;
+        throw err;
+      },
+    });
+    const entries = [entry({ id: 'a' }), entry({ id: 'b' })];
+    const results = runManifest(entries, deps, applyAt); // must NOT throw
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe(STATUS.INTERRUPTED);
+    expect(deps.onResult).toHaveBeenCalledTimes(1); // 'b' never attempted
+  });
 });
 
 describe('computeExitCode', () => {
@@ -365,6 +530,22 @@ describe('parseArgs', () => {
   });
 });
 
+describe('resolveManifestPath', () => {
+  const root = '/repo/';
+
+  it('joins a relative --manifest under ROOT', () => {
+    expect(resolveManifestPath(root, 'tools/mutate/manifest.json')).toBe('/repo/tools/mutate/manifest.json');
+  });
+
+  it('uses an absolute --manifest AS GIVEN, not joined under ROOT -- join() would silently concatenate it instead of jumping to filesystem root', () => {
+    expect(resolveManifestPath(root, '/tmp/scratch-manifest.json')).toBe('/tmp/scratch-manifest.json');
+    // The bug this guards: path.join('/repo/', '/tmp/x.json') is '/repo/tmp/x.json',
+    // NOT '/tmp/x.json' -- join has no special case for an absolute later segment
+    // the way path.resolve does.
+    expect(join(root, '/tmp/scratch-manifest.json')).not.toBe('/tmp/scratch-manifest.json');
+  });
+});
+
 describe('dirtyReport', () => {
   it('is null (no refusal) for a clean porcelain output', () => {
     expect(dirtyReport('')).toBeNull();
@@ -376,6 +557,57 @@ describe('dirtyReport', () => {
     expect(report).toMatch(/refusing to start/);
     expect(report).toMatch(/skins\.ts/);
     expect(report).toMatch(/scratch\.txt/);
+  });
+});
+
+describe('findUnreachableEntries + unreachableReport (the scoped-tests-must-reach-the-file guard)', () => {
+  const graph = new Map([
+    ['src/render/skins.ts', new Set(['src/render/skins.test.ts', 'src/game/hud.test.ts'])],
+    ['src/render/framing.ts', new Set(['src/render/framing.test.ts'])],
+  ]);
+  const relatedFilesFor = (file: string) => graph.get(file) ?? new Set();
+
+  it('reports no problems when every entry\'s tests intersect the related set', () => {
+    const entries = [
+      entry({ id: 'a', file: 'src/render/skins.ts', tests: ['src/render/skins.test.ts'] }),
+      entry({ id: 'b', file: 'src/render/framing.ts', tests: ['src/render/framing.test.ts'] }),
+    ];
+    expect(findUnreachableEntries(entries, relatedFilesFor)).toEqual([]);
+  });
+
+  it('flags an entry scoped to a test file that vitest\'s own graph says is unrelated to the mutated file -- this is the exact case a survives-because-not-measured mutation exploits', () => {
+    const entries = [
+      entry({ id: 'wrong-scope', file: 'src/render/skins.ts', tests: ['src/render/framing.test.ts'] }),
+    ];
+    const problems = findUnreachableEntries(entries, relatedFilesFor);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].id).toBe('wrong-scope');
+    expect(problems[0].related).toEqual(expect.arrayContaining(['src/render/skins.test.ts', 'src/game/hud.test.ts']));
+  });
+
+  it('unreachableReport is null for no problems, and names the entry + the real related set otherwise', () => {
+    expect(unreachableReport([])).toBeNull();
+    const report = unreachableReport(findUnreachableEntries(
+      [entry({ id: 'wrong-scope', file: 'src/render/skins.ts', tests: ['src/render/framing.test.ts'] })],
+      relatedFilesFor,
+    ));
+    expect(report).toMatch(/refusing to start/);
+    expect(report).toMatch(/wrong-scope/);
+    expect(report).toMatch(/src\/render\/skins\.test\.ts/); // tells the author what WOULD have worked
+  });
+
+  it('a file nothing tests at all is reported with an explicit "nothing tests this file" note, not an empty list that reads as a bug', () => {
+    const report = unreachableReport(findUnreachableEntries(
+      [entry({ id: 'orphan', file: 'src/orphan.ts', tests: ['src/somewhere.test.ts'] })],
+      () => new Set(),
+    ));
+    expect(report).toMatch(/none -- nothing tests this file at all/);
+  });
+
+  it('propagates (does not swallow) a relatedFilesFor that throws -- run.mjs relies on this to distinguish "interrupted mid-probe" from "genuinely found nothing", see relatedFilesFor\'s signal check', () => {
+    const throwing = () => { throw new Error('vitest related was interrupted (signal SIGINT)'); };
+    expect(() => findUnreachableEntries([entry({ file: 'x.ts', tests: ['x.test.ts'] })], throwing))
+      .toThrow('interrupted');
   });
 });
 
@@ -412,6 +644,16 @@ describe('formatResult', () => {
     const result = { id: 'x', status: STATUS.SURVIVES, matches: true, detail: '0 of 5 test(s) failed' };
     expect(formatResult(result, 1, 1, { ...e, equivalent: true })).toMatch(/\[equivalent mutant\]/);
     expect(formatResult(result, 1, 1, { ...e, equivalent: false })).not.toMatch(/\[equivalent mutant\]/);
+  });
+
+  it('reports BASELINE-RED and INTERRUPTED the same way as FAILED-TO-APPLY/ERROR -- no declared-outcome tag', () => {
+    const baselineRed = formatResult({ id: 'x', status: STATUS.BASELINE_RED, matches: false, detail: 'baseline is red before any mutation: 1 of 14 failing' }, 1, 1, e);
+    expect(baselineRed).toMatch(/BASELINE-RED/);
+    expect(baselineRed).not.toMatch(/matches declared|MISMATCH/);
+
+    const interrupted = formatResult({ id: 'x', status: STATUS.INTERRUPTED, matches: false, detail: 'interrupted mid-mutation; the file was restored' }, 1, 1, e);
+    expect(interrupted).toMatch(/INTERRUPTED/);
+    expect(interrupted).not.toMatch(/matches declared|MISMATCH/);
   });
 });
 
@@ -517,6 +759,47 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
       expect(results[0].matches).toBe(false);
       expect(runTests).not.toHaveBeenCalled(); // no vitest subprocess for a mutation that never applied
       expect(readFileSync(abs, 'utf8')).toBe(source); // never touched
+    } finally {
+      rmSync(abs, { force: true });
+    }
+  });
+
+  it('a real pre-existing failure makes the baseline RED, real vitest agreeing -- and the file is never touched', () => {
+    // Same fixture shape as the others, but its OWN assertion is already false before
+    // any mutation -- this is the reviewer's proof case, reproduced for real: without
+    // the baseline check, this mutation (a genuine no-op find/replace on an unrelated
+    // line) would report KILLED at exit 0, blaming the mutation for a pre-existing red
+    // test that has nothing to do with it.
+    const id = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const rel = `tools/mutate/fixtures/tmp-e2e-${id}.test.ts`;
+    const abs = join(ROOT, rel);
+    mkdirSync(fixturesDir, { recursive: true });
+    const source =
+      "import { describe, it, expect } from 'vitest';\n" +
+      'function greet(name: string) { return `hello ${name}`; }\n' +
+      "describe('e2e fixture', () => {\n" +
+      "  it('greets by name', () => { expect(greet('world')).toBe('hello world'); });\n" +
+      "  it('an unrelated assertion that is already false', () => { expect(1).toBe(2); });\n" +
+      '});\n';
+    writeFileSync(abs, source);
+    try {
+      const results = runManifest(
+        [{
+          id: 'e2e-baseline-red', file: rel,
+          find: "function greet(name: string) { return `hello ${name}`; }",
+          replace: "function greet(name: string) { return `hello ${name}`.trim(); }", // behaviour-preserving no-op
+          why: 'proves the baseline check fires for real, against a real vitest run',
+          expect: 'killed', // would be "true" under the old (no-baseline) logic
+          tests: [rel],
+        }],
+        realDepsWithStubGit(),
+        applyAt,
+      );
+      expect(results[0].status).toBe(STATUS.BASELINE_RED);
+      expect(results[0].matches).toBe(false);
+      expect(results[0].detail).toMatch(/baseline is red before any mutation: 1 of 2 failing/);
+      // The whole point: nothing was ever written to disk for this entry.
+      expect(readFileSync(abs, 'utf8')).toBe(source);
     } finally {
       rmSync(abs, { force: true });
     }
