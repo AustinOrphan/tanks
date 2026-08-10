@@ -41,6 +41,15 @@ jobs:
       - name: Test
         run: npx vitest run
 
+      # tools/mutate/manifest.json is hand-verified against a specific commit, and this
+      # repo's own history has that go stale: a rebase onto a later main left two `find`
+      # strings no longer matching (a function signature was parameterised, a constant's
+      # value changed) and one entry's declared outcome flipped from a real change
+      # elsewhere. Nothing caught that until it was re-run by hand. This step is what
+      # makes staleness a CI failure instead of a fact nobody re-checks.
+      - name: Mutation manifest
+        run: npm run mutate
+
       - name: Build
         run: npx vite build
 

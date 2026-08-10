@@ -8,3 +8,8 @@ visual-out/
 gallery-out/
 *.gif
 audio-out/
+
+# scratch fixtures written (and deleted) by tools/mutate's own end-to-end test --
+# uniquely named per run, cleaned up in a finally; this is only a safety net for an
+# interrupted test run
+tools/mutate/fixtures/tmp-e2e-*.test.ts

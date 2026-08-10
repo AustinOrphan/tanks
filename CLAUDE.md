@@ -10,6 +10,7 @@ npm test     # tsc --noEmit && vitest run
 npm run build # tsc --noEmit && vite build
 npm run dev   # vite
 npm run gallery -- --elements mine,tank,shell --view low   # look at any element
+npm run mutate                                              # run the hand-picked mutation manifest
 ```
 
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
@@ -20,6 +21,24 @@ it refuses to start if the target file is already dirty. `--scene game --slowmo 
 --burst 150` records a slow-motion timeline of REAL gameplay, one frame per rAF — the way
 to catch a sub-second moment (a shell leaving the muzzle) that a still would miss. See
 `tools/gallery/`.
+
+`npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,
+made checkable: for each hand-picked entry in `tools/mutate/manifest.json` (an exact
+find/replace against a `src/` file, a declared `killed`/`survives`, an optional
+`expectFailures` count, a `why`, and scoped `tests`) it verifies the find/replace
+actually changed the file's bytes (refusing an ambiguous find rather than guessing),
+runs a BASELINE check on the unmutated file first (a pre-existing red test in scope
+must not be misattributed to the mutation), refuses to start if any entry's `tests`
+cannot reach its `file` (checked once via `vitest related`, so a wrong-scope mutation
+can never silently read as SURVIVES), applies the mutation, runs the scoped tests, and
+restores from the bytes it read -- verified by reading them back, not by a zero exit.
+The exit code is non-zero if any entry's real outcome (including a suite that fails to
+COLLECT under the mutation, which counts as killed even at 0 failed tests) does not
+match what it declared, which is what turns a manifest entry from a transcript into
+something CI can check. **SURVIVES means the scoped vitest run does not catch it, not
+that the full gate (`tsc --noEmit && vitest run`) doesn't** -- this tool does not run
+`tsc` as part of the verdict, so a type-only mutation can still be caught by the build
+even when every entry here reports SURVIVES. `--only <id>` runs a single entry.
 
 CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a bundle-portability
 assertion on Node 20.19.0 — the declared floor — and 22. `engines.node` is

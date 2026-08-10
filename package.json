@@ -15,7 +15,8 @@
     "portability": "node tools/portability/check.mjs dist",
     "test:gl": "node tools/gl/run.mjs",
     "gallery": "node tools/gallery/run.mjs",
-    "audio": "node tools/audio/render.mjs"
+    "audio": "node tools/audio/render.mjs",
+    "mutate": "node tools/mutate/run.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
