@@ -81,6 +81,21 @@ export function validateEntry(entry, index) {
   if (entry.find === entry.replace) {
     throw new Error(`manifest ${label}: "find" and "replace" are identical -- this mutation changes nothing`);
   }
+  if (entry.expectFailures !== undefined) {
+    if (!Number.isInteger(entry.expectFailures) || entry.expectFailures < 0) {
+      throw new Error(`manifest ${label}: "expectFailures" must be a non-negative integer when present`);
+    }
+    // Catches a manifest authoring mistake, not a real outcome: "survives" already
+    // means 0 failures and "killed" already means at least 1, by definition (see
+    // runOne). A value that contradicts "expect" can never be matched by any real
+    // test run, which is a stale/wrong manifest entry, not a live coverage question.
+    if (entry.expect === 'survives' && entry.expectFailures !== 0) {
+      throw new Error(`manifest ${label}: "expect": "survives" requires "expectFailures": 0, got ${entry.expectFailures}`);
+    }
+    if (entry.expect === 'killed' && entry.expectFailures === 0) {
+      throw new Error(`manifest ${label}: "expect": "killed" requires "expectFailures" > 0, got 0`);
+    }
+  }
 }
 
 /** Validates the whole manifest: every entry, plus id uniqueness across the set. */

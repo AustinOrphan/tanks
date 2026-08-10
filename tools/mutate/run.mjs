@@ -13,11 +13,15 @@
  *   - the declared outcome (killed/survives) is checked against what really happened,
  *     and a mismatch is what makes `npm run mutate`'s exit code non-zero -- so a
  *     stale count in a PR body or manifest entry fails the tool instead of being
- *     believed.
+ *     believed
+ *   - a manifest entry can also pin the exact failure COUNT (`expectFailures`), which
+ *     an outcome-only check cannot see drift: "fails 4 of 12" quietly becoming "fails
+ *     5 of 13" when a test is added is `killed` both times, and only expectFailures
+ *     turns that into a mismatch too
  *
  *   npm run mutate
  *   npm run mutate -- --manifest tools/mutate/manifest.json
- *   npm run mutate -- --only skins-min-accent-delta
+ *   npm run mutate -- --only skins-min-accent-delta-200
  *
  * See tools/mutate/orchestrate.test.ts for the harness's own tests, including the
  * negative controls this file's own doc comment above promises: a find that does not
@@ -103,7 +107,16 @@ export function formatResult(result, index, count, entry) {
     // compare against, they mean the mutation never actually ran.
     return `${head} ... ${result.status} -- ${result.detail}`;
   }
-  const tag = result.matches ? 'matches declared outcome' : `MISMATCH: manifest declared "${entry.expect}"`;
+  let tag = 'matches declared outcome';
+  if (!result.matches) {
+    // Two distinct ways to mismatch: the outcome itself (killed vs. survives), or --
+    // when the manifest pins expectFailures -- the SAME outcome with a drifted count.
+    // The second is the one an outcome-only check would miss: "fails 4 of 12" quietly
+    // becoming "fails 5 of 13" is `killed` both times.
+    tag = result.status.toLowerCase() === entry.expect
+      ? `MISMATCH: manifest declared ${entry.expectFailures} failure(s), got ${result.failed}`
+      : `MISMATCH: manifest declared "${entry.expect}"`;
+  }
   const equiv = result.status === STATUS.SURVIVES && entry.equivalent ? ' [equivalent mutant]' : '';
   return `${head} ... ${result.status}${equiv} (${result.detail}) -- ${tag}`;
 }

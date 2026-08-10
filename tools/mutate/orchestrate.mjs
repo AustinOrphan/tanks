@@ -84,10 +84,17 @@ export function runOne(entry, deps, applyAt) {
       };
     }
     const actual = failed > 0 ? 'killed' : 'survives';
+    // The outcome (killed/survives) matching is necessary but not sufficient: "fails 4
+    // of 12" quietly becoming "fails 5 of 13" when a test is added is still `killed`
+    // both times, and outcome-only matching would call that a match. When the manifest
+    // pins expectFailures, a count drift is a mismatch too -- this is what makes a
+    // stale count in a manifest entry (or a PR body copied from one) fail the tool
+    // instead of being believed.
+    const countOk = entry.expectFailures === undefined || failed === entry.expectFailures;
     return {
       id: entry.id,
       status: actual === 'killed' ? STATUS.KILLED : STATUS.SURVIVES,
-      matches: actual === entry.expect,
+      matches: actual === entry.expect && countOk,
       failed,
       total,
       detail: `${failed} of ${total} test(s) failed`,

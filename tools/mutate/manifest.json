@@ -5,7 +5,8 @@
     "find": "export const MIN_ACCENT_DELTA = 43;",
     "replace": "export const MIN_ACCENT_DELTA = 200;",
     "expect": "killed",
-    "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch.",
+    "expectFailures": 5,
+    "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch. expectFailures pins the count itself, not just the killed/survives outcome: a test added later that also breaks under this mutation should move this number, and a stale number here is what the harness's exit code exists to catch.",
     "tests": ["src/render/skins.test.ts"]
   },
   {
@@ -14,6 +15,7 @@
     "find": "for (let i = 0; i < 20 && Math.abs(luma(base) - luma(t)) < MIN_ACCENT_DELTA; i++) {",
     "replace": "for (let i = 0; i < 1 && Math.abs(luma(base) - luma(t)) < MIN_ACCENT_DELTA; i++) {",
     "expect": "killed",
+    "expectFailures": 2,
     "why": "ensureContrast steps lightness toward whichever pole increases the luma gap, up to 20 times, until it clears MIN_ACCENT_DELTA. Capping the budget at 1 step leaves most pairs under-separated -- caught by the 33,696-pair sweep that asserts every pair reaches the required separation.",
     "tests": ["src/render/skins.test.ts"]
   },
@@ -23,7 +25,8 @@
     "find": "return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];",
     "replace": "return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];",
     "expect": "killed",
-    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. Verified against the scoped run only: 1 of 13 tests fails in src/render/skins.test.ts (not re-verified repo-wide here, though skins.ts's own comment claims exactly 1 repo-wide too). Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
+    "expectFailures": 1,
+    "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. expectFailures (1) is verified against the SCOPED run (src/render/skins.test.ts) only -- not re-verified repo-wide here, though skins.ts's own comment separately claims exactly 1 repo-wide too. Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
     "tests": ["src/render/skins.test.ts"]
   },
   {
@@ -32,6 +35,7 @@
     "find": "l = towardBlack ? Math.max(0, l - STEP) : Math.min(1, l + STEP);",
     "replace": "l = towardBlack ? l - STEP : Math.min(1, l + STEP);",
     "expect": "survives",
+    "expectFailures": 0,
     "equivalent": true,
     "why": "EQUIVALENT, not a coverage gap: skins.ts's own comment on the loop states this branch is measured unreachable at the shipped MIN_ACCENT_DELTA (43) -- an instrumented 909,792-pair probe hit the l===0 clamp 0 times (vs 34,835 times at MIN_ACCENT_DELTA 127), so dropping the redundant Math.max(0, ...) floor changes no output any test can observe. Included so a future retune of MIN_ACCENT_DELTA that makes the branch reachable is the thing that flips this from survives to killed, not a silent behaviour change.",
     "tests": ["src/render/skins.test.ts"]
@@ -42,6 +46,7 @@
     "find": "return { width: worldWidth + boundary * 2, height: worldHeight + boundary * 2 };",
     "replace": "return { width: worldWidth + boundary * 3, height: worldHeight + boundary * 3 };",
     "expect": "killed",
+    "expectFailures": 3,
     "why": "framedBounds must widen by exactly 2x the boundary ring (one cell radius on each side) to match the wall geometry loadArena actually builds -- widening by 3x instead is caught by the test that pins framedBounds(10, 8, 3) against a literal, boundary-argument-only expectation.",
     "tests": ["src/render/framing.test.ts"]
   },
@@ -51,6 +56,7 @@
     "find": "export const FRAME_MARGIN = 0.06;",
     "replace": "export const FRAME_MARGIN = 0.12;",
     "expect": "survives",
+    "expectFailures": 0,
     "why": "REAL coverage gap, not equivalent: framing.test.ts imports FRAME_MARGIN directly and uses the SAME constant both to drive fitCameraToArea (via its default parameter) and to compute the test's own expected screen-space bound (`1 - FRAME_MARGIN`). Doubling the margin moves both sides of the assertion together, so the test stays self-consistent and passes regardless of the constant's value. Left in the manifest on purpose as a documented gap rather than fixed here -- fixing framing.test.ts is a separate change, and this entry is what stops that gap from being silently declared closed.",
     "tests": ["src/render/framing.test.ts"]
   }

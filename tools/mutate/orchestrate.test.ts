@@ -124,6 +124,25 @@ describe('validateEntry', () => {
     const e = { ...base(), find: 'same', replace: 'same' };
     expect(() => validateEntry(e, 1)).toThrow(/identical/);
   });
+
+  it('accepts a positive expectFailures on a killed entry', () => {
+    expect(() => validateEntry({ ...base(), expect: 'killed', expectFailures: 5 }, 1)).not.toThrow();
+  });
+
+  it('rejects a non-integer or negative expectFailures', () => {
+    expect(() => validateEntry({ ...base(), expectFailures: 1.5 }, 1)).toThrow(/"expectFailures"/);
+    expect(() => validateEntry({ ...base(), expectFailures: -1 }, 1)).toThrow(/"expectFailures"/);
+  });
+
+  it('rejects expectFailures: 0 on a killed entry -- self-contradictory, not a real outcome', () => {
+    const e = { ...base(), expect: 'killed', expectFailures: 0 };
+    expect(() => validateEntry(e, 1)).toThrow(/"expect": "killed" requires "expectFailures" > 0/);
+  });
+
+  it('rejects a non-zero expectFailures on a survives entry -- survives already means 0', () => {
+    const e = { ...base(), expect: 'survives', expectFailures: 3 };
+    expect(() => validateEntry(e, 1)).toThrow(/"expect": "survives" requires "expectFailures": 0/);
+  });
 });
 
 describe('validateManifest', () => {
@@ -241,6 +260,26 @@ describe('runOne', () => {
     expect(r.matches).toBe(false);
   });
 
+  it('a count DRIFT with the SAME outcome is still a mismatch when expectFailures is pinned -- this is the "4 of 12 became 5 of 13" case outcome-only matching cannot see', () => {
+    const deps = fakeDeps({ runTests: () => ({ failed: 5, total: 13 }) }); // was 4 of 12 when the manifest was written
+    const r = runOne(entry({ expect: 'killed', expectFailures: 4 }), deps, applyAt);
+    expect(r.status).toBe(STATUS.KILLED); // outcome alone still matches...
+    expect(r.matches).toBe(false); // ...but the pinned count does not
+  });
+
+  it('matches when both the outcome and the pinned count agree', () => {
+    const deps = fakeDeps({ runTests: () => ({ failed: 5, total: 13 }) });
+    const r = runOne(entry({ expect: 'killed', expectFailures: 5 }), deps, applyAt);
+    expect(r.status).toBe(STATUS.KILLED);
+    expect(r.matches).toBe(true);
+  });
+
+  it('an entry with no expectFailures only checks the outcome (backward compatible)', () => {
+    const deps = fakeDeps({ runTests: () => ({ failed: 99, total: 100 }) });
+    const r = runOne(entry({ expect: 'killed' }), deps, applyAt); // no expectFailures given
+    expect(r.matches).toBe(true);
+  });
+
   it('always restores, even when runTests throws', () => {
     const deps = fakeDeps({
       runTests: () => { throw new Error('vitest exploded'); },
@@ -355,9 +394,18 @@ describe('formatResult', () => {
     expect(line).toMatch(/matches declared outcome/);
   });
 
-  it('marks a mismatch, naming what the manifest declared', () => {
+  it('marks an outcome mismatch, naming what the manifest declared', () => {
     const line = formatResult({ id: 'x', status: STATUS.SURVIVES, matches: false, detail: '0 of 5 test(s) failed' }, 1, 1, e);
     expect(line).toMatch(/MISMATCH: manifest declared "killed"/);
+  });
+
+  it('marks a COUNT mismatch distinctly from an outcome mismatch -- same status, wrong expectFailures', () => {
+    const line = formatResult(
+      { id: 'x', status: STATUS.KILLED, matches: false, failed: 5, detail: '5 of 13 test(s) failed' },
+      1, 1, { ...e, expect: 'killed', expectFailures: 4 },
+    );
+    expect(line).toMatch(/MISMATCH: manifest declared 4 failure\(s\), got 5/);
+    expect(line).not.toMatch(/manifest declared "killed"/); // outcome itself was right
   });
 
   it('tags an equivalent-mutant survive distinctly from a plain survive', () => {
@@ -474,9 +522,13 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
     }
   });
 
-  it('no stray tmp-e2e-* fixtures are left in tools/mutate/fixtures/ after this suite', () => {
+  it('no stray tmp-e2e-* fixtures from THIS process are left in tools/mutate/fixtures/ after this suite', () => {
+    // Scoped to this process's own pid prefix, not every tmp-e2e-* file: a fixture
+    // left behind by an unrelated crashed run (a different pid) is a separate,
+    // pre-existing problem this assertion should not fail on.
+    const mine = `tmp-e2e-${process.pid}-`;
     const left = existsSync(fixturesDir)
-      ? readdirSync(fixturesDir).filter((f) => f.startsWith('tmp-e2e-'))
+      ? readdirSync(fixturesDir).filter((f) => f.startsWith(mine))
       : [];
     expect(left).toEqual([]);
   });
