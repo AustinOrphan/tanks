@@ -421,6 +421,79 @@ describe('hud.css is syntactically whole', () => {
     expect(block).toContain('display: none');
   });
 
+  it('keeps the HUD clear of display cutouts and the home-indicator strip', () => {
+    // TEXT assertions, and the reason is measured rather than assumed: jsdom's cssstyle
+    // drops any declaration whose value it cannot parse, and it parses neither `max()`
+    // nor `env()`. Probed in this environment -- a rule
+    // `padding: max(12px, env(safe-area-inset-top)) 18px` computes to paddingTop "0",
+    // while a plain `padding: 12px 18px` computes to "12px". So a computed-style
+    // assertion here would report the safe-area rule as ABSENT whether it is there or
+    // not, which is worse than reading the text.
+    //
+    // What this can still catch is the regression that happens: the rules being deleted
+    // or the selectors renamed out from under them. The real check is a notched device,
+    // and nobody has run one.
+    const src = stripComments(css);
+    const topbar = src.slice(src.indexOf('.hud-topbar {'));
+    const topbarRule = topbar.slice(0, topbar.indexOf('}'));
+    // Top for portrait (status bar / Dynamic Island), left and right for landscape,
+    // where the score row runs under the camera housing. Bottom is deliberately absent:
+    // nothing in the topbar is near it.
+    for (const side of ['top', 'left', 'right']) {
+      expect(topbarRule, `the topbar ignores the ${side} inset`).toContain(
+        `env(safe-area-inset-${side})`,
+      );
+    }
+    const touch = src.slice(src.indexOf('.hud-touch {'));
+    const touchRule = touch.slice(0, touch.indexOf('}'));
+    // Fire and Mine sit in the home-indicator swipe strip at `bottom: 14px`.
+    for (const side of ['right', 'bottom']) {
+      expect(touchRule, `the touch row ignores the ${side} inset`).toContain(
+        `env(safe-area-inset-${side})`,
+      );
+    }
+  });
+
+  it('lets no later rule quietly override the safe-area insets', () => {
+    // The trap this shape exists to remove, and it was live: BOTH narrow-viewport
+    // blocks used to set `padding` on .hud-topbar as a shorthand. A shorthand in a
+    // later @media wins outright, so writing the insets into the base rule alone would
+    // have dropped them on every viewport under 760px -- phones, which is the entire
+    // population the feature is for. The blocks now retune two custom properties and
+    // the padding is declared in ONE place.
+    //
+    // Not a style rule: it is the only thing standing between "the insets are written"
+    // and "the insets apply".
+    const blocks: Array<{ selector: string; body: string }> = [];
+    const rule = /([^{}]+)\{([^{}]*)\}/g; // innermost blocks only, so @media prelude is skipped
+    let m: RegExpExecArray | null;
+    const src = stripComments(css);
+    while ((m = rule.exec(src)) !== null) blocks.push({ selector: m[1].trim(), body: m[2] });
+    // The scan is worth nothing if the regex matched nothing.
+    expect(blocks.length).toBeGreaterThan(40);
+
+    const targeting = (cls: string): typeof blocks =>
+      // `(?![\w-])` so `.hud-topbar--hidden` and `.hud-touch--hidden` are not this rule.
+      blocks.filter((b) =>
+        b.selector.split(',').some((s) => new RegExp(`\\${cls}(?![\\w-])`).test(s)),
+      );
+
+    const setsPadding = targeting('.hud-topbar').filter((b) =>
+      /(^|;)\s*padding(-top|-right|-bottom|-left)?\s*:/.test(b.body),
+    );
+    expect(
+      setsPadding.map((b) => b.selector),
+      'more than one rule sets .hud-topbar padding: the narrow-viewport blocks retune --hud-topbar-pad-*',
+    ).toHaveLength(1);
+    expect(setsPadding[0].body).toContain('env(safe-area-inset-top)');
+
+    const setsOffsets = targeting('.hud-touch').filter((b) =>
+      /(^|;)\s*(right|bottom)\s*:/.test(b.body),
+    );
+    expect(setsOffsets.map((b) => b.selector)).toHaveLength(1);
+    expect(setsOffsets[0].body).toContain('env(safe-area-inset-bottom)');
+  });
+
   it('keeps the stacking order the overlays depend on', () => {
     // Three positioned layers with no z-index would be ordered by tree position
     // alone. Two real defects came from that: the stats page painted over the

@@ -18,7 +18,26 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 18px;
+  /* The spacing knobs live in custom properties so the safe-area padding below can be
+   * written ONCE. The narrow-viewport blocks further down retune these two numbers and
+   * must not set `padding` themselves: a `padding` shorthand in an @media wins over
+   * this rule and would drop the insets on exactly the viewports that HAVE insets --
+   * phones. `hud.css.test.ts` fails if any other rule sets padding on this selector. */
+  --hud-topbar-pad-y: 12px;
+  --hud-topbar-pad-x: 18px;
+  padding: var(--hud-topbar-pad-y) var(--hud-topbar-pad-x);
+  /* A second declaration, not a replacement: a browser that parses neither `max()` nor
+   * `env()` drops this one as invalid and keeps the line above, so the topbar is never
+   * left with no padding at all.
+   *
+   * `max(base, inset)` rather than `base + inset`: the inset is a distance from the
+   * physical display edge, so on a phone with no cutout it is 0 and the base spacing
+   * stands. Top for portrait (the status bar and the Dynamic Island); left and right
+   * for landscape, where the camera housing is on one side and the score and mute
+   * button are what sit under it. Bottom is untouched -- nothing here is near it. */
+  padding: max(var(--hud-topbar-pad-y), env(safe-area-inset-top))
+    max(var(--hud-topbar-pad-x), env(safe-area-inset-right)) var(--hud-topbar-pad-y)
+    max(var(--hud-topbar-pad-x), env(safe-area-inset-left));
 }
 
 .hud-stat {
@@ -94,7 +113,10 @@
 @media (max-width: 760px) {
   .hud-topbar {
     gap: 8px;
-    padding: 8px 10px;
+    /* The knobs, not `padding`: see the base rule. Setting the shorthand here would
+     * override the safe-area padding on every phone. */
+    --hud-topbar-pad-y: 8px;
+    --hud-topbar-pad-x: 10px;
   }
 
   .hud-stat {
@@ -122,7 +144,8 @@
 @media (max-width: 360px) {
   .hud-topbar {
     gap: 6px;
-    padding: 6px 8px;
+    --hud-topbar-pad-y: 6px;
+    --hud-topbar-pad-x: 8px;
   }
 
   .hud-stat {
@@ -309,6 +332,12 @@
   z-index: 2; /* above the topbar, below the title screen */
   right: 14px;
   bottom: 14px;
+  /* Fire and Mine sit exactly where the iPhone home indicator's swipe strip is, and a
+   * swipe that starts on a button is the system's, not the game's. The pair above is
+   * the fallback for a browser that parses neither function; these two win wherever
+   * they parse, and collapse back to 14px on a device with no inset. */
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 12px;
