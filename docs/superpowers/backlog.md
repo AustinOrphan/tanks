@@ -347,6 +347,208 @@ cleanly and surfaced only as a vite 500 when the harness was actually loaded, wh
 checked only by running it, and a typo there costs a 30-second timeout to diagnose.
 Widening `include` was not attempted here and may surface pre-existing errors.
 
+---
+
+## Spike: mobile app release (iOS App Store / Google Play)
+
+**Raised 2026-08-10**, from a four-part release investigation.
+**Document: `docs/research/mobile-release.md`.**
+
+**The question:** should Tanks! ship as a wrapped mobile app, and if so on which platform
+first?
+
+**Why it is live now.** The tree is unusually ready for a wrapper and nobody has said so in
+one place: `grep` finds exactly 1 non-test occurrence of `fetch(`/`XMLHttpRequest`/`import(`
+across `src/` (a type-position import at `audio/music.ts:86`), `public/audio/` holds only a
+`.gitkeep`, and `base: './'` already emits `./assets/…`. Touch controls, gesture
+classification, `pointercancel`/`blur`/`visibilitychange` recovery and the iOS audio-unlock
+gesture path all ship today. What is missing is the store-quality shell — and one number.
+
+**What would answer it:**
+
+- **The gating measurement is frame time on a real mid-range Android.** Serve `dist/` over
+  the LAN, add a temporary probe around the render call in `game/driver.ts`, and record
+  p50/p95 over three 60-second rounds on arena-04. Report the distribution. Nothing in this
+  repo has ever measured a frame time on a phone, and the render settings are desktop-tuned:
+  `antialias: true`, a 2048x2048 PCFSoft shadow map, three directional lights, ACES tone
+  mapping, a PMREM environment map, DPR capped at 2, and no instancing anywhere
+  (`grep -rn InstancedMesh src/ tools/` returns nothing). **Until that number exists, the
+  size of the port is a guess, and no estimate here is worth anything.**
+- Then a one-variable-at-a-time knob sweep **on device** — shadow map 2048→1024, antialias
+  off, DPR cap 2→1.5, dropping the fill/rim lights. `npm run gallery --sweep` already patches
+  constants and restores them; it has never been pointed at a phone. Prove the knob is wired
+  first: identical p50 across passes means a dead knob.
+- Decide Capacitor vs Tauri v2 by enumerating the native surface actually wanted (my read:
+  haptics, orientation lock, edge-to-edge, splash, nothing else). Note Capacitor 8 requires
+  Node 22+, which sits above this repo's declared floor of 20.19.0.
+
+**Two calendar constraints that no engineering shortens**, both re-verified 2026-08-10: a
+personal Play account created after 2023-11-13 must run a closed test with **12 testers
+opted in for 14 continuous days** before applying for production access; and from
+**2026-08-31** new Play apps and updates must target API 36. iOS additionally cannot be built
+from this machine at all — it needs macOS + Xcode, which is hardware, not code.
+
+**Not scheduled.** The PR-able pieces (safe areas, a web app manifest, the storage seam, a
+privacy policy) are filed as issues and are worth doing on their own merits.
+
+---
+
+## Spike: console release (Steam, Switch, PlayStation)
+
+**Raised 2026-08-10**, from the same investigation.
+**Document: `docs/research/console-release.md`.**
+
+**The question:** is any console or storefront release worth pursuing, and does it start with
+content or with platform work?
+
+**Why it is live now.** Three findings do not point the same way, and averaging them would
+be wrong.
+
+1. **Steam is unblocked but not close.** The gaps are concrete: zero gamepad code anywhere
+   (`grep -rni gamepad` returns 3 doc hits, all "out of scope", and 0 under `src/`), five
+   localStorage keys that Steam Auto-Cloud cannot see, 14 achievements with no external
+   write path, no packaging target, and no LICENSE file.
+2. **Steam Deck / Machine Verified is UNKNOWN, not a fail.** The criterion binds the default
+   *controller configuration*, authored on the partner site — Valve's own recommendations
+   page tells developers without native controller support to map one to keyboard/mouse. The
+   real question is narrower: this game aims at a mouse POSITION, and nobody has tested
+   whether a mouse-region binding plays acceptably.
+3. **Switch and PlayStation are gated on approved developer status under NDA**, and no
+   publicly documented licensed runtime was found that runs a TypeScript + three.js WebGL
+   bundle on either. CrossCode's team AOT-compiled their JS to C++ to reach 60fps on Switch —
+   a compiler project, not a port.
+
+**What would answer it:**
+
+- **Author a Steam Input default configuration and play it on a Deck.** That is the whole
+  Verified input question, and it is cheap relative to writing a gamepad reader.
+- **Does `dist/` render correctly and fast under WebKitGTK** (what Tauri would use on
+  Linux/Deck), or does it require Electron's bundled Chromium? One measurement decides the
+  whole shell architecture — install size, overlay behaviour, everything.
+- **Do any `hud.css` em-relative font sizes compute below 9px at 1280x800?** The fixed-px
+  declarations run 12px–72px and are fine; the `0.72em`/`0.85em`/`0.75em` rules are the only
+  ones whose computed height cannot be read off the rule, and they were never checked.
+- **Author arena-05 and time it end to end.** Four arenas and 18 enemy spawns is a demo. The
+  five pin sites a new level moves are already enumerated in CLAUDE.md, so per-level cost is
+  knowable rather than guessable — measure one, then multiply.
+- For Switch/PlayStation there is no substitute for registering (free for Nintendo) and
+  submitting a concept. **Neither platform publishes its criteria**, so nothing short of that
+  converts the unknown into a fact — and the pitch is what is judged, so decide content
+  first.
+
+**Deliberately unestimated.** Console porting effort and cost are not estimated here: the
+toolchains are NDA'd, and neither Nintendo nor Sony publishes devkit prices or certification
+requirements. Any number would be invented.
+
+---
+
+## Spike: multiplayer — which mode, and does peer determinism hold?
+
+**Raised 2026-08-10**, from the same investigation.
+**Document: `docs/research/multiplayer.md`.**
+
+**The question:** which multiplayer mode, if any, and can it be peer-deterministic or does it
+need a server?
+
+**Why it is live now.** The sim is a genuinely good netcode foundation and the game around it
+is not, and the gap has never been written down. `step(world, input)` clones its argument
+(`world.ts:242-243`) so every tick is already an immutable snapshot — rollback save-states,
+normally the expensive part, are free. Measured on this box, `cloneWorld` is **2–7% of a
+tick**, and an 8-frame rollback is roughly **0.5–1.2 ms of a 16.7 ms budget**. (Report the
+contrast, not the tick number: two probes disagreed by more than 2x, and tick cost varies
+2.3x across arenas — 61 µs to 144 µs — so the absolute moves when the probe moves.)
+
+Against that, the single-player assumption is load-bearing in five places: `applyPlayerInput`
+and `resolveStatus` find one tank by kind; the arena validator **hard-fails at module load**
+on any grid without exactly one `P` (`config/validate.ts:257`); four AI target-acquisition
+sites take the FIRST player found; a death resets the whole arena by `tanks[i]` ↔ `spawns[i]`
+index alignment; and there is no gamepad code, so local versus has no second controller.
+
+**What would answer it:**
+
+- **THE gating measurement: do Chrome, Firefox and Safari produce a bit-identical baseline
+  trace hash?** Extract the body of `tools/baseline/trace.test.ts` into a module a browser
+  page can call, and compare against
+  `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4`. If they match, lockstep
+  and rollback are both live. If they diverge, the choice is quantizing the sim's 18
+  transcendental lines (bounded — 10 `hypot`, 4 `sqrt`, 3 `cos`, 3 `sin`, 1 `atan2`) or
+  falling back to an authoritative Node server, which is the most expensive design. **Nothing
+  else should be decided before this.** No second JS engine is installed here; Playwright
+  ships Linux WebKit and Firefox builds but is not a dependency, and its WebKit is not
+  identical to shipped Safari, so the iOS half stays open either way.
+- **Decide win/lose semantics before touching `resolveStatus`**, which currently encodes
+  exactly one answer. Co-op: is `world.lives` shared or per-player, and does one death reset
+  the arena? Versus: "every non-player tank dead" and a HUD reading "Enemies remaining" mean
+  nothing with no AI.
+- **Decide `TankKind` vs a `controlledBy` field on `Tank`** by prototyping both far enough to
+  count touched files. The kind route gets compiler help; the field route avoids four AI
+  files and the spawn-letter table. The file count is the deciding number.
+- **Price the zero-infrastructure option first:** manual SDP copy-paste works on the current
+  static deploy today, with no signalling server at all, and would let an online prototype be
+  measured before anyone signs up for Cloudflare or depends on Trystero's public relays.
+
+**Constraint that shapes any answer:** `InputState.aim` is a world-space POINT produced by
+unprojecting a mouse position against the ground plane, so it depends on canvas size. Two
+peers with different window sizes produce different aim floats — the input must be quantized
+at the input boundary before the sim consumes it. And `SimEvent` carries no tick field, so
+re-simulation re-emits the same events and rollback needs de-duplication across all five
+consumers.
+
+---
+
+## Spike: richer animated skins — what the offset mechanism cannot express
+
+**Raised 2026-08-10**, from the same investigation.
+**Document: `docs/research/animated-skins.md`.**
+
+**The question:** should skins gain animation beyond texture-offset scrolling, and what is
+the cheapest route that does not introduce this tree's first shader?
+
+**Why it is live now.** Two facts that were not written down together.
+
+1. **The existing mechanism is free and narrow.** `flow` scrolls via per-skin `scroll` data
+   applied in `entities.ts:881-884`; three re-uploads the texture matrix uniform every frame
+   for every mapped material anyway (`WebGLMaterials.js:11-21`), so an animated skin costs no
+   extra upload over a static mapped one. But it can only express a **rigid 2D transform of a
+   static tile** — no brightness pulse, no per-pixel evolution, no colour cycling. Tinting is
+   closed off too: mapped materials are forced to `0xffffff` and `entities.test.ts:881-884`
+   pins it.
+2. **Adding a skin costs more than the render tests suggest.** Measured by mutation (a sixth
+   patterned skin, reverted): **7 failing tests across 3 files** — four literal counts in
+   `skins.test.ts` (120, 28, 30 and a second 30), six new GOLDEN hashes, two in
+   `customization.test.ts`, and one in `hud.css.test.ts` (every `SKINS` entry builds a
+   button). A second *scrolling* skin costs more still, because `customization.test.ts:108`
+   asserts `flow` is the only animated one.
+
+**What would answer it:**
+
+- **Decide what `customization.test.ts:108` should become.** That assertion is the reason
+  "ship the bold-speed Flow variant" (ledger, #61) is not the trivial data edit it looks
+  like. It is a design question — what does "the animated one" mean when there are two? —
+  and it must be settled before any second scrolling skin, including the one already on the
+  ledger.
+- **Decide whether skins should be unlockable at all** (ledger, #61), and specifically what
+  happens to a save wearing a locked skin after `Reset progress` calls
+  `achievements.reset()` (`loop.ts:708`). The mechanics are trivial; the rule is not.
+- **Look at a scrolling tile at play distance before building anything richer.** Skin
+  textures inherit `DataTexture`'s NearestFilter/no-mipmap defaults, and nobody has looked at
+  whether `flow` shimmers or steps. `npm run gallery --scene game --slowmo` answers it, and
+  the fix (LinearFilter + mipmaps) does not move `skins.test.ts`'s golden hashes, which read
+  the painter's source array rather than a sampled result.
+- **If a brightness pulse is wanted, the cheapest route is an emissive channel, not a
+  shader** — precedent exists in the same file (the mine's
+  `mat.emissive.copy(lo).lerp(hi, pulse)`, `entities.ts:828`). It needs the player's hull and
+  turret materials retained (or a `traverse` by mesh name); `tankViews` holds only
+  `{ group, turret, kind, gen }` today. The open question is whether an emissive pulse reads
+  as "skin" or as "this tank is in some state" — the game already uses emissive pulsing to
+  mean "armed mine". Answer that with eyes before writing the registry.
+
+**Constraint that shapes any shader answer:** nothing on the deploy path can see a shader.
+`pages.yml` runs `tsc`, `vitest`, `vite build`, `portability` and `npm audit` — **not the
+`visual` job**. A `ShaderMaterial` whose GLSL fails to compile typechecks, passes vitest
+(jsdom has no WebGL), and publishes. Only `npm run test:gl` could catch it.
+
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
