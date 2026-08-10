@@ -60,5 +60,35 @@
     "expectFailures": 1,
     "why": "HISTORY, not the current story: when this entry was first written (against an earlier commit, FRAME_MARGIN 0.06), it was a documented SURVIVING gap -- framing.test.ts imported FRAME_MARGIN and used the same constant on both sides of its own assertion (to drive fitCameraToArea AND to compute the test's expected screen-space bound), so doubling it moved both sides together and passed regardless of value. PR #103 ('give the board the screen back') independently added a coverage-ratio floor (`covers at least 48% of the frame...`) that does NOT reference FRAME_MARGIN at all -- it measures the framed rect's actual projected area against a hardcoded 0.48 threshold. Re-verifying this entry against current main (as this manifest's own re-verification process requires) found the gap CLOSED: doubling FRAME_MARGIN now fails that coverage floor (46.5% < 48% at 'phone landscape' on 3 of 4 arenas), one test, moved from SURVIVES to KILLED by a change that never touched this mutation. Left in the manifest as a killed entry rather than dropped, specifically because the reversal is itself the lesson: a stale 'known gap' claim in a comment or a PR body would have been WRONG here had it not been re-run.",
     "tests": ["src/render/framing.test.ts"]
+  },
+  {
+    "id": "storage-resolver-ignores-the-host",
+    "file": "src/game/storage.ts",
+    "find": "    if (host.localStorage) return host.localStorage;",
+    "replace": "    if (false as boolean) return host.localStorage!;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "resolveStorage must hand back the host's REAL localStorage when there is one; returning the in-memory shim instead means the shipped game silently persists nothing, and every round-trip assertion still passes on the shim. Only an IDENTITY assertion can see it, which is what storage.test.ts's 'returns the host storage ITSELF' case is. Verified through this harness at the commit that added the entry.",
+    "tests": ["src/game/storage.test.ts"]
+  },
+  {
+    "id": "save-import-drops-the-allow-list",
+    "file": "src/game/save.ts",
+    "find": "    if (!SAVE_KEYS.includes(key) || typeof value !== 'string') {",
+    "replace": "    if (typeof value !== 'string') {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "importSave writes only keys on SAVE_KEYS. That is a security property, not tidiness: austinorphan.com's localStorage namespace is shared with every other project page on the origin (CLAUDE.md), so a blob a player was talked into pasting must not be able to set a neighbour's key. Dropping the allow-list leaves every round-trip test green -- the keys a real export carries are all on the list -- and is caught only by the case that imports a blob carrying a foreign key. Verified through this harness at the commit that added the entry.",
+    "tests": ["src/game/save.test.ts"]
+  },
+  {
+    "id": "replay-recorder-wraps-the-raw-controller",
+    "file": "src/game/loop.ts",
+    "find": "    ? createRecordingInput(effectiveInput, replayMetaFor(world, level))",
+    "replace": "    ? createRecordingInput(input, replayMetaFor(world, level))",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The recorder must decorate `effectiveInput` -- what the driver is actually handed -- and not the raw input controller, or an autoplay session records an empty stream while a normal session looks perfect. Both wirings pass every tick-count assertion, because with autoplay off the two are the same object's behaviour; the discriminating case is the one that turns autoplay on and asserts the trace still filled. Verified through this harness at the commit that added the entry.",
+    "tests": ["src/game/loop.test.ts"]
   }
 ]

@@ -68,7 +68,7 @@ export interface ReplayTrace {
   schema: number;
   /**
    * A fingerprint of the sim's DATA -- balance, tank defs, AI profiles, arenas.
-   * See SIM_DATA_FINGERPRINT for exactly what it does and does not cover.
+   * See simDataFingerprint() for exactly what it does and does not cover.
    */
   data: string;
   meta: ReplayMeta;
@@ -125,13 +125,23 @@ export function fingerprint(value: unknown): string {
  * commit sha injected at build time), which is a build-pipeline change this does
  * not make -- see the backlog entry. A mismatch is therefore proof a trace is
  * stale; a match is not proof it is fresh.
+ *
+ * LAZY and memoised, not a module-level const. The canonical rendering is 20,445
+ * characters and cost 3.5 ms cold / 0.27 ms warm when measured on this tree's
+ * data (node 24, 50 warm samples) -- small, but paid at import time by every boot
+ * including the ones with no dev flag on at all, since loop.ts imports this
+ * module unconditionally. Nothing calls it unless `?dev=1&replay=1` is set.
  */
-export const SIM_DATA_FINGERPRINT = fingerprint({
-  balance: balanceJson,
-  tankDefs: tankDefsJson,
-  aiProfiles: aiProfilesJson,
-  arenas: arenasJson,
-});
+let simDataFingerprintMemo: string | null = null;
+export function simDataFingerprint(): string {
+  simDataFingerprintMemo ??= fingerprint({
+    balance: balanceJson,
+    tankDefs: tankDefsJson,
+    aiProfiles: aiProfilesJson,
+    arenas: arenasJson,
+  });
+  return simDataFingerprintMemo;
+}
 
 export function encodeInput(input: InputState): EncodedInput {
   return [
@@ -200,7 +210,7 @@ export function createRecordingInput(
       return {
         format: REPLAY_FORMAT,
         schema: REPLAY_SCHEMA,
-        data: SIM_DATA_FINGERPRINT,
+        data: simDataFingerprint(),
         meta: { ...current },
         ticks: ticks.map((t) => [...t] as EncodedInput),
         truncated,
@@ -237,8 +247,9 @@ export function checkTrace(trace: ReplayTrace): TraceCheck {
   if (trace.schema !== REPLAY_SCHEMA) {
     return { ok: false, reason: `schema ${trace.schema} != ${REPLAY_SCHEMA}` };
   }
-  if (trace.data !== SIM_DATA_FINGERPRINT) {
-    return { ok: false, reason: `sim data ${trace.data} != ${SIM_DATA_FINGERPRINT}` };
+  const want = simDataFingerprint();
+  if (trace.data !== want) {
+    return { ok: false, reason: `sim data ${trace.data} != ${want}` };
   }
   return { ok: true, reason: null };
 }

@@ -13,7 +13,7 @@ import {
   replayMetaFor,
   replayTrace,
   checkTrace,
-  SIM_DATA_FINGERPRINT,
+  simDataFingerprint,
   REPLAY_FORMAT,
   REPLAY_SCHEMA,
   type ReplayMeta,
@@ -93,9 +93,9 @@ describe('canonical / fingerprint', () => {
   });
 });
 
-describe('SIM_DATA_FINGERPRINT', () => {
+describe('simDataFingerprint', () => {
   it('is eight hex digits', () => {
-    expect(SIM_DATA_FINGERPRINT).toMatch(/^[0-9a-f]{8}$/);
+    expect(simDataFingerprint()).toMatch(/^[0-9a-f]{8}$/);
   });
 
   it('moves when a balance scalar moves', () => {
@@ -115,7 +115,7 @@ describe('SIM_DATA_FINGERPRINT', () => {
     // The stamp claims all four data files. If it hashed balance alone, this would
     // pass for the wrong reason -- so compare the real stamp against a fingerprint
     // of balance alone: they must differ, which is only true if more went in.
-    expect(SIM_DATA_FINGERPRINT).not.toBe(fingerprint({ balance: balanceJson }));
+    expect(simDataFingerprint()).not.toBe(fingerprint({ balance: balanceJson }));
   });
 });
 
@@ -181,7 +181,7 @@ describe('createRecordingInput', () => {
     const trace = rec.trace();
     expect(trace.format).toBe(REPLAY_FORMAT);
     expect(trace.schema).toBe(REPLAY_SCHEMA);
-    expect(trace.data).toBe(SIM_DATA_FINGERPRINT);
+    expect(trace.data).toBe(simDataFingerprint());
     expect(trace.meta).toEqual(META);
   });
 
