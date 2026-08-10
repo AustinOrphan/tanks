@@ -129,28 +129,31 @@ export const TRACK_OVERHANG = 0.05;
 export const TURRET_R = 0.36;
 
 /**
- * THE TWO RACING-STRIPE OPTIONS, both built so Austin can pick between renders rather
- * than descriptions. He asked for exactly this: "I'm not sure if racing stripes should
- * remain as is or if the turret/barrel should be continuous as well."
+ * RACING STRIPES RUN THE WHOLE TANK AS ONE STRIPE. Austin, after seeing both rendered:
+ * "I like continuous stripes actually."
  *
- *   'part'  As shipped. Each part's stripe is normalised to that part's own half-width,
- *           so the pair covers the same FRACTION of the hull, the turret and the barrel.
- *           The three sets are the same size relative to their part and so do NOT line
- *           up with each other: measured in world units the stripe is 0.084 wide on the
- *           hull, 0.069 on the turret and 0.025 on the barrel -- the gun's are 3.4x
- *           NARROWER than the hull's, and the mismatch steps visibly where the barrel
- *           leaves the turret (see the `top` render). It reads as three striped parts.
+ *   'body'  SHIPPED. One continuous field. Every part is projected at world scale
+ *           (k = 1), so the SAME pair of stripes runs from the nose, up over the turret
+ *           and out along the gun at one constant width of 0.084 world units. It reads
+ *           as one striped object, which is what a racing stripe on a real vehicle is:
+ *           one unbroken line down the whole body.
  *
- *   'body'  One continuous field. Every part is projected at world scale (k = 1), so the
- *           SAME pair of stripes runs from the nose, up over the turret and out along
- *           the gun, at one constant 0.084. It reads as one striped object.
+ *   'part'  BUILT AND REJECTED, kept because it is the arrangement that shipped before
+ *           and someone will otherwise wonder whether it was considered. Each part's
+ *           stripe is normalised to that part's own half-width, so the pair covers the
+ *           same FRACTION of hull, turret and barrel -- which means the three sets are
+ *           the same size relative to their part and do NOT line up with each other.
+ *           Measured in world units the stripe is 0.084 wide on the hull, 0.069 on the
+ *           turret and 0.025 on the barrel: the gun's are 3.4x NARROWER than the hull's,
+ *           and the mismatch steps visibly where the barrel leaves the turret. Clearest
+ *           in the `top` view, which is how the choice was made.
  *
- * Normalising to HULL_HALF_W is what makes 'body' work: `projectStripeUV` divides by
+ * Normalising to HULL_HALF_W is what makes 'body' work: `projectPlanarUV` divides by
  * `acrossHalf`, so handing it the hull's own half-width leaves the scale factor at 1 and
  * every part lands in the hull's world-space v.
  */
 export type StripeTurretMode = 'part' | 'body';
-export const STRIPE_TURRET_MODE: StripeTurretMode = 'part';
+export const STRIPE_TURRET_MODE: StripeTurretMode = 'body';
 
 /**
  * Height of the barrel's centreline, and therefore of every shell in flight.
@@ -376,29 +379,28 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   const HULL_HALF_W = (HULL_WIDTH - TRACK_W * TRACK_PROUD * 2) / 2;
 
   /**
-   * Re-map a lathe part's UVs so a pattern banded on v runs ALONG the barrel.
+   * Project a part's UVs FLAT: u from the `along` world axis, v from the `across` one.
    *
-   * LatheGeometry maps u around the axis of revolution, which is right for a pattern
-   * with no direction -- the checker's turret reads as a deliberate pinwheel and the
-   * flow's as a swirl, and both are kept. It is wrong for a stripe: a hard-edged band
-   * wrapped around the axis arrives as PIE SLICES radiating from the turret's centre,
-   * which is what a blue/stripes tank measured as at play distance while its hull
-   * carried two clean bands.
+   * BOTH AXES ARE LOAD-BEARING, and for more skins than this function was written for.
+   * It began as the stripe skin's private fix and its comment said so; that is no longer
+   * true and the stale version actively invited a regression. Today it is called from:
    *
-   * So this is applied to the stripe skin ONLY. `across` is normalised to the hull's
-   * half-width so one stripe covers the same fraction of the turret and the barrel as
-   * it does of the hull -- without that a constant-width pair of stripes would cover
-   * roughly half the 0.26-wide barrel (measured ~46% at the flare, ~52% on the tube),
-   * against a fifth of the hull. An earlier draft said 70%, which was not measured.
+   *   - `projectBodyUV`, for the HULL, on EVERY mapped skin. u is the hull's length and
+   *     v its width, so checker's squares, camo's patches, clouds' puffs and flow's
+   *     bands all read their position along the tank off u. Collapsing u to a constant
+   *     turns the checker hull into horizontal bands -- and used to leave the whole
+   *     suite green, which is why `entities.test.ts` now pins the u extent.
+   *   - the TURRET and BARREL, for `stripes` only. A hard-edged band wrapped around a
+   *     lathe axis arrives as PIE SLICES radiating from the turret's centre, which is
+   *     what a blue/stripes tank measured as at play distance while its hull carried two
+   *     clean bands. Every other skin keeps the lathe wrap on those parts, deliberately:
+   *     it is what makes the checker's turret a pinwheel and the flow's a swirl.
    *
-   * `along` carries no pattern information -- the stripe painter ignores u entirely, and
-   * setting it to a constant leaves the whole suite green. An earlier version of this
-   * comment justified it by flow's scrolling offset, which is FALSE: flow is never
-   * projected (only `stripes` is), so nothing here can affect it. It stays a real
-   * coordinate because a degenerate u would break any future skin that reads it, not
-   * because anything today does.
+   * `across` is divided by `acrossHalf`, which is what lets the caller choose between
+   * scaling a pattern to each part and running one field across the whole tank. See
+   * STRIPE_TURRET_MODE, which is exactly that choice.
    */
-  function projectStripeUV(
+  function projectPlanarUV(
     geo: THREE.BufferGeometry,
     along: 'x' | 'y' | 'z',
     across: 'x' | 'y' | 'z',
@@ -459,7 +461,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
    * Both are in the PR's `after-planar` renders. So the skirt is unrolled as well.
    */
   function projectBodyUV(geo: THREE.BufferGeometry): void {
-    projectStripeUV(geo, 'x', 'z', HULL_HALF_W);
+    projectPlanarUV(geo, 'x', 'z', HULL_HALF_W);
     unrollSkirtUV(geo);
   }
 
@@ -497,9 +499,18 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // load-bearing rather than tidy. ExtrudeGeometry is non-indexed, so
     // `computeVertexNormals` gives every triangle its own FACET normal and a position on
     // a rounded corner carries several. Offsetting each by its own facet normal splits
-    // the UV at every corner facet -- measured at 0.102 of a tile, about 13 texels, which
-    // is a faint version of the very seam this function exists to remove. Averaging first
-    // makes co-located vertices agree exactly, so the corners close.
+    // the UV at those corners; averaging first makes co-located vertices agree exactly,
+    // so the corners close.
+    //
+    // Measured max UV gap between co-located vertices, WITH THE POPULATION STATED because
+    // the two differ by 4x and an earlier draft quoted the smaller one bare:
+    //
+    //   per-facet, visible surface only (normal.y > -0.1, 729 of 1248 vertices)  0.102506
+    //   per-facet, all 1248 vertices                                             0.400000
+    //   averaged (shipped), either population                                    0.000000
+    //
+    // The all-vertices figure is larger because it includes the bottom cap, whose own
+    // discontinuity is discussed below and is never drawn.
     let top = -Infinity;
     const dir = new Map<string, { x: number; z: number }>();
     for (let i = 0; i < pos.count; i++) {
@@ -708,7 +719,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // `stripeAcross` is the ONE knob that separates the two racing-stripe options, and
     // it is deliberately the same number for the turret and the barrel -- see
     // STRIPE_TURRET_MODE.
-    if (striped) projectStripeUV(domeGeo, 'x', 'z', stripeAcrossFor(TURRET_R));
+    if (striped) projectPlanarUV(domeGeo, 'x', 'z', stripeAcrossFor(TURRET_R));
     const dome = new THREE.Mesh(domeGeo, turretMat);
     dome.name = 'turret';
     dome.castShadow = true;
@@ -721,7 +732,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // lay it along the turret's +x), so in GEOMETRY space the along-axis is y and the
     // horizontal across-axis is z -- which is what puts the stripe on its top and
     // bottom rather than its flanks.
-    if (striped) projectStripeUV(barrelGeo, 'y', 'z', stripeAcrossFor(BARREL_R));
+    if (striped) projectPlanarUV(barrelGeo, 'y', 'z', stripeAcrossFor(BARREL_R));
     // Every other skin: keep the lathe wrap the turret has, at the turret's world scale.
     else if (mapped) matchLatheToTurret(barrelGeo, barrelProfile(), BARREL_R);
     const barrel = new THREE.Mesh(barrelGeo, turretMat);

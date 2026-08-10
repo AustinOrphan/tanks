@@ -157,9 +157,19 @@ NOT enough on its own, because the near-vertical walls collapse and the skirt re
 vertical streaks (checker became columns, camo a picket fence). The unroll averages the
 outward direction over every vertex sharing a position, which is load-bearing rather
 than tidy: the geometry is non-indexed, so facet normals split the UV at every rounded
-corner — measured 0.102 of a tile before averaging, 0.000000 after, against 1.472500 for
-the untouched default. `entities.test.ts` asserts co-located vertices agree, with the
-unmapped enemy hull as the negative control.
+corner — per-facet measures 0.102506 over the VISIBLE surface (normal.y > −0.1, 729 of
+1248 vertices) and 0.400000 over all 1248, against 0.000000 either way once averaged and
+1.472500 for the untouched default. **State which population**: an earlier draft quoted
+0.102506 bare and a reviewer reproducing it over all vertices got 0.400000 and could not
+match the figure.
+
+**Three separate guards, because one metric cannot see all three failures.**
+Co-located vertices agreeing pins continuity (negative control: the unmapped enemy hull).
+It is blind to the unroll, since a collapsed skirt is perfectly continuous — so skirt
+TEXEL DENSITY pins that the sides are drawn at authored size, and UV footprint exceeding
+the plan footprint pins that the unroll goes OUTWARD rather than folding back inward.
+Both of those mutations, and collapsing `projectPlanarUV`'s `along` axis, each left the
+full suite green before those tests existed.
 
 The TURRET keeps `LatheGeometry`'s own wrap and **must not be touched**: u around the
 axis is what makes checker a pinwheel and flow a swirl, and Austin asked for both by
@@ -179,10 +189,28 @@ is unchanged and only the seam moves. Pick an angle that is not a whole number o
 segments and the silhouette rotates with it.
 
 `stripes` is the exception to all of it: a hard-edged band wrapped around a lathe axis
-arrives as pie slices, so its turret and barrel are projected flat.
-`STRIPE_TURRET_MODE` chooses whether they are normalised per part (as shipped: 0.084
-wide on the hull, 0.069 on the turret, 0.025 on the barrel) or at world scale
-(continuous, 0.084 throughout).
+arrives as pie slices, so its turret and barrel are projected flat. `STRIPE_TURRET_MODE`
+is `'body'` — one field at world scale, 0.084 wide on every part, which Austin chose from
+renders ("I like continuous stripes actually"). `'part'` normalises each part to its own
+half-width (0.084 / 0.069 / 0.025 on hull / turret / barrel) and was rejected because the
+three sets do not line up. Pinned through the behaviour — all three parts must share one
+v scale — not through the constant alone.
+
+**CAMO AND CLOUDS ARE DIFFERENT SHAPE LANGUAGES, and that is the fix that finally
+worked.** They shared one `blotches` generator (lobed clusters of circles) and differed
+only in count, radius and lobes, so Austin twice reported them as swapped. The coverage
+WAS backwards and swapping it was necessary — camo covers, clouds does not — but it was
+not sufficient, because two skins cut from one silhouette generator read as versions of
+each other at any density. `camoCells` is now a seeded power diagram: hard-edged
+interlocking polygons, straight edges, no arcs, which a circle-based generator cannot
+produce at any parameter setting. `cumulus` is soft-edged bulbous puffs, a MAX of
+per-lobe coverage fields so the union has no internal rims. Edge hardness is pinned
+directly (camo 0.0000 of pixels off-tone, clouds 0.1802). Both still tile toroidally and
+both stay deterministic from one seed. Neither touches its tone derivation: `autoAccent`
+keeps camo muted, `cloudTone` keeps clouds light, and the white hull's deliberate
+darkening survives. Coverage is measured by NEAREST TONE, not exact hull-hex equality —
+a soft rim equals no tone exactly, so exact matching penalises a skin for having the
+property it is supposed to have.
 
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose

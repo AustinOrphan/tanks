@@ -260,26 +260,126 @@ function cloudTone(base: RGB, delta: number): RGB {
 }
 
 /**
- * A seamless field of round blotches in two tones over a base -- camo and clouds are the
- * same field at different densities and different distances from the hull, which is the
- * point of sharing it. The seed is fixed so a given hull always paints the same pattern.
+ * WHY CAMO AND CLOUDS NO LONGER SHARE A GENERATOR.
  *
- * COVERAGE IS THE PARAMETER THAT MATTERS, and it is easy to get wrong: the tones are
- * painted in order, so the second buries the first wherever they overlap. The DENSE
- * setting (13 blotches, radius 9-18, 4 lobes) leaves the base on 27.9% of the texture
- * and gives the last tone painted 44.4%; the SPARSE one (7, radius 8-15, 5 lobes)
- * leaves the base on 57.8% with 22.3% and 19.9% for the two tones. Those figures are
- * identical on all 6 shipped hulls, because the blotch geometry is seeded and carries
- * no colour dependence at all.
+ * They used to: one `blotches` helper drew lobed clusters of circles, and the two skins
+ * differed only in count, radius and lobe count. That is why Austin kept reporting them
+ * as swapped. Coverage WAS wrong and swapping it helped -- he confirmed the dense/sparse
+ * split is now the right way round -- but it could never be enough on its own, because
+ * two skins cut from one silhouette generator read as each other at different densities.
+ * His verdict after the swap: "Clouds turret top could be made to look a bit more
+ * cloudlike in shape. Same with some spots on the hull. Camo also could use some
+ * shape-improvement on the hull."
  *
- * WHICH SKIN GETS WHICH WAS BACKWARDS UNTIL NOW, and it is the whole reason Austin
- * reported that "camo and clouds need to be swapped". Dense interlocking patches that
- * cover most of a surface are what camouflage IS, so camo takes the dense setting;
- * separated puffs over a visible field are what clouds are, so clouds takes the sparse
- * one. Coverage is the only thing that moved -- each skin kept its own tone derivation,
- * which is what still makes camo muted and clouds light.
+ * So the difference is now SHAPE LANGUAGE, which is the thing the eye actually names:
+ *
+ *   camo    hard-edged interlocking polygons, from a seeded power diagram. Straight
+ *           edges, corners, no arcs anywhere. A circle-based generator cannot make this
+ *           at any parameter setting, which is the whole point.
+ *   clouds  soft-edged bulbous puffs, from a union of varying-radius lobes with a
+ *           smooth falloff and a flattened underside. No hard edge anywhere.
+ *
+ * Both still tile seamlessly (every distance below wraps toroidally) and both are still
+ * deterministic from a fixed seed. Neither touches its tone derivation: camo stays muted
+ * via `autoAccent` and clouds stays light via `cloudTone`.
  */
-function blotches(
+
+/** Toroidal component distance -- the tile's left edge is adjacent to its right. */
+function wrapDelta(a: number, b: number): number {
+  const d = Math.abs(a - b);
+  return d > SIZE / 2 ? SIZE - d : d;
+}
+
+/**
+ * CAMO: a seeded power diagram (an additively weighted Voronoi partition).
+ *
+ * Scatter `points` feature sites, give each a weight and one of the three tones, then
+ * colour every pixel by whichever site wins `d^2 - weight`. That yields cells with
+ * STRAIGHT edges meeting at corners -- subtracting a per-site constant moves a boundary
+ * without bending it, which is exactly what a power diagram buys over the multiplicative
+ * kind, whose bisectors are circular arcs and would have put the arcs straight back.
+ *
+ * Two properties make it read as camouflage rather than as a mosaic. Adjacent sites
+ * drawn the same tone MERGE, so the visible patches are unions of several cells and are
+ * irregular in size and outline rather than one-cell-one-blob. And the weights vary the
+ * cell areas, so nothing reads as a regular grid.
+ *
+ * Coverage is a consequence here, not a parameter: each site independently draws a tone,
+ * so the base's share is the probability it is drawn, up to sampling noise over
+ * `points` cells. That is why the shares below are close to but not exactly the split.
+ */
+function camoCells(
+  px: Uint8ClampedArray,
+  base: RGB,
+  dark: RGB,
+  deep: RGB,
+  points: number,
+  baseShare: number,
+  darkShare: number,
+): void {
+  const rnd = xorshift(0xc4310);
+  const fx: number[] = [];
+  const fy: number[] = [];
+  const fw: number[] = [];
+  const tone: RGB[] = [];
+  for (let i = 0; i < points; i++) {
+    fx.push(rnd() * SIZE);
+    fy.push(rnd() * SIZE);
+    // Weight spread as a fraction of a typical cell's squared radius, so it perturbs
+    // boundaries noticeably without letting one site swallow its neighbours.
+    fw.push((rnd() * 2 - 1) * (SIZE * SIZE) / (points * 14));
+    const r = rnd();
+    tone.push(r < baseShare ? base : r < baseShare + darkShare ? dark : deep);
+  }
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      let best = Infinity;
+      let winner = 0;
+      for (let i = 0; i < points; i++) {
+        const dx = wrapDelta(x, fx[i]);
+        const dy = wrapDelta(y, fy[i]);
+        const d = dx * dx + dy * dy - fw[i];
+        if (d < best) {
+          best = d;
+          winner = i;
+        }
+      }
+      fill(px, (y * SIZE + x) * 4, tone[winner]);
+    }
+  }
+}
+
+/** Linear blend of `tone` into whatever is already at `i`, by coverage `t` in [0,1]. */
+function blendPixel(px: Uint8ClampedArray, i: number, tone: RGB, t: number): void {
+  px[i] = Math.round(px[i] + (tone[0] - px[i]) * t);
+  px[i + 1] = Math.round(px[i + 1] + (tone[1] - px[i + 1]) * t);
+  px[i + 2] = Math.round(px[i + 2] + (tone[2] - px[i + 2]) * t);
+  px[i + 3] = 255;
+}
+
+/**
+ * CLOUDS: soft-edged cumulus puffs.
+ *
+ * Each puff is a union of overlapping lobes whose radii VARY widely, which is what gives
+ * the bulging cauliflower outline rather than the even scallop a constant radius makes.
+ * The union is taken as a MAXIMUM of per-lobe coverage fields, not by painting each lobe
+ * in turn: painting would leave every lobe's own rim visible inside the puff, and the
+ * whole point is that a cloud has no internal edges.
+ *
+ * Coverage ramps over `SOFT` pixels at the rim instead of switching, which is the single
+ * biggest difference from camo and the thing Austin asked for. It costs the pattern its
+ * flat-tone property -- a soft rim is a gradient, so these textures carry many more than
+ * three colours -- and the coverage test below counts only EXACT base pixels, so the
+ * rims read as "not base" there.
+ *
+ * The underside is flattened rather than clipped. Real cumulus sits on a definite flat
+ * base, but the tile's y axis is not consistently "up" on the tank: it runs along the
+ * lathe profile on the turret (so roughly vertical there) and across the hull's WIDTH
+ * once the body is projected from above. A hard flat base would look right on the turret
+ * and lie on its side on the hull, so the flattening is gentle enough to shape the puff
+ * without reading as a cut when the texture arrives rotated.
+ */
+function cumulus(
   px: Uint8ClampedArray,
   base: RGB,
   first: RGB,
@@ -291,27 +391,46 @@ function blotches(
 ): void {
   for (let i = 0; i < SIZE * SIZE * 4; i += 4) fill(px, i, base);
   const rnd = xorshift(0xc4310);
+  /** Width of the soft rim, in pixels. Below ~2 it reads as a hard edge again. */
+  const SOFT = 3.5;
+  /** How much the underside is pulled in, as a fraction of a lobe's radius. */
+  const FLATTEN = 0.55;
   for (const tone of [first, second]) {
     for (let b = 0; b < count; b++) {
       const cx = rnd() * SIZE;
       const cy = rnd() * SIZE;
       const r = rMin + rnd() * (rMax - rMin);
-      // Each patch is a CLUSTER of overlapping circles rather than one circle. A single
-      // circle per patch reads as polka dots -- Austin's "camo still doesn't look camo"
-      // -- because real camouflage is irregular and interlocking. Overlapping lobes cost
-      // nothing and are what turn a dot into a blob.
+      const ox: number[] = [];
+      const oy: number[] = [];
+      const or: number[] = [];
       for (let lobe = 0; lobe < lobes; lobe++) {
-        const ox = cx + (rnd() * 2 - 1) * r * 0.8;
-        const oy = cy + (rnd() * 2 - 1) * r * 0.8;
-        const lr = r * (0.45 + rnd() * 0.55);
-        for (let y = Math.floor(oy - lr); y < oy + lr; y++) {
-          for (let x = Math.floor(ox - lr); x < ox + lr; x++) {
-            if ((x - ox) ** 2 + (y - oy) ** 2 > lr * lr) continue;
-            // Wrap so patches crossing an edge tile seamlessly.
-            const wx = ((x % SIZE) + SIZE) % SIZE;
-            const wy = ((y % SIZE) + SIZE) % SIZE;
-            fill(px, (wy * SIZE + wx) * 4, tone);
+        // Lobes are strung along the puff's width and lifted ABOVE its base line, so the
+        // mass bulges upward off a settled underside.
+        const t = lobes === 1 ? 0.5 : lobe / (lobes - 1);
+        const lr = r * (0.4 + rnd() * 0.75);
+        ox.push(cx + (t - 0.5) * r * 2.1 + (rnd() * 2 - 1) * r * 0.25);
+        oy.push(cy - lr * FLATTEN - rnd() * r * 0.3);
+        or.push(lr);
+      }
+      let maxR = 0;
+      for (const v of or) maxR = Math.max(maxR, v);
+      const reach = r * 1.6 + maxR + SOFT;
+      for (let y = Math.floor(cy - reach); y <= cy + reach; y++) {
+        for (let x = Math.floor(cx - reach); x <= cx + reach; x++) {
+          let cov = 0;
+          for (let l = 0; l < lobes; l++) {
+            const dx = x - ox[l];
+            const dy = y - oy[l];
+            const d = Math.sqrt(dx * dx + dy * dy);
+            // 1 well inside, ramping to 0 over SOFT pixels at the rim.
+            const c = (or[l] - d) / SOFT;
+            if (c > cov) cov = c;
           }
+          if (cov <= 0) continue;
+          if (cov > 1) cov = 1;
+          const wx = ((x % SIZE) + SIZE) % SIZE;
+          const wy = ((y % SIZE) + SIZE) % SIZE;
+          blendPixel(px, (wy * SIZE + wx) * 4, tone, cov);
         }
       }
     }
@@ -371,17 +490,14 @@ const PAINTERS: Record<
     // of the hull so camo is a family of one paint, not a clash.
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base, AUTO_ACCENT_DELTA * 0.5);
     const deep = accent ? scale(dark, 0.7) : autoAccent(base, AUTO_ACCENT_DELTA * 0.95);
-    // DENSE and interlocking: real camouflage is patches that meet and cover, so the
-    // hull survives on a minority of the surface. These numbers were CLOUDS' until
-    // Austin reported "camo and clouds need to be swapped -- the skins appear to have
-    // their names reversed". The two skins have only ever differed in coverage and in
-    // how far their tones travel, and it was the COVERAGE that was on the wrong one:
-    // camo shipped as 7 small sparse patches leaving 57.8% hull, which reads as a few
-    // puffs, while clouds shipped as 13 large ones leaving 27.9%, which reads as
-    // camouflage. The tones did not move -- camo's muted, close-to-hull pair and
-    // clouds' light `cloudTone` pair were both already right, and the comment above
-    // proves camo's were tuned for the dense coverage it is only now getting.
-    blotches(px, base, dark, deep, 13, 9, 18, 4);
+    // DENSE and interlocking, in HARD-EDGED polygons -- see camoCells. The hull survives
+    // on a minority of the surface, which is what camouflage does and what the sparse
+    // arrangement this skin used to carry could not.
+    //
+    // 22 cells over a 128px tile is about 27px across each before the same-tone merging
+    // that makes the visible patches bigger; the shares are tuned so the base stays the
+    // minority without either accent tone dominating.
+    camoCells(px, base, dark, deep, 44, 0.3, 0.37);
   },
   clouds(px, base, accent) {
     // The same blotch field as camo, taken to the FULL accent delta and beyond. Camo
@@ -398,10 +514,11 @@ const PAINTERS: Record<
     // accident, and the result was better as its own thing than as a broken camo.
     const soft = accent ? ensureContrast(base, accent) : cloudTone(base, AUTO_ACCENT_DELTA);
     const bright = accent ? scale(soft, 0.7) : cloudTone(base, AUTO_ACCENT_DELTA * 1.8);
-    // SPARSE and separated -- these were camo's numbers; see the note there. Fewer,
-    // smaller puffs on a hull that stays visible between them is what reads as sky, and
-    // it is the light tones above rather than the density that make them clouds.
-    blotches(px, base, soft, bright, 7, 8, 15, 5);
+    // SPARSE and separated, in SOFT-EDGED puffs -- see cumulus. Fewer, larger, rounder
+    // shapes on a hull that stays visible between them is what reads as sky; the soft
+    // rim is what stops them reading as light-coloured camouflage, which is exactly
+    // what they did while both skins shared one hard-edged generator.
+    cumulus(px, base, soft, bright, 6, 8, 13, 5);
   },
   checker(px, base, accent) {
     const dark = accent ? ensureContrast(base, accent) : autoAccent(base);
