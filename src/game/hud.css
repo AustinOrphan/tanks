@@ -635,14 +635,17 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  /* SAME strength as the stats/achievements scrim now, not the old lighter 0.35 --
-   * that value existed only so the arena's own player tank, standing at its spawn
-   * behind this pane, was visible through it; that WAS the "preview". Measured with
-   * a real screenshot after .hud-preview landed: at 0.35 the arena tank still shows
-   * through clearly enough to visually collide with the Skin section's buttons,
-   * reading as a second, smaller, out-of-place tank beside the real preview. Now that
-   * the pane has an actual preview, the arena behind it is background noise, not
-   * content -- so it gets the same treatment stats/achievements already had. */
+  /* SAME strength as the stats scrim now (rgba(10, 12, 16, 0.72) -- not the same as
+   * achievements, which is a different colour AND alpha: rgba(11, 14, 20, 0.86)),
+   * not the old lighter 0.35 that this pane used to carry. That 0.35 existed only so
+   * the arena's own player tank, standing at its spawn behind this pane, was visible
+   * through it; that WAS the "preview". Measured with a real screenshot after
+   * .hud-preview landed: at 0.35 the arena tank still shows through clearly enough to
+   * visually collide with the Skin section's buttons, reading as a second, smaller,
+   * out-of-place tank beside the real preview. Now that the pane has an actual
+   * preview, the arena behind it is background noise, not content -- so it gets
+   * stats' treatment, chosen over achievements' only because it was the closer
+   * match already in the file; there is no requirement the two agree. */
   background: rgba(10, 12, 16, 0.72);
   color: #d8dde6;
 }

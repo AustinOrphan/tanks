@@ -704,6 +704,35 @@ check('dispose actually runs (does not throw), including a SECOND dispose', () =
   return null;
 });
 
+check('dispose does NOT lose the context -- it is held, live, and reused on reopen', () => {
+  // Pins the exact lifetime claim documented in loop.ts and preview.ts: after
+  // dispose(), the canvas's WebGL context is the SAME object, still live, not lost --
+  // "held for the rest of the session" is the true (and safe) behaviour, not "freed
+  // and reacquired every open/close". This is the direct measurement; the "repeated
+  // open/close cycles" check below shows the CONSEQUENCE (reopening still draws) but
+  // does not by itself distinguish "context reused" from "context re-created cheaply
+  // some other way" -- this check reads the context identity and isContextLost()
+  // directly, so the claim in the doc comments is measured here, not merely inferred.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const glBefore = c.getContext('webgl2') ?? c.getContext('webgl');
+  preview.dispose();
+  const glAfter = c.getContext('webgl2') ?? c.getContext('webgl');
+  const lostAfterDispose = (glAfter as WebGLRenderingContext).isContextLost();
+  const sameCtxAfterDispose = glBefore === glAfter;
+  const reopened = createTankPreview(c);
+  const sameCtxOnReopen = reopened
+    ? (c.getContext('webgl2') ?? c.getContext('webgl')) === glBefore
+    : false;
+  reopened?.dispose();
+  c.remove();
+  if (lostAfterDispose) return 'context IS lost after dispose -- the doc comments are now wrong';
+  if (!sameCtxAfterDispose) return 'a DIFFERENT context object exists after dispose -- not held, replaced';
+  if (!sameCtxOnReopen) return 'reopen did not reuse the same context object';
+  return null;
+});
+
 check('the preview and the main renderer hold TWO live contexts at once, neither lost', () => {
   // The concurrency claim behind scoping the preview to "panel open": the peak is
   // two contexts (this one plus the main game's), only while the Customize panel is

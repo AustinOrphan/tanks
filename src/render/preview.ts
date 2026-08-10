@@ -25,13 +25,21 @@
  * scene.ts's does. scene.ts's canvas gets a brand new WebGLRenderer on every level
  * (a genuinely new canvas each time main.ts boots, or never at all otherwise), so
  * losing the context on teardown is free. This canvas is reused, and a lost context
- * does not reliably come back: a real run proved a second `createTankPreview` on a
- * force-lost canvas returns a live renderer that draws nothing (see the "reopening on
- * the SAME canvas" check in tools/gl/harness.ts, which fails against the
- * forceContextLoss version and is the reason this comment exists). dispose() still
- * frees everything IT owns -- the entity views, the lights, the ground, the generated
- * environment map -- so nothing GROWS across an open/close cycle; only the context
- * itself, and the small viewport/state THREE keeps for it, survives to be reused.
+ * does not reliably come back: a real run with `forceContextLoss()` still in dispose()
+ * proved the SECOND `createTankPreview` on that same canvas returns `null` -- not a
+ * live renderer that draws nothing, `new THREE.WebGLRenderer` itself throws against
+ * the lost context, which the try/catch above (correctly, if for the "no context
+ * available" reason it exists for) turns into a null return -- see the "reopening on
+ * the SAME canvas" check in tools/gl/harness.ts, which fails with exactly that message
+ * against the forceContextLoss version and is the reason this comment exists.
+ * Measured directly, not merely inferred: after a plain (non-force-losing) dispose(),
+ * `canvas.getContext(...)` on the SAME canvas returns the SAME context object, live,
+ * and a `createTankPreview` built from it renders correctly -- so the context is not
+ * freed by dispose(), it is HELD, from the first Customize open through the rest of
+ * the session. dispose() still frees everything IT owns at the THREE level -- the
+ * entity views, the lights, the ground, the generated environment map -- so that cost
+ * does not grow across an open/close cycle; only the raw context itself, and the small
+ * viewport/state THREE keeps for it, survives to be reused.
  *
  * `createTankPreview` returns `null` instead of throwing if the environment cannot
  * hand out a context (three.js's WebGLRenderer constructor throws when

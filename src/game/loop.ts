@@ -637,11 +637,19 @@ export function startGameWith(
     sm.toTitle();
   });
 
-  // The paint shop's live preview: a SECOND WebGL context, so its lifetime is scoped
-  // to the panel being open rather than held for the session -- built on
-  // onCustomizeOpen, torn down on onCustomizeClose, which together are the ONE
-  // chokepoint hud.ts fires both transitions through (see its doc comment), so this
-  // never leaks a context down the "Start while the panel is open" path.
+  // The paint shop's live preview: a SECOND WebGL context. Built on onCustomizeOpen,
+  // torn down on onCustomizeClose -- together the ONE chokepoint hud.ts fires both
+  // transitions through (see its doc comment), so this never SKIPS a dispose down the
+  // "Start while the panel is open" path. But "torn down" is dispose(), not context
+  // loss: measured directly (see render/preview.ts's doc comment), the underlying
+  // WebGL context survives dispose() and is REUSED on the next open, because the HUD
+  // holds one persistent `.hud-preview` canvas for the whole session rather than a
+  // fresh one per open. So the context is held from the first Customize open through
+  // the rest of the session, not freed and reacquired every open/close -- what
+  // dispose() DOES reclaim every time is the THREE-side cost (the scene, the tank
+  // mesh, the skin texture, the environment map, the shadow map). The number that
+  // stays true either way, and is the one that actually matters: peak is two live
+  // contexts (this one plus the main game's), never three.
   let preview: TankPreview | null = null;
   hud.onCustomizeOpen(() => {
     preview = deps.createPreview(hud.previewCanvas);

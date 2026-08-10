@@ -1379,6 +1379,25 @@ describe('hud: the paint shop', () => {
     expect(closes).toHaveLength(1);
   });
 
+  it('unhides the pane BEFORE firing onCustomizeOpen, not after', () => {
+    // Load-bearing for the live preview, even though jsdom cannot see the actual
+    // consequence: game/loop.ts's onCustomizeOpen handler builds the preview and reads
+    // hud.previewCanvas.clientWidth (via render/preview.ts's fit()) to size it. A
+    // canvas still carrying `hud-customize--hidden` at that moment lays out at 0x0 in a
+    // real browser, and fit()'s `|| 1` fallback would silently produce a 1x1 preview --
+    // wrong, not broken, so nothing would throw and no GL check builds a canvas in that
+    // exact hidden state to catch it. This pins the ORDERING that prevents it: by the
+    // time the callback runs, the pane's hidden class is already gone.
+    const { hud: h, root } = mount();
+    let hiddenWhenCallbackFired: boolean | null = null;
+    h.onCustomizeOpen(() => {
+      hiddenWhenCallbackFired = pane(root).classList.contains('hud-customize--hidden');
+    });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(hiddenWhenCallbackFired).toBe(false);
+  });
+
   it('fires onCustomizeClose on ANY state change while open, not just Back -- the leak this guards', () => {
     // The common exit from the panel is Start (setState('playing')), which never
     // touches the Back button. A caller building a live WebGL preview off open/close

@@ -2642,4 +2642,46 @@ describe('startGameWith: the live tank preview', () => {
     expect(() => h.hud.closeCustomize()).not.toThrow();
     h.handle.dispose();
   });
+
+  it('is resized alongside the main renderer on a window resize, while the panel is open', () => {
+    const h = boot(makeDeps());
+    h.hud.openCustomize();
+    expect(h.rec.previewResizes).toBe(0); // opening does not itself resize
+    h.resize();
+    expect(h.rec.previewResizes).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('is NOT resized on a window resize once the panel has closed', () => {
+    // The preview object is gone by then (disposed on close) -- a caller that keeps
+    // calling resize() on a stale reference either throws (a plain `preview.resize()`)
+    // or silently resizes something no longer on screen. `preview?.resize()` guards it.
+    const h = boot(makeDeps());
+    h.hud.openCustomize();
+    h.hud.closeCustomize();
+    h.resize();
+    expect(h.rec.previewResizes).toBe(0);
+    h.handle.dispose();
+  });
+
+  it('is disposed on teardown if the panel is still open when the game tears down', () => {
+    // main.ts's pagehide path can call dispose() at any time, panel open or not --
+    // see loop.ts's own comment on this. Not covered by the "closes via the
+    // chokepoint" test above, which only exercises the Back/state-change path.
+    const h = boot(makeDeps());
+    h.hud.openCustomize();
+    expect(h.rec.disposed).not.toContain('preview');
+    h.handle.dispose();
+    expect(h.rec.disposed).toContain('preview');
+  });
+
+  it('teardown does not double-dispose an ALREADY-closed preview', () => {
+    const h = boot(makeDeps());
+    h.hud.openCustomize();
+    h.hud.closeCustomize();
+    const disposedCountAtClose = h.rec.disposed.filter((d) => d === 'preview').length;
+    expect(disposedCountAtClose).toBe(1);
+    h.handle.dispose();
+    expect(h.rec.disposed.filter((d) => d === 'preview')).toHaveLength(1); // still 1, not 2
+  });
 });
