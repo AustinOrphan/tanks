@@ -210,7 +210,7 @@ describe('hud.css is syntactically whole', () => {
     // for ACCENTS.length -- one swatch button per accent entry, same as the hull row.
     // The count moving is the prompt to check the new buttons are themed, which is why
     // it is pinned exactly -- and it did exactly that here.
-    expect(buttons.length).toBe(37);
+    expect(buttons.length).toBe(38);
     expect(unstyled).toEqual([]);
 
     dispose();

@@ -1,6 +1,12 @@
 // DataTextures are CPU-side, so the whole generator is testable headlessly.
 import { describe, it, expect } from 'vitest';
-import { createSkinTexture, ensureContrast, luma as luma709, MIN_ACCENT_DELTA } from './skins';
+import {
+  createSkinTexture,
+  ensureContrast,
+  luma as luma709,
+  MIN_ACCENT_DELTA,
+  AUTO_ACCENT_DELTA,
+} from './skins';
 import type { RGB } from './skins';
 import { SKINS, PALETTE, ACCENTS } from '../game/customization';
 
@@ -44,6 +50,35 @@ function fnv1a(bytes: Uint8ClampedArray): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+const hslOf = (r: number, g: number, b: number): { h: number; s: number } => {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
+  else if (max === gn) h = (bn - rn) / d + 2;
+  else h = (rn - gn) / d + 4;
+  return { h: (h / 6) * 360, s };
+};
+
+/** Every distinct RGB triple in a texture. */
+function distinctTones(px: Uint8ClampedArray): Array<[number, number, number]> {
+  const seen = new Map<string, [number, number, number]>();
+  for (let i = 0; i < px.length; i += 4) {
+    seen.set(`${px[i]},${px[i + 1]},${px[i + 2]}`, [px[i], px[i + 1], px[i + 2]]);
+  }
+  return [...seen.values()];
+}
+
+const rgbOfHexTop = (h: string): [number, number, number] => [
+  parseInt(h.slice(1, 3), 16),
+  parseInt(h.slice(3, 5), 16),
+  parseInt(h.slice(5, 7), 16),
+];
+
 describe('createSkinTexture', () => {
   it('solid is the no-map default, every other skin mints a tiling texture', () => {
     expect(createSkinTexture('solid', '#3d7bd6')).toBeNull();
@@ -76,6 +111,145 @@ describe('createSkinTexture', () => {
     }
   });
 
+  describe('pattern direction and coverage', () => {
+    const SIZE = 128;
+    const rowOf = (px: Uint8ClampedArray, y: number): Array<string> => {
+      const out: string[] = [];
+      for (let x = 0; x < SIZE; x++) {
+        const i = (y * SIZE + x) * 4;
+        out.push(`${px[i]},${px[i + 1]},${px[i + 2]}`);
+      }
+      return out;
+    };
+
+    it('the racing stripe runs along the tank, not across it', () => {
+      // Austin: "The hull also appears to have stripes running the wrong direction. They
+      // should run parallel to the treads." He was right, and the cause is in the UVs:
+      // the hull is an ExtrudeGeometry whose cap UVs are the shape's (x, y) = (LENGTH,
+      // width), so banding on u held the LENGTH constant and ran the band across the
+      // tank -- a belt, perpendicular to the treads.
+      //
+      // Expressed at the texture level: banding on v means every ROW is one flat colour
+      // and rows differ. Banding on u is the transpose -- rows are striped internally --
+      // so this assertion is exactly the discriminator between the two, and it fails on
+      // the old code rather than merely describing the new.
+      const px = pixelsOf('stripes', '#3d7bd6', null);
+      const striped: number[] = [];
+      for (let y = 0; y < SIZE; y++) {
+        if (new Set(rowOf(px, y)).size !== 1) striped.push(y);
+      }
+      expect(striped, `rows ${striped.slice(0, 3)}... vary internally: the stripe runs ACROSS`).toEqual([]);
+      const rowColours = new Set(Array.from({ length: SIZE }, (_, y) => rowOf(px, y)[0]));
+      // ...and it must actually be a stripe, not a flat texture that trivially passes.
+      expect(rowColours.size).toBe(2);
+    });
+
+    it('there are exactly TWO stripes, straddling the centreline', () => {
+      // Austin asked for a single stripe first, then for two once he saw it on the
+      // tank. Counting RUNS on the WRAPPED row sequence is what makes this exact: the
+      // centreline is v = 0, which RepeatWrapping puts on the tile's edge, so a single
+      // centred stripe would appear as two half-bands and count as ONE run, while these
+      // two flanking stripes count as two. The wrap is why a naive scan would confuse
+      // the two arrangements.
+      const px = pixelsOf('stripes', '#3d7bd6', null);
+      const rows = Array.from({ length: SIZE }, (_, y) => rowOf(px, y)[0]);
+      const base = rows[Math.floor(SIZE / 2)]; // mid-texture is furthest from the seam
+      let runs = 0;
+      for (let y = 0; y < SIZE; y++) {
+        const prev = rows[(y - 1 + SIZE) % SIZE];
+        if (rows[y] !== base && prev === base) runs += 1;
+      }
+      expect(runs, 'the hull no longer carries exactly two stripes').toBe(2);
+    });
+
+    it('clouds is LIGHT on every hull that has room to be', () => {
+      // The guard for the exemption above. Review measured that clouds' dominant tone
+      // landed at luma 23 on the orange hull and 29 on the green -- near-black blotches
+      // on a skin called Clouds, 3 of the 6 shipped hulls -- because `autoAccent` moves
+      // away from the nearest pole and those hulls are light. Every existing test asked
+      // about CONTRAST, which was fine, so nothing caught it.
+      //
+      // Population: all 6 shipped hulls, the complete set. Only the white hull may go
+      // dark, and only because lightening it cannot clear the delta at all (19 luma of
+      // headroom against a 64 target).
+      const wrong: string[] = [];
+      for (const hull of PALETTE) {
+        const px = pixelsOf('clouds', hull.hex, null);
+        const hullL = luma(...rgbOfHexTop(hull.hex));
+        // The dominant tone: the second one painted, which covers the most texture.
+        const counts = new Map<string, number>();
+        for (let i = 0; i < px.length; i += 4) {
+          const k = `${px[i]},${px[i + 1]},${px[i + 2]}`;
+          counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+        const toneL = luma(...(top[0].split(',').map(Number) as [number, number, number]));
+        const mayGoDark = 255 - hullL < AUTO_ACCENT_DELTA;
+        if (!mayGoDark && toneL < hullL) wrong.push(`${hull.id}: ${hullL.toFixed(0)} -> ${toneL.toFixed(0)}`);
+      }
+      expect(wrong).toEqual([]);
+    });
+
+    it('pins WHERE the stripes sit, which the golden hash provably does not', () => {
+      // Review found the hole this closes. The stripes texture is row-uniform, so an
+      // FNV-1a over it collapses to the COUNT of banded rows -- it cannot see where
+      // those rows are. Measured: 101 of 414 alternative STRIPE_CENTRE_V values in
+      // [0.043, 0.457] reproduce the complete golden hash table, and the whole suite
+      // stayed green at 0.30, with the stripes visibly moved off the centreline and
+      // onto the shoulders. That directly falsified the re-pinned hash test's stated
+      // purpose, so the position needs its own assertion.
+      //
+      // The expected rows are HARDCODED, not recomputed from STRIPE_CENTRE_V and
+      // STRIPE_HALF_V -- deriving them from the constants under test is the tautology
+      // this file keeps catching elsewhere. Read them as a golden value: 128 rows, two
+      // stripes centred on v = +/-0.105, so row 13.5 and row 114.5.
+      const px = pixelsOf('stripes', '#3d7bd6', null);
+      const SIZE = 128;
+      const rowColour = (y: number): string => {
+        const i = (y * SIZE + 0) * 4;
+        return `${px[i]},${px[i + 1]},${px[i + 2]}`;
+      };
+      const base = rowColour(SIZE / 2); // mid-texture is furthest from the seam
+      const banded = Array.from({ length: SIZE }, (_, y) => y).filter((y) => rowColour(y) !== base);
+      // Group into runs on the WRAPPED sequence, then take each run's centre.
+      const centres: number[] = [];
+      for (const y of banded) {
+        if (!banded.includes((y - 1 + SIZE) % SIZE)) {
+          let len = 0;
+          while (banded.includes((y + len) % SIZE)) len += 1;
+          centres.push((y + (len - 1) / 2) % SIZE);
+        }
+      }
+      // The two centres ARE the symmetry check: 13.5 and 114.5 sit equidistant from the
+      // seam at row 0 (13.5 and 128 - 114.5 = 13.5), so an asymmetric pair fails here.
+      expect(centres.sort((a, b) => a - b)).toEqual([13.5, 114.5]);
+      // Total width, kept as a cheap width check. Note it adds nothing the golden hash
+      // does not already see -- the hash over a row-uniform texture IS the banded-row
+      // count -- so it is the centres above that carry this test's whole contribution.
+      expect(banded.length).toBe(20);
+    });
+
+    it('camo leaves the hull as the majority tone; clouds deliberately does not', () => {
+      // The two share `blotches`, and coverage is the whole difference between them.
+      // Getting this wrong is not subtle but IS invisible to a spread metric: at clouds'
+      // density the last tone painted covers 44.4% of the texture and the hull survives
+      // on 27.9%, so camo rendered with those numbers came back as SNOW camo on a blue
+      // hull -- the blotches won and the hull stopped being the tank's colour. Measured
+      // on screen before it was caught. (An earlier draft said 73%, which was the OLD
+      // camo's figure carried across by mistake.)
+      const share = (skin: 'camo' | 'clouds'): number => {
+        const px = pixelsOf(skin, '#3d7bd6', null);
+        let base = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          if (px[i] === 0x3d && px[i + 1] === 0x7b && px[i + 2] === 0xd6) base += 1;
+        }
+        return base / (px.length / 4);
+      };
+      expect(share('camo'), 'camo has stopped being the hull colour').toBeGreaterThan(0.5);
+      expect(share('clouds'), 'clouds is no longer cloud-dominant').toBeLessThan(0.35);
+    });
+  });
+
   describe('accent (the pattern\'s second tone) is selectable', () => {
     /**
      * This is the test that would have caught the ORIGINAL defect: pure black and pure
@@ -94,7 +268,7 @@ describe('createSkinTexture', () => {
      * test that looks at hue, which is the one further down this file.
      *
      * Population for the sweep below: every shipped hull (6, PALETTE) x every accent
-     * choice including `auto` (5, ACCENTS) x every patterned skin (4) = 120 combinations,
+     * choice including `auto` (5, ACCENTS) x every patterned skin (5, since `clouds` landed) = 150 combinations,
      * every one of them checked, not a sample.
      */
     it('never renders a flat block, across the full hull x accent x skin cross product', () => {
@@ -109,7 +283,7 @@ describe('createSkinTexture', () => {
           }
         }
       }
-      expect(checked).toBe(PALETTE.length * ACCENTS.length * PATTERNED_SKINS.length); // 120
+      expect(checked).toBe(PALETTE.length * ACCENTS.length * PATTERNED_SKINS.length); // 150
       expect(flat).toEqual([]);
     });
 
@@ -126,8 +300,9 @@ describe('createSkinTexture', () => {
      * genuinely washed-out pattern could reach by accident.
      *
      * Population: every shipped hull (6) x every EXPLICIT accent -- excluding `auto`,
-     * which keeps the old unguarded derivation on purpose (4: black/white/silver/gold)
-     * x every patterned skin (4) = 96 combinations, all checked.
+     * which is checked by its own visibility floor below (4: black/white/silver/gold)
+     * x every patterned skin (5, since `clouds` landed) = 120 combinations, all
+     * checked.
      */
     it('explicit accents clear a real contrast floor, not just "not flat"', () => {
       const weak: string[] = [];
@@ -141,7 +316,7 @@ describe('createSkinTexture', () => {
           }
         }
       }
-      expect(checked).toBe(96);
+      expect(checked).toBe(120);
       expect(weak).toEqual([]);
     });
 
@@ -186,19 +361,6 @@ describe('createSkinTexture', () => {
      * second-derived tone).
      */
     it('an explicit accent keeps its saturation and hue: gold stays gold, not olive', () => {
-      const hslOf = (r: number, g: number, b: number): { h: number; s: number } => {
-        const rn = r / 255, gn = g / 255, bn = b / 255;
-        const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
-        const l = (max + min) / 2;
-        if (max === min) return { h: 0, s: 0 };
-        const d = max - min;
-        const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        let h: number;
-        if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
-        else if (max === gn) h = (bn - rn) / d + 2;
-        else h = (rn - gn) / d + 4;
-        return { h: (h / 6) * 360, s };
-      };
       const CELL = 128 / 8; // checker's cell size, matching skins.ts
       const off = (px: Uint8ClampedArray): [number, number, number] => {
         // x=CELL..2*CELL-1, y=0 is an "off" (dark/accent) cell -- see PAINTERS.checker.
@@ -234,15 +396,62 @@ describe('createSkinTexture', () => {
       expect(drifted).toEqual([]);
     });
 
-    it('a white accent lands close to what auto ships today, on the default hull', () => {
-      // auto on blue (the default hull) already lightens TOWARD white
-      // (lighten(base, 0.75)), so an explicit white accent -- a different mechanism
-      // reaching for a similar result -- should land in the same neighbourhood: a
-      // player who picks "White" should not be surprised by a totally different
-      // stripe brightness than the auto look they are used to.
-      const auto = toneStats(pixelsOf('stripes', '#3d7bd6', null));
-      const white = toneStats(pixelsOf('stripes', '#3d7bd6', '#f2f2f2'));
-      expect(Math.abs(auto.spread - white.spread)).toBeLessThan(25);
+    it('auto keeps the hull\'s OWN hue: a blue tank gets a lighter blue, never white', () => {
+      // This replaces a test that asserted auto lands near the explicit WHITE accent.
+      // That was true of the old derivation and is exactly what was wrong with it: it
+      // mixed toward white, so every auto accent drifted toward grey as it brightened,
+      // and ON the white hull it WAS white -- white/stripes measured 14.3 spread and
+      // rendered as a featureless blob (screenshotted). autoAccent moves lightness only.
+      //
+      // Population: 28 of the 30 hull x patterned-skin pairs. The two skipped are
+      // clouds on orange and green, for the reason given in the loop; that is the gap.
+      const drifted: string[] = [];
+      let checked = 0;
+      for (const hull of PALETTE) {
+        const want = hslOf(...rgbOfHexTop(hull.hex));
+        for (const skin of PATTERNED_SKINS) {
+          // Clouds on ORANGE and GREEN only. Those are the two hulls whose bright tone
+          // reaches pure white (they are light enough that clearing the delta upward
+          // runs L to 1), leaving no saturation to keep. An earlier version excluded
+          // clouds on ALL six hulls, which was four combinations wider than the reason
+          // given -- review measured that narrowing it to these two still passes, 28 of
+          // 30 checked. Clouds' own character is pinned by the direction test below.
+          if (skin === 'clouds' && (hull.id === 'orange' || hull.id === 'green')) continue;
+          checked += 1;
+          for (const tone of distinctTones(pixelsOf(skin, hull.hex, null))) {
+            const got = hslOf(...tone);
+            // A greyed-out tone has lost its saturation; that is the failure mode the
+            // old lighten() had. Achromatic hulls have no hue to keep, so they are
+            // exempt -- but the shipped palette has none, which `want.s` proves here.
+            if (want.s < 0.15) continue;
+            if (got.s < want.s * 0.5) {
+              drifted.push(`${hull.id}/${skin}: s ${want.s.toFixed(2)} -> ${got.s.toFixed(2)}`);
+            }
+          }
+        }
+      }
+      expect(checked).toBe(28);
+      expect(drifted).toEqual([]);
+    });
+
+    it('no auto combination is invisible on its own hull -- the bug Austin reported', () => {
+      // white/stripes measured 14.3 and white/flow 11.4 against 33.6-141.6 for the other
+      // 22 pairs; both were indistinguishable from a bare hull on screen. The floor is
+      // set at 50, below the current worst (68.5, measured across all 30) and far above
+      // anything the old derivation produced on white.
+      //
+      // Population: all 6 hulls x all 5 patterned skins = 30, the complete set.
+      const weak: string[] = [];
+      let checked = 0;
+      for (const hull of PALETTE) {
+        for (const skin of PATTERNED_SKINS) {
+          checked += 1;
+          const stats = toneStats(pixelsOf(skin, hull.hex, null));
+          if (stats.spread < 50) weak.push(`${hull.id}/${skin} (${stats.spread.toFixed(1)})`);
+        }
+      }
+      expect(checked).toBe(30);
+      expect(weak).toEqual([]);
     });
 
     it('an explicit accent is used AS THE TONE, not silently ignored in favour of auto', () => {
@@ -254,20 +463,24 @@ describe('createSkinTexture', () => {
       expect(black).not.toEqual(auto);
     });
 
-    it('auto is BYTE-IDENTICAL to the pre-accent-feature derivation, for every shipped hull', () => {
-      // Golden FNV-1a hashes of `createSkinTexture(skin, hex, null)`'s pixel bytes,
-      // captured from THIS code and cross-checked once against origin/fire-modes's
-      // skins.ts byte-for-byte (all 24 combinations matched exactly -- see the PR
-      // description). Pinning the hash rather than re-deriving it here means a
-      // constant tweak inside the `auto` branch (e.g. stripes' 0.75 lighten ratio)
-      // fails this test instead of silently changing every existing save's tank.
+    it('the auto derivation is pinned: changing it is deliberate, never incidental', () => {
+      // This test USED to assert auto was byte-identical to the pre-accent-feature
+      // derivation, so an existing save rendered exactly as before. That guarantee is
+      // now deliberately broken -- Austin reported that some auto combinations were
+      // indistinguishable from the bare hull, and fixing that had to change what every
+      // saved tank looks like. The machinery is kept and re-pinned rather than deleted,
+      // because its real value was never the specific bytes: it is that a tweak inside
+      // the `auto` branch fails HERE, loudly, instead of quietly repainting every
+      // player's tank. Re-capture these only when you mean to.
+      //
+      // Population: 6 shipped hulls x 5 patterned skins = 30, the complete set.
       const GOLDEN: Record<string, string> = {
-        'blue/stripes': '1337afc5', 'blue/camo': '9bb06987', 'blue/checker': '8be85dc5', 'blue/flow': 'ef5048e6',
-        'red/stripes': '46778dc5', 'red/camo': 'eea1f490', 'red/checker': 'b8e15dc5', 'red/flow': '983e55a5',
-        'orange/stripes': 'ace46dc5', 'orange/camo': '85862f64', 'orange/checker': 'e50d5dc5', 'orange/flow': 'b36a4c88',
-        'purple/stripes': 'c2ebe9c5', 'purple/camo': '1dccbcc7', 'purple/checker': '83e51dc5', 'purple/flow': '6dcd11d9',
-        'green/stripes': 'f207e7c5', 'green/camo': '660d915c', 'green/checker': '4dfaddc5', 'green/flow': 'c263c49e',
-        'white/stripes': '386337c5', 'white/camo': '13d6f32b', 'white/checker': '18785dc5', 'white/flow': '24d53a05',
+        'blue/stripes': '68c745c5', 'blue/camo': '641f4f52', 'blue/clouds': 'c1aeb8e5', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06',
+        'red/stripes': '44d265c5', 'red/camo': 'dcf08c54', 'red/clouds': '50f418d9', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845',
+        'orange/stripes': '3678b9c5', 'orange/camo': 'f60cb930', 'orange/clouds': '72987c29', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70',
+        'purple/stripes': '8f6df1c5', 'purple/camo': '462c00c5', 'purple/clouds': '61134c25', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5',
+        'green/stripes': '8a012dc5', 'green/camo': '7e2271eb', 'green/clouds': 'fde43ddd', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82',
+        'white/stripes': 'f8ded5c5', 'white/camo': '88795436', 'white/clouds': 'a0adc599', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2',
       };
       let checked = 0;
       for (const hull of PALETTE) {
@@ -278,7 +491,7 @@ describe('createSkinTexture', () => {
           expect(hash, key).toBe(GOLDEN[key]);
         }
       }
-      expect(checked).toBe(24); // 6 shipped hulls x 4 patterned skins, all of them
+      expect(checked).toBe(30); // 6 shipped hulls x 5 patterned skins, all of them
     });
   });
 });

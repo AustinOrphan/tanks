@@ -281,6 +281,8 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // The one skin texture, owned HERE: disposeObject deliberately skips material maps
   // (walls borrow the shared TextureSet), so per-style disposal happens on change.
   let playerSkinMap: THREE.DataTexture | null = null;
+  /** Which skin `playerSkinMap` was painted for -- the stripe skin needs its own UVs. */
+  let playerSkin: SkinId = 'solid';
   // Resolved once per restyle, not per frame: sync runs at 60fps.
   let playerScroll: { u: number; v: number } | null = null;
   let colorGen = 0;
@@ -323,6 +325,54 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     }
     pts.push(new THREE.Vector2(0, half));
     return new THREE.LatheGeometry(pts, 20);
+  }
+
+  /**
+   * The hull body's half-width, which is the reference every other part is normalised
+   * to when the stripe skin is projected. Kept here so the stripe stays the same
+   * FRACTION of each part rather than a constant width -- see STRIPE_HALF_V in skins.ts.
+   */
+  const HULL_HALF_W = (HULL_WIDTH - TRACK_W * TRACK_PROUD * 2) / 2;
+
+  /**
+   * Re-map a lathe part's UVs so a pattern banded on v runs ALONG the barrel.
+   *
+   * LatheGeometry maps u around the axis of revolution, which is right for a pattern
+   * with no direction -- the checker's turret reads as a deliberate pinwheel and the
+   * flow's as a swirl, and both are kept. It is wrong for a stripe: a hard-edged band
+   * wrapped around the axis arrives as PIE SLICES radiating from the turret's centre,
+   * which is what a blue/stripes tank measured as at play distance while its hull
+   * carried two clean bands.
+   *
+   * So this is applied to the stripe skin ONLY. `across` is normalised to the hull's
+   * half-width so one stripe covers the same fraction of the turret and the barrel as
+   * it does of the hull -- without that a constant-width pair of stripes would cover
+   * roughly half the 0.26-wide barrel (measured ~46% at the flare, ~52% on the tube),
+   * against a fifth of the hull. An earlier draft said 70%, which was not measured.
+   *
+   * `along` carries no pattern information -- the stripe painter ignores u entirely, and
+   * setting it to a constant leaves the whole suite green. An earlier version of this
+   * comment justified it by flow's scrolling offset, which is FALSE: flow is never
+   * projected (only `stripes` is), so nothing here can affect it. It stays a real
+   * coordinate because a degenerate u would break any future skin that reads it, not
+   * because anything today does.
+   */
+  function projectStripeUV(
+    geo: THREE.BufferGeometry,
+    along: 'x' | 'y' | 'z',
+    across: 'x' | 'y' | 'z',
+    acrossHalf: number,
+  ): void {
+    const pos = geo.attributes.position;
+    const get = (i: number, axis: 'x' | 'y' | 'z'): number =>
+      axis === 'x' ? pos.getX(i) : axis === 'y' ? pos.getY(i) : pos.getZ(i);
+    const k = HULL_HALF_W / acrossHalf;
+    const uv = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uv[i * 2] = get(i, along);
+      uv[i * 2 + 1] = get(i, across) * k;
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   }
 
   /**
@@ -378,8 +428,23 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // at any distance; the corners are what make it look built rather than blocked out.
     // Shape is (length, width) and extrudes along its own +z, so rotating -90deg about x
     // stands the extrusion up into height.
+    // The stripe skin is the one pattern whose DIRECTION matters, so it -- and only it
+    // -- gets planar UVs. Every other skin keeps each part's own wrap, which is what
+    // makes the checker's turret a pinwheel and the flow's a swirl; Austin asked for
+    // both of those to stay. Geometry is rebuilt whenever the style changes
+    // (setPlayerStyle bumps colorGen), so this is decided per build rather than needing
+    // a runtime attribute swap.
+    const striped = kind === 'player' && playerSkin === 'stripes';
+
     const bodyGeo = beveledExtrude(hullPlan(HULL_LEN, bodyWidth, HULL_CORNER, HULL_NOSE), bodyH, HULL_BEVEL);
     bodyGeo.rotateX(-Math.PI / 2);
+    // The hull's TOP already carried the stripes correctly -- ExtrudeGeometry's cap UVs
+    // are the shape's own (length, width), and width is the z axis once the extrusion is
+    // stood up. Its BEVELLED SIDE WALLS did not: those come from a different generator
+    // that runs v along the extrusion path, so the stripe landed on them as two short
+    // dashes across the hull's shoulders (visible in the render). Projecting the whole
+    // body reproduces the top face and brings the walls into the same space.
+    if (striped) projectStripeUV(bodyGeo, 'x', 'z', HULL_HALF_W);
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = 'hull';
     body.position.y = HULL_RIDE + bodyH / 2;
@@ -429,14 +494,22 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       roughness: 0.42,
       metalness: 0.35,
     });
-    const dome = new THREE.Mesh(turretGeometry(), turretMat);
+    const domeGeo = turretGeometry();
+    if (striped) projectStripeUV(domeGeo, 'x', 'z', TURRET_R);
+    const dome = new THREE.Mesh(domeGeo, turretMat);
     dome.name = 'turret';
     dome.castShadow = true;
     turret.add(dome);
     // The bore has to clear the shell it fires. It did not: the barrel was radius 0.07
     // against a shell of BULLET_RADIUS 0.10, so the round was WIDER than the tube it
     // came out of -- visible the moment shells were drawn at their true size.
-    const barrel = new THREE.Mesh(barrelGeometry(), turretMat);
+    const barrelGeo = barrelGeometry();
+    // The barrel's lathe runs along its own +y (the mesh is rotated -90deg about z to
+    // lay it along the turret's +x), so in GEOMETRY space the along-axis is y and the
+    // horizontal across-axis is z -- which is what puts the stripe on its top and
+    // bottom rather than its flanks.
+    if (striped) projectStripeUV(barrelGeo, 'y', 'z', BARREL_R);
+    const barrel = new THREE.Mesh(barrelGeo, turretMat);
     // The profile is built along the lathe's own +y from breech to muzzle, so rotating
     // -90deg about z lays it along local +x already positioned -- no offset to keep in
     // step with the length, which is how the barrel got shorter when the turret grew.
@@ -845,6 +918,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       playerHex = hex;
       playerSkinMap?.dispose();
       playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color, accentHex);
+      playerSkin = skin;
       playerScroll = SKINS.find((sk) => sk.id === skin)?.scroll ?? null;
       colorGen++;
     },

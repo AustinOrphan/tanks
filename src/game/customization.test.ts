@@ -90,8 +90,12 @@ describe('createCustomizationStore', () => {
 });
 
 describe('skins', () => {
-  it('offers the approved five, solid first as the default', () => {
-    expect(SKINS.map((s) => s.id)).toEqual(['solid', 'stripes', 'camo', 'checker', 'flow']);
+  it('offers the approved six, solid first as the default', () => {
+    // `clouds` is the newest and arrived by accident: unifying the `auto` accent briefly
+    // gave camo a far larger delta, and the light blotch field that produced was better
+    // as its own skin than as a broken camo. It shares camo's painter at a different
+    // density -- see `blotches` in skins.ts.
+    expect(SKINS.map((s) => s.id)).toEqual(['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow']);
     expect(SKINS[0].id).toBe(DEFAULT_SKIN);
   });
 
