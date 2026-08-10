@@ -1339,12 +1339,39 @@ describe('hud: the paint shop', () => {
   // registered, and Austin's instruction is explicit enough on its own to cut this
   // narrow an edge case. See the PR body for the fuller argument.
 
-  it('has exactly two labelled sections -- Hull and Skin -- and no leftover paragraphs', () => {
+  it('has exactly two labelled sections -- Hull and Skin -- and no prose at rest', () => {
     const { root } = mount();
     const headings = Array.from(pane(root).querySelectorAll('h2')).map((h) => h.textContent);
     expect(headings).toEqual(['Hull', 'Skin']);
-    // No prose paragraphs left in the pane (the h1 title is not a <p>).
-    expect(pane(root).querySelectorAll('p')).toHaveLength(0);
+    // THIS PIN MOVED, deliberately and narrowly. It used to be "no <p> at all". There
+    // is now exactly one, `.hud-preview-hint`, and it is hidden until the preview
+    // canvas has :focus-visible (hud.css, with its own check) -- so the pane still
+    // OPENS as two labelled sections and nothing else, which is the property Austin's
+    // instruction was protecting. A SECOND paragraph, or this one losing its class,
+    // still fails here.
+    //
+    // Why it was worth moving: shift+arrows turn the turret, and a sighted keyboard
+    // user had no way to find that out. title= needs a hovering pointer they do not
+    // have and aria-label= is never rendered, so the one scheme added for keyboard
+    // users was invisible to the keyboard users who can see.
+    const paragraphs = Array.from(pane(root).querySelectorAll('p'));
+    expect(paragraphs.map((p) => p.className)).toEqual(['hud-preview-hint']);
+  });
+
+  it('puts the keyboard hint where the focus rule can reach it, and keeps it off the a11y tree', () => {
+    const { hud: h, root } = mount();
+    const hint = pane(root).querySelector('.hud-preview-hint') as HTMLElement;
+    // hud.css reveals it with `.hud-preview:focus-visible + .hud-preview-hint`. CSS has
+    // no parent or previous-sibling combinator, so if anything is ever inserted between
+    // the canvas and this element the hint stops appearing and NOTHING else would say
+    // so -- the panel would simply have an invisible line in it forever.
+    expect(h.previewCanvas.nextElementSibling).toBe(hint);
+    // It names the two things that are otherwise undiscoverable.
+    expect(hint.textContent).toMatch(/arrow/i);
+    expect(hint.textContent).toMatch(/shift/i);
+    expect(hint.textContent).toMatch(/turret/i);
+    // ...and says nothing new to a screen reader, which already got it from aria-label.
+    expect(hint.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('puts the skin buttons AND the accent swatches inside the Skin section', () => {

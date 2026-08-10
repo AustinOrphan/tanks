@@ -89,9 +89,12 @@ const FOV = 50;
 // the turret, so the framed area is generously larger than the hull alone. Chosen by
 // eye against the real geometry (see "Numbers that are feel, not measurement" in
 // CLAUDE.md); cheap to retune with `npm run gallery`.
-const PREVIEW_AREA_W = 2.4;
-const PREVIEW_AREA_H = 1.8;
-const PREVIEW_MARGIN = 0.1;
+// Exported so preview.test.ts can assert the fitted camera frames EXACTLY this, as
+// tightly as the fit allows -- which is what makes a change to the framing fail
+// something instead of silently moving the aim.
+export const PREVIEW_AREA_W = 2.4;
+export const PREVIEW_AREA_H = 1.8;
+export const PREVIEW_MARGIN = 0.1;
 
 // A neutral 3/4 pose: hull turned off dead-on so both a flank and the front plate
 // read, turret aligned with the hull rather than off aiming at nothing in particular.
@@ -105,27 +108,49 @@ export const INITIAL_PREVIEW_POSE: PreviewPose = {
   turretAngle: PREVIEW_BODY_ANGLE,
 };
 
+/** What the preview's camera is aimed at: the tank, which stands on the origin. A
+ * module-level constant rather than a fresh Vector3 per fit, since nothing moves it. */
+const PREVIEW_TARGET = new THREE.Vector3(0, 0, 0);
+
 /**
- * The camera `createTankPreview` draws through, built standalone.
+ * Aim `camera` at the tank for a viewport of the given aspect. THE ONLY place the
+ * preview's framing is decided -- `createTankPreview`'s `fit()` and
+ * `createPreviewCamera` both come through here, and neither calls `fitCameraToArea`
+ * itself.
  *
- * Exported (and constructed here rather than inline) so `preview-controls.test.ts` can
- * unproject the pointer through the PRODUCTION camera instead of a stand-in built to
- * match it. A stand-in would pass happily after FOV or PREVIEW_AREA_W changed and left
- * the real aim pointing somewhere else -- the whole class of drift this repo's "prove
- * the assertion can fail" rule exists to catch. Needs no GL: a PerspectiveCamera and
- * `fitCameraToArea` are CPU maths, which is why framing.ts was split out in the first
- * place.
+ * That is the whole point of the function, and it did not start out true. `fit()` used
+ * to make its own `fitCameraToArea` call with the same constants, which meant
+ * `createPreviewCamera` was a PARALLEL construction that merely happened to agree:
+ * review changed `fit()`'s framed area by 15% and every gate stayed green (50 of 50
+ * vitest cases, 43 of 43 GL checks), with the shipped aim off by 15% of the frame and
+ * the tests -- built on the other camera -- none the wiser. One fitter is what makes
+ * "the tests unproject through the production camera" a fact about the code rather
+ * than a coincidence between two call sites.
+ */
+export function fitPreviewCamera(camera: THREE.PerspectiveCamera, aspect: number): void {
+  camera.aspect = aspect;
+  fitCameraToArea(camera, PREVIEW_TARGET, PREVIEW_AREA_W, PREVIEW_AREA_H, PREVIEW_MARGIN);
+}
+
+/**
+ * A preview camera, standalone: the same lens, framed by the same `fitPreviewCamera`
+ * the live preview is framed by.
+ *
+ * Exported so `preview-controls.test.ts` can unproject the pointer through the
+ * production framing rather than a stand-in built to match it. Needs no GL: a
+ * PerspectiveCamera and `fitCameraToArea` are CPU maths, which is why framing.ts was
+ * split out in the first place.
+ *
+ * What this does and does not guarantee, stated exactly, because the looser version of
+ * this sentence was false. The FRAMING is shared, so a change to the fitted area, the
+ * margin or the target moves the tests with the game -- and `preview.test.ts` pins that
+ * framing tightly enough to notice. The LENS is shared only as the `FOV` constant, and
+ * the near/far planes are duplicated literals; a change to those in one place and not
+ * the other is not caught by construction, only by them sitting three lines apart.
  */
 export function createPreviewCamera(aspect: number): THREE.PerspectiveCamera {
   const camera = new THREE.PerspectiveCamera(FOV, aspect, 0.05, 100);
-  camera.aspect = aspect;
-  fitCameraToArea(
-    camera,
-    new THREE.Vector3(0, 0, 0),
-    PREVIEW_AREA_W,
-    PREVIEW_AREA_H,
-    PREVIEW_MARGIN,
-  );
+  fitPreviewCamera(camera, aspect);
   return camera;
 }
 
@@ -251,16 +276,17 @@ export function createTankPreview(canvas: HTMLCanvasElement): TankPreview | null
 
   const entities: EntityViews = createEntityViews(scene);
 
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 100);
-  const target = new THREE.Vector3(0, 0, 0);
+  // Built through the same factory the tests use, then re-framed by the same fitter on
+  // every resize -- so there is one camera construction for the preview, not two that
+  // agree by inspection. See fitPreviewCamera's doc comment for what that bought.
+  const camera = createPreviewCamera(1);
 
   function fit(): void {
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h, false);
-    camera.aspect = h === 0 ? 1 : w / h;
-    fitCameraToArea(camera, target, PREVIEW_AREA_W, PREVIEW_AREA_H, PREVIEW_MARGIN);
+    fitPreviewCamera(camera, h === 0 ? 1 : w / h);
   }
   fit();
 

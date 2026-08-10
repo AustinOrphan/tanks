@@ -338,8 +338,37 @@ describe('hud.css is syntactically whole', () => {
     // the keyboard user cannot tell where they are.
     const src = stripComments(css);
     expect(src, 'the preview has no focus ring').toContain('.hud-preview:focus-visible');
-    const start = src.indexOf('.hud-preview:focus-visible');
+    const start = src.indexOf('.hud-preview:focus-visible {');
     expect(src.slice(start, src.indexOf('}', start))).toContain('outline:');
+  });
+
+  it('keeps the keyboard hint off the screen until the preview is focused', () => {
+    // The two halves of the exception to "no prose in this pane", and they have to hold
+    // TOGETHER: hidden at rest is what keeps the pane opening as two labelled sections,
+    // and the reveal rule is the only reason the hint is worth having at all. Assert
+    // one without the other and you get either a permanently visible line or a
+    // permanently invisible one, both of them green.
+    const hint = document.createElement('p');
+    hint.className = 'hud-preview-hint';
+    document.body.appendChild(hint);
+    const style = getComputedStyle(hint);
+    // Computed, so it resolves the cascade: another rule making it visible fails here.
+    expect(style.visibility, 'the hint is on screen before anyone focuses the preview').toBe(
+      'hidden',
+    );
+    // visibility, not display: revealing it must not shove the Hull section down the
+    // panel the moment focus lands, so it keeps its box at rest.
+    expect(style.display).not.toBe('none');
+    document.body.innerHTML = '';
+
+    // jsdom cannot evaluate :focus-visible in a selector match, so the reveal is
+    // asserted as text. Weak on purpose and stated as such -- it catches the rule being
+    // deleted or the combinator being changed, which is the regression that happens.
+    const src = stripComments(css);
+    const reveal = '.hud-preview:focus-visible + .hud-preview-hint';
+    expect(src, 'nothing ever shows the hint').toContain(reveal);
+    const start = src.indexOf(reveal);
+    expect(src.slice(start, src.indexOf('}', start))).toContain('visibility: visible');
   });
 
   it('keeps the narrow-viewport rules the phone layout needs', () => {

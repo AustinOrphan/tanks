@@ -216,10 +216,23 @@ describe('groundPointFromPointer: the same unprojection the game aims through', 
 describe('turretAngleFromPointer', () => {
   it('aims at the pointer in sim angle convention', () => {
     // +x is 0, +y (screen-down) is +pi/2 -- the same convention Tank.turretAngle uses.
-    expect(turretAngleFromPointer(camera, RECT, CX + 80, CY)!).toBeCloseTo(0, 4);
-    expect(turretAngleFromPointer(camera, RECT, CX - 80, CY)!).toBeCloseTo(Math.PI, 4);
-    expect(turretAngleFromPointer(camera, RECT, CX, CY + 60)!).toBeCloseTo(Math.PI / 2, 4);
-    expect(turretAngleFromPointer(camera, RECT, CX, CY - 60)!).toBeCloseTo(-Math.PI / 2, 4);
+    //
+    // Compared as a DIRECTION, not as a number, and the pi case is why: the left-of-
+    // centre point sits on the x axis, so its z is a float residual whose SIGN decides
+    // whether atan2 answers +pi or -pi. An earlier draft asserted `toBeCloseTo(PI)` and
+    // passed only because the residual happened to come out positive at this camera
+    // distance -- moving the camera flipped it to -pi and failed the case for a reason
+    // that had nothing to do with what the case is about. entities.test.ts compares
+    // cos/sin for exactly this hazard; so does this now.
+    const aims = (dx: number, dy: number, expected: number): void => {
+      const a = turretAngleFromPointer(camera, RECT, CX + dx, CY + dy)!;
+      expect(Math.cos(a)).toBeCloseTo(Math.cos(expected), 4);
+      expect(Math.sin(a)).toBeCloseTo(Math.sin(expected), 4);
+    };
+    aims(80, 0, 0);
+    aims(-80, 0, Math.PI);
+    aims(0, 60, Math.PI / 2);
+    aims(0, -60, -Math.PI / 2);
   });
 
   it('refuses to aim inside the dead radius, at exactly the radius the constant names', () => {
@@ -653,6 +666,30 @@ describe('createPreviewControls: teardown', () => {
     h.canvas.dispatchEvent(pointerEvent('pointerdown', { clientX: CX, clientY: CY }));
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+    h.controls.dispose();
+  });
+
+  it('cancels the press default, so a drag is not a text selection', () => {
+    // This existed as an UNCHECKED claim: `onPointerDown` calls preventDefault, the
+    // comment beside it explains that `canvas.focus()` is there to compensate for the
+    // focus it suppresses, and deleting it passed every case. Review found it, which is
+    // the second time this file has needed the same lesson -- a call whose consequence
+    // another line exists to undo is exactly the one that has to be asserted.
+    //
+    // What it stops: on desktop, dragging across a canvas begins a document text
+    // selection, which then follows the pointer over the swatches below and highlights
+    // the panel while the tank turns. (Touch is already covered by `touch-action: none`
+    // in hud.css, which has its own check.)
+    const h = harness();
+    const press = pointerEvent('pointerdown', { clientX: CX, clientY: CY });
+    h.canvas.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(true);
+    // The negative control, and the reason this is not just "preventDefault is called":
+    // a press the controls DECLINE (the right mouse button) must be left to the browser
+    // entirely, default included, or the context menu stops opening over the preview.
+    const right = pointerEvent('pointerdown', { clientX: CX, clientY: CY, button: 2 });
+    h.canvas.dispatchEvent(right);
+    expect(right.defaultPrevented).toBe(false);
     h.controls.dispose();
   });
 });

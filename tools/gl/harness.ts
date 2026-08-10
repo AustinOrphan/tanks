@@ -933,4 +933,94 @@ check('a disposed preview stops listening to the canvas it no longer owns', () =
   return null;
 });
 
+// ---------------------------------------------------------------------------
+// The idle spin, on the REAL requestAnimationFrame.
+//
+// Everything above this line is synchronous, which is why these are separate: no rAF
+// callback can fire while a synchronous script is running, so not one check in this
+// file had ever seen the spin move. It was shipped as an acknowledged residual and is
+// closed here instead -- the spin is a render loop that runs on its own, indefinitely,
+// against a live WebGL context, and "it stops when it should" was the one claim about
+// it resting entirely on an injected fake `raf`.
+//
+// Measured through PIXELS rather than a pose read-back, deliberately: what matters is
+// whether the loop is repainting the canvas, which is the cost and the visible effect.
+// ---------------------------------------------------------------------------
+
+/** Resolve after `ms` of wall clock, with rAF free to run throughout. This file is an
+ * ES module, so the top-level awaits below really do suspend it -- and `__glResults` is
+ * assigned after them, which is what keeps the runner from reading a partial set. */
+function idle(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+await checkAsync('the idle spin actually turns the tank on the real rAF', async () => {
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  const before = grab(gl, c.width, c.height);
+  await idle(500);
+  const after = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  const moved = bytesDiffering(before, after);
+  // 500ms at IDLE_SPIN_RAD_PER_SEC 0.35 is ~0.175 rad, about 10 degrees -- a small
+  // but unmistakable silhouette change. Both ends measured on this harness: 23069 of
+  // 197600 bytes with the spin running, 0 with it suppressed.
+  if (moved < 1000) return `only ${moved} of ${before.length} bytes changed in 500ms -- the spin is not running`;
+  return null;
+});
+
+await checkAsync('the idle spin stops for good at the first interaction', async () => {
+  // The claim the whole design rests on -- a preview that resumes drifting under
+  // someone trying to look at one face is the failure this is written to avoid --
+  // and until now it was asserted only against an injected raf/cancelRaf pair.
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  c.dispatchEvent(pointerAt('pointermove', c, 70, 0));
+  // Let a frame or two go by first: the cancel happens inside the event handler, but
+  // a callback already scheduled for this frame may still be in flight.
+  await idle(100);
+  const settled = grab(gl, c.width, c.height);
+  await idle(500);
+  const later = grab(gl, c.width, c.height);
+  preview.dispose();
+  c.remove();
+  const moved = bytesDiffering(settled, later);
+  if (moved !== 0) return `${moved} bytes changed 500ms after a hover -- the spin restarted or never stopped`;
+  return null;
+});
+
+await checkAsync('a disposed preview schedules no further frames', async () => {
+  // dispose() cancels the pending frame AND the loop must not reschedule from inside
+  // the callback that was already queued. A leak here is a rAF loop running against a
+  // disposed renderer for the rest of the session, once per Customize close.
+  //
+  // What this pins is a PAIR, and saying so matters. Three things stop the loop --
+  // `cancelFrame()`, `idle = false`, and `disposed` in the frame guard -- and any one
+  // of the last two is sufficient on its own, so no SINGLE-line mutation can fail this
+  // check (both were tried; both survive). Remove both and it fails: 81377 of 197600
+  // bytes change in the 500ms after dispose. Redundant guards are not a defect here,
+  // but a reader should not mistake "no mutation kills it" for "not covered".
+  const c = previewCanvas();
+  const preview = createTankPreview(c);
+  if (!preview) { c.remove(); return 'createTankPreview returned null in a real browser'; }
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  preview.dispose();
+  const before = grab(gl, c.width, c.height);
+  await idle(500);
+  const after = grab(gl, c.width, c.height);
+  c.remove();
+  const moved = bytesDiffering(before, after);
+  if (moved !== 0) return `${moved} bytes changed 500ms after dispose -- a frame loop outlived the preview`;
+  return null;
+});
+
+// __glResults is the runner's readiness signal, and it is assigned LAST on purpose: the
+// top-level awaits above suspend module evaluation, so publishing it any earlier would
+// report a pass for checks that had not run -- the same failure the runner's "no results
+// at all" guard covers one level up.
 window.__glResults = results;

@@ -16,10 +16,15 @@ import * as THREE from 'three';
 import {
   createTankPreview,
   createPreviewCamera,
+  fitPreviewCamera,
   previewWorld,
   applyPose,
   INITIAL_PREVIEW_POSE,
+  PREVIEW_AREA_W,
+  PREVIEW_AREA_H,
+  PREVIEW_MARGIN,
 } from './preview';
+import { framedAreaFits } from './framing';
 import { createEntityViews } from './entities';
 import { createPreviewControls, HULL_DRAG_RAD_PER_PX } from './preview-controls';
 
@@ -83,6 +88,61 @@ function render(pose: { bodyAngle: number; turretAngle: number }): {
 }
 
 const DEG = Math.PI / 180;
+const ORIGIN = new THREE.Vector3(0, 0, 0);
+
+describe('the preview camera frames what it says it frames', () => {
+  // Why this exists, precisely. The tests unproject the pointer through
+  // `createPreviewCamera`, and that is only worth anything if the LIVE preview is
+  // framed the same way. It used not to be: `createTankPreview`'s `fit()` made its own
+  // `fitCameraToArea` call, and review changed the area it passed by 15% with all 50
+  // vitest cases and all 43 GL checks staying green -- the shipped aim off by 15% of
+  // the frame, the tests looking at a different camera and seeing nothing.
+  //
+  // Half the fix is structural (one `fitPreviewCamera`, called by both). The other half
+  // is this: something has to be SCALE-SENSITIVE, or a shared fitter is just a shared
+  // way to be wrong. Note what does NOT catch it -- the canvas centre unprojects to the
+  // origin at every distance, and so does "80px right of centre is angle 0", which is
+  // why every aim assertion in preview-controls.test.ts survived the 15% change.
+  it.each([260 / 190, 1, 2.2, 0.6])('contains the declared area at aspect %s', (aspect) => {
+    const camera = createPreviewCamera(aspect);
+    expect(framedAreaFits(camera, ORIGIN, PREVIEW_AREA_W, PREVIEW_AREA_H, PREVIEW_MARGIN)).toBe(
+      true,
+    );
+  });
+
+  it('and frames it as CLOSELY as it can, so the tank is not left small in the box', () => {
+    // The assertion that has scale in it. `fitCameraToArea` bisects to the nearest
+    // distance that still contains the area, so pulling the camera 5% back in is the
+    // difference between "the fit is tight" and "the fit is loose" -- and a fitter
+    // handed a 15% larger area produces a camera that still fits comfortably at 95%.
+    const camera = createPreviewCamera(260 / 190);
+    const closer = createPreviewCamera(260 / 190);
+    closer.position.multiplyScalar(0.95);
+    closer.lookAt(ORIGIN);
+    closer.updateMatrixWorld(true);
+    expect(
+      framedAreaFits(closer, ORIGIN, PREVIEW_AREA_W, PREVIEW_AREA_H, PREVIEW_MARGIN),
+      'the camera sits further out than the area needs',
+    ).toBe(false);
+    // ...and the two really are the same camera 5% apart, not two different fits.
+    expect(closer.position.length()).toBeCloseTo(camera.position.length() * 0.95, 9);
+  });
+
+  it('re-frames an existing camera in place on resize, rather than only at construction', () => {
+    // `fit()` calls `fitPreviewCamera` on the camera it already has -- the same object
+    // the controls hold -- so a window resize has to MOVE it, not merely change its
+    // aspect. A `fitPreviewCamera` that set the aspect and stopped there leaves the
+    // tank cropped or adrift after a resize and is caught here.
+    const camera = createPreviewCamera(2.2);
+    const wide = camera.position.length();
+    fitPreviewCamera(camera, 0.6);
+    expect(camera.aspect).toBe(0.6);
+    expect(camera.position.length()).not.toBeCloseTo(wide, 3);
+    expect(framedAreaFits(camera, ORIGIN, PREVIEW_AREA_W, PREVIEW_AREA_H, PREVIEW_MARGIN)).toBe(
+      true,
+    );
+  });
+});
 
 describe('the preview pose reaches the model the way the game does', () => {
   it.each([

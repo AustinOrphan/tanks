@@ -28,11 +28,16 @@
  *   the hull without dragging the gun round with it, which is the one thing this panel
  *   is meant to show can be done separately. Tap to aim, drag to turn.
  * - **Arrow keys turn the hull; Shift+Arrow turns the turret.** The panel is reachable
- *   by keyboard, so the preview must not be mouse-only. Left/Right and NOT Up/Down:
- *   the Customize pane scrolls vertically (`hud.css` gives it `touch-action: pan-y`
- *   for the same reason), and swallowing Up/Down on a focused canvas would take page
- *   scrolling away from the keyboard user to spell a yaw with a key that does not mean
- *   yaw. Shift is the modifier because it reads as "the same rotation, other part".
+ *   by keyboard, so the preview must not be mouse-only. Left/Right and NOT Up/Down,
+ *   for two reasons that survive scrutiny: Up/Down scroll the DOCUMENT, so swallowing
+ *   them on a focused canvas takes page scrolling away from the keyboard user in order
+ *   to spell a yaw with a key that does not mean yaw; and Left/Right already means
+ *   "turn" here, since it is what the drag does. (An earlier version of this comment
+ *   justified it by saying the Customize pane itself scrolls. It does not -- the only
+ *   `overflow-y: auto` in hud.css is on the achievements list -- so that premise was
+ *   wrong even though the conclusion holds.) Shift is the modifier because it reads as
+ *   "the same rotation, other part"; it is the less guessable half of the scheme,
+ *   which is why hud.css shows a hint the moment the canvas takes focus.
  * - **An idle spin** turns the whole tank slowly so it advertises that it is live
  *   before anything is touched, and stops PERMANENTLY at the first interaction --
  *   a preview that keeps drifting under a player who is trying to look at one face is
