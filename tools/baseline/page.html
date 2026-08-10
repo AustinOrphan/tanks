@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>baseline trace</title>
+    <style>
+      body { font: 14px/1.5 ui-monospace, monospace; margin: 2rem; }
+      .ok { color: #0a0 } .bad { color: #c00 }
+    </style>
+  </head>
+  <body>
+    <h1>Tanks! baseline trace</h1>
+    <!--
+      Runs the golden trace (tools/baseline/trace.ts) in whatever engine loaded this page
+      and prints the fingerprint. tools/baseline/run.mjs drives it under Playwright and
+      reads window.__traceResult; open it by hand in any browser to get the same number
+      from an engine Playwright does not ship (shipped Safari, iOS, a phone).
+
+      MUST be served from localhost (or https): crypto.subtle is secure-context only.
+    -->
+    <pre id="out">running... (a few seconds; the main thread is blocked while it simulates)</pre>
+    <script type="module">
+      import { traceText, sha256Hex, BASELINE_HASH } from '/tools/baseline/trace.ts';
+
+      const out = document.getElementById('out');
+      const started = performance.now();
+      try {
+        if (!globalThis.crypto?.subtle) {
+          throw new Error(
+            'crypto.subtle is unavailable -- this page must be served from localhost or over https',
+          );
+        }
+        const text = traceText();
+        const hash = await sha256Hex(text);
+        const result = {
+          hash,
+          expected: BASELINE_HASH,
+          match: hash === BASELINE_HASH,
+          ms: Math.round(performance.now() - started),
+          textLength: text.length,
+          userAgent: navigator.userAgent,
+        };
+        out.textContent =
+          `${result.match ? 'MATCH' : 'MISMATCH'}\n` +
+          `hash     ${result.hash}\n` +
+          `expected ${result.expected}\n` +
+          `chars    ${result.textLength}\n` +
+          `took     ${result.ms} ms\n` +
+          `ua       ${result.userAgent}`;
+        out.className = result.match ? 'ok' : 'bad';
+        // Set LAST, so a runner that polls for it can never read a half-filled object.
+        window.__traceResult = result;
+      } catch (e) {
+        const result = { error: String(e?.stack ?? e), userAgent: navigator.userAgent };
+        out.textContent = `FAILED\n${result.error}`;
+        out.className = 'bad';
+        window.__traceResult = result;
+      }
+    </script>
+  </body>
+</html>

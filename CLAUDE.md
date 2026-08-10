@@ -11,6 +11,7 @@ npm run build # tsc --noEmit && vite build
 npm run dev   # vite
 npm run gallery -- --elements mine,tank,shell --view low   # look at any element
 npm run mutate                                              # run the hand-picked mutation manifest
+npm run trace:browser -- --all                              # the golden trace, in three real engines
 ```
 
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
@@ -79,6 +80,20 @@ screen) and `game/loop.ts`. If you change an event's shape, check all five.
 
 `step(world, input)` clones its input and returns `{ world, events }` — it never mutates
 what it is given.
+
+**The step boundary takes a LIST.** `stepInputs(world, inputs: InputState[])` is the
+primitive and pairs `inputs[i]` with the i-th `kind === 'player'` tank in tank-array
+order; `step(world, input)` is a one-line adapter (`stepInputs(world, [input])`) and is
+what every caller in the tree uses. The adapter must stay one line: two copies of the
+single-player path is exactly what would break the argument that the golden trace hash
+proves single-player behaviour did not move. Nothing else about multiplayer exists —
+`config/validate.ts` still hard-fails any grid without exactly one `P`, `resolveStatus`
+still defines a win as "every non-player tank dead", and four AI sites still take the
+FIRST player. The pairing rules (a dead player keeps its slot; surplus inputs are
+ignored; a player past the end of the list gets NO input, which differs from an idle one)
+are unreachable from gameplay today and are pinned ONLY by
+`src/sim/step-inputs.test.ts` — the trace drives one player and cannot see them, measured:
+all 7 mutations swept there leave the hash unchanged.
 
 **Entity configs are data, resolved through `src/sim/config/`.** A tank is
 `TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
@@ -297,6 +312,18 @@ path stays uncovered. The lesson generalises: a coverage claim recorded at one c
 go stale as later changes alter trajectories, so re-measure rather than carrying it
 forward. The decomposition guarantees are held by `decomposition.test.ts`, not by this
 hash.
+
+**The trace body lives in `tools/baseline/trace.ts` and runs in a BROWSER too.** It
+imports `src/sim` only and hashes through `crypto.subtle` + `TextEncoder` rather than
+`node:crypto`, which is the whole reason it can: the same code under vitest and under
+Playwright. `npm run trace:browser -- --all` serves `tools/baseline/page.html` on
+localhost (secure context — `crypto.subtle` is undefined without one) and prints one hash
+per engine. Measured on this box: **chromium 151, firefox 153 and Playwright's webkit
+(JavaScriptCore, UA-spoofed as macOS Safari but a Linux build) all produce
+`015a5d17…`** — so V8, SpiderMonkey and JSC agree on this trace, on Linux x86-64,
+headless. **That is not the whole question**: shipped Safari, iOS and non-x86-64 CPUs are
+untested, and one matching hash is agreement on the sampled trajectory, not a proof about
+`Math.hypot`. Take the remaining half by opening `page.html` by hand on the device.
 
 ## Testing conventions, learned the hard way
 

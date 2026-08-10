@@ -458,8 +458,11 @@ tick**, and an 8-frame rollback is roughly **0.5–1.2 ms of a 16.7 ms budget**.
 contrast, not the tick number: two probes disagreed by more than 2x, and tick cost varies
 2.3x across arenas — 61 µs to 144 µs — so the absolute moves when the probe moves.)
 
-Against that, the single-player assumption is load-bearing in five places: `applyPlayerInput`
-and `resolveStatus` find one tank by kind; the arena validator **hard-fails at module load**
+Against that, the single-player assumption is load-bearing in five places, of which issue
+#120 moved one: the step boundary now takes a LIST (`stepInputs`, with `step` as a
+one-argument adapter) and pairs inputs with player tanks by position, so `applyPlayerInput`
+finding one tank by kind is no longer the only path. The other four are untouched.
+`resolveStatus` still finds one tank by kind; the arena validator **hard-fails at module load**
 on any grid without exactly one `P` (`config/validate.ts:257`); four AI target-acquisition
 sites take the FIRST player found; a death resets the whole arena by `tanks[i]` ↔ `spawns[i]`
 index alignment; and there is no gamepad code, so local versus has no second controller.
@@ -467,15 +470,18 @@ index alignment; and there is no gamepad code, so local versus has no second con
 **What would answer it:**
 
 - **THE gating measurement: do Chrome, Firefox and Safari produce a bit-identical baseline
-  trace hash?** Extract the body of `tools/baseline/trace.test.ts` into a module a browser
-  page can call, and compare against
-  `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4`. If they match, lockstep
-  and rollback are both live. If they diverge, the choice is quantizing the sim's 18
-  transcendental lines (bounded — 10 `hypot`, 4 `sqrt`, 3 `cos`, 3 `sin`, 1 `atan2`) or
-  falling back to an authoritative Node server, which is the most expensive design. **Nothing
-  else should be decided before this.** No second JS engine is installed here; Playwright
-  ships Linux WebKit and Firefox builds but is not a dependency, and its WebKit is not
-  identical to shipped Safari, so the iOS half stays open either way.
+  trace hash?** **Half answered 2026-08-10 (issue #121).** The rig is
+  `npm run trace:browser -- --all` (`tools/baseline/{trace.ts,page.html,run.mjs}`), and one
+  run each of chromium 151 (V8), firefox 153 (SpiderMonkey) and Playwright's webkit
+  (JavaScriptCore) printed
+  `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4`, matching Node.
+  **Still open:** shipped Safari and iOS — Playwright's WebKit is a Linux JSC build, not
+  Safari — and every engine here ran on x86-64, so ARM is untested. The method for the
+  rest is now known rather than unknown: open `tools/baseline/page.html` from a localhost
+  server on the device (`crypto.subtle` needs a secure context). If a device diverges, the
+  choice is quantizing the sim's 18 transcendental lines (bounded — 10 `hypot`, 4 `sqrt`,
+  3 `cos`, 3 `sin`, 1 `atan2`) or falling back to an authoritative Node server, which is
+  the most expensive design.
 - **Decide win/lose semantics before touching `resolveStatus`**, which currently encodes
   exactly one answer. Co-op: is `world.lives` shared or per-player, and does one death reset
   the arena? Versus: "every non-player tank dead" and a HUD reading "Enemies remaining" mean
