@@ -112,7 +112,7 @@ FIRST player. The pairing rules (a dead player keeps its slot; surplus inputs ar
 ignored; a player past the end of the list gets NO input, which differs from an idle one)
 are unreachable from gameplay today and are pinned ONLY by
 `src/sim/step-inputs.test.ts` — the trace drives one player and cannot see them, measured:
-all 7 mutations swept there leave the hash unchanged.
+all 8 mutations swept there leave the hash unchanged.
 
 **Persistence is one seam, `src/game/storage.ts`.** All five stores take an injected
 `Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the old
@@ -508,6 +508,24 @@ single-element moves)", never "32 of 36". A count without its population reads a
 exhaustive sweep. Name any class you did *not* sweep. This repo has twice shipped a
 survivor hiding in an unstated remainder.
 
+Two habits that come from the same place. The RECURRING failure is attribution rather than
+arithmetic — the figure was really measured, then carried into a sentence it was not
+about. (Not the only one: `CLAUDE.md:81` records a plain miscount, four keys where there
+are five, which no amount of naming the probe would have caught.) **State the derivation
+inline** so the arithmetic is checkable (`skins.ts:142`: "5,832 accents on a 15-step RGB
+grid (18 values a channel, 18^3)"). And **when two probes appear in one paragraph, put
+each one's population next to its number** — `skins.test.ts:771` does this explicitly,
+because an earlier draft there conflated them and quoted a 483,695 hit count from the
+909,792-pair probe against the coarser 33,696-pair sweep, claiming more hits than the
+sweep had trials. That is catchable by reading alone, but only if the populations are on
+the page.
+
+**Counts are a property of the tree at the moment you ran them**, so measure them LAST:
+writing a test changes them. `tools/mutate/run.mjs:30` exists because of this — "fails 4
+of 12" quietly becoming "fails 5 of 13" when a test is added is `killed` both times, which
+is why the manifest carries `expectFailures` rather than an outcome alone. The same
+applies to any test total quoted in a PR body.
+
 **Every assertion must be able to fail.** Before adding one, name the production change
 that would break it. Watch for tautologies against the fixture: asserting `angle: 0` in a
 fixture whose angle is 0 passes even when the field is hardcoded. Decorative assertions are
@@ -526,6 +544,62 @@ same treatment.
 
 **A guard is worth what its own tests prove.** The purity guard reported green for four of
 five known-bad imports until it was given a meta-test. Guards need negative controls.
+
+**An assertion can stop meaning what its name says without anyone touching it.** It does
+not need to be edited to go blind — its SUBJECT changing underneath it is enough, which
+makes this different from the tautology-at-write-time above. Two cases, and the useful
+thing about both is that each was caught inside the PR that broke it, which is why either
+is recoverable at all:
+
+- `clouds is LIGHT on every hull that has room to be` took the commonest tone in the tile,
+  on the stated reasoning that this was the painted one. That reasoning held only while
+  clouds was dense — an unstated property of its subject. #139's density swap made the
+  HULL the majority tone, so the comparison became `hullL < hullL` and could never hold;
+  forcing the production function to darken unconditionally left it GREEN, the exact
+  property it exists to guard, inverted. Measured over all 6 shipped hulls at both
+  commits: the hull's share goes 0.2791 -> 0.5781, and goes from not being the top tone to
+  being it, on every one. Broken and repaired inside #139.
+- The metric separating camo from clouds was EDGE HARDNESS, which worked only while clouds
+  had a ramped rim. Reverting that generator made both skins hard-edged and the metric
+  read 0.0000 for BOTH — it would have had to be asserted as EQUAL to keep passing. Also
+  written and replaced inside #139.
+
+The rule: **when you change what a test's subject is, re-run that test's own mutation
+against it.** A test written against the old subject is evidence about the old subject
+only. `skins.test.ts` records both cases in place, each with the mutation that proves the
+repaired form fails.
+
+**A guard blind to one dimension stays green until that dimension moves.** Reversing
+`applyPlayerInputs`' loop order (`for (i = n - 1; i >= 0; i--)`, pairing untouched) passed
+the WHOLE gate as it then stood: 87 files passed, 1730 passed, 2 skipped, 0 failed. The
+neighbouring two-player test `.sort()`s the ownerIds — correct for the question it asks
+("did each player get its own shell") and exactly what hid the ordering. It is not
+cosmetic: `world.nextId++` is consumed in drive order, so the reversal renumbers every
+shell. Pinned unsorted now, in `step-inputs.test.ts`. The golden trace passed too, but for
+a reason that does not generalise: the trace drives ONE player, so `n` is 1 on every tick
+and reversing a one-element loop is bit-identical. Before trusting a suite as a behaviour
+proof, name the dimension it sorts, rounds or aggregates away.
+
+**A green local gate is not necessarily the gate.** Three ways it has lied here:
+
+- **`node_modules` drifting from the lockfile.** A worktree in this repo sat on vite
+  5.4.21 / vitest 2.1.9 while `package-lock.json` pinned 8.1.5 / 3.2.7 — versions
+  `package.json`'s own `^8.1.5` / `^3.2.7` ranges do not even admit — and one
+  `tools/mutate` test failed locally and nowhere else. `npm ci` fixed it. The direction
+  was luck: a stale tree can as easily go green on something CI fails. If a local result
+  disagrees with CI, check `npx vitest --version` against the lock before debugging the
+  code.
+- **`tools/` is typechecked by nothing.** `tsconfig.json` includes only `["src",
+  "vite.config.ts"]`, while `vite.config.ts` runs `tools/**/*.test.ts` — so those tests
+  RUN under `npm test` and `tsc` never reads the files. A duplicate declaration there
+  passes the gate and surfaces as a bare timeout under `npm run test:gl`. See backlog item
+  9, under "Customize preview residuals" — that numbering is section-relative, so grep the
+  title rather than trusting the number.
+- **A zero exit code is not verification.** Separate shell lines do not inherit the
+  previous line's failure: a heredoc `python3` that raised and wrote nothing, followed by
+  `gh pr edit --body-file`, re-published the UNCHANGED body and printed "edited". Read the
+  value back and grep it for the string you expect to be **gone**, not only the one you
+  expect to be there.
 
 ## Merge bar
 
