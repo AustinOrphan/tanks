@@ -126,11 +126,14 @@ export function fingerprint(value: unknown): string {
  * not make -- see the backlog entry. A mismatch is therefore proof a trace is
  * stale; a match is not proof it is fresh.
  *
- * LAZY and memoised, not a module-level const. The canonical rendering is 20,445
- * characters and cost 3.5 ms cold / 0.27 ms warm when measured on this tree's
- * data (node 24, 50 warm samples) -- small, but paid at import time by every boot
- * including the ones with no dev flag on at all, since loop.ts imports this
- * module unconditionally. Nothing calls it unless `?dev=1&replay=1` is set.
+ * LAZY and memoised, not a module-level const. The canonical rendering of the four
+ * files is 20,445 characters; hashing it cost 3.5 ms cold and 0.27 ms warm
+ * (median of 50) in a standalone node 24 script running this same canonical/FNV
+ * code over the same four files -- NOT an in-browser measurement, and not this
+ * module under vite. Small either way, but it was being paid at import time by
+ * every boot, including the ones with no dev flag on at all, since loop.ts
+ * imports this module unconditionally. Nothing calls it unless
+ * `?dev=1&replay=1` is set.
  */
 let simDataFingerprintMemo: string | null = null;
 export function simDataFingerprint(): string {
