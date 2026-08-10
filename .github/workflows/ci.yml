@@ -137,6 +137,14 @@ jobs:
       - name: GL tests (scene.ts)
         run: node tools/gl/run.mjs
 
+      # The golden trace, run in the browser this job already has. `npx vitest run` in the
+      # `verify` job pins the same hash under Node, so this is not about catching a sim
+      # change -- it is about tools/baseline/{page.html,run.mjs} not rotting unread, which
+      # is how hud.css lost a brace for the life of a feature. It also means a divergence
+      # between Node and V8 would surface here rather than at netcode time. ~5 seconds.
+      - name: Baseline trace (chromium)
+        run: node tools/baseline/run.mjs
+
       - name: Visual check
         run: node tools/visual/verify.mjs dist --check --out visual-out
 

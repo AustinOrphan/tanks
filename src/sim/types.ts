@@ -126,6 +126,11 @@ export interface Mine {
 
 // move components in [-1,1] (not normalized); aim is a world-space ground point;
 // fire/mine are edge-triggered (press-this-tick).
+//
+// One InputState is ONE human's intent for ONE tick. `stepInputs` (world.ts) takes a
+// LIST of them and pairs entry i with the i-th `kind === 'player'` tank in tank-array
+// order, so nothing here identifies its tank: the position in the list is the binding.
+// `step(world, input)` is the one-argument adapter over that -- see world.ts.
 export interface InputState {
   move: Vec2;
   aim: Vec2;
