@@ -58,18 +58,34 @@
  *
  *   **The spin is capped at one revolution** (`IDLE_SPIN_MAX_RAD`), which is a cost
  *   decision with a measurement behind it, not a taste one. Each drawn frame of it is a
- *   full `entities.sync` + `renderer.render`; on a box with no GPU (chromium under
- *   `--use-gl=swiftshader`, tools/gl/idle-cost.mjs) that costs ~32ms of renderer
- *   main-thread task time per frame, and the loop then runs flat out at ~31fps and
- *   saturates the thread: 9993ms of TaskDuration in 10.01s wall, against 1.7ms for the
- *   same preview with the spin suppressed and 75.3ms for a bare rAF loop that draws
- *   nothing. The JS half is negligible either way -- the rAF callback itself measures
- *   0.211ms mean / 0.6ms p95. So the expense is the DRAWING, and the only lever that
- *   bounds it on the machines where it is expensive is drawing fewer frames in total.
- *   A frame-rate cap was considered and rejected on the same numbers: capping at 30fps
- *   does nothing on a box that can only reach 31, and is unnecessary on a box with a
- *   GPU. One revolution shows every face of the model and then stops, which is the whole
- *   job of the spin. A resume starts a fresh revolution, so the bound is per
+ *   full `entities.sync` + `renderer.render`, and tools/gl/idle-cost.mjs times it in a
+ *   real browser on a box with no GPU (chromium under `--use-gl=swiftshader`).
+ *
+ *   **The JS is free and the DRAWING is not.** The rAF callback itself measures 0.211 /
+ *   0.213ms mean across two runs, 0.6ms p95. The contrast that matters is between two
+ *   arms of the SAME probe over the same 10s window: the spin costs 305 frames /
+ *   +10003.1ms of renderer main-thread TaskDuration, a bare rAF loop that draws nothing
+ *   costs 602 frames / +76.5ms, and the same preview with the spin suppressed costs
+ *   +1.0ms. Per frame that is a factor of **258**, reproducible to three figures across
+ *   runs (258 and 258).
+ *
+ *   **Quote that ratio, not a frame rate or an absolute ms.** Both move with the probe:
+ *   the identical arm reads ~57fps timed in-page and ~30fps with a CDP `Performance`
+ *   session attached, so attaching the instrument roughly halves what it measures. What
+ *   survives the change of probe is which arm dominates, and by how much.
+ *
+ *   A frame-rate cap was considered. It is rejected at the two ends this box can
+ *   measure -- capping at 30fps does nothing where the machine is already slower than
+ *   the cap, and is unnecessary where drawing is cheap -- but **the middle was not
+ *   measured and cannot be here**: a mid-range phone, an integrated GPU, a machine on
+ *   battery, anything drawing a frame in roughly 5-30ms is exactly where a 30fps cap
+ *   would halve the cost. Treat "rejected" as "rejected on the evidence available",
+ *   which is not the same as "wrong", and re-open it if anyone can measure that band.
+ *
+ *   The revolution cap is the bound that does NOT depend on the machine, which is why
+ *   it is the one applied: it multiplies whatever a frame costs by a fixed number of
+ *   frames. One revolution also shows every face of the model and then stops, which is
+ *   the whole job of the spin. A resume starts a fresh revolution, so the bound is per
  *   interaction rather than absolute -- an untouched panel can no longer render forever,
  *   which is what auto-resume would otherwise have made permanent.
  *

@@ -15,6 +15,13 @@
  *
  * The runner launches chromium with `--use-gl=swiftshader`: the raster is on the CPU, so
  * these numbers are a slow-path ceiling, not what a machine with a GPU pays.
+ *
+ * READ THE RATIO, NOT THE RATE. The in-page arms and the CDP task-accounting arms
+ * disagree about frame rate by roughly 2x for the SAME work -- ~57fps timed in-page
+ * against ~30fps with a `Performance` session attached -- so attaching the instrument
+ * changes what it measures. Every arm below therefore ships with a control measured
+ * through the same probe, and the figure worth quoting is how far one arm dominates
+ * another within one run, not any single absolute number.
  */
 import { createTankPreview } from '../../src/render/preview';
 
