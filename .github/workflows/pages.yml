@@ -68,8 +68,8 @@ jobs:
       # and there is no workflow_run edge between the two files. Without these steps a
       # red main would publish.
       #
-      # Be precise about what this is: 5 of 9 (verify: 6, visual: 3) of ci.yml's checking
-      # steps.
+      # Be precise about what this is: 5 of ci.yml's 9 checking steps (verify: 6,
+      # visual: 3).
       #
       # Denominator: the named steps of both ci.yml jobs that CHECK -- that can fail
       # because of the tree -- rather than set up the runner, so checkout, setup-node,

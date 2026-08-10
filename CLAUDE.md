@@ -60,7 +60,7 @@ the bundle asks for `/assets/…` and the page is blank. `npm run portability`
 call it — it cannot live in `npm test`, because under Vitest `import.meta.env.BASE_URL` is
 `/` even though vitest reads the same config that sets `base: './'`.
 
-The deploy re-runs **5 of 9 (`verify`: 6, `visual`: 3)** of `ci.yml`'s checking steps,
+The deploy re-runs **5 of `ci.yml`'s 9 checking steps** (`verify`: 6, `visual`: 3),
 **not the `visual` job and not `Mutation manifest`** — so a render regression that only
 `tools/gl/` and `tools/visual/` catch will publish, and so will a stale
 `tools/mutate/manifest.json`. (Denominator: the named steps of both `ci.yml` jobs that
