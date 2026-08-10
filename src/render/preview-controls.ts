@@ -132,6 +132,12 @@ export function groundPointFromPointer(
   clientX: number,
   clientY: number,
 ): { x: number; y: number } | null {
+  // Defence in depth, and known to be redundant rather than assumed to be needed: an
+  // unlaid-out canvas divides by zero, which gives an Infinity ndc, a NaN ray and a
+  // missed plane, so the `!hit` return below already covers it. Measured -- deleting
+  // this line leaves the whole test file green. It stays because "no layout box" is a
+  // different fact about the world from "the ray went above the horizon", and reading
+  // it off a NaN two functions later is not obvious to anyone.
   if (rect.width === 0 || rect.height === 0) return null;
   _ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   _ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;

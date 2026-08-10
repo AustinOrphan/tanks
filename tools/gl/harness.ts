@@ -852,8 +852,10 @@ check('a drag on the preview canvas turns the tank in the rendered image', () =>
   preview.dispose();
   c.remove();
   const moved = bytesDiffering(before, after);
-  // 1% of the buffer is far below what a 90px drag actually moves and far above the
-  // zero a missing hookup gives. Measured on this harness: ~46000 bytes of 197600.
+  // 1% of the buffer (1976 bytes) sits between the two states by an order of
+  // magnitude in each direction. Both ends measured on this harness: a real 90px drag
+  // moves 26926 of 197600 bytes, and with the controls unwired from preview.ts it
+  // moves 0.
   if (moved < c.width * c.height * 4 * 0.01) {
     return `only ${moved} of ${before.length} bytes changed -- the drag did not reach the pixels`;
   }
@@ -878,7 +880,8 @@ check('a hover over the preview canvas aims the turret in the rendered image', (
   c.remove();
   const moved = bytesDiffering(left, right);
   // A turret swinging through 180 degrees is a smaller silhouette change than a hull
-  // turn, so the floor is lower -- still three orders of magnitude above zero.
+  // turn, so the floor is lower. Measured: 11794 of 197600 bytes with the hover wired,
+  // 0 with it unwired.
   if (moved < 2000) {
     return `only ${moved} of ${left.length} bytes changed -- the hover did not aim the turret`;
   }

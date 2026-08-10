@@ -189,8 +189,16 @@ describe('groundPointFromPointer: the same unprojection the game aims through', 
   });
 
   it('returns null when the canvas has no layout box', () => {
-    // A hidden or unlaid-out canvas: dividing by a zero width yields Infinity/NaN,
-    // and NaN would sail through atan2 into the turret angle.
+    // A hidden or unlaid-out canvas -- which is what jsdom reports for EVERY element,
+    // and what the panel's canvas reports before its first layout.
+    //
+    // State what this does and does not pin. Deleting the explicit `rect.width === 0`
+    // guard leaves it GREEN (measured): dividing by zero gives an Infinity ndc, which
+    // makes a NaN ray, which misses the plane, which is already null. So this is not a
+    // guard-coverage check. What it pins is the CONTRACT -- no answer means null,
+    // never a fallback point -- and that does fail: making the miss return {0, 0} the
+    // way renderer.ts's screenToGround returns the arena centre kills the horizon case
+    // below, and kills this one too once the redundant guard goes with it.
     expect(groundPointFromPointer(camera, { left: 0, top: 0, width: 0, height: 0 }, 5, 5)).toBeNull();
   });
 
@@ -199,6 +207,8 @@ describe('groundPointFromPointer: the same unprojection the game aims through', 
     // pointermove while a drag runs off the top of the canvas. The camera sits about
     // 51 degrees above the ground with a 50-degree lens, so the horizon is roughly
     // 0.8 canvas-heights above the top edge; -400 is comfortably past it.
+    //
+    // This is the case that fails if the miss ever grows a fallback point.
     expect(groundPointFromPointer(camera, RECT, CX, RECT.top - 400)).toBeNull();
   });
 });
@@ -370,6 +380,38 @@ describe('createPreviewControls: the turret aims independently of the hull', () 
     );
     expect(h.controls.pose().turretAngle).toBeCloseTo(Math.PI / 2, 4);
     h.controls.dispose();
+  });
+
+  it('reads the camera live, so a resize re-fit is picked up with no rewiring', () => {
+    // preview.ts's resize() re-fits the SAME camera object in place (fitCameraToArea
+    // mutates it), and the controls were handed that object. Caching anything derived
+    // from it at construction -- a projection matrix, a units-per-pixel scale -- would
+    // leave the aim pointing at where the tank used to be after the window resized.
+    // Proven by moving the camera underneath a live controls instance: the answer for
+    // the SAME screen point has to move with it.
+    const own = createPreviewCamera(RECT.width / RECT.height);
+    const canvas = makeCanvas();
+    let seen: PreviewPose | null = null;
+    const controls = createPreviewControls(canvas, {
+      camera: own,
+      initialPose: INITIAL_PREVIEW_POSE,
+      reducedMotion: true,
+      onPose: (p) => {
+        seen = p;
+      },
+      raf: () => 0,
+      cancelRaf: () => {},
+    });
+    canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 70, clientY: CY - 40 }));
+    const before = seen!.turretAngle;
+    // A quarter turn about the tank: the same pixel now looks at a different patch of
+    // ground, so the same event must give a different aim.
+    own.position.set(own.position.z, own.position.y, -own.position.x);
+    own.lookAt(0, 0, 0);
+    canvas.dispatchEvent(pointerEvent('pointermove', { clientX: CX + 71, clientY: CY - 40 }));
+    const after = seen!.turretAngle;
+    expect(Math.abs(normalizeAngle(after - before))).toBeGreaterThan(0.5);
+    controls.dispose();
   });
 
   it('leaves the turret alone when the pointer is on the tank itself', () => {

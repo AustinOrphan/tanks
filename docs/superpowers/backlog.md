@@ -288,6 +288,39 @@ the two matched and went stale silently when #103 moved `BASE_FOV`; review caugh
 and the comment now asserts no relationship rather than a false one. Needs eyes, not a
 test. #102
 
+---
+
+**Raised while making the preview interactive** (`src/render/preview-controls.ts`, the
+hull turntable and the turret aim).
+
+**5. The idle spin never runs in a real browser under any gate.** Every check in
+`tools/gl/harness.ts` runs synchronously in module scope, so no `requestAnimationFrame`
+callback fires while they execute — which means the spin is asserted only in
+`preview-controls.test.ts`, against an injected `raf`/`cancelRaf` pair. What that leaves
+unmeasured is whether the real `window.requestAnimationFrame` loop draws at a sane rate,
+or whether it keeps the panel repainting when it should have stopped. Closing it needs
+the harness to support an async check, which it does not today.
+
+**6. `prefers-reduced-motion` is read in `preview.ts` and nothing covers that read.**
+`createPreviewControls` takes the flag as a parameter and both branches are tested; the
+`window.matchMedia` call that supplies it lives inside `createTankPreview`, which returns
+null under jsdom, so no test reaches it. The optional-chaining fallback for an absent
+`matchMedia` is likewise unexercised.
+
+**7. Pointer capture is unverified.** `setPointerCapture` is what keeps a drag alive once
+it leaves the 260px canvas, and neither gate can see it: jsdom does not implement capture
+semantics (the call is inside a try/catch for exactly that reason), and the GL harness
+dispatches events directly at the canvas, which needs no capture. "A drag that runs off
+the preview keeps turning the hull" is therefore claimed by construction, not measured.
+The `groundPointFromPointer` null-on-miss path exists for that case and IS tested.
+
+**8. Four more feel constants with nothing pinning them**, in the same class as item 2
+above but self-documented at their definitions: `HULL_DRAG_RAD_PER_PX` (0.012, ~179
+degrees across the canvas), `IDLE_SPIN_RAD_PER_SEC` (0.35), `KEY_STEP_RAD` (pi/24) and
+`TURRET_AIM_DEAD_RADIUS` (0.12). The tests assert behaviour in terms of each constant, so
+retuning does not mean rewriting tests — but nobody has played with the panel on a phone,
+and the drag rate is the one most likely to be wrong there.
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
