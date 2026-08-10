@@ -9,9 +9,15 @@ import { parseArgs, BROWSERS, DEFAULTS } from './args.mjs';
 
 describe('baseline runner args', () => {
   it('defaults to one chromium run on a port of its own', () => {
-    expect(parseArgs([])).toEqual({ browsers: ['chromium'], port: DEFAULTS.port });
+    // LITERAL, not `DEFAULTS.port`. Writing the constant on both sides made this a
+    // tautology against the fixture: measured, `DEFAULTS.port` 5178 -> 5173 (vite's own
+    // default, the collision that matters most) passed this file untouched. The port is a
+    // contract with two things outside this module -- tools/gl/run.mjs's 5177, and
+    // whatever else is listening on the box -- so it is pinned as the number it is.
+    expect(parseArgs([])).toEqual({ browsers: ['chromium'], port: 5178 });
     // Not 5177: that is tools/gl/run.mjs's port, and each runner refuses to start while
-    // anything answers on its own. Sharing one would make them mutually exclusive.
+    // anything answers on its own. Sharing one would make them mutually exclusive. Kept
+    // beside the literal because it names WHY the literal is not free to move.
     expect(DEFAULTS.port).not.toBe(5177);
   });
 

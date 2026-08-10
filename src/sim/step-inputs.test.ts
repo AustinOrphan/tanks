@@ -17,14 +17,22 @@ import { COUNTDOWN_TICKS, GRACE_TICKS, PLAYER_TURRET_TURN_RATE, DT } from './con
  * bearing, and by then a wrong one is a silent behaviour change.
  *
  * MUTATION RECORD -- measured, one mutation at a time, each applied to src/sim/world.ts
- * and run against the WHOLE gate (`npx vitest run`, 87 files / 1718 tests with this file
- * present). "Killed here only" means the run's sole failing file was this one, which is
- * the same evidence as watching it survive before the file existed.
+ * and run against the WHOLE gate (`npx vitest run`). Every figure below was RE-MEASURED
+ * against the head of this branch; the numbers an earlier draft carried (87 files / 1718
+ * tests) were taken at the branch's first commit and were stale by the time it shipped.
+ * The gate with this file present is 88 files (87 passed + 1 skipped) and 1733 tests
+ * (1731 passed + 2 skipped). "Killed here only" means the run's sole failing file was
+ * this one, which is the same evidence as watching it survive before the file existed.
  *
- * Population: every distinct single-element edit to applyPlayerInputs' three decisions --
+ * Population: every distinct single-element edit to applyPlayerInputs' FOUR decisions --
  * which tanks are indexed (1), how the input is chosen (2, 3), how many are driven and
- * what an unmatched tank gets (4, 5) -- plus step's delegation (6, 7). 7 of 7 run,
- * 6 killed, 1 survivor disclosed below.
+ * what an unmatched tank gets (4, 5), and in what ORDER they are driven (8) -- plus
+ * step's delegation (6, 7). 8 of 8 run, 7 killed, 1 survivor disclosed below.
+ *
+ * An earlier draft of this list said "three decisions" and omitted 8. That was not a
+ * wording slip: the order was genuinely unpinned, and the omission is what let the
+ * mutant survive review. It is stated here because a population claim that quietly
+ * excludes the class a survivor lives in is the failure mode CLAUDE.md names.
  *
  *   1. `filter(kind === 'player')` -> `filter(kind === 'player' && t.alive)`
  *      (a dead player stops consuming its slot)   killed here only (1 test)
@@ -33,21 +41,32 @@ import { COUNTDOWN_TICKS, GRACE_TICKS, PLAYER_TURRET_TURN_RATE, DT } from './con
  *   4. `Math.min(...)` -> `players.length` with an idle input synthesised for the
  *      unmatched tanks                            killed here only (2 tests)
  *   5. `Math.min(...)` -> `inputs.length`         killed here (1) AND by
- *      src/game/loop.test.ts (1) -- a world with no player tank indexes past the end
- *      and throws, so this one was already half-covered.
+ *      src/game/loop.test.ts (1, "pushes null when the built world has no player tank")
+ *      -- a world with no player tank indexes past the end and throws, so this one was
+ *      already half-covered.
  *   6. `step` -> `stepInputs(world, [input, input])`  killed here only (2 tests)
+ *   8. `for (i = 0; i < n; i++)` -> `for (i = n - 1; i >= 0; i--)`, pairing untouched
+ *      -- the tanks are driven in reverse slot order. Before the "drives the players in
+ *      SLOT ORDER" test below existed this passed the WHOLE gate (87 files passed / 1
+ *      skipped, 1730 passed / 2 skipped, 0 failed) while renumbering every shell and
+ *      reversing the event stream. Now: killed here only (1 test).
  *
  * SURVIVOR, disclosed: (7) giving `step` its own copy of the pipeline body -- clone,
  * tick, `applyPlayerInput`, the seven stages -- instead of delegating to `stepInputs`
- * passed the ENTIRE gate: 1716 passed / 2 skipped, zero failures, and the golden trace
- * hash unchanged. It is behaviour-identical today, which is exactly why nothing can catch
- * it; the risk it carries is that the single-player path stops being the same code as the
- * list path, which is the whole argument for the trace hash proving this refactor. Not
- * testable, only reviewable. `step`'s doc comment says so.
+ * passes the ENTIRE gate. Re-measured at this head with the new test present: 1731
+ * passed / 2 skipped, zero failures, and the golden trace hash unchanged. It is
+ * behaviour-identical today, which is exactly why nothing can catch it; the risk it
+ * carries is that the single-player path stops being the same code as the list path,
+ * which is the whole argument for the trace hash proving this refactor. Unfalsifiable
+ * by construction, not merely untested: any test that could tell the two apart would
+ * have to observe a behavioural difference, and there is none to observe -- what the
+ * mutation removes is a structural guarantee, which only review can hold. `step`'s doc
+ * comment says so.
  *
  * Also measured, and the reason this file has to exist: the golden trace hash
- * (015a5d17..., tools/baseline/trace.test.ts) was UNCHANGED under all seven mutations.
- * It drives one player, so it cannot see a pairing rule at all.
+ * (015a5d17..., tools/baseline/trace.test.ts) was UNCHANGED under all eight mutations --
+ * tools/baseline/trace.test.ts is among the passing files in every run above. It drives
+ * one player, so it cannot see a pairing rule or a drive order at all.
  */
 
 const A_ID = 1;
@@ -123,6 +142,30 @@ describe('stepInputs pairs inputs with player tanks by position', () => {
     expect(r.world.bullets.map((b) => b.ownerId).sort()).toEqual([A_ID, B_ID]);
     const fired = r.events.filter((e) => e.type === 'fire').map((e) => e.ownerId).sort();
     expect(fired).toEqual([A_ID, B_ID]);
+  });
+
+  it('drives the players in SLOT ORDER, so ids and events are a function of the slot', () => {
+    // The `.sort()` in the test above is deliberate there -- it asks "did each player get
+    // its own shell" -- but it is also exactly what let a reversed loop
+    // (`for (i = n - 1; i >= 0; i--)`, pairing untouched) pass the WHOLE gate: 87 files /
+    // 1730 passed / 2 skipped, 0 failed. Order is a fourth decision applyPlayerInputs
+    // makes, and nothing pinned it.
+    //
+    // It is not cosmetic. `world.nextId++` is consumed in drive order (bullets.ts:62), so
+    // the reversal renumbers every shell; `events` is appended in drive order, and
+    // render/particles.ts draws from that stream. A recorded input list replayed against a
+    // build that iterated the other way would diverge on tick one -- which is the whole
+    // property `stepInputs` exists to make replayable.
+    const r = stepInputs(twoPlayerWorld(), [
+      { ...inputA, fire: true },
+      { ...inputB, fire: true },
+    ]);
+
+    // UNSORTED, on all three: the array order, the id order, and the event order.
+    expect(r.world.bullets.map((b) => b.ownerId)).toEqual([A_ID, B_ID]);
+    const shellOf = (id: number) => r.world.bullets.find((b) => b.ownerId === id)!;
+    expect(shellOf(A_ID).id).toBeLessThan(shellOf(B_ID).id);
+    expect(r.events.filter((e) => e.type === 'fire').map((e) => e.ownerId)).toEqual([A_ID, B_ID]);
   });
 
   it('gives a player past the end of the list NO input, not an idle one', () => {
