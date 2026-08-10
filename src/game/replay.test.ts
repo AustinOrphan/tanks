@@ -1,0 +1,323 @@
+import { describe, it, expect } from 'vitest';
+import { ARENAS, createWorldFor } from '../sim/arena';
+import { cloneWorld, step, type World } from '../sim/world';
+import type { InputState } from '../sim/types';
+import { COUNTDOWN_TICKS } from '../sim/constants';
+import balanceJson from '../sim/config/data/balance.json';
+import {
+  canonical,
+  fingerprint,
+  encodeInput,
+  decodeInput,
+  createRecordingInput,
+  replayMetaFor,
+  replayTrace,
+  checkTrace,
+  SIM_DATA_FINGERPRINT,
+  REPLAY_FORMAT,
+  REPLAY_SCHEMA,
+  type ReplayMeta,
+  type EncodedInput,
+} from './replay';
+
+const META: ReplayMeta = {
+  level: 0,
+  seed: 12345,
+  lives: 3,
+  unarmedTrigger: 'none',
+  invincible: false,
+};
+
+/**
+ * A deterministic, seeded input script -- NOT a constant input.
+ *
+ * A constant input would make "the recorder captured the stream" untestable: any
+ * per-tick mix-up (an off-by-one, a dropped tick, a repeated one) replays
+ * identically when every tick is the same. This varies every field.
+ */
+function scriptedInputs(seed: number): { sample(): InputState; calls: number; last: InputState | null } {
+  let s = seed >>> 0;
+  const src = {
+    calls: 0,
+    /** The exact object last handed out, so a caller can assert IDENTITY. */
+    last: null as InputState | null,
+    sample(): InputState {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      src.calls += 1;
+      const a = (s % 1000) / 1000;
+      src.last = {
+        move: { x: a * 2 - 1, y: 1 - a },
+        aim: { x: 10 * a, y: -7 * a },
+        fire: (s & 8) !== 0,
+        mine: (s & 16) !== 0,
+      };
+      return src.last;
+    },
+  };
+  return src;
+}
+
+function worldFor(meta: ReplayMeta): World {
+  return createWorldFor(ARENAS[meta.level], meta.seed, meta.unarmedTrigger, meta.lives);
+}
+
+describe('canonical / fingerprint', () => {
+  it('is insensitive to key ORDER but sensitive to values', () => {
+    // Key order is the failure this exists to prevent: a JSON module's property
+    // order is a bundler artefact, so an order-sensitive hash would differ between
+    // `vite dev` and `vite build` and silently reject every trace across the two.
+    expect(canonical({ a: 1, b: 2 })).toBe(canonical({ b: 2, a: 1 }));
+    expect(fingerprint({ a: 1, b: 2 })).toBe(fingerprint({ b: 2, a: 1 }));
+    expect(fingerprint({ a: 1 })).not.toBe(fingerprint({ a: 2 }));
+  });
+
+  it('keeps ARRAY order, which is data', () => {
+    // An arena's grid is an array of row strings; two arenas with the same rows in
+    // a different order are different levels.
+    expect(fingerprint([1, 2])).not.toBe(fingerprint([2, 1]));
+  });
+
+  it('does not confuse an array with the object of its indices', () => {
+    expect(fingerprint([7, 8])).not.toBe(fingerprint({ 0: 7, 1: 8 }));
+  });
+
+  it('sees a change ANYWHERE in a nested structure', () => {
+    const base = { a: { b: { c: [1, { d: 'x' }] } } };
+    const moved = { a: { b: { c: [1, { d: 'y' }] } } };
+    expect(fingerprint(base)).not.toBe(fingerprint(moved));
+  });
+
+  it('distinguishes null, undefined-shaped absence, and the string "null"', () => {
+    expect(fingerprint({ a: null })).not.toBe(fingerprint({ a: 'null' }));
+    expect(fingerprint({ a: null })).not.toBe(fingerprint({}));
+  });
+});
+
+describe('SIM_DATA_FINGERPRINT', () => {
+  it('is eight hex digits', () => {
+    expect(SIM_DATA_FINGERPRINT).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('moves when a balance scalar moves', () => {
+    // Deliberately NOT a pinned literal. A literal here would make retuning
+    // balance.json a three-file edit (JSON, constants.test.ts, and this), which is
+    // a pin CLAUDE.md's two-file convention does not ask for. What has to be true
+    // is the PROPERTY: perturb the data and the fingerprint moves. Measured against
+    // a copy, so nothing in the sim is touched.
+    const before = fingerprint({ balance: balanceJson });
+    const after = fingerprint({
+      balance: { ...balanceJson, tank: { ...balanceJson.tank, speed: balanceJson.tank.speed + 1 } },
+    });
+    expect(after).not.toBe(before);
+  });
+
+  it('covers ai-profiles and arenas, not only balance', () => {
+    // The stamp claims all four data files. If it hashed balance alone, this would
+    // pass for the wrong reason -- so compare the real stamp against a fingerprint
+    // of balance alone: they must differ, which is only true if more went in.
+    expect(SIM_DATA_FINGERPRINT).not.toBe(fingerprint({ balance: balanceJson }));
+  });
+});
+
+describe('encodeInput / decodeInput', () => {
+  it('round-trips fractional and negative components EXACTLY', () => {
+    const input: InputState = {
+      move: { x: -0.3333333333333333, y: 0.7 },
+      aim: { x: 12.5, y: -0.125 },
+      fire: false,
+      mine: false,
+    };
+    expect(decodeInput(encodeInput(input))).toEqual(input);
+  });
+
+  it('keeps fire and mine independent', () => {
+    // Population: all 4 combinations of the two edge-triggered booleans. Packed
+    // into one number, so a wrong mask makes one button press the other.
+    for (const fire of [false, true]) {
+      for (const mine of [false, true]) {
+        const input: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire, mine };
+        expect(decodeInput(encodeInput(input))).toEqual(input);
+      }
+    }
+  });
+
+  it('does not confuse move with aim', () => {
+    const decoded = decodeInput(encodeInput({
+      move: { x: 1, y: 2 },
+      aim: { x: 3, y: 4 },
+      fire: false,
+      mine: false,
+    }));
+    expect(decoded.move).toEqual({ x: 1, y: 2 });
+    expect(decoded.aim).toEqual({ x: 3, y: 4 });
+  });
+});
+
+describe('createRecordingInput', () => {
+  it('returns the inner sample UNCHANGED, and calls it exactly once per sample', () => {
+    const inner = scriptedInputs(1);
+    const rec = createRecordingInput(inner, META);
+    const seen = rec.sample();
+    expect(inner.calls).toBe(1);
+    // IDENTITY, not value equality: the driver hands this object straight to
+    // step(), so a recorder that returned its own reconstruction (through
+    // encode/decode, say) would pass a `toEqual` while substituting a different
+    // object for the real one.
+    expect(seen).toBe(inner.last);
+    expect(decodeInput(rec.trace().ticks[0])).toEqual(seen);
+  });
+
+  it('records exactly one tick per sample, in order', () => {
+    const rec = createRecordingInput(scriptedInputs(7), META);
+    const taken: InputState[] = [];
+    for (let i = 0; i < 25; i++) taken.push(rec.sample());
+    const trace = rec.trace();
+    expect(trace.ticks).toHaveLength(25);
+    expect(trace.ticks.map(decodeInput)).toEqual(taken);
+  });
+
+  it('stamps the format, schema and sim fingerprint', () => {
+    const rec = createRecordingInput(scriptedInputs(1), META);
+    const trace = rec.trace();
+    expect(trace.format).toBe(REPLAY_FORMAT);
+    expect(trace.schema).toBe(REPLAY_SCHEMA);
+    expect(trace.data).toBe(SIM_DATA_FINGERPRINT);
+    expect(trace.meta).toEqual(META);
+  });
+
+  it('stops at the limit, keeps delegating, and says it truncated', () => {
+    const inner = scriptedInputs(3);
+    const rec = createRecordingInput(inner, META, 4);
+    for (let i = 0; i < 10; i++) rec.sample();
+    const trace = rec.trace();
+    expect(trace.ticks).toHaveLength(4);
+    expect(trace.truncated).toBe(true);
+    // The game must not change because a trace filled up: every sample still
+    // reaches the real input source.
+    expect(inner.calls).toBe(10);
+  });
+
+  it('is not truncated before the limit is reached', () => {
+    const rec = createRecordingInput(scriptedInputs(3), META, 4);
+    for (let i = 0; i < 4; i++) rec.sample();
+    expect(rec.trace().truncated).toBe(false);
+  });
+
+  it('begin() starts a fresh trace under the new meta', () => {
+    const rec = createRecordingInput(scriptedInputs(3), META, 2);
+    rec.sample();
+    rec.sample();
+    rec.sample(); // truncates
+    const next: ReplayMeta = { ...META, level: 2, seed: 99 };
+    rec.begin(next);
+    expect(rec.trace().ticks).toEqual([]);
+    expect(rec.trace().truncated).toBe(false);
+    expect(rec.trace().meta).toEqual(next);
+    rec.sample();
+    expect(rec.trace().ticks).toHaveLength(1);
+  });
+
+  it('hands back a SNAPSHOT: later ticks do not mutate a trace already taken', () => {
+    const rec = createRecordingInput(scriptedInputs(3), META);
+    rec.sample();
+    const first = rec.trace();
+    rec.sample();
+    expect(first.ticks).toHaveLength(1);
+    // and the encoded tuples are copies, not the live rows
+    (first.ticks[0] as EncodedInput)[0] = 999;
+    expect(rec.trace().ticks[0][0]).not.toBe(999);
+  });
+});
+
+describe('replayMetaFor', () => {
+  it('reads the world, not the flags that built it', () => {
+    const world = createWorldFor(ARENAS[1], 4242, 'both', 2);
+    expect(replayMetaFor(world, 1)).toEqual({
+      level: 1,
+      seed: 4242,
+      lives: 2,
+      unarmedTrigger: 'both',
+      invincible: false,
+    });
+  });
+
+  it('carries the dev invincibility that loop.ts applies AFTER the world is built', () => {
+    // The one field that is not an argument to createWorldFor: loop.ts sets it on
+    // the player tank, and a replay that dropped it would kill a player the
+    // recorded run did not.
+    const world = createWorldFor(ARENAS[0], 5, 'none', 3);
+    world.tanks.find((t) => t.kind === 'player')!.invincible = true;
+    expect(replayMetaFor(world, 0).invincible).toBe(true);
+  });
+});
+
+describe('replayTrace', () => {
+  it('reproduces a run tick for tick, from the trace alone', () => {
+    // The claim the whole feature rests on. Record a real run through the real
+    // sim, then rebuild the world from meta and re-apply the recorded inputs: the
+    // final worlds must be identical, structurally, not merely "still playing".
+    const meta = replayMetaFor(worldFor(META), 0);
+    const rec = createRecordingInput(scriptedInputs(2024), meta);
+
+    let live = worldFor(meta);
+    const liveEvents: number[] = [];
+    // Past COUNTDOWN_TICKS, so the recorded stretch includes live movement and
+    // shots rather than only the blocked opening.
+    const TICKS = COUNTDOWN_TICKS + 240;
+    for (let i = 0; i < TICKS; i++) {
+      const result = step(live, rec.sample());
+      live = result.world;
+      liveEvents.push(result.events.length);
+    }
+
+    const replayed = replayTrace(rec.trace(), worldFor(meta));
+    expect(replayed.ticks).toBe(TICKS);
+    expect(cloneWorld(replayed.world)).toEqual(cloneWorld(live));
+    expect(replayed.events).toHaveLength(liveEvents.reduce((a, b) => a + b, 0));
+    // Non-vacuous: the run has to have DONE something, or an all-zeros comparison
+    // would pass with the inputs discarded.
+    expect(replayed.events.length).toBeGreaterThan(0);
+    expect(replayed.world.tick).toBe(TICKS);
+  });
+
+  it('diverges when a single tick is dropped -- the equality above is load-bearing', () => {
+    // The negative control for the test above: if the comparison could not see a
+    // one-tick difference, it would pass for a recorder that dropped ticks.
+    const meta = replayMetaFor(worldFor(META), 0);
+    const rec = createRecordingInput(scriptedInputs(2024), meta);
+    let live = worldFor(meta);
+    for (let i = 0; i < COUNTDOWN_TICKS + 120; i++) live = step(live, rec.sample()).world;
+
+    const trace = rec.trace();
+    const short = { ...trace, ticks: trace.ticks.filter((_, i) => i !== COUNTDOWN_TICKS + 10) };
+    const replayed = replayTrace(short, worldFor(meta));
+    expect(cloneWorld(replayed.world)).not.toEqual(cloneWorld(live));
+  });
+
+  it('replays an empty trace as the world it was handed', () => {
+    const world = worldFor(META);
+    const result = replayTrace(createRecordingInput(scriptedInputs(1), META).trace(), world);
+    expect(result.ticks).toBe(0);
+    expect(result.world).toBe(world);
+  });
+});
+
+describe('checkTrace', () => {
+  it('accepts a trace this build just produced', () => {
+    expect(checkTrace(createRecordingInput(scriptedInputs(1), META).trace())).toEqual({
+      ok: true,
+      reason: null,
+    });
+  });
+
+  it('rejects a foreign format, a foreign schema and a stale fingerprint', () => {
+    // Population: the three stamp fields checkTrace inspects, one at a time.
+    const good = createRecordingInput(scriptedInputs(1), META).trace();
+    expect(checkTrace({ ...good, format: 'something.else' }).ok).toBe(false);
+    expect(checkTrace({ ...good, schema: REPLAY_SCHEMA + 1 }).ok).toBe(false);
+    expect(checkTrace({ ...good, data: 'deadbeef' }).ok).toBe(false);
+    // and the reason names which one, so a bug report says why it was refused
+    expect(checkTrace({ ...good, data: 'deadbeef' }).reason).toContain('deadbeef');
+    expect(checkTrace({ ...good, schema: 9 }).reason).toContain('schema');
+  });
+});

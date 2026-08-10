@@ -98,6 +98,25 @@ export interface DevFlags {
    * or not.
    */
   autoplay: boolean;
+  /**
+   * Publish the save export/import on the dev console object (`__tanks`).
+   *
+   * localStorage is origin-scoped, so a player who moves from the web build to a
+   * wrapped mobile build starts at zero -- and this is the only mechanism that
+   * carries a save across, or backs one up at all. Console-level, not a HUD
+   * button: whether it earns a permanent affordance is a product call, and
+   * shipping a button now would decide it by accident.
+   */
+  saveIo: boolean;
+  /**
+   * Record the per-tick input stream, and publish it on the dev console object.
+   *
+   * The sim is already a pure function of (world, input per tick); this is the
+   * thing in the shipped game that can CAPTURE that pair, for a bug report that
+   * reproduces exactly or an attract-mode demo. Recording DECORATES the input
+   * collaborator, so the flag never reaches src/sim/ -- see replay.ts.
+   */
+  replay: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -115,6 +134,8 @@ export const DEV_FLAGS_OFF: DevFlags = {
   sandboxWalls: null,
   invincible: false,
   autoplay: false,
+  saveIo: false,
+  replay: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -199,6 +220,8 @@ export function parseDevFlags(search: string): DevFlags {
     sandboxWalls: asWalls(params),
     invincible: isOn(params, 'invincible'),
     autoplay: isOn(params, 'autoplay'),
+    saveIo: isOn(params, 'saveIo'),
+    replay: isOn(params, 'replay'),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps

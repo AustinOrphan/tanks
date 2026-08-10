@@ -163,7 +163,10 @@ Related, and verified independently at
 **once your app targets SDK 35**." It is a target-SDK trigger, not a device-version trigger.
 Because Play forces API 36 from 2026-08-31 (below), the condition is met in practice.
 
-### There are FIVE `tanks.*` localStorage keys, not four — CLAUDE.md is stale
+### There are FIVE `tanks.*` localStorage keys, not four — CLAUDE.md was stale
+<!-- Corrected in CLAUDE.md by the PR that closed issue #109; the finding below is kept
+     as written, since it is what the investigation measured. -->
+
 
 `grep -rn "_KEY = " src/ --include=*.ts` returns exactly five declarations:
 
