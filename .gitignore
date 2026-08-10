@@ -8,3 +8,6 @@ visual-out/
 gallery-out/
 *.gif
 audio-out/
+
+# scratch manifests written by tools/mutate's own end-to-end tests
+tools/mutate/fixtures/tmp-manifest-*.json
