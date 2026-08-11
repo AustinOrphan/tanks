@@ -105,10 +105,13 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     // Scaled by the same 9x so the ASK is what it was. It is one number and pure feel --
     // retune it freely, but do not read the old 50 as still meaning what it meant.
     //
-    // arena-05 added 27 more (its bar reuses arena-04's shape exactly: two 3x3 anchors
-    // plus the 3x3 mid-field cover, same as arena-04), taking the total to 171. Retuned
-    // from 450 to 540 to hold the same ~3.1 playthroughs shape (540/171 = 3.16, against
-    // the original 450/144 = 3.125) rather than let a fifth level quietly shrink the ask.
+    // arena-05 added 18 more (its bar reuses arena-04's two 3x3 anchor segments; unlike
+    // arena-04 it carries no mid-field destructible -- everything south of the bar was
+    // redesigned in solid walls only), taking the total to 162. Retuned from 450 to 540
+    // to stay within a quarter playthrough of the original shape (540/162 = 3.33,
+    // against the original 450/144 = 3.125) rather than let a fifth level quietly
+    // shrink the ask; 3.33 is honest rather than re-tuned to land closer to 3.125,
+    // since the exact multiple is feel, not a contract.
     description: 'Blow apart 540 walls.',
     earned: (c) => c.lifetime.wallsDestroyed >= 540,
   },
