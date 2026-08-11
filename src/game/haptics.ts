@@ -63,6 +63,13 @@ export interface HapticsDirector {
    * distance. `null` when there is no live player tank in this world. Not derived
    * from the event stream itself: `mine-detonate` carries only the mine's own
    * position, not the player's.
+   *
+   * KNOWN RESIDUAL: loop.ts pushes this from `onSimulated`, which the driver calls
+   * AFTER `handle` on the same frame (driver.ts's frame body) -- so a mine-detonate
+   * event is checked against the position from the END of the PREVIOUS frame, one
+   * tick of lag. Not swept or fixed: immaterial against MINE_DANGER_RADIUS (2.5
+   * units) at TANK_SPEED, but a reviewer re-deriving the call order should not
+   * "discover" it as new.
    */
   setPlayerPosition(pos: Vec2 | null): void;
   /** The persisted off switch (touch-settings.ts). Suppresses every pulse when false. */
@@ -143,15 +150,16 @@ export interface VibrateHost {
  * `resolveStorage`'s shape in storage.ts, the repo's established degrade pattern.
  *
  * Feature-detected with `typeof ... === 'function'` rather than a bare property
- * read, because the caniuse support story (checked 2026-08-11 via caniuse.com/vibration)
- * is not the "Android-only" shape an earlier, unsourced draft of this project's own
- * research claimed. It is a Chromium/WebKit split, not an OS split: Chrome and Edge
- * support it on BOTH desktop and Android, and Samsung Internet and Opera Mobile
- * support it too -- while Safari has never implemented it, on desktop macOS OR iOS
- * (every iOS browser is WebKit under the hood, so "iOS Safari" covers the whole
- * platform), and desktop Firefox dropped support after v15 (Firefox for Android also
- * does not support it). So a no-op is not a rare edge case here; it is what Safari and
- * Firefox users get, always, on any OS.
+ * read, because the support story is not the "Android-only" shape an earlier,
+ * unsourced draft of this project's own research claimed. Per MDN (which marks the
+ * API "not Baseline") and a caniuse.com/vibration summary fetched 2026-08-11, the
+ * real split is Chromium vs. WebKit/Firefox, not an OS split: Safari has never
+ * implemented it, on desktop macOS or iOS (every iOS browser is WebKit under the
+ * hood), and Firefox does not support it either -- while Chrome and Edge support it
+ * on both desktop and Android. So a no-op is not a rare edge case here; it is what
+ * Safari and Firefox users get, always, on any OS. The finer detail behind that
+ * summary (exact version cutoffs, Samsung Internet, Opera Mobile) was not indepen-
+ * dently re-verified and should be treated as secondhand if it matters to a decision.
  */
 export function resolveVibrate(host: VibrateHost = globalThis as unknown as VibrateHost): VibrateFn {
   const nav = host.navigator;
