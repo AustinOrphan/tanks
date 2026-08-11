@@ -470,11 +470,14 @@ describe('hud.css is syntactically whole', () => {
     const start = src.indexOf('.hud button:focus-visible');
     const block = src.slice(start, src.indexOf('}', start));
     expect(block).toContain('outline:');
-    // ...and it must not also ring the .hud-panel CONTAINER, which programmatic focus
-    // lands on exactly once (leaving the splash screen) and which already declares its
-    // own `:focus { outline: none }` -- a ring here would fight it, and `[tabindex]` is
-    // exactly as specific as a class, so a bare `.hud [tabindex]` would win that fight.
-    expect(block, 'the generic rule rings the panel container too').toContain(':not(.hud-panel)');
+    // ...and it must not also ring a panel CONTAINER (`.hud-panel` and its four
+    // siblings, all `tabindex="-1"`), which programmatic focus lands on for every
+    // panel-open transition and which already declare their own `:focus { outline:
+    // none }` -- a ring here would fight that, and `[tabindex]` is exactly as specific
+    // as a class, so a bare `.hud [tabindex]` would win the fight.
+    expect(block, 'the generic rule rings a panel container too').toContain(
+      ':not([tabindex="-1"])',
+    );
   });
 
   it('keeps the narrow-viewport rules the phone layout needs', () => {

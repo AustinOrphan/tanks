@@ -1658,17 +1658,24 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
   /**
    * Independently re-derives the exact predicate hud.ts's own (unexported)
    * `focusableControls` applies, straight from the DOM rather than a maintained list --
-   * `button, [tabindex]`, filtered to not-disabled and not `display: none`. Written
-   * separately on purpose: if production's real selector ever narrowed (dropping a
-   * class of button from the roving order) the two would disagree, and the traversal
-   * below would land somewhere this list did not predict and fail loudly. A hardcoded
-   * expected-controls list could not see that kind of drift; this can.
+   * `button, [tabindex]`, filtered to not-disabled and not hidden by `display: none` on
+   * itself OR ON ANY ANCESTOR up to (not including) `container`. That ancestor walk
+   * matters: `.hud-panel-settings` hides the audio row as a GROUP on the win/lose panel,
+   * and `getComputedStyle` on a child inside it reports the child's OWN resolved
+   * display, not `none` (measured directly below), so a check that only looked at the
+   * element itself would disagree with a correct production predicate exactly where a
+   * hidden wrapper is involved -- which is exactly the drift this independent oracle
+   * exists to catch, not paper over by copying the bug.
    */
   function controlsOf(container: HTMLElement): HTMLElement[] {
+    const hiddenWithin = (el: HTMLElement): boolean => {
+      for (let n: HTMLElement | null = el; n && n !== container; n = n.parentElement) {
+        if (getComputedStyle(n).display === 'none') return true;
+      }
+      return false;
+    };
     return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
-      (el) =>
-        !(el instanceof HTMLButtonElement && el.disabled) &&
-        getComputedStyle(el).display !== 'none',
+      (el) => !(el instanceof HTMLButtonElement && el.disabled) && !hiddenWithin(el),
     );
   }
 
@@ -1691,7 +1698,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // disabled-but-focusable.
     const { hud: h, root } = mount();
     h.setLevelSelect(3, 5);
-    h.setState('title'); // splash -> title: focuses the .hud-panel container, index -1
+    h.setState('title'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
 
     let totalControls = 0;
     const visited = new Set<HTMLElement>();
@@ -1701,20 +1708,22 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // arrows -- activation is a separate, native concern; see the report). Recursive
     // because a subpanel is walked exactly the same way the title panel is.
     //
-    // `alreadyAtFirst` covers the ONE asymmetry in how a panel is entered. The title
-    // panel's first entry is splash -> title, which focuses the .hud-PANEL CONTAINER
-    // (index -1, see setState's `leavingSplash` branch) so the hotkey-liveness test
-    // above keeps passing -- the first ArrowDown is what reaches controls[0]. Every
-    // OTHER panel-open transition (a subpanel's own open button, or Back returning to
-    // title) calls `focusFirstControl` as part of the SAME synchronous click, so by the
-    // time `walk` is called recursively, focus is already ON controls[0] -- pressing
-    // ArrowDown there would skip straight past it to controls[1].
-    function walk(container: HTMLElement, alreadyAtFirst: boolean): void {
+    // EVERY panel-open transition -- the first splash -> title, a subpanel's own open
+    // button, and Back returning to title -- focuses that panel's CONTAINER, never a
+    // control (see the doc comment above `activePanelContainer` in hud.ts for why:
+    // focusing a button there killed Escape/M the instant the panel opened). So `walk`
+    // always starts at index -1 and its own first ArrowDown is what reaches controls[0],
+    // uniformly, with no "already there" special case.
+    function walk(container: HTMLElement): void {
+      expect(
+        document.activeElement,
+        `${container.className} was not focused as a CONTAINER on open`,
+      ).toBe(container);
       const controls = controlsOf(container);
       expect(controls.length, `${container.className} exposed no reachable controls`).toBeGreaterThan(0);
       totalControls += controls.length;
       for (let i = 0; i < controls.length; i++) {
-        if (!(alreadyAtFirst && i === 0)) pressActive('ArrowDown');
+        pressActive('ArrowDown');
         const active = document.activeElement as HTMLElement;
         expect(active, `step ${i} in .${container.className.split(' ')[0]} landed on the wrong control`).toBe(
           controls[i],
@@ -1722,14 +1731,18 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
         visited.add(active);
         const openCls = Array.from(active.classList).find((c) => c in OPEN_TO_PANEL);
         if (openCls) {
-          activate(active); // opens the subpanel and refocuses ITS first control
+          activate(active); // opens the subpanel and focuses ITS container
           const subPanel = root.querySelector(`.${OPEN_TO_PANEL[openCls]}`) as HTMLElement;
-          walk(subPanel, true);
+          walk(subPanel);
           const back = root.querySelector(`.${BACK_OF_PANEL[OPEN_TO_PANEL[openCls]]}`) as HTMLButtonElement;
-          activate(back); // leave -- resets focus to controls[0] of THIS (title) panel
-          // Back always lands on index 0; replay i presses to resume exactly where this
-          // loop left off, so the loop's own next ArrowDown reaches index i + 1.
-          for (let k = 0; k < i; k++) pressActive('ArrowDown');
+          activate(back); // leave -- resets focus to THIS (title) panel's CONTAINER
+          expect(
+            document.activeElement,
+            'Back did not return focus to the panel container',
+          ).toBe(container);
+          // Container is index -1 again; replay i + 1 presses to resume exactly where
+          // this loop left off (control i), so the loop's own next ArrowDown reaches i+1.
+          for (let k = 0; k <= i; k++) pressActive('ArrowDown');
         }
       }
       // One more step proves the list is a closed CYCLE, not just a reachable line --
@@ -1740,7 +1753,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       );
     }
 
-    walk(root.querySelector('.hud-panel') as HTMLElement, false);
+    walk(root.querySelector('.hud-panel') as HTMLElement);
 
     // Denominator: 41, the live sum of controlsOf().length over the title panel and all
     // four subpanels, counted as `walk` actually visits each one (not asserted as a bare
@@ -1765,21 +1778,23 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     h.setState('title');
 
     let active = document.activeElement as HTMLElement;
-    while (!active.classList.contains('hud-levelselect-open')) {
+    while (!(active instanceof HTMLElement && active.classList.contains('hud-levelselect-open'))) {
       pressActive('ArrowDown');
       active = document.activeElement as HTMLElement;
     }
-    activate(active); // open Levels
+    activate(active); // open Levels -- focuses the .hud-levelselect CONTAINER
 
+    const levelSelectView = root.querySelector('.hud-levelselect') as HTMLElement;
+    expect(document.activeElement, 'opening Levels did not focus its container').toBe(
+      levelSelectView,
+    );
     const levelBtns = Array.from(
       root.querySelectorAll('.hud-level-btn'),
     ) as HTMLButtonElement[];
     expect(levelBtns).toHaveLength(4);
-    // Opening the panel already focused its first control (`focusFirstControl`, same as
-    // every other panel-open transition), so the first unlocked button is reached with
-    // NO press -- the 2 locked buttons must never appear in this list at all.
-    const reached: HTMLButtonElement[] = [document.activeElement as HTMLButtonElement];
-    for (let i = 0; i < 2; i++) {
+    // 2 unlocked level buttons + Back -- the 2 locked ones must never appear here.
+    const reached: HTMLButtonElement[] = [];
+    for (let i = 0; i < 3; i++) {
       pressActive('ArrowDown');
       reached.push(document.activeElement as HTMLButtonElement);
     }
@@ -1818,28 +1833,110 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     );
   });
 
-  it('auto-focuses the pause panel\'s Resume button, and Down reaches Quit', () => {
+  it('focuses the pause panel\'s CONTAINER (not Resume) so Escape-to-resume stays live', () => {
+    // The regression this shape exists to avoid: an earlier draft focused Resume
+    // directly on entering pause, on the reasoning that arriving already positioned
+    // saves a keypress. `isPauseHotkey`/`isMuteHotkey` (game/loop.ts) both ignore any
+    // key whose target sits inside a button, so that draft silently killed
+    // Escape-to-resume and M-to-mute the instant the pause panel opened -- which no
+    // test caught, because the only existing hotkey-liveness test covers splash ->
+    // title, not pause. This constructs the SAME kind of event those guards read,
+    // exactly as that test does, rather than trusting the class name alone.
     const { hud: h, root } = mount();
     h.setState('title');
+    h.setState('playing');
     h.setState('paused');
-    const action = root.querySelector('.hud-action') as HTMLButtonElement;
-    expect(document.activeElement, 'Resume was not focused on entering the pause panel').toBe(
-      action,
+    const panel = root.querySelector('.hud-panel') as HTMLElement;
+    const active = document.activeElement as HTMLElement;
+    expect(active, 'pause focused something other than the panel container').toBe(panel);
+    const ev = (key: string): KeyboardEvent =>
+      ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
+    expect(isPauseHotkey(ev('Escape')), 'Escape-to-resume is dead while paused').toBe(true);
+    expect(isMuteHotkey(ev('m')), 'M-to-mute is dead while paused').toBe(true);
+  });
+
+  it('reaches Resume then Quit from the pause panel with two ArrowDowns', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.setState('playing');
+    h.setState('paused');
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the first ArrowDown from pause did not reach Resume').toBe(
+      root.querySelector('.hud-action'),
     );
     pressActive('ArrowDown');
     expect(document.activeElement).toBe(root.querySelector('.hud-quit'));
   });
 
-  it('auto-focuses the single action button on the win and lose panels', () => {
+  it('keeps the menu hotkeys alive returning to title via a subpanel\'s Back button too', () => {
+    // The existing 'leaves the menu hotkeys alive after the title screen is dismissed'
+    // test (createHud panel) covers splash -> title only. Back -> title is a SEPARATE
+    // code path (setState('title') called from handleCustomizeBack, not from
+    // dismissSplash), and nothing else in this file proves it lands on the container
+    // rather than on Continue/New Game.
     const { hud: h, root } = mount();
+    h.setState('title');
+    (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
+    );
+    (root.querySelector('.hud-customize-back') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
+    );
+    const active = document.activeElement as HTMLElement;
+    expect(active.className, 'Back left focus somewhere other than the panel container').toContain(
+      'hud-panel',
+    );
+    const ev = (key: string): KeyboardEvent =>
+      ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
+    expect(isMuteHotkey(ev('m')), 'M is dead at the menu after Back').toBe(true);
+  });
+
+  it('auto-focuses the panel container, then reaches the action button, on win and lose', () => {
+    const { hud: h, root } = mount();
+    const panel = root.querySelector('.hud-panel') as HTMLElement;
     const action = root.querySelector('.hud-action') as HTMLButtonElement;
     h.setState('title');
     h.setState('playing');
     h.setState('win');
+    expect(document.activeElement, 'win focused something other than the panel container').toBe(
+      panel,
+    );
+    pressActive('ArrowDown');
     expect(document.activeElement).toBe(action);
     h.setState('playing');
     h.setState('lose');
+    expect(document.activeElement, 'lose focused something other than the panel container').toBe(
+      panel,
+    );
+    pressActive('ArrowDown');
     expect(document.activeElement).toBe(action);
+  });
+
+  it('never walks focus onto the audio row while its wrapper is display:none', () => {
+    // The bug the ancestor-walking `isHiddenWithin` in hud.ts exists to catch:
+    // `.hud-panel-settings` hides the audio row (panel Mute, the scheme and fire-mode
+    // toggles) as a GROUP on the win/lose panel, but each control's OWN `display`
+    // resolves to something other than `none` -- measured directly, a `getComputedStyle`
+    // check that only looked at the control itself would have included all three and
+    // walked the roving order onto invisible buttons on every win/lose screen.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.setState('playing');
+    h.setState('win'); // controls: the action button ALONE
+    const settings = root.querySelector('.hud-panel-settings') as HTMLElement;
+    expect(getComputedStyle(settings).display, 'test invalid: the wrapper is not actually hidden').toBe(
+      'none',
+    );
+    const panelMute = root.querySelector('.hud-panel-mute') as HTMLElement;
+    expect(
+      getComputedStyle(panelMute).display,
+      'test invalid: the control itself now also resolves display:none, which would make this pass for the wrong reason',
+    ).not.toBe('none');
+    pressActive('ArrowDown'); // reaches the action button
+    pressActive('ArrowDown'); // must WRAP back to the action button, not fall into the audio row
+    expect(document.activeElement, 'focus walked onto a control inside the hidden audio row').toBe(
+      root.querySelector('.hud-action'),
+    );
   });
 
   it('does not intercept arrow keys while playing, so input.ts still drives the tank', () => {
