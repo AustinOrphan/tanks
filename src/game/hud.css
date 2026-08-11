@@ -95,10 +95,43 @@
   display: none;
 }
 
-/* Focused programmatically when the title screen is dismissed, never by tabbing, so a
- * ring around the entire panel would be noise with nothing to explain it. */
-.hud-panel:focus {
+/* Every panel CONTAINER -- .hud-panel and its four siblings (.hud-stats, .hud-customize,
+ * .hud-achievements, .hud-levelselect) -- is focused programmatically on every panel-open
+ * transition, never by tabbing (hud.ts's roving focus lands on the container so
+ * isMuteHotkey/isPauseHotkey's focused-widget guard stays clear; see the doc comment
+ * above `activePanelContainer`), so a ring around the entire pane would be noise with
+ * nothing to explain it. */
+.hud-panel:focus,
+.hud-stats:focus,
+.hud-customize:focus,
+.hud-achievements:focus,
+.hud-levelselect:focus {
   outline: none;
+}
+
+/* ONE rule for every control the roving tabindex (hud.ts's `onNavKeyDown`) can land
+ * focus on, rather than a per-class list that a new button silently falls outside of --
+ * `.hud-preview:focus-visible` and `.hud-rotate-btn:focus-visible` below predate this
+ * and are left in place rather than merged, since removing them is a separate change
+ * with its own risk of a cascade-order surprise for no behavioural gain.
+ *
+ * `:focus-visible`, not `:focus`: `blurIfPointer` already drops focus after a pointer
+ * click specifically so a mouse player never sees a lingering ring, and `:focus` alone
+ * would repaint one for the instant between the click and that blur. `:focus-visible`
+ * is the browser's own heuristic for "this focus came from a keyboard (or similar),
+ * show the ring" -- it does not fire for a pointer activation at all, so the two
+ * conventions do not fight each other. */
+/* `:not([tabindex="-1"])` on purpose: every panel CONTAINER also carries a `[tabindex]`
+ * (its own `-1`, see the five `:focus { outline: none }` selectors above), and
+ * `[tabindex]` is as specific as a class, so a bare `.hud [tabindex]` would outrank
+ * those and paint a ring around the WHOLE pane on every panel-open transition -- which
+ * is every one of them, not just splash -> title, now that all five containers use the
+ * same trick. Excluding by the ATTRIBUTE VALUE rather than by listing five class names
+ * is what keeps this rule correct if a sixth panel is ever added. */
+.hud button:focus-visible,
+.hud [tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid #7fd0ff;
+  outline-offset: 2px;
 }
 
 /* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px

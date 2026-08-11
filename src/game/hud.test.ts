@@ -326,6 +326,55 @@ describe('createHud panel', () => {
     expect(starts, 'the first keyboard activation after a drag dismissal was eaten').toBe(1);
   });
 
+  it('does not eat a click after a drag dismissal followed by ARROW-KEY navigation', () => {
+    // The Tab test above cannot see this: roving focus (onNavKeyDown) claims arrow keys
+    // at window in the CAPTURE phase and stops propagation, which -- before the fix --
+    // starved el's own capture-phase disarm listener, so the pending swallow sat armed
+    // through any amount of arrow navigation and ate the next REAL click (Enter/Space
+    // self-corrects, a pointer click does not). The production change that breaks this:
+    // onNavKeyDown claiming a key without also disarming the pending panel-click swallow.
+    const { hud: h, root } = mount();
+    let picks = 0;
+    h.onLevelSelect(() => {
+      picks += 1;
+    });
+    h.setLevelSelect(2, 2);
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    h.setState('title'); // armed, and the drag's click never lands in the panel
+
+    // Arrow navigation instead of Tab -- the roving-focus path this file adds.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    (root.querySelector('.hud-new-game') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expect(picks, 'the first real click after drag-dismiss + arrow navigation was eaten').toBe(1);
+  });
+
+  it('claims a navigation key outright while a panel is open, and not while playing', () => {
+    // Pins onNavKeyDown's stopPropagation itself -- removing that call left every other
+    // test in this file green (measured by mutation in review), because the
+    // while-playing test only exercises the early-return branch that never reaches it.
+    // A second window-bound BUBBLE listener stands in for input.ts's own: it must not
+    // see a claimed key while a panel is open, and must see the same key while playing.
+    const { hud: h } = mount();
+    h.setState('title');
+    const seen: string[] = [];
+    const probe = (e: KeyboardEvent): void => {
+      seen.push(e.key);
+    };
+    window.addEventListener('keydown', probe);
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      expect(seen, 'a claimed key leaked past the roving-focus handler to a bubble listener').toEqual([]);
+      h.setState('playing');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      expect(seen, 'an unclaimed key while playing must still reach input.ts').toEqual(['ArrowDown']);
+    } finally {
+      window.removeEventListener('keydown', probe);
+    }
+  });
+
   it('draws the driving thumb where it landed, and clamps the knob to the throw', () => {
     const { hud: h, root } = mount();
     const viz = root.querySelector('.hud-touchviz') as HTMLElement;
@@ -1632,5 +1681,419 @@ describe('hud: the paint shop', () => {
     h.setState('title');
     h.setState('paused');
     expect(closes).toHaveLength(1);
+  });
+});
+
+describe('createHud roving-tabindex focus navigation (issue #115)', () => {
+  it('every focus-target container names itself from its own heading', () => {
+    // The five tabindex="-1" containers are what panel-open transitions focus; a bare
+    // div's accessible name is the flattened text of everything inside it, so each one
+    // carries aria-labelledby pointing at its own h1. Derived from the DOM, not a list:
+    // a sixth focusable container added without the attribute fails here. Breaks if an
+    // aria-labelledby is dropped, its id target renamed, or the target moves outside
+    // the container it names.
+    const { root } = mount();
+    const containers = Array.from(root.querySelectorAll<HTMLElement>('[tabindex="-1"]'));
+    expect(containers.length, '5 panel containers carry tabindex=-1 (panel + 4 subpanels)').toBe(5);
+    for (const c of containers) {
+      const ref = c.getAttribute('aria-labelledby');
+      expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
+      const target = root.querySelector(`#${ref}`);
+      expect(target, `${c.className}'s aria-labelledby (#${ref}) resolves to nothing`).not.toBeNull();
+      expect(c.contains(target), `${c.className}'s label lives outside the container it names`).toBe(true);
+      expect(target!.tagName, `${c.className}'s label is not its heading`).toBe('H1');
+    }
+  });
+
+  /** A real keydown, dispatched at whatever currently holds focus -- exactly what a
+   * browser delivers to `document.activeElement`, and what makes this reach the
+   * capture-phase `window` listener `onNavKeyDown` registers (a bubbling event fired at
+   * any connected descendant of `window` passes through it during capture, regardless
+   * of which node it is dispatched at). */
+  function pressActive(key: string): void {
+    (document.activeElement as HTMLElement).dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+    );
+  }
+
+  /** Keyboard activation: MouseEvent detail 0, the same convention `blurIfPointer`
+   * relies on elsewhere in this file (see 'does not keep keyboard focus after a
+   * pointer interaction' above) -- so entering a subpanel through this traversal does
+   * not blur the button the way a real pointer click would. */
+  function activate(el: HTMLElement): void {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+  }
+
+  /**
+   * Independently re-derives the exact predicate hud.ts's own (unexported)
+   * `focusableControls` applies, straight from the DOM rather than a maintained list --
+   * `button, [tabindex]`, filtered to not-disabled and not hidden by `display: none` on
+   * itself OR ON ANY ANCESTOR up to (not including) `container`. That ancestor walk
+   * matters: `.hud-panel-settings` hides the audio row as a GROUP on the win/lose panel,
+   * and `getComputedStyle` on a child inside it reports the child's OWN resolved
+   * display, not `none` (measured directly below), so a check that only looked at the
+   * element itself would disagree with a correct production predicate exactly where a
+   * hidden wrapper is involved -- which is exactly the drift this independent oracle
+   * exists to catch, not paper over by copying the bug.
+   */
+  function controlsOf(container: HTMLElement): HTMLElement[] {
+    const hiddenWithin = (el: HTMLElement): boolean => {
+      for (let n: HTMLElement | null = el; n && n !== container; n = n.parentElement) {
+        if (getComputedStyle(n).display === 'none') return true;
+      }
+      return false;
+    };
+    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
+      (el) => !(el instanceof HTMLButtonElement && el.disabled) && !hiddenWithin(el),
+    );
+  }
+
+  const OPEN_TO_PANEL: Record<string, string> = {
+    'hud-customize-open': 'hud-customize',
+    'hud-stats-open': 'hud-stats',
+    'hud-achievements-open': 'hud-achievements',
+    'hud-levelselect-open': 'hud-levelselect',
+  };
+  const BACK_OF_PANEL: Record<string, string> = {
+    'hud-customize': 'hud-customize-back',
+    'hud-stats': 'hud-stats-back',
+    'hud-achievements': 'hud-achievements-back',
+    'hud-levelselect': 'hud-levelselect-back',
+  };
+
+  it('reaches every visible, enabled control from the title screen using arrow keys alone', () => {
+    // The issue's own falsifiable assertion. 3 of 5 levels unlocked: exercises a
+    // reachable level button AND a locked one that must be SKIPPED, not merely
+    // disabled-but-focusable.
+    const { hud: h, root } = mount();
+    h.setLevelSelect(3, 5);
+    h.setState('title'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
+
+    let totalControls = 0;
+    const visited = new Set<HTMLElement>();
+
+    // Walks ONE panel's flat control list forward with ArrowDown, entering and leaving
+    // every subpanel it finds along the way via its own open/Back buttons (never via
+    // arrows -- activation is a separate, native concern; see the report). Recursive
+    // because a subpanel is walked exactly the same way the title panel is.
+    //
+    // EVERY panel-open transition -- the first splash -> title, a subpanel's own open
+    // button, and Back returning to title -- focuses that panel's CONTAINER, never a
+    // control (see the doc comment above `activePanelContainer` in hud.ts for why:
+    // focusing a button there killed Escape/M the instant the panel opened). So `walk`
+    // always starts at index -1 and its own first ArrowDown is what reaches controls[0],
+    // uniformly, with no "already there" special case.
+    function walk(container: HTMLElement): void {
+      expect(
+        document.activeElement,
+        `${container.className} was not focused as a CONTAINER on open`,
+      ).toBe(container);
+      const controls = controlsOf(container);
+      expect(controls.length, `${container.className} exposed no reachable controls`).toBeGreaterThan(0);
+      totalControls += controls.length;
+      for (let i = 0; i < controls.length; i++) {
+        pressActive('ArrowDown');
+        const active = document.activeElement as HTMLElement;
+        expect(active, `step ${i} in .${container.className.split(' ')[0]} landed on the wrong control`).toBe(
+          controls[i],
+        );
+        visited.add(active);
+        const openCls = Array.from(active.classList).find((c) => c in OPEN_TO_PANEL);
+        if (openCls) {
+          activate(active); // opens the subpanel and focuses ITS container
+          const subPanel = root.querySelector(`.${OPEN_TO_PANEL[openCls]}`) as HTMLElement;
+          walk(subPanel);
+          const back = root.querySelector(`.${BACK_OF_PANEL[OPEN_TO_PANEL[openCls]]}`) as HTMLButtonElement;
+          activate(back); // leave -- resets focus to THIS (title) panel's CONTAINER
+          expect(
+            document.activeElement,
+            'Back did not return focus to the panel container',
+          ).toBe(container);
+          // Container is index -1 again; replay i + 1 presses to resume exactly where
+          // this loop left off (control i), so the loop's own next ArrowDown reaches i+1.
+          for (let k = 0; k <= i; k++) pressActive('ArrowDown');
+        }
+      }
+      // One more step proves the list is a closed CYCLE, not just a reachable line --
+      // the last control wraps back to the first rather than dead-ending.
+      pressActive('ArrowDown');
+      expect(document.activeElement, `${container.className} did not wrap back to its first control`).toBe(
+        controls[0],
+      );
+    }
+
+    walk(root.querySelector('.hud-panel') as HTMLElement);
+
+    // Denominator: 41, the live sum of controlsOf().length over the title panel and all
+    // four subpanels, counted as `walk` actually visits each one (not asserted as a bare
+    // literal -- see below). It decomposes as 9 (title: Continue, New Game, the three
+    // open buttons, Levels-open, panel Mute, the scheme and fire-mode toggles) + 24
+    // (Customize: the preview canvas, its 4 rotate buttons, PALETTE.length 6 hull
+    // swatches, SKINS.length 7 skin buttons, ACCENTS.length 5 accent swatches, Back) + 3
+    // (Stats: Reset stats, Reset progress, Back) + 1 (Achievements: Back -- the list
+    // itself is plain divs, not focusable) + 4 (Levels: the 3 unlocked buttons this
+    // test's own `setLevelSelect(3, 5)` leaves reachable, plus Back). The two volume
+    // sliders and the topbar's own Mute are excluded by design -- see the roving-focus
+    // doc comment in hud.ts.
+    expect(totalControls, 'recount the panels above if this moves').toBe(41);
+    expect(visited.size, 'a control was reached more than once under a different identity').toBe(
+      totalControls,
+    );
+  });
+
+  it('skips locked level buttons when stepping through the Levels panel', () => {
+    const { hud: h, root } = mount();
+    h.setLevelSelect(2, 4); // levels 3 and 4 locked
+    h.setState('title');
+
+    let active = document.activeElement as HTMLElement;
+    while (!(active instanceof HTMLElement && active.classList.contains('hud-levelselect-open'))) {
+      pressActive('ArrowDown');
+      active = document.activeElement as HTMLElement;
+    }
+    activate(active); // open Levels -- focuses the .hud-levelselect CONTAINER
+
+    const levelSelectView = root.querySelector('.hud-levelselect') as HTMLElement;
+    expect(document.activeElement, 'opening Levels did not focus its container').toBe(
+      levelSelectView,
+    );
+    const levelBtns = Array.from(
+      root.querySelectorAll('.hud-level-btn'),
+    ) as HTMLButtonElement[];
+    expect(levelBtns).toHaveLength(4);
+    // 2 unlocked level buttons + Back -- the 2 locked ones must never appear here.
+    const reached: HTMLButtonElement[] = [];
+    for (let i = 0; i < 3; i++) {
+      pressActive('ArrowDown');
+      reached.push(document.activeElement as HTMLButtonElement);
+    }
+    expect(reached).toEqual([levelBtns[0], levelBtns[1], root.querySelector('.hud-levelselect-back')]);
+    expect(reached.some((b) => b.disabled), 'a disabled, locked level button was focused').toBe(false);
+  });
+
+  it('moves focus backward with ArrowUp, undoing an ArrowDown step', () => {
+    // A spot check, not a re-sweep of the whole panel -- the traversal test above
+    // already proves the forward order for every control; this pins one adjacent pair
+    // (of however many the title panel exposes) to check that reversing the direction
+    // key reverses the step, not the full sweep that test performs.
+    const { hud: h } = mount();
+    h.setLevelSelect(3, 5);
+    h.setState('title');
+    pressActive('ArrowDown');
+    const first = document.activeElement;
+    pressActive('ArrowDown');
+    const second = document.activeElement;
+    expect(second).not.toBe(first);
+    pressActive('ArrowUp');
+    expect(document.activeElement, 'ArrowUp did not undo the previous ArrowDown').toBe(first);
+  });
+
+  it('treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach', () => {
+    const { hud: h } = mount();
+    h.setState('title');
+    pressActive('s');
+    const afterS = document.activeElement;
+    pressActive('ArrowDown');
+    const afterArrowDown = document.activeElement;
+    expect(afterArrowDown, 's did not move focus the same way ArrowDown does').not.toBe(afterS);
+    pressActive('w');
+    expect(document.activeElement, 'w did not undo the previous step, as ArrowUp does').toBe(
+      afterS,
+    );
+  });
+
+  it('focuses the pause panel\'s CONTAINER (not Resume) so Escape-to-resume stays live', () => {
+    // The regression this shape exists to avoid: an earlier draft focused Resume
+    // directly on entering pause, on the reasoning that arriving already positioned
+    // saves a keypress. `isPauseHotkey`/`isMuteHotkey` (game/loop.ts) both ignore any
+    // key whose target sits inside a button, so that draft silently killed
+    // Escape-to-resume and M-to-mute the instant the pause panel opened -- which no
+    // test caught, because the only existing hotkey-liveness test covers splash ->
+    // title, not pause. This constructs the SAME kind of event those guards read,
+    // exactly as that test does, rather than trusting the class name alone.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.setState('playing');
+    h.setState('paused');
+    const panel = root.querySelector('.hud-panel') as HTMLElement;
+    const active = document.activeElement as HTMLElement;
+    expect(active, 'pause focused something other than the panel container').toBe(panel);
+    const ev = (key: string): KeyboardEvent =>
+      ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
+    expect(isPauseHotkey(ev('Escape')), 'Escape-to-resume is dead while paused').toBe(true);
+    expect(isMuteHotkey(ev('m')), 'M-to-mute is dead while paused').toBe(true);
+  });
+
+  it('reaches Resume then Quit from the pause panel with two ArrowDowns', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.setState('playing');
+    h.setState('paused');
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the first ArrowDown from pause did not reach Resume').toBe(
+      root.querySelector('.hud-action'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement).toBe(root.querySelector('.hud-quit'));
+  });
+
+  it('keeps the menu hotkeys alive returning to title via a subpanel\'s Back button too', () => {
+    // The existing 'leaves the menu hotkeys alive after the title screen is dismissed'
+    // test (createHud panel) covers splash -> title only. Back -> title is a SEPARATE
+    // code path (setState('title') called from handleCustomizeBack, not from
+    // dismissSplash), and nothing else in this file proves it lands on the container
+    // rather than on Continue/New Game.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
+    );
+    (root.querySelector('.hud-customize-back') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
+    );
+    const active = document.activeElement as HTMLElement;
+    expect(active.className, 'Back left focus somewhere other than the panel container').toContain(
+      'hud-panel',
+    );
+    const ev = (key: string): KeyboardEvent =>
+      ({ key, repeat: false, target: active }) as unknown as KeyboardEvent;
+    expect(isMuteHotkey(ev('m')), 'M is dead at the menu after Back').toBe(true);
+  });
+
+  it('auto-focuses the panel container, then reaches the action button, on win and lose', () => {
+    const { hud: h, root } = mount();
+    const panel = root.querySelector('.hud-panel') as HTMLElement;
+    const action = root.querySelector('.hud-action') as HTMLButtonElement;
+    h.setState('title');
+    h.setState('playing');
+    h.setState('win');
+    expect(document.activeElement, 'win focused something other than the panel container').toBe(
+      panel,
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement).toBe(action);
+    h.setState('playing');
+    h.setState('lose');
+    expect(document.activeElement, 'lose focused something other than the panel container').toBe(
+      panel,
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement).toBe(action);
+  });
+
+  it('never walks focus onto the audio row while its wrapper is display:none', () => {
+    // The bug the ancestor-walking `isHiddenWithin` in hud.ts exists to catch:
+    // `.hud-panel-settings` hides the audio row (panel Mute, the scheme and fire-mode
+    // toggles) as a GROUP on the win/lose panel, but each control's OWN `display`
+    // resolves to something other than `none` -- measured directly, a `getComputedStyle`
+    // check that only looked at the control itself would have included all three and
+    // walked the roving order onto invisible buttons on every win/lose screen.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.setState('playing');
+    h.setState('win'); // controls: the action button ALONE
+    const settings = root.querySelector('.hud-panel-settings') as HTMLElement;
+    expect(getComputedStyle(settings).display, 'test invalid: the wrapper is not actually hidden').toBe(
+      'none',
+    );
+    const panelMute = root.querySelector('.hud-panel-mute') as HTMLElement;
+    expect(
+      getComputedStyle(panelMute).display,
+      'test invalid: the control itself now also resolves display:none, which would make this pass for the wrong reason',
+    ).not.toBe('none');
+    pressActive('ArrowDown'); // reaches the action button
+    pressActive('ArrowDown'); // must WRAP back to the action button, not fall into the audio row
+    expect(document.activeElement, 'focus walked onto a control inside the hidden audio row').toBe(
+      root.querySelector('.hud-action'),
+    );
+  });
+
+  it('does not intercept arrow keys while playing, so input.ts still drives the tank', () => {
+    // The state-aware boundary this whole feature has to respect: no panel is visible
+    // while playing, so `activePanelContainer` must return null and the handler must
+    // return before calling preventDefault -- otherwise input.ts's own window listener,
+    // which registers AFTER this one in a real boot and so runs strictly later, would
+    // never see the key at all.
+    const { hud: h } = mount();
+    h.setState('title');
+    h.setState('playing');
+    document.body.focus();
+    const ev = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(ev);
+    expect(ev.defaultPrevented, 'a playing-state ArrowDown was swallowed by the HUD nav').toBe(
+      false,
+    );
+  });
+
+  it('leaves the volume slider in full control of its own arrow keys', () => {
+    // input.ts's WIDGET_KEYS already gives a focused range input every arrow key for
+    // its own value adjustment (see its doc comment on Right Arrow strafing instead of
+    // moving the slider); this file's roving nav must not re-litigate that. Production
+    // change that would break this: dropping the `e.target instanceof HTMLInputElement`
+    // early return in `onNavKeyDown`.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    const slider = root.querySelector('.hud-panel-volume') as HTMLInputElement;
+    slider.focus();
+    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+      const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      slider.dispatchEvent(ev);
+      expect(document.activeElement, `${key} moved focus off the slider`).toBe(slider);
+      expect(ev.defaultPrevented, `${key} was swallowed instead of left to the slider`).toBe(false);
+    }
+  });
+
+  it('leaves ArrowLeft/ArrowRight on the preview canvas for its own rotation scheme', () => {
+    // render/preview-controls.ts binds its own keydown DIRECTLY to the canvas (not at
+    // window), so this file cannot see whether that scheme still fires -- what it CAN
+    // pin is that its own capture-phase handler, which runs strictly before a
+    // target-bound listener ever sees the event, gets out of the way for Left/Right and
+    // does not for the axis the canvas never claims. Production change that would break
+    // this: dropping the `e.target === previewCanvasEl` carve-out for lateral keys.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
+    );
+    // LOAD-BEARING, not clarity: showCustomize(true) focuses the PANE (customizeView),
+    // never the canvas -- nothing in hud.ts ever calls previewCanvas.focus(). Delete
+    // this line and the assertion below tests the wrong element.
+    h.previewCanvas.focus();
+    for (const key of ['ArrowLeft', 'ArrowRight']) {
+      const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      h.previewCanvas.dispatchEvent(ev);
+      expect(document.activeElement, `${key} moved focus off the canvas`).toBe(h.previewCanvas);
+      expect(ev.defaultPrevented, `${key} was claimed by the HUD nav instead of the canvas`).toBe(
+        false,
+      );
+    }
+    const down = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
+    h.previewCanvas.dispatchEvent(down);
+    expect(document.activeElement, 'ArrowDown did not move focus off the canvas').not.toBe(
+      h.previewCanvas,
+    );
+  });
+
+  it('removes its own capture-phase window keydown listener on dispose', () => {
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    const removeSpy = vi.spyOn(window, 'removeEventListener');
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const h = createHud(root);
+
+    const added = addSpy.mock.calls.find(
+      (c) => c[0] === 'keydown' && c[2] === true,
+    );
+    expect(added, 'no capture-phase keydown listener was registered at window').toBeDefined();
+
+    h.dispose();
+
+    const removed = removeSpy.mock.calls.find(
+      (c) => c[0] === 'keydown' && c[1] === added![1] && c[2] === true,
+    );
+    expect(removed, 'dispose did not remove the capture-phase keydown listener it added').toBeDefined();
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 });

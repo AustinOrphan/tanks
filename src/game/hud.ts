@@ -291,8 +291,12 @@ export function createHud(root: HTMLElement): Hud {
       <p class="hud-splash-hint">Press any key or tap to begin</p>
     </div>
     <div class="hud-toasts" aria-live="polite"></div>
-    <div class="hud-achievements hud-achievements--hidden">
-      <h1>Achievements</h1>
+    <!-- tabindex="-1" for the same reason .hud-panel carries one: it is what lets
+         showAchievements(true) focus the PANE rather than its first button, keeping
+         isMuteHotkey/isPauseHotkey's target.closest('button,...') guard from going dead
+         the moment this pane opens (see setState's own comment on the same trick). -->
+    <div class="hud-achievements hud-achievements--hidden" tabindex="-1" aria-labelledby="hud-achievements-title">
+      <h1 id="hud-achievements-title">Achievements</h1>
       <p class="hud-achievements-count"></p>
       <div class="hud-achievement-list"></div>
       <button class="hud-achievements-back" type="button">Back</button>
@@ -304,13 +308,13 @@ export function createHud(root: HTMLElement): Hud {
          setState like its siblings. The .hud-levels row carries no hidden class of its
          own -- the panel wrapper is the one chokepoint, same as .hud-achievement-list
          inside .hud-achievements. -->
-    <div class="hud-levelselect hud-levelselect--hidden">
-      <h1>Levels</h1>
+    <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1" aria-labelledby="hud-levelselect-title">
+      <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
       <button class="hud-levelselect-back" type="button">Back</button>
     </div>
-    <div class="hud-customize hud-customize--hidden">
-      <h1>Customize</h1>
+    <div class="hud-customize hud-customize--hidden" tabindex="-1" aria-labelledby="hud-customize-title">
+      <h1 id="hud-customize-title">Customize</h1>
       <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
            this canvas, using the SAME tank-building code (render/entities.ts) and skin
            textures (render/skins.ts) the game itself uses -- not a depiction of the
@@ -370,8 +374,8 @@ export function createHud(root: HTMLElement): Hud {
       </section>
       <button class="hud-customize-back" type="button">Back</button>
     </div>
-    <div class="hud-stats hud-stats--hidden">
-      <h1>Stats</h1>
+    <div class="hud-stats hud-stats--hidden" tabindex="-1" aria-labelledby="hud-stats-title">
+      <h1 id="hud-stats-title">Stats</h1>
       <table class="hud-stats-table"></table>
       <div class="hud-stats-actions">
         <button class="hud-reset-stats hud-danger" type="button">Reset stats</button>
@@ -379,13 +383,25 @@ export function createHud(root: HTMLElement): Hud {
         <button class="hud-stats-back" type="button">Back</button>
       </div>
     </div>
-    <!-- tabindex="-1" so the menu can RECEIVE focus when the title screen is dismissed
-         without joining the tab order. It must be this container and not the Start
-         button: isMuteHotkey/isPauseHotkey both ignore a key whose target is inside
-         input, button, select or textarea, so focusing the button leaves M and Escape
-         dead at the menu -- measured in a browser, and a regression against main. -->
-    <div class="hud-panel hud-panel--hidden" tabindex="-1">
-      <h1 class="hud-title"></h1>
+    <!-- tabindex="-1" so the menu can RECEIVE focus on every panel-open transition
+         (setState('title'/'paused'/'win'/'lose')) without joining the tab order. It must
+         be this container and not a button inside it (Start, Resume, ...):
+         isMuteHotkey/isPauseHotkey both ignore a key whose target is inside input,
+         button, select or textarea, so focusing a button leaves M and Escape dead the
+         moment the panel opens -- measured in a browser, and a regression against main
+         that was tried once for the "land already on a control" version of this and
+         reverted. -->
+    <!-- aria-labelledby on all five focus-target containers: a bare tabindex="-1" div's
+         accessible name is the flattened text of EVERYTHING inside it (measured via CDP
+         Accessibility.queryAXTree in review -- role generic, name = heading + subtitle +
+         every button label concatenated), so pointing each at its own h1 gives the
+         screen reader a concise name instead. The panel's h1 changes text per state
+         (TANKS!/Paused/You Win...), which is exactly what the name should be. aria-*
+         attributes cannot match isMuteHotkey/isPauseHotkey's
+         closest('input,button,select,textarea') guard, so this cannot reopen the dead-
+         hotkey bug the container-focus decision exists to avoid. -->
+    <div class="hud-panel hud-panel--hidden" tabindex="-1" aria-labelledby="hud-panel-title">
+      <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
       <p class="hud-run-summary hud-run-summary--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
@@ -759,7 +775,12 @@ export function createHud(root: HTMLElement): Hud {
     disarmReset(); // entering OR leaving, no reset stays one click from firing
     statsView.classList.toggle('hud-stats--hidden', !show);
     panel.classList.toggle('hud-panel--hidden', show);
-    if (show) renderStatsTable();
+    if (show) {
+      renderStatsTable();
+      // The PANE, not its first button -- see the roving-focus doc comment below on why
+      // every panel-open transition focuses the container rather than a control.
+      statsView.focus();
+    }
   }
 
   // The single chokepoint for both the panel's own Back button AND setState's
@@ -774,6 +795,7 @@ export function createHud(root: HTMLElement): Hud {
       renderSwatchSelection();
       renderSkinSelection();
       renderAccentSelection();
+      customizeView.focus(); // the pane, not the canvas -- see the roving-focus comment below
       if (!wasOpen) for (const cb of customizeOpenCbs) cb();
     } else if (wasOpen) {
       for (const cb of customizeCloseCbs) cb();
@@ -806,7 +828,10 @@ export function createHud(root: HTMLElement): Hud {
   function showAchievements(show: boolean): void {
     achView.classList.toggle('hud-achievements--hidden', !show);
     panel.classList.toggle('hud-panel--hidden', show);
-    if (show) renderAchievements();
+    if (show) {
+      renderAchievements();
+      achView.focus();
+    }
   }
 
   // Same shape as showAchievements: no open/close callbacks (nothing here owns a WebGL
@@ -815,7 +840,151 @@ export function createHud(root: HTMLElement): Hud {
   function showLevelSelect(show: boolean): void {
     levelSelectView.classList.toggle('hud-levelselect--hidden', !show);
     panel.classList.toggle('hud-panel--hidden', show);
+    if (show) levelSelectView.focus();
   }
+
+  /**
+   * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
+   *
+   * Only ONE of `panel`/`customizeView`/`statsView`/`achView`/`levelSelectView` is ever
+   * visible at a time -- every showX(true) hides `panel`, and setState's top
+   * unconditionally closes the three subpanels that do not own a hide chokepoint of
+   * their own, so `activePanelContainer` can just return the first one found visible.
+   * `null` (nothing visible, i.e. `splash` or `playing`) is the signal to do nothing and
+   * let the key fall through to `input.ts` -- arrows must keep driving the tank while
+   * playing, which this file must not regress.
+   *
+   * A control is anything `button, [tabindex]` finds that is not disabled and not
+   * `display: none` -- the SAME predicate a reachability test can build from the DOM
+   * itself, so a button added to a panel and never wired into this sweep cannot happen:
+   * it is swept by construction, not by a maintained list. `input[type=range]` never
+   * matches either selector (no default `tabindex` attribute, and it is not a
+   * `<button>`), which is what keeps the two volume sliders out of the roving order --
+   * input.ts's own `WIDGET_KEYS` already gives a focused slider full ownership of all
+   * four arrow keys (see its doc comment on Right Arrow strafing instead of moving one),
+   * and fighting that here would break the slider rather than extend it. A slider stays
+   * reachable by Tab, exactly as it was before this file existed.
+   *
+   * EVERY panel-open transition focuses the CONTAINER, never a control inside it --
+   * `showStats`/`showCustomize`/`showAchievements`/`showLevelSelect` above and setState's
+   * paused/win/lose/title branches below all call `.focus()` on the pane itself, which is
+   * exactly what `.hud-panel`'s own pre-existing `tabindex="-1"` did for the one
+   * transition this file used to handle (splash -> title) -- the other four panes now
+   * carry the same attribute for the same reason. An EARLIER version of this focused each
+   * pane's first CONTROL instead, on the reasoning that arriving already positioned saves
+   * a keypress. That reasoning was wrong: `isMuteHotkey`/`isPauseHotkey`
+   * (`game/loop.ts`) both ignore any key whose `target.closest('input,button,select,
+   * textarea')` matches, so focusing a real button on entry -- Resume on the pause panel,
+   * Continue/New Game back at title -- silently killed Escape-to-resume and M-to-mute the
+   * moment the panel opened. A plain `<div tabindex="-1">` never matches that selector, so
+   * the container is the one target that can carry focus without going near that guard.
+   * `moveFocus`'s `idx < 0` branch is what makes this free: the first ArrowDown from the
+   * container lands on control[0] exactly as it would have if this landed there directly.
+   */
+  function activePanelContainer(): HTMLElement | null {
+    for (const c of [panel, customizeView, statsView, achView, levelSelectView]) {
+      if (getComputedStyle(c).display !== 'none') return c;
+    }
+    return null;
+  }
+
+  /**
+   * Walks up from `el` to (not including) `container`, so a control whose own
+   * `display` resolves to something other than `none` but sits inside a hidden
+   * WRAPPER -- `.hud-panel-settings` on the win/lose panel, which hides the audio row
+   * as a group rather than each control individually -- is still excluded. Measured:
+   * `getComputedStyle` on a `<button>` inside a `display:none` ancestor reports the
+   * button's OWN resolved display (e.g. `inline-block`), not `none` -- computed style is
+   * per-element, not "as rendered" -- so `focusableControls` checking only the control
+   * itself would have walked the roving order onto three invisible buttons on every
+   * win/lose screen.
+   */
+  function isHiddenWithin(el: HTMLElement, container: HTMLElement): boolean {
+    for (let node: HTMLElement | null = el; node && node !== container; node = node.parentElement) {
+      if (getComputedStyle(node).display === 'none') return true;
+    }
+    return false;
+  }
+
+  function focusableControls(container: HTMLElement): HTMLElement[] {
+    return Array.from(container.querySelectorAll<HTMLElement>('button, [tabindex]')).filter(
+      (el) => {
+        if (el instanceof HTMLButtonElement && el.disabled) return false; // locked levels
+        const ti = el.getAttribute('tabindex');
+        if (ti !== null && Number(ti) < 0) return false; // none today, but future-proof
+        return !isHiddenWithin(el, container);
+      },
+    );
+  }
+
+  /**
+   * Move the roving-tabindex focus one step within whichever panel is showing.
+   * `dir` is +1 (the direction Down/Right/S move) or -1 (Up/Left/W). Factored out from
+   * the key handler so a gamepad D-pad -- issue #114, not built here -- can call this
+   * exact function later and inherit every panel's traversal for free.
+   *
+   * Wrapping, not clamping: with no "past the end" state to fall off, the exact same
+   * ArrowDown press that reaches the last control also proves the cycle closes, which
+   * is what the reachability test asserts.
+   *
+   * `idx < 0` covers two real starting points, not one: focus sitting on the panel
+   * CONTAINER itself (just after `panel.focus()`, tabindex -1, not in the control list)
+   * and focus sitting on something this sweep does not track at all (the topbar's own
+   * Mute button, reachable by Tab independently of the panel). Both land on the first
+   * control going forward and the last one going backward, which is a reasonable
+   * default for either case rather than a special error path.
+   */
+  function moveFocus(container: HTMLElement, dir: 1 | -1): void {
+    const list = focusableControls(container);
+    if (list.length === 0) return;
+    const active = document.activeElement;
+    const idx = active instanceof HTMLElement ? list.indexOf(active) : -1;
+    const next = idx < 0 ? (dir > 0 ? 0 : list.length - 1) : (idx + dir + list.length) % list.length;
+    list[next].focus();
+  }
+
+  /**
+   * The window-level keydown handler that drives roving focus. Bound at `window` in the
+   * CAPTURE phase -- not on `el` -- for two reasons. Capture at `window` runs before the
+   * event ever reaches its target, so it sees the key regardless of what currently holds
+   * focus (including `<body>`, which an `el`-scoped bubble listener could never see: an
+   * event whose target is outside `el`'s subtree never bubbles through `el` at all).
+   * And capture always precedes bubble, so this handler is guaranteed to run before
+   * input.ts's OWN `window.addEventListener('keydown', ...)` -- which is bubble-phase --
+   * no matter which of the two modules happens to construct first; `stopPropagation`
+   * here during capture cancels the rest of that dispatch outright, so input.ts's
+   * listener never runs for a key this function has claimed.
+   *
+   * Up/Down (and W/S) always move the roving focus. Left/Right do too, EXCEPT while the
+   * Customize preview canvas is focused: `render/preview-controls.ts` binds its own
+   * `keydown` directly to that canvas to turn the hull (`Shift` for the turret), and
+   * because that listener sits at the TARGET rather than at `window`, this capture-phase
+   * handler would otherwise run first and steal Left/Right before the canvas ever saw
+   * them. The one-element carve-out is what keeps that scheme intact; Up/Down are not
+   * claimed by the canvas at all, so they still move focus off it in either direction.
+   */
+  const onNavKeyDown = (e: KeyboardEvent): void => {
+    if (e.target instanceof HTMLInputElement) return; // the two volume sliders keep all four arrows
+    const key = e.key.toLowerCase();
+    const isVertical = key === 'arrowdown' || key === 'arrowup' || key === 's' || key === 'w';
+    const isLateral = key === 'arrowleft' || key === 'arrowright';
+    if (!isVertical && !isLateral) return;
+    if (isLateral && e.target === previewCanvasEl) return; // the preview owns its own scheme
+    const container = activePanelContainer();
+    if (!container) return; // nothing shown (splash/playing): let input.ts drive the tank
+    const dir: 1 | -1 = key === 'arrowup' || key === 'w' ? -1 : key === 'arrowleft' ? -1 : 1;
+    // Claiming the key stops the WHOLE remaining dispatch -- including el's own
+    // capture-phase `disarm` listener, which clears the pending drag-dismiss click
+    // swallow on any key. Found by mutation in review: without this call, a player who
+    // drag-dismissed the splash and then navigated by ARROW keys (rather than Tab,
+    // which is not claimed here) had the next real click silently eaten. Any key that
+    // moves focus must disarm exactly as an unclaimed key would have.
+    disarm();
+    e.preventDefault();
+    e.stopPropagation();
+    moveFocus(container, dir);
+  };
+  window.addEventListener('keydown', onNavKeyDown, true);
 
   // Each toast owns its own timer, so several landing at once stack and expire
   // independently. Timers are tracked to be cleared in dispose(): a pending
@@ -978,8 +1147,6 @@ export function createHud(root: HTMLElement): Hud {
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: GameState = 'splash';
-  /** Previous state, so leaving the splash can hand focus somewhere useful. */
-  let lastState: GameState = 'splash';
   const levelSelectCbs: Array<(level: number) => void> = [];
 
   const handleLevelSelectOpen = (): void => showLevelSelect(true);
@@ -1021,12 +1188,6 @@ export function createHud(root: HTMLElement): Hud {
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
     // and a Mine button on the menu lays nothing.
     touchRow.classList.toggle('hud-touch--hidden', s !== 'playing');
-    // Leaving the title screen hands focus to the menu's primary action. Without it
-    // `document.activeElement` is still <body> when the menu appears, so a
-    // keyboard-only player has to Tab in from nowhere and a screen reader announces
-    // nothing at all -- the overlay simply vanishes.
-    const leavingSplash = lastState === 'splash' && s !== 'splash';
-    lastState = s;
     // The topbar is the only chrome that outranks the menu panel, so it is also the
     // only thing that would show through on the title screen.
     topbarEl.classList.toggle('hud-topbar--hidden', s === 'splash');
@@ -1064,13 +1225,26 @@ export function createHud(root: HTMLElement): Hud {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
       actionBtn.textContent = 'Resume';
+      // The PANEL, not actionBtn -- see the tabindex note on the element and the
+      // roving-focus doc comment above `activePanelContainer`. Focusing Resume directly
+      // used to be tried here and reverted: `isPauseHotkey` ignores any key whose target
+      // sits inside a button, so it made Escape-to-resume go dead the instant the pause
+      // panel opened -- measured by constructing the same event that guard reads and
+      // finding it return false. A div can never match that guard.
+      panel.focus();
       return; // do NOT fall through: the final else renders a Game Over corpse screen
     }
+    // The panel, NOT actionBtn/Continue/New Game -- see the tabindex note on the element
+    // and the roving-focus doc comment above `activePanelContainer`. Without this,
+    // `document.activeElement` is still <body> when the menu appears (leaving the splash
+    // screen with nothing focused), or -- on a route back from a subpanel's Back button --
+    // whatever the subpanel's own container last held, in both cases stranding a
+    // keyboard-only player with no visible position and a screen reader announcing
+    // nothing.
+    panel.focus();
     if (s === 'title') {
       titleEl.textContent = 'TANKS!';
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
-      // The panel, NOT actionBtn -- see the tabindex note on the element.
-      if (leavingSplash) panel.focus();
     } else if (s === 'win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {
@@ -1365,6 +1539,7 @@ export function createHud(root: HTMLElement): Hud {
       disarmReset(); // a pending confirm timer must not outlive the HUD
       for (const t of toastTimers) clearTimeout(t);
       toastTimers.clear();
+      window.removeEventListener('keydown', onNavKeyDown, true);
       splashEl.removeEventListener('pointerdown', onSplashPointerDown);
       panel.removeEventListener('click', onPanelClickCapture, true);
       el.removeEventListener('pointerdown', disarm, true);
