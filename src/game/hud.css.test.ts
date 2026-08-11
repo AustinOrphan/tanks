@@ -449,6 +449,34 @@ describe('hud.css is syntactically whole', () => {
     expect(src.slice(start, src.indexOf('}', start))).toContain('outline:');
   });
 
+  it('shows focus on every control the roving tabindex can land on, generically', () => {
+    // hud.ts's onNavKeyDown (issue #115) moves real DOM focus between whatever
+    // `button, [tabindex]` finds -- which by construction covers every button this or a
+    // future panel adds, not a maintained list. The ring has to be equally generic, or a
+    // new button would navigate to silently and show no ring at all.
+    //
+    // TEXT only, like the two focus-visible checks above and for the same reason stated
+    // there: jsdom's `getComputedStyle` does not recompute a dynamic pseudo-class --
+    // measured directly, a bare `button:focus { outline: 3px solid blue }` rule in a
+    // live `<style>` reports `outlineStyle: 'none'` after a real `.focus()`, even though
+    // `btn.matches(':focus')` correctly reports `true` at the same moment. So a
+    // computed-style assertion here would report EVERY focus-visible rule in this file
+    // as absent whether it is wired or not, which is worse than reading the text -- the
+    // same shape of gap this file's own doc comment names for `max()`/`env()`.
+    const src = stripComments(css);
+    expect(src, 'no generic focus-visible rule for HUD buttons').toContain(
+      '.hud button:focus-visible',
+    );
+    const start = src.indexOf('.hud button:focus-visible');
+    const block = src.slice(start, src.indexOf('}', start));
+    expect(block).toContain('outline:');
+    // ...and it must not also ring the .hud-panel CONTAINER, which programmatic focus
+    // lands on exactly once (leaving the splash screen) and which already declares its
+    // own `:focus { outline: none }` -- a ring here would fight it, and `[tabindex]` is
+    // exactly as specific as a class, so a bare `.hud [tabindex]` would win that fight.
+    expect(block, 'the generic rule rings the panel container too').toContain(':not(.hud-panel)');
+  });
+
   it('keeps the narrow-viewport rules the phone layout needs', () => {
     // Measured on a 393px-wide phone before this existed: the volume slider ran 35px
     // PAST the viewport edge and the topbar wrapped to 72px tall, eating the top of the

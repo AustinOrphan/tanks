@@ -101,6 +101,28 @@
   outline: none;
 }
 
+/* ONE rule for every control the roving tabindex (hud.ts's `onNavKeyDown`) can land
+ * focus on, rather than a per-class list that a new button silently falls outside of --
+ * `.hud-preview:focus-visible` and `.hud-rotate-btn:focus-visible` below predate this
+ * and are left in place rather than merged, since removing them is a separate change
+ * with its own risk of a cascade-order surprise for no behavioural gain.
+ *
+ * `:focus-visible`, not `:focus`: `blurIfPointer` already drops focus after a pointer
+ * click specifically so a mouse player never sees a lingering ring, and `:focus` alone
+ * would repaint one for the instant between the click and that blur. `:focus-visible`
+ * is the browser's own heuristic for "this focus came from a keyboard (or similar),
+ * show the ring" -- it does not fire for a pointer activation at all, so the two
+ * conventions do not fight each other. */
+/* `:not(.hud-panel)` on purpose: that container also carries a `[tabindex]` (see
+ * above), and `[tabindex]` is as specific as a class, so a bare `.hud [tabindex]`
+ * would outrank `.hud-panel:focus` and paint a ring around the WHOLE menu on the one
+ * transition (leaving the splash screen) that focuses the container itself. */
+.hud button:focus-visible,
+.hud [tabindex]:not(.hud-panel):focus-visible {
+  outline: 2px solid #7fd0ff;
+  outline-offset: 2px;
+}
+
 /* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px
  * PAST the viewport edge and the row wrapped to 72px tall, eating the top of the board.
  * Shrink the type, tighten the gaps and narrow the slider so it stays one row.
