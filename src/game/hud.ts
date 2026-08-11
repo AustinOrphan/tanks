@@ -295,8 +295,8 @@ export function createHud(root: HTMLElement): Hud {
          showAchievements(true) focus the PANE rather than its first button, keeping
          isMuteHotkey/isPauseHotkey's target.closest('button,...') guard from going dead
          the moment this pane opens (see setState's own comment on the same trick). -->
-    <div class="hud-achievements hud-achievements--hidden" tabindex="-1">
-      <h1>Achievements</h1>
+    <div class="hud-achievements hud-achievements--hidden" tabindex="-1" aria-labelledby="hud-achievements-title">
+      <h1 id="hud-achievements-title">Achievements</h1>
       <p class="hud-achievements-count"></p>
       <div class="hud-achievement-list"></div>
       <button class="hud-achievements-back" type="button">Back</button>
@@ -308,13 +308,13 @@ export function createHud(root: HTMLElement): Hud {
          setState like its siblings. The .hud-levels row carries no hidden class of its
          own -- the panel wrapper is the one chokepoint, same as .hud-achievement-list
          inside .hud-achievements. -->
-    <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1">
-      <h1>Levels</h1>
+    <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1" aria-labelledby="hud-levelselect-title">
+      <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
       <button class="hud-levelselect-back" type="button">Back</button>
     </div>
-    <div class="hud-customize hud-customize--hidden" tabindex="-1">
-      <h1>Customize</h1>
+    <div class="hud-customize hud-customize--hidden" tabindex="-1" aria-labelledby="hud-customize-title">
+      <h1 id="hud-customize-title">Customize</h1>
       <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
            this canvas, using the SAME tank-building code (render/entities.ts) and skin
            textures (render/skins.ts) the game itself uses -- not a depiction of the
@@ -374,8 +374,8 @@ export function createHud(root: HTMLElement): Hud {
       </section>
       <button class="hud-customize-back" type="button">Back</button>
     </div>
-    <div class="hud-stats hud-stats--hidden" tabindex="-1">
-      <h1>Stats</h1>
+    <div class="hud-stats hud-stats--hidden" tabindex="-1" aria-labelledby="hud-stats-title">
+      <h1 id="hud-stats-title">Stats</h1>
       <table class="hud-stats-table"></table>
       <div class="hud-stats-actions">
         <button class="hud-reset-stats hud-danger" type="button">Reset stats</button>
@@ -391,8 +391,17 @@ export function createHud(root: HTMLElement): Hud {
          moment the panel opens -- measured in a browser, and a regression against main
          that was tried once for the "land already on a control" version of this and
          reverted. -->
-    <div class="hud-panel hud-panel--hidden" tabindex="-1">
-      <h1 class="hud-title"></h1>
+    <!-- aria-labelledby on all five focus-target containers: a bare tabindex="-1" div's
+         accessible name is the flattened text of EVERYTHING inside it (measured via CDP
+         Accessibility.queryAXTree in review -- role generic, name = heading + subtitle +
+         every button label concatenated), so pointing each at its own h1 gives the
+         screen reader a concise name instead. The panel's h1 changes text per state
+         (TANKS!/Paused/You Win...), which is exactly what the name should be. aria-*
+         attributes cannot match isMuteHotkey/isPauseHotkey's
+         closest('input,button,select,textarea') guard, so this cannot reopen the dead-
+         hotkey bug the container-focus decision exists to avoid. -->
+    <div class="hud-panel hud-panel--hidden" tabindex="-1" aria-labelledby="hud-panel-title">
+      <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
       <p class="hud-run-summary hud-run-summary--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
@@ -964,6 +973,13 @@ export function createHud(root: HTMLElement): Hud {
     const container = activePanelContainer();
     if (!container) return; // nothing shown (splash/playing): let input.ts drive the tank
     const dir: 1 | -1 = key === 'arrowup' || key === 'w' ? -1 : key === 'arrowleft' ? -1 : 1;
+    // Claiming the key stops the WHOLE remaining dispatch -- including el's own
+    // capture-phase `disarm` listener, which clears the pending drag-dismiss click
+    // swallow on any key. Found by mutation in review: without this call, a player who
+    // drag-dismissed the splash and then navigated by ARROW keys (rather than Tab,
+    // which is not claimed here) had the next real click silently eaten. Any key that
+    // moves focus must disarm exactly as an unclaimed key would have.
+    disarm();
     e.preventDefault();
     e.stopPropagation();
     moveFocus(container, dir);

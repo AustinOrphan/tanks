@@ -326,6 +326,55 @@ describe('createHud panel', () => {
     expect(starts, 'the first keyboard activation after a drag dismissal was eaten').toBe(1);
   });
 
+  it('does not eat a click after a drag dismissal followed by ARROW-KEY navigation', () => {
+    // The Tab test above cannot see this: roving focus (onNavKeyDown) claims arrow keys
+    // at window in the CAPTURE phase and stops propagation, which -- before the fix --
+    // starved el's own capture-phase disarm listener, so the pending swallow sat armed
+    // through any amount of arrow navigation and ate the next REAL click (Enter/Space
+    // self-corrects, a pointer click does not). The production change that breaks this:
+    // onNavKeyDown claiming a key without also disarming the pending panel-click swallow.
+    const { hud: h, root } = mount();
+    let picks = 0;
+    h.onLevelSelect(() => {
+      picks += 1;
+    });
+    h.setLevelSelect(2, 2);
+    const splash = root.querySelector('.hud-splash') as HTMLElement;
+    splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    h.setState('title'); // armed, and the drag's click never lands in the panel
+
+    // Arrow navigation instead of Tab -- the roving-focus path this file adds.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    (root.querySelector('.hud-new-game') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+    expect(picks, 'the first real click after drag-dismiss + arrow navigation was eaten').toBe(1);
+  });
+
+  it('claims a navigation key outright while a panel is open, and not while playing', () => {
+    // Pins onNavKeyDown's stopPropagation itself -- removing that call left every other
+    // test in this file green (measured by mutation in review), because the
+    // while-playing test only exercises the early-return branch that never reaches it.
+    // A second window-bound BUBBLE listener stands in for input.ts's own: it must not
+    // see a claimed key while a panel is open, and must see the same key while playing.
+    const { hud: h } = mount();
+    h.setState('title');
+    const seen: string[] = [];
+    const probe = (e: KeyboardEvent): void => {
+      seen.push(e.key);
+    };
+    window.addEventListener('keydown', probe);
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      expect(seen, 'a claimed key leaked past the roving-focus handler to a bubble listener').toEqual([]);
+      h.setState('playing');
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      expect(seen, 'an unclaimed key while playing must still reach input.ts').toEqual(['ArrowDown']);
+    } finally {
+      window.removeEventListener('keydown', probe);
+    }
+  });
+
   it('draws the driving thumb where it landed, and clamps the knob to the throw', () => {
     const { hud: h, root } = mount();
     const viz = root.querySelector('.hud-touchviz') as HTMLElement;
@@ -1636,6 +1685,26 @@ describe('hud: the paint shop', () => {
 });
 
 describe('createHud roving-tabindex focus navigation (issue #115)', () => {
+  it('every focus-target container names itself from its own heading', () => {
+    // The five tabindex="-1" containers are what panel-open transitions focus; a bare
+    // div's accessible name is the flattened text of everything inside it, so each one
+    // carries aria-labelledby pointing at its own h1. Derived from the DOM, not a list:
+    // a sixth focusable container added without the attribute fails here. Breaks if an
+    // aria-labelledby is dropped, its id target renamed, or the target moves outside
+    // the container it names.
+    const { root } = mount();
+    const containers = Array.from(root.querySelectorAll<HTMLElement>('[tabindex="-1"]'));
+    expect(containers.length, '5 panel containers carry tabindex=-1 (panel + 4 subpanels)').toBe(5);
+    for (const c of containers) {
+      const ref = c.getAttribute('aria-labelledby');
+      expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
+      const target = root.querySelector(`#${ref}`);
+      expect(target, `${c.className}'s aria-labelledby (#${ref}) resolves to nothing`).not.toBeNull();
+      expect(c.contains(target), `${c.className}'s label lives outside the container it names`).toBe(true);
+      expect(target!.tagName, `${c.className}'s label is not its heading`).toBe('H1');
+    }
+  });
+
   /** A real keydown, dispatched at whatever currently holds focus -- exactly what a
    * browser delivers to `document.activeElement`, and what makes this reach the
    * capture-phase `window` listener `onNavKeyDown` registers (a bubbling event fired at
@@ -1986,7 +2055,10 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
       new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
     );
-    h.previewCanvas.focus(); // showCustomize(true) already focused it; explicit for clarity
+    // LOAD-BEARING, not clarity: showCustomize(true) focuses the PANE (customizeView),
+    // never the canvas -- nothing in hud.ts ever calls previewCanvas.focus(). Delete
+    // this line and the assertion below tests the wrong element.
+    h.previewCanvas.focus();
     for (const key of ['ArrowLeft', 'ArrowRight']) {
       const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
       h.previewCanvas.dispatchEvent(ev);
