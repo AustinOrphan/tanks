@@ -33,8 +33,11 @@ const SHIPPED_COLORS: Record<TankKind, string> = {
   // pair (27.7, green swatch vs olive) as the minimum instead of becoming the new one.
   green: '#0A6E42',
   // The reference taxonomy's own YELLOW hex, reused as-is (issue #136): every one of
-  // the ten shipped/paletted colours it was checked against (customization.test.ts's
-  // deltaE floor of 20) clears it by at least 38, well clear of the 27.7 minimum pair.
+  // the ELEVEN shipped/paletted colours it was checked against (6 palette swatches +
+  // brown/grey/teal/olive/green -- review corrected an earlier "ten", which was
+  // green's own count carried forward without green itself joining the population)
+  // clears it by at least 38 deltaE76, well clear of the roster's own 33.0 minimum
+  // pair (olive vs green, pinned kind-vs-kind in customization.test.ts).
   yellow: '#E7C928',
 };
 
@@ -87,7 +90,7 @@ describe('game roster resolves to the shipped tunables (behaviour-preservation p
       olive: { shells: 1, mines: 0 },
       // Yellow's whole identity (issue #136): the dedicated mine layer, 2x MINE_CAP.
       // Shell cap stays the default -- it is not a shooting specialist.
-      yellow: { shells: SHELL_CAP, mines: 4 },
+      yellow: { shells: 1, mines: 4 }, // reference YELLOW: 1 active shell; the mines are the identity
     };
     for (const k of KINDS) {
       const want = PER_TANK[k] ?? { shells: SHELL_CAP, mines: MINE_CAP };
@@ -223,7 +226,12 @@ describe('per-kind identity comes from config, not code branches', () => {
     expect(y.weapon.ricochetCount).toBe(bulletConfig.normal.bounces);
     expect(y.weapon.speed).toBe(bulletConfig.normal.speed);
     expect(y.weapon.fireCooldown).toBe(FIRE_COOLDOWN_TICKS); // MEDIUM, like player/grey
-    expect(y.weapon.maxActiveProjectiles).toBe(SHELL_CAP);
+    // 1, the reference taxonomy's own YELLOW value (tank-types.json), NOT the shipped
+    // SHELL_CAP default -- review caught the first draft shipping 5 with no stated
+    // reason, in a definition every other field of which mirrors the reference
+    // verbatim. One shell in flight is the design: this kind fights with its mines
+    // (same shape as olive's 1-active rocket).
+    expect(y.weapon.maxActiveProjectiles).toBe(1);
     expect(y.movementSpeed).toBe(TANK_SPEED); // MEDIUM chassis, unlike teal's 0.6x creep
     expect(y.rotationSpeed).toBe(TANK_TURN_RATE); // MEDIUM turret, unlike teal's 0.6x
     // The whole point of the kind: double MINE_CAP, and the ability that makes the

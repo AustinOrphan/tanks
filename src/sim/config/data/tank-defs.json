@@ -121,7 +121,7 @@
     "weapon": {
       "projectileType": "STANDARD_SHELL",
       "fireRate": "MEDIUM",
-      "maxActiveProjectiles": 5,
+      "maxActiveProjectiles": 1,
       "ricochetCount": 1
     },
     "mineCapacity": 4,

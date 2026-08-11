@@ -326,7 +326,7 @@ describe('tankDifficulty over the shipped roster (population: all 7 shipped Tank
     // Issue #136's new kind. Pinned the same way as every other entry here: by
     // RUNNING the model (`npx vitest run src/sim/config/difficulty.test.ts -t
     // "reports the full table"` and reading the `tank yellow:` line), not by hand.
-    yellow: 49.7952380952381,
+    yellow: 43.7952380952381,
   };
 
   it('matches every shipped kind, not a sample', () => {
