@@ -172,7 +172,13 @@ describe('hud.css is syntactically whole', () => {
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
       '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle', // the settings row's controls
-      '.hud-levels', '.hud-levels--hidden', '.hud-level-btn', '.hud-level-btn--locked', // level select
+      '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
+      // the level select PANEL: without the hidden rules it covers everything from load,
+      // and without the open button's hidden rule it shows outside the title screen
+      '.hud-levelselect', '.hud-levelselect--hidden', '.hud-levelselect-open--hidden',
+      // Continue/New Game split: without these hidden rules both show at once, or the
+      // retired single action button shows alongside them at title
+      '.hud-continue--hidden', '.hud-new-game--hidden', '.hud-action--hidden',
       // stats: without the hidden rules the page covers everything from load
       '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
       '.hud-danger', '.hud-danger--armed', '.hud-run-summary', '.hud-run-summary--hidden',
@@ -244,7 +250,9 @@ describe('hud.css is syntactically whole', () => {
     // 42 since the preview's rotate cluster landed: 38 + its four icon buttons, which
     // are themed by `.hud-rotate-btn` and would show as stock grey browser buttons in
     // the middle of the pane without it.
-    expect(buttons.length).toBe(42);
+    // 46 since the level select panel and the Continue/New Game split landed: 42 + the
+    // Levels open button, its own panel's Back button, Continue and New Game.
+    expect(buttons.length).toBe(46);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -264,8 +272,8 @@ describe('hud.css is syntactically whole', () => {
       document.body.appendChild(b);
       return getComputedStyle(b);
     };
-    const panel = ['hud-stats-open', 'hud-achievements-open', 'hud-customize-open'];
-    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back'];
+    const panel = ['hud-stats-open', 'hud-achievements-open', 'hud-customize-open', 'hud-levelselect-open'];
+    const back = ['hud-stats-back', 'hud-customize-back', 'hud-achievements-back', 'hud-levelselect-back'];
 
     // Quitting is pushed further off the action button than its neighbours are off
     // each other. Asserted as the relationship, so retuning either value is free.

@@ -180,6 +180,7 @@
 .hud-stats,
 .hud-customize,
 .hud-achievements,
+.hud-levelselect,
 .hud-splash {
   touch-action: pan-y;
 }
@@ -490,7 +491,14 @@
   opacity: 0.9;
 }
 
-.hud-action {
+/* The title state's primary action, split into Continue and New Game (issue #135):
+ * both join this rule rather than getting their own, since either one may be the ONLY
+ * button offered (New Game alone with no progress, or both together once there is
+ * some) and a player should not be able to tell from the styling which is "more
+ * primary". */
+.hud-action,
+.hud-continue,
+.hud-new-game {
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -503,14 +511,25 @@
   box-shadow: 0 6px 0 #2f8f45;
 }
 
-.hud-action:active {
+.hud-action:active,
+.hud-continue:active,
+.hud-new-game:active {
   transform: translateY(3px);
   box-shadow: 0 3px 0 #2f8f45;
 }
 
+/* Without these, the retired single action button and its two replacements would all
+ * three show at once at the title screen -- setState toggles them, this is what makes
+ * the toggle visible. */
+.hud-action--hidden,
+.hud-continue--hidden,
+.hud-new-game--hidden {
+  display: none;
+}
+
 /* ---- The quiet button theme ----------------------------------------------------- */
 
-/* Every secondary button in the HUD -- the menu's three panes, Quit, and the three
+/* Every secondary button in the HUD -- the menu's four panes, Quit, and the four
  * Back buttons -- is the same quiet slab, deliberately less loud than `.hud-action`.
  *
  * Grouped rather than repeated, because the repetition is what hid a real defect:
@@ -525,9 +544,11 @@
 .hud-stats-open,
 .hud-achievements-open,
 .hud-customize-open,
+.hud-levelselect-open,
 .hud-stats-back,
 .hud-customize-back,
-.hud-achievements-back {
+.hud-achievements-back,
+.hud-levelselect-back {
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -543,7 +564,8 @@
 .hud-quit,
 .hud-stats-open,
 .hud-achievements-open,
-.hud-customize-open {
+.hud-customize-open,
+.hud-levelselect-open {
   margin-top: 2px;
   font-size: 15px;
 }
@@ -874,6 +896,32 @@
   display: none;
 }
 
+.hud-levelselect-open--hidden {
+  display: none;
+}
+
+/* Reached from the Levels button rather than shown inline on the menu (issue #135) --
+ * same overlay shape as `.hud-achievements` right below, for the same reason: without
+ * the hidden rule it covers the game from load. */
+.hud-levelselect {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(11, 14, 20, 0.86);
+  color: #d8dde6;
+  text-align: center;
+}
+
+.hud-levelselect--hidden {
+  display: none;
+}
+
 /* The page is a full overlay like stats; without the hidden rule it covers the
  * game from load. */
 .hud-achievements {
@@ -980,17 +1028,15 @@
   }
 }
 
-/* ---- Main menu: level select ---------------------------------------------------- */
+/* ---- Level select panel: the numbered row inside .hud-levelselect --------------- */
 
+/* No hidden class of its own: the panel wrapper above is the one chokepoint, same as
+ * .hud-achievement-list inside .hud-achievements. */
 .hud-levels {
   pointer-events: auto;
   display: flex;
   gap: 10px;
   margin-bottom: 4px;
-}
-
-.hud-levels--hidden {
-  display: none;
 }
 
 .hud-level-btn {
