@@ -63,6 +63,19 @@ describe('dropMine', () => {
     expect(events.find((e) => e.type === 'mine-dropped')).toBeUndefined() // no event emitted
   })
 
+  it("accepts a 4th mine for yellow, whose per-kind cap (4) doubles the generic MINE_CAP (2) -- issue #136's payload discriminator", () => {
+    // dropMine gates on configFor(owner.kind).mineCapacity, not the MINE_CAP constant --
+    // this is what makes yellow's whole identity (issue #136: "4 mines, medium speed")
+    // real rather than silently clamped to the same 2 every other mine-layer gets.
+    const yellow = mkTank({ id: 1, kind: 'yellow', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [yellow], spawns: [], lives: 3 })
+    for (let i = 0; i < 4; i++) expect(dropMine(world, 1, [])).toBe(true)
+    expect(yellow.activeMineIds.length).toBe(4) // MINE_CAP (2) would have refused the 3rd
+    const beforeMineCount = world.mines.length
+    expect(dropMine(world, 1, [])).toBe(false) // the 5th is refused: the cap is 4, not unlimited
+    expect(world.mines.length).toBe(beforeMineCount)
+  })
+
   it('rejects a mine from a DEAD owner, matching spawnBullet', () => {
     // A corpse must not keep laying mines. spawnBullet has carried
     // `!owner || !owner.alive` since Task 12 as defence-in-depth; the mine

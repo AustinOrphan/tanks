@@ -109,5 +109,24 @@
     "abilities": [
       "BANK_SHOT_AIM"
     ]
+  },
+  "yellow": {
+    "displayName": "Yellow",
+    "color": "#E7C928",
+    "firstMission": 8,
+    "singlePlayerOnly": false,
+    "movementSpeed": "MEDIUM",
+    "rotationSpeed": "MEDIUM",
+    "aiProfile": "MOBILE_MINE_LAYER",
+    "weapon": {
+      "projectileType": "STANDARD_SHELL",
+      "fireRate": "MEDIUM",
+      "maxActiveProjectiles": 5,
+      "ricochetCount": 1
+    },
+    "mineCapacity": 4,
+    "abilities": [
+      "MINE_LAYER"
+    ]
   }
 }

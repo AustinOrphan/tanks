@@ -312,7 +312,7 @@ describe('bounds clamp rather than extrapolate past the fixed range', () => {
   });
 });
 
-describe('tankDifficulty over the shipped roster (population: all 6 shipped TankKinds)', () => {
+describe('tankDifficulty over the shipped roster (population: all 7 shipped TankKinds)', () => {
   // Pinned by RUNNING the model (npx vitest run src/sim/config/difficulty.test.ts),
   // not computed by hand. Mutation ledger note: bumping any one weight constant
   // moves exactly the kinds whose corresponding term is non-zero -- see the report.
@@ -323,6 +323,10 @@ describe('tankDifficulty over the shipped roster (population: all 6 shipped Tank
     teal: 51.93809523809524,
     olive: 39.345238095238095,
     green: 47.17857142857143,
+    // Issue #136's new kind. Pinned the same way as every other entry here: by
+    // RUNNING the model (`npx vitest run src/sim/config/difficulty.test.ts -t
+    // "reports the full table"` and reading the `tank yellow:` line), not by hand.
+    yellow: 49.7952380952381,
   };
 
   it('matches every shipped kind, not a sample', () => {
@@ -506,7 +510,7 @@ describe('reports the full table', () => {
     // import, a narrowed glob), the loops above would silently print nothing
     // and the test would still pass with zero assertions failing. Pin the
     // population so that failure mode is loud instead.
-    expect(kinds).toEqual(['player', 'brown', 'grey', 'teal', 'olive', 'green']);
+    expect(kinds).toEqual(['player', 'brown', 'grey', 'teal', 'olive', 'green', 'yellow']);
     expect(arenas).toEqual(['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05']);
   });
 });

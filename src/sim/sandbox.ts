@@ -75,6 +75,7 @@ const KIND_LETTER: Record<Exclude<TankKind, 'player'>, string> = {
   // shipped grid, so the newcomer takes the free letter -- see SPAWN_LETTERS,
   // which this table must agree with.
   green: 'N',
+  yellow: 'Y',
 };
 
 /**

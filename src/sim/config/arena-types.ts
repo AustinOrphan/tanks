@@ -15,6 +15,7 @@ export const SPAWN_LETTERS: Record<string, TankKind> = {
   // greeN: 'G' is grey's, and re-lettering grey would rewrite all four shipped
   // grids. sandbox.ts's KIND_LETTER carries the same pairing for generation.
   N: 'green',
+  Y: 'yellow',
 };
 
 /** The geometry half of a definition -- what a bare `Arena` already is. */
