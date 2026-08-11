@@ -63,7 +63,7 @@ describe('createGamepadReader: no pad present', () => {
   it('returns a neutral poll and reports disconnected, for an empty array', () => {
     const reader = createGamepadReader(() => []);
     const poll = reader.poll(null);
-    expect(poll).toEqual({ move: { x: 0, y: 0 }, aim: null, fire: false, mine: false, justConnected: false });
+    expect(poll).toEqual({ move: { x: 0, y: 0 }, aim: null, fire: false, mine: false });
     expect(reader.connected()).toBe(false);
   });
 
@@ -86,23 +86,22 @@ describe('createGamepadReader: no pad present', () => {
 });
 
 describe('createGamepadReader: connection edge', () => {
-  it('reports justConnected only on the poll where the pad first appears', () => {
-    let present = false;
-    const reader = createGamepadReader(() => (present ? [fakePad()] : []));
-    expect(reader.poll(null).justConnected).toBe(false); // still absent
-    present = true;
-    expect(reader.poll(null).justConnected).toBe(true); // the one poll that flips
-    expect(reader.poll(null).justConnected).toBe(false); // still connected, not new
-  });
-
-  it('re-reports justConnected after a disconnect/reconnect cycle', () => {
+  // The reader deliberately computes NO justConnected field: an earlier draft carried
+  // one, fully tested, and review proved it dead -- loop.ts derives the connect
+  // toast's rising edge from connected() itself (pinned in loop.test.ts, including the
+  // reconnect re-toast). What this block pins instead is the raw material that edge is
+  // derived FROM: connected() tracking presence across polls.
+  it('connected() follows presence across a disconnect/reconnect cycle', () => {
     let present = true;
     const reader = createGamepadReader(() => (present ? [fakePad()] : []));
-    expect(reader.poll(null).justConnected).toBe(true);
+    reader.poll(null);
+    expect(reader.connected()).toBe(true);
     present = false;
     reader.poll(null);
+    expect(reader.connected()).toBe(false);
     present = true;
-    expect(reader.poll(null).justConnected).toBe(true);
+    reader.poll(null);
+    expect(reader.connected()).toBe(true);
   });
 
   it('connected() reflects the last poll without calling getGamepads again', () => {

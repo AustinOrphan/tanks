@@ -362,6 +362,45 @@ describe('createInputController — gamepad', () => {
     expect(move.y).toBeGreaterThan(0);
   });
 
+  it('an in-flight touch aim thumb beats the gamepad right stick, mirroring the move rule', () => {
+    // Review finding on this PR: MOVE had touch > gamepad, AIM did not -- a deflected
+    // right stick silently overwrote a live touch aim gesture every tick. The guard is
+    // aimPointer, the same in-flight marker the touch scheme itself tracks. Breaks if
+    // sample() writes gp.aim without the aimPointer === null check.
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [0, 0, 1, 0] })]; // right stick pure +x
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+    controller.setTouchScheme('stick');
+    controller.setPlayerPosition({ x: 0, y: 0 });
+
+    touch(target, 'pointerdown', { x: RIGHT, y: 200 }); // aim thumb lands
+    touch(window, 'pointermove', { x: RIGHT, y: 400 }); // pushed straight DOWN (+y)
+    const aim = controller.sample().aim;
+    // Touch pushed +y, the gamepad +x. If the gamepad won, x would be +AIM_PROJECTION_UNITS.
+    expect(aim.x).toBeCloseTo(0, 6);
+    expect(aim.y).toBeCloseTo(AIM_PROJECTION_UNITS, 6);
+  });
+
+  it('a deflected right stick beats mouse aim, and releasing it hands aim straight back', () => {
+    // The DECISION, pinned: gamepad-vs-mouse aim is stick-wins-while-deflected --
+    // holding a stick off centre is as deliberate as a touch gesture, and unlike the
+    // touch thumb there is no discrete in-flight marker to arbitrate with. The moment
+    // the stick recentres, gp.aim goes null and the next mouse move owns aim again.
+    // Breaks if the gamepad write is dropped, or if a centred stick keeps overwriting.
+    const target = makeTarget();
+    let axes = [0, 0, 1, 0];
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+    controller.setPlayerPosition({ x: 0, y: 0 });
+
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 42, clientY: 7 }));
+    const deflected = controller.sample().aim;
+    expect(deflected.x).toBeCloseTo(AIM_PROJECTION_UNITS, 6); // stick won
+    axes = [0, 0, 0, 0]; // stick released
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 42, clientY: 7 }));
+    expect(controller.sample().aim).toEqual({ x: 42, y: 7 }); // mouse owns aim again
+  });
+
   it('projects aim from the right stick, at AIM_PROJECTION_UNITS from the player position', () => {
     const target = makeTarget();
     const getGamepads = (): GamepadLike[] => [fakePad({ axes: [0, 0, 1, 0] })];

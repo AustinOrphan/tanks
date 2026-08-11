@@ -87,11 +87,9 @@ export interface GamepadPoll {
   readonly fire: boolean;
   /** Same, for the mine button. */
   readonly mine: boolean;
-  /** True on the poll where gamepad[0] first appears -- Firefox hides it until a press. */
-  readonly justConnected: boolean;
 }
 
-const NEUTRAL_POLL: GamepadPoll = { move: { x: 0, y: 0 }, aim: null, fire: false, mine: false, justConnected: false };
+const NEUTRAL_POLL: GamepadPoll = { move: { x: 0, y: 0 }, aim: null, fire: false, mine: false };
 
 export interface GamepadReader {
   /**
@@ -120,7 +118,6 @@ export interface GamepadReader {
  * see `createReaderFromNavigator` below for the one production call site.
  */
 export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
-  let hadPad = false;
   let cachedConnected = false;
   let prevFire = false;
   let prevMine = false;
@@ -139,13 +136,14 @@ export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
       cachedConnected = pad != null;
 
       if (pad == null) {
-        hadPad = false;
         prevFire = false;
         prevMine = false;
         return NEUTRAL_POLL;
       }
-      const justConnected = !hadPad;
-      hadPad = true;
+      // No "just connected" edge is computed here, deliberately: an earlier draft
+      // returned one and review found it dead -- loop.ts derives the connect toast's
+      // rising edge itself from connected(), and two mechanisms for one concept is how
+      // the unwired one rots while its tests keep advertising coverage.
 
       const move = deadzoneVector(pad.axes[MOVE_AXIS_X] ?? 0, pad.axes[MOVE_AXIS_Y] ?? 0);
 
@@ -166,7 +164,7 @@ export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
       prevFire = firePressed;
       prevMine = minePressed;
 
-      return { move, aim, fire, mine, justConnected };
+      return { move, aim, fire, mine };
     },
     connected(): boolean {
       return cachedConnected;

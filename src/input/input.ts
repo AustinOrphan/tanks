@@ -423,10 +423,14 @@ export function createInputController(
         // same edge, not a replacement path, so no extra precedence rule is needed here.
         if (gp.fire) firePressed = true;
         if (gp.mine) minePressed = true;
-        // Aim: overwrite exactly as a touch aim gesture already does (see
-        // applyAimGesture) -- last writer wins, and staying inside the dead zone means
-        // gp.aim is null, which holds whatever aim is already live.
-        if (gp.aim !== null) aim = gp.aim;
+        // Aim precedence, mirroring readMove's: an IN-FLIGHT touch aim thumb
+        // (aimPointer) beats the gamepad -- review proved the unguarded version
+        // overwrote a live touch gesture every tick. Against the MOUSE the stick wins
+        // while deflected, deliberately: holding a stick off centre is as deliberate as
+        // a gesture, there is no discrete in-flight marker to arbitrate with, and the
+        // moment it recentres gp.aim goes null so the next mousemove owns aim again.
+        // Both halves pinned in input.test.ts's gamepad block.
+        if (gp.aim !== null && aimPointer === null) aim = gp.aim;
       }
       const state: InputState = {
         move: readMove(gp?.move ?? null),

@@ -502,7 +502,8 @@ export function startGameWith(
   /**
    * `?dev=1&gamepad=1` only: `input.gamepadConnected()` is always false when the flag is
    * off (the reader is never constructed -- see input.ts), so this needs no separate flag
-   * check. Toasts only on the RISING edge, once per session -- Firefox does not expose a
+   * check. Toasts on each RISING edge -- a reconnect toasts again, pinned by its own
+   * test -- because Firefox does not expose a
    * pad to `navigator.getGamepads()` until the player presses a button on it, so this is
    * the one moment that confirms the press was seen.
    */
