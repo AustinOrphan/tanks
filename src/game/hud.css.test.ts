@@ -252,7 +252,9 @@ describe('hud.css is syntactically whole', () => {
     // the middle of the pane without it.
     // 46 since the level select panel and the Continue/New Game split landed: 42 + the
     // Levels open button, its own panel's Back button, Continue and New Game.
-    expect(buttons.length).toBe(46);
+    // 47 since two-tone (issue #137) landed: every SKINS entry builds a button in the
+    // skin row (hud.ts:607), so a seventh skin is a seventh button.
+    expect(buttons.length).toBe(47);
     expect(unstyled).toEqual([]);
 
     dispose();

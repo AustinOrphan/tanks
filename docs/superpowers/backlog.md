@@ -932,7 +932,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - Separate `canFire`/`canMine` flags instead of the single `disarmed` boolean. #43
 - Per-chassis turret turn rate — still the two globals, with no per-kind field in `tank-defs.json`. #46
 - Skins are all free; unlock criteria were never designed, and the achievements set is never consulted by the customization store. #61
-- Enemy tanks cannot wear skins; `setPlayerStyle` is the only entry point. #61
+- Every enemy kind's two-tone skin uses the SAME split geometry (one 50/50 v-band), differing only in the two tones -- both still derived from that kind's own hull hue. #137's dichromacy measurement (grey/teal collapse to dE 4.1 under deuteranopia) is therefore only partly answered: under that same collapse, grey's two-tone `[grey, lighter-grey]` and teal's `[teal, lighter-teal]` also read as the same texture, because the shape carries no per-kind information. A pattern that varies by kind -- a distinct split axis, band count or offset per kind -- would add a real non-colour channel; this is a design decision (which split maps to which kind, and whether it still reads as "two-tone" once it does), not a mechanical follow-up. #137
 - Spawn and victory animations. #61
 - Emotes. #61
 - A bold-speed Flow skin variant (the per-skin `scroll` machinery already exists). #61
@@ -991,7 +991,9 @@ a claim that arena-01's *brown* holds an unpinned bank onto the spawn (the tree 
 and teal, and every shipped arena runs through `structuralFailures`). A third line quoted
 a figure that exists in no PR body; it is rewritten to the two figures that do. Against
 those 16 removals the review also split or corrected lines that were understated, which is
-why 76 − 16 lands above 60 rather than at it.
+why 76 − 16 lands above 60 rather than at it. Issue #137 closed one line here (enemy tanks
+wearing skins) and opened another in its place (the shared-geometry limitation that closing
+it exposed), which is why the live count still reads 66 rather than one lower.
 
 The remaining **9** lines came from prose-only PRs outside the heading scope and are marked
 `*(prose-only PR)*`. They are a spot-check of 4 such PRs, not a sweep of the ~15.
