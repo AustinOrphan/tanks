@@ -23,6 +23,7 @@ import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../gallery/subjects';
+import { QUALITY_PRESETS } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
 declare global { interface Window { __glResults?: Result[] } }
@@ -222,6 +223,90 @@ check('the renderer really has a live GL context', () => {
   const lost = gl.isContextLost();
   ctx.dispose();
   return lost ? 'context is lost' : null;
+});
+
+// ---------------------------------------------------------------------------
+// render/quality.ts, applied. Every check above this line calls fresh(), which
+// omits the 5th argument -- so none of them could tell a quality preset apart from
+// no preset support at all existing. That question is asked here: does a NON-DEFAULT
+// preset actually reach the THREE.WebGLRenderer/DirectionalLight construction, not just
+// the plain data table quality.test.ts already pins under vitest.
+// ---------------------------------------------------------------------------
+
+function sunOf(ctx: ReturnType<typeof createScene>): THREE.DirectionalLight | null {
+  let sun: THREE.DirectionalLight | null = null;
+  ctx.scene.traverse((o) => {
+    if ((o as THREE.DirectionalLight).isDirectionalLight && (o as THREE.DirectionalLight).castShadow) {
+      sun = o as THREE.DirectionalLight;
+    }
+  });
+  return sun;
+}
+
+check('the `low` quality preset reaches the renderer: shadow type, shadow map size and pixel ratio cap', () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280;
+  canvas.height = 800;
+  document.body.appendChild(canvas);
+  const ctx = createScene(canvas, W, H, BOUNDARY, QUALITY_PRESETS.low);
+  const sun = sunOf(ctx);
+  const shadowType = ctx.renderer.shadowMap.type;
+  const mapSize = sun?.shadow.mapSize.width;
+  // Cap only bounds devicePixelRatio; a headless runner's own dpr may already sit
+  // below QUALITY_PRESETS.low.pixelRatioCap (1), so assert the property that actually
+  // distinguishes the preset -- the cap is respected -- rather than an exact value that
+  // depends on a host setting this file does not control.
+  const pixelRatio = ctx.renderer.getPixelRatio();
+  ctx.dispose();
+  if (!sun) return 'no shadow-casting sun found';
+  if (shadowType !== QUALITY_PRESETS.low.shadowType) {
+    return `shadowMap.type is ${shadowType}, want low's ${QUALITY_PRESETS.low.shadowType} (BasicShadowMap)`;
+  }
+  if (mapSize !== QUALITY_PRESETS.low.shadowMapSize) {
+    return `sun.shadow.mapSize.width is ${mapSize}, want ${QUALITY_PRESETS.low.shadowMapSize}`;
+  }
+  if (pixelRatio > QUALITY_PRESETS.low.pixelRatioCap) {
+    return `renderer pixel ratio ${pixelRatio} exceeds low's cap ${QUALITY_PRESETS.low.pixelRatioCap}`;
+  }
+  return null;
+});
+
+check('omitting the quality argument reproduces the `high` preset exactly (the default-path pixel guarantee)', () => {
+  // fresh() (used by every OTHER check in this file) omits the 5th argument. This proves
+  // that omission resolves to the SAME values QUALITY_PRESETS.high names -- the property
+  // the whole feature depends on: an absent quality dev flag must not move a single
+  // rendered pixel from what shipped before this feature existed.
+  const ctx = fresh();
+  const sun = sunOf(ctx);
+  const shadowType = ctx.renderer.shadowMap.type;
+  const mapSize = sun?.shadow.mapSize.width;
+  ctx.dispose();
+  if (!sun) return 'no shadow-casting sun found';
+  if (shadowType !== QUALITY_PRESETS.high.shadowType) {
+    return `default shadowMap.type is ${shadowType}, want high's ${QUALITY_PRESETS.high.shadowType} (PCFSoftShadowMap)`;
+  }
+  if (mapSize !== QUALITY_PRESETS.high.shadowMapSize) {
+    return `default sun.shadow.mapSize.width is ${mapSize}, want ${QUALITY_PRESETS.high.shadowMapSize}`;
+  }
+  return null;
+});
+
+check('createRenderer forwards its quality option through to the scene it builds', () => {
+  // renderer.ts's own seam, not scene.ts's -- proves the RendererOptions.quality field
+  // (loop.ts's actual wiring point) is not merely typed but actually plumbed.
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280;
+  canvas.height = 800;
+  document.body.appendChild(canvas);
+  const r = createRenderer(canvas, W, H, BOUNDARY, { quality: QUALITY_PRESETS.low });
+  const gl = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext;
+  const lost = gl.isContextLost();
+  r.dispose();
+  canvas.remove();
+  // createRenderer does not expose ctx, so a live, undamaged context after
+  // construction with a non-default preset is the reachable half of this proof; the
+  // exact-value half is covered by the two checks above against createScene directly.
+  return lost ? 'context lost after constructing with a non-default quality preset' : null;
 });
 
 

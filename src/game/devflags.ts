@@ -10,6 +10,7 @@
  */
 import type { TankKind, UnarmedTrigger } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
+import type { QualityPreset } from '../render/quality';
 
 export interface DevFlags {
   /**
@@ -124,6 +125,17 @@ export interface DevFlags {
    * beyond `stepInputs` taking a list -- see CLAUDE.md).
    */
   gamepad: boolean;
+  /**
+   * A render quality preset -- `low` | `medium` | `high` -- see `render/quality.ts` for
+   * what each one sets (antialias, pixel ratio cap, shadow map size, shadow filter).
+   *
+   * `null` when absent OR unrecognised, exactly like `mineTrigger`: it leaves the
+   * render's own default, which is `high`, today's shipped values. This makes an
+   * on-device sweep a URL change instead of a rebuild per pass -- auto-selecting a
+   * preset from a device probe is explicitly out of scope until that measurement
+   * spike runs (see issue #113); this only makes the knobs reachable.
+   */
+  quality: QualityPreset | null;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -144,12 +156,24 @@ export const DEV_FLAGS_OFF: DevFlags = {
   saveIo: false,
   replay: false,
   gamepad: false,
+  quality: null,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
 const FALSY = new Set(['0', 'false', 'off', 'no']);
 
 const MINE_TRIGGERS = new Set(['none', 'proximity', 'bullet', 'both']);
+
+const QUALITY_PRESET_NAMES = new Set(['low', 'medium', 'high']);
+
+/** One of the three named presets, or null when absent or unrecognised -- an
+ * unrecognised value (`?quality=potato`) is rejected to null rather than guessed,
+ * matching asMineTrigger below; null resolves to the `high` default downstream. */
+function asQuality(params: URLSearchParams): QualityPreset | null {
+  const raw = params.get('quality');
+  if (raw === null) return null;
+  return QUALITY_PRESET_NAMES.has(raw) ? (raw as QualityPreset) : null;
+}
 
 /** One of the four UnarmedTrigger values, or null when absent or unrecognised. */
 function asMineTrigger(params: URLSearchParams): UnarmedTrigger | null {
@@ -231,6 +255,7 @@ export function parseDevFlags(search: string): DevFlags {
     saveIo: isOn(params, 'saveIo'),
     replay: isOn(params, 'replay'),
     gamepad: isOn(params, 'gamepad'),
+    quality: asQuality(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps

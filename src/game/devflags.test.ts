@@ -230,3 +230,29 @@ describe('the sandbox roster tracks the canonical kind list', () => {
   });
 });
 
+describe('parseDevFlags: quality', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?quality=low').quality).toBeNull();
+  });
+
+  it('is null when absent', () => {
+    expect(parseDevFlags('?dev=1').quality).toBeNull();
+  });
+
+  it('accepts each of the three named presets -- population: all 3 QualityPreset values', () => {
+    for (const v of ['low', 'medium', 'high']) {
+      expect(parseDevFlags(`?dev=1&quality=${v}`).quality).toBe(v);
+    }
+  });
+
+  it('rejects anything else, rather than guessing -- an unrecognised value leaves the render default', () => {
+    for (const v of ['', 'ultra', 'HIGH', '1', 'lowx']) {
+      expect(parseDevFlags(`?dev=1&quality=${v}`).quality).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&quality=low')).toEqual({ ...DEV_FLAGS_OFF, quality: 'low' });
+  });
+});
+
