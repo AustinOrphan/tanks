@@ -134,6 +134,12 @@ export interface DevFlags {
    * on-device sweep a URL change instead of a rebuild per pass -- auto-selecting a
    * preset from a device probe is explicitly out of scope until that measurement
    * spike runs (see issue #113); this only makes the knobs reachable.
+   *
+   * End state, per this file's flag-lifecycle rule: this flag is not a permanent user
+   * setting. It either ships as an auto-detected preset (device probe replaces the
+   * manual value, flag deleted) or gets deleted outright once the on-device sweep
+   * concludes low/medium/high are not worth keeping. It does not stay a dev-only knob
+   * indefinitely.
    */
   quality: QualityPreset | null;
 }

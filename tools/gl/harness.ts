@@ -233,6 +233,16 @@ check('the renderer really has a live GL context', () => {
 // the plain data table quality.test.ts already pins under vitest.
 // ---------------------------------------------------------------------------
 
+/** A bare canvas in the document, sized like fresh()'s -- but WITHOUT calling
+ * createScene, so the caller can pass its own quality preset as the 5th argument. */
+function freshCanvas(w = 1280, h = 800): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  document.body.appendChild(canvas);
+  return canvas;
+}
+
 function sunOf(ctx: ReturnType<typeof createScene>): THREE.DirectionalLight | null {
   let sun: THREE.DirectionalLight | null = null;
   ctx.scene.traverse((o) => {
@@ -243,48 +253,96 @@ function sunOf(ctx: ReturnType<typeof createScene>): THREE.DirectionalLight | nu
   return sun;
 }
 
-check('the `low` quality preset reaches the renderer: shadow type, shadow map size and pixel ratio cap', () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 800;
-  document.body.appendChild(canvas);
-  const ctx = createScene(canvas, W, H, BOUNDARY, QUALITY_PRESETS.low);
-  const sun = sunOf(ctx);
+// Each knob gets its OWN check, deliberately not folded into one multi-assertion check
+// with early returns: a masking mutation test proved a combined check's later
+// assertions (mapSize) were never demonstrated to fire, because the first
+// (shadowType) always returned first. One property per check is what makes "this
+// check has teeth" a claim about EACH knob rather than about whichever one happens to
+// be checked first.
+
+check('the `low` quality preset sets renderer.shadowMap.type', () => {
+  const ctx = createScene(freshCanvas(), W, H, BOUNDARY, QUALITY_PRESETS.low);
   const shadowType = ctx.renderer.shadowMap.type;
-  const mapSize = sun?.shadow.mapSize.width;
-  // Cap only bounds devicePixelRatio; a headless runner's own dpr may already sit
-  // below QUALITY_PRESETS.low.pixelRatioCap (1), so assert the property that actually
-  // distinguishes the preset -- the cap is respected -- rather than an exact value that
-  // depends on a host setting this file does not control.
-  const pixelRatio = ctx.renderer.getPixelRatio();
   ctx.dispose();
-  if (!sun) return 'no shadow-casting sun found';
   if (shadowType !== QUALITY_PRESETS.low.shadowType) {
     return `shadowMap.type is ${shadowType}, want low's ${QUALITY_PRESETS.low.shadowType} (BasicShadowMap)`;
-  }
-  if (mapSize !== QUALITY_PRESETS.low.shadowMapSize) {
-    return `sun.shadow.mapSize.width is ${mapSize}, want ${QUALITY_PRESETS.low.shadowMapSize}`;
-  }
-  if (pixelRatio > QUALITY_PRESETS.low.pixelRatioCap) {
-    return `renderer pixel ratio ${pixelRatio} exceeds low's cap ${QUALITY_PRESETS.low.pixelRatioCap}`;
   }
   return null;
 });
 
-check('omitting the quality argument reproduces the `high` preset exactly (the default-path pixel guarantee)', () => {
-  // fresh() (used by every OTHER check in this file) omits the 5th argument. This proves
-  // that omission resolves to the SAME values QUALITY_PRESETS.high names -- the property
-  // the whole feature depends on: an absent quality dev flag must not move a single
-  // rendered pixel from what shipped before this feature existed.
-  const ctx = fresh();
+check('the `low` quality preset sets the shadow-casting sun.shadow.mapSize', () => {
+  const ctx = createScene(freshCanvas(), W, H, BOUNDARY, QUALITY_PRESETS.low);
   const sun = sunOf(ctx);
-  const shadowType = ctx.renderer.shadowMap.type;
   const mapSize = sun?.shadow.mapSize.width;
   ctx.dispose();
   if (!sun) return 'no shadow-casting sun found';
+  if (mapSize !== QUALITY_PRESETS.low.shadowMapSize) {
+    return `sun.shadow.mapSize.width is ${mapSize}, want ${QUALITY_PRESETS.low.shadowMapSize}`;
+  }
+  return null;
+});
+
+check('the three presets scale renderer.getPixelRatio() distinctly when devicePixelRatio exceeds every cap', () => {
+  // The vacuous form this replaces: comparing getPixelRatio() to a preset's own cap
+  // under this harness's real devicePixelRatio (1, under swiftshader) is
+  // min(1, cap) <= cap for EVERY cap -- an assertion that cannot fail, the named
+  // anti-pattern. Stubbing devicePixelRatio above every cap (3 > high's 2) forces
+  // Math.min(dpr, cap) to equal the cap exactly, which is what actually distinguishes
+  // the three presets from each other and from a mutation that ignores the cap.
+  const original = window.devicePixelRatio;
+  Object.defineProperty(window, 'devicePixelRatio', { value: 3, configurable: true });
+  const got: Partial<Record<'low' | 'medium' | 'high', number>> = {};
+  try {
+    for (const name of ['low', 'medium', 'high'] as const) {
+      const ctx = createScene(freshCanvas(), W, H, BOUNDARY, QUALITY_PRESETS[name]);
+      got[name] = ctx.renderer.getPixelRatio();
+      ctx.dispose();
+    }
+  } finally {
+    Object.defineProperty(window, 'devicePixelRatio', { value: original, configurable: true });
+  }
+  const mismatches = (['low', 'medium', 'high'] as const)
+    .filter((name) => got[name] !== QUALITY_PRESETS[name].pixelRatioCap)
+    .map((name) => `${name}: got ${got[name]}, want ${QUALITY_PRESETS[name].pixelRatioCap}`);
+  return mismatches.length > 0 ? mismatches.join('; ') : null;
+});
+
+check('the `low` quality preset disables antialiasing on the WebGL context', () => {
+  // Read back through the GL context itself (getContextAttributes), not the JS-side
+  // RenderQuality object passed in -- the latter would only prove the value was
+  // read, not that it reached THREE.WebGLRenderer's constructor.
+  const highCtx = createScene(freshCanvas(), W, H, BOUNDARY, QUALITY_PRESETS.high);
+  const highAA = highCtx.renderer.getContext().getContextAttributes()?.antialias;
+  highCtx.dispose();
+  const lowCtx = createScene(freshCanvas(), W, H, BOUNDARY, QUALITY_PRESETS.low);
+  const lowAA = lowCtx.renderer.getContext().getContextAttributes()?.antialias;
+  lowCtx.dispose();
+  if (highAA !== true) return `high preset: context antialias attribute is ${highAA}, want true`;
+  if (lowAA !== false) return `low preset: context antialias attribute is ${lowAA}, want false`;
+  return null;
+});
+
+check('omitting the quality argument reproduces the `high` preset\'s shadowMap.type', () => {
+  // fresh() (used by every OTHER check above this section) omits the 5th argument.
+  // This is the default-path guarantee the whole feature depends on: an absent
+  // `quality` dev flag must not move construction away from what shipped before this
+  // feature existed. Split per-knob for the same masking reason as the low-preset
+  // checks above.
+  const ctx = fresh();
+  const shadowType = ctx.renderer.shadowMap.type;
+  ctx.dispose();
   if (shadowType !== QUALITY_PRESETS.high.shadowType) {
     return `default shadowMap.type is ${shadowType}, want high's ${QUALITY_PRESETS.high.shadowType} (PCFSoftShadowMap)`;
   }
+  return null;
+});
+
+check('omitting the quality argument reproduces the `high` preset\'s sun.shadow.mapSize', () => {
+  const ctx = fresh();
+  const sun = sunOf(ctx);
+  const mapSize = sun?.shadow.mapSize.width;
+  ctx.dispose();
+  if (!sun) return 'no shadow-casting sun found';
   if (mapSize !== QUALITY_PRESETS.high.shadowMapSize) {
     return `default sun.shadow.mapSize.width is ${mapSize}, want ${QUALITY_PRESETS.high.shadowMapSize}`;
   }
