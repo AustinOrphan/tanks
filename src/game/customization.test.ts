@@ -95,8 +95,19 @@ describe('skins', () => {
     // gave camo a far larger delta, and the light blotch field that produced was better
     // as its own skin than as a broken camo. It shares camo's painter at a different
     // density -- see `blotches` in skins.ts.
-    expect(SKINS.map((s) => s.id)).toEqual(['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow']);
+    expect(SKINS.map((s) => s.id)).toEqual([
+      'solid', 'stripes', 'camo', 'clouds', 'checker', 'flow', 'two-tone',
+    ]);
     expect(SKINS[0].id).toBe(DEFAULT_SKIN);
+  });
+
+  it('accepts two-tone exactly like any other skin -- issue #137', () => {
+    // The newest skin, and the one every enemy kind now wears (entities.ts). Not
+    // scrolling (see its SkinDef comment), so it does not need the exclusivity test
+    // above to change -- this only proves setSkin's off-list rejection recognises it.
+    const a = createCustomizationStore(localStorage);
+    a.setSkin('two-tone');
+    expect(a.skin()).toBe('two-tone');
   });
 
   it('flow is the animated one, and slow: speed is per-skin DATA', () => {

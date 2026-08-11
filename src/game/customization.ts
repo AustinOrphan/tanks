@@ -60,7 +60,7 @@ export const ACCENTS: readonly AccentSwatch[] = Object.freeze([
 
 export const DEFAULT_ACCENT: AccentId = 'auto';
 
-export type SkinId = 'solid' | 'stripes' | 'camo' | 'clouds' | 'checker' | 'flow';
+export type SkinId = 'solid' | 'stripes' | 'camo' | 'clouds' | 'checker' | 'flow' | 'two-tone';
 
 export interface SkinDef {
   id: SkinId;
@@ -83,6 +83,12 @@ export const SKINS: readonly SkinDef[] = Object.freeze([
   { id: 'clouds', label: 'Clouds' },
   { id: 'checker', label: 'Checkerplate' },
   { id: 'flow', label: 'Flow', scroll: { u: 0.08, v: 0 } },
+  // NOT scrolling, deliberately: a second animated skin would trip the "flow is the
+  // only animated one" exclusivity test below, which is a real design question
+  // (docs/superpowers/backlog.md's animated-skins spike) that this issue does not need
+  // to answer. Two-tone is also what every ENEMY kind now wears (entities.ts's
+  // `enemySkinMapFor`), and an animated enemy livery is a different feature again.
+  { id: 'two-tone', label: 'Two-tone' },
 ]);
 
 export const DEFAULT_SKIN: SkinId = 'solid';

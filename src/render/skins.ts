@@ -506,6 +506,38 @@ const PAINTERS: Record<
       }
     }
   },
+  /**
+   * TWO-TONE: a plain, hard-edged split into two solid fields, one per half of the
+   * tile -- issue #137. It is the skin every ENEMY kind now wears (entities.ts's
+   * `enemySkinMapFor`), painted from that kind's own definition colour, so hue
+   * identity survives (the two-tone's first field is exactly the hull colour) while
+   * the split adds a second, non-colour channel for a player who cannot separate two
+   * hues under CVD -- see the issue's dichromacy measurement.
+   *
+   * Banded on v (row index), the same axis `stripes` uses, and for the same structural
+   * reason: v is the hull's ACROSS-width axis once `projectBodyUV` runs, so a v-split
+   * runs down the tank's LEFT/RIGHT sides rather than nose-to-tail. Unlike `stripes`,
+   * two-tone does NOT need entities.ts's planar re-projection for the turret and
+   * barrel -- the split has no preferred direction to protect, so the lathe's own wrap
+   * (which the turret/barrel keep for every other skin) reads it as a RING split on
+   * the turret (base colour below, accent above) and a BREECH/MUZZLE split on the
+   * barrel, both coherent two-field paint jobs. That is why `two-tone` needed no entry
+   * in entities.ts's `striped` gate -- see that file's comment on resolving the UV
+   * choice by SKIN, not by KIND, now that enemies carry a skin too.
+   *
+   * A hard 50/50 split is a periodic function of row alone, so it tiles under
+   * RepeatWrapping with no extra care: repeating the tile side by side reproduces the
+   * same two bands, and the wrap seam (row 127 to row 0) is an ordinary transition
+   * between the two fields, not a broken one -- unlike `camo`/`clouds`, there is no
+   * scatter geometry here that could fail to wrap.
+   */
+  'two-tone'(px, base, accent) {
+    const other = accent ? ensureContrast(base, accent) : autoAccent(base);
+    for (let y = 0; y < SIZE; y++) {
+      const tone = y < SIZE / 2 ? base : other;
+      for (let x = 0; x < SIZE; x++) fill(px, (y * SIZE + x) * 4, tone);
+    }
+  },
   flow(px, base, accent) {
     // Soft diagonal bands built on a sine, so the tile scrolls seamlessly -- this is
     // the ANIMATED one; its speed lives in the skin def (game/customization.ts).

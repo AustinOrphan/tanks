@@ -15,6 +15,8 @@ import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
+import { configFor } from '../sim/config';
+import { createSkinTexture } from './skins';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
   return {
@@ -699,14 +701,35 @@ describe('world replacement (level switch)', () => {
     r.tanks = [makeTank(5, 'teal', 3, 3)];
     refViews.sync(r, r, 0);
 
-    const hullColor = (s: THREE.Scene): number => {
+    // TRACKS, not the hull -- issue #137 made every hull material white (the map
+    // carries the tint now, entities.ts's `matColor`), so a hull-colour comparison
+    // stopped discriminating kinds at all: brown and teal both read 0xffffff, and this
+    // test kept passing even with the kind-change rebuild guard disabled (verified by
+    // mutation before this fix -- a stale brown view is ALSO white). Tracks stay
+    // unmapped and keep each kind's own shaded colour, so they are still a real
+    // discriminator.
+    const trackColor = (s: THREE.Scene): number => {
       let c = -1;
       s.traverse((o) => {
-        if (o.name === 'hull') c = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+        if (o.name === 'track') c = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
       });
       return c;
     };
-    expect(hullColor(scene)).toBe(hullColor(refScene));
+    expect(trackColor(scene)).toBe(trackColor(refScene));
+
+    // And the hull's MAP now carries the identity that used to live in its colour --
+    // this is the new discriminator issue #137 introduced, checked directly rather
+    // than assumed from the track alone.
+    const hullMap = (s: THREE.Scene): THREE.DataTexture => {
+      let t: THREE.DataTexture | null = null;
+      s.traverse((o) => {
+        if (o.name === 'hull') t = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).map as THREE.DataTexture;
+      });
+      if (!t) throw new Error('no hull map found');
+      return t;
+    };
+    expect(Array.from(hullMap(scene).image.data)).toEqual(Array.from(hullMap(refScene).image.data));
+
     views.dispose();
     refViews.dispose();
   });
@@ -718,9 +741,6 @@ describe('the paint shop (player colour override)', () => {
     const views = createEntityViews(scene);
     const w = makeWorld();
     w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
-    views.sync(w, w, 0);
-
-    views.setPlayerStyle('#d64545', 'solid', null);
     views.sync(w, w, 0);
 
     const partColor = (x: number, name: string): number => {
@@ -736,13 +756,45 @@ describe('the paint shop (player colour override)', () => {
       });
       return c;
     };
+    const partMap = (x: number, name: string): THREE.Texture | null => {
+      let m: THREE.Texture | null = null;
+      scene.traverse((o) => {
+        if (o.name === name) {
+          let g: THREE.Object3D | null = o;
+          while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+          if (g && (g as THREE.Group).position.x === x) {
+            m = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).map;
+          }
+        }
+      });
+      return m;
+    };
+    // Captured BEFORE the restyle: the enemy's own two-tone map (issue #137) and its
+    // track colour, both of which the "never the enemies" half below now has to prove
+    // are untouched by a PLAYER-only restyle.
+    const enemyMapBefore = partMap(7, 'hull');
+    const enemyTrackBefore = partColor(7, 'track');
+    expect(enemyMapBefore).not.toBeNull();
+
+    views.setPlayerStyle('#d64545', 'solid', null);
+    views.sync(w, w, 0);
+
     // The WHOLE tank repaints, not just the hull: review found a hull-only assertion
     // would pass a player wearing an enemy-coloured turret. Tracks are the shaded
     // derivative of the hull colour, so they prove the derivation follows too.
     expect(partColor(3, 'hull')).toBe(0xd64545);
     expect(partColor(3, 'turret')).toBe(0xd64545);
     expect(partColor(3, 'track')).toBe(new THREE.Color(0xd64545).multiplyScalar(TRACK_SHADE).getHex());
-    expect(partColor(7, 'hull')).not.toBe(0xd64545); // brown keeps its identity
+    // "brown keeps its identity": since issue #137, `partColor(7, 'hull')` is ALWAYS
+    // 0xffffff -- every enemy is mapped now (`enemySkinMapFor`), and a mapped material's
+    // colour is unconditionally forced white (entities.ts's `matColor`), regardless of
+    // whether the player's restyle leaked onto the enemy. So a hull-colour comparison
+    // against the player's red can no longer discriminate "untouched" from "repainted"
+    // -- it would read the same either way. The track colour and the hull's own map
+    // identity are what still separate the two, and are asserted directly here rather
+    // than inferred from colour.
+    expect(partColor(7, 'track')).toBe(enemyTrackBefore);
+    expect(partMap(7, 'hull')).toBe(enemyMapBefore);
 
     // And back to the roster default.
     views.setPlayerStyle(null, 'solid', null);
@@ -876,8 +928,12 @@ describe('skins (player texture override)', () => {
       ).toBe(false);
     }
 
-    // The ENEMY never carries a skin map, so it must never be re-projected either --
-    // otherwise the stripe skin would silently re-UV every tank on the board.
+    // The ENEMY carries a skin map now too (`two-tone`, issue #137) but its resolved
+    // skin is never `stripes` -- only the player can choose that -- so it must still
+    // never be planar-re-projected, or the stripe skin would silently re-UV every tank
+    // on the board the moment the player wore it. This is `striped`'s KIND-independence
+    // proven directly: entities.ts keys `striped` on the tank's own resolved skin, and
+    // an enemy's resolved skin is always `two-tone`.
     views.setPlayerStyle('#3d7bd6', 'stripes', null);
     views.sync(w, w, 0);
     expect(vIsFunctionOfZ(geoOf(scene, 7, 'turret')), 'an enemy turret was re-projected').toBe(false);
@@ -911,13 +967,13 @@ describe('skins (player texture override)', () => {
     return worst;
   };
 
-  it('gives the hull ONE continuous surface, for every skin', () => {
+  it('gives the hull ONE continuous surface, for every skin -- the player\'s and the enemy\'s', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();
     w.tanks = [makeTank(1, 'player', 3, 3), makeTank(2, 'brown', 7, 7)];
 
-    for (const skin of ['stripes', 'checker', 'flow', 'camo', 'clouds'] as const) {
+    for (const skin of ['stripes', 'checker', 'flow', 'camo', 'clouds', 'two-tone'] as const) {
       views.setPlayerStyle('#3d7bd6', skin, null);
       views.sync(w, w, 0);
       expect(
@@ -926,12 +982,27 @@ describe('skins (player texture override)', () => {
       ).toBeLessThan(1e-6);
     }
 
-    // The negative control, and the reason the threshold above means anything: the
-    // enemy hull carries no skin map and is left with ExtrudeGeometry's own UVs, which
-    // fail the same check by six orders of magnitude. Without this the assertion could
-    // be passing because the metric is broken rather than because the hull is whole.
+    // The ENEMY is mapped too now (`two-tone`, issue #137), so its hull gets the exact
+    // same continuous treatment as the player's -- it is no longer the negative control
+    // it used to be, and this is the assertion that would catch a regression there:
+    // deleting `enemySkinMapFor`'s wiring (entities.ts) makes `mapped` false again for
+    // every enemy and this fails the same way the old unmapped hull did.
     expect(
       maxCoincidentUvGap(geoOf(scene, 7, 'hull')),
+      "the enemy hull is split at an edge -- it will render as panels",
+    ).toBeLessThan(1e-6);
+
+    // The negative control, and the reason the thresholds above mean anything. It can
+    // no longer come from an enemy tank -- every kind carries a map now -- so this uses
+    // the one skin that is still unmapped: the PLAYER wearing `solid`, whose
+    // `createSkinTexture` returns null (skins.ts). Left with ExtrudeGeometry's own UVs,
+    // it fails the same check by six orders of magnitude. Without this the assertions
+    // above could be passing because the metric is broken rather than because the hulls
+    // are whole.
+    views.setPlayerStyle('#3d7bd6', 'solid', null);
+    views.sync(w, w, 0);
+    expect(
+      maxCoincidentUvGap(geoOf(scene, 3, 'hull')),
       'the default extrude UVs suddenly look continuous -- is the metric wired?',
     ).toBeGreaterThan(1);
   });
@@ -1223,8 +1294,22 @@ describe('skins (player texture override)', () => {
     expect(barrel / turret).toBeGreaterThan(0.6);
     expect(barrel / turret).toBeLessThan(1.05);
 
-    // The enemy is the control: untouched, it shows the defect this test describes.
-    const bare = uDensity(geoOf(scene, 7, 'barrel')) / uDensity(geoOf(scene, 7, 'turret'));
+    // The ENEMY is mapped too now (`two-tone`, issue #137), and `matchLatheToTurret`
+    // does not branch on skin or kind, so its barrel gets the identical matching
+    // treatment as the player's -- it can no longer stand in as the "untouched, raw
+    // lathe" control this test used to read it as.
+    const enemyTurret = uDensity(geoOf(scene, 7, 'turret'));
+    const enemyBarrel = uDensity(geoOf(scene, 7, 'barrel'));
+    expect(enemyBarrel / enemyTurret).toBeGreaterThan(0.6);
+    expect(enemyBarrel / enemyTurret).toBeLessThan(1.05);
+
+    // The negative control, and the reason the bounds above mean anything, now has to
+    // come from an UNMAPPED tank instead of an enemy -- the player wearing `solid`, the
+    // one skin whose `createSkinTexture` returns null (skins.ts). It shows the defect
+    // this test describes: a raw, unscaled lathe wrap.
+    views.setPlayerStyle('#3d7bd6', 'solid', null);
+    views.sync(w, w, 0);
+    const bare = uDensity(geoOf(scene, 3, 'barrel')) / uDensity(geoOf(scene, 3, 'turret'));
     expect(bare, 'an unmapped barrel should still carry the raw lathe wrap').toBeGreaterThan(1.9);
   });
 
@@ -1270,7 +1355,7 @@ describe('skins (player texture override)', () => {
     expect(sumY / n).toBeLessThan(-0.99);
   });
 
-  it('dresses hull AND turret in the map, leaves tracks solid and enemies bare', () => {
+  it('dresses hull AND turret in the map, leaves tracks solid', () => {
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();
@@ -1288,14 +1373,21 @@ describe('skins (player texture override)', () => {
     expect(matOf(scene, 3, 'track').color.getHex()).toBe(
       new THREE.Color(0xd64545).multiplyScalar(TRACK_SHADE).getHex(),
     );
-    // The enemy keeps its identity: no map, roster colour.
-    expect(matOf(scene, 7, 'hull').map).toBeNull();
+    // The enemy is mapped too now (`two-tone`, issue #137) -- its own coverage lives in
+    // the "enemy skins" describe block below, so this test is not the place to restate
+    // it. What is still true here, and worth keeping in THIS test: the player's paint
+    // shop change did not touch the enemy's material at all -- same white tint, same
+    // map identity, before and after the player's restyle below.
+    const enemyMapBefore = matOf(scene, 7, 'hull').map;
+    expect(enemyMapBefore).not.toBeNull();
 
-    // Back to solid: the map comes OFF and the tint returns to the material.
+    // Back to solid: the map comes OFF and the tint returns to the material -- for the
+    // PLAYER only. The enemy is untouched by a player-only restyle.
     views.setPlayerStyle('#d64545', 'solid', null);
     views.sync(w, w, 0);
     expect(matOf(scene, 3, 'hull').map).toBeNull();
     expect(matOf(scene, 3, 'hull').color.getHex()).toBe(0xd64545);
+    expect(matOf(scene, 7, 'hull').map).toBe(enemyMapBefore);
     views.dispose();
   });
 
@@ -1361,5 +1453,118 @@ describe('skins (player texture override)', () => {
     second.addEventListener('dispose', () => disposed2++);
     views.dispose();
     expect(disposed2).toBe(1);
+  });
+
+  it('the player can wear two-tone, exactly like any other skin', () => {
+    // Mirrors the coverage every other skin already has via setPlayerStyle -- issue
+    // #137's player-facing half. Fails if 'two-tone' is ever missing from PAINTERS
+    // (skins.ts) or from customization.ts's SKINS/SkinId.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(1, 'player', 3, 3)];
+    views.setPlayerStyle('#3d7bd6', 'two-tone', null);
+    views.sync(w, w, 0);
+    expect(matOf(scene, 3, 'hull').map).not.toBeNull();
+    expect(matOf(scene, 3, 'hull').color.getHex()).toBe(0xffffff);
+    views.dispose();
+  });
+});
+
+describe('enemy skins (issue #137)', () => {
+  const matOf = (scene: THREE.Scene, x: number, name: string): THREE.MeshStandardMaterial => {
+    let m: THREE.MeshStandardMaterial | null = null;
+    scene.traverse((o) => {
+      if (o.name === name) {
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if (g && (g as THREE.Group).position.x === x) {
+          m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        }
+      }
+    });
+    if (!m) throw new Error(`no ${name} at x=${x}`);
+    return m;
+  };
+
+  const ENEMY_KINDS = ['brown', 'grey', 'teal', 'olive', 'green'] as const;
+
+  it('gives every enemy kind a skin map -- they used to get null, every one of them', () => {
+    // THE negative control that flips: before this issue, `entities.ts:411` was
+    // `kind === 'player' ? playerSkinMap : null`, so every enemy material's `map` was
+    // null. This is the per-kind assertion the issue asks for, not "some tank has a
+    // skin" -- it fails if even ONE kind is missed by `enemySkinMapFor`.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = ENEMY_KINDS.map((kind, i) => makeTank(i + 2, kind, i + 2, i + 2));
+    views.sync(w, w, 0);
+    for (let i = 0; i < ENEMY_KINDS.length; i++) {
+      const x = i + 2;
+      expect(matOf(scene, x, 'hull').map, `${ENEMY_KINDS[i]} hull has no skin map`).not.toBeNull();
+      expect(matOf(scene, x, 'turret').map, `${ENEMY_KINDS[i]} turret has no skin map`).not.toBeNull();
+      // Mapped parts go white so the map's own tint is not multiplied twice -- the same
+      // rule the player's mapped materials follow (entities.test.ts's earlier describe).
+      expect(matOf(scene, x, 'hull').color.getHex(), ENEMY_KINDS[i]).toBe(0xffffff);
+    }
+    views.dispose();
+  });
+
+  it('derives each kind\'s texture from ITS OWN colour, not a shared one', () => {
+    // Discriminates BETWEEN kinds, as the issue asks -- two different kinds must
+    // produce two different textures, and each must match what `createSkinTexture`
+    // paints directly from that kind's OWN `configFor(kind).color`, not merely differ
+    // from its neighbour by accident (e.g. a stale cache keyed wrong).
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(2, 'brown', 2, 2), makeTank(3, 'grey', 3, 3)];
+    views.sync(w, w, 0);
+
+    const brownMap = matOf(scene, 2, 'hull').map as THREE.DataTexture;
+    const greyMap = matOf(scene, 3, 'hull').map as THREE.DataTexture;
+    expect(Array.from(brownMap.image.data)).not.toEqual(Array.from(greyMap.image.data));
+
+    const expectedBrown = createSkinTexture('two-tone', configFor('brown').color, null)!;
+    const expectedGrey = createSkinTexture('two-tone', configFor('grey').color, null)!;
+    expect(Array.from(brownMap.image.data)).toEqual(Array.from(expectedBrown.image.data));
+    expect(Array.from(greyMap.image.data)).toEqual(Array.from(expectedGrey.image.data));
+    expectedBrown.dispose();
+    expectedGrey.dispose();
+    views.dispose();
+  });
+
+  it('shares ONE texture per kind across every tank of that kind', () => {
+    // Not required by the issue, but worth pinning: `enemySkinMapFor` caches by kind,
+    // so two `brown` tanks on the board are not two separate 64kB textures.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = [makeTank(2, 'brown', 2, 2), makeTank(3, 'brown', 3, 3)];
+    views.sync(w, w, 0);
+    expect(matOf(scene, 2, 'hull').map).toBe(matOf(scene, 3, 'hull').map);
+    views.dispose();
+  });
+
+  it('dispose() releases every enemy kind\'s texture, not just the player\'s', () => {
+    // PROVE THE GAP FIRST: `dispose()` used to read `playerSkinMap?.dispose()` alone
+    // (entities.ts, pre-issue-#137). Enemy kinds did not have their own textures then,
+    // so there was nothing to leak -- but the moment `enemySkinMapFor` starts minting
+    // one DataTexture per kind, that single-slot dispose is no longer sufficient, and
+    // nothing else in this file would have caught the leak (disposeObject deliberately
+    // skips material maps). This is exactly that gap, closed.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.tanks = ENEMY_KINDS.map((kind, i) => makeTank(i + 2, kind, i + 2, i + 2));
+    views.sync(w, w, 0);
+
+    const maps = ENEMY_KINDS.map((_, i) => matOf(scene, i + 2, 'hull').map as THREE.Texture);
+    let disposedCount = 0;
+    for (const m of maps) m.addEventListener('dispose', () => disposedCount++);
+    views.dispose();
+    expect(disposedCount, 'not every enemy kind\'s texture was disposed -- a per-kind leak').toBe(
+      ENEMY_KINDS.length,
+    );
   });
 });

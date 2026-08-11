@@ -79,7 +79,7 @@ export const DEFAULTS = {
  * so adding a skin without teaching the gallery about it fails a test rather than
  * failing at the URL.
  */
-export const SKIN_IDS = ['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow'];
+export const SKIN_IDS = ['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow', 'two-tone'];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 

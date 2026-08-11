@@ -313,6 +313,28 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // Resolved once per restyle, not per frame: sync runs at 60fps.
   let playerScroll: { u: number; v: number } | null = null;
   let colorGen = 0;
+  /**
+   * One two-tone texture PER ENEMY KIND, shared by every tank of that kind -- issue
+   * #137. A kind's colour never changes at runtime (it is roster data, not a paint
+   * shop choice), so there is nothing to regenerate per tank or per frame; minting
+   * once and caching by kind is exactly what `enemySkinMapFor` below does. Owned HERE
+   * for the same reason `playerSkinMap` is: `disposeObject` deliberately skips
+   * material maps, so these five (today) textures need their OWN disposal path --
+   * `dispose()` below -- or they leak one per kind for the life of the game.
+   * Never scrolled: enemies stay on STATIC two-tone, deliberately -- see the SkinDef
+   * comment on why two-tone itself does not carry a `scroll`.
+   */
+  const enemySkinMaps = new Map<TankKind, THREE.DataTexture>();
+
+  /** Mint (once) and return the two-tone texture for a non-player kind. */
+  function enemySkinMapFor(kind: TankKind): THREE.DataTexture {
+    let tex = enemySkinMaps.get(kind);
+    if (!tex) {
+      tex = createSkinTexture('two-tone', configFor(kind).color, null)!;
+      enemySkinMaps.set(kind, tex);
+    }
+    return tex;
+  }
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
   const mineViews = new Map<number, THREE.Mesh>();
@@ -629,7 +651,20 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // A patterned skin rides as a map on the hull and turret ONLY -- tracks keep
     // their solid shade for grounding. The map already carries the tint, so mapped
     // materials use white (color multiplies the map; tinting twice goes muddy).
-    const skinMap = kind === 'player' ? playerSkinMap : null;
+    //
+    // EVERY kind is mapped now, not just the player -- issue #137. Enemies wear a
+    // two-tone texture keyed by their own KIND (`enemySkinMapFor`), so their identity
+    // colour lives in the painted texture, exactly like the player's chosen skin does;
+    // the ternary below (and its two neighbours, `color` above and `resolvedSkin`
+    // right after) are the player-specific branches left in this function, each for
+    // the same reason: the player's texture is a paint-shop CHOICE while an enemy's is
+    // fixed roster data.
+    const skinMap = kind === 'player' ? playerSkinMap : enemySkinMapFor(kind);
+    // The skin id THIS tank is actually wearing -- the player's own pick, or `two-tone`
+    // for every enemy. Resolved per tank (not read off the module-level `playerSkin`)
+    // because that slot only ever describes the player; an enemy's UV treatment must
+    // follow ITS OWN skin, which is what `striped` below now keys on.
+    const resolvedSkin: SkinId = kind === 'player' ? playerSkin : 'two-tone';
     const matColor = skinMap ? 0xffffff : color;
     const bodyMat = new THREE.MeshStandardMaterial({
       color: matColor,
@@ -649,17 +684,29 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // at any distance; the corners are what make it look built rather than blocked out.
     // Shape is (length, width) and extrudes along its own +z, so rotating -90deg about x
     // stands the extrusion up into height.
-    // Only a MAPPED tank is re-projected. Enemies carry no skin map, so their UVs are
-    // never read and rebuilding them would be churn; the test suite pins that they are
-    // left alone. Geometry is rebuilt whenever the style changes (setPlayerStyle bumps
-    // colorGen), so this is decided per build rather than needing a runtime attribute
-    // swap.
+    // Only a MAPPED tank is re-projected -- which, since issue #137, is every tank:
+    // enemies now carry a two-tone map too, so their hulls get the same continuous UV
+    // treatment the player's always has. Geometry is rebuilt whenever the style changes
+    // (setPlayerStyle bumps colorGen for the player; an enemy's kind never changes once
+    // built, so its geometry is built once and never re-touched by a restyle).
     const mapped = skinMap !== null;
     // The stripe skin is the one pattern whose DIRECTION matters, so its turret and
-    // barrel are projected flat. Every other skin keeps each part's own lathe wrap on
-    // the TURRET, which is what makes the checker's turret a pinwheel and the flow's a
-    // swirl; Austin asked for both of those to stay untouched.
-    const striped = mapped && playerSkin === 'stripes';
+    // barrel are projected flat. Every other skin -- including `two-tone`, which is
+    // what every enemy wears -- keeps each part's own lathe wrap on the TURRET, which
+    // is what makes the checker's turret a pinwheel and the flow's a swirl; Austin
+    // asked for both of those to stay untouched. Keyed on the tank's own RESOLVED skin
+    // rather than on `kind`, deliberately: `kind === 'player'` was equivalent to "is
+    // this the tank whose skin might be stripes" only while stripes was player-only.
+    // Now that every kind carries a skin, the question this gate answers is "is THIS
+    // tank's skin stripes", and only the player's skin is ever stripes -- an enemy's
+    // resolved skin is always `two-tone`, which two-tone's own painter comment explains
+    // does not need planar UVs at all. MEASURED, not just argued: because no enemy can
+    // wear stripes today, this form and the old `kind === 'player' && playerSkin ===
+    // 'stripes'` are equivalent over every reachable state -- reverting to the old form
+    // passes the full entities.test.ts suite (50 of 50) unchanged. The re-keying is a
+    // semantic tidy-up pinned by nothing until an enemy CAN wear stripes; if that day
+    // comes, this comment is the reminder that the gate must follow the skin.
+    const striped = mapped && resolvedSkin === 'stripes';
 
     const bodyGeo = beveledExtrude(hullPlan(HULL_LEN, bodyWidth, HULL_CORNER, HULL_NOSE), bodyH, HULL_BEVEL);
     bodyGeo.rotateX(-Math.PI / 2);
@@ -1126,6 +1173,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   function dispose(): void {
     playerSkinMap?.dispose();
+    // Five enemy kinds, five textures (today) -- disposing only the player's map, as
+    // this used to, leaked one DataTexture per enemy KIND for the life of the game.
+    // `dispose()` only runs once per createEntityViews instance (teardown), so unlike
+    // `playerSkinMap` these are never replaced mid-game and need no per-restyle
+    // disposal path of their own.
+    for (const tex of enemySkinMaps.values()) tex.dispose();
+    enemySkinMaps.clear();
     for (const v of tankViews.values()) disposeObject(v.group);
     for (const m of bulletViews.values()) disposeObject(m);
     for (const m of mineViews.values()) disposeObject(m);

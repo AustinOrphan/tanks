@@ -93,10 +93,10 @@ describe('createSkinTexture', () => {
   });
 
   it('samples the tile the way it was DECIDED to, not the way DataTexture defaults', () => {
-    // Population: all 5 non-solid skins (derived from SKINS, so a sixth arrives here
-    // automatically). Every one is minted by the same factory, so this is really one
-    // decision checked five times -- what it catches is a per-skin special case as much
-    // as a change to the constants.
+    // Population: all 6 non-solid skins (derived from SKINS, so a seventh arrives here
+    // automatically -- `two-tone` already has, issue #137). Every one is minted by the
+    // same factory, so this is really one decision checked six times -- what it catches
+    // is a per-skin special case as much as a change to the constants.
     //
     // The production change it catches: deleting the three assignments in
     // createSkinTexture, which is what the file did before -- `magFilter`/`minFilter`
@@ -202,6 +202,35 @@ describe('createSkinTexture', () => {
         if (rows[y] !== base && prev === base) runs += 1;
       }
       expect(runs, 'the hull no longer carries exactly two stripes').toBe(2);
+    });
+
+    it('two-tone: a genuine even split into two solid, row-uniform bands -- issue #137', () => {
+      // Every row is FLAT -- the split runs along v (row), not across it, mirroring the
+      // stripe test's own row-uniformity check above. A production change that instead
+      // varied colour WITHIN a row (splitting along u, or a non-band pattern) fails
+      // here even though `toneStats` alone would not see it.
+      const px = pixelsOf('two-tone', '#3d7bd6', null);
+      for (let y = 0; y < SIZE; y++) {
+        expect(new Set(rowOf(px, y)).size, `row ${y} varies internally: two-tone is not row-uniform`).toBe(1);
+      }
+      // Exactly TWO transitions among the 128 wrapped row-to-row comparisons: the
+      // interior boundary (row 63 -> 64) and the wrap boundary (row 127 -> 0). Two
+      // solid fields split in half have exactly two edges, and the wrap one is not a
+      // BROKEN extra edge -- a hard 50/50 band is a periodic function of row, so it
+      // tiles under RepeatWrapping with no special handling, unlike camo/clouds' scatter
+      // geometry, which needs its own wrap-distance maths to avoid a busier seam.
+      const rows = Array.from({ length: SIZE }, (_, y) => rowOf(px, y)[0]);
+      let transitions = 0;
+      for (let y = 0; y < SIZE; y++) if (rows[y] !== rows[(y - 1 + SIZE) % SIZE]) transitions++;
+      expect(transitions, 'two-tone should be exactly two bands, not several').toBe(2);
+      // An EVEN split: the boundary sits at row 64, half the tile either side.
+      expect(rows[0]).toBe(rows[63]);
+      expect(rows[64]).toBe(rows[127]);
+      expect(rows[63]).not.toBe(rows[64]);
+    });
+
+    it('two-tone is deterministic, like every other skin', () => {
+      expect(pixelsOf('two-tone', '#3d7bd6')).toEqual(pixelsOf('two-tone', '#3d7bd6'));
     });
 
     it('clouds is LIGHT on every hull that has room to be', () => {
@@ -512,8 +541,8 @@ describe('createSkinTexture', () => {
      * test that looks at hue, which is the one further down this file.
      *
      * Population for the sweep below: every shipped hull (6, PALETTE) x every accent
-     * choice including `auto` (5, ACCENTS) x every patterned skin (5, since `clouds` landed) = 150 combinations,
-     * every one of them checked, not a sample.
+     * choice including `auto` (5, ACCENTS) x every patterned skin (6, since `two-tone`
+     * landed, issue #137) = 180 combinations, every one of them checked, not a sample.
      */
     it('never renders a flat block, across the full hull x accent x skin cross product', () => {
       const flat: string[] = [];
@@ -527,13 +556,13 @@ describe('createSkinTexture', () => {
           }
         }
       }
-      expect(checked).toBe(PALETTE.length * ACCENTS.length * PATTERNED_SKINS.length); // 150
+      expect(checked).toBe(PALETTE.length * ACCENTS.length * PATTERNED_SKINS.length); // 180
       expect(flat).toEqual([]);
     });
 
     /**
      * A stronger bar than "not flat" for an EXPLICIT accent pick specifically -- every
-     * one of these 96 combinations should hold a real margin, not just clear zero,
+     * one of these 144 combinations should hold a real margin, not just clear zero,
      * whether or not `ensureContrast` (skins.ts) actually nudges that particular pair.
      * Tightening `MIN_ACCENT_DELTA` (see that constant's comment) means most pairs now
      * pass through untouched, so the floor here is no longer "how far the nudge pushes"
@@ -545,8 +574,10 @@ describe('createSkinTexture', () => {
      *
      * Population: every shipped hull (6) x every EXPLICIT accent -- excluding `auto`,
      * which is checked by its own visibility floor below (4: black/white/silver/gold)
-     * x every patterned skin (5, since `clouds` landed) = 120 combinations, all
-     * checked.
+     * x every patterned skin (6, since `two-tone` landed, issue #137) = 144
+     * combinations, all checked. `two-tone` clears this floor with NO extra tuning: it
+     * reuses `ensureContrast` exactly as stripes/checker/flow do, and those three never
+     * needed one either.
      */
     it('explicit accents clear a real contrast floor, not just "not flat"', () => {
       const weak: string[] = [];
@@ -560,7 +591,7 @@ describe('createSkinTexture', () => {
           }
         }
       }
-      expect(checked).toBe(120);
+      expect(checked).toBe(144);
       expect(weak).toEqual([]);
     });
 
@@ -647,8 +678,12 @@ describe('createSkinTexture', () => {
       // and ON the white hull it WAS white -- white/stripes measured 14.3 spread and
       // rendered as a featureless blob (screenshotted). autoAccent moves lightness only.
       //
-      // Population: 28 of the 30 hull x patterned-skin pairs. The two skipped are
-      // clouds on orange and green, for the reason given in the loop; that is the gap.
+      // Population: 34 of the 36 hull x patterned-skin pairs (6 hulls x 6 skins, since
+      // `two-tone` landed, issue #137). The two skipped are clouds on orange and green,
+      // for the reason given in the loop; that is the gap. `two-tone` needed no
+      // exclusion of its own: it reuses `autoAccent` at the same delta stripes/checker/
+      // flow already use, none of which needed one either -- verified by running this
+      // sweep, not assumed from the reuse alone.
       const drifted: string[] = [];
       let checked = 0;
       for (const hull of PALETTE) {
@@ -659,7 +694,8 @@ describe('createSkinTexture', () => {
           // runs L to 1), leaving no saturation to keep. An earlier version excluded
           // clouds on ALL six hulls, which was four combinations wider than the reason
           // given -- review measured that narrowing it to these two still passes, 28 of
-          // 30 checked. Clouds' own character is pinned by the direction test below.
+          // 30 checked (now 34 of 36). Clouds' own character is pinned by the direction
+          // test below.
           if (skin === 'clouds' && (hull.id === 'orange' || hull.id === 'green')) continue;
           checked += 1;
           for (const tone of distinctTones(pixelsOf(skin, hull.hex, null))) {
@@ -674,7 +710,7 @@ describe('createSkinTexture', () => {
           }
         }
       }
-      expect(checked).toBe(28);
+      expect(checked).toBe(34);
       expect(drifted).toEqual([]);
     });
 
@@ -684,7 +720,8 @@ describe('createSkinTexture', () => {
       // set at 50, below the current worst (68.5, measured across all 30) and far above
       // anything the old derivation produced on white.
       //
-      // Population: all 6 hulls x all 5 patterned skins = 30, the complete set.
+      // Population: all 6 hulls x all 6 patterned skins = 36, the complete set (since
+      // `two-tone` landed, issue #137).
       const weak: string[] = [];
       let checked = 0;
       for (const hull of PALETTE) {
@@ -694,7 +731,7 @@ describe('createSkinTexture', () => {
           if (stats.spread < 50) weak.push(`${hull.id}/${skin} (${stats.spread.toFixed(1)})`);
         }
       }
-      expect(checked).toBe(30);
+      expect(checked).toBe(36);
       expect(weak).toEqual([]);
     });
 
@@ -717,29 +754,33 @@ describe('createSkinTexture', () => {
       // the `auto` branch fails HERE, loudly, instead of quietly repainting every
       // player's tank. Re-capture these only when you mean to.
       //
-      // Population: 6 shipped hulls x 5 patterned skins = 30, the complete set.
+      // Population: 6 shipped hulls x 6 patterned skins = 36, the complete set (since
+      // `two-tone` landed, issue #137; was 30 before).
       //
-      // RE-CAPTURED THREE TIMES on this branch, for three deliberate changes to the same
-      // pair: the camo/clouds density swap (12 of 30 moved), the shape-language split
-      // that gave each its own generator (12 of 30 again), and then the reversion of
-      // clouds alone to `blotches` after `cumulus` was rejected on look (6 of 30 -- the
-      // six clouds entries and nothing else). The 18 stripes/checker/flow hashes are
-      // byte-for-byte what they were before any of the three. That invariance is the
-      // check that none of them touched anything but camo and clouds. If a stripes,
-      // checker or flow hash ever moves in the same commit as a camo/clouds one, that is
-      // a second change riding along and it needs its own reason.
+      // RE-CAPTURED THREE TIMES before `two-tone`, for three deliberate changes to the
+      // same pair: the camo/clouds density swap (12 of 30 moved), the shape-language
+      // split that gave each its own generator (12 of 30 again), and then the reversion
+      // of clouds alone to `blotches` after `cumulus` was rejected on look (6 of 30 --
+      // the six clouds entries and nothing else). The 18 stripes/checker/flow hashes
+      // stayed byte-for-byte through all three. That invariance is the check that none
+      // of them touched anything but camo and clouds. If a stripes, checker or flow
+      // hash ever moves in the same commit as a camo/clouds one, that is a second
+      // change riding along and it needs its own reason. Adding the six `two-tone`
+      // entries below moved nothing else in the table -- the 30 pre-existing hashes are
+      // unchanged, which is the same invariance applied to a new skin rather than a
+      // re-tuned one.
       //
       // The six clouds entries below are not newly captured: they are byte-identical to
       // what this table held at 76ef38a, before `cumulus` existed. That equality is the
       // evidence that the revert landed on the exact texture Austin compared against,
       // rather than on something merely similar to it.
       const GOLDEN: Record<string, string> = {
-        'blue/stripes': '68c745c5', 'blue/camo': '892c9da9', 'blue/clouds': 'cbe3c968', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06',
-        'red/stripes': '44d265c5', 'red/camo': '7504e4e5', 'red/clouds': 'a1a5fa27', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845',
-        'orange/stripes': '3678b9c5', 'orange/camo': '29f15911', 'orange/clouds': '740aace5', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70',
-        'purple/stripes': '8f6df1c5', 'purple/camo': 'a75fc0dd', 'purple/clouds': 'c1836e39', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5',
-        'green/stripes': '8a012dc5', 'green/camo': '27573ce1', 'green/clouds': '40761c41', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82',
-        'white/stripes': 'f8ded5c5', 'white/camo': 'e71c4aed', 'white/clouds': 'e228941b', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2',
+        'blue/stripes': '68c745c5', 'blue/camo': '892c9da9', 'blue/clouds': 'cbe3c968', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06', 'blue/two-tone': '5b6d1dc5',
+        'red/stripes': '44d265c5', 'red/camo': '7504e4e5', 'red/clouds': 'a1a5fa27', 'red/checker': 'dd799dc5', 'red/flow': 'd3fe9845', 'red/two-tone': 'fd799dc5',
+        'orange/stripes': '3678b9c5', 'orange/camo': '29f15911', 'orange/clouds': '740aace5', 'orange/checker': '8750ddc5', 'orange/flow': '8bb8ea70', 'orange/two-tone': '4650ddc5',
+        'purple/stripes': '8f6df1c5', 'purple/camo': 'a75fc0dd', 'purple/clouds': 'c1836e39', 'purple/checker': '9b37ddc5', 'purple/flow': 'fe157ce5', 'purple/two-tone': 'a4b7ddc5',
+        'green/stripes': '8a012dc5', 'green/camo': '27573ce1', 'green/clouds': '40761c41', 'green/checker': '641b9dc5', 'green/flow': 'c5c95e82', 'green/two-tone': 'ee0a1dc5',
+        'white/stripes': 'f8ded5c5', 'white/camo': 'e71c4aed', 'white/clouds': 'e228941b', 'white/checker': '05b19dc5', 'white/flow': '3d0a85d2', 'white/two-tone': 'a5b19dc5',
       };
       let checked = 0;
       for (const hull of PALETTE) {
@@ -750,7 +791,7 @@ describe('createSkinTexture', () => {
           expect(hash, key).toBe(GOLDEN[key]);
         }
       }
-      expect(checked).toBe(30); // 6 shipped hulls x 5 patterned skins, all of them
+      expect(checked).toBe(36); // 6 shipped hulls x 6 patterned skins, all of them
     });
   });
 });
