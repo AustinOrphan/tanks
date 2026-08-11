@@ -212,6 +212,13 @@ describe('parseDevFlags: playtest is additive, never a veto', () => {
     expect(parseDevFlags('?dev=1&playtest=1&invincible=0').invincible).toBe(true);
   });
 });
+describe('parseDevFlags: gamepad', () => {
+  it('needs dev, like every other flag', () => {
+    expect(parseDevFlags('?gamepad=1').gamepad).toBe(false);
+    expect(parseDevFlags('?dev=1&gamepad=1').gamepad).toBe(true);
+  });
+});
+
 describe('the sandbox roster tracks the canonical kind list', () => {
   it('every enemy kind in TANK_KINDS parses in tanks= -- a new kind is spawnable the moment it exists', () => {
     // Pins the derivation in devflags.ts (review: it was built to admit new

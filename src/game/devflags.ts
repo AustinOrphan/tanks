@@ -117,6 +117,13 @@ export interface DevFlags {
    * collaborator, so the flag never reaches src/sim/ -- see replay.ts.
    */
   replay: boolean;
+  /**
+   * Read `navigator.getGamepads()` and merge gamepad[0] into the input stream alongside
+   * keyboard/mouse/touch -- see `src/input/gamepad.ts`. Single player only: gamepad[1]
+   * onward is ignored, matching every other input path (nothing about multiplayer exists
+   * beyond `stepInputs` taking a list -- see CLAUDE.md).
+   */
+  gamepad: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -136,6 +143,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   autoplay: false,
   saveIo: false,
   replay: false,
+  gamepad: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -222,6 +230,7 @@ export function parseDevFlags(search: string): DevFlags {
     autoplay: isOn(params, 'autoplay'),
     saveIo: isOn(params, 'saveIo'),
     replay: isOn(params, 'replay'),
+    gamepad: isOn(params, 'gamepad'),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps

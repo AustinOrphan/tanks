@@ -150,6 +150,14 @@ export interface Hud {
    */
   showAchievementToasts(defs: readonly AchievementDef[]): void;
   /**
+   * A single-line, self-expiring toast, reusing the same `.hud-toast` stack and timer as
+   * `showAchievementToasts` but for a plain message with no achievement identity behind
+   * it. Today's one caller: `?dev=1&gamepad=1`'s "gamepad connected" notice -- Firefox
+   * hides a pad from `navigator.getGamepads()` until the player presses a button on it,
+   * so the game has no other moment to confirm the pad was seen.
+   */
+  showToast(message: string): void;
+  /**
    * Draw the player's thumbs back on screen: the driving stick where it landed, and a
    * dot on the point the turret is being sent to.
    *
@@ -990,6 +998,15 @@ export function createHud(root: HTMLElement): Hud {
   // independently. Timers are tracked to be cleared in dispose(): a pending
   // callback firing into a removed DOM is the classic teardown leak.
   const toastTimers = new Set<ReturnType<typeof setTimeout>>();
+  /** Shared append+self-expire bookkeeping behind both showAchievementToasts and showToast. */
+  const appendToast = (t: HTMLElement): void => {
+    toastsEl.appendChild(t);
+    const timer = setTimeout(() => {
+      t.remove();
+      toastTimers.delete(timer);
+    }, TOAST_MS);
+    toastTimers.add(timer);
+  };
 
   const handleMute = (): void => {
     for (const cb of muteCbs) cb();
@@ -1527,13 +1544,14 @@ export function createHud(root: HTMLElement): Hud {
         name.className = 'hud-toast-label';
         name.textContent = d.label;
         t.append(head, name);
-        toastsEl.appendChild(t);
-        const timer = setTimeout(() => {
-          t.remove();
-          toastTimers.delete(timer);
-        }, TOAST_MS);
-        toastTimers.add(timer);
+        appendToast(t);
       }
+    },
+    showToast(message: string): void {
+      const t = document.createElement('div');
+      t.className = 'hud-toast';
+      t.textContent = message;
+      appendToast(t);
     },
     dispose(): void {
       disarmReset(); // a pending confirm timer must not outlive the HUD

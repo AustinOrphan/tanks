@@ -671,8 +671,9 @@ only when someone updates it. `round-ux` passes today, and nobody would learn th
 stopped.
 
 The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
-`invincible`, `autoplay`, `saveIo`, `replay`, `level` (a 1-based jump, or `level=sandbox`),
-and the sandbox knobs
+`invincible`, `autoplay`, `saveIo`, `replay`, `gamepad` (issue #114: merges gamepad[0]
+into keyboard/mouse/touch, single player only -- see `src/input/gamepad.ts`), `level` (a
+1-based jump, or `level=sandbox`), and the sandbox knobs
 `tanks`, `disarmed`, `walls`. `playtest=1` is a parse-time BUNDLE, not a field: it
 expands to invincible + shellCount + mineReach + mineTimer. `parseDevFlags` derives the
 boolean list from `DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what
