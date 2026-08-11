@@ -404,13 +404,24 @@ and a fixture whose whole job is to be an unshipped size gives way to production
 data. Three distinct board sizes are now covered.
 
 **Adding a level moves more pins than the level file.** Five places moved when
-arena-04 landed, and the list is the checklist for the next one:
-`cell-mapping.test.ts`'s cell and spawn totals (4379 / 25); `EXPECTED_CLAIMS` in
-`arena-validation.test.ts` (the claim mix, not a count); that file's `variable
-arena dimensions` block (fixture dimensions and bounds); its cover-ratio
-`EXPECTED` table; and three size labels in `tools/gl/harness.ts`. The harness
-labels are prose, so nothing failed when one of them was missed — review caught
-it. Any number a `notes` string quotes is likewise unpinned by construction:
+arena-04 landed; arena-05 then proved that list stale in both directions, so the
+checklist below is ARENA-05'S measured list, and the lesson is to re-derive it
+each time rather than trust this paragraph: `cell-mapping.test.ts`'s cell and
+spawn totals (5864 / 33 since arena-05); `EXPECTED_CLAIMS` in
+`arena-validation.test.ts` (the claim mix, not a count); that file's cover-ratio
+`EXPECTED` table (and its `tightest` assertion, which names one arena);
+`framing.test.ts`'s two `ARENAS.length` pins; `difficulty.test.ts`'s per-arena
+`EXPECTED` table and arena-list assertion (landed after arena-04, so the old
+checklist never knew it); the `demolition` threshold in `achievements.ts`
+(derived from the total destructible-cell count, which a new arena moves);
+`BASELINE_HASH` in `tools/baseline/trace.test.ts` (the trace runs over ALL
+shipped arenas); and the `framing-fit-bracket-4.5` entry's `expectFailures` in
+`tools/mutate/manifest.json`. Two items from arena-04's list dropped off: the
+`variable arena dimensions` fixture block only moves if the new size collides
+with a fixture, and the "three size labels in `tools/gl/harness.ts`" no longer
+exist — grep at arena-05 found no arena-size prose there to update. The harness
+labels were prose, so nothing failed when one was missed — review caught it —
+and the same class of miss is why this paragraph now says re-derive. Any number a `notes` string quotes is likewise unpinned by construction:
 `notes` are validated as strings only. Three blocks in `arena-validation.test.ts`
 exist purely to recompute quoted prose — arena-02's `12 of 16`, arena-04's cover
 ratios, and arena-04's bank-reach count (275 cells reached by ricochet, covering
@@ -480,11 +491,14 @@ by `decomposition.test.ts`; these two provenance figures are not.
 
 `src/sim/decomposition.test.ts` pins the property directly — the same geometry
 expressed at two cell sizes must agree on `resolveWalls`, `lineOfSight` and `bankShot`.
-`tools/baseline/trace.test.ts` is a golden trace over 4 arenas x 6 seeds x 2500 ticks
-and is now ASSERTED, not merely printed: `determinism.test.ts` only proves
+`tools/baseline/trace.test.ts` is a golden trace over 5 arenas x 6 seeds x 2500 ticks
+(4 until arena-05 joined — the trace runs over ALL shipped arenas, so adding a level
+moves `BASELINE_HASH` by construction) and is now ASSERTED, not merely printed:
+`determinism.test.ts` only proves
 self-consistency, which is invariant under behaviour changes. **Know what it does not
-cover, RE-MEASURED against the current tree.** Mutating `bankShot` to return the first
-valid candidate instead of the shortest now changes the hash (to
+cover, RE-MEASURED at the 4-arena tree (arena-05 has not re-measured these probes;
+the hash values below predate it).** Mutating `bankShot` to return the first
+valid candidate instead of the shortest changed the then-current hash (to
 `0cf1f76a14060992eb8763c9cd20e95b8c17cde2d1dbe3e8de6c87ff47137e9a`) and fails the test —
 a later change to `resolveWalls` altered trajectories enough that bank shots now DO
 influence the trace, even though the bank-shot rewrite itself did not move it when it
@@ -501,12 +515,16 @@ imports `src/sim` only and hashes through `crypto.subtle` + `TextEncoder` rather
 `node:crypto`, which is the whole reason it can: the same code under vitest and under
 Playwright. `npm run trace:browser -- --all` serves `tools/baseline/page.html` on
 localhost (secure context — `crypto.subtle` is undefined without one) and prints one hash
-per engine. Measured on this box: **chromium 151, firefox 153 and Playwright's webkit
-(JavaScriptCore, UA-spoofed as macOS Safari but a Linux build) all produce
-`015a5d17…`** — so V8, SpiderMonkey and JSC agree on this trace, on Linux x86-64,
-headless. **That is not the whole question**: shipped Safari, iOS and non-x86-64 CPUs are
-untested, and one matching hash is agreement on the sampled trajectory, not a proof about
-`Math.hypot`. Take the remaining half by opening `page.html` by hand on the device.
+per engine. Measured on this box AT THE 4-ARENA TRACE: **chromium 151, firefox 153 and
+Playwright's webkit (JavaScriptCore, UA-spoofed as macOS Safari but a Linux build) all
+produced `015a5d17…`** — so V8, SpiderMonkey and JSC agreed on that trace, on Linux
+x86-64, headless. **Arena-05 moved the hash (now `324aa9b5…`) and the three-engine run
+has NOT been repeated against it** — CI's `Baseline trace (chromium)` step re-verifies
+chromium on every push, so V8 agreement is current, but firefox and webkit agreement is
+a claim about the retired trace until someone re-runs `npm run trace:browser -- --all`.
+**And that is not the whole question either**: shipped Safari, iOS and non-x86-64 CPUs
+are untested, and one matching hash is agreement on the sampled trajectory, not a proof
+about `Math.hypot`. Take the remaining half by opening `page.html` by hand on the device.
 
 ## Testing conventions, learned the hard way
 
