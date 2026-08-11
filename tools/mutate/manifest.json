@@ -77,8 +77,8 @@
     "find": "let hi = span * 8;",
     "replace": "let hi = span * 4.5;",
     "expect": "killed",
-    "expectFailures": 9,
-    "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 9 -- 4 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire. NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here.",
+    "expectFailures": 11,
+    "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here.",
     "tests": ["src/render/framing.test.ts"]
   },
   {
