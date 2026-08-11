@@ -461,8 +461,9 @@ export function startGameWith(
     : null;
   const director = deps.createDirector(audio, playerId ?? -1);
   const haptics = deps.createHaptics(playerId ?? -1);
-  // Read once at boot. There is no UI to change it yet (issue #112 defers the toggle),
-  // so re-reading on every world switch would be indistinguishable from reading it here.
+  // Read once at boot; the toggle below (see the settings-row wiring) keeps it live
+  // afterward, the same as the saved scheme/fire-mode reads just above. Re-reading here
+  // on every world switch would be redundant with that.
   haptics.setEnabled(deps.touchSettings.haptics());
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
@@ -722,6 +723,17 @@ export function startGameWith(
     input.setFireMode(accepted);
   });
 
+  // The haptics toggle: same three-step convention -- store, then echo the ACCEPTED
+  // value back to both the HUD and the live director, since this preference has no
+  // input-controller half the way scheme/fire-mode do. Booleans have no off-list value
+  // to refuse, unlike setScheme/setFireMode.
+  hud.onHapticsChange((next) => {
+    deps.touchSettings.setHaptics(next);
+    const accepted = deps.touchSettings.haptics();
+    hud.setHaptics(accepted);
+    haptics.setEnabled(accepted);
+  });
+
   hud.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause, but a handler that rebuilds the
     // world deserves its own guard, not a CSS class as its only defence.
@@ -885,6 +897,7 @@ export function startGameWith(
   hud.setAccentColor(deps.customization.accent());
   hud.setTouchScheme(deps.touchSettings.scheme());
   hud.setFireMode(deps.touchSettings.fireMode());
+  hud.setHaptics(deps.touchSettings.haptics());
   hud.setAchievements(deps.achievements.earned());
   refreshStats(world);
 

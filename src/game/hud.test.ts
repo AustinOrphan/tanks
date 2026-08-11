@@ -1031,6 +1031,58 @@ describe('hud: the fire-mode toggle', () => {
   });
 });
 
+describe('hud: the haptics toggle', () => {
+  it('shows the current state, labelled so on/off read as different', () => {
+    const { hud: h, root } = mount();
+    const toggle = () => root.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
+
+    h.setHaptics(true);
+    expect(toggle().textContent).toMatch(/on/i);
+    const onLabel = toggle().textContent;
+    const onAria = toggle().getAttribute('aria-label');
+
+    h.setHaptics(false);
+    expect(toggle().textContent).toMatch(/off/i);
+    // Not just different case of the same string -- genuinely distinct copy, same
+    // discipline as the scheme and fire-mode toggles.
+    expect(toggle().textContent).not.toBe(onLabel);
+    expect(toggle().getAttribute('aria-label')).not.toBe(onAria);
+  });
+
+  it('taps the toggle and reports the OTHER state, from a real click at the button', () => {
+    // Same composition-blindness reasoning as the Pause/Mine/Fire/scheme/fire-mode
+    // toggle tests: drive a real event at a real element rather than only invoking the
+    // callback directly.
+    const { hud: h, root } = mount();
+    const seen: boolean[] = [];
+    h.onHapticsChange((on) => seen.push(on));
+    h.setHaptics(true);
+
+    const toggle = root.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen, 'the toggle is not wired to anything').toEqual([false]);
+
+    // The button does NOT flip its own label -- it only reports the choice. The loop
+    // echoes the ACCEPTED value back via setHaptics, same convention as the scheme and
+    // fire-mode toggles, so the label must not move until that echo arrives.
+    expect(root.querySelector('.hud-haptics-toggle')!.textContent).toMatch(/on/i);
+
+    h.setHaptics(false); // the loop's echo
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(seen).toEqual([false, true]);
+  });
+
+  it('is reachable from the title screen too, not just pause', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    const toggle = root.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
+    expect(settingsRow.classList.contains('hud-panel-settings--hidden')).toBe(false);
+    expect(settingsRow.contains(toggle)).toBe(true);
+  });
+});
+
 describe('hud: level select panel', () => {
   // The row used to sit directly on the main menu; it is now a panel reached from a
   // "Levels" button, following the Stats/Achievements/Customize pattern exactly (see
@@ -1859,18 +1911,20 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
 
     walk(root.querySelector('.hud-panel') as HTMLElement);
 
-    // Denominator: 41, the live sum of controlsOf().length over the title panel and all
+    // Denominator: 42, the live sum of controlsOf().length over the title panel and all
     // four subpanels, counted as `walk` actually visits each one (not asserted as a bare
-    // literal -- see below). It decomposes as 9 (title: Continue, New Game, the three
-    // open buttons, Levels-open, panel Mute, the scheme and fire-mode toggles) + 24
-    // (Customize: the preview canvas, its 4 rotate buttons, PALETTE.length 6 hull
+    // literal -- see below). It decomposes as 10 (title: Continue, New Game, the three
+    // open buttons, Levels-open, panel Mute, the scheme, fire-mode and haptics toggles) +
+    // 24 (Customize: the preview canvas, its 4 rotate buttons, PALETTE.length 6 hull
     // swatches, SKINS.length 7 skin buttons, ACCENTS.length 5 accent swatches, Back) + 3
     // (Stats: Reset stats, Reset progress, Back) + 1 (Achievements: Back -- the list
     // itself is plain divs, not focusable) + 4 (Levels: the 3 unlocked buttons this
     // test's own `setLevelSelect(3, 5)` leaves reachable, plus Back). The two volume
     // sliders and the topbar's own Mute are excluded by design -- see the roving-focus
     // doc comment in hud.ts.
-    expect(totalControls, 'recount the panels above if this moves').toBe(41);
+    // 42 since the haptics toggle (issue #112's deferred HUD control) landed: 41 + the
+    // toggle beside the fire-mode toggle in the title panel's settings row.
+    expect(totalControls, 'recount the panels above if this moves').toBe(42);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

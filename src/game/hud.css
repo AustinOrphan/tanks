@@ -1108,11 +1108,12 @@
   width: 140px;
 }
 
-/* The right thumb's aim-scheme toggle, and the fire-mode toggle beside it. Themed like
- * .hud-panel-mute -- same row, same kind of control (a button that cycles between
- * states). */
+/* The right thumb's aim-scheme toggle, the fire-mode toggle beside it, and the haptics
+ * toggle beside that. Themed like .hud-panel-mute -- same row, same kind of control (a
+ * button that cycles between states). */
 .hud-scheme-toggle,
-.hud-firemode-toggle {
+.hud-firemode-toggle,
+.hud-haptics-toggle {
   pointer-events: auto;
   cursor: pointer;
   border: none;

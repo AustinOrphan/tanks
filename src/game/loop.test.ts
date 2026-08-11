@@ -84,6 +84,10 @@ interface Recorder {
   fireModeStoreSets: FireMode[];
   /** Every mode echoed back to the HUD (hud.setFireMode), in order. */
   fireModeEchoes: FireMode[];
+  /** Every value accepted by the STORE (touchSettings.setHaptics), in order. */
+  hapticsStoreSets: boolean[];
+  /** Every value echoed back to the HUD (hud.setHaptics), in order. */
+  hapticsEchoes: boolean[];
   playerPosPushes: number;
   lastPlayerPos: { x: number; y: number } | null;
   touchPushes: TouchIndicator[];
@@ -159,6 +163,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     fireTap(): void;
     toggleScheme(s: TouchScheme): void;
     toggleFireMode(m: FireMode): void;
+    toggleHaptics(v: boolean): void;
     pickLevel(i: number): void;
     resetStats(): void;
     resetProgress(): void;
@@ -212,6 +217,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     fireModeSets: [],
     fireModeStoreSets: [],
     fireModeEchoes: [],
+    hapticsStoreSets: [],
+    hapticsEchoes: [],
     playerPosPushes: 0,
     lastPlayerPos: null,
     touchPushes: [],
@@ -274,6 +281,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onFireTap = (): void => {};
   let onTouchSchemeChange = (_s: TouchScheme): void => {};
   let onFireModeChange = (_m: FireMode): void => {};
+  let onHapticsChange = (_on: boolean): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
@@ -554,6 +562,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onFireModeChange: (cb: (m: FireMode) => void) => {
           onFireModeChange = cb;
         },
+        setHaptics: (v: boolean) => {
+          rec.hapticsEchoes.push(v);
+        },
+        onHapticsChange: (cb: (v: boolean) => void) => {
+          onHapticsChange = cb;
+        },
         setStats: () => {
           rec.statPushes += 1;
         },
@@ -656,6 +670,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         haptics: () => haptics,
         setHaptics: (v: boolean) => {
           haptics = v;
+          rec.hapticsStoreSets.push(v);
         },
       };
     })(),
@@ -832,6 +847,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       fireTap: () => onFireTap(),
       toggleScheme: (s: TouchScheme) => onTouchSchemeChange(s),
       toggleFireMode: (m: FireMode) => onFireModeChange(m),
+      toggleHaptics: (v: boolean) => onHapticsChange(v),
       pickLevel: (i) => onPickLevel(i),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
@@ -1002,13 +1018,15 @@ describe('startGameWith: construction', () => {
     h.handle.dispose();
   });
 
-  it('reads the persisted haptics preference at boot and pushes it to the director', () => {
+  it('reads the persisted haptics preference at boot, pushes it to the director, and echoes it to the HUD', () => {
     const on = boot(makeDeps({ savedHaptics: true }));
     expect(on.rec.hapticsEnabledCalls).toEqual([true]);
+    expect(on.rec.hapticsEchoes[0]).toBe(true);
     on.handle.dispose();
 
     const off = boot(makeDeps({ savedHaptics: false }));
     expect(off.rec.hapticsEnabledCalls).toEqual([false]);
+    expect(off.rec.hapticsEchoes[0]).toBe(false);
     off.handle.dispose();
   });
 
@@ -1517,6 +1535,26 @@ describe('startGameWith: the touch fire-mode wiring', () => {
       'the echo did not fall back to the stored value',
     ).toBe('double');
     expect(h.rec.fireModeSets.at(-1)).toBe('double'); // the input controller was not moved either
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the haptics toggle wiring', () => {
+  it('a toggle stores the pick, takes effect on the LIVE director, and echoes the accepted value to the HUD', () => {
+    // Same three-step convention as the scheme/fire-mode toggles: store, then echo what
+    // the store actually accepted. Unlike scheme/fire-mode there is no input controller
+    // half of this -- the second collaborator is the haptics director itself, via
+    // setEnabled, which is why this asserts hapticsEnabledCalls rather than an
+    // input-controller setter.
+    const h = boot(makeDeps({ savedHaptics: true }));
+    expect(h.rec.hapticsEnabledCalls).toEqual([true]); // the boot-time read
+    h.hud.toggleHaptics(false);
+    expect(h.rec.hapticsStoreSets).toEqual([false]);
+    expect(
+      h.rec.hapticsEnabledCalls.at(-1),
+      'the live director was not told about the switch',
+    ).toBe(false);
+    expect(h.rec.hapticsEchoes.at(-1)).toBe(false);
     h.handle.dispose();
   });
 });

@@ -171,7 +171,8 @@ describe('hud.css is syntactically whole', () => {
       '.hud-aimstick', '.hud-aimstick--hidden',
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
-      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle', // the settings row's controls
+      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle',
+      '.hud-haptics-toggle', // the settings row's controls
       '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
       // the level select PANEL: without the hidden rules it covers everything from load,
       // and without the open button's hidden rule it shows outside the title screen
@@ -255,7 +256,9 @@ describe('hud.css is syntactically whole', () => {
     // 47 since two-tone (issue #137) landed: every SKINS entry builds a button in the
     // skin row (hud.ts:641, `for (const skin of SKINS)`), so a seventh skin is a
     // seventh button.
-    expect(buttons.length).toBe(47);
+    // 48 since the haptics toggle (issue #112's deferred HUD control) landed: 47 + the
+    // toggle beside the fire-mode toggle in the settings row.
+    expect(buttons.length).toBe(48);
     expect(unstyled).toEqual([]);
 
     dispose();
