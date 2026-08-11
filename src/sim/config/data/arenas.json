@@ -527,7 +527,7 @@
         {
           "type": "spawnBlockRobust",
           "nudge": 0.1,
-          "why": "All seven spawn blocks are solid cells -- the bar's segments for the north three, the three-tier east wall for its three, the reused mid-field block for the west grey -- so none opens under a breach. Measured 0 of 28 nudge probes (7 enemies x 4 cardinal offsets) open in either wall phase, including green's ricochet, which is the property three rejected west-wall shapes failed to hold (see notes)."
+          "why": "All seven spawn blocks are solid cells -- the bar's segments for the north three, the continuous east wall for its three, the reused mid-field block for the west grey -- so none opens under a breach. Measured 0 of 28 nudge probes (7 enemies x 4 cardinal offsets) open in either wall phase, including green's ricochet, which is the property three rejected west-wall shapes failed to hold (see notes)."
         }
       ]
     }
