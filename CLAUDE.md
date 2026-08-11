@@ -515,15 +515,16 @@ imports `src/sim` only and hashes through `crypto.subtle` + `TextEncoder` rather
 `node:crypto`, which is the whole reason it can: the same code under vitest and under
 Playwright. `npm run trace:browser -- --all` serves `tools/baseline/page.html` on
 localhost (secure context — `crypto.subtle` is undefined without one) and prints one hash
-per engine. Measured on this box AT THE 4-ARENA TRACE: **chromium 151, firefox 153 and
-Playwright's webkit (JavaScriptCore, UA-spoofed as macOS Safari but a Linux build) all
-produced `015a5d17…`** — so V8, SpiderMonkey and JSC agreed on that trace, on Linux
-x86-64, headless. **Arena-05 moved the hash (now `324aa9b5…`) and the three-engine run
-has NOT been repeated against it** — CI's `Baseline trace (chromium)` step re-verifies
-chromium on every push, so V8 agreement is current, but firefox and webkit agreement is
-a claim about the retired trace until someone re-runs `npm run trace:browser -- --all`.
-**And that is not the whole question either**: shipped Safari, iOS and non-x86-64 CPUs
-are untested, and one matching hash is agreement on the sampled trajectory, not a proof
+per engine. Measured on this box at the 5-ARENA trace (2026-08-11, the day arena-05
+landed): **chromium 151, firefox 153 and Playwright's webkit (JavaScriptCore, UA-spoofed
+as macOS Safari but a Linux build) all produce `324aa9b5…`, matching the pinned
+baseline** — so V8, SpiderMonkey and JSC agree on this trace, on Linux x86-64, headless.
+(The 4-arena trace's three-engine agreement on `015a5d17…` was the same result at the
+previous baseline; a new arena moves the hash by construction, so this re-run is owed
+again after every arena. CI's `Baseline trace (chromium)` step keeps V8 current on every
+push; firefox and webkit only re-verify when someone runs `npm run trace:browser --
+--all`.) **That is not the whole question**: shipped Safari, iOS and non-x86-64 CPUs are
+untested, and one matching hash is agreement on the sampled trajectory, not a proof
 about `Math.hypot`. Take the remaining half by opening `page.html` by hand on the device.
 
 ## Testing conventions, learned the hard way
