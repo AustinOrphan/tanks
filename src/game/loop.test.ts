@@ -2253,6 +2253,22 @@ describe('startGameWith: the main menu', () => {
     expect(h.rec.levelBuilds).toHaveLength(1);
     h.handle.dispose();
   });
+
+  it('New Game -- hud.ts firing pick(0) -- starts level 1 and leaves recorded progress untouched', () => {
+    // hud.ts's New Game button reuses this exact wiring (fires onLevelSelect with 0,
+    // the same as clicking level 1 in the panel) rather than a second path, so this is
+    // the seam that pins issue #135's "New Game starts level 1 with progress
+    // unchanged": recordCleared keeps a maximum, and a new run must not re-lock
+    // anything a prior session already unlocked. The production change that would
+    // break this is New Game calling deps.progress.reset() or recordCleared, or
+    // targeting any level index other than 0.
+    const h = boot(makeDeps({ levelCount: 3, progressHighest: 2 })); // level 3 already unlocked
+    h.hud.pickLevel(0);
+    expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 0, lives: undefined });
+    expect(h.getState()).toBe('playing');
+    expect(h.deps.progress.highestCleared(), 'a fresh run must not re-lock anything').toBe(2);
+    h.handle.dispose();
+  });
 });
 
 describe('startGameWith: a level pick is bounds-checked', () => {

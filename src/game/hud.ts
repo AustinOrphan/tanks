@@ -32,11 +32,17 @@ export interface Hud {
   setLevel(current: number, total: number): void;
   /**
    * The main menu's level select: `unlocked` of `total` levels are pickable
-   * (1-based count; level 1 is always open). A one-level total hides the row --
-   * the sandbox is not a choice. Locked buttons are DISABLED, not merely grey.
+   * (1-based count; level 1 is always open). A one-level total hides the Levels button
+   * entirely -- the sandbox is not a choice. Locked buttons are DISABLED, not merely
+   * grey. Also the ONLY signal the HUD gets that progress exists: `unlocked > 1` iff
+   * `highestCleared() > 0`, which is what gates the Continue button (see onStartRestart).
    */
   setLevelSelect(unlocked: number, total: number): void;
-  /** Fired with the 0-BASED level index when an unlocked level button is clicked. */
+  /**
+   * Fired with the 0-BASED level index when an unlocked level button is clicked -- and
+   * with 0 when New Game is clicked, which reuses this exact callback rather than a
+   * second wiring to the same destination under a different label.
+   */
   onLevelSelect(cb: (level: number) => void): void;
   setState(s: GameState): void;
   /** Reflect the engine's mute state in the button. */
@@ -65,7 +71,12 @@ export interface Hud {
   signalPlayerDeath(): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
-  /** Extension: fired when the title/win/lose panel's start/restart button is clicked. */
+  /**
+   * Extension: fired when the pause/win/lose panel's Resume/Next Level/Play
+   * Again/Retry button is clicked -- and by the title panel's Continue button, which
+   * shares this handler rather than a second one, since it IS that action ("resume at
+   * `levels.start`") under a label that says what it does at the title screen.
+   */
   onStartRestart(cb: () => void): void;
   /** Fired by the pause panel's Quit to Title button, and by nothing else. */
   onQuitToTitle(cb: () => void): void;
@@ -286,6 +297,18 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-achievement-list"></div>
       <button class="hud-achievements-back" type="button">Back</button>
     </div>
+    <!-- The level select panel: reached from the "Levels" button on the main menu,
+         following the Stats/Achievements/Customize pattern exactly (issue #135). The
+         picker used to sit directly on the menu, competing for space with those three
+         buttons; it is now the SAME kind of pane they are, closed unconditionally by
+         setState like its siblings. The .hud-levels row carries no hidden class of its
+         own -- the panel wrapper is the one chokepoint, same as .hud-achievement-list
+         inside .hud-achievements. -->
+    <div class="hud-levelselect hud-levelselect--hidden">
+      <h1>Levels</h1>
+      <div class="hud-levels"></div>
+      <button class="hud-levelselect-back" type="button">Back</button>
+    </div>
     <div class="hud-customize hud-customize--hidden">
       <h1>Customize</h1>
       <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
@@ -364,12 +387,18 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-panel hud-panel--hidden" tabindex="-1">
       <h1 class="hud-title"></h1>
       <p class="hud-subtitle"></p>
-      <div class="hud-levels hud-levels--hidden"></div>
       <p class="hud-run-summary hud-run-summary--hidden"></p>
+      <!-- The title state's action button, split in two (issue #135): Continue resumes
+           at the furthest unlocked level and is offered only once there is something to
+           resume; New Game always starts level 1. The .hud-action button itself survives
+           for Resume/Next Level/Play Again/Retry -- see setState -- and hides at title. -->
+      <button class="hud-continue hud-continue--hidden" type="button">Continue</button>
+      <button class="hud-new-game hud-new-game--hidden" type="button">New Game</button>
       <button class="hud-action" type="button"></button>
       <button class="hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
       <button class="hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
       <button class="hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
+      <button class="hud-levelselect-open hud-levelselect-open--hidden" type="button">Levels</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
@@ -422,6 +451,8 @@ export function createHud(root: HTMLElement): Hud {
   const titleEl = el.querySelector('.hud-title') as HTMLElement;
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
+  const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
+  const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
   const quitBtn = el.querySelector('.hud-quit') as HTMLButtonElement;
   const statsOpenBtn = el.querySelector('.hud-stats-open') as HTMLButtonElement;
   const statsView = el.querySelector('.hud-stats') as HTMLElement;
@@ -446,6 +477,9 @@ export function createHud(root: HTMLElement): Hud {
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
   const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
+  const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
+  const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
+  const levelSelectBackBtn = el.querySelector('.hud-levelselect-back') as HTMLButtonElement;
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
@@ -775,6 +809,14 @@ export function createHud(root: HTMLElement): Hud {
     if (show) renderAchievements();
   }
 
+  // Same shape as showAchievements: no open/close callbacks (nothing here owns a WebGL
+  // context the way Customize does), and no re-render on open -- setLevelSelect already
+  // keeps `.hud-levels` current regardless of visibility ("REPLACE, never append").
+  function showLevelSelect(show: boolean): void {
+    levelSelectView.classList.toggle('hud-levelselect--hidden', !show);
+    panel.classList.toggle('hud-panel--hidden', show);
+  }
+
   // Each toast owns its own timer, so several landing at once stack and expire
   // independently. Timers are tracked to be cleared in dispose(): a pending
   // callback firing into a removed DOM is the classic teardown leak.
@@ -925,15 +967,43 @@ export function createHud(root: HTMLElement): Hud {
   // until the loop calls setLevel, and a HUD never told about levels keeps its
   // original single-arena wording.
   let levelPos: { current: number; total: number } | null = null;
-  // Whether level select has anything to offer (more than one level). Gates the row's
-  // visibility together with the title state.
+  // Whether level select has anything to offer (more than one level). Gates the
+  // Levels button's visibility together with the title state.
   let levelChoice = false;
+  // Whether Continue has anything to resume: derived from setLevelSelect's `unlocked`
+  // rather than a new channel -- unlocked > 1 iff highestCleared() > 0, since
+  // unlockedLevels() is min(highestCleared() + 1, count). Same gating convention as
+  // levelChoice.
+  let hasProgress = false;
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
-  // up (unlocks are recorded at the win event), and must not splash the row onto it.
+  // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: GameState = 'splash';
   /** Previous state, so leaving the splash can hand focus somewhere useful. */
   let lastState: GameState = 'splash';
   const levelSelectCbs: Array<(level: number) => void> = [];
+
+  const handleLevelSelectOpen = (): void => showLevelSelect(true);
+  const handleLevelSelectBack = (): void => {
+    showLevelSelect(false);
+    setState('title'); // re-render the title panel it covered
+  };
+  levelSelectOpenBtn.addEventListener('click', handleLevelSelectOpen);
+  levelSelectOpenBtn.addEventListener('click', blurIfPointer);
+  levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
+  levelSelectBackBtn.addEventListener('click', blurIfPointer);
+
+  // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
+  // that action, under a label that says what it does at the title screen specifically.
+  continueBtn.addEventListener('click', handleAction);
+  continueBtn.addEventListener('click', blurIfPointer);
+  // New Game IS "pick level 1" -- it reuses onLevelSelect's callback list (and so
+  // loop.ts's existing state/range guard on it) rather than adding a second wiring to
+  // the same destination under a different label.
+  const handleNewGame = (): void => {
+    for (const cb of levelSelectCbs) cb(0);
+  };
+  newGameBtn.addEventListener('click', handleNewGame);
+  newGameBtn.addEventListener('click', blurIfPointer);
 
   function setState(s: GameState): void {
     // Any state change closes the stats and customize pages FIRST -- including the
@@ -945,6 +1015,7 @@ export function createHud(root: HTMLElement): Hud {
     // from the panel is Start, which arrives here, not through the Back button.
     showCustomize(false);
     achView.classList.add('hud-achievements--hidden');
+    levelSelectView.classList.add('hud-levelselect--hidden');
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
@@ -977,9 +1048,15 @@ export function createHud(root: HTMLElement): Hud {
     statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
     customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
     achOpenBtn.classList.toggle('hud-achievements-open--hidden', s !== 'title');
+    levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', s !== 'title' || !levelChoice);
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
-    levelsRow.classList.toggle('hud-levels--hidden', s !== 'title' || !levelChoice);
+    // Continue/New Game replace the single action button AT TITLE ONLY -- Resume, Next
+    // Level, Play Again and Retry all still route through actionBtn below, which is why
+    // this toggles on `s === 'title'` alone rather than joining the group above.
+    continueBtn.classList.toggle('hud-continue--hidden', s !== 'title' || !hasProgress);
+    newGameBtn.classList.toggle('hud-new-game--hidden', s !== 'title');
+    actionBtn.classList.toggle('hud-action--hidden', s === 'title');
     // The run summary belongs to the END screens alone.
     runSummaryEl.classList.toggle('hud-run-summary--hidden', s !== 'win' && s !== 'lose');
     if (s === 'win' || s === 'lose') renderRunSummary();
@@ -992,7 +1069,6 @@ export function createHud(root: HTMLElement): Hud {
     if (s === 'title') {
       titleEl.textContent = 'TANKS!';
       subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
-      actionBtn.textContent = 'Start';
       // The panel, NOT actionBtn -- see the tabindex note on the element.
       if (leavingSplash) panel.focus();
     } else if (s === 'win') {
@@ -1074,6 +1150,8 @@ export function createHud(root: HTMLElement): Hud {
     },
     setLevelSelect(unlocked: number, total: number): void {
       levelChoice = total > 1;
+      // unlocked > 1 iff highestCleared() > 0 -- see the declaration's comment.
+      hasProgress = unlocked > 1;
       // REPLACE, never append: this re-renders after every unlock.
       levelsRow.textContent = '';
       for (let i = 0; i < total; i++) {
@@ -1094,7 +1172,11 @@ export function createHud(root: HTMLElement): Hud {
         }
         levelsRow.appendChild(btn);
       }
-      levelsRow.classList.toggle('hud-levels--hidden', shownState !== 'title' || !levelChoice);
+      // setLevelSelect may re-render while ANOTHER panel is up (unlocks are recorded at
+      // the win event) and must not splash either button onto it -- same `shownState`
+      // convention the row itself used to follow directly.
+      levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', shownState !== 'title' || !levelChoice);
+      continueBtn.classList.toggle('hud-continue--hidden', shownState !== 'title' || !hasProgress);
     },
     onLevelSelect(cb: (level: number) => void): void {
       levelSelectCbs.push(cb);
@@ -1298,6 +1380,14 @@ export function createHud(root: HTMLElement): Hud {
       achOpenBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);
       achBackBtn.removeEventListener('click', blurIfPointer);
+      levelSelectOpenBtn.removeEventListener('click', handleLevelSelectOpen);
+      levelSelectOpenBtn.removeEventListener('click', blurIfPointer);
+      levelSelectBackBtn.removeEventListener('click', handleLevelSelectBack);
+      levelSelectBackBtn.removeEventListener('click', blurIfPointer);
+      continueBtn.removeEventListener('click', handleAction);
+      continueBtn.removeEventListener('click', blurIfPointer);
+      newGameBtn.removeEventListener('click', handleNewGame);
+      newGameBtn.removeEventListener('click', blurIfPointer);
       customizeOpenBtn.removeEventListener('click', handleCustomizeOpen);
       customizeOpenBtn.removeEventListener('click', blurIfPointer);
       customizeBackBtn.removeEventListener('click', handleCustomizeBack);
