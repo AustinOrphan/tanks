@@ -32,7 +32,7 @@ import { SPAWN_LETTERS } from './arena-types';
  * is where the old "a 5th TankKind must be a compile error in the roster"
  * guard lives now that the roster is JSON.
  */
-export const TANK_KINDS = ['player', 'brown', 'grey', 'teal', 'olive', 'green'] as const satisfies readonly TankKind[];
+export const TANK_KINDS = ['player', 'brown', 'grey', 'teal', 'olive', 'green', 'yellow'] as const satisfies readonly TankKind[];
 type MissingKind = Exclude<TankKind, (typeof TANK_KINDS)[number]>;
 const _tankKindsExhaustive: MissingKind extends never ? true : MissingKind = true;
 void _tankKindsExhaustive;

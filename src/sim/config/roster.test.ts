@@ -15,7 +15,7 @@ import { AIBehavior, TankAbility } from './enums';
 
 // The shipped kinds. `player` is included because the player is now resolved through
 // the same pipeline (its weapon/movement/mine-capacity all come from configFor).
-const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive', 'green'];
+const KINDS: TankKind[] = ['player', 'brown', 'grey', 'teal', 'olive', 'green', 'yellow'];
 
 // The colours the renderer shipped before this refactor (entities.ts TANK_COLORS, as
 // 0x hex). config.color must reproduce them exactly, or the tanks change colour.
@@ -32,6 +32,13 @@ const SHIPPED_COLORS: Record<TankKind, string> = {
   // nearest of all ten shipped colours, so it leaves the palette's existing worst
   // pair (27.7, green swatch vs olive) as the minimum instead of becoming the new one.
   green: '#0A6E42',
+  // The reference taxonomy's own YELLOW hex, reused as-is (issue #136): every one of
+  // the ELEVEN shipped/paletted colours it was checked against (6 palette swatches +
+  // brown/grey/teal/olive/green -- review corrected an earlier "ten", which was
+  // green's own count carried forward without green itself joining the population)
+  // clears it by at least 38 deltaE76, well clear of the roster's own 33.0 minimum
+  // pair (olive vs green, pinned kind-vs-kind in customization.test.ts).
+  yellow: '#E7C928',
 };
 
 describe('game roster resolves to the shipped tunables (behaviour-preservation pins)', () => {
@@ -81,6 +88,9 @@ describe('game roster resolves to the shipped tunables (behaviour-preservation p
       // a time (its whole rhythm -- a slow, telegraphed lance), and no mines at all.
       // Raising either is a gameplay change, not a tidy-up.
       olive: { shells: 1, mines: 0 },
+      // Yellow's whole identity (issue #136): the dedicated mine layer, 2x MINE_CAP.
+      // Shell cap stays the default -- it is not a shooting specialist.
+      yellow: { shells: 1, mines: 4 }, // reference YELLOW: 1 active shell; the mines are the identity
     };
     for (const k of KINDS) {
       const want = PER_TANK[k] ?? { shells: SHELL_CAP, mines: MINE_CAP };
@@ -197,6 +207,43 @@ describe('per-kind identity comes from config, not code branches', () => {
     // no gameplay code reads it (see the note on abilities in resolve.ts) -- but the
     // dedicated bank tank lacking the descriptor its lesser banker carries is wrong.
     expect(hasAbility('green', TankAbility.BANK_SHOT_AIM)).toBe(true);
+  });
+
+  it('yellow, the mine specialist debut (issue #136 -- data-only, reused MOBILE_MINE_LAYER)', () => {
+    // The cheap case named in #136: a data-only kind reusing teal's shipped profile,
+    // differing only in weapon and mine capacity. Each line below is the design decision
+    // that distinguishes it from teal, or it is just teal with a different colour.
+    const y = configFor('yellow');
+    // TACTICAL -- routed to tealDecision by decideAi's switch, same as teal. Also the
+    // load-bearing fact behind the structuralFailures spawn-safety rule: that rule only
+    // binds STATIONARY bankers (arena-claims.ts), so a TACTICAL/mobile kind can never
+    // trip it no matter its bankShotWeight -- and MOBILE_MINE_LAYER's is 0 anyway.
+    expect(y.behavior).toBe(AIBehavior.TACTICAL);
+    expect(y.behavior).not.toBe(AIBehavior.STATIONARY);
+    // A plain shell, not teal's ricochet rocket -- yellow's identity is the mines, not
+    // the shot.
+    expect(y.weapon.bulletType).toBe('normal');
+    expect(y.weapon.ricochetCount).toBe(bulletConfig.normal.bounces);
+    expect(y.weapon.speed).toBe(bulletConfig.normal.speed);
+    expect(y.weapon.fireCooldown).toBe(FIRE_COOLDOWN_TICKS); // MEDIUM, like player/grey
+    // 1, the reference taxonomy's own YELLOW value (tank-types.json), NOT the shipped
+    // SHELL_CAP default -- review caught the first draft shipping 5 with no stated
+    // reason, in a definition every other field of which mirrors the reference
+    // verbatim. One shell in flight is the design: this kind fights with its mines
+    // (same shape as olive's 1-active rocket).
+    expect(y.weapon.maxActiveProjectiles).toBe(1);
+    expect(y.movementSpeed).toBe(TANK_SPEED); // MEDIUM chassis, unlike teal's 0.6x creep
+    expect(y.rotationSpeed).toBe(TANK_TURN_RATE); // MEDIUM turret, unlike teal's 0.6x
+    // The whole point of the kind: double MINE_CAP, and the ability that makes the
+    // mine-inclined profile legal (resolve.ts:69 refuses a mine-inclined profile without
+    // this on the definition -- roster.ts loading at all is that check passing).
+    expect(y.mineCapacity).toBe(4);
+    expect(hasAbility('yellow', TankAbility.MINE_LAYER)).toBe(true);
+    expect(y.ai.minePlacementChance ?? 0).toBeGreaterThan(0);
+    // Reused profile, not a new one (#136's point: this is the free part). Same
+    // MOBILE_MINE_LAYER numbers teal reads -- if this profile diverges from teal's, one
+    // of the two kinds is silently reading the wrong table.
+    expect(y.ai).toEqual(configFor('teal').ai);
   });
 
   it('parses to the exact 0xRRGGBB numbers the renderer used to hardcode', () => {

@@ -50,6 +50,24 @@ describe('the palette', () => {
     }
   });
 
+  it('keeps every shipped KIND perceptually clear of every other kind', () => {
+    // Kind-vs-kind, which the swatch test above cannot see: review proved that giving
+    // yellow grey's exact hex passed all 2150 tests, because nothing compared enemies
+    // to EACH OTHER and hull colour is a kind's primary identity channel (issue #137).
+    // Population: all 21 pairs of the 7 shipped kinds, player included. Same floor 20
+    // deltaE76 as the swatch test; the shipped minimum is 33.0 (olive vs green),
+    // measured over those 21 pairs, so this passes with headroom while failing any
+    // future kind that lands on (or one hex off) an existing identity.
+    const kinds = Object.entries(GAME_TANK_DEFS);
+    for (let i = 0; i < kinds.length; i++) {
+      for (let j = i + 1; j < kinds.length; j++) {
+        const [ka, a] = kinds[i];
+        const [kb, b] = kinds[j];
+        expect(deltaE(a.color, b.color), `${ka} vs ${kb}`).toBeGreaterThan(20);
+      }
+    }
+  });
+
   it('leads with the shipped default', () => {
     expect(PALETTE[0].id).toBe(DEFAULT_HULL);
     expect(PALETTE[0].hex.toLowerCase()).toBe(GAME_TANK_DEFS.player.color.toLowerCase());

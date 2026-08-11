@@ -27,6 +27,18 @@ describe('sandboxArena', () => {
       .toEqual(['brown', 'brown', 'teal']);
   });
 
+  it('spawns yellow -- the two-tables-agree trap (KIND_LETTER here vs SPAWN_LETTERS in loadArena)', () => {
+    // sandboxArena paints sandbox.ts's OWN KIND_LETTER onto the grid; loadArena then
+    // reads it back through config/arena-types.ts's SPAWN_LETTERS. If a new kind is
+    // added to one table and not the other, this is where it would surface: not as a
+    // compile error (SPAWN_LETTERS is keyed by letter, not exhaustive over TankKind),
+    // but as sandboxArena emitting a character loadArena silently drops (SPAWN_LETTERS
+    // returns undefined, so PASS 1 in loadArena's `if (!kind) continue` skips the cell
+    // and the tank never spawns).
+    const { spawns } = loadArena(sandboxArena({ tanks: ['yellow'] }));
+    expect(spawns.filter((s) => s.kind !== 'player').map((s) => s.kind)).toEqual(['yellow']);
+  });
+
   it('refuses more enemies than it has anchor positions, loudly', () => {
     const many = Array(SANDBOX_ENEMY_ANCHORS.length + 1).fill('brown');
     expect(() => sandboxArena({ tanks: many })).toThrow(/enem/i);
