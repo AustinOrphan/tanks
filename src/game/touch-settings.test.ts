@@ -7,6 +7,7 @@ import {
   createTouchSettingsStore,
   DEFAULT_TOUCH_SCHEME,
   DEFAULT_FIRE_MODE,
+  DEFAULT_HAPTICS,
   TOUCH_SETTINGS_KEY,
 } from './touch-settings';
 import { TOUCH_SCHEMES, FIRE_MODES } from '../input/touch';
@@ -146,6 +147,70 @@ describe('createTouchSettingsStore — fire mode', () => {
   it('a junk value under one key never touches the other store', () => {
     localStorage.setItem(TOUCH_SETTINGS_KEY, 'not json');
     expect(createTouchSettingsStore(localStorage).fireMode()).toBe(DEFAULT_FIRE_MODE);
+    expect(localStorage.getItem('tanks.custom.v1')).toBeNull();
+  });
+});
+
+describe('createTouchSettingsStore — haptics', () => {
+  it('defaults to on', () => {
+    // Pins the DEFAULT constant itself, not just that some boolean is returned --
+    // the spec requires `true` specifically, the same convention as audio's unmuted
+    // default.
+    expect(DEFAULT_HAPTICS).toBe(true);
+    expect(createTouchSettingsStore(localStorage).haptics()).toBe(true);
+  });
+
+  it('starts at the default and persists a pick across instances', () => {
+    const a = createTouchSettingsStore(localStorage);
+    expect(a.haptics()).toBe(DEFAULT_HAPTICS);
+    a.setHaptics(false);
+    expect(createTouchSettingsStore(localStorage).haptics()).toBe(false);
+  });
+
+  it('treats junk haptics values as the default', () => {
+    for (const junk of ['banana', '{"haptics":"yes"}', '{"haptics":1}', '']) {
+      localStorage.setItem(TOUCH_SETTINGS_KEY, junk);
+      expect(createTouchSettingsStore(localStorage).haptics(), junk).toBe(DEFAULT_HAPTICS);
+    }
+  });
+
+  it('survives a throwing storage, carrying the pick in-memory', () => {
+    const throwing = {
+      getItem: () => {
+        throw new Error('denied');
+      },
+      setItem: () => {
+        throw new Error('denied');
+      },
+    } as unknown as Storage;
+    const s = createTouchSettingsStore(throwing);
+    s.setHaptics(false); // must not throw
+    expect(s.haptics()).toBe(false);
+  });
+
+  it('a junk haptics value never resets scheme or fireMode, and vice versa -- all three degrade independently', () => {
+    localStorage.setItem(
+      TOUCH_SETTINGS_KEY,
+      JSON.stringify({ scheme: 'point', fireMode: 'double', haptics: 'nope' }),
+    );
+    let s = createTouchSettingsStore(localStorage);
+    expect(s.scheme(), 'a bad haptics value reset scheme too').toBe('point');
+    expect(s.fireMode(), 'a bad haptics value reset fireMode too').toBe('double');
+    expect(s.haptics()).toBe(DEFAULT_HAPTICS);
+
+    localStorage.setItem(
+      TOUCH_SETTINGS_KEY,
+      JSON.stringify({ scheme: 'joystick', fireMode: 7, haptics: false }),
+    );
+    s = createTouchSettingsStore(localStorage);
+    expect(s.scheme()).toBe(DEFAULT_TOUCH_SCHEME);
+    expect(s.fireMode()).toBe(DEFAULT_FIRE_MODE);
+    expect(s.haptics(), 'a bad scheme/fireMode reset haptics too').toBe(false);
+  });
+
+  it('a junk value under one key never touches the other store', () => {
+    localStorage.setItem(TOUCH_SETTINGS_KEY, 'not json');
+    expect(createTouchSettingsStore(localStorage).haptics()).toBe(DEFAULT_HAPTICS);
     expect(localStorage.getItem('tanks.custom.v1')).toBeNull();
   });
 });
