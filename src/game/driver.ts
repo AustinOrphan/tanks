@@ -44,6 +44,8 @@ export interface DriverDeps {
     render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
   };
   director: { handle(events: SimEvent[]): void };
+  /** haptics.ts's consumer, wired on the SAME terms as director -- see the call site below. */
+  haptics: { handle(events: SimEvent[]): void };
   stateMachine: DriverStateMachine;
   /** The world to start on. `reset` replaces it. */
   world: World;
@@ -103,6 +105,7 @@ export function createDriver(deps: DriverDeps): Driver {
       }
       if (frameEvents.length > 0) {
         deps.director.handle(frameEvents);
+        deps.haptics.handle(frameEvents);
         deps.stateMachine.onEvents(frameEvents);
         deps.onFrameEvents(frameEvents);
       }

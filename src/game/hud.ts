@@ -183,6 +183,14 @@ export interface Hud {
   /** Fired with the NEXT mode in the cycle when the player taps the fire-mode toggle. */
   onFireModeChange(cb: (mode: FireMode) => void): void;
   /**
+   * Whether haptics.ts's vibrate calls are allowed through, echoed back by the loop
+   * after an accepted toggle -- same convention as `setTouchScheme`/`setFireMode`: the
+   * HUD shows what was STORED, not what was clicked.
+   */
+  setHaptics(on: boolean): void;
+  /** Fired with the FLIPPED value when the player taps the haptics toggle. */
+  onHapticsChange(cb: (on: boolean) => void): void;
+  /**
    * The player just fired. Pulses the aim mark, so a tap that produced a shot is
    * distinguishable from a tap that did not -- on a phone the muzzle is under the
    * player's own hand, and the shell is gone before the eye gets there.
@@ -440,6 +448,10 @@ export function createHud(root: HTMLElement): Hud {
              EVERY mode; this only adds a gesture. Label/hint filled in by
              renderFireModeToggle. -->
         <button class="hud-firemode-toggle" type="button"></button>
+        <!-- Whether haptics.ts's vibrate calls fire at all -- same row, same
+             reachability as the two toggles above (a phone player can only reach this
+             here). Label/hint text is filled in by renderHapticsToggle. -->
+        <button class="hud-haptics-toggle" type="button"></button>
       </div>
     </div>
   `;
@@ -509,6 +521,7 @@ export function createHud(root: HTMLElement): Hud {
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
   const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
   const firemodeToggleBtn = el.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
+  const hapticsToggleBtn = el.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
 
   const muteCbs: Array<() => void> = [];
   const volumeCbs: Array<(v: number) => void> = [];
@@ -1149,6 +1162,35 @@ export function createHud(root: HTMLElement): Hud {
   firemodeToggleBtn.addEventListener('click', handleFireModeToggle);
   firemodeToggleBtn.addEventListener('click', blurIfPointer);
 
+  // The haptics toggle: one button, two states, cycling like the aim-scheme toggle
+  // rather than a checkbox -- same reasoning, a binary choice does not need a NEXT map.
+  // Vibration only ever fires where the platform supports it (see resolveVibrate in
+  // haptics.ts); this switch is for the player who wants it off regardless.
+  const HAPTICS_LABEL: Record<'on' | 'off', string> = { on: 'Haptics: On', off: 'Haptics: Off' };
+  const HAPTICS_HINT: Record<'on' | 'off', string> = {
+    on: 'Firing, losing a life and nearby mine blasts pulse the device, where supported.',
+    off: 'No vibration on firing, losing a life or nearby mine blasts.',
+  };
+  let currentHaptics = true;
+  function renderHapticsToggle(): void {
+    const state = currentHaptics ? 'on' : 'off';
+    const nextState = currentHaptics ? 'off' : 'on';
+    hapticsToggleBtn.textContent = HAPTICS_LABEL[state];
+    hapticsToggleBtn.title = HAPTICS_HINT[state];
+    hapticsToggleBtn.setAttribute(
+      'aria-label',
+      `Haptic feedback: ${HAPTICS_LABEL[state]}. ${HAPTICS_HINT[state]} ` +
+        `Tap to switch to ${HAPTICS_LABEL[nextState]}.`,
+    );
+  }
+  renderHapticsToggle();
+  const hapticsChangeCbs: Array<(on: boolean) => void> = [];
+  const handleHapticsToggle = (): void => {
+    for (const cb of hapticsChangeCbs) cb(!currentHaptics);
+  };
+  hapticsToggleBtn.addEventListener('click', handleHapticsToggle);
+  hapticsToggleBtn.addEventListener('click', blurIfPointer);
+
   // Where the session stands in the level sequence, for the win panel's copy. Null
   // until the loop calls setLevel, and a HUD never told about levels keeps its
   // original single-arena wording.
@@ -1526,6 +1568,13 @@ export function createHud(root: HTMLElement): Hud {
     onFireModeChange(cb: (mode: FireMode) => void): void {
       fireModeChangeCbs.push(cb);
     },
+    setHaptics(on: boolean): void {
+      currentHaptics = on;
+      renderHapticsToggle();
+    },
+    onHapticsChange(cb: (on: boolean) => void): void {
+      hapticsChangeCbs.push(cb);
+    },
     setAchievements(earned: ReadonlySet<AchievementId>): void {
       earnedIds = earned;
       // Only if the page is open: rebuilding a hidden list every frame-batch is
@@ -1569,6 +1618,8 @@ export function createHud(root: HTMLElement): Hud {
       schemeToggleBtn.removeEventListener('click', blurIfPointer);
       firemodeToggleBtn.removeEventListener('click', handleFireModeToggle);
       firemodeToggleBtn.removeEventListener('click', blurIfPointer);
+      hapticsToggleBtn.removeEventListener('click', handleHapticsToggle);
+      hapticsToggleBtn.removeEventListener('click', blurIfPointer);
       achOpenBtn.removeEventListener('click', handleAchOpen);
       achOpenBtn.removeEventListener('click', blurIfPointer);
       achBackBtn.removeEventListener('click', handleAchBack);

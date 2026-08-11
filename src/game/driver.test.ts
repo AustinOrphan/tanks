@@ -84,6 +84,7 @@ function harness(
   raf: ReturnType<typeof fakeRaf>;
   renders: RenderCall[];
   directed: SimEvent[][];
+  hapticsSaw: SimEvent[][];
   machineSaw: SimEvent[][];
   simulated: World[];
   framed: SimEvent[][];
@@ -94,6 +95,7 @@ function harness(
   const raf = fakeRaf();
   const renders: RenderCall[] = [];
   const directed: SimEvent[][] = [];
+  const hapticsSaw: SimEvent[][] = [];
   const machineSaw: SimEvent[][] = [];
   const simulated: World[] = [];
   const framed: SimEvent[][] = [];
@@ -117,6 +119,11 @@ function harness(
     director: {
       handle(events): void {
         directed.push(events);
+      },
+    },
+    haptics: {
+      handle(events): void {
+        hapticsSaw.push(events);
       },
     },
     stateMachine: {
@@ -144,6 +151,7 @@ function harness(
     raf,
     renders,
     directed,
+    hapticsSaw,
     machineSaw,
     simulated,
     framed,
@@ -255,6 +263,16 @@ describe('driver: event routing', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it('feeds the same events to haptics, on the same terms as the director', () => {
+    // A fourth consumer (haptics.ts) is wired at the same call site as the
+    // director -- if it drifted to a different batch, a player-fire pulse could
+    // land on a frame that carried an enemy shot instead.
+    const { h, playerId } = firedByPlayer();
+    expect(h.hapticsSaw).toHaveLength(1);
+    expect(h.hapticsSaw[0].filter((e) => e.type === 'fire' && e.ownerId === playerId)).toHaveLength(1);
+    expect(h.hapticsSaw[0]).toEqual(h.directed[0]);
+  });
+
   it('passes this frame\'s events to the renderer, and an empty list when there were none', () => {
     const { h, playerId } = firedByPlayer();
     const first = h.renders[0];
@@ -266,8 +284,8 @@ describe('driver: event routing', () => {
   });
 
   it('hands the same frame events to the extra consumer', () => {
-    // A third consumer (loop.ts drives HUD damage feedback from it) must see
-    // the same frame the director and the machine do, or the three drift.
+    // A fourth consumer (loop.ts drives HUD damage feedback from it) must see
+    // the same frame the director, haptics and the machine do, or they drift.
     const { h, playerId } = firedByPlayer();
     expect(h.framed).toHaveLength(1);
     expect(h.framed[0].filter((e) => e.type === 'fire' && e.ownerId === playerId)).toHaveLength(1);
@@ -279,6 +297,7 @@ describe('driver: event routing', () => {
     h.driver.start();
     h.raf.fire(20);
     expect(h.directed).toHaveLength(0);
+    expect(h.hapticsSaw).toHaveLength(0);
     expect(h.machineSaw).toHaveLength(0);
     expect(h.framed).toHaveLength(0);
   });

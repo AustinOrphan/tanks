@@ -118,8 +118,10 @@ file under `src/sim/`; it is the only file there that mentions those packages.
 
 **Render and audio are one-way projections.** The sim emits a `SimEvent[]` stream
 (`src/sim/events.ts`) and never reaches back. Consumers today: `render/renderer.ts`,
-`render/particles.ts`, `audio/director.ts`, `game/state.ts` (win/lose drives the game-over
-screen) and `game/loop.ts`. If you change an event's shape, check all five.
+`render/particles.ts`, `audio/director.ts`, `game/haptics.ts` (issue #112's seam --
+`navigator.vibrate` on web, injected so a future Capacitor build can swap in the native
+plugin), `game/state.ts` (win/lose drives the game-over screen) and `game/loop.ts`. If
+you change an event's shape, check all six.
 
 `step(world, input)` clones its input and returns `{ world, events }` — it never mutates
 what it is given.

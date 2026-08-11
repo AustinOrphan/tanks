@@ -24,6 +24,7 @@ import { AUDIO_MANIFEST } from '../audio/manifest';
 import type { SuiteContext } from '../audio/suites';
 import type { GameState } from './state';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
+import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import { createGameStateMachine, type GameStateMachine } from './state';
 import { createHud, type Hud } from './hud';
 import { createDriver, type RafScheduler } from './driver';
@@ -105,6 +106,17 @@ export interface GameDeps {
    * cannon. Requiring it makes that a compile error instead of a defect.
    */
   readonly createDirector: (engine: AudioEngine, playerId: number) => AudioDirector;
+  /**
+   * The haptics seam (issue #112). Mirrors createDirector's shape and the same
+   * reasoning: playerId is required, not defaulted, because no live tank is ever id 0
+   * and a silently-wrong default would mean the player's own shots never buzz. Unlike
+   * createDirector there is no separately-constructed "engine" to pass in -- the
+   * injected collaborator is the bare `vibrate` function, and it is closed over
+   * inside this factory (createBrowserDeps passes `resolveVibrate()`) rather than
+   * threaded through GameDeps as its own field, since it has no lifecycle of its own
+   * to test independently of the director that calls it.
+   */
+  readonly createHaptics: (playerId: number) => HapticsDirector;
   readonly createStateMachine: () => GameStateMachine;
   readonly createHud: (root: HTMLElement) => Hud;
   /**
@@ -323,6 +335,7 @@ export function createBrowserDeps(): GameDeps {
     createInput: createInputController,
     createAudio: () => createAudioEngine(AUDIO_MANIFEST),
     createDirector: createAudioDirector,
+    createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
     createStateMachine: createGameStateMachine,
     createHud,
     levels: createLevelSystem(devFlags, progress),
@@ -447,6 +460,11 @@ export function startGameWith(
     ? createRecordingInput(effectiveInput, replayMetaFor(world, level))
     : null;
   const director = deps.createDirector(audio, playerId ?? -1);
+  const haptics = deps.createHaptics(playerId ?? -1);
+  // Read once at boot; the toggle below (see the settings-row wiring) keeps it live
+  // afterward, the same as the saved scheme/fire-mode reads just above. Re-reading here
+  // on every world switch would be redundant with that.
+  haptics.setEnabled(deps.touchSettings.haptics());
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
 
@@ -531,6 +549,7 @@ export function startGameWith(
     input: recorder ?? effectiveInput,
     renderer,
     director,
+    haptics,
     stateMachine: sm,
     world,
     onSimulated(w): void {
@@ -539,7 +558,12 @@ export function startGameWith(
       // see setPlayerPosition's doc comment. `null` when there is no player tank in
       // this world, in which case the input layer simply holds its last aim.
       const player = w.tanks.find((t) => t.kind === 'player');
-      input.setPlayerPosition(player ? { x: player.pos.x, y: player.pos.y } : null);
+      const playerPos = player ? { x: player.pos.x, y: player.pos.y } : null;
+      input.setPlayerPosition(playerPos);
+      // Same position, to the haptics director: mine-detonate is the only cue that
+      // needs a distance from the player, and the event stream never carries the
+      // player's own position (mine-detonate carries only the mine's).
+      haptics.setPlayerPosition(playerPos);
       hud.setTouchIndicator(input.touchIndicator());
       const gamepadConnected = input.gamepadConnected();
       if (gamepadConnected && !wasGamepadConnected) hud.showToast('Gamepad connected');
@@ -616,6 +640,7 @@ export function startGameWith(
     recorder?.begin(replayMetaFor(world, level));
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
+    haptics.setPlayerId(playerId ?? -1);
     // A FRESH world's roundStartTick can equal the old one's (both start at the same
     // tick), so without this reset the round tracker would not count the new level's
     // opening round and the teaching banner would re-show.
@@ -696,6 +721,17 @@ export function startGameWith(
     const accepted = deps.touchSettings.fireMode();
     hud.setFireMode(accepted);
     input.setFireMode(accepted);
+  });
+
+  // The haptics toggle: same three-step convention -- store, then echo the ACCEPTED
+  // value back to both the HUD and the live director, since this preference has no
+  // input-controller half the way scheme/fire-mode do. Booleans have no off-list value
+  // to refuse, unlike setScheme/setFireMode.
+  hud.onHapticsChange((next) => {
+    deps.touchSettings.setHaptics(next);
+    const accepted = deps.touchSettings.haptics();
+    hud.setHaptics(accepted);
+    haptics.setEnabled(accepted);
   });
 
   hud.onQuitToTitle(() => {
@@ -861,6 +897,7 @@ export function startGameWith(
   hud.setAccentColor(deps.customization.accent());
   hud.setTouchScheme(deps.touchSettings.scheme());
   hud.setFireMode(deps.touchSettings.fireMode());
+  hud.setHaptics(deps.touchSettings.haptics());
   hud.setAchievements(deps.achievements.earned());
   refreshStats(world);
 

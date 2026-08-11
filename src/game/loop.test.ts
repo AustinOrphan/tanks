@@ -48,6 +48,13 @@ interface Recorder {
   screenToGroundArgs: Array<[number, number]>;
   directorPlayerIds: number[];
   directorRebinds: number[];
+  hapticsPlayerIds: number[];
+  hapticsRebinds: number[];
+  hapticsSaw: SimEvent[][];
+  /** Every position pushed to haptics.setPlayerPosition, in order -- mirrors lastPlayerPos. */
+  hapticsPositions: Array<{ x: number; y: number } | null>;
+  /** Every value passed to haptics.setEnabled, in order. */
+  hapticsEnabledCalls: boolean[];
   levelBuilds: Array<{ level: number; lives: number | undefined }>;
   hudLevels: Array<[number, number]>;
   seeds: number[];
@@ -77,6 +84,10 @@ interface Recorder {
   fireModeStoreSets: FireMode[];
   /** Every mode echoed back to the HUD (hud.setFireMode), in order. */
   fireModeEchoes: FireMode[];
+  /** Every value accepted by the STORE (touchSettings.setHaptics), in order. */
+  hapticsStoreSets: boolean[];
+  /** Every value echoed back to the HUD (hud.setHaptics), in order. */
+  hapticsEchoes: boolean[];
   playerPosPushes: number;
   lastPlayerPos: { x: number; y: number } | null;
   touchPushes: TouchIndicator[];
@@ -133,7 +144,7 @@ interface Recorder {
   inputOptions: Array<{ gamepad?: boolean } | null>;
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string> } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string> } = {}): {
   deps: GameDeps;
   rec: Recorder;
   storage: Storage;
@@ -152,6 +163,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     fireTap(): void;
     toggleScheme(s: TouchScheme): void;
     toggleFireMode(m: FireMode): void;
+    toggleHaptics(v: boolean): void;
     pickLevel(i: number): void;
     resetStats(): void;
     resetProgress(): void;
@@ -177,6 +189,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     screenToGroundArgs: [],
     directorPlayerIds: [],
     directorRebinds: [],
+    hapticsPlayerIds: [],
+    hapticsRebinds: [],
+    hapticsSaw: [],
+    hapticsPositions: [],
+    hapticsEnabledCalls: [],
     levelBuilds: [],
     hudLevels: [],
     seeds: [],
@@ -200,6 +217,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     fireModeSets: [],
     fireModeStoreSets: [],
     fireModeEchoes: [],
+    hapticsStoreSets: [],
+    hapticsEchoes: [],
     playerPosPushes: 0,
     lastPlayerPos: null,
     touchPushes: [],
@@ -262,6 +281,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onFireTap = (): void => {};
   let onTouchSchemeChange = (_s: TouchScheme): void => {};
   let onFireModeChange = (_m: FireMode): void => {};
+  let onHapticsChange = (_on: boolean): void => {};
   let onResetStats = (): void => {};
   let onPickHull = (_id: HullColorId): void => {};
   let onPickSkin = (_id: SkinId): void => {};
@@ -422,6 +442,23 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
+    createHaptics: (playerId) => {
+      rec.hapticsPlayerIds.push(playerId);
+      return {
+        handle(events): void {
+          rec.hapticsSaw.push(events);
+        },
+        setPlayerId(id): void {
+          rec.hapticsRebinds.push(id);
+        },
+        setPlayerPosition(pos): void {
+          rec.hapticsPositions.push(pos);
+        },
+        setEnabled(v): void {
+          rec.hapticsEnabledCalls.push(v);
+        },
+      };
+    },
     createStateMachine: () => ({
       get state(): GameState {
         return state;
@@ -525,6 +562,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onFireModeChange: (cb: (m: FireMode) => void) => {
           onFireModeChange = cb;
         },
+        setHaptics: (v: boolean) => {
+          rec.hapticsEchoes.push(v);
+        },
+        onHapticsChange: (cb: (v: boolean) => void) => {
+          onHapticsChange = cb;
+        },
         setStats: () => {
           rec.statPushes += 1;
         },
@@ -609,6 +652,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     touchSettings: (() => {
       let scheme: TouchScheme = (opts.savedScheme ?? 'stick') as TouchScheme;
       let fireMode: FireMode = (opts.savedFireMode ?? 'tap') as FireMode;
+      let haptics = opts.savedHaptics ?? true;
       // From the REAL scheme/mode lists, not duplicates that could drift.
       const VALID = new Set<string>(TOUCH_SCHEMES);
       const VALID_MODES = new Set<string>(FIRE_MODES);
@@ -622,6 +666,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setFireMode: (id: FireMode) => {
           if (VALID_MODES.has(id)) fireMode = id;
           rec.fireModeStoreSets.push(id);
+        },
+        haptics: () => haptics,
+        setHaptics: (v: boolean) => {
+          haptics = v;
+          rec.hapticsStoreSets.push(v);
         },
       };
     })(),
@@ -798,6 +847,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       fireTap: () => onFireTap(),
       toggleScheme: (s: TouchScheme) => onTouchSchemeChange(s),
       toggleFireMode: (m: FireMode) => onFireModeChange(m),
+      toggleHaptics: (v: boolean) => onHapticsChange(v),
       pickLevel: (i) => onPickLevel(i),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
@@ -957,6 +1007,27 @@ describe('startGameWith: construction', () => {
     expect(h.rec.directorPlayerIds[0]).toBe(player?.id);
     expect(h.rec.directorPlayerIds[0]).not.toBe(0);
     h.handle.dispose();
+  });
+
+  it('gives haptics the real player tank id too, the same way the director gets it', () => {
+    const world = createArenaWorld(1);
+    const player = world.tanks.find((t) => t.kind === 'player');
+    const h = boot(makeDeps({ world }));
+    expect(h.rec.hapticsPlayerIds[0]).toBe(player?.id);
+    expect(h.rec.hapticsPlayerIds[0]).not.toBe(0);
+    h.handle.dispose();
+  });
+
+  it('reads the persisted haptics preference at boot, pushes it to the director, and echoes it to the HUD', () => {
+    const on = boot(makeDeps({ savedHaptics: true }));
+    expect(on.rec.hapticsEnabledCalls).toEqual([true]);
+    expect(on.rec.hapticsEchoes[0]).toBe(true);
+    on.handle.dispose();
+
+    const off = boot(makeDeps({ savedHaptics: false }));
+    expect(off.rec.hapticsEnabledCalls).toEqual([false]);
+    expect(off.rec.hapticsEchoes[0]).toBe(false);
+    off.handle.dispose();
   });
 
   it('seeds the world from wall-clock time, not a constant', () => {
@@ -1468,6 +1539,26 @@ describe('startGameWith: the touch fire-mode wiring', () => {
   });
 });
 
+describe('startGameWith: the haptics toggle wiring', () => {
+  it('a toggle stores the pick, takes effect on the LIVE director, and echoes the accepted value to the HUD', () => {
+    // Same three-step convention as the scheme/fire-mode toggles: store, then echo what
+    // the store actually accepted. Unlike scheme/fire-mode there is no input controller
+    // half of this -- the second collaborator is the haptics director itself, via
+    // setEnabled, which is why this asserts hapticsEnabledCalls rather than an
+    // input-controller setter.
+    const h = boot(makeDeps({ savedHaptics: true }));
+    expect(h.rec.hapticsEnabledCalls).toEqual([true]); // the boot-time read
+    h.hud.toggleHaptics(false);
+    expect(h.rec.hapticsStoreSets).toEqual([false]);
+    expect(
+      h.rec.hapticsEnabledCalls.at(-1),
+      'the live director was not told about the switch',
+    ).toBe(false);
+    expect(h.rec.hapticsEchoes.at(-1)).toBe(false);
+    h.handle.dispose();
+  });
+});
+
 describe('startGameWith: the aim stick\'s player-position feed', () => {
   it('pushes the LIVE player tank\'s world position on every simulated frame', () => {
     const world = { ...createArenaWorld(1), roundStartTick: -1000 };
@@ -1497,6 +1588,20 @@ describe('startGameWith: the aim stick\'s player-position feed', () => {
     h.fireFrame(20);
     expect(h.rec.playerPosPushes).toBeGreaterThan(0);
     expect(h.rec.lastPlayerPos, 'a world with no player pushed a stale position').toBeNull();
+    h.handle.dispose();
+  });
+
+  it('feeds haptics the SAME position, on the same frame -- the mine-detonate cue needs it', () => {
+    // haptics.ts cannot see the player's position from the event stream (mine-detonate
+    // carries only the mine's own pos), so loop.ts must push it the same way it pushes
+    // the aim stick's feed. A loop that fed haptics a stale or absent position would
+    // still pass every test above.
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = boot(makeDeps({ world }));
+    h.setState('playing');
+    h.fireFrame(20);
+    const player = world.tanks.find((t) => t.kind === 'player')!;
+    expect(h.rec.hapticsPositions.at(-1)).toEqual({ x: player.pos.x, y: player.pos.y });
     h.handle.dispose();
   });
 
@@ -1631,7 +1736,7 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
     h.handle.dispose();
   });
 
-  it('routes the events a real tick produced to BOTH the director and the machine', () => {
+  it('routes the events a real tick produced to the director, haptics AND the machine', () => {
     // Back-date the round so the player is past countdown+grace and can fire.
     const world = { ...createArenaWorld(1), roundStartTick: -1000 };
     const h = boot(makeDeps({ world }));
@@ -1646,6 +1751,8 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
     expect(h.rec.directed.length).toBeGreaterThan(0);
     expect(h.rec.machineSaw.length).toBe(h.rec.directed.length);
     expect(h.rec.directed.flat().length).toBe(h.rec.machineSaw.flat().length);
+    expect(h.rec.hapticsSaw.length).toBe(h.rec.directed.length);
+    expect(h.rec.hapticsSaw.flat().length).toBe(h.rec.directed.flat().length);
     h.handle.dispose();
   });
 });
@@ -2065,6 +2172,15 @@ describe('startGameWith: level progression', () => {
     h.hud.startRestart();
     expect(h.rec.directorRebinds).toHaveLength(1);
     expect(h.rec.directorRebinds[0]).toBe(h.rec.directorPlayerIds[0] + 71);
+    h.handle.dispose();
+  });
+
+  it('rebinds haptics to the NEW world\'s player too, on the same switch', () => {
+    const h = boot(makeDeps({ levelCount: 2 }));
+    h.setState('win');
+    h.hud.startRestart();
+    expect(h.rec.hapticsRebinds).toHaveLength(1);
+    expect(h.rec.hapticsRebinds[0]).toBe(h.rec.hapticsPlayerIds[0] + 71);
     h.handle.dispose();
   });
 

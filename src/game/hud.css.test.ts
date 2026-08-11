@@ -171,7 +171,8 @@ describe('hud.css is syntactically whole', () => {
       '.hud-aimstick', '.hud-aimstick--hidden',
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
-      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle', // the settings row's controls
+      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle',
+      '.hud-haptics-toggle', // the settings row's controls
       '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
       // the level select PANEL: without the hidden rules it covers everything from load,
       // and without the open button's hidden rule it shows outside the title screen
@@ -255,7 +256,9 @@ describe('hud.css is syntactically whole', () => {
     // 47 since two-tone (issue #137) landed: every SKINS entry builds a button in the
     // skin row (hud.ts:641, `for (const skin of SKINS)`), so a seventh skin is a
     // seventh button.
-    expect(buttons.length).toBe(47);
+    // 48 since the haptics toggle (issue #112's deferred HUD control) landed: 47 + the
+    // toggle beside the fire-mode toggle in the settings row.
+    expect(buttons.length).toBe(48);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -290,6 +293,19 @@ describe('hud.css is syntactically whole', () => {
     for (const cls of back) expect(styleOf(cls).fontSize, cls).toBe(inherited);
     for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
 
+    document.body.innerHTML = '';
+  });
+
+  it('lets the settings row wrap, since five controls no longer fit a phone width', () => {
+    // Review measured this in real chromium at hud.css's own named phone widths: four
+    // controls fit 393px exactly (rowWidth 393.0); adding the haptics toggle made it
+    // 448.5, clipped at both edges and unpannable under the body's overflow:hidden +
+    // the panel's touch-action: pan-y. `flex-wrap: wrap` is what folds it instead.
+    // Breaks if the declaration is dropped from `.hud-panel-settings`.
+    const row = document.createElement('div');
+    row.className = 'hud-panel-settings';
+    document.body.appendChild(row);
+    expect(getComputedStyle(row).flexWrap).toBe('wrap');
     document.body.innerHTML = '';
   });
 
