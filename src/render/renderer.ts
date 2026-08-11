@@ -3,6 +3,7 @@ import type { Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import { createScene, type SceneContext } from './scene';
+import type { RenderQuality } from './quality';
 import { createEntityViews, type EntityViews } from './entities';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createAimRay, type AimRay } from './aimray';
@@ -42,6 +43,12 @@ export interface RendererOptions {
    * means `auto` -- derive the tone from playerColor, exactly as skins.ts always has.
    */
   readonly playerAccent?: string | null;
+  /**
+   * The render quality preset (see quality.ts). Undefined leaves scene.ts's own
+   * default, which is `high` -- today's shipped values -- so the default construction
+   * path here must not move a single rendered pixel either.
+   */
+  readonly quality?: RenderQuality;
 }
 
 export function createRenderer(
@@ -54,7 +61,7 @@ export function createRenderer(
   // Mutable: refit() moves the board, and screenToGround's miss-fallback must keep
   // pointing at the CURRENT arena's centre.
   let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
-  const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary);
+  const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
   const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(

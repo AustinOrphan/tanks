@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { createTextures, type TextureSet } from './textures';
 import { framedBounds, fitCameraToArea } from './framing';
+import { QUALITY_PRESETS, DEFAULT_QUALITY_PRESET, type RenderQuality } from './quality';
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -112,11 +113,19 @@ export function createScene(
   worldHeight: number,
   /** Thickness of the boundary wall ring loadArena puts OUTSIDE the playable area. */
   boundary: number,
+  /**
+   * The render quality preset (see quality.ts) -- antialias, pixel ratio cap, shadow
+   * map size and shadow filter. Defaults to `high`, which is today's shipped values
+   * copied literally: an absent `quality` dev flag must not move a single rendered
+   * pixel, which is why every caller that does not thread a preset gets exactly this
+   * object rather than a freshly derived one.
+   */
+  quality: RenderQuality = QUALITY_PRESETS[DEFAULT_QUALITY_PRESET],
 ): SceneContext {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.antialias });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatioCap));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = quality.shadowType;
   renderer.setClearColor(0x14161c, 1);
   // ACES filmic instead of the default clip-to-white.
   //
@@ -165,7 +174,7 @@ export function createScene(
   // Directional 'sun' casting soft shadows across the whole arena.
   const sun = new THREE.DirectionalLight(0xffffff, 1.6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
   // The felt is one large flat receiver, the classic shadow-acne surface -- but the bias
   // that fixes acne DETACHES the shadow from its caster if you overdo it, leaving a lit
   // sliver of felt between a wall and its own shadow. It was overdone: normalBias 0.02
@@ -290,7 +299,7 @@ export function createScene(
     // Re-read the pixel ratio: browser zoom mutates devicePixelRatio, and
     // dragging the window between a HiDPI and a 1x monitor changes it too.
     // Setting it once at construction left the drawing buffer stale.
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatioCap));
     renderer.setSize(w, h, false);
     camera.aspect = h === 0 ? 1 : w / h;
     camera.fov = BASE_FOV;

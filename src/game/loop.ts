@@ -32,6 +32,7 @@ import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
 import { parseDevFlags, type DevFlags } from './devflags';
 import { configFor } from '../sim/config';
+import { qualityFor, type RenderQuality } from '../render/quality';
 
 /**
  * Construction and wiring: the boundary where the untestable collaborators are
@@ -81,6 +82,7 @@ export interface GameDeps {
       playerColor?: string;
       playerSkin?: SkinId;
       playerAccent?: string | null;
+      quality?: RenderQuality;
     },
   ) => Renderer3D;
   /**
@@ -406,6 +408,9 @@ export function startGameWith(
     playerColor: deps.customization.hexFor(deps.customization.hull()),
     playerSkin: deps.customization.skin(),
     playerAccent: deps.customization.accentHexFor(deps.customization.accent()),
+    // `?dev=1&quality=low|medium|high`; a null flag resolves to `high`, today's shipped
+    // values -- see render/quality.ts.
+    quality: qualityFor(deps.devFlags.quality),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
     gamepad: deps.devFlags.gamepad,
