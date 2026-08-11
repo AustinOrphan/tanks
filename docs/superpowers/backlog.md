@@ -468,9 +468,12 @@ be wrong.
 - **Do any `hud.css` em-relative font sizes compute below 9px at 1280x800?** The fixed-px
   declarations run 12px–72px and are fine; the `0.72em`/`0.85em`/`0.75em` rules are the only
   ones whose computed height cannot be read off the rule, and they were never checked.
-- **Author arena-05 and time it end to end.** Four arenas and 18 enemy spawns is a demo. The
-  five pin sites a new level moves are already enumerated in CLAUDE.md, so per-level cost is
-  knowable rather than guessable — measure one, then multiply.
+- **Author arena-05 and time it end to end.** ANSWERED (issue #119, PR #145): ~55.5
+  minutes wall-clock for the fifth level, including two validator-forced redesigns and
+  every pin the level moved — and the pin list itself had grown two sites since CLAUDE.md's
+  checklist was written, so the per-level figure to multiply is "an hour with the
+  machinery mature". A 20-mission campaign extrapolates to roughly 15 more hours of
+  authoring alone, before any per-level playtest or feel adjudication.
 - For Switch/PlayStation there is no substitute for registering (free for Nintendo) and
   submitting a concept. **Neither platform publishes its criteria**, so nothing short of that
   converts the unknown into a fact — and the pitch is what is judged, so decide content
@@ -794,9 +797,11 @@ disagree with each other. That disagreement is the spike.
   implementation plan for **stretch 1 only**: prepend two 2-brown boards and renumber the
   existing four. It carries full JSON grids.
 
-**Neither was executed, and the plan has gone stale.** Verified 2026-08-10:
-`src/sim/config/data/arenas.json` holds exactly `arena-01` .. `arena-04` (4 `"id"` keys, no
-`arena-00a`/`arena-00b`). `firstMission` is still only validated as a non-negative integer
+**Neither was executed, and the plan has gone stale.** Verified 2026-08-10, arena count
+re-verified 2026-08-11 after PR #145: `src/sim/config/data/arenas.json` holds exactly
+`arena-01` .. `arena-05` (5 `"id"` keys, no `arena-00a`/`arena-00b` — arena-05 extends the
+shipped sequence rather than adopting the spec's renumbered arc, which deepens rather than
+resolves this spike's question). `firstMission` is still only validated as a non-negative integer
 (`config/validate.ts:131`) and copied through `config/resolve.ts:79` — the spec's
 "enforced load-time rule" does not exist and **nothing reads the field**. And the plan's
 boards are specified as `"cols": 9, "rows": 7, "cellSize": 2`, which is pre-#75 geometry:

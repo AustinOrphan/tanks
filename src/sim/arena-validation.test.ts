@@ -249,9 +249,10 @@ describe('the cover ratio each arena quotes in its notes', () => {
     // independent counts: a grid edit that made arena-04 roomier than arena-03 would
     // satisfy every count above if they were updated to match, and still falsify the
     // sentence. arena-05 is now the tightest of the five (its own notes explain why --
-    // a staggered wall gives its enemies more overlapping sightline than arena-04's one
-    // continuous wall); arena-04's notes are corrected to say "tightest of the four that
-    // existed when written" rather than claim a property arena-05 removes.
+    // its east wall is CONTINUOUS like arena-04's but six rows DEEPER, 15 rows against
+    // 9, holding a third spawn whose reach covers the board's south half); arena-04's
+    // notes are corrected to say "tightest of the four that existed when written"
+    // rather than claim a property arena-05 removes.
     const tightest = Object.entries(ratio).sort((a, b) => a[1] - b[1])[0][0];
     expect(tightest).toBe('arena-05');
     expect(ratio['arena-05']).toBeLessThan(ratio['arena-04']);
