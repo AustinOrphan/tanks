@@ -617,6 +617,13 @@
 .hud-panel-settings {
   pointer-events: auto;
   display: flex;
+  /* wrap, since the haptics toggle made this a five-control row: measured in real
+   * chromium at the file's own named phone widths, four controls fit 393px exactly
+   * (rowWidth 393.0) and five overflow both edges (448.5, clipped and unpannable
+   * under the body's overflow:hidden + the panel's touch-action: pan-y). Wrapping
+   * folds the row to two lines instead. */
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 12px;
   margin-top: 18px;

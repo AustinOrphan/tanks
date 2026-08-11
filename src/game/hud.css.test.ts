@@ -296,6 +296,19 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('lets the settings row wrap, since five controls no longer fit a phone width', () => {
+    // Review measured this in real chromium at hud.css's own named phone widths: four
+    // controls fit 393px exactly (rowWidth 393.0); adding the haptics toggle made it
+    // 448.5, clipped at both edges and unpannable under the body's overflow:hidden +
+    // the panel's touch-action: pan-y. `flex-wrap: wrap` is what folds it instead.
+    // Breaks if the declaration is dropped from `.hud-panel-settings`.
+    const row = document.createElement('div');
+    row.className = 'hud-panel-settings';
+    document.body.appendChild(row);
+    expect(getComputedStyle(row).flexWrap).toBe('wrap');
+    document.body.innerHTML = '';
+  });
+
   it('lays out the accent row like its siblings, not as one touching strip', () => {
     // `.hud-accents` shipped with NO layout rule of its own -- `.hud-swatches` and
     // `.hud-skins` both set `display: flex; gap: ...`, but the accent row (a THIRD,

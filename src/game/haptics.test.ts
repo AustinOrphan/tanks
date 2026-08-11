@@ -68,7 +68,20 @@ describe('createHapticsDirector', () => {
     const d = createHapticsDirector(vibrate, PLAYER_ID);
     d.handle([destroyedEvent('player', PLAYER_ID)]);
     expect(calls).toEqual([DESTROYED_PATTERN_MS]);
-    expect(calls[0]).not.toEqual(FIRE_PULSE_MS);
+    // No `.not.toEqual(FIRE_PULSE_MS)` companion: an array can never toEqual a
+    // number, so that assertion was true regardless of either constant's value --
+    // review flagged it as decorative and it is deleted rather than kept for show.
+  });
+
+  it('pins MINE_DANGER_RADIUS to the sim kill reach it claims to be', () => {
+    // The boundary tests below probe RELATIVE to the constant, so they survive any
+    // magnitude -- review proved a x10 mutation (radius 25, larger than arena-01's
+    // whole board) passed 217 scoped tests. This literal is the magnitude pin:
+    // 2.5 = MINE_BLAST_RADIUS (2, balance.json mines.blastRadius) + TANK_RADIUS
+    // (0.5, balance.json tank.radius). Breaks if either constant retunes -- which is
+    // the point: retuning the sim's kill reach SHOULD force this file to re-affirm
+    // that the buzz still means "genuinely in the blast".
+    expect(MINE_DANGER_RADIUS).toBe(2.5);
   });
 
   it('does NOT vibrate when an ENEMY tank is destroyed', () => {
@@ -166,9 +179,14 @@ describe('createHapticsDirector', () => {
 
 describe('resolveVibrate', () => {
   it('binds and returns navigator.vibrate when the host has one', () => {
+    // The fake READS `this`, because a fixture that ignores its receiver cannot tell
+    // bound from unbound -- review proved the first version passed with .bind(nav)
+    // deleted. Chromium's real vibrate throws "Illegal invocation" detached from its
+    // navigator; this fake reproduces that contract, so dropping the bind fails here.
     const seen: Array<number | number[]> = [];
     const nav = {
-      vibrate(pattern: number | number[]): boolean {
+      vibrate(this: unknown, pattern: number | number[]): boolean {
+        if (this !== nav) throw new TypeError('Illegal invocation');
         seen.push(pattern);
         return true;
       },
@@ -176,6 +194,19 @@ describe('resolveVibrate', () => {
     const vibrate = resolveVibrate({ navigator: nav });
     expect(vibrate(10)).toBe(true);
     expect(seen).toEqual([10]);
+  });
+
+  it('degrades to the no-op when the navigator property itself THROWS on access', () => {
+    // The resolveStorage-mirroring half the comment promises: Safari-style lockdown
+    // hosts throw on property access rather than returning undefined. Breaks if the
+    // try/catch around host.navigator is removed.
+    const host = {
+      get navigator(): { vibrate?: (p: number | number[]) => boolean } {
+        throw new Error('SecurityError: navigator access blocked');
+      },
+    };
+    const vibrate = resolveVibrate(host);
+    expect(vibrate(10)).toBe(false); // the no-op, not a crash
   });
 
   it('returns a no-op that reports false when the host has no vibrate', () => {

@@ -162,9 +162,19 @@ export interface VibrateHost {
  * dently re-verified and should be treated as secondhand if it matters to a decision.
  */
 export function resolveVibrate(host: VibrateHost = globalThis as unknown as VibrateHost): VibrateFn {
-  const nav = host.navigator;
-  if (nav && typeof nav.vibrate === 'function') {
-    return nav.vibrate.bind(nav);
+  // The try/catch is what "mirrors resolveStorage" actually means -- its defining
+  // feature is surviving a host whose property access THROWS (storage.ts: "A getter
+  // that THROWS is the case that motivates the try/catch below"). Review proved the
+  // first version of this function propagated such a throw instead of degrading.
+  try {
+    const nav = host.navigator;
+    if (nav && typeof nav.vibrate === 'function') {
+      // bind, or Chromium's native method throws "Illegal invocation" when called
+      // detached from its navigator. Pinned by a test whose fake reads `this`.
+      return nav.vibrate.bind(nav);
+    }
+  } catch {
+    /* fall through to the no-op */
   }
   return () => false;
 }
