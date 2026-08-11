@@ -219,7 +219,7 @@ describe('the cover ratio each arena quotes in its notes', () => {
     'arena-02': { unseen: 369, open: 747 },
     'arena-03': { unseen: 248, open: 792 },
     'arena-04': { unseen: 284, open: 1359 },
-    'arena-05': { unseen: 284, open: 1359 },
+    'arena-05': { unseen: 185, open: 1359 },
   };
 
   it('recomputes every quoted count, and the ranking the note claims', () => {
@@ -245,12 +245,16 @@ describe('the cover ratio each arena quotes in its notes', () => {
       ratio[arena.id] = unseen / open;
     }
 
-    // The note's actual claim is comparative -- "the tightest of the four". Pinned as
-    // an ordering, not just four independent counts: a grid edit that made arena-04
-    // roomier than arena-03 would satisfy every count above if they were updated to
-    // match, and still falsify the sentence.
+    // The notes' actual claims are comparative. Pinned as an ordering, not just five
+    // independent counts: a grid edit that made arena-04 roomier than arena-03 would
+    // satisfy every count above if they were updated to match, and still falsify the
+    // sentence. arena-05 is now the tightest of the five (its own notes explain why --
+    // a staggered wall gives its enemies more overlapping sightline than arena-04's one
+    // continuous wall); arena-04's notes are corrected to say "tightest of the four that
+    // existed when written" rather than claim a property arena-05 removes.
     const tightest = Object.entries(ratio).sort((a, b) => a[1] - b[1])[0][0];
-    expect(tightest).toBe('arena-04');
+    expect(tightest).toBe('arena-05');
+    expect(ratio['arena-05']).toBeLessThan(ratio['arena-04']);
     expect(ratio['arena-04']).toBeLessThan(ratio['arena-03']);
   });
 });

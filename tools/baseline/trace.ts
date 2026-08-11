@@ -49,7 +49,7 @@ import { step } from '../../src/sim/world';
  * Lesson: a coverage claim recorded at one commit can go stale as later changes alter
  * trajectories -- re-measure rather than carrying it forward.
  */
-export const BASELINE_HASH = '114f90d957010b04879dcc5b10f55c926ba446a299799333c5b65b0819c7010e';
+export const BASELINE_HASH = '324aa9b5d369ec6abc61f73e8e454de67b5fbf365f4b0df2eedf2c01add33bb5';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
