@@ -6,6 +6,14 @@
  *
  * Auto-detection from a device probe is explicitly OUT OF SCOPE here -- see the issue --
  * pending the on-device measurement spike. This only makes the knobs reachable.
+ *
+ * SCOPE: this governs the GAME scene (`createScene`) only. Two other WebGL contexts
+ * build their own renderers and deliberately do not read the flag: `render/preview.ts`
+ * (the Customize pane's live tank preview, hardcoded antialias/cap-2/shadows) and
+ * `tools/gallery` (a dev tool). So `?dev=1&quality=low` does not change the Customize
+ * preview's cost -- the flag exists to sweep GAMEPLAY cost on a device, and the issue
+ * names only scene.ts's knobs. Extending it to the preview is a decision for the
+ * on-device sweep to justify, not a default.
  */
 import * as THREE from 'three';
 
@@ -36,8 +44,10 @@ export const QUALITY_PRESETS: Record<QualityPreset, RenderQuality> = {
    * A feel/perf step down, NOT yet measured on-device -- awaiting the sweep the issue
    * defers. Half the shadow texel density (1024 vs 2048) and a slightly lower pixel
    * ratio ceiling (1.5 vs 2) are where most of a mid-range GPU's cost sits; antialias
-   * and the soft PCF filter stay on because they are comparatively cheap next to a
-   * full-resolution shadow map.
+   * stays on, and the shadow filter steps down ONE rung, PCFSoft -> plain PCF (still
+   * filtered, no longer soft-sampled) -- review caught an earlier draft of this
+   * comment claiming "the soft PCF filter stays on", which is high's filter, not this
+   * one's.
    */
   medium: {
     antialias: true,

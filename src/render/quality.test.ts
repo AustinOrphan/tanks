@@ -55,12 +55,13 @@ describe('medium and low are real steps down, not copies of high', () => {
     expect(QUALITY_PRESETS.high.antialias).toBe(true);
   });
 
-  it('the three presets use three distinct shadow filters', () => {
-    const types = new Set([
-      QUALITY_PRESETS.high.shadowType,
-      QUALITY_PRESETS.medium.shadowType,
-      QUALITY_PRESETS.low.shadowType,
-    ]);
-    expect(types.size).toBe(3);
+  it('the shadow filters step DOWN in order: PCFSoft, plain PCF, Basic', () => {
+    // Pinned as literals, not distinctness: review proved that swapping medium's and
+    // low's filters (an internally-incoherent table where "low" shadows better than
+    // "medium") survived the whole 2144-test suite when this only asserted a Set of
+    // size 3. Breaks if any preset's filter moves off its rung.
+    expect(QUALITY_PRESETS.high.shadowType).toBe(THREE.PCFSoftShadowMap);
+    expect(QUALITY_PRESETS.medium.shadowType).toBe(THREE.PCFShadowMap);
+    expect(QUALITY_PRESETS.low.shadowType).toBe(THREE.BasicShadowMap);
   });
 });

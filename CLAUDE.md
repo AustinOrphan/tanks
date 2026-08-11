@@ -673,6 +673,7 @@ only when someone updates it. `round-ux` passes today, and nobody would learn th
 stopped.
 
 The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
+`quality` (a valued flag, `low|medium|high` — render preset, see `render/quality.ts`),
 `invincible`, `autoplay`, `saveIo`, `replay`, `gamepad` (issue #114: merges gamepad[0]
 into keyboard/mouse/touch, single player only -- see `src/input/gamepad.ts`), `level` (a
 1-based jump, or `level=sandbox`), and the sandbox knobs

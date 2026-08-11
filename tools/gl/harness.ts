@@ -358,13 +358,18 @@ check('createRenderer forwards its quality option through to the scene it builds
   document.body.appendChild(canvas);
   const r = createRenderer(canvas, W, H, BOUNDARY, { quality: QUALITY_PRESETS.low });
   const gl = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext;
-  const lost = gl.isContextLost();
+  // Read back a QUALITY-DERIVED value, not merely context liveness: review proved the
+  // isContextLost() version passed with renderer.ts's forwarding line reverted, since
+  // a live context is exactly as achievable at the default preset. The context is the
+  // one three.js created on this canvas, and low's antialias is FALSE where the
+  // default high's is true -- so a dropped forwarding reads back true here and fails.
+  const aa = gl.getContextAttributes()?.antialias;
   r.dispose();
   canvas.remove();
-  // createRenderer does not expose ctx, so a live, undamaged context after
-  // construction with a non-default preset is the reachable half of this proof; the
-  // exact-value half is covered by the two checks above against createScene directly.
-  return lost ? 'context lost after constructing with a non-default quality preset' : null;
+  if (aa === undefined) return 'context attributes unavailable -- cannot verify forwarding';
+  return aa === QUALITY_PRESETS.low.antialias
+    ? null
+    : `context antialias is ${aa} after forwarding the low preset, want ${QUALITY_PRESETS.low.antialias}`;
 });
 
 
