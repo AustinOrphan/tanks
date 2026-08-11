@@ -1390,6 +1390,41 @@ describe('hud: achievements', () => {
       vi.useRealTimers();
     }
   });
+
+  it('showToast: a plain message stacks and expires exactly like an achievement toast', () => {
+    // #114's "gamepad connected" notice, and any future plain notice, ride the same
+    // stack and timer as showAchievementToasts -- this pins that they share the
+    // machinery rather than each growing their own.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const toasts = (): HTMLElement[] => Array.from(root.querySelectorAll('.hud-toast'));
+      h.showToast('Gamepad connected');
+      expect(toasts()).toHaveLength(1);
+      expect(toasts()[0].textContent).toBe('Gamepad connected');
+      // No achievement identity: unlike showAchievementToasts, nothing sets `.dataset.achievement`.
+      expect(toasts()[0].dataset.achievement).toBeUndefined();
+      vi.advanceTimersByTime(3199);
+      expect(toasts()).toHaveLength(1);
+      vi.advanceTimersByTime(2);
+      expect(toasts()).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('showToast stacks alongside an achievement toast rather than replacing it', () => {
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
+      h.showToast('Gamepad connected');
+      const toasts = Array.from(root.querySelectorAll('.hud-toast'));
+      expect(toasts).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('hud: the paint shop', () => {

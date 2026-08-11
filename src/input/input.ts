@@ -10,6 +10,7 @@ import {
   type TouchSample,
   type FireMode,
 } from './touch';
+import { createGamepadReader, readNavigatorGamepads, type GamepadReader, type GetGamepads } from './gamepad';
 export type { TouchIndicator, TouchScheme, FireMode } from './touch';
 
 export interface InputController {
@@ -62,17 +63,36 @@ export interface InputController {
    * no player, in which case the stick simply holds its last aim.
    */
   setPlayerPosition(pos: Vec2 | null): void;
+  /**
+   * Whether gamepad[0] is present, as of the last `sample()`. Read-only and outside
+   * `sample()` on purpose, same reasoning as `touchIndicator()`: a HUD affordance (a
+   * "gamepad connected" toast) wants to poll this every frame without perturbing the
+   * input stream `step()` consumes. Always `false` when the `gamepad` option was not
+   * passed to `createInputController` -- the reader is never even constructed then, so
+   * this cannot report state that was never read.
+   */
+  gamepadConnected(): boolean;
   dispose(): void;
 }
 
 export function createInputController(
   target: HTMLElement,
   screenToGround: (clientX: number, clientY: number) => Vec2,
+  options: { gamepad?: boolean; getGamepads?: GetGamepads } = {},
 ): InputController {
   const keys = new Set<string>();
   let aim: Vec2 = { x: 0, y: 0 };
   let firePressed = false;
   let minePressed = false;
+  /**
+   * `?dev=1&gamepad=1` (issue #114). `null` when the option is off, which is the whole
+   * gate: `sample()` below only ever touches `navigator.getGamepads` through this, so
+   * "off" means the reader is never even constructed, not merely that its output is
+   * discarded.
+   */
+  const gamepadReader: GamepadReader | null = options.gamepad
+    ? createGamepadReader(options.getGamepads ?? readNavigatorGamepads)
+    : null;
 
   // Keydown is bound at the window, so it also sees events bubbling out of the
   // HUD's own controls. Driving the tank from those -- and worse, calling
@@ -362,11 +382,18 @@ export function createInputController(
   window.addEventListener('pointerup', onPointerEnd);
   window.addEventListener('pointercancel', onPointerEnd);
 
-  function readMove(): Vec2 {
+  /**
+   * Precedence, most to least specific: TOUCH stick (a deliberate gesture in flight) >
+   * GAMEPAD stick (outside its dead zone, so `gamepadMove` is non-zero) > keyboard.
+   * Never summed, same reasoning as touch-over-keyboard above: a stray held key must not
+   * drag an analogue stick off-axis, and the same now applies to a gamepad's stick.
+   */
+  function readMove(gamepadMove: Vec2 | null): Vec2 {
     // The thumbstick wins while it is held. Not summed with the keys: nobody drives with
     // both, and summing would let a stray held key drag an analogue stick off-axis with
     // nothing on screen to explain it.
     if (stickPointer !== null) return stickMove;
+    if (gamepadMove !== null && (gamepadMove.x !== 0 || gamepadMove.y !== 0)) return gamepadMove;
     let x = 0;
     let y = 0;
     if (keys.has('a') || keys.has('arrowleft')) x -= 1;
@@ -382,8 +409,27 @@ export function createInputController(
 
   return {
     sample(): InputState {
+      // Polled HERE, once per call -- the driver calls sample() once per SIMULATED tick
+      // (see driver.ts), never on its own rAF loop, so this is exactly one hardware read
+      // per tick, no more. A multi-tick catch-up frame polls the same live hardware state
+      // several times in a row, which is why the reader's fire/mine edge detection lives
+      // inside the reader (a button held across three polls must fire once, not three
+      // times) rather than here.
+      let gp: ReturnType<GamepadReader['poll']> | null = null;
+      if (gamepadReader !== null) {
+        gp = gamepadReader.poll(playerPos);
+        // Fire/mine OR into the same latches every other source uses (keyboard, mouse,
+        // touch, the HUD's own buttons) -- gamepad is simply one more producer of the
+        // same edge, not a replacement path, so no extra precedence rule is needed here.
+        if (gp.fire) firePressed = true;
+        if (gp.mine) minePressed = true;
+        // Aim: overwrite exactly as a touch aim gesture already does (see
+        // applyAimGesture) -- last writer wins, and staying inside the dead zone means
+        // gp.aim is null, which holds whatever aim is already live.
+        if (gp.aim !== null) aim = gp.aim;
+      }
       const state: InputState = {
-        move: readMove(),
+        move: readMove(gp?.move ?? null),
         aim,
         fire: firePressed,
         mine: minePressed,
@@ -450,6 +496,9 @@ export function createInputController(
     setPlayerPosition(pos: Vec2 | null): void {
       playerPos = pos === null ? null : { x: pos.x, y: pos.y };
     },
+    gamepadConnected(): boolean {
+      return gamepadReader !== null && gamepadReader.connected();
+    },
     dispose(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -462,6 +511,7 @@ export function createInputController(
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerEnd);
       window.removeEventListener('pointercancel', onPointerEnd);
+      gamepadReader?.dispose();
     },
   };
 }

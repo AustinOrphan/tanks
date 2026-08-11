@@ -95,6 +95,7 @@ export interface GameDeps {
   readonly createInput: (
     target: HTMLElement,
     screenToGround: (clientX: number, clientY: number) => Vec2,
+    options?: { gamepad?: boolean },
   ) => InputController;
   readonly createAudio: () => AudioEngine;
   /**
@@ -393,7 +394,9 @@ export function startGameWith(
     playerSkin: deps.customization.skin(),
     playerAccent: deps.customization.accentHexFor(deps.customization.accent()),
   });
-  const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y));
+  const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
+    gamepad: deps.devFlags.gamepad,
+  });
   // The saved scheme, pushed at boot so the very first touch already uses it -- see the
   // echo-back wiring below for what happens when the player changes it in the HUD.
   input.setTouchScheme(deps.touchSettings.scheme());
@@ -496,6 +499,14 @@ export function startGameWith(
   // arenas differ in enemy count.
   let enemiesAtRoundStart = countEnemies(world);
   let roundsSeen = 0;
+  /**
+   * `?dev=1&gamepad=1` only: `input.gamepadConnected()` is always false when the flag is
+   * off (the reader is never constructed -- see input.ts), so this needs no separate flag
+   * check. Toasts only on the RISING edge, once per session -- Firefox does not expose a
+   * pad to `navigator.getGamepads()` until the player presses a button on it, so this is
+   * the one moment that confirms the press was seen.
+   */
+  let wasGamepadConnected = false;
   function refreshRoundPhase(w: World): void {
     if (w.roundStartTick !== lastRoundStartTick) {
       lastRoundStartTick = w.roundStartTick;
@@ -529,6 +540,9 @@ export function startGameWith(
       const player = w.tanks.find((t) => t.kind === 'player');
       input.setPlayerPosition(player ? { x: player.pos.x, y: player.pos.y } : null);
       hud.setTouchIndicator(input.touchIndicator());
+      const gamepadConnected = input.gamepadConnected();
+      if (gamepadConnected && !wasGamepadConnected) hud.showToast('Gamepad connected');
+      wasGamepadConnected = gamepadConnected;
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
     },

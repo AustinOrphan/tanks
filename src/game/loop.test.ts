@@ -104,6 +104,7 @@ interface Recorder {
   accentSets: string[];
   accentEchoes: string[];
   toasts: string[][];
+  plainToasts: string[];
   achPushes: string[][];
   achChecks: Array<{
     clearedLevel: number | null;
@@ -129,6 +130,7 @@ interface Recorder {
   unlocks: number;
   samples: number;
   hudRoots: HTMLElement[];
+  inputOptions: Array<{ gamepad?: boolean } | null>;
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string> } = {}): {
@@ -162,6 +164,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
   firePlayerShot(): void;
+  setGamepadConnected(v: boolean): void;
   getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
@@ -224,6 +227,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     accentSets: [],
     accentEchoes: [],
     toasts: [],
+    plainToasts: [],
     achPushes: [],
     achChecks: [],
     achResets: 0,
@@ -239,6 +243,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     unlocks: 0,
     samples: 0,
     hudRoots: [],
+    inputOptions: [],
   };
 
   let pending: ((now: number) => void) | null = null;
@@ -250,6 +255,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // Faithful shape, and mutable so a test can put a thumb down.
   let touchState: TouchIndicator = { stick: null, aim: null, scheme: 'stick', used: false };
   let fireNext = false;
+  let gamepadConnectedNext = false;
   let onQuit = (): void => {};
   let onPauseTap = (): void => {};
   let onMineTap = (): void => {};
@@ -332,7 +338,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
-    createInput: (_target, screenToGround) => ({
+    createInput: (_target, screenToGround, options) => {
+      rec.inputOptions.push(options ?? null);
+      return {
       sample() {
         rec.samples += 1;
         // Prove the wiring passes x and y through in that order, not swapped.
@@ -361,10 +369,14 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         rec.playerPosPushes += 1;
         rec.lastPlayerPos = pos;
       },
+      gamepadConnected(): boolean {
+        return gamepadConnectedNext;
+      },
       dispose(): void {
         rec.disposed.push('input');
       },
-    }),
+      };
+    },
     createAudio: () => ({
       play: () => {},
       startMusic: () => {
@@ -547,6 +559,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         showAchievementToasts: (defs: ReadonlyArray<{ id: string }>) => {
           rec.toasts.push(defs.map((d) => d.id));
+        },
+        showToast: (message: string) => {
+          rec.plainToasts.push(message);
         },
         onResetStats: (cb: () => void) => {
           onResetStats = cb;
@@ -801,6 +816,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     },
     firePlayerShot: () => {
       fireNext = true;
+    },
+    setGamepadConnected: (v: boolean) => {
+      gamepadConnectedNext = v;
     },
     getState: () => state,
     blur(): void {
@@ -2404,6 +2422,59 @@ describe('startGameWith: stats wiring', () => {
     h.hud.resetProgress();
     expect(h.rec.progressResets).toBe(1);
     expect(h.rec.levelSelects.at(-1)).toEqual([1, 2]); // re-locked
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: gamepad connect toast (issue #114)', () => {
+  it('passes the gamepad devFlag through to createInput, off by default', () => {
+    const off = boot(makeDeps());
+    expect(off.rec.inputOptions).toEqual([{ gamepad: false }]);
+    off.handle.dispose();
+
+    const on = boot(makeDeps({ devFlags: { gamepad: true } }));
+    expect(on.rec.inputOptions).toEqual([{ gamepad: true }]);
+    on.handle.dispose();
+  });
+
+  it('toasts once on the tick input.gamepadConnected() first reports true', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.setGamepadConnected(true);
+    h.fireFrame(100); // several simulated ticks, all seeing the pad already connected
+    expect(h.rec.plainToasts).toEqual(['Gamepad connected']);
+    h.handle.dispose();
+  });
+
+  it('does not toast again while the pad stays connected across later frames', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.setGamepadConnected(true);
+    h.fireFrame(100);
+    h.fireFrame(200);
+    h.fireFrame(300);
+    expect(h.rec.plainToasts).toEqual(['Gamepad connected']); // still exactly one
+    h.handle.dispose();
+  });
+
+  it('never toasts when no pad is ever seen', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.plainToasts).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('toasts again after a disconnect/reconnect cycle, one toast per rising edge', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.setGamepadConnected(true);
+    h.fireFrame(100);
+    h.setGamepadConnected(false);
+    h.fireFrame(200);
+    h.setGamepadConnected(true);
+    h.fireFrame(300);
+    expect(h.rec.plainToasts).toEqual(['Gamepad connected', 'Gamepad connected']);
     h.handle.dispose();
   });
 });

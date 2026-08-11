@@ -10,6 +10,7 @@ import {
   DOUBLE_TAP_MAX_MS,
   DOUBLE_TAP_SLOP_PX,
 } from './touch';
+import { deadzoneVector, type GamepadLike } from './gamepad';
 import type { Vec2 } from '../sim/types';
 
 // A predictable screenToGround: echoes the client coords as a world point.
@@ -280,6 +281,179 @@ describe('createInputController — dispose', () => {
     expect(s.move).toEqual({ x: 0, y: 0 });
     expect(s.fire).toBe(false);
     expect(s.aim).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('createInputController — gamepad', () => {
+  function fakePad(overrides: Partial<{ axes: number[]; buttons: boolean[] }> = {}): GamepadLike {
+    const axes = overrides.axes ?? [0, 0, 0, 0];
+    const pressedFlags = overrides.buttons ?? [];
+    return {
+      axes,
+      buttons: Array.from({ length: Math.max(pressedFlags.length, 2) }, (_, i) => ({
+        pressed: pressedFlags[i] ?? false,
+      })),
+    };
+  }
+
+  it('is completely inert with the flag off, even with a fully-active fake pad present', () => {
+    // The "nothing is on unless dev is present" rule (devflags.ts), mirrored here: the
+    // gamepad option must gate the merge itself, not just whether a real pad exists.
+    // Fully active on purpose -- stick deflected AND a button down -- so a guard that
+    // silently fails open (e.g. an accidentally-inverted `if`) cannot hide behind a fake
+    // pad that was too quiet to move anything.
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [1, 1, 0, 0], buttons: [true, true] })];
+    controller = createInputController(target, echoGround, { gamepad: false, getGamepads });
+
+    key('keydown', 'd');
+    const s = controller.sample();
+    expect(s.move).toEqual({ x: 1, y: 0 }); // keyboard only -- gamepad move ignored
+    expect(s.fire).toBe(false); // gamepad fire ignored
+    expect(s.mine).toBe(false); // gamepad mine ignored
+    expect(controller.gamepadConnected()).toBe(false); // the reader was never even built
+  });
+
+  it('drives move from the left stick once it clears the dead zone', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [1, 0, 0, 0] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    expect(controller.sample().move).toEqual(deadzoneVector(1, 0));
+  });
+
+  it('leaves move on the keyboard while the stick sits inside the dead zone', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [0.05, 0.05, 0, 0] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    key('keydown', 'd');
+    expect(controller.sample().move).toEqual({ x: 1, y: 0 });
+  });
+
+  it('gamepad move beats keyboard once outside the dead zone -- the documented precedence', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [0, 1, 0, 0] })]; // pure +y
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    key('keydown', 'd'); // keyboard says +x
+    const move = controller.sample().move;
+    expect(move.x).toBe(0); // keyboard's x lost
+    expect(move.y).toBeGreaterThan(0); // gamepad's y won
+  });
+
+  it('the touch stick still beats the gamepad, unchanged from touch-vs-keyboard precedence', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [1, 0, 0, 0] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    // Left-half pointerdown starts the driving stick, dragged straight down (pure +y).
+    target.dispatchEvent(
+      new PointerEvent('pointerdown', { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 80 }),
+    );
+    // The gamepad's stick is pure +x. If the gamepad won this slot, x would be
+    // positive; it stays 0, and y (touch's own axis) is what comes through instead --
+    // proof touch, not the gamepad, produced this value.
+    const move = controller.sample().move;
+    expect(move.x).toBe(0);
+    expect(move.y).toBeGreaterThan(0);
+  });
+
+  it('projects aim from the right stick, at AIM_PROJECTION_UNITS from the player position', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes: [0, 0, 1, 0] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+    controller.setPlayerPosition({ x: 3, y: 3 });
+
+    const aim = controller.sample().aim;
+    expect(aim.x).toBeCloseTo(3 + AIM_PROJECTION_UNITS, 6);
+    expect(aim.y).toBeCloseTo(3, 6);
+  });
+
+  it('holds the last aim while the right stick is centred, exactly as touch does', () => {
+    const target = makeTarget();
+    let axes = [0, 0, 1, 0];
+    const getGamepads = (): GamepadLike[] => [fakePad({ axes })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+    controller.setPlayerPosition({ x: 0, y: 0 });
+
+    const first = controller.sample().aim;
+    axes = [0, 0, 0, 0]; // stick released, back to centre
+    const second = controller.sample().aim;
+    expect(second).toEqual(first);
+  });
+
+  it('fires on the tick the button transitions down, not on every tick it is held', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [true, false] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    expect(controller.sample().fire).toBe(true);
+    expect(controller.sample().fire).toBe(false);
+    expect(controller.sample().fire).toBe(false);
+  });
+
+  it('mines on its own button, independent of fire, same edge rule', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad({ buttons: [false, true] })];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    const s = controller.sample();
+    expect(s.mine).toBe(true);
+    expect(s.fire).toBe(false);
+    expect(controller.sample().mine).toBe(false);
+  });
+
+  it('gamepad fire ORs with keyboard/mouse rather than replacing them -- a mouse click still fires', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad()]; // connected, nothing pressed
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    target.dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
+    expect(controller.sample().fire).toBe(true);
+  });
+
+  it('gamepadConnected() reflects the reader without needing a sample() call to notice', () => {
+    const target = makeTarget();
+    let connected = false;
+    const getGamepads = (): GamepadLike[] => (connected ? [fakePad()] : []);
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    expect(controller.gamepadConnected()).toBe(false);
+    connected = true;
+    controller.sample(); // the reader only advances on poll, which happens inside sample()
+    expect(controller.gamepadConnected()).toBe(true);
+  });
+
+  it('tolerates getGamepads() returning [] or holes of null forever, without throwing', () => {
+    const target = makeTarget();
+    const getGamepads = (): (GamepadLike | null)[] => [null, null, null, null];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+
+    expect(() => {
+      for (let i = 0; i < 5; i++) controller!.sample();
+    }).not.toThrow();
+    expect(controller.gamepadConnected()).toBe(false);
+  });
+
+  it('defaults to reading the real navigator when no getGamepads override is given', () => {
+    // jsdom has no Gamepad API by default (spiked for issue #114), so this proves the
+    // production default path is exactly as tolerant as the injected-fake path above.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround, { gamepad: true });
+    expect(() => controller!.sample()).not.toThrow();
+    expect(controller.gamepadConnected()).toBe(false);
+  });
+
+  it('disposes without error, even though it registers no listeners of its own', () => {
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [fakePad()];
+    const c = createInputController(target, echoGround, { gamepad: true, getGamepads });
+    expect(() => c.dispose()).not.toThrow();
+    controller = null;
   });
 });
 
