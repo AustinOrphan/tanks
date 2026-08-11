@@ -19,11 +19,12 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 4 shipped arenas -- three at 33x27 and arena-04
-    // at 45x33 (each the old 11x9 / 15x11 board upscaled 3x) -- plus the 17x13
-    // fixture, untouched by the upscale = 891 + 891 + 891 + 1485 + 221 = 4379
-    // cells. The non-square boards matter here: a formula that confused cols with
-    // rows would round-trip fine on a square-ish board.
+    // Population: all cells of all 5 shipped arenas -- three at 33x27 and arena-04
+    // and arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x) -- plus
+    // the 17x13 fixture, untouched by the upscale =
+    // 891 + 891 + 891 + 1485 + 1485 + 221 = 5864 cells. The non-square boards
+    // matter here: a formula that confused cols with rows would round-trip fine on
+    // a square-ish board.
     let checked = 0;
     for (const arena of ARENAS_UNDER_TEST) {
       for (let r = 0; r < arena.rows; r++) {
@@ -34,7 +35,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(4379);
+    expect(checked).toBe(5864);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {
@@ -73,9 +74,9 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
         spawnsChecked++;
       }
     }
-    // 4 + 5 + 6 + 7 shipped (each count INCLUDES that arena's player spawn) + 3
-    // fixture = 25. Written as 17 first when the total was 18; the test caught the
+    // 4 + 5 + 6 + 7 + 8 shipped (each count INCLUDES that arena's player spawn) + 3
+    // fixture = 33. Written as 17 first when the total was 18; the test caught the
     // arithmetic, which is the denominator discipline working on its own author.
-    expect(spawnsChecked).toBe(25);
+    expect(spawnsChecked).toBe(33);
   });
 });

@@ -310,7 +310,7 @@
         "The two walls are deliberately different KINDS of problem. The bar is porous, solid only in alternating segments, and breachable at columns 13 and 31; the east wall is solid throughout except for one corridor gap, and must be FLANKED rather than blown. From the player's half that means the corridor above it or the open rows below its south end; it is open north of the bar too, but the bar cuts that section off from the player's half. Level 2 taught breaching; level 4 says not every wall answers to it.",
         "Blowing the bar at column 31 opens that column top-to-bottom, giving the brown at (31, 4) a line down to row 28 -- alongside the player spawn, never onto it: the spawn's own blockers are the bar's solid anchors, which no breach touches. That is why spawnBlockRobust holds here and all six sightlineAfterBreach claims read false, unlike level 2 where breaching is meant to open spawn lines.",
         "The destructible at (19, 19) is mid-field cover for the player's left-hand approach, not a spawn-line blocker: losing it hands the teal at (40, 13) a line onto (16, 22).",
-        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 284 of 1359 = 20.9%, the tightest of the four, against arena-01 288/774 = 37.2%, arena-02 369/747 = 49.4%, arena-03 248/792 = 31.3%. The intended step up in pressure for the last level. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
+        "Measured against the shipped levels on the same probe -- open cells (destructibles EXCLUDED, they are walls until destroyed) seen by no enemy from its spawn, walls intact: arena-04 is 284 of 1359 = 20.9%, the tightest of the four levels that existed when this was written, against arena-01 288/774 = 37.2%, arena-02 369/747 = 49.4%, arena-03 248/792 = 31.3%. The intended step up in pressure for the last level -- 'last' meaning at the time; arena-05 (185/1359 = 13.6%) is tighter still, and its own notes explain why. These five numbers are recomputed by arena-validation.test.ts rather than left as unpinned prose."
       ],
       "claims": [
         {
@@ -469,6 +469,65 @@
           "intact": "blocked",
           "breached": "open",
           "why": "Losing the mid-field cover at (19, 19) hands the east teal the player's left-hand approach. The cover is the player's, so this is a cost the PLAYER pays for a stray shot, not a trade they choose."
+        }
+      ]
+    },
+    {
+      "id": "arena-05",
+      "cols": 45,
+      "rows": 33,
+      "cellSize": 0.6666666666666666,
+      "legend": {
+        "#": "solid",
+        "x": "destructible"
+      },
+      "grid": [
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        "..........N...........G........B.............",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".........###xxx###...###...###xxx###.........",
+        ".........###xxx###...###...###xxx###.........",
+        ".........###xxx###...###...###xxx###.........",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".................................###.........",
+        ".................................###....T....",
+        ".................................###.........",
+        ".................................###.........",
+        ".................................###.........",
+        ".................................###.........",
+        "............######...............###.........",
+        "..........G.######...............###....O....",
+        "............######...............###.........",
+        ".................................###.........",
+        "......................P..........###.........",
+        ".................................###.........",
+        ".................................###.........",
+        ".................................###....T....",
+        ".................................###........."
+      ],
+      "notes": [
+        "The fifth campaign level, and the second board at arena-04's 45x33 size: seven enemies, one more than arena-04's six, continuing the 3/4/5/6/7 progression. All five enemy kinds appear -- green, two grey, brown, two teal, one olive -- so the level asks the player to handle every mechanic the campaign has taught (bank shots, mines, breachable cover, rockets, the ricochet sniper) in the same fight rather than teaching a new one.",
+        "The bar (rows 12-14) and the north row it shelters (green, grey, brown) are copied UNCHANGED from arena-04. That reuse is deliberate: green (RICOCHET_SNIPER) bounces TWICE -- ricochetCount 2, not the single bounce most banking kinds get -- so its reachable set is far larger than a one-bounce reflector search would suggest (arena-04's own notes measure it at 275 cells by ricochet). A mirrored west flank wall, tried first for a three-front pincer, opened a ricochet path onto the nudged player spawn once the bar breaches, in three shapes tried (a bare mirror of the east wall including its rows 15-17 gap, the same footprint with that gap closed, and the wall shifted two columns further from green's own column -- the first failed all 4 cardinal nudges, the second failed 2, the third failed all 4 again once filled solid). Everything SOUTH of the bar was redesigned instead, well clear of green's own column and the bar's western gap.",
+        "The east flank wall runs the full 15 rows from 18 to 32 -- six rows further south than arena-04's 18-26 -- so it can hold a THIRD spawn at real depth (row 31, one row from the board's own south edge) rather than arena-04's two. It is CONTINUOUS, not staggered: a staggered version with real gaps between tiers was tried first, and a diagonal line from the shallowest spawn (row 19) slipped through a rows-21-23 gap to see the player's nudged spawn, failing all 8 spawnBlockRobust probes for that one enemy. The lesson generalises from the bank-shot search above: a real gap in a spawn's own blocking wall is exactly as dangerous as a new reflecting surface, just for the DIRECT rule instead of the bank one.",
+        "The second grey spawns west, in the shadow of arena-04's own mid-field cover block (columns 12-17, rows 24-26) -- geometry that already shipped there as pure decoration (arena-04's notes: cover for the player's left-hand approach, not a spawn blocker) and is reused here as a spawn blocker precisely because it is proven not to open a green ricochet path; only a fresh direct-line check was needed for the new spawn, not a fresh bank-path search.",
+        "Cover ratio (open cells no enemy can see from its spawn, walls intact, destructibles excluded): 185 of 1359 = 13.6%, tighter than arena-04's 20.9% and the tightest of all five shipped levels -- the deeper east wall gives its three enemies more combined reach into the board's south half than arena-04's shallower one does. Recomputed by arena-validation.test.ts alongside the other four arenas' figures; arena-04's own notes are corrected to say 'tightest of the four that existed when written' rather than claim a property arena-05 now removes."
+      ],
+      "claims": [
+        {
+          "type": "spawnBlockRobust",
+          "nudge": 0.1,
+          "why": "All seven spawn blocks are solid cells -- the bar's segments for the north three, the continuous east wall for its three, the reused mid-field block for the west grey -- so none opens under a breach. Measured 0 of 28 nudge probes (7 enemies x 4 cardinal offsets) open in either wall phase, including green's ricochet, which is the property three rejected west-wall shapes failed to hold (see notes)."
         }
       ]
     }
