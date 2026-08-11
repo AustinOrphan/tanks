@@ -471,6 +471,64 @@
           "why": "Losing the mid-field cover at (19, 19) hands the east teal the player's left-hand approach. The cover is the player's, so this is a cost the PLAYER pays for a stray shot, not a trade they choose."
         }
       ]
+    },
+    {
+      "id": "arena-05",
+      "cols": 45,
+      "rows": 33,
+      "cellSize": 0.6666666666666666,
+      "legend": {
+        "#": "solid",
+        "x": "destructible"
+      },
+      "grid": [
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        "..........N...........G........B.............",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        ".........###xxx###...###...###xxx###.........",
+        ".........###xxx###...###...###xxx###....T....",
+        ".........###xxx###...###...###xxx###.........",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        "...............###xxx............###.........",
+        "...............###xxx............###....O....",
+        "...............###xxx............###.........",
+        ".................................###.........",
+        ".................................###....G....",
+        ".................................###.........",
+        "............######...............###.........",
+        "............######...............###....T....",
+        "............######...............###.........",
+        ".............................................",
+        "......................P......................",
+        ".............................................",
+        ".............................................",
+        ".............................................",
+        "............................................."
+      ],
+      "notes": [
+        "The fifth campaign level, and the second board at arena-04's 45x33 size: seven enemies, one more than arena-04's six, continuing the 3/4/5/6/7 progression. All five enemy kinds appear -- green, two grey, brown, two teal, one olive -- so the level asks the player to handle every mechanic the campaign has taught (bank shots, mines, breachable cover, rockets, the ricochet sniper) in the same fight rather than teaching a new one.",
+        "The bar (rows 12-14) and the east flank wall (columns 33-35, rows 18-26, gapped at rows 15-17) are copied UNCHANGED from arena-04, and that reuse is deliberate, not laziness. A mirrored west flank wall was the first design tried, to give the level a three-front pincer; it was rejected on evidence. Green (RICOCHET_SNIPER) bounces TWICE -- ricochetCount 2, not the single bounce most banking kinds get -- so its reachable set is far larger than a one-bounce reflector search would suggest (arena-04's own notes measure it at 275 cells by ricochet). Three different west-wall shapes were tried -- a bare mirror of the east wall including its rows 15-17 gap, the same footprint with that gap closed, and the wall shifted two columns further from green's own column -- and each one opened a ricochet path onto the nudged player spawn once the bar breaches, caught by this arena's spawnBlockRobust claim (the first failed all 4 cardinal nudges, the second failed 2, the third failed all 4 again once the shape was filled solid). Rather than keep guessing at a fourth shape, the extra two enemies went into the EAST front instead, which is already proven not to interact with green's reach.",
+        "The fourth east spawn (grey, row 22) sits inside the same solid span (rows 18-26) that already covers the row-19 olive and row-25 teal, so it inherits their proof rather than needing a new one -- verified fresh regardless, by this arena's own structuralFailures and spawnBlockRobust checks in arena-validation.test.ts.",
+        "Cover ratio (open cells no enemy can see from its spawn, walls intact, destructibles excluded): 284 of 1359 = 20.9%, identical to arena-04's own figures. That is expected rather than a coincidence: the wall layout is byte-identical, and the added grey spawn at row 22 sees no open cell that the row-19 olive or row-25 teal, behind the same wall span, did not already cover. Recomputed by arena-validation.test.ts alongside the other four arenas' figures."
+      ],
+      "claims": [
+        {
+          "type": "spawnBlockRobust",
+          "nudge": 0.1,
+          "why": "All seven spawn blocks are solid cells -- the bar's segments for the north three, the shared flank wall for the four east spawns -- so none opens under a breach. Measured 0 of 28 nudge probes (7 enemies x 4 cardinal offsets) open in either wall phase, including green's ricochet, which is the property three rejected west-wall shapes failed to hold (see notes)."
+        }
+      ]
     }
   ]
 }

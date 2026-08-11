@@ -104,8 +104,13 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     //
     // Scaled by the same 9x so the ASK is what it was. It is one number and pure feel --
     // retune it freely, but do not read the old 50 as still meaning what it meant.
-    description: 'Blow apart 450 walls.',
-    earned: (c) => c.lifetime.wallsDestroyed >= 450,
+    //
+    // arena-05 added 27 more (its bar reuses arena-04's shape exactly: two 3x3 anchors
+    // plus the 3x3 mid-field cover, same as arena-04), taking the total to 171. Retuned
+    // from 450 to 540 to hold the same ~3.1 playthroughs shape (540/171 = 3.16, against
+    // the original 450/144 = 3.125) rather than let a fifth level quietly shrink the ask.
+    description: 'Blow apart 540 walls.',
+    earned: (c) => c.lifetime.wallsDestroyed >= 540,
   },
   {
     id: 'trick-shot',

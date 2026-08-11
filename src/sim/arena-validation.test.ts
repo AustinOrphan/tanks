@@ -55,6 +55,7 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   'arena-02': { sightlineAfterBreach: 4 },
   'arena-03': { lane: 2, sightlineAfterBreach: 5, spawnBlockRobust: 1 },
   'arena-04': { lane: 7, sightlineAfterBreach: 6, spawnBlockRobust: 1 },
+  'arena-05': { spawnBlockRobust: 1 },
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {
@@ -218,6 +219,7 @@ describe('the cover ratio each arena quotes in its notes', () => {
     'arena-02': { unseen: 369, open: 747 },
     'arena-03': { unseen: 248, open: 792 },
     'arena-04': { unseen: 284, open: 1359 },
+    'arena-05': { unseen: 284, open: 1359 },
   };
 
   it('recomputes every quoted count, and the ranking the note claims', () => {

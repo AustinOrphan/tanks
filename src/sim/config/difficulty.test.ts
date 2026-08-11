@@ -352,12 +352,13 @@ describe('tankDifficulty over the shipped roster (population: all 6 shipped Tank
   });
 });
 
-describe('levelDifficulty over the 4 shipped arenas (population: all 4, from ARENA_DEFS)', () => {
+describe('levelDifficulty over the 5 shipped arenas (population: all 5, from ARENA_DEFS)', () => {
   const EXPECTED: Record<string, { total: number; rosterSum: number; enemyCount: number; openCells: number }> = {
     'arena-01': { total: 131.1750830564784, rosterSum: 121.79523809523809, enemyCount: 3, openCells: 774 },
     'arena-02': { total: 164.99757123733025, rosterSum: 148.2238095238095, enemyCount: 4, openCells: 747 },
     'arena-03': { total: 196.541847041847, rosterSum: 174.97619047619045, enemyCount: 5, openCells: 792 },
     'arena-04': { total: 272.33219804478085, rosterSum: 260.25714285714287, enemyCount: 6, openCells: 1359 },
+    'arena-05': { total: 319.4399453379586, rosterSum: 303.6857142857143, enemyCount: 7, openCells: 1359 },
   };
 
   it('matches every shipped arena, not a sample', () => {
@@ -377,7 +378,7 @@ describe('levelDifficulty over the 4 shipped arenas (population: all 4, from ARE
     // so this is a from-scratch re-derivation, not a shared call -- agreement
     // is evidence the two walks mean the same thing, not a structural guarantee.
     const known: Record<string, number> = {
-      'arena-01': 774, 'arena-02': 747, 'arena-03': 792, 'arena-04': 1359,
+      'arena-01': 774, 'arena-02': 747, 'arena-03': 792, 'arena-04': 1359, 'arena-05': 1359,
     };
     for (const arena of ARENA_DEFS) {
       expect(levelDifficultyBreakdown(arena).openCells, arena.id).toBe(known[arena.id]);
@@ -506,6 +507,6 @@ describe('reports the full table', () => {
     // and the test would still pass with zero assertions failing. Pin the
     // population so that failure mode is loud instead.
     expect(kinds).toEqual(['player', 'brown', 'grey', 'teal', 'olive', 'green']);
-    expect(arenas).toEqual(['arena-01', 'arena-02', 'arena-03', 'arena-04']);
+    expect(arenas).toEqual(['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05']);
   });
 });

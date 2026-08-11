@@ -28,12 +28,12 @@ const TARGET = new THREE.Vector3(W / 2, 0, H / 2);
 const ASPECTS = [0.42, 0.46, 0.75, 1.0, 1.33, 1.6, 1.78, 2.33, 2.39, 3.0];
 
 /**
- * Every (arena, aspect) pair -- population: 4 shipped arenas x 10 aspects = 40.
+ * Every (arena, aspect) pair -- population: 5 shipped arenas x 10 aspects = 50.
  *
  * The sweep used to run against `CURRENT_ARENA` alone, which is one BOARD SHAPE: three
- * of the four shipped arenas are 33x27, and arena-04 (45x33) is the only one that
- * differs. A per-arena refit is exactly what the fit exists to do, so testing it at one
- * shape tested half the function.
+ * of the five shipped arenas are 33x27, and arena-04 and arena-05 (both 45x33) are the
+ * only ones that differ. A per-arena refit is exactly what the fit exists to do, so
+ * testing it at one shape tested half the function.
  */
 const COMBOS: Array<[string, (typeof ARENAS)[number], number]> = ARENAS.flatMap((arena, i) =>
   ASPECTS.map((aspect) => [`arena ${i + 1} @ ${aspect}`, arena, aspect] as [string, typeof arena, number]),
@@ -237,7 +237,7 @@ describe('the board actually fills the screen', () => {
   ];
 
   it('covers at least 48% of the frame, on every shipped arena at every common aspect', () => {
-    // Population: all 4 shipped arenas x 4 aspects = 16, every one checked -- not a
+    // Population: all 5 shipped arenas x 4 aspects = 20, every one checked -- not a
     // sample. The floor sits just under the measured worst case (49.1%, arena-01 on a
     // phone) and comfortably above what the old camera managed anywhere (39.9% there).
     const thin: string[] = [];
@@ -255,7 +255,7 @@ describe('the board actually fills the screen', () => {
     // to this test), and it is this line that carries the production sensitivity: it
     // fails when a level is added, which is exactly when the floor deserves
     // re-measuring.
-    expect(ARENAS.length, 'a level was added; re-measure the coverage floor').toBe(4);
+    expect(ARENAS.length, 'a level was added; re-measure the coverage floor').toBe(5);
     expect(checked).toBe(ARENAS.length * ASPECTS.length);
     expect(thin).toEqual([]);
   });
@@ -264,7 +264,7 @@ describe('the board actually fills the screen', () => {
     // Issue #108's actual question: must a mobile build lock landscape? The failure it
     // was filed against -- `fitCameraToArea` returning a cropping camera below aspect
     // ~0.249 (backlog.md) -- does NOT occur at 20:9: the containment sweep above passes
-    // at 0.42 on all four arenas. So nothing is unreachable in portrait, and the case
+    // at 0.42 on all five arenas. So nothing is unreachable in portrait, and the case
     // for a lock is not correctness.
     //
     // It is this instead, and it is worth having as a number rather than an impression:
@@ -285,10 +285,10 @@ describe('the board actually fills the screen', () => {
     // `framing-frame-margin-doubled`. The bands are wide enough to survive a retune and
     // narrow enough to catch a different camera.
     const at = (aspect: number): number[] => ARENAS.map((arena) => coverage(arena, aspect));
-    // Population: all 4 shipped arenas, at each of the two aspects issue #108 names.
+    // Population: all 5 shipped arenas, at each of the two aspects issue #108 names.
     const portrait = at(0.42); // 20:9 upright
     const ultrawide = at(2.39); // 21:9 sideways
-    expect(portrait).toHaveLength(4);
+    expect(portrait).toHaveLength(5);
     for (const f of portrait) {
       expect(f, 'portrait now fills a quarter of the frame -- re-read the orientation decision').toBeLessThan(0.25);
       expect(f).toBeGreaterThan(0.15);
