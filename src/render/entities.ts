@@ -655,9 +655,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // EVERY kind is mapped now, not just the player -- issue #137. Enemies wear a
     // two-tone texture keyed by their own KIND (`enemySkinMapFor`), so their identity
     // colour lives in the painted texture, exactly like the player's chosen skin does;
-    // the ternary below is the ONLY branch left that treats the player differently, and
-    // it exists only because the player's texture is a paint-shop CHOICE while an
-    // enemy's is fixed roster data.
+    // the ternary below (and its two neighbours, `color` above and `resolvedSkin`
+    // right after) are the player-specific branches left in this function, each for
+    // the same reason: the player's texture is a paint-shop CHOICE while an enemy's is
+    // fixed roster data.
     const skinMap = kind === 'player' ? playerSkinMap : enemySkinMapFor(kind);
     // The skin id THIS tank is actually wearing -- the player's own pick, or `two-tone`
     // for every enemy. Resolved per tank (not read off the module-level `playerSkin`)
@@ -699,7 +700,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // Now that every kind carries a skin, the question this gate answers is "is THIS
     // tank's skin stripes", and only the player's skin is ever stripes -- an enemy's
     // resolved skin is always `two-tone`, which two-tone's own painter comment explains
-    // does not need planar UVs at all.
+    // does not need planar UVs at all. MEASURED, not just argued: because no enemy can
+    // wear stripes today, this form and the old `kind === 'player' && playerSkin ===
+    // 'stripes'` are equivalent over every reachable state -- reverting to the old form
+    // passes the full entities.test.ts suite (50 of 50) unchanged. The re-keying is a
+    // semantic tidy-up pinned by nothing until an enemy CAN wear stripes; if that day
+    // comes, this comment is the reminder that the gate must follow the skin.
     const striped = mapped && resolvedSkin === 'stripes';
 
     const bodyGeo = beveledExtrude(hullPlan(HULL_LEN, bodyWidth, HULL_CORNER, HULL_NOSE), bodyH, HULL_BEVEL);
