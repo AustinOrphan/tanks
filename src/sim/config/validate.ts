@@ -11,6 +11,7 @@ import {
 import type { AIProfileBalance, TankDefinition } from './types';
 import type { ArenaClaim, ArenaDefinition, ArenaShape } from './arena-types';
 import { SPAWN_LETTERS } from './arena-types';
+import type { CampaignDefinition, CampaignLevel } from './campaign-types';
 
 // ---------------------------------------------------------------------------
 // Runtime validation for the JSON entity data (data/tank-defs.json,
@@ -339,4 +340,46 @@ export function validateArenas(raw: unknown, file = 'arenas.json'): ArenaDefinit
     const claims = entry.claims.map((c, j) => validateClaim(file, `${path}.claims[${j}]`, c, shape));
     return { id, ...shape, notes, claims };
   });
+}
+
+const CAMPAIGN_FIELDS = ['id', 'levels'] as const;
+const CAMPAIGN_LEVEL_FIELDS = ['id', 'arenaId'] as const;
+
+/** Reserved for a legacy numeric-string persisted value (progress.ts's frozen ordinal
+ *  table) -- a real level id must never collide with one, or a stale save could
+ *  misresolve against a level nobody authored. */
+const BARE_DIGITS = /^\d+$/;
+
+export function validateCampaign(
+  raw: unknown,
+  knownArenaIds: ReadonlySet<string>,
+  file = 'campaign.json',
+): CampaignDefinition {
+  if (!isRecord(raw)) fail(file, 'root', 'must be an object');
+  exactKeys(file, 'root', raw, CAMPAIGN_FIELDS);
+  const id = str(file, 'root.id', raw.id);
+  if (id.trim() === '') fail(file, 'root.id', 'must not be empty');
+  if (!Array.isArray(raw.levels)) fail(file, 'root.levels', 'must be an array');
+  if (raw.levels.length === 0) fail(file, 'root.levels', 'must hold at least one level');
+
+  const seen = new Set<string>();
+  const levels: CampaignLevel[] = raw.levels.map((entry, i) => {
+    const path = `levels[${i}]`;
+    if (!isRecord(entry)) fail(file, path, 'must be an object');
+    exactKeys(file, path, entry, CAMPAIGN_LEVEL_FIELDS);
+    const levelId = str(file, `${path}.id`, entry.id);
+    if (levelId.trim() === '') fail(file, `${path}.id`, 'must not be empty');
+    if (BARE_DIGITS.test(levelId)) {
+      fail(file, `${path}.id`, `must not be a bare digit string ${JSON.stringify(levelId)} -- reserved for a legacy persisted ordinal`);
+    }
+    if (seen.has(levelId)) fail(file, path, `duplicate id ${JSON.stringify(levelId)}`);
+    seen.add(levelId);
+    const arenaId = str(file, `${path}.arenaId`, entry.arenaId);
+    if (!knownArenaIds.has(arenaId)) {
+      fail(file, `${path}.arenaId`, `${JSON.stringify(arenaId)} does not name a known arena`);
+    }
+    return { id: levelId, arenaId };
+  });
+
+  return { id, levels };
 }

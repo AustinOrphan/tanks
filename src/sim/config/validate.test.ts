@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TANK_KINDS, validateAiProfiles, validateArenaShape, validateArenas, validateTankDefinitions } from './validate';
+import { TANK_KINDS, validateAiProfiles, validateArenaShape, validateArenas, validateCampaign, validateTankDefinitions } from './validate';
 import tankDefsJson from './data/tank-defs.json';
 import aiProfilesJson from './data/ai-profiles.json';
 import { AIProfile } from './enums';
@@ -505,5 +505,113 @@ describe('validateArenaShape', () => {
     const shape = GOOD_SHAPE;
     expect(() => validateArenaShape({ ...shape, grid: [5, '.#..', '..P.'] }, 'sandbox', 'sandbox'))
       .toThrow(/sandbox\.grid\[0\].*string/);
+  });
+});
+
+const KNOWN_ARENA_IDS = new Set(['arena-a', 'arena-b', 'arena-c']);
+const GOOD_CAMPAIGN = {
+  id: 'main',
+  levels: [
+    { id: 'level-01', arenaId: 'arena-a' },
+    { id: 'level-02', arenaId: 'arena-b' },
+  ],
+};
+
+describe('validateCampaign', () => {
+  it('accepts a well-formed campaign and returns it intact', () => {
+    expect(validateCampaign(GOOD_CAMPAIGN, KNOWN_ARENA_IDS)).toEqual(GOOD_CAMPAIGN);
+  });
+
+  it('rejects a root that is not an object', () => {
+    expect(() => validateCampaign(null, KNOWN_ARENA_IDS)).toThrow(/root.*object/);
+    expect(() => validateCampaign('nope', KNOWN_ARENA_IDS)).toThrow(/root.*object/);
+  });
+
+  it('rejects an unknown root key', () => {
+    const bad = corrupt(GOOD_CAMPAIGN, (c) => { c.extra = true; });
+    expect(() => validateCampaign(bad, KNOWN_ARENA_IDS)).toThrow(/root.*unknown entry "extra"/);
+  });
+
+  it('rejects a missing or empty id', () => {
+    const missing = corrupt(GOOD_CAMPAIGN, (c) => { delete c.id; });
+    expect(() => validateCampaign(missing, KNOWN_ARENA_IDS)).toThrow(/root.*missing required entry "id"/);
+    const empty = corrupt(GOOD_CAMPAIGN, (c) => { c.id = ''; });
+    expect(() => validateCampaign(empty, KNOWN_ARENA_IDS)).toThrow(/root\.id.*not be empty/);
+  });
+
+  it('rejects a missing or empty levels array', () => {
+    const missing = corrupt(GOOD_CAMPAIGN, (c) => { delete c.levels; });
+    expect(() => validateCampaign(missing, KNOWN_ARENA_IDS)).toThrow(/root.*missing required entry "levels"/);
+    const notArray = corrupt(GOOD_CAMPAIGN, (c) => { c.levels = 'nope'; });
+    expect(() => validateCampaign(notArray, KNOWN_ARENA_IDS)).toThrow(/root\.levels.*array/);
+    const empty = corrupt(GOOD_CAMPAIGN, (c) => { c.levels = []; });
+    expect(() => validateCampaign(empty, KNOWN_ARENA_IDS)).toThrow(/root\.levels.*at least one level/);
+  });
+
+  it('rejects an entry with an unknown or missing key', () => {
+    const extra = corrupt(GOOD_CAMPAIGN, (c) => {
+      (c.levels as Record<string, unknown>[])[0] = { ...(c.levels as Record<string, unknown>[])[0], extra: 1 };
+    });
+    expect(() => validateCampaign(extra, KNOWN_ARENA_IDS)).toThrow(/levels\[0\].*unknown entry "extra"/);
+  });
+
+  it('rejects a duplicate level id', () => {
+    // Would fail if: the Set-based duplicate check were removed or short-circuited.
+    const bad = corrupt(GOOD_CAMPAIGN, (c) => {
+      (c.levels as Record<string, unknown>[])[1] = { id: 'level-01', arenaId: 'arena-b' };
+    });
+    expect(() => validateCampaign(bad, KNOWN_ARENA_IDS)).toThrow(/levels\[1\].*duplicate id "level-01"/);
+  });
+
+  it('rejects a bare-digit level id -- reserved for a legacy persisted ordinal', () => {
+    // The fixture that PROVES the /^\d+$/ guard actually fires, not merely that
+    // the regex compiles: a level id of '3' (exactly what run.ts's old
+    // levelIdFromIndex(3) produced) must be rejected outright.
+    const bad = corrupt(GOOD_CAMPAIGN, (c) => {
+      (c.levels as Record<string, unknown>[])[0] = { id: '3', arenaId: 'arena-a' };
+    });
+    expect(() => validateCampaign(bad, KNOWN_ARENA_IDS)).toThrow(/levels\[0\]\.id.*bare digit string "3"/);
+  });
+
+  it('accepts a level id that merely CONTAINS digits, only rejecting an id that is ALL digits', () => {
+    // Negative control for the guard above: 'level-3' must not be caught by the
+    // same regex that catches '3'.
+    const ok = corrupt(GOOD_CAMPAIGN, (c) => {
+      (c.levels as Record<string, unknown>[])[0] = { id: 'level-3', arenaId: 'arena-a' };
+    });
+    expect(() => validateCampaign(ok, KNOWN_ARENA_IDS)).not.toThrow();
+  });
+
+  it('rejects an empty level id', () => {
+    const bad = corrupt(GOOD_CAMPAIGN, (c) => {
+      (c.levels as Record<string, unknown>[])[0] = { id: '', arenaId: 'arena-a' };
+    });
+    expect(() => validateCampaign(bad, KNOWN_ARENA_IDS)).toThrow(/levels\[0\]\.id.*not be empty/);
+  });
+
+  it('rejects an arenaId that does not name a known arena', () => {
+    // Would fail if: knownArenaIds were ignored and any string accepted.
+    const bad = corrupt(GOOD_CAMPAIGN, (c) => {
+      (c.levels as Record<string, unknown>[])[0] = { id: 'level-01', arenaId: 'arena-ghost' };
+    });
+    expect(() => validateCampaign(bad, KNOWN_ARENA_IDS))
+      .toThrow(/levels\[0\]\.arenaId.*"arena-ghost".*does not name a known arena/);
+  });
+
+  it('preserves the INPUT level order verbatim, independent of arena-catalog order', () => {
+    // The proof that campaign order and arena-catalog order are independent
+    // knobs: this campaign's levels are NOT in `arena-a, arena-b, arena-c` order
+    // (the order KNOWN_ARENA_IDS would suggest an arena catalog ships in), and
+    // the validator must not silently re-sort them. Would fail if: validateCampaign
+    // sorted levels by id or by arenaId before returning.
+    const reordered = {
+      id: 'main',
+      levels: [
+        { id: 'level-01', arenaId: 'arena-c' },
+        { id: 'level-02', arenaId: 'arena-a' },
+        { id: 'level-03', arenaId: 'arena-b' },
+      ],
+    };
+    expect(validateCampaign(reordered, KNOWN_ARENA_IDS)).toEqual(reordered);
   });
 });
