@@ -18,13 +18,18 @@ export const ACHIEVEMENTS_KEY = 'tanks.achievements.v1';
 export interface AchievementContext {
   /** The lifetime tally, for cumulative milestones. */
   lifetime: StatCounts;
-  /** The current run's tally -- zeroed per level by the loop's switchTo. */
-  run: StatCounts;
+  /**
+   * The current ATTEMPT's tally -- zeroed per level by the loop's switchTo. Named
+   * `attempt`, not `run`: issue #153 reserves `run` for the whole-campaign concept
+   * (see run.ts), and every feat below is level-sized, exactly the "level-sized
+   * stats bucket" the spec's terminology audit calls out.
+   */
+  attempt: StatCounts;
   highestCleared: number;
   totalLevels: number;
   /**
-   * The 1-based level just cleared, non-null ONLY on the frame a win lands. Run feats
-   * gate on it: without that gate a feat fires the moment the tally happens to
+   * The 1-based level just cleared, non-null ONLY on the frame a win lands. Attempt
+   * feats gate on it: without that gate a feat fires the moment the tally happens to
    * qualify, crediting the player for a level they went on to lose.
    */
   clearedLevel: number | null;
@@ -62,7 +67,7 @@ export type AchievementId =
   | 'bomb-squad'
   | 'survivor';
 
-/** A run feat only counts at the moment of a clear. */
+/** An attempt feat only counts at the moment of a clear. */
 const atClear =
   (pred: (c: AchievementContext) => boolean) =>
   (c: AchievementContext): boolean =>
@@ -151,19 +156,19 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     id: 'flawless',
     label: 'Flawless',
     description: 'Clear a level without losing a life.',
-    earned: atClear((c) => c.run.deaths === 0),
+    earned: atClear((c) => c.attempt.deaths === 0),
   },
   {
     id: 'dead-eye',
     label: 'Dead Eye',
     description: 'Clear a level where every shell you fired found a tank.',
-    earned: atClear((c) => c.run.shotsFired > 0 && c.run.shellKills === c.run.shotsFired),
+    earned: atClear((c) => c.attempt.shotsFired > 0 && c.attempt.shellKills === c.attempt.shotsFired),
   },
   {
     id: 'bomb-squad',
     label: 'Bomb Squad',
     description: 'Clear a level on mines alone, without a single shell kill.',
-    earned: atClear((c) => c.run.mineKills > 0 && c.run.shellKills === 0),
+    earned: atClear((c) => c.attempt.mineKills > 0 && c.attempt.shellKills === 0),
   },
   {
     id: 'survivor',

@@ -34,16 +34,37 @@ export interface Hud {
    * The main menu's level select: `unlocked` of `total` levels are pickable
    * (1-based count; level 1 is always open). A one-level total hides the Levels button
    * entirely -- the sandbox is not a choice. Locked buttons are DISABLED, not merely
-   * grey. Also the ONLY signal the HUD gets that progress exists: `unlocked > 1` iff
-   * `highestCleared() > 0`, which is what gates the Continue button (see onStartRestart).
+   * grey.
+   *
+   * This is a PERMANENT-PROGRESS question ("which levels has the save unlocked"), not
+   * an active-run one -- it used to also gate the Continue button (`unlocked > 1` iff
+   * `highestCleared() > 0`), which was exactly the highestCleared/run conflation issue
+   * #153 removes. See setContinueAvailable for that, now a separate signal.
    */
   setLevelSelect(unlocked: number, total: number): void;
   /**
-   * Fired with the 0-BASED level index when an unlocked level button is clicked -- and
-   * with 0 when New Game is clicked, which reuses this exact callback rather than a
-   * second wiring to the same destination under a different label.
+   * Fired with the 0-BASED level index when an unlocked level button in the Levels
+   * panel is clicked. This is PRACTICE (spec: "Selecting an unlocked level begins
+   * practice with independent lives") -- New Game is a distinct, deliberate action and
+   * fires onNewGame instead. The two used to share this one callback (New Game reported
+   * `cb(0)`, indistinguishable from picking level 1 in the panel), which is exactly the
+   * seam practice-vs-campaign needed to discriminate and could not.
    */
   onLevelSelect(cb: (level: number) => void): void;
+  /**
+   * Whether Continue has anything to resume: true iff an active campaign run exists.
+   * A separate signal from setLevelSelect's `unlocked` on purpose -- see that doc
+   * comment. The loop pushes this from wherever the run's existence can change: boot,
+   * New Game, quitting to title, and game-over/campaign-completion.
+   */
+  setContinueAvailable(available: boolean): void;
+  /**
+   * New Game: the one deliberate, explicit action that starts (or replaces) the
+   * active campaign run. Separate from onLevelSelect (see its doc comment) so the
+   * loop can tell "start/replace the run" from "enter practice" apart -- before this
+   * split they were the literal same event.
+   */
+  onNewGame(cb: () => void): void;
   setState(s: GameState): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
@@ -95,10 +116,18 @@ export interface Hud {
   onFireTap(cb: () => void): void;
   /**
    * Both tallies, pushed by the loop whenever they change. The HUD re-renders the
-   * stats table only while it is visible, and keeps the win/lose run-summary line
-   * live -- the winning kill is recorded a beat AFTER the state flips.
+   * stats table only while it is visible, and keeps the win/lose attempt-summary
+   * line live -- the winning kill is recorded a beat AFTER the state flips.
+   *
+   * `attempt` (not `run`, see stats.ts): a level-sized tally, zeroed on every
+   * switchTo. The visible copy still reads "This run" -- that is user-facing
+   * wording, not the codebase's ambiguous use of the word issue #153 asks to
+   * remove, and changing it is out of this change's scope (nit 4, adjudicated
+   * review of #156: renaming `hud-run-summary`/`runSummaryEl`/`renderRunSummary`
+   * to their attempt-scoped names was trivial and safe, and is done; the visible
+   * "This run: ..." copy is a separate, user-facing decision and stays as-is).
    */
-  setStats(data: { lifetime: StatCounts; run: StatCounts }): void;
+  setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void;
   /** Two-click-confirmed on the stats page. */
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
@@ -419,7 +448,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-panel hud-panel--hidden" tabindex="-1" aria-labelledby="hud-panel-title">
       <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
-      <p class="hud-run-summary hud-run-summary--hidden"></p>
+      <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
@@ -511,7 +540,7 @@ export function createHud(root: HTMLElement): Hud {
   const achCountEl = el.querySelector('.hud-achievements-count') as HTMLElement;
   const achBackBtn = el.querySelector('.hud-achievements-back') as HTMLButtonElement;
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
-  const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
+  const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
@@ -724,7 +753,7 @@ export function createHud(root: HTMLElement): Hud {
     }
   }
 
-  let statsData: { lifetime: StatCounts; run: StatCounts } | null = null;
+  let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
 
   const pct = (num: number, den: number): string =>
     den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
@@ -746,23 +775,23 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderStatsTable(): void {
     if (!statsData) return;
-    const { lifetime, run } = statsData;
+    const { lifetime, attempt } = statsData;
     const rows = STAT_ROWS.map(
-      ([label, get]) => `<tr><th>${label}</th><td>${get(lifetime)}</td><td>${get(run)}</td></tr>`,
+      ([label, get]) => `<tr><th>${label}</th><td>${get(lifetime)}</td><td>${get(attempt)}</td></tr>`,
     ).join('');
     statsTable.innerHTML = `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;
   }
 
-  function renderRunSummary(): void {
+  function renderAttemptSummary(): void {
     if (!statsData) {
-      runSummaryEl.classList.add('hud-run-summary--hidden');
+      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');
       return;
     }
-    const r = statsData.run;
+    const r = statsData.attempt;
     const kills = r.shellKills + r.mineKills;
-    runSummaryEl.textContent =
+    attemptSummaryEl.textContent =
       `This run: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
-    runSummaryEl.classList.remove('hud-run-summary--hidden');
+    attemptSummaryEl.classList.remove('hud-attempt-summary--hidden');
   }
 
   /**
@@ -1198,15 +1227,16 @@ export function createHud(root: HTMLElement): Hud {
   // Whether level select has anything to offer (more than one level). Gates the
   // Levels button's visibility together with the title state.
   let levelChoice = false;
-  // Whether Continue has anything to resume: derived from setLevelSelect's `unlocked`
-  // rather than a new channel -- unlocked > 1 iff highestCleared() > 0, since
-  // unlockedLevels() is min(highestCleared() + 1, count). Same gating convention as
-  // levelChoice.
+  // Whether Continue has anything to resume: pushed explicitly by setContinueAvailable,
+  // a signal independent of setLevelSelect's `unlocked` -- see both doc comments. Used
+  // to be derived from `unlocked > 1`, which was exactly the highestCleared/active-run
+  // conflation issue #153 removes.
   let hasProgress = false;
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: GameState = 'splash';
   const levelSelectCbs: Array<(level: number) => void> = [];
+  const newGameCbs: Array<() => void> = [];
 
   const handleLevelSelectOpen = (): void => showLevelSelect(true);
   const handleLevelSelectBack = (): void => {
@@ -1222,11 +1252,10 @@ export function createHud(root: HTMLElement): Hud {
   // that action, under a label that says what it does at the title screen specifically.
   continueBtn.addEventListener('click', handleAction);
   continueBtn.addEventListener('click', blurIfPointer);
-  // New Game IS "pick level 1" -- it reuses onLevelSelect's callback list (and so
-  // loop.ts's existing state/range guard on it) rather than adding a second wiring to
-  // the same destination under a different label.
+  // New Game fires its OWN callback list now -- see onNewGame's doc comment for why it
+  // no longer reuses onLevelSelect's.
   const handleNewGame = (): void => {
-    for (const cb of levelSelectCbs) cb(0);
+    for (const cb of newGameCbs) cb();
   };
   newGameBtn.addEventListener('click', handleNewGame);
   newGameBtn.addEventListener('click', blurIfPointer);
@@ -1277,9 +1306,9 @@ export function createHud(root: HTMLElement): Hud {
     continueBtn.classList.toggle('hud-continue--hidden', s !== 'title' || !hasProgress);
     newGameBtn.classList.toggle('hud-new-game--hidden', s !== 'title');
     actionBtn.classList.toggle('hud-action--hidden', s === 'title');
-    // The run summary belongs to the END screens alone.
-    runSummaryEl.classList.toggle('hud-run-summary--hidden', s !== 'win' && s !== 'lose');
-    if (s === 'win' || s === 'lose') renderRunSummary();
+    // The attempt summary belongs to the END screens alone.
+    attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', s !== 'win' && s !== 'lose');
+    if (s === 'win' || s === 'lose') renderAttemptSummary();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
@@ -1383,8 +1412,6 @@ export function createHud(root: HTMLElement): Hud {
     },
     setLevelSelect(unlocked: number, total: number): void {
       levelChoice = total > 1;
-      // unlocked > 1 iff highestCleared() > 0 -- see the declaration's comment.
-      hasProgress = unlocked > 1;
       // REPLACE, never append: this re-renders after every unlock.
       levelsRow.textContent = '';
       for (let i = 0; i < total; i++) {
@@ -1406,13 +1433,22 @@ export function createHud(root: HTMLElement): Hud {
         levelsRow.appendChild(btn);
       }
       // setLevelSelect may re-render while ANOTHER panel is up (unlocks are recorded at
-      // the win event) and must not splash either button onto it -- same `shownState`
+      // the win event) and must not splash the button onto it -- same `shownState`
       // convention the row itself used to follow directly.
       levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', shownState !== 'title' || !levelChoice);
-      continueBtn.classList.toggle('hud-continue--hidden', shownState !== 'title' || !hasProgress);
     },
     onLevelSelect(cb: (level: number) => void): void {
       levelSelectCbs.push(cb);
+    },
+    setContinueAvailable(available: boolean): void {
+      hasProgress = available;
+      // Same `shownState` convention as setLevelSelect just above: this can be pushed
+      // while another panel is up (a game-over/completion transition ends the run
+      // before the player is back at the title screen to see it).
+      continueBtn.classList.toggle('hud-continue--hidden', shownState !== 'title' || !hasProgress);
+    },
+    onNewGame(cb: () => void): void {
+      newGameCbs.push(cb);
     },
     setEnemiesRemaining(n: number): void {
       if (n === lastEnemies) return;
@@ -1489,10 +1525,10 @@ export function createHud(root: HTMLElement): Hud {
     onFireTap(cb: () => void): void {
       fireTapCbs.push(cb);
     },
-    setStats(data: { lifetime: StatCounts; run: StatCounts }): void {
+    setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void {
       statsData = data;
       if (!statsView.classList.contains('hud-stats--hidden')) renderStatsTable();
-      if (!runSummaryEl.classList.contains('hud-run-summary--hidden')) renderRunSummary();
+      if (!attemptSummaryEl.classList.contains('hud-attempt-summary--hidden')) renderAttemptSummary();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);

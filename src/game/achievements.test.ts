@@ -11,7 +11,7 @@ import { ARENAS, loadArena } from '../sim/arena';
 
 const ctx = (over: Partial<AchievementContext> = {}): AchievementContext => ({
   lifetime: { ...ZERO_STATS },
-  run: { ...ZERO_STATS },
+  attempt: { ...ZERO_STATS },
   highestCleared: 0,
   totalLevels: 3,
   clearedLevel: null,
@@ -39,27 +39,27 @@ describe('the achievement catalog', () => {
     }
   });
 
-  it('run feats stay dormant until a level is actually cleared', () => {
-    // Each must be false mid-run with a feat-worthy tally and true only once
+  it('attempt feats stay dormant until a level is actually cleared', () => {
+    // Each must be false mid-attempt with a feat-worthy tally and true only once
     // clearedLevel lands -- otherwise a feat fires on the frame the tally happens to
     // qualify and the player is credited for a level they went on to lose.
     //
-    // Population: all 4 run feats, NAMED rather than derived by a filter. Review proved the filter
+    // Population: all 4 attempt feats, NAMED rather than derived by a filter. Review proved the filter
     // silently dropped two of the four (bomb-squad, because the fixture had shell
-    // kills; flawless, because it is already true on a zeroed run), so dropping
+    // kills; flawless, because it is already true on a zeroed attempt), so dropping
     // atClear from either would have left this green.
-    const RUN_FEATS = ['flawless', 'dead-eye', 'bomb-squad', 'survivor'];
+    const ATTEMPT_FEATS = ['flawless', 'dead-eye', 'bomb-squad', 'survivor'];
     const feat = { deaths: 0, shotsFired: 4, shellKills: 4, mineKills: 2 };
-    const bombRun = { deaths: 0, shotsFired: 0, shellKills: 0, mineKills: 2 };
-    for (const id of RUN_FEATS) {
+    const bombAttempt = { deaths: 0, shotsFired: 0, shellKills: 0, mineKills: 2 };
+    for (const id of ATTEMPT_FEATS) {
       const a = ACHIEVEMENTS.find((x) => x.id === id)!;
       // The tally that would earn it, but mid-round: clearedLevel is still null.
-      const tally = id === 'bomb-squad' ? bombRun : feat;
-      expect(a.earned(ctx({ run: { ...ZERO_STATS, ...tally }, livesLeft: 1 })), id).toBe(false);
+      const tally = id === 'bomb-squad' ? bombAttempt : feat;
+      expect(a.earned(ctx({ attempt: { ...ZERO_STATS, ...tally }, livesLeft: 1 })), id).toBe(false);
       // And the same tally at a clear earns it -- so the false above is the GATE,
       // not merely a predicate that never fires.
       expect(
-        a.earned(ctx({ run: { ...ZERO_STATS, ...tally }, livesLeft: 1, clearedLevel: 1 })),
+        a.earned(ctx({ attempt: { ...ZERO_STATS, ...tally }, livesLeft: 1, clearedLevel: 1 })),
         id,
       ).toBe(true);
     }
@@ -80,7 +80,7 @@ describe('the achievement catalog', () => {
     // 0 shots means 0 === 0 is vacuously "every shell found a tank". Without the
     // shotsFired > 0 guard, the sniping award lands on a player who never fired.
     const minesOnly = ctx({
-      run: { ...ZERO_STATS, mineKills: 2, shotsFired: 0, shellKills: 0 },
+      attempt: { ...ZERO_STATS, mineKills: 2, shotsFired: 0, shellKills: 0 },
       clearedLevel: 1,
     });
     const ids = ACHIEVEMENTS.filter((a) => a.earned(minesOnly)).map((a) => a.id);

@@ -3,9 +3,10 @@ import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
+import { RUN_KEY } from './run';
 
 /**
- * Serialise and restore the whole save: the five `tanks.*` keys as one blob.
+ * Serialise and restore the whole save: the six `tanks.*` keys as one blob.
  *
  * localStorage is ORIGIN-scoped. The web game lives at `austinorphan.com`; a
  * wrapped mobile build lives at `capacitor://localhost` or `https://localhost`.
@@ -17,7 +18,7 @@ import { ACHIEVEMENTS_KEY } from './achievements';
  * project page on austinorphan.com (CLAUDE.md), so anything that clears storage
  * for that origin takes the save with it.
  *
- * Deliberately at the RAW key/value layer, not through the five typed stores.
+ * Deliberately at the RAW key/value layer, not through the six typed stores.
  * The stores validate on read and drop what they do not recognise, so a
  * store-level round trip would silently discard a field written by a newer
  * version of the game -- exactly the data an export exists to preserve. Junk is
@@ -37,7 +38,7 @@ export const SAVE_VERSION = 1;
 /**
  * Every key an export carries, in a fixed order.
  *
- * Sourced from the five store modules rather than retyped, so a renamed key
+ * Sourced from the six store modules rather than retyped, so a renamed key
  * cannot leave this list pointing at a key nothing writes. The order is fixed so
  * two exports of the same state are byte-identical and diffable.
  */
@@ -47,6 +48,7 @@ export const SAVE_KEYS: readonly string[] = Object.freeze([
   CUSTOM_KEY,
   TOUCH_SETTINGS_KEY,
   ACHIEVEMENTS_KEY,
+  RUN_KEY,
 ]);
 
 export interface SaveBlob {
@@ -74,7 +76,7 @@ export interface ImportResult {
  *
  * An ABSENT key is omitted rather than exported as null: importing a blob taken
  * before a store existed must not blank that store, and "absent" and "empty" are
- * different states to every one of the five readers.
+ * different states to every one of the six readers.
  */
 export function exportSave(storage: Storage): string {
   const keys: Record<string, string> = {};
@@ -93,7 +95,7 @@ export function exportSave(storage: Storage): string {
 }
 
 /**
- * Write a blob back over the five keys.
+ * Write a blob back over the six keys.
  *
  * Unknown keys are IGNORED, not written. That is a security property, not
  * tidiness: this origin's localStorage namespace is shared with every other

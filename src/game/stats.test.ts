@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The lifetime tally and the per-run tally, fed by the attributed event stream.
+// The lifetime tally and the per-attempt tally, fed by the attributed event stream.
 // Storage paranoia mirrors progress.ts: corrupt reads as zeros, throwing storage
 // degrades to in-memory.
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -27,10 +27,10 @@ const killed = (
 beforeEach(() => localStorage.clear());
 
 describe('createStatsStore: attribution rules', () => {
-  function afterEvents(events: SimEvent[]): { life: StatCounts; run: StatCounts } {
+  function afterEvents(events: SimEvent[]): { life: StatCounts; attempt: StatCounts } {
     const s = createStatsStore(localStorage);
     s.record(events, P);
-    return { life: s.lifetime(), run: s.run() };
+    return { life: s.lifetime(), attempt: s.attempt() };
   }
 
   it('counts the player\'s shots, ricochets, mines and walls -- and NOT the AI\'s', () => {
@@ -64,22 +64,22 @@ describe('createStatsStore: attribution rules', () => {
   });
 });
 
-describe('createStatsStore: run vs lifetime', () => {
-  it('startRun zeroes the run tally and leaves the lifetime alone', () => {
+describe('createStatsStore: attempt vs lifetime', () => {
+  it('startAttempt zeroes the attempt tally and leaves the lifetime alone', () => {
     const s = createStatsStore(localStorage);
     s.record([fire(P)], P);
-    s.startRun();
-    expect(s.run()).toEqual(ZERO_STATS);
+    s.startAttempt();
+    expect(s.attempt()).toEqual(ZERO_STATS);
     expect(s.lifetime().shotsFired).toBe(1);
   });
 
-  it('lifetime persists across store instances; the run does not', () => {
+  it('lifetime persists across store instances; the attempt does not', () => {
     const a = createStatsStore(localStorage);
     a.record([fire(P), killed('brown', 'shell', P)], P);
     const b = createStatsStore(localStorage);
     expect(b.lifetime().shotsFired).toBe(1);
     expect(b.lifetime().shellKills).toBe(1);
-    expect(b.run()).toEqual(ZERO_STATS); // a reload is a fresh run
+    expect(b.attempt()).toEqual(ZERO_STATS); // a reload is a fresh attempt
   });
 
   it('resetLifetime zeroes and persists the zeros', () => {
