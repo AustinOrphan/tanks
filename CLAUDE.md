@@ -101,9 +101,10 @@ carries no branch protection and no ruleset** — nothing forces work through a 
 nothing stops a direct push. The CI gate above is on the DEPLOY, not on the branch: a red
 commit can still land on `main`, it just will not publish. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
-one localStorage namespace (the game's **five** keys are all `tanks.*`-prefixed —
-`progress`, `touch`, `stats`, `custom`, `achievements`, each `.v1`; this sentence said
-"four" until the mobile-release investigation counted them), and the
+one localStorage namespace (the game's **six** keys are all `tanks.*`-prefixed —
+`progress`, `touch`, `stats`, `custom`, `achievements`, `run`, each `.v1`; this sentence
+said "four" until the mobile-release investigation counted them, and "five" until the
+campaign-run model added a sixth), and the
 portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
 CacheStorage entry it does not own — so an offline feature here needs coordination first.
 
@@ -140,14 +141,14 @@ are unreachable from gameplay today and are pinned ONLY by
 `src/sim/step-inputs.test.ts` — the trace drives one player and cannot see them, measured:
 all 8 mutations swept there leave the hash unchanged.
 
-**Persistence is one seam, `src/game/storage.ts`.** All five stores take an injected
+**Persistence is one seam, `src/game/storage.ts`.** All six stores take an injected
 `Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the old
 inline stand-in was `{getItem, setItem}` cast to `Storage`, so `removeItem`/`clear`/`key`
-were TypeErrors waiting), and `createStores(storage)` gives all five the SAME one **by
+were TypeErrors waiting), and `createStores(storage)` gives all six the SAME one **by
 signature** — resolving per store was harmless only because localStorage returns the same
 object every time, and would have given each store a private namespace under the shim.
 Pointing the game at Capacitor Preferences or a file-backed desktop shim is a one-file
-change with a test that can fail. `src/game/save.ts` serialises those five keys as one
+change with a test that can fail. `src/game/save.ts` serialises those six keys as one
 blob at the RAW key/value layer, deliberately not through the typed stores: they validate
 on read and drop what they do not recognise, which is exactly the data an export exists to
 preserve. Import writes only keys on the `SAVE_KEYS` allow-list — the origin is shared, so

@@ -146,7 +146,7 @@ export interface GameDeps {
   readonly touchSettings: TouchSettingsStore;
   readonly achievements: AchievementsStore;
   /**
-   * The RAW key/value layer the five stores above sit on.
+   * The RAW key/value layer the six stores above sit on.
    *
    * Deliberately alongside them rather than instead of them: the save
    * export/import round-trips whole strings, which the typed stores cannot do
