@@ -835,12 +835,44 @@ export function startGameWith(
   // Distinct from onLevelSelect above -- before issue #153 New Game reported
   // onLevelSelect(0), the literal same event as picking level 1 in the Levels panel,
   // which is exactly why practice and campaign could not be told apart.
+  //
+  // Gated on campaignActive() (defect 2, adjudicated review of #157): every OTHER
+  // run mutation in this file already checks it, and this one had no guard at all --
+  // `deps.run.startNewRun(deps.levels.levels[0].id)` ran unconditionally. For the
+  // sandbox, `levels[0].id` is the synthetic `'sandbox'` string, never a member of
+  // CAMPAIGN_LEVELS, so a click there persisted `{currentLevelId: 'sandbox', ...}`
+  // into the REAL tanks.run.v2 key -- the sandbox must never create OR read a real
+  // campaign run, and a later normal session would read the poisoned id back as
+  // unresolvable and silently fall back to level 1, discarding wherever the run
+  // actually was. For a dev-flag jump, the same call REPLACED a real run outright:
+  // #156's adjudicated model already excludes a jump from consuming, restoring,
+  // advancing or completing the run (see campaignActive's doc comment), and Replace
+  // is the same exclusion, just missed the first time. Only a session that OWNS the
+  // run -- real campaign play, neither the sandbox nor a jump -- may replace it;
+  // the other two get a fresh board and leave the real run untouched.
+  //
+  // `inPractice = false` is set FIRST, unconditionally, same as landOnCampaignBoard:
+  // New Game from title always leaves practice, campaign-owning or not. Today every
+  // path back to 'title' already runs through landOnCampaignBoard (quit-to-title) or
+  // starts with `inPractice` false from construction, so `sm.state === 'title'` with
+  // `inPractice === true` cannot currently happen -- this ordering is defensive, not
+  // covering a reachable gap, so a future path to title that skips
+  // landOnCampaignBoard cannot leave campaignActive() reading a stale practice flag.
   hud.onNewGame(() => {
     if (sm.state !== 'title') return;
-    const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
     inPractice = false;
-    switchTo(deps.levels.levels[0], fresh.livesRemaining);
-    hud.setContinueAvailable(true);
+    if (campaignActive()) {
+      const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
+      switchTo(deps.levels.levels[0], fresh.livesRemaining);
+      hud.setContinueAvailable(true);
+    } else {
+      // Sandbox or dev jump: no run write at all -- just a fresh board at levels[0],
+      // the same "New Game" affordance a campaign-owning session gets, minus the
+      // part that touches a run this session does not own. Continue's signal is left
+      // alone rather than forced to `true`, which would claim a run exists when this
+      // click created none.
+      switchTo(deps.levels.levels[0], undefined);
+    }
     // Same convention as onLevelSelect just above: a real gesture that starts play
     // must unlock the audio context here, since Safari accepts no later opportunity.
     audio.unlock();

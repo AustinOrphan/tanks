@@ -2377,6 +2377,74 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       } satisfies ActiveRun);
       h.handle.dispose();
     });
+
+    // The one defect from the adjudicated review of #157: hud.onNewGame's startNewRun call had
+    // no session-type guard at all -- unlike every other run mutation in this file,
+    // which is gated on campaignActive(). The two tests below reproduce the two ways
+    // that reached: the sandbox's synthetic level id poisoning the REAL run key, and a
+    // dev jump's New Game replacing a run it does not own -- same structural exclusion
+    // as #156's campaignActive, extended to cover New Game.
+    it('New Game in the sandbox creates no run and writes no tanks.run.v2 key', () => {
+      // Before the fix: hud.onNewGame called deps.run.startNewRun(deps.levels.levels[0].id)
+      // unconditionally. For the sandbox that id is the synthetic 'sandbox' string --
+      // never a member of CAMPAIGN_LEVELS -- so this persisted
+      // {currentLevelId: 'sandbox', ...} into the REAL tanks.run.v2 key: a later normal
+      // session would read it back as an unresolvable id and silently fall back to
+      // level 1, discarding wherever the player's real run actually was.
+      // campaignActive() is false here (tracksProgress is false for the sandbox), so
+      // the fix must touch neither the in-memory run nor the storage key at all.
+      const storage = createMemoryStorage();
+      const run = createRunStore(storage);
+      const sandboxFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 'sandbox' };
+      const levels = createLevelSystem(sandboxFlags, run);
+      const base = makeDeps();
+      const deps: GameDeps = { ...base.deps, levels, run, devFlags: sandboxFlags };
+      const h = boot({ ...base, deps });
+      h.hud.newGame();
+      // Proves the handler actually ran (rather than the guard short-circuiting it
+      // for an unrelated reason and leaving run.active() null incidentally): New
+      // Game still starts play unconditionally.
+      expect(h.getState(), 'the handler ran -- New Game still starts play').toBe('playing');
+      expect(run.active()).toBeNull();
+      expect(storage.getItem(RUN_KEY)).toBeNull();
+      h.handle.dispose();
+    });
+
+    it("New Game in a dev-jumped session leaves an unrelated real run byte-for-byte untouched, and boots levels[0] with fresh lives", () => {
+      // Before the fix, the same unconditional startNewRun call REPLACED a real run:
+      // under `?dev=1&level=2`, New Game rewrote a run sitting at level 4 to a brand
+      // new one at level 1 with full lives -- discarding wherever the run actually
+      // was. #156's adjudicated model already excludes a dev jump from
+      // consuming/restoring/advancing/completing the run; this defect showed New
+      // Game -- Replace -- was never added to that exclusion list.
+      //
+      // The saved run is deliberately left at 1 life, not LIVES: both the buggy and
+      // the fixed code boot levels[0] at LIVES-valued lives (startNewRun always
+      // grants full LIVES, and the fixed path's `undefined` also defaults to LIVES),
+      // so a saved run already at LIVES would make the lives assertion below a
+      // tautology. At 1 life, a wrong fix that read the untouched run's own lives
+      // back (deps.run.active()?.livesRemaining) instead of passing undefined would
+      // still be caught.
+      const storage = createMemoryStorage();
+      const run = createRunStore(storage);
+      run.startNewRun(CAMPAIGN_LEVELS[0].id);
+      run.advanceLevel(CAMPAIGN_LEVELS[3].id, 1); // the run: level-04, 1 life left
+      const savedRun = run.active();
+      const jumpFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 2 }; // ?dev=1&level=2 -> index 1
+      const levels = createLevelSystem(jumpFlags, run);
+      const base = makeDeps();
+      const deps: GameDeps = { ...base.deps, levels, run, devFlags: jumpFlags };
+      const h = boot({ ...base, deps });
+      h.hud.newGame();
+      expect(run.active()).toEqual(savedRun); // byte-for-byte unchanged
+      // Boots levels[0] (ordinal 1 of 5), not the jumped level (index 1) or the run's
+      // own level-04 -- ordinalOf/hud.setLevel is driven off deps.levels.levels, real
+      // here, so this does not depend on the fake levels object's own recorder.
+      expect(h.rec.hudLevels.at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
+      h.fireFrame(100);
+      expect(h.rec.renders.at(-1)!.curr.lives).toBe(LIVES);
+      h.handle.dispose();
+    });
   });
 });
 
