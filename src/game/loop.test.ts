@@ -800,8 +800,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       let base = opts.progressHighest ?? 0;
       return {
         highestCleared: () => Math.max(base, ...rec.cleared, 0),
-        recordCleared: (level: number) => {
-          rec.cleared.push(level);
+        recordCleared: (level: CampaignLevel) => {
+          // 1-based ordinal, matching the real store's highestCleared() shape --
+          // `rec.cleared` stays plain numbers, same convention as `rec.levelBuilds`.
+          rec.cleared.push(fakeLevels.indexOf(level) + 1);
         },
         reset: () => {
           rec.progressResets += 1;

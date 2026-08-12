@@ -9,6 +9,7 @@ import {
   SAVE_VERSION,
   type SaveBlob,
 } from './save';
+import { CAMPAIGN_LEVELS } from '../sim/arena';
 
 function seeded(): Storage {
   const s = createMemoryStorage();
@@ -51,7 +52,7 @@ describe('SAVE_KEYS', () => {
     // list rots.
     const storage = createMemoryStorage();
     const stores = createStores(storage);
-    stores.progress.recordCleared(1);
+    stores.progress.recordCleared(CAMPAIGN_LEVELS[0]);
     stores.stats.resetLifetime();
     stores.customization.setHull('red');
     stores.touchSettings.setScheme('point');

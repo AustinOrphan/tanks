@@ -6,13 +6,14 @@ import { CUSTOM_KEY } from './customization';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
 import { RUN_KEY } from './run';
+import { CAMPAIGN_LEVELS } from '../sim/arena';
 
 /** Every key the six stores own, as the wire strings the browser sees. */
 const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, TOUCH_SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY];
 
 /** Make each of the six stores write, so their keys have to appear somewhere. */
 function writeThroughEveryStore(stores: GameStores): void {
-  stores.progress.recordCleared(2);
+  stores.progress.recordCleared(CAMPAIGN_LEVELS[1]);
   stores.stats.resetLifetime();
   stores.customization.setHull('red');
   stores.touchSettings.setScheme('point');

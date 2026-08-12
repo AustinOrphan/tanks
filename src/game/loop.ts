@@ -1037,7 +1037,7 @@ export function startGameWith(
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
     // unlock real levels.
     if (s === 'win' && deps.levels.tracksProgress) {
-      deps.progress.recordCleared(ordinalOf(level));
+      deps.progress.recordCleared(level);
       hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
     }
     // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
