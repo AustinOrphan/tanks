@@ -124,8 +124,8 @@
   {
     "id": "replay-recorder-wraps-the-raw-controller",
     "file": "src/game/loop.ts",
-    "find": "    ? createRecordingInput(effectiveInput, replayMetaFor(world, level))",
-    "replace": "    ? createRecordingInput(input, replayMetaFor(world, level))",
+    "find": "    ? createRecordingInput(effectiveInput, replayMetaFor(world, ARENA_DEFS[level].id))",
+    "replace": "    ? createRecordingInput(input, replayMetaFor(world, ARENA_DEFS[level].id))",
     "expect": "killed",
     "expectFailures": 1,
     "why": "The recorder must decorate `effectiveInput` -- what the driver is actually handed -- and not the raw input controller, or an autoplay session records an empty stream while a normal session looks perfect. Both wirings pass every tick-count assertion, because with autoplay off the two are the same object's behaviour; the discriminating case is the one that turns autoplay on and asserts the trace still filled. Verified through this harness at the commit that added the entry.",

@@ -58,8 +58,14 @@ export const DEFAULT_TICK_LIMIT = TICK_HZ * 60 * 10;
  * world's own answer.
  */
 export interface ReplayMeta {
-  /** 0-based level index in the session's LevelSystem. */
-  level: number;
+  /**
+   * The ARENA this trace's world was built from, not a campaign level id. A
+   * level can be re-pointed to a different arena later (issue #154's
+   * campaign.json), and a trace must keep reproducing the exact geometry it
+   * was recorded against -- so it names the arena directly rather than a
+   * level id re-resolved through (possibly since-edited) campaign data.
+   */
+  arenaId: string;
   seed: number;
   lives: number;
   unarmedTrigger: UnarmedTrigger;
@@ -131,6 +137,13 @@ export function fingerprint(value: unknown): string {
  * commit sha injected at build time), which is a build-pipeline change this does
  * not make -- see the backlog entry. A mismatch is therefore proof a trace is
  * stale; a match is not proof it is fresh.
+ *
+ * `campaign.json` (issue #154) is DELIBERATELY not a 5th hashed file, for the
+ * same reason ReplayMeta carries an arena id rather than a level id: campaign
+ * order changes which arena a level POSITION resolves to, not any single
+ * arena's own trajectory, and this fingerprint's job is "would this build's
+ * data reproduce the same run from an already-resolved arena," not "did the
+ * position-to-arena mapping stay the same."
  *
  * LAZY and memoised, not a module-level const. The canonical rendering of the four
  * files is 20,445 characters; hashing it cost 3.5 ms cold and 0.27 ms warm
@@ -229,9 +242,9 @@ export function createRecordingInput(
 }
 
 /** What a world says about itself, for the trace's meta. */
-export function replayMetaFor(world: World, level: number): ReplayMeta {
+export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
   return {
-    level,
+    arenaId,
     seed: world.seed,
     lives: world.lives,
     unarmedTrigger: world.unarmedTrigger,

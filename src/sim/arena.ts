@@ -32,6 +32,12 @@ export const ARENA_02: Arena = arenaById('arena-02');
 export const ARENA_03: Arena = arenaById('arena-03');
 export const ARENA_04: Arena = arenaById('arena-04');
 export const ARENAS: Arena[] = ARENA_DEFS;
+// Re-exported (not just consumed above) so a CampaignLevel's arenaId -- a level's
+// only pointer to its board, since #154 -- can be resolved from the same module
+// `src/game/` already imports arena identity from. ARENA_DEFS carries `id`; the
+// narrower `Arena` shape above deliberately does not, so a caller that needs an
+// arena's id reaches for this rather than `ARENAS[i]`.
+export { arenaById, ARENA_DEFS };
 
 /**
  * The playable area, in world units. Derived from the same `cols * cellSize`

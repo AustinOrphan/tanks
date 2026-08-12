@@ -43,7 +43,7 @@ import {
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeInput, replayTrace, checkTrace } from './replay';
-import { createWorldFor, ARENAS } from '../sim/arena';
+import { createWorldFor, ARENA_DEFS, arenaById } from '../sim/arena';
 import { createLevelSystem } from './levels';
 
 interface Recorder {
@@ -3602,14 +3602,14 @@ describe('startGameWith: the input recorder', () => {
     const h = boot(makeDeps({ devFlags: { replay: true }, levelCount: 3 }));
     h.setState('playing');
     h.fireFrame(100);
-    expect(trace(h).meta.level).toBe(0);
+    expect(trace(h).meta.arenaId).toBe(ARENA_DEFS[0].id);
     expect(trace(h).ticks).toHaveLength(6);
     expect(trace(h).meta.seed).toBe(h.rec.seeds[0]);
 
     h.setState('win');
     h.hud.startRestart(); // advance to level 2
     const after = trace(h);
-    expect(after.meta.level).toBe(1);
+    expect(after.meta.arenaId).toBe(ARENA_DEFS[1].id);
     expect(after.meta.seed).toBe(h.rec.seeds[1]);
     expect(after.ticks).toHaveLength(0);
     h.handle.dispose();
@@ -3629,7 +3629,7 @@ describe('startGameWith: the input recorder', () => {
 
     const live = h.rec.renders[h.rec.renders.length - 1].curr;
     const rebuilt = createWorldFor(
-      ARENAS[t.meta.level],
+      arenaById(t.meta.arenaId),
       t.meta.seed,
       t.meta.unarmedTrigger,
       t.meta.lives,
