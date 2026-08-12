@@ -516,13 +516,42 @@ default:
    the reversible option is the defensible default.
 4. **The stated intent points away from MIT.** Issue #116 raises this because of a possible
    paid release; MIT would let anyone repackage and sell the same game.
-   `git shortlog -sne --all` reports one author over all 249 commits reachable from any
-   ref, so a later relicence needs no contributor agreement.
+   The tree has a single author, so a later relicence needs no contributor agreement:
+   `git shortlog -sne origin/main` reports 1 author over its 109 commits. Deliberately
+   NOT quoted as a `--all` total -- that counts whatever local branches a clone happens to
+   carry, and three working copies gave 249, 250 and 251 for the same project. The author
+   count is the claim; the commit count is a property of the copy you run it in.
 
 **What would answer it:** the owner deciding. It is a genuine preference, not a
 measurement. If the answer is "open source after all", three files change — `LICENSE`,
 `package.json`'s `license` field, and the README section. The test forces the first two to
 move together; the README paragraph is prose and is pinned by nothing.
+
+**Three latent defects in the guard, recorded rather than fixed**, because all three are
+unreachable until a THIRD production dependency lands and all three fail loudly rather than
+silently. Found by review of #142.
+
+1. **The verbatim-text assertion will go red on a CORRECT tree.** It requires every shipped
+   licence to contain `Permission is hereby granted` and to match `/copyright\s+(\(c\)|©)/i`,
+   which is an MIT shape. Probed by taking the FIRST installed package of each declared
+   licence family (population: the 9 families with an installed representative; 0BSD has
+   none): **7 of 9 fail the permission-grant test** (all but MIT and MIT-0) and **5 of 9
+   fail the copyright-line regex**. Add an Apache-2.0 or ISC dependency and the guard fails
+   with "X's licence grants nothing" — and the natural repair is to delete the assertion,
+   which is how guards die here. (Review measured 8 of 9 and 6 of 9 by picking a different
+   representative per family; the disagreement IS the finding — the result depends on which
+   package you sample, so neither figure is a property of the family.)
+2. **`headings()` parses `^## ` out of a document that embeds arbitrary licence text.**
+   Of 108 installed packages, **6 ship a licence file containing a line starting `## `**
+   (`vite`, `rollup`, `vitest`, `lru-cache`, plus two nested `vite` copies). Both shipped
+   licences have 0, so it is latent — but such a dependency would corrupt the test's own
+   index of what the file covers and the CLI's package count. Review saw the CLI report
+   "407 package(s)" for 103 packages under a mutation that admitted dev deps.
+3. **The rendered `- Licence:` SPDX id is pinned only against the generator's own output.**
+   Hardcoding `licence: 'MIT'` in `collect()` survives the whole suite, because both shipped
+   packages are MIT and the bytes do not move. The licence BODY is checked against
+   `node_modules`; the id is not. (The related legacy-object bug review found — npm's old
+   `{type, url}` form rendering as `[object Object]` — WAS fixed, with a synthetic control.)
 
 **Second, smaller question, deliberately not settled here:** the notices file is **not
 copied into `dist/`**, so the deployed build at austinorphan.com/tanks/ still distributes

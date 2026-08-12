@@ -5,7 +5,8 @@
 Tanks! bundles the software listed below. Every one of these licences requires its
 copyright notice and permission notice to travel with any copy of the software, and
 the build strips both: the minified bundle in `dist/` keeps the code and drops the
-notices. This file is where they travel instead.
+notices. This file is where they travel -- for anyone receiving this repository.
+It is NOT copied into `dist/`, so a deployed build still carries neither.
 
 Scope: the packages whose code actually reaches `dist/`, which is the lockfile's
 non-development closure. That set was checked against the artifact rather than

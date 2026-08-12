@@ -251,9 +251,9 @@ describe('the third-party notices file', () => {
 });
 
 describe('the generator filters what ships, proved against a synthetic tree', () => {
-  // The real lockfile has 189 plain-dev and 2 plain-production entries and zero of
-  // everything else, so every branch except those two is unreachable from the repo. These
-  // build the missing states.
+  // The real lockfile has 189 dev entries (102 plain-dev + 87 also-optional) and 2
+  // production ones, and 0 `devOptional`, `link` or `extraneous`, so those branches are
+  // unreachable from the repo. These build the missing states.
   const LOCK = {
     lockfileVersion: 3,
     packages: {
@@ -304,6 +304,41 @@ describe('the generator filters what ships, proved against a synthetic tree', ()
       const built = buildNotices(dir) as { text: string | null; failures: string[] };
       expect(built.text).toBeNull();
       expect(built.failures.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('renders npm\'s LEGACY object licence field as its SPDX id, not "[object Object]"', () => {
+    // Review found this: `pkg.license ?? …` accepted npm's old `{type, url}` form, which
+    // `??` passes through untouched because it is not null -- so the rendered line read
+    // `- Licence: [object Object]`. In a legal artifact that is then committed and agreed
+    // with forever by the round-trip test, which cannot tell a wrong id from a right one.
+    //
+    // Both shipped packages use the string form, so nothing in the real tree moves and
+    // this HAS to be synthetic. It is the same reason the other controls here exist.
+    const dir = scratch(
+      {
+        lockfileVersion: 3,
+        packages: { '': {}, 'node_modules/legacy': { version: '1.0.0' } },
+      },
+      {
+        'node_modules/legacy': {
+          pkg: { name: 'legacy', version: '1.0.0', license: { type: 'BSD-2-Clause', url: 'x' } },
+          licence: 'Copyright (c) nobody\n\nRedistribution and use ...',
+        },
+      },
+    );
+    try {
+      const { entries, failures } = collect(dir) as {
+        entries: Array<{ name: string; licence: string }>;
+        failures: string[];
+      };
+      expect(failures).toEqual([]);
+      expect(entries).toHaveLength(1);
+      // The assertion that fails on the old code, with the exact string it produced.
+      expect(entries[0].licence).not.toBe('[object Object]');
+      expect(entries[0].licence).toBe('BSD-2-Clause');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -416,8 +451,21 @@ describe('the licence census the backlog spike argues from', () => {
     // Every licence the tree declares must appear in the quoted breakdown with its real
     // count -- so adding a dependency under a new licence fails here rather than silently
     // widening a list the spike calls exhaustive.
+    //
+    // PARSED NUMERICALLY, for the reason the comment above the total already gives. The
+    // first version of this loop used `toContain(`${n} ${licence}`)` and had the exact
+    // hole it warns about: review edited `**162 MIT` to `**1162 MIT` in the backlog and
+    // all 18 tests passed, because "162 MIT" is still a substring of "1162 MIT". Also
+    // reproduced with `3 ISC` -> `13 ISC` and `1 CC0-1.0` -> `41 CC0-1.0` (population: 3
+    // of 3 left-extension mutations tried, one per digit-shape; not a sweep of all ten).
+    // Naming a hole in a comment and then reproducing it is worse than not knowing.
     for (const [licence, n] of [...counts].sort()) {
-      expect(flat, `the breakdown omits or miscounts ${licence}`).toContain(`${n} ${licence}`);
+      // \b alone will not do it: it matches between "1162" and " MIT" just as happily.
+      // The needle has to start at a non-digit or at the string's head.
+      const quoted = licence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const found = new RegExp(`(?:^|[^\\d])(\\d+) ${quoted}(?![\\w.-])`).exec(flat);
+      expect(found, `the breakdown omits ${licence}`).not.toBeNull();
+      expect(Number(found![1]), `the breakdown miscounts ${licence}`).toBe(n);
     }
     expect(counts.get('(undeclared)') ?? 0).toBe(0);
 

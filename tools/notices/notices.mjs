@@ -6,8 +6,10 @@
  * substantial portions of the Software". `dist/assets/index-*.js` is a substantial
  * portion of both, minified: the copyright notices do NOT survive the build. Measured on
  * the built bundle -- `mrdoob` appears 0 times, `goldfire` 0 times, `@license` 0 times,
- * while `HowlerGlobal` appears 7 times and three's `REVISION` string is present. So the
- * notice has to travel in a separate file, and this writes it.
+ * while `HowlerGlobal` appears 7 times, `THREE` 125 and `WebGLRenderer` 35. So the
+ * notice has to travel in a separate file, and this writes it. (An earlier draft said
+ * "three's `REVISION` string is present" -- the TOKEN `REVISION` appears 0 times; what
+ * survives is the value, as `three.js r169`. The point held, the probe named did not.)
  *
  * Two decisions are worth stating, because both were measured rather than assumed.
  *
@@ -75,10 +77,12 @@ export const LICENCE_FILENAMES = [
  * npm's lockfile v3 marks each entry with the trees it is reachable from. `dev: true`
  * means dev-only; `devOptional: true` means reachable from BOTH the dev tree and as an
  * optional dependency of something that ships, which is why it is kept rather than
- * dropped -- it can end up in the bundle. (Neither case exists in this tree today: 189
- * of 191 entries are plain `dev`, 2 are plain production, and 0 are `devOptional`,
- * `optional`, `link` or `extraneous`. The branches are here because the classification is
- * npm's to change, not because they fire.)
+ * dropped -- it can end up in the bundle. Neither case exists in this tree today: of 191
+ * entries, 189 are `dev` and 2 are production, and `devOptional`, `link` and `extraneous`
+ * are all 0. `optional` is NOT 0 -- it is 87 -- but every one of those is also `dev`, so
+ * none reaches the ship set. An earlier draft of this comment said `optional` was 0 too,
+ * which was simply wrong; the true split is 102 plain-dev + 87 dev-and-optional. The
+ * branches are here because the classification is npm's to change, not because they fire.
  *
  * @param {unknown} lock parsed package-lock.json
  * @returns {{path: string, name: string, version: string, declaredLicense: string|null}[]}
@@ -180,7 +184,18 @@ export function collect(root) {
     entries.push({
       name: entry.name,
       version: entry.version,
-      licence: pkg.license ?? entry.declaredLicense ?? 'see text below',
+      // Type-guarded for the same reason `declaredLicense` is, which an earlier version
+      // of this line was not: npm's legacy form is an OBJECT (`{type, url}`), and older
+      // packages still ship it. Unguarded, `??` accepts it happily and the rendered line
+      // reads `- Licence: [object Object]` -- in a legal artifact, generated, committed
+      // and then agreed with forever by the round-trip test.
+      licence:
+        (typeof pkg.license === 'string' ? pkg.license : null) ??
+        (pkg.license && typeof pkg.license === 'object' && typeof pkg.license.type === 'string'
+          ? pkg.license.type
+          : null) ??
+        entry.declaredLicense ??
+        'see text below',
       homepage: typeof pkg.homepage === 'string' ? pkg.homepage : null,
       repository: repoUrl(pkg.repository),
       licenceFile: `${entry.path}/${licence.file}`,
@@ -237,7 +252,8 @@ export function renderNotices(entries) {
     'Tanks! bundles the software listed below. Every one of these licences requires its',
     'copyright notice and permission notice to travel with any copy of the software, and',
     'the build strips both: the minified bundle in `dist/` keeps the code and drops the',
-    'notices. This file is where they travel instead.',
+    'notices. This file is where they travel -- for anyone receiving this repository.',
+    'It is NOT copied into `dist/`, so a deployed build still carries neither.',
     '',
     'Scope: the packages whose code actually reaches `dist/`, which is the lockfile\'s',
     'non-development closure. That set was checked against the artifact rather than',
@@ -292,6 +308,18 @@ export function repoRoot() {
 }
 
 // CLI only when invoked directly, so the test can import the pure functions.
+//
+// INVOKE THE CHECK AS `npm run notices -- --check`. The `--` is not optional and its
+// absence is SILENT: npm parses a bare `--check` as its own config flag and never passes
+// it on, so `npm run notices --check` takes the WRITE path and exits 0. Measured:
+//
+//   $ npm run notices --check        -> "THIRD-PARTY-NOTICES.md: 2 package(s) unchanged"
+//   $ npm run notices -- --check     -> "THIRD-PARTY-NOTICES.md matches the dependency tree"
+//
+// The first line is the write path reporting that it rewrote identical bytes. Anyone
+// promoting this to a CI step with the bare form would add a check that cannot fail --
+// which is a failure mode this repo has hit before and now has a rule about. Running
+// `node tools/notices/notices.mjs --check` directly has no such trap.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { writeFileSync } = await import('node:fs');
   const root = repoRoot();
