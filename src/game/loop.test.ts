@@ -20,7 +20,7 @@ import {
   type FireMode,
 } from '../input/touch';
 import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
-import { createRunStore, DEFAULT_CAMPAIGN_ID, type ActiveRun } from './run';
+import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
@@ -43,7 +43,7 @@ import {
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeInput, replayTrace, checkTrace } from './replay';
-import { createWorldFor, ARENA_DEFS, arenaById } from '../sim/arena';
+import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
 
 interface Recorder {
@@ -332,9 +332,30 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       livesRemaining: opts.savedRun.lives,
       status: 'active',
     };
-    storage.setItem('tanks.run.v1', JSON.stringify(seed));
+    storage.setItem(RUN_KEY, JSON.stringify(seed));
   }
   const devConsole: DevConsoleTarget = {};
+
+  // A small array of INTERNED (built-once, reused-by-reference) synthetic
+  // CampaignLevel objects standing in for this session's own `levels` -- the
+  // LevelSystem invariant (levels.ts's doc comment) is that `start` and every
+  // value `world`/`bounds`/the run are handed is always reference-equal to an
+  // element of `levels`, never a freshly-built lookalike. Ids are plain digit
+  // strings ('0', '1', ...) so every existing `currentLevelId: '<N>'` fixture and
+  // `rec.runNewRuns`/`rec.runAdvances` assertion below keeps meaning exactly what
+  // it always did -- a REAL CampaignLevel id is never a bare digit string
+  // (validateCampaign rejects one), but this is a hand-built test double, not
+  // validated data, and nothing here calls the validator.
+  // `Math.max` with (levelStart + 1): the OLD fake's `start` was a raw, UNCLAMPED
+  // number independent of `count` (levels.ts's real system clamps; this fake never
+  // did), so a test setting `levelStart` past `levelCount - 1` without also raising
+  // `levelCount` -- reachable, and at least one test in this file does exactly
+  // that -- must still get a real fakeLevels[levelStart] rather than undefined.
+  const fakeLevelCount = Math.max(opts.levelCount ?? 1, (opts.levelStart ?? 0) + 1);
+  const fakeLevels: CampaignLevel[] = Array.from({ length: fakeLevelCount }, (_, i) => ({
+    id: String(i),
+    arenaId: ARENA_DEFS[i % ARENA_DEFS.length].id,
+  }));
 
   function emit(): void {
     for (const cb of changeCbs) cb(state);
@@ -799,13 +820,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       const real = createRunStore(storage);
       return {
         active: () => real.active(),
-        startNewRun: (startLevel: number) => {
-          rec.runNewRuns.push(startLevel);
-          return real.startNewRun(startLevel);
+        startNewRun: (startLevelId: string) => {
+          rec.runNewRuns.push(Number(startLevelId));
+          return real.startNewRun(startLevelId);
         },
-        advanceLevel: (lvl: number, lives: number) => {
-          rec.runAdvances.push({ level: lvl, lives });
-          real.advanceLevel(lvl, lives);
+        advanceLevel: (levelId: string, lives: number) => {
+          rec.runAdvances.push({ level: Number(levelId), lives });
+          real.advanceLevel(levelId, lives);
         },
         setLivesRemaining: (lives: number) => {
           rec.runLivesSets.push(lives);
@@ -821,29 +842,32 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // Defaults to a ONE-level sequence: every pre-progression test in this file was
       // written against "restart rebuilds the same arena", which is exactly what a
       // one-level sequence still does. Progression tests opt into more.
-      count: opts.levelCount ?? 1,
+      levels: fakeLevels,
       // LIVE, like the real system: an unlock earned mid-session must move the
       // session's start. A fixed opts.levelStart models a dev-flag jump OR a plain
       // resumed run's own position -- opts.isDevJump (default false) says which, and
       // is what loop.ts's campaignActive() reads (see "the active campaign run"
       // below, and levels.test.ts for the real system's own version of this field).
-      get start(): number {
-        if (opts.levelStart !== undefined) return opts.levelStart;
+      get start(): CampaignLevel {
+        if (opts.levelStart !== undefined) return fakeLevels[opts.levelStart];
         const cleared = Math.max(opts.progressHighest ?? 0, ...rec.cleared, 0);
-        return Math.min(cleared, (opts.levelCount ?? 1) - 1);
+        return fakeLevels[Math.min(cleared, fakeLevelCount - 1)];
       },
       tracksProgress: opts.tracksProgress ?? true,
       isDevJump: opts.isDevJump ?? false,
-      bounds: (level: number) =>
+      bounds: (level: CampaignLevel) => {
+        const i = fakeLevels.indexOf(level);
         // Width/height are world-space (arenaBounds(ARENA_01)); cellSize is DELIBERATELY
         // not ARENA_01.cellSize. While the fake echoed the shipped constant, the
         // "sizes the renderer to the arena" assertion below could not tell "loop.ts
         // passes shownBounds.cellSize through" from "loop.ts hardcodes the constant" --
         // hardcoding it in loop.ts left all 142 tests in this file, levels.test.ts and
         // framing.test.ts passing. An unshipped value makes the assertion discriminate.
-        opts.boundsByLevel?.[level] ?? { width: 22, height: 18, cellSize: 1.5 },
+        return opts.boundsByLevel?.[i] ?? { width: 22, height: 18, cellSize: 1.5 };
+      },
       world: (level, seed, policy, lives) => {
-        rec.levelBuilds.push({ level, lives });
+        const i = fakeLevels.indexOf(level);
+        rec.levelBuilds.push({ level: i, lives });
         // The same reference the loop receives: post-build mutations (invincibility)
         // are visible here.
         rec.seeds.push(seed);
@@ -857,12 +881,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // Each level's player gets a DIFFERENT id, as loadArena's grid-scan numbering
         // really does (16 in ARENA_01, 15 in ARENA_02) -- a fake where every level's
         // player id matches let a stale-id bug pass the rebind test.
-        let tanks = level === 0 ? base.tanks
-          : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + level } : t));
+        let tanks = i === 0 ? base.tanks
+          : base.tanks.map((t) => (t.kind === 'player' ? { ...t, id: t.id + 70 + i } : t));
         // Real arenas differ in enemy count (ARENA_01 has 3, ARENA_03 more), and
         // anything computed from "how many did this round start with" is wrong if
         // the fake keeps every level the same size.
-        const want = opts.enemiesByLevel?.[level];
+        const want = opts.enemiesByLevel?.[i];
         if (want !== undefined) {
           const player = tanks.filter((t) => t.kind === 'player');
           const foes = tanks.filter((t) => t.kind !== 'player').slice(0, want);
@@ -1988,9 +2012,9 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // "Refresh": a brand NEW session, seeded from the same WIRE BYTES the first
       // session actually wrote -- not the same object reference, a copy of exactly
       // what a real page reload would read back out of localStorage.
-      const runBlob = h.storage.getItem('tanks.run.v1');
+      const runBlob = h.storage.getItem(RUN_KEY);
       expect(runBlob).not.toBeNull();
-      const h2 = boot(makeDeps({ savedKeys: { 'tanks.run.v1': runBlob! } }));
+      const h2 = boot(makeDeps({ savedKeys: { [RUN_KEY]: runBlob! } }));
       expect(h2.deps.run.active()?.livesRemaining, 'refresh must not restore lost lives').toBe(
         LIVES - 1,
       );
@@ -2316,8 +2340,8 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     function realJumpDeps(): { deps: GameDeps; run: ReturnType<typeof createRunStore>; base: ReturnType<typeof makeDeps> } {
       const storage = createMemoryStorage();
       const run = createRunStore(storage);
-      run.startNewRun(0);
-      run.advanceLevel(3, LIVES); // the run: currentLevelId '3', full lives
+      run.startNewRun(CAMPAIGN_LEVELS[0].id);
+      run.advanceLevel(CAMPAIGN_LEVELS[3].id, LIVES); // the run: currentLevelId CAMPAIGN_LEVELS[3].id, full lives
       const jumpFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 1 }; // ?dev=1&level=1 -> index 0
       const levels = createLevelSystem(jumpFlags, run);
       const base = makeDeps({ world: { ...createArenaWorld(1), lives: 2 } });
@@ -2331,7 +2355,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.setState('win');
       expect(run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
-        currentLevelId: '3',
+        currentLevelId: CAMPAIGN_LEVELS[3].id,
         livesRemaining: LIVES,
         status: 'active',
       } satisfies ActiveRun);
@@ -2345,7 +2369,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.setState('lose');
       expect(run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
-        currentLevelId: '3',
+        currentLevelId: CAMPAIGN_LEVELS[3].id,
         livesRemaining: LIVES,
         status: 'active',
       } satisfies ActiveRun);

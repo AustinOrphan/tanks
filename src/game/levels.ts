@@ -1,9 +1,16 @@
 import type { UnarmedTrigger } from '../sim/types';
 import type { World } from '../sim/world';
-import { ARENAS, arenaBounds, createWorldFor } from '../sim/arena';
+import {
+  arenaBounds,
+  arenaById,
+  createWorldFor,
+  CAMPAIGN_LEVELS,
+  FIRST_CAMPAIGN_LEVEL,
+  type CampaignLevel,
+} from '../sim/arena';
 import { createSandboxWorld } from '../sim/sandbox';
 import type { DevFlags } from './devflags';
-import { levelIndexFromId, type RunStore } from './run';
+import type { RunStore } from './run';
 
 /**
  * The one object that knows how many levels exist, where a session starts, and how to
@@ -11,10 +18,10 @@ import { levelIndexFromId, type RunStore } from './run';
  * substitute a fake sequence and still exercise the real advance/reset wiring.
  */
 export interface LevelSystem {
-  /** How many levels this session's sequence holds. */
-  readonly count: number;
+  /** This session's own level sequence, in play order. */
+  readonly levels: readonly CampaignLevel[];
   /** Where the session starts: the furthest unlocked level, or a dev-flag jump. */
-  readonly start: number;
+  readonly start: CampaignLevel;
   /** Whether wins here record progress. TRUE for the shipped sequence; the sandbox is
    *  a test rig, and a sandbox win must never unlock real levels. */
   readonly tracksProgress: boolean;
@@ -33,25 +40,40 @@ export interface LevelSystem {
    */
   readonly isDevJump: boolean;
   /** Build the world for a level. `lives` carries a cleared level's remainder forward. */
-  world(level: number, seed: number, unarmedTrigger?: UnarmedTrigger, lives?: number): World;
+  world(level: CampaignLevel, seed: number, unarmedTrigger?: UnarmedTrigger, lives?: number): World;
   /**
    * The level's board size, for the renderer's per-level refit. From the arena's own
    * cols/rows -- walls are deliberately NOT measurable (the boundary ring overhangs).
    */
-  bounds(level: number): { width: number; height: number; cellSize: number };
+  bounds(level: CampaignLevel): { width: number; height: number; cellSize: number };
 }
 
-export function createLevelSystem(flags: DevFlags, run: RunStore): LevelSystem {
+export function createLevelSystem(
+  flags: DevFlags,
+  run: RunStore,
+  // Injectable so a test can prove levels.ts resolves through CAMPAIGN LEVELS and
+  // not ARENAS position -- see levels.test.ts's reordered-fixture regression test.
+  campaignLevels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): LevelSystem {
   if (flags.level === 'sandbox') {
     // A one-level sequence: clearing the sandbox is a final win, and losing it
     // rebuilds the sandbox, never level 1 of the shipped game.
+    //
+    // A synthetic CampaignLevel, not a real campaign entry -- `'sandbox'` is never a
+    // member of CAMPAIGN_LEVELS (or of any injected `campaignLevels`), which is
+    // exactly why loop.ts's ordinalOf/nextInSession helpers work against THIS
+    // session's own `levels` array rather than the global catalog.
+    const sandboxLevel: CampaignLevel = { id: 'sandbox', arenaId: FIRST_CAMPAIGN_LEVEL.arenaId };
     return {
-      count: 1,
-      start: 0,
+      levels: [sandboxLevel],
+      start: sandboxLevel,
       tracksProgress: false,
       isDevJump: false,
       // The sandbox is built on the standard board (see sandboxArena).
-      bounds: () => ({ ...arenaBounds(ARENAS[0]), cellSize: ARENAS[0].cellSize }),
+      bounds: () => ({
+        ...arenaBounds(arenaById(sandboxLevel.arenaId)),
+        cellSize: arenaById(sandboxLevel.arenaId).cellSize,
+      }),
       world: (_level, seed, unarmedTrigger) =>
         createSandboxWorld(
           {
@@ -83,17 +105,26 @@ export function createLevelSystem(flags: DevFlags, run: RunStore): LevelSystem {
   // narrows flags.level in this scope, but narrowing does not survive into a closure.
   const jump: number | null = typeof flags.level === 'number' ? flags.level : null;
   return {
-    count: ARENAS.length,
-    get start(): number {
-      if (jump !== null) return Math.min(jump - 1, ARENAS.length - 1);
+    levels: campaignLevels,
+    get start(): CampaignLevel {
+      if (jump !== null) {
+        return campaignLevels[Math.min(jump - 1, campaignLevels.length - 1)];
+      }
       const active = run.active();
-      if (active === null) return 0; // no run yet: New Game/Continue decide from title
-      return Math.min(levelIndexFromId(active.currentLevelId), ARENAS.length - 1);
+      // No run yet: New Game/Continue decide from title.
+      if (active === null) return campaignLevels[0];
+      // The untrusted-persisted-string-to-domain-object lookup, WITH graceful
+      // fallback -- never via the throwing campaignLevelById, since a stale or
+      // corrupt/foreign currentLevelId must land on level 1, not crash the boot.
+      return campaignLevels.find((l) => l.id === active.currentLevelId) ?? campaignLevels[0];
     },
     tracksProgress: true,
     isDevJump: jump !== null,
     world: (level, seed, unarmedTrigger, lives) =>
-      createWorldFor(ARENAS[level], seed, unarmedTrigger, lives),
-    bounds: (level) => ({ ...arenaBounds(ARENAS[level]), cellSize: ARENAS[level].cellSize }),
+      createWorldFor(arenaById(level.arenaId), seed, unarmedTrigger, lives),
+    bounds: (level) => ({
+      ...arenaBounds(arenaById(level.arenaId)),
+      cellSize: arenaById(level.arenaId).cellSize,
+    }),
   };
 }

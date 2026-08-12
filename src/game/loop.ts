@@ -2,7 +2,7 @@ import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Vec2, InputState } from '../sim/types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from '../sim/ai/player-profile';
-import { ARENA_DEFS } from '../sim/arena';
+import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, type LevelSystem } from './levels';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
@@ -394,7 +394,7 @@ export function startGameWith(
    * invincibility flag cannot drift apart between them -- their parity used to be
    * checked line-by-line in review instead of being structural.
    */
-  function buildWorld(atLevel: number, lives?: number): World {
+  function buildWorld(atLevel: CampaignLevel, lives?: number): World {
     const w = deps.levels.world(atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives);
     if (deps.devFlags.invincible) {
       const p = w.tanks.find((t) => t.kind === 'player');
@@ -419,6 +419,25 @@ export function startGameWith(
   // adopt-but-never-write was the odd combination (defect 1, adjudicated review of
   // #156), not a deliberate design. Pinned in loop.test.ts.
   let level = deps.levels.start;
+
+  /**
+   * The shared `level + 1` arithmetic, split into its two unrelated roles (CLAUDE.md):
+   * a 1-based display/record ordinal, and "what comes after this in THIS SESSION's own
+   * sequence." Computed against `deps.levels.levels` -- this session's own list -- never
+   * against the global `CAMPAIGN_LEVELS` catalog directly: the sandbox's synthetic
+   * `'sandbox'` id is not a member of that catalog, and a lookup against it would throw.
+   * Relies on the LevelSystem invariant that `start` (and therefore `level`, which is
+   * only ever assigned from `start` or from `nextInSession`'s own return) is always
+   * reference-equal to an element of `levels` -- see levels.ts's doc comment.
+   */
+  function ordinalOf(l: CampaignLevel): number {
+    return deps.levels.levels.indexOf(l) + 1;
+  }
+  function nextInSession(l: CampaignLevel): CampaignLevel | null {
+    const i = deps.levels.levels.indexOf(l);
+    return i >= 0 && i + 1 < deps.levels.levels.length ? deps.levels.levels[i + 1] : null;
+  }
+
   const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump
     ? deps.run.active()?.livesRemaining
     : undefined;
@@ -520,7 +539,7 @@ export function startGameWith(
    * world, so `begin` restarts it on every level switch (see switchTo).
    */
   const recorder: RecordingInput | null = deps.devFlags.replay
-    ? createRecordingInput(effectiveInput, replayMetaFor(world, ARENA_DEFS[level].id))
+    ? createRecordingInput(effectiveInput, replayMetaFor(world, level.arenaId))
     : null;
   const director = deps.createDirector(audio, playerId ?? -1);
   const haptics = deps.createHaptics(playerId ?? -1);
@@ -552,7 +571,7 @@ export function startGameWith(
       lifetime: deps.stats.lifetime(),
       attempt: deps.stats.attempt(),
       highestCleared: deps.progress.highestCleared(),
-      totalLevels: deps.levels.count,
+      totalLevels: deps.levels.levels.length,
       clearedLevel,
       livesLeft: driver.world.lives,
       tracksProgress: deps.levels.tracksProgress,
@@ -691,9 +710,9 @@ export function startGameWith(
       // game-over/completion is already persisted reactively in sm.onChange, the
       // instant the state flipped -- not deferred to this click, so a refresh at the
       // win/lose screen cannot lose it. This click only decides which WORLD to build.
-      const advancing = sm.state === 'win' && level + 1 < deps.levels.count;
-      if (advancing) {
-        switchTo(level + 1, driver.world.lives);
+      const next = sm.state === 'win' ? nextInSession(level) : null;
+      if (next !== null) {
+        switchTo(next, driver.world.lives);
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
@@ -712,13 +731,13 @@ export function startGameWith(
    * level pick -- their parity was reviewed line-by-line three times before it
    * became structural.
    */
-  function switchTo(newLevel: number, lives?: number): void {
+  function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
     // A new world means a new trace: the recorded inputs only mean anything
     // applied to the world they were sampled against, so carrying them across a
     // level switch would produce a trace that replays into a different game.
-    recorder?.begin(replayMetaFor(world, ARENA_DEFS[level].id));
+    recorder?.begin(replayMetaFor(world, level.arenaId));
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     haptics.setPlayerId(playerId ?? -1);
@@ -734,7 +753,7 @@ export function startGameWith(
       renderer.refit(b.width, b.height, b.cellSize);
       shownBounds = b;
     }
-    hud.setLevel(level + 1, deps.levels.count);
+    hud.setLevel(ordinalOf(level), deps.levels.levels.length);
     driver.reset(world);
     refreshStats(world);
     // A switch is a new ATTEMPT: the per-attempt tally starts over, the lifetime
@@ -782,7 +801,7 @@ export function startGameWith(
     inPractice = false;
     const startLevel = deps.levels.start;
     if (deps.levels.tracksProgress && deps.run.active() === null && mayCreateRun) {
-      deps.run.startNewRun(startLevel);
+      deps.run.startNewRun(startLevel.id);
     }
     const lives = campaignActive() ? deps.run.active()?.livesRemaining : undefined;
     switchTo(startLevel, lives);
@@ -791,19 +810,20 @@ export function startGameWith(
 
   /** How many levels are pickable: everything cleared plus the next one, capped. */
   const unlockedLevels = (): number =>
-    Math.min(deps.progress.highestCleared() + 1, deps.levels.count);
+    Math.min(deps.progress.highestCleared() + 1, deps.levels.levels.length);
 
   hud.onLevelSelect((picked) => {
     // Panel-only control, guarded like Quit: CSS hiding is not the only defence --
-    // and neither is the HUD's button rendering, for the index. ARENAS[7] is
-    // undefined, and a handler that rebuilds the world does not get to crash on it.
+    // and neither is the HUD's button rendering, for the index. `deps.levels.levels[7]`
+    // is undefined on a shorter sequence, and a handler that rebuilds the world does
+    // not get to crash on it.
     if (sm.state !== 'title') return;
-    if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.count) return;
+    if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.levels.length) return;
     // Practice: independent fresh lives (switchTo's `lives` is left undefined, so
     // buildWorld defaults to full LIVES), and the active campaign run is never read
     // or written from here on out -- see campaignActive.
     inPractice = true;
-    switchTo(picked);
+    switchTo(deps.levels.levels[picked]);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.
     audio.unlock();
@@ -817,9 +837,9 @@ export function startGameWith(
   // which is exactly why practice and campaign could not be told apart.
   hud.onNewGame(() => {
     if (sm.state !== 'title') return;
-    const fresh = deps.run.startNewRun(0);
+    const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
     inPractice = false;
-    switchTo(0, fresh.livesRemaining);
+    switchTo(deps.levels.levels[0], fresh.livesRemaining);
     hud.setContinueAvailable(true);
     // Same convention as onLevelSelect just above: a real gesture that starts play
     // must unlock the audio context here, since Safari accepts no later opportunity.
@@ -968,7 +988,7 @@ export function startGameWith(
     hud.setAchievements(deps.achievements.earned());
     // Levels re-lock immediately: the select the player is looking at must not keep
     // offering a level the save no longer justifies.
-    hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+    hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
   });
 
   /**
@@ -1017,24 +1037,24 @@ export function startGameWith(
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
     // unlock real levels.
     if (s === 'win' && deps.levels.tracksProgress) {
-      deps.progress.recordCleared(level + 1);
-      hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+      deps.progress.recordCleared(ordinalOf(level));
+      hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
     }
     // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
     // guard on purpose: the sandbox unlocks no levels but a feat performed there is
     // still a feat. recordCleared has already run, so level milestones see the clear.
-    if (s === 'win') pendingClear = level + 1;
+    if (s === 'win') pendingClear = ordinalOf(level);
     // The active RUN's own transitions (issue #153/#152) -- separate from permanent
     // progress just above, and gated on campaignActive() so practice and the sandbox
     // can never reach them. Reactive, not deferred to the Next Level/Retry click: a
     // refresh sitting at the win/lose screen must already see the persisted result.
     if (campaignActive()) {
       if (s === 'win') {
-        const isFinalLevel = level + 1 >= deps.levels.count;
-        if (isFinalLevel) {
+        const next = nextInSession(level);
+        if (next === null) {
           deps.run.endRun(); // campaign completion
         } else {
-          deps.run.advanceLevel(level + 1, driver.world.lives); // level clear, lives carried
+          deps.run.advanceLevel(next.id, driver.world.lives); // level clear, lives carried
         }
       } else if (s === 'lose') {
         deps.run.endRun(); // game over: no lives remain
@@ -1060,8 +1080,8 @@ export function startGameWith(
 
   hud.setState(sm.state); // initial title panel
   followMusic(sm.state); // ...and its music: this path bypasses sm.onChange
-  hud.setLevel(level + 1, deps.levels.count);
-  hud.setLevelSelect(unlockedLevels(), deps.levels.count);
+  hud.setLevel(ordinalOf(level), deps.levels.levels.length);
+  hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
   // Boot is an arrival at the title screen too (splash precedes it, but the button
   // states must already be right underneath) -- see the matching sm.onChange('title')
   // refresh above, which covers every LATER arrival.

@@ -18,8 +18,8 @@ function seeded(): Storage {
   s.setItem('tanks.touch.v1', JSON.stringify({ scheme: 'point', fireMode: 'button' }));
   s.setItem('tanks.achievements.v1', JSON.stringify({ earned: ['first-blood'] }));
   s.setItem(
-    'tanks.run.v1',
-    JSON.stringify({ campaignId: 'main', currentLevelId: '2', livesRemaining: 2, status: 'active' }),
+    'tanks.run.v2',
+    JSON.stringify({ campaignId: 'main', currentLevelId: 'level-02', livesRemaining: 2, status: 'active' }),
   );
   return s;
 }
@@ -40,7 +40,7 @@ describe('SAVE_KEYS', () => {
       'tanks.custom.v1',
       'tanks.touch.v1',
       'tanks.achievements.v1',
-      'tanks.run.v1',
+      'tanks.run.v2',
     ]);
   });
 
@@ -56,7 +56,7 @@ describe('SAVE_KEYS', () => {
     stores.customization.setHull('red');
     stores.touchSettings.setScheme('point');
     stores.achievements.reset();
-    stores.run.startNewRun(0);
+    stores.run.startNewRun('level-01');
     const written: string[] = [];
     for (let i = 0; i < storage.length; i++) written.push(storage.key(i)!);
     expect(written.slice().sort()).toEqual(SAVE_KEYS.slice().sort());
@@ -146,7 +146,7 @@ describe('importSave', () => {
     expect(stores.stats.lifetime().shotsFired).toBe(12);
     expect(stores.run.active()).toEqual({
       campaignId: 'main',
-      currentLevelId: '2',
+      currentLevelId: 'level-02',
       livesRemaining: 2,
       status: 'active',
     });

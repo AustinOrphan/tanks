@@ -17,7 +17,7 @@ function writeThroughEveryStore(stores: GameStores): void {
   stores.customization.setHull('red');
   stores.touchSettings.setScheme('point');
   stores.achievements.reset();
-  stores.run.startNewRun(0);
+  stores.run.startNewRun('level-01');
 }
 
 describe('createMemoryStorage', () => {
