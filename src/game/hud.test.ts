@@ -202,7 +202,7 @@ describe('createHud panel', () => {
     h.onStartRestart(() => {
       starts += 1;
     });
-    h.setLevelSelect(2, 2); // some progress, so Continue is the visible button
+    h.setContinueAvailable(true); // an active run exists, so Continue is the visible button
     // The real sequence: a pointer lands on the overlay, loop.ts dismisses on that same
     // pointerdown, and the browser then completes the click on the button beneath.
     const splash = root.querySelector('.hud-splash') as HTMLElement;
@@ -229,7 +229,7 @@ describe('createHud panel', () => {
     h.onStartRestart(() => {
       starts += 1;
     });
-    h.setLevelSelect(2, 2); // some progress, so Continue is the visible button
+    h.setContinueAvailable(true); // an active run exists, so Continue is the visible button
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     h.setState('title');
@@ -313,7 +313,7 @@ describe('createHud panel', () => {
     h.onStartRestart(() => {
       starts += 1;
     });
-    h.setLevelSelect(2, 2); // some progress, so Continue (not the retired action button) is visible
+    h.setContinueAvailable(true); // an active run exists, so Continue (not the retired action button) is visible
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     h.setState('title'); // armed, and the drag's click never lands in the panel
@@ -334,11 +334,10 @@ describe('createHud panel', () => {
     // self-corrects, a pointer click does not). The production change that breaks this:
     // onNavKeyDown claiming a key without also disarming the pending panel-click swallow.
     const { hud: h, root } = mount();
-    let picks = 0;
-    h.onLevelSelect(() => {
-      picks += 1;
+    let newGames = 0;
+    h.onNewGame(() => {
+      newGames += 1;
     });
-    h.setLevelSelect(2, 2);
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     h.setState('title'); // armed, and the drag's click never lands in the panel
@@ -348,7 +347,7 @@ describe('createHud panel', () => {
     (root.querySelector('.hud-new-game') as HTMLButtonElement).dispatchEvent(
       new MouseEvent('click', { bubbles: true, cancelable: true }),
     );
-    expect(picks, 'the first real click after drag-dismiss + arrow navigation was eaten').toBe(1);
+    expect(newGames, 'the first real click after drag-dismiss + arrow navigation was eaten').toBe(1);
   });
 
   it('claims a navigation key outright while a panel is open, and not while playing', () => {
@@ -1188,18 +1187,22 @@ describe('hud: continue vs new game', () => {
   const newGameBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-new-game') as HTMLButtonElement;
 
-  it('Continue is absent at zero progress, and appears once a level is cleared', () => {
+  it('Continue is absent with no active run, and appears once setContinueAvailable says so', () => {
     // The assertion that can fail where "the button exists" cannot (issue #135): a
-    // production change dropping the `unlocked > 1` check, or one that always shows
-    // Continue, both break this.
+    // production change that always shows Continue, or never does, both break this.
+    // Driven by setContinueAvailable, NOT setLevelSelect's `unlocked` -- issue #153
+    // separates "an active run exists" from "levels are permanently unlocked".
     const { hud: h, root } = mount();
     h.setState('title');
-    h.setLevelSelect(1, 4); // nothing cleared yet: only level 1 unlocked
-    expect(continueBtn(root).classList.contains('hud-continue--hidden'), 'Continue must not show with no progress').toBe(true);
+    h.setLevelSelect(1, 4); // unlocked levels exist, but that says nothing about a run
+    expect(continueBtn(root).classList.contains('hud-continue--hidden'), 'Continue must not show with no active run').toBe(true);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
 
-    h.setLevelSelect(2, 4); // level 1 cleared -> level 2 unlocks
-    expect(continueBtn(root).classList.contains('hud-continue--hidden'), 'Continue must show once progress exists').toBe(false);
+    h.setContinueAvailable(true);
+    expect(continueBtn(root).classList.contains('hud-continue--hidden'), 'Continue must show once a run is active').toBe(false);
+
+    h.setContinueAvailable(false);
+    expect(continueBtn(root).classList.contains('hud-continue--hidden'), 'Continue must hide again once the run ends').toBe(true);
   });
 
   it('Continue fires the same onStartRestart callback the old single action button did', () => {
@@ -1207,36 +1210,39 @@ describe('hud: continue vs new game', () => {
     let starts = 0;
     h.onStartRestart(() => starts++);
     h.setState('title');
-    h.setLevelSelect(2, 4);
+    h.setContinueAvailable(true);
     continueBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(starts).toBe(1);
   });
 
-  it('New Game reports onLevelSelect(0), same as clicking level 1 in the panel', () => {
-    // New Game IS "pick level 1" under a label that reads as starting fresh -- the
-    // production change that would break this is New Game firing a different index,
-    // or nothing at all.
+  it('New Game fires its OWN callback, distinct from onLevelSelect', () => {
+    // Before issue #153 New Game reported onLevelSelect(0), indistinguishable from
+    // picking level 1 in the Levels panel -- exactly the seam practice-vs-campaign
+    // needed to tell apart and could not. The production change that would break this
+    // is New Game firing onLevelSelect again, or firing nothing at all.
     const { hud: h, root } = mount();
+    let newGames = 0;
     const picks: number[] = [];
+    h.onNewGame(() => newGames++);
     h.onLevelSelect((i) => picks.push(i));
     h.setState('title');
-    h.setLevelSelect(3, 4); // progress exists, but New Game must still target level 1
+    h.setContinueAvailable(true); // a run exists, but New Game must still fire
     newGameBtn(root).dispatchEvent(new MouseEvent('click'));
-    expect(picks).toEqual([0]);
+    expect(newGames).toBe(1);
+    expect(picks).toEqual([]);
   });
 
-  it('New Game is always offered at title, with or without progress', () => {
+  it('New Game is always offered at title, with or without an active run', () => {
     const { hud: h, root } = mount();
     h.setState('title');
-    h.setLevelSelect(1, 4);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
-    h.setLevelSelect(4, 4);
+    h.setContinueAvailable(true);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
   });
 
   it('both buttons are a title-screen affair, and the retired action button stays hidden there', () => {
     const { hud: h, root } = mount();
-    h.setLevelSelect(2, 4);
+    h.setContinueAvailable(true);
     h.setState('title');
     expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(false);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
@@ -1274,7 +1280,7 @@ describe('hud: the stats page', () => {
 
   it('opens from the title, shows both columns, and Back returns to the menu', () => {
     const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, run: NONE });
+    h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('title');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(false);
@@ -1286,7 +1292,7 @@ describe('hud: the stats page', () => {
 
   it('derives both accuracies, and shows -- when the denominator is zero', () => {
     const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, run: NONE });
+    h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('title');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(cell(root, 'Accuracy', 0)).toBe('40%'); // 4 shell kills / 10 shots
@@ -1310,7 +1316,7 @@ describe('hud: the stats page', () => {
     let progResets = 0;
     h.onResetStats(() => statResets++);
     h.onResetProgress(() => progResets++);
-    h.setStats({ lifetime: SOME, run: NONE });
+    h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('title');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
 
@@ -1330,7 +1336,7 @@ describe('hud: the stats page', () => {
 
   it('arming one reset does not arm the other, and leaving the page disarms', () => {
     const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, run: NONE });
+    h.setStats({ lifetime: SOME, attempt: NONE });
     h.setState('title');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
@@ -1344,14 +1350,14 @@ describe('hud: the stats page', () => {
 
   it('win panel carries the run summary line', () => {
     const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, run: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
+    h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
     h.setState('win');
     const line = (root.querySelector('.hud-run-summary') as HTMLElement).textContent ?? '';
     expect(line).toContain('3 kills');
     expect(line).toContain('50%');
     // And updates if the final batch lands after the panel opened -- the winning
     // kill is recorded a beat after the state flips.
-    h.setStats({ lifetime: SOME, run: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
+    h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
     expect((root.querySelector('.hud-run-summary') as HTMLElement).textContent).toContain('4 kills');
   });
 });
@@ -1854,6 +1860,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // disabled-but-focusable.
     const { hud: h, root } = mount();
     h.setLevelSelect(3, 5);
+    h.setContinueAvailable(true); // Continue must be one of the reachable controls counted below
     h.setState('title'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
 
     let totalControls = 0;

@@ -3,13 +3,14 @@ import { createStatsStore, type StatsStore } from './stats';
 import { createCustomizationStore, type CustomizationStore } from './customization';
 import { createTouchSettingsStore, type TouchSettingsStore } from './touch-settings';
 import { createAchievementsStore, type AchievementsStore } from './achievements';
+import { createRunStore, type RunStore } from './run';
 
 /**
  * The ONE place the game decides where persisted state lives.
  *
  * Every store already takes an injected `Storage` -- progress, stats,
- * customization, touch settings and achievements -- and loop.ts resolved the
- * real one inline, five times over. That inline resolver was untestable (it read
+ * customization, touch settings, achievements and the active run -- and loop.ts
+ * resolved the real one inline, five times over. That inline resolver was untestable (it read
  * `globalThis` directly from a function nothing could call with a fake host) and
  * it made pointing the game at a different backend an edit inside 868 lines of
  * wiring rather than a one-file change.
@@ -107,14 +108,16 @@ export interface GameStores {
   customization: CustomizationStore;
   touchSettings: TouchSettingsStore;
   achievements: AchievementsStore;
+  /** The active campaign run -- see run.ts. Distinct from `progress`, per the spec. */
+  run: RunStore;
 }
 
 /**
- * All five stores on ONE storage, by signature.
+ * All six stores on ONE storage, by signature.
  *
  * loop.ts used to call the resolver once per store. With a real localStorage that
  * was harmless (the same object comes back every time); with the shim it would
- * hand each store its OWN private Map, so the five keys would live in five
+ * hand each store its OWN private Map, so the six keys would live in six
  * namespaces and an export of "the save" would see one of them. Taking a single
  * `Storage` makes that structural rather than a rule someone has to remember.
  */
@@ -125,5 +128,6 @@ export function createStores(storage: Storage): GameStores {
     customization: createCustomizationStore(storage),
     touchSettings: createTouchSettingsStore(storage),
     achievements: createAchievementsStore(storage),
+    run: createRunStore(storage),
   };
 }

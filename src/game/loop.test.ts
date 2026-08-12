@@ -19,7 +19,8 @@ import {
   type TouchScheme,
   type FireMode,
 } from '../input/touch';
-import { COUNTDOWN_TICKS } from '../sim/constants';
+import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
+import { createRunStore, DEFAULT_CAMPAIGN_ID, type ActiveRun } from './run';
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
@@ -96,10 +97,19 @@ interface Recorder {
   cleared: number[];
   progressResets: number;
   statBatches: Array<{ count: number; playerId: number }>;
-  statRunStarts: number;
+  statAttemptStarts: number;
   statResets: number;
   statPushes: number;
   levelSelects: Array<[number, number]>;
+  /** Every value pushed to hud.setContinueAvailable, in order. */
+  continueAvailable: boolean[];
+  /** Every level passed to run.startNewRun, in order. */
+  runNewRuns: number[];
+  /** Every (level, lives) passed to run.advanceLevel, in order. */
+  runAdvances: Array<{ level: number; lives: number }>;
+  /** Every value passed to run.setLivesRemaining, in order. */
+  runLivesSets: number[];
+  runEnds: number;
   builtWorlds: World[];
   volumes: number[];
   resizes: Array<[number, number]>;
@@ -122,7 +132,7 @@ interface Recorder {
     clearedLevel: number | null;
     livesLeft: number;
     highestCleared: number;
-    runShellKills: number;
+    attemptShellKills: number;
   }>;
   achResets: number;
   listeners: Array<[string, (e: never) => void]>;
@@ -145,7 +155,7 @@ interface Recorder {
   inputOptions: Array<{ gamepad?: boolean } | null>;
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string> } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
   deps: GameDeps;
   rec: Recorder;
   storage: Storage;
@@ -166,6 +176,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     toggleFireMode(m: FireMode): void;
     toggleHaptics(v: boolean): void;
     pickLevel(i: number): void;
+    newGame(): void;
     resetStats(): void;
     resetProgress(): void;
     pickHull(id: HullColorId): void;
@@ -227,10 +238,15 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     cleared: [],
     progressResets: 0,
     statBatches: [],
-    statRunStarts: 0,
+    statAttemptStarts: 0,
     statResets: 0,
     statPushes: 0,
     levelSelects: [],
+    continueAvailable: [],
+    runNewRuns: [],
+    runAdvances: [],
+    runLivesSets: [],
+    runEnds: 0,
     builtWorlds: [],
     volumes: [],
     resizes: [],
@@ -289,6 +305,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onPickAccent = (_id: AccentId): void => {};
   let onResetProgress = (): void => {};
   let onPickLevel = (_i: number): void => {};
+  let onNewGame = (): void => {};
   let onCustomizeOpen = (): void => {};
   let onCustomizeClose = (): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
@@ -301,6 +318,21 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   // The save layer's two seams, both real objects a test can inspect afterwards.
   const storage = createMemoryStorage();
   for (const [k, v] of Object.entries(opts.savedKeys ?? {})) storage.setItem(k, v);
+  // A pre-existing active run, written at the RAW storage layer -- like every other
+  // `saved*` option -- rather than through `deps.run` once it exists below. `deps.run`
+  // is the REAL store DECORATED to record every call into `rec` (see its own comment),
+  // so seeding through it would show up as a spurious call the test under test never
+  // made -- exactly the trap `startNewRun`/`setLivesRemaining` calls made from test
+  // SETUP fell into before this option existed.
+  if (opts.savedRun) {
+    const seed: ActiveRun = {
+      campaignId: DEFAULT_CAMPAIGN_ID,
+      currentLevelId: String(opts.savedRun.level),
+      livesRemaining: opts.savedRun.lives,
+      status: 'active',
+    };
+    storage.setItem('tanks.run.v1', JSON.stringify(seed));
+  }
   const devConsole: DevConsoleTarget = {};
 
   function emit(): void {
@@ -617,6 +649,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onLevelSelect: (cb: (i: number) => void) => {
           onPickLevel = cb;
         },
+        setContinueAvailable: (available: boolean) => {
+          rec.continueAvailable.push(available);
+        },
+        onNewGame: (cb: () => void) => {
+          onNewGame = cb;
+        },
         dispose: () => rec.disposed.push('hud'),
       };
     },
@@ -687,7 +725,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
             clearedLevel: ctx.clearedLevel,
             livesLeft: ctx.livesLeft,
             highestCleared: ctx.highestCleared,
-            runShellKills: ctx.run.shellKills,
+            attemptShellKills: ctx.attempt.shellKills,
           });
           const due = (opts.earnsOn ?? []).filter(
             (e) => e.when(ctx) && !earned.has(e.id as AchievementId),
@@ -710,23 +748,23 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // Accumulating, not a frozen ZERO_STATS literal: a stub that returns fresh
       // zeros every call makes a STALE read indistinguishable from a fresh one,
       // which is exactly how the win-ordering defect stayed invisible.
-      let run = { ...ZERO_STATS };
+      let attempt = { ...ZERO_STATS };
       let lifetime = { ...ZERO_STATS };
       const fold = (events: SimEvent[]): void => {
         const kills = events.filter((e) => e.type === 'tank-destroyed').length;
-        run = { ...run, shellKills: run.shellKills + kills };
+        attempt = { ...attempt, shellKills: attempt.shellKills + kills };
         lifetime = { ...lifetime, shellKills: lifetime.shellKills + kills };
       };
       return {
         lifetime: () => ({ ...lifetime }),
-        run: () => ({ ...run }),
+        attempt: () => ({ ...attempt }),
         record: (events: SimEvent[], playerId: number) => {
           rec.statBatches.push({ count: events.length, playerId });
           fold(events);
         },
-        startRun: () => {
-          run = { ...ZERO_STATS };
-          rec.statRunStarts += 1;
+        startAttempt: () => {
+          attempt = { ...ZERO_STATS };
+          rec.statAttemptStarts += 1;
         },
         resetLifetime: () => {
           lifetime = { ...ZERO_STATS };
@@ -747,6 +785,34 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           rec.progressResets += 1;
           rec.cleared.length = 0;
           base = 0;
+        },
+      };
+    })(),
+    // The REAL run store over `storage` (also real -- see its own comment below), not
+    // a hand-fake: this is exactly the composition CLAUDE.md warns loop.test.ts must
+    // pin ("the REAL wiring feeds the run store"), so the store itself has to be real
+    // too, or a wiring bug that never calls it could still read back a value that
+    // happens to be right. Decorated only to also RECORD each call, the same
+    // convention `stats`/`progress` above already follow.
+    run: (() => {
+      const real = createRunStore(storage);
+      return {
+        active: () => real.active(),
+        startNewRun: (startLevel: number) => {
+          rec.runNewRuns.push(startLevel);
+          return real.startNewRun(startLevel);
+        },
+        advanceLevel: (lvl: number, lives: number) => {
+          rec.runAdvances.push({ level: lvl, lives });
+          real.advanceLevel(lvl, lives);
+        },
+        setLivesRemaining: (lives: number) => {
+          rec.runLivesSets.push(lives);
+          real.setLivesRemaining(lives);
+        },
+        endRun: () => {
+          rec.runEnds += 1;
+          real.endRun();
         },
       };
     })(),
@@ -850,6 +916,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       toggleFireMode: (m: FireMode) => onFireModeChange(m),
       toggleHaptics: (v: boolean) => onHapticsChange(v),
       pickLevel: (i) => onPickLevel(i),
+      newGame: () => onNewGame(),
       resetStats: () => onResetStats(),
       pickHull: (id: HullColorId) => onPickHull(id),
       pickSkin: (id: SkinId) => onPickSkin(id),
@@ -1852,6 +1919,284 @@ describe('startGameWith: a real player death reaches the HUD', () => {
   });
 });
 
+/**
+ * A world where the player is one real driven frame from death: a live enemy shell
+ * sits exactly on the player's position, roundStartTick pushed into the deep past so
+ * nothing is gated. Same construction as the death-signal fixtures above -- factored
+ * out here because the run tests below need several of them.
+ */
+function worldWithPlayerAboutToDie(): World {
+  const base = createArenaWorld(1);
+  const player = base.tanks.find((t) => t.kind === 'player');
+  if (!player) throw new Error('fixture has no player');
+  const enemy = base.tanks.find((t) => t.kind !== 'player');
+  if (!enemy) throw new Error('fixture has no enemy');
+  return {
+    ...base,
+    roundStartTick: -1000,
+    bullets: [
+      {
+        id: 900,
+        ownerId: enemy.id,
+        type: 'normal' as const,
+        pos: { x: player.pos.x, y: player.pos.y },
+        vel: { x: 1, y: 0 },
+        bouncesLeft: 1,
+        alive: true,
+      },
+    ],
+  };
+}
+
+/**
+ * The active campaign run (issues #153 and #152, spec:
+ * docs/superpowers/specs/2026-08-11-campaign-run-model.md). `deps.run` here is the
+ * REAL run.ts store over the REAL (in-memory) `storage` -- not a hand-fake -- so
+ * these tests pin the COMPOSITION: that loop.ts's wiring actually calls the real
+ * store with the right arguments at the right moments, the blindness CLAUDE.md
+ * warns a unit-level test (run.test.ts) cannot see on its own.
+ */
+describe('startGameWith: the active campaign run (issues #153/#152)', () => {
+  describe('death persistence -- the #152 fix', () => {
+    it('persists a lost life to the run store the instant it happens, before any click', () => {
+      const world = worldWithPlayerAboutToDie();
+      const h = boot(makeDeps({ world, savedRun: { level: 0, lives: LIVES } }));
+      h.setState('playing');
+      expect(h.deps.run.active()?.livesRemaining).toBe(LIVES);
+      h.fireFrame(20);
+      expect(h.rec.runLivesSets).toEqual([LIVES - 1]);
+      expect(h.deps.run.active()?.livesRemaining).toBe(LIVES - 1);
+      h.handle.dispose();
+    });
+
+    it('#152 repro: lose a life, "refresh" the page, the reduced count survives', () => {
+      // The issue's own 4-step repro: start a run at the campaign's 3 lives, lose 1 in
+      // level 1 (2 left), refresh. Campaign progress was already preserved before this
+      // fix; the life counter was the part that came back to 3. It must not.
+      const world = worldWithPlayerAboutToDie();
+      const h = boot(makeDeps({ world, savedRun: { level: 0, lives: LIVES } }));
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(h.deps.run.active()?.livesRemaining).toBe(LIVES - 1);
+      h.handle.dispose();
+
+      // "Refresh": a brand NEW session, seeded from the same WIRE BYTES the first
+      // session actually wrote -- not the same object reference, a copy of exactly
+      // what a real page reload would read back out of localStorage.
+      const runBlob = h.storage.getItem('tanks.run.v1');
+      expect(runBlob).not.toBeNull();
+      const h2 = boot(makeDeps({ savedKeys: { 'tanks.run.v1': runBlob! } }));
+      expect(h2.deps.run.active()?.livesRemaining, 'refresh must not restore lost lives').toBe(
+        LIVES - 1,
+      );
+      // And the reconstructed BOOT actually builds the world with that count -- the
+      // composition point, not merely "the store remembers if asked".
+      expect(h2.rec.levelBuilds[0]).toEqual({ level: 0, lives: LIVES - 1 });
+      h2.handle.dispose();
+    });
+
+    it('still calls the store with no run active, which safely no-ops (run.ts is the guard, not loop.ts)', () => {
+      const world = worldWithPlayerAboutToDie();
+      const h = boot(makeDeps({ world })); // no run ever started
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(h.rec.runLivesSets).toEqual([LIVES - 1]); // the call happened
+      expect(h.deps.run.active()).toBeNull(); // and the real store correctly ignored it
+      h.handle.dispose();
+    });
+  });
+
+  describe('practice isolation -- Level Select must never touch the run', () => {
+    it('a life lost in practice never reaches the run store', () => {
+      const world = worldWithPlayerAboutToDie();
+      const h = boot(makeDeps({ levelCount: 2, world, savedRun: { level: 0, lives: 2 } }));
+      h.hud.pickLevel(1); // enters PRACTICE on level 2 -- independent, fresh lives
+      h.setState('playing');
+      h.fireFrame(20); // the PRACTICE player dies
+      expect(h.rec.deathSignals).toBe(1); // the death really happened
+      expect(h.rec.runLivesSets).toEqual([]); // and never reached the run store
+      expect(h.deps.run.active()?.livesRemaining, 'practice must not touch the run').toBe(2);
+      h.handle.dispose();
+    });
+
+    it('a practice win cannot advance, replace or complete the run', () => {
+      const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 0, lives: LIVES } }));
+      const before = h.deps.run.active();
+      h.hud.pickLevel(1); // practice on the LAST level -- nowhere for it to advance to
+      h.setState('playing');
+      h.setState('win'); // a practice "clear"
+      expect(h.rec.runAdvances).toEqual([]);
+      expect(h.rec.runEnds).toBe(0);
+      expect(h.deps.run.active()).toEqual(before); // byte-for-byte unchanged
+      h.handle.dispose();
+    });
+
+    it('a practice loss cannot end the run', () => {
+      const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 0, lives: LIVES } }));
+      const before = h.deps.run.active();
+      h.hud.pickLevel(1); // practice
+      h.setState('playing');
+      h.setState('lose'); // a practice "game over"
+      expect(h.rec.runEnds).toBe(0);
+      expect(h.deps.run.active()).toEqual(before);
+      h.handle.dispose();
+    });
+
+    it('Continue after leaving practice still resumes the campaign run exactly where it was', () => {
+      const h = boot(makeDeps({ levelCount: 3, levelStart: 1, savedRun: { level: 1, lives: 2 } }));
+      h.hud.pickLevel(2); // practice on level 3, fresh lives
+      h.setState('playing');
+      h.keydown({ key: 'Escape' });
+      h.hud.quitToTitle(); // back to the menu
+      // The board behind the title is the RUN's own position, not the practiced one.
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: 2 });
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '1',
+        livesRemaining: 2,
+        status: 'active',
+      } satisfies ActiveRun);
+      h.handle.dispose();
+    });
+  });
+
+  describe('New Run -- the one explicit, deliberate replacement', () => {
+    it('creates a fresh run at level 1 with full lives, and starts playing', () => {
+      const h = boot(makeDeps({ levelCount: 2 }));
+      expect(h.deps.run.active()).toBeNull();
+      h.hud.newGame();
+      expect(h.rec.runNewRuns).toEqual([0]);
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '0',
+        livesRemaining: LIVES,
+        status: 'active',
+      } satisfies ActiveRun);
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 0, lives: LIVES });
+      expect(h.getState()).toBe('playing');
+      expect(h.rec.unlocks).toBeGreaterThan(0); // a real gesture unlocks audio
+      h.handle.dispose();
+    });
+
+    it('explicitly replaces an in-progress run, even one with lives remaining', () => {
+      const h = boot(makeDeps({ levelCount: 3, savedRun: { level: 2, lives: 1 } })); // mid-campaign, level 3
+      h.hud.newGame();
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '0',
+        livesRemaining: LIVES,
+        status: 'active',
+      } satisfies ActiveRun);
+      h.handle.dispose();
+    });
+
+    it('is ignored outside the title screen, like every other title-only control', () => {
+      const h = boot(makeDeps());
+      h.setState('playing');
+      h.hud.newGame();
+      expect(h.rec.runNewRuns).toEqual([]);
+      h.handle.dispose();
+    });
+  });
+
+  describe('level clear -- advances the run reactively, not deferred to a click', () => {
+    it('persists the next level and the carried lives the instant the win lands', () => {
+      const won = { ...createArenaWorld(1), lives: 2 };
+      const h = boot(makeDeps({ levelCount: 3, world: won, savedRun: { level: 0, lives: LIVES } }));
+      expect(h.rec.runAdvances).toEqual([]); // nothing yet
+      h.setState('win'); // level 1 cleared, not final (levelCount 3)
+      expect(h.rec.runAdvances).toEqual([{ level: 1, lives: 2 }]);
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '1',
+        livesRemaining: 2,
+        status: 'active',
+      } satisfies ActiveRun);
+      // Never clicked Next Level: a refresh right here must already see the advance.
+      h.handle.dispose();
+    });
+  });
+
+  describe('game over and campaign completion -- explicit run-ending transitions', () => {
+    it('game over ends the active run; Retry starts a brand-new one at level 1', () => {
+      const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 1, lives: 1 } })); // mid-campaign, level 2
+      h.setState('playing');
+      h.setState('lose');
+      expect(h.rec.runEnds).toBe(1);
+      expect(h.deps.run.active()).toBeNull();
+      h.hud.startRestart(); // Retry
+      expect(h.rec.runNewRuns).toEqual([0]); // deps.levels.start with no run/jump: level 1
+      expect(h.deps.run.active()?.livesRemaining).toBe(LIVES);
+      h.handle.dispose();
+    });
+
+    it('a game-over Retry lands wherever deps.levels.start says, not hardcoded level 1', () => {
+      // Retry's fresh run is created AT deps.levels.start (levels.ts: dev-jump beats
+      // the run beats level 1), not a bare 0 -- a dev testing level 2 who dies must
+      // still retry level 2, the same as before the run model existed.
+      const h = boot(makeDeps({ levelCount: 3, levelStart: 1, savedRun: { level: 2, lives: 1 } }));
+      h.setState('playing');
+      h.setState('lose');
+      h.hud.startRestart();
+      expect(h.rec.runNewRuns).toEqual([1]);
+      h.handle.dispose();
+    });
+
+    it('campaign completion ends the run without automatically creating a replacement', () => {
+      // One level: any win is the final one.
+      const h = boot(makeDeps({ levelCount: 1, savedRun: { level: 0, lives: LIVES } }));
+      h.setState('playing');
+      h.setState('win');
+      expect(h.rec.runEnds).toBe(1);
+      expect(h.rec.runAdvances).toEqual([]); // not a mid-campaign advance
+      expect(h.deps.run.active()).toBeNull();
+      h.handle.dispose();
+    });
+
+    it('the sandbox never touches the active run on win or loss', () => {
+      // A real campaign run exists from earlier (non-sandbox) play.
+      const h = boot(makeDeps({ levelCount: 1, tracksProgress: false, savedRun: { level: 0, lives: 2 } }));
+      h.setState('playing');
+      h.setState('win');
+      expect(h.rec.runAdvances).toEqual([]);
+      expect(h.rec.runEnds).toBe(0);
+      expect(h.deps.run.active()?.livesRemaining, 'untouched by the sandbox').toBe(2);
+      h.setState('lose');
+      expect(h.rec.runEnds).toBe(0);
+      h.handle.dispose();
+    });
+  });
+
+  describe('quit, boot and Continue availability', () => {
+    it('quitting to title never creates or replenishes the run', () => {
+      const h = boot(makeDeps({ levelCount: 2 }));
+      h.setState('playing');
+      h.keydown({ key: 'Escape' });
+      h.hud.quitToTitle();
+      expect(h.deps.run.active()).toBeNull();
+      expect(h.rec.runNewRuns).toEqual([]);
+      h.handle.dispose();
+    });
+
+    it("boot resumes the run's own level and lives, not fresh ones", () => {
+      const h = boot(makeDeps({ levelCount: 3, levelStart: 2, savedRun: { level: 2, lives: 1 } }));
+      expect(h.rec.levelBuilds[0]).toEqual({ level: 2, lives: 1 });
+      h.handle.dispose();
+    });
+
+    it('Continue availability reflects whether a run exists, refreshed at every arrival at the title screen', () => {
+      const h = boot(makeDeps({ levelCount: 2 }));
+      expect(h.rec.continueAvailable.at(-1), 'boot: no run yet').toBe(false);
+      h.hud.newGame();
+      expect(h.rec.continueAvailable.at(-1), 'New Game just created one').toBe(true);
+      h.setState('lose'); // game over ends the run
+      h.setState('title'); // arriving at the title screen refreshes the signal
+      expect(h.rec.continueAvailable.at(-1), 'the run that just ended is gone').toBe(false);
+      h.handle.dispose();
+    });
+  });
+});
+
 describe('playerShellsInFlight', () => {
   const bullet = (id: number, ownerId: number, alive: boolean): Bullet =>
     ({ id, ownerId, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive }) as Bullet;
@@ -2219,8 +2564,11 @@ describe('startGameWith: level progression', () => {
     const h = boot(makeDeps({ levelCount: 2, levelStart: 1 }));
     h.setState('lose');
     h.hud.startRestart();
-    // levels.start, not 0: a dev who jumped to level 2 retries level 2.
-    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
+    // levels.start, not 0: a dev who jumped to level 2 retries level 2. Game over
+    // ends the active run (issue #153), and no run existed here (this test never
+    // called New Game), so Retry's landOnCampaignBoard(true) creates a fresh one --
+    // explicit LIVES now, not the `undefined`-defaults-to-LIVES this used to be.
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: LIVES });
     h.handle.dispose();
   });
 
@@ -2233,7 +2581,9 @@ describe('startGameWith: level progression', () => {
     h.hud.startRestart(); // -> level 1, the last
     h.setState('win');
     h.hud.startRestart(); // final win -> furthest unlocked, which is now level 2
-    expect(h.rec.levelBuilds[2]).toEqual({ level: 1, lives: undefined });
+    // Campaign completion ends the run (issue #153); no run was ever explicitly
+    // started here, so the restart's landOnCampaignBoard(true) creates a fresh one.
+    expect(h.rec.levelBuilds[2]).toEqual({ level: 1, lives: LIVES });
     h.handle.dispose();
   });
 });
@@ -2295,13 +2645,15 @@ describe('startGameWith: pause', () => {
     h.handle.dispose();
   });
 
-  it('Quit to Title returns to the title over a FRESH run at the starting level', () => {
+  it('Quit to Title returns to the title over a FRESH board at the starting level', () => {
     const h = boot(makeDeps({ levelCount: 2, levelStart: 1 }));
     h.setState('playing');
     h.keydown({ key: 'Escape' });
     h.hud.quitToTitle();
     expect(h.getState()).toBe('title');
-    // Rebuilt at levels.start with fresh lives, like the game-over path.
+    // Rebuilt at levels.start; no active RUN was ever started here (see
+    // 'startGameWith: New Run' below for that), so lives stay undefined -- quit must
+    // never CREATE a run, only read one if it already exists.
     expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
     expect(h.rec.hudLevels.at(-1)).toEqual([2, 2]);
     h.handle.dispose();
@@ -2401,19 +2753,20 @@ describe('startGameWith: the main menu', () => {
     h.handle.dispose();
   });
 
-  it('New Game -- hud.ts firing pick(0) -- starts level 1 and leaves recorded progress untouched', () => {
-    // hud.ts's New Game button reuses this exact wiring (fires onLevelSelect with 0,
-    // the same as clicking level 1 in the panel) rather than a second path, so this is
-    // the seam that pins issue #135's "New Game starts level 1 with progress
-    // unchanged": recordCleared keeps a maximum, and a new run must not re-lock
-    // anything a prior session already unlocked. The production change that would
-    // break this is New Game calling deps.progress.reset() or recordCleared, or
-    // targeting any level index other than 0.
+  it('picking level 1 from the Levels panel starts level 1 and leaves recorded progress untouched', () => {
+    // Before issue #153, hud.ts's New Game button reused this EXACT wiring (fired
+    // onLevelSelect with 0, the same event as clicking level 1 in the panel) --
+    // deliberately no longer true, see 'startGameWith: New Run' below. This test now
+    // pins Level Select's own level-1 pick: it starts level 1 with fresh lives and
+    // must not re-lock anything a prior session already unlocked, same as any other
+    // practice pick.
     const h = boot(makeDeps({ levelCount: 3, progressHighest: 2 })); // level 3 already unlocked
     h.hud.pickLevel(0);
     expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 0, lives: undefined });
     expect(h.getState()).toBe('playing');
-    expect(h.deps.progress.highestCleared(), 'a fresh run must not re-lock anything').toBe(2);
+    expect(h.deps.progress.highestCleared(), 'practice must not re-lock anything').toBe(2);
+    // And it must not be mistaken for New Game: no run was touched.
+    expect(h.rec.runNewRuns).toEqual([]);
     h.handle.dispose();
   });
 });
@@ -2454,7 +2807,10 @@ describe('startGameWith: quit and retry follow LIVE progress', () => {
     h.hud.startRestart(); // now on level 2
     h.setState('lose');
     h.hud.startRestart(); // retry
-    expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: undefined });
+    // No run was ever explicitly started (New Game) here, so game over's endRun() is
+    // a no-op and Retry's landOnCampaignBoard(true) creates a fresh one at the same
+    // live furthest-unlocked level -- explicit LIVES now, not undefined.
+    expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: LIVES });
     h.handle.dispose();
   });
 });
@@ -2523,16 +2879,16 @@ describe('startGameWith: stats wiring', () => {
     h.handle.dispose();
   });
 
-  it('starts a fresh run tally at boot and on every level switch', () => {
+  it('starts a fresh attempt tally at boot and on every level switch', () => {
     const h = boot(makeDeps({ levelCount: 2 }));
-    expect(h.rec.statRunStarts).toBe(1); // boot
+    expect(h.rec.statAttemptStarts).toBe(1); // boot
     h.setState('win');
     h.hud.startRestart(); // advance
-    expect(h.rec.statRunStarts).toBe(2);
+    expect(h.rec.statAttemptStarts).toBe(2);
     h.setState('playing');
     h.keydown({ key: 'Escape' });
     h.hud.quitToTitle(); // quit rebuild
-    expect(h.rec.statRunStarts).toBe(3);
+    expect(h.rec.statAttemptStarts).toBe(3);
     h.handle.dispose();
   });
 
@@ -2684,16 +3040,16 @@ describe('startGameWith: achievements wiring', () => {
   it('the win-time context INCLUDES the winning frame\'s kill', () => {
     // The winning tank-destroyed and the win event ride the SAME step() batch, and
     // the state machine flips inside stateMachine.onEvents -- which the driver calls
-    // BEFORE onFrameEvents, where stats.record runs. Evaluate run feats at the state
-    // change and they see a tally one kill short: Dead Eye (shellKills ===
+    // BEFORE onFrameEvents, where stats.record runs. Evaluate attempt feats at the
+    // state change and they see a tally one kill short: Dead Eye (shellKills ===
     // shotsFired) becomes unearnable on a normal clear and Bomb Squad misses a
-    // single-mine-kill win. This asserts the check sees the FINISHED run.
+    // single-mine-kill win. This asserts the check sees the FINISHED attempt.
     const h = boot(makeDeps({ world: winningWorld() }));
     h.setState('playing');
     h.fireFrame(100);
     const atWin = h.rec.achChecks.filter((c) => c.clearedLevel !== null);
     expect(atWin).toHaveLength(1); // the win really landed in-frame
-    expect(atWin[0].runShellKills).toBeGreaterThan(0);
+    expect(atWin[0].attemptShellKills).toBeGreaterThan(0);
     h.handle.dispose();
   });
 

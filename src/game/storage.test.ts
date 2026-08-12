@@ -5,17 +5,19 @@ import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
+import { RUN_KEY } from './run';
 
-/** Every key the five stores own, as the wire strings the browser sees. */
-const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, TOUCH_SETTINGS_KEY, ACHIEVEMENTS_KEY];
+/** Every key the six stores own, as the wire strings the browser sees. */
+const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, TOUCH_SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY];
 
-/** Make each of the five stores write, so their keys have to appear somewhere. */
+/** Make each of the six stores write, so their keys have to appear somewhere. */
 function writeThroughEveryStore(stores: GameStores): void {
   stores.progress.recordCleared(2);
   stores.stats.resetLifetime();
   stores.customization.setHull('red');
   stores.touchSettings.setScheme('point');
   stores.achievements.reset();
+  stores.run.startNewRun(0);
 }
 
 describe('createMemoryStorage', () => {
@@ -122,8 +124,8 @@ describe('resolveStorage', () => {
 });
 
 describe('createStores', () => {
-  it('puts all five stores on the storage it was handed, and no others', () => {
-    // Population: all five stores in GameStores, each driven through a write.
+  it('puts all six stores on the storage it was handed, and no others', () => {
+    // Population: all six stores in GameStores, each driven through a write.
     // The exact-set assertion is what catches a store wired to its own private
     // storage (its key would be missing) as well as one writing a stray key.
     const storage = createMemoryStorage();

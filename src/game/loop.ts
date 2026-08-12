@@ -8,6 +8,7 @@ import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
 import type { TouchSettingsStore } from './touch-settings';
 import type { AchievementsStore, AchievementContext } from './achievements';
+import type { RunStore } from './run';
 import { resolveStorage, createStores } from './storage';
 import { createSaveApi, type SaveApi } from './save';
 import {
@@ -128,9 +129,16 @@ export interface GameDeps {
    * wiring in startGameWith.
    */
   readonly levels: LevelSystem;
-  /** Saved progress: which levels are cleared. Drives level select and Start's level. */
+  /** Saved progress: which levels are cleared. Drives level select. */
   readonly progress: ProgressStore;
-  /** The lifetime and per-run tallies, fed from the attributed event stream. */
+  /**
+   * The active campaign run -- distinct from `progress` (issue #153). `progress` is
+   * permanent, monotonic unlock history; `run` is the one in-flight attempt through
+   * the campaign, with its own level position and life pool, that Continue resumes
+   * and practice must never touch. See run.ts.
+   */
+  readonly run: RunStore;
+  /** The lifetime and per-attempt tallies, fed from the attributed event stream. */
   readonly stats: StatsStore;
   /** The paint shop's saved choice. Render-only downstream. */
   readonly customization: CustomizationStore;
@@ -330,7 +338,7 @@ export function createBrowserDeps(): GameDeps {
   // object every time -- with the in-memory fallback it would have given each
   // store its own private namespace. storage.ts makes that structural.
   const storage = resolveStorage();
-  const { progress, stats, customization, touchSettings, achievements } = createStores(storage);
+  const { progress, stats, customization, touchSettings, achievements, run } = createStores(storage);
   return {
     createRenderer,
     createPreview: createTankPreview,
@@ -340,8 +348,9 @@ export function createBrowserDeps(): GameDeps {
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
     createStateMachine: createGameStateMachine,
     createHud,
-    levels: createLevelSystem(devFlags, progress),
+    levels: createLevelSystem(devFlags, run),
     progress,
+    run,
     stats,
     customization,
     touchSettings,
@@ -393,8 +402,30 @@ export function startGameWith(
     return w;
   }
 
+  // The board shown behind the title screen reflects the active RUN, not a fresh
+  // start: `deps.levels.start` already resolves to the run's own level (levels.ts),
+  // and the run's remaining lives must come along with it -- undefined falls back to
+  // full LIVES (arena.ts's default), which is correct both when no run exists yet and
+  // for the sandbox (tracksProgress false, where the run is never consulted at all).
   let level = deps.levels.start;
-  let world = buildWorld(level);
+  const bootLives = deps.levels.tracksProgress ? deps.run.active()?.livesRemaining : undefined;
+  let world = buildWorld(level, bootLives);
+  // Whether the CURRENT session is practice (Level Select), as opposed to the
+  // campaign run. Practice must not consume, restore, replace, advance or complete
+  // the active run (the spec's hard rule) -- this is the flag every run-mutation
+  // below is gated on. Starts false: the board just built above is always the
+  // campaign's own (the sandbox aside, where it is moot -- see campaignActive).
+  let inPractice = false;
+  /**
+   * Is this session allowed to touch the active run at all? False for practice
+   * (see `inPractice`) AND for any session `deps.levels.tracksProgress` says is not
+   * real campaign play -- today that is only the dev sandbox (`?dev=1&level=sandbox`),
+   * which must never unlock real levels OR mutate the real run, the same reasoning
+   * `deps.progress.recordCleared` is already gated on below.
+   */
+  function campaignActive(): boolean {
+    return deps.levels.tracksProgress && !inPractice;
+  }
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
   // try/catch to render a "this browser has no WebGL" page, and that only
@@ -475,14 +506,14 @@ export function startGameWith(
 
   /**
    * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
-   * has just landed, which is what stops a run feat firing mid-round on a tally that
-   * happens to qualify. Newly earned entries come back and become toasts.
+   * has just landed, which is what stops an attempt feat firing mid-round on a tally
+   * that happens to qualify. Newly earned entries come back and become toasts.
    */
   /**
    * Set when a win lands, consumed on the SAME frame once that frame's stats are
    * recorded. The winning tank-destroyed and the win event ride one step() batch,
    * and the driver routes it to the state machine (which flips synchronously)
-   * BEFORE onFrameEvents, where stats.record runs. Evaluating run feats straight
+   * BEFORE onFrameEvents, where stats.record runs. Evaluating attempt feats straight
    * from the state change therefore reads a tally one kill short -- Dead Eye
    * unearnable on a normal clear, Bomb Squad blind to a single-mine-kill win,
    * Flawless granted for a mutual kill the player did not survive.
@@ -492,7 +523,7 @@ export function startGameWith(
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
       lifetime: deps.stats.lifetime(),
-      run: deps.stats.run(),
+      attempt: deps.stats.attempt(),
       highestCleared: deps.progress.highestCleared(),
       totalLevels: deps.levels.count,
       clearedLevel,
@@ -580,7 +611,15 @@ export function startGameWith(
     // fires on every enemy kill too -- exactly the presence-only mistake
     // CLAUDE.md warns about. Discriminate on kind.
     onFrameEvents(events): void {
-      if (isPlayerDeath(events)) hud.signalPlayerDeath();
+      if (isPlayerDeath(events)) {
+        hud.signalPlayerDeath();
+        // The #152 fix: persist the reduced life count on the RUN before the player
+        // can escape it by refreshing or leaving gameplay -- not deferred to any
+        // later click. `driver.world.lives` is already the post-step count: the
+        // driver assigns `curr = result.world` before calling onFrameEvents.
+        // Practice/sandbox never reach here -- see campaignActive.
+        if (campaignActive()) deps.run.setLivesRemaining(driver.world.lives);
+      }
       // Discriminated by ownerId, not presence: the stream is shared, so a bare
       // `some(e => e.type === 'fire')` pulses on every enemy shot -- exactly the
       // presence-only mistake CLAUDE.md warns about.
@@ -592,13 +631,13 @@ export function startGameWith(
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
-      // AFTER record, so a run feat sees the run that just finished.
+      // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
       // Keep the HUD's copy fresh: the stats page re-renders only while visible, and
       // the win/lose run-summary line updates a beat after the state flips -- the
       // winning kill is in THIS batch, not the one before the panel opened.
-      hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
+      hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
     },
   });
 
@@ -621,11 +660,21 @@ export function startGameWith(
       sm.resume();
     } else {
       // Intermediate win -> the NEXT level, with the lives that survived this one.
-      // Final win or game over -> back to the session's starting level with fresh
-      // lives (levels.start, not 0: a dev who jumped to level 2 retries level 2).
+      // Neither branch touches the active RUN here: a mid-campaign level clear or a
+      // game-over/completion is already persisted reactively in sm.onChange, the
+      // instant the state flipped -- not deferred to this click, so a refresh at the
+      // win/lose screen cannot lose it. This click only decides which WORLD to build.
       const advancing = sm.state === 'win' && level + 1 < deps.levels.count;
-      const carried = advancing ? driver.world.lives : undefined;
-      switchTo(advancing ? level + 1 : deps.levels.start, carried);
+      if (advancing) {
+        switchTo(level + 1, driver.world.lives);
+      } else {
+        // Final win, game over, or a practice session ending either way -- land back
+        // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
+        // Only a real campaign session may CREATE a new run here: the one that just
+        // ended (sm.onChange's 'lose'/final-'win' branch already ran endRun()) is
+        // gone, and playing on needs somewhere to persist the next death/clear.
+        landOnCampaignBoard(campaignActive());
+      }
       sm.restart();
     }
   });
@@ -661,9 +710,47 @@ export function startGameWith(
     hud.setLevel(level + 1, deps.levels.count);
     driver.reset(world);
     refreshStats(world);
-    // A switch is a new run: the per-run tally starts over, the lifetime rolls on.
-    deps.stats.startRun();
-    hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
+    // A switch is a new ATTEMPT: the per-attempt tally starts over, the lifetime
+    // rolls on. Deliberately NOT where the active RUN is touched -- switchTo only
+    // builds a world; every caller above decides for itself whether this world is
+    // campaign or practice, and mutates (or does not mutate) the run accordingly.
+    deps.stats.startAttempt();
+    hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+  }
+
+  /**
+   * Rebuild the CAMPAIGN's own board: the LEVEL from `deps.levels.start` -- already
+   * live and already correctly prioritised (a dev-flag jump beats the active run
+   * beats level 1, see levels.ts) -- and the LIVES from the active run, NEVER fresh.
+   * Quit-to-title, a game-over/completion restart, and a practice session ending all
+   * land here. Before this consolidation each called switchTo with no `lives`
+   * argument at all, which defaults to full LIVES (arena.ts's `createWorldFor`)
+   * rather than the run's real count -- the literal #152 exploit, reachable from
+   * three call sites instead of one.
+   *
+   * `mayCreateRun` is true only for a real campaign game-over/completion restart:
+   * the run that just ended is already gone (sm.onChange's 'lose'/final-'win'
+   * branch calls endRun() the instant the state flips, not deferred to this call),
+   * and playing on needs somewhere to persist the next death/clear -- created AT
+   * `deps.levels.start`, so a dev-flag jump is still where a died-and-retried session
+   * lands. Quitting and leaving practice must NOT create one -- landing on a
+   * "no run yet" board is correct there: Continue stays hidden, New Game remains the
+   * only way in.
+   *
+   * Reads `deps.run` only when `deps.levels.tracksProgress` -- for the sandbox
+   * (`?dev=1&level=sandbox`) both the guard and `mayCreateRun`'s effect fall through
+   * to nothing, so this is `switchTo(deps.levels.start)` there, exactly as before the
+   * run model existed. The sandbox must never create OR read a real campaign run.
+   */
+  function landOnCampaignBoard(mayCreateRun: boolean): void {
+    inPractice = false;
+    const startLevel = deps.levels.start;
+    if (deps.levels.tracksProgress && deps.run.active() === null && mayCreateRun) {
+      deps.run.startNewRun(startLevel);
+    }
+    const lives = deps.levels.tracksProgress ? deps.run.active()?.livesRemaining : undefined;
+    switchTo(startLevel, lives);
+    if (deps.levels.tracksProgress) hud.setContinueAvailable(deps.run.active() !== null);
   }
 
   /** How many levels are pickable: everything cleared plus the next one, capped. */
@@ -676,9 +763,30 @@ export function startGameWith(
     // undefined, and a handler that rebuilds the world does not get to crash on it.
     if (sm.state !== 'title') return;
     if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.count) return;
+    // Practice: independent fresh lives (switchTo's `lives` is left undefined, so
+    // buildWorld defaults to full LIVES), and the active campaign run is never read
+    // or written from here on out -- see campaignActive.
+    inPractice = true;
     switchTo(picked);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.
+    audio.unlock();
+    sm.startPlaying();
+  });
+
+  // New Run (spec: docs/superpowers/specs/2026-08-11-campaign-run-model.md): the one
+  // deliberate action that creates or explicitly replaces the active campaign run.
+  // Distinct from onLevelSelect above -- before issue #153 New Game reported
+  // onLevelSelect(0), the literal same event as picking level 1 in the Levels panel,
+  // which is exactly why practice and campaign could not be told apart.
+  hud.onNewGame(() => {
+    if (sm.state !== 'title') return;
+    const fresh = deps.run.startNewRun(0);
+    inPractice = false;
+    switchTo(0, fresh.livesRemaining);
+    hud.setContinueAvailable(true);
+    // Same convention as onLevelSelect just above: a real gesture that starts play
+    // must unlock the audio context here, since Safari accepts no later opportunity.
     audio.unlock();
     sm.startPlaying();
   });
@@ -743,10 +851,12 @@ export function startGameWith(
     // The HUD hides the Quit button outside pause, but a handler that rebuilds the
     // world deserves its own guard, not a CSS class as its only defence.
     if (sm.state !== 'paused') return;
-    // Like the game-over path: the next Start begins a FRESH run at the session's
-    // starting level with fresh lives. Rebuilt NOW rather than lazily on Start, so
-    // the title screen renders over the new arena, not the abandoned game.
-    switchTo(deps.levels.start);
+    // Quit suspends presentation of the run; it must not create or replenish one
+    // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
+    // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
+    // lazily on Continue, so the title screen renders over the campaign's own
+    // board, not the abandoned (possibly practice) one.
+    landOnCampaignBoard(false);
     sm.toTitle();
   });
 
@@ -811,7 +921,7 @@ export function startGameWith(
 
   hud.onResetStats(() => {
     deps.stats.resetLifetime();
-    hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
+    hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   });
 
   hud.onResetProgress(() => {
@@ -878,6 +988,27 @@ export function startGameWith(
     // guard on purpose: the sandbox unlocks no levels but a feat performed there is
     // still a feat. recordCleared has already run, so level milestones see the clear.
     if (s === 'win') pendingClear = level + 1;
+    // The active RUN's own transitions (issue #153/#152) -- separate from permanent
+    // progress just above, and gated on campaignActive() so practice and the sandbox
+    // can never reach them. Reactive, not deferred to the Next Level/Retry click: a
+    // refresh sitting at the win/lose screen must already see the persisted result.
+    if (campaignActive()) {
+      if (s === 'win') {
+        const isFinalLevel = level + 1 >= deps.levels.count;
+        if (isFinalLevel) {
+          deps.run.endRun(); // campaign completion
+        } else {
+          deps.run.advanceLevel(level + 1, driver.world.lives); // level clear, lives carried
+        }
+      } else if (s === 'lose') {
+        deps.run.endRun(); // game over: no lives remain
+      }
+    }
+    // Refreshed on every arrival at the title screen -- covers boot (the initial call
+    // below), quitting, and a game-over/completion restart's later return to title --
+    // rather than only at the moments above, so this can never go stale relative to
+    // whatever landOnCampaignBoard/onNewGame most recently decided.
+    if (s === 'title') hud.setContinueAvailable(deps.run.active() !== null);
     // The driver stops sampling while paused and only sample() resets the fire/mine
     // latches, so a Space pressed around or during a pause would mine on the first
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger
@@ -895,8 +1026,12 @@ export function startGameWith(
   followMusic(sm.state); // ...and its music: this path bypasses sm.onChange
   hud.setLevel(level + 1, deps.levels.count);
   hud.setLevelSelect(unlockedLevels(), deps.levels.count);
-  deps.stats.startRun();
-  hud.setStats({ lifetime: deps.stats.lifetime(), run: deps.stats.run() });
+  // Boot is an arrival at the title screen too (splash precedes it, but the button
+  // states must already be right underneath) -- see the matching sm.onChange('title')
+  // refresh above, which covers every LATER arrival.
+  hud.setContinueAvailable(deps.run.active() !== null);
+  deps.stats.startAttempt();
+  hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
   hud.setAccentColor(deps.customization.accent());

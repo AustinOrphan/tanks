@@ -17,6 +17,10 @@ function seeded(): Storage {
   s.setItem('tanks.custom.v1', JSON.stringify({ hull: 'green', skin: 'camo', accent: 'gold' }));
   s.setItem('tanks.touch.v1', JSON.stringify({ scheme: 'point', fireMode: 'button' }));
   s.setItem('tanks.achievements.v1', JSON.stringify({ earned: ['first-blood'] }));
+  s.setItem(
+    'tanks.run.v1',
+    JSON.stringify({ campaignId: 'main', currentLevelId: '2', livesRemaining: 2, status: 'active' }),
+  );
   return s;
 }
 
@@ -25,23 +29,24 @@ function parse(text: string): SaveBlob {
 }
 
 describe('SAVE_KEYS', () => {
-  it('is exactly the five tanks.* keys, in a fixed order', () => {
+  it('is exactly the six tanks.* keys, in a fixed order', () => {
     // Pinned as LITERALS, not derived from the store modules: this is the wire
     // format. Renaming a store's key is a save-compatibility break and should
     // fail here rather than silently produce blobs an older build cannot read.
-    // Population: all five keys an export carries.
+    // Population: all six keys an export carries.
     expect(SAVE_KEYS).toEqual([
       'tanks.progress.v1',
       'tanks.stats.v1',
       'tanks.custom.v1',
       'tanks.touch.v1',
       'tanks.achievements.v1',
+      'tanks.run.v1',
     ]);
   });
 
-  it('covers every key the five stores actually write', () => {
-    // The other direction, measured rather than asserted: drive all five stores
-    // and check the keys that appear are the keys an export would carry. A sixth
+  it('covers every key the six stores actually write', () => {
+    // The other direction, measured rather than asserted: drive all six stores
+    // and check the keys that appear are the keys an export would carry. A seventh
     // store added without a SAVE_KEYS entry fails here -- which is the way this
     // list rots.
     const storage = createMemoryStorage();
@@ -51,6 +56,7 @@ describe('SAVE_KEYS', () => {
     stores.customization.setHull('red');
     stores.touchSettings.setScheme('point');
     stores.achievements.reset();
+    stores.run.startNewRun(0);
     const written: string[] = [];
     for (let i = 0; i < storage.length; i++) written.push(storage.key(i)!);
     expect(written.slice().sort()).toEqual(SAVE_KEYS.slice().sort());
@@ -74,7 +80,7 @@ describe('exportSave', () => {
     s.removeItem('tanks.achievements.v1');
     const blob = parse(exportSave(s));
     expect('tanks.achievements.v1' in blob.keys).toBe(false);
-    expect(Object.keys(blob.keys)).toHaveLength(4);
+    expect(Object.keys(blob.keys)).toHaveLength(5);
   });
 
   it('never exports a key belonging to another app on the shared origin', () => {
@@ -138,6 +144,12 @@ describe('importSave', () => {
     expect(stores.touchSettings.fireMode()).toBe('button');
     expect([...stores.achievements.earned()]).toEqual(['first-blood']);
     expect(stores.stats.lifetime().shotsFired).toBe(12);
+    expect(stores.run.active()).toEqual({
+      campaignId: 'main',
+      currentLevelId: '2',
+      livesRemaining: 2,
+      status: 'active',
+    });
   });
 
   it('refuses a blob that is not a save, and writes NOTHING when it does', () => {

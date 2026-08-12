@@ -1,7 +1,14 @@
 import type { SimEvent } from '../sim/events';
 
 /**
- * The lifetime tally and the per-run tally, fed by the attributed event stream.
+ * The lifetime tally and the per-attempt tally, fed by the attributed event stream.
+ *
+ * "Attempt", not "run": issue #153 gives `run` one meaning across the codebase (one
+ * try through the whole campaign, see run.ts), and what this tracks -- a tally zeroed
+ * on every level switch, quit or retry by the loop's switchTo -- is level/attempt-sized,
+ * exactly the "current ambiguous use of `run` for level-sized statistics" the spec
+ * calls out to rename. It counts attempts at BOTH campaign play and practice; nothing
+ * here knows which.
  *
  * Game layer only, like progress.ts, and paranoid the same way: one localStorage key,
  * corrupt data reads as zeros, a throwing storage (Safari private mode) degrades to
@@ -35,12 +42,12 @@ export const ZERO_STATS: StatCounts = Object.freeze({
 
 export interface StatsStore {
   lifetime(): StatCounts;
-  run(): StatCounts;
+  attempt(): StatCounts;
   /** Fold one frame's events in, attributed against the CURRENT world's player id. */
   record(events: SimEvent[], playerId: number): void;
-  /** A new run begins (level switch, quit, retry): zero the run tally only. */
-  startRun(): void;
-  /** The two-click-confirmed reset. Lifetime only; the run tally is already ephemeral. */
+  /** A new attempt begins (level switch, quit, retry): zero the attempt tally only. */
+  startAttempt(): void;
+  /** The two-click-confirmed reset. Lifetime only; the attempt tally is already ephemeral. */
   resetLifetime(): void;
 }
 
@@ -74,7 +81,7 @@ function read(storage: Storage): StatCounts {
 
 export function createStatsStore(storage: Storage): StatsStore {
   const life = read(storage);
-  let run: StatCounts = { ...ZERO_STATS };
+  let attempt: StatCounts = { ...ZERO_STATS };
 
   function persist(): void {
     // Max-merge against CURRENT storage before writing: a second tab persists too,
@@ -96,14 +103,14 @@ export function createStatsStore(storage: Storage): StatsStore {
 
   function bump(key: keyof StatCounts): void {
     life[key] += 1;
-    run[key] += 1;
+    attempt[key] += 1;
   }
 
   return {
     lifetime: () => ({ ...life }),
-    run: () => ({ ...run }),
-    startRun(): void {
-      run = { ...ZERO_STATS };
+    attempt: () => ({ ...attempt }),
+    startAttempt(): void {
+      attempt = { ...ZERO_STATS };
     },
     resetLifetime(): void {
       for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) life[key] = 0;
