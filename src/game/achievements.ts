@@ -28,8 +28,8 @@ export interface AchievementContext {
   highestCleared: number;
   totalLevels: number;
   /**
-   * The 1-based level just cleared, non-null ONLY on the frame a win lands. Run feats
-   * gate on it: without that gate a feat fires the moment the tally happens to
+   * The 1-based level just cleared, non-null ONLY on the frame a win lands. Attempt
+   * feats gate on it: without that gate a feat fires the moment the tally happens to
    * qualify, crediting the player for a level they went on to lose.
    */
   clearedLevel: number | null;

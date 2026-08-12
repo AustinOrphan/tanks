@@ -407,8 +407,20 @@ export function startGameWith(
   // and the run's remaining lives must come along with it -- undefined falls back to
   // full LIVES (arena.ts's default), which is correct both when no run exists yet and
   // for the sandbox (tracksProgress false, where the run is never consulted at all).
+  //
+  // EXCEPT for a dev-flag jump (`isDevJump`): the board it opens is not the run's own
+  // position (levels.ts's `start` getter lets a jump beat the run for which board
+  // builds), so adopting the run's lives here would show a life count that belongs to
+  // a level the player is not looking at -- and since a jumped session never writes
+  // back either (see campaignActive below), there would be no way to tell "the run
+  // really has this many lives" from "this session merely read them once, stale,
+  // at boot". Decided: a jumped session gets fresh lives, the same as practice --
+  // adopt-but-never-write was the odd combination (defect 1, adjudicated review of
+  // #156), not a deliberate design. Pinned in loop.test.ts.
   let level = deps.levels.start;
-  const bootLives = deps.levels.tracksProgress ? deps.run.active()?.livesRemaining : undefined;
+  const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump
+    ? deps.run.active()?.livesRemaining
+    : undefined;
   let world = buildWorld(level, bootLives);
   // Whether the CURRENT session is practice (Level Select), as opposed to the
   // campaign run. Practice must not consume, restore, replace, advance or complete
@@ -418,13 +430,27 @@ export function startGameWith(
   let inPractice = false;
   /**
    * Is this session allowed to touch the active run at all? False for practice
-   * (see `inPractice`) AND for any session `deps.levels.tracksProgress` says is not
+   * (see `inPractice`), for any session `deps.levels.tracksProgress` says is not
    * real campaign play -- today that is only the dev sandbox (`?dev=1&level=sandbox`),
    * which must never unlock real levels OR mutate the real run, the same reasoning
-   * `deps.progress.recordCleared` is already gated on below.
+   * `deps.progress.recordCleared` is already gated on below -- AND for a dev-flag
+   * level jump (`deps.levels.isDevJump`).
+   *
+   * The jump exclusion is defect 1 (adjudicated review of #156): `tracksProgress`
+   * alone does not tell a real campaign session apart from `?dev=1&level=N`, both are
+   * true, so a jumped session used to read AND write the real run exactly like a
+   * normal one. Proven reachable: a run sitting at level 4, a boot jump to level 1,
+   * a win at the jumped level regressed the run to level 2, and a loss ENDED it
+   * outright -- neither the level the player was jumped to nor the level the run was
+   * actually on. A dev-flag jump is a look-at-any-level tool, not a way to play the
+   * campaign, so it is excluded the same structural way practice is: it must not
+   * consume, restore, replace, advance or complete the run. Permanent progress
+   * (`deps.progress.recordCleared`) is NOT part of this exclusion and keeps its
+   * pre-existing behaviour -- it is monotonic and was always writable from a dev
+   * jump; only the position/life-pool bookkeeping this function gates is new here.
    */
   function campaignActive(): boolean {
-    return deps.levels.tracksProgress && !inPractice;
+    return deps.levels.tracksProgress && !deps.levels.isDevJump && !inPractice;
   }
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
@@ -721,26 +747,35 @@ export function startGameWith(
   /**
    * Rebuild the CAMPAIGN's own board: the LEVEL from `deps.levels.start` -- already
    * live and already correctly prioritised (a dev-flag jump beats the active run
-   * beats level 1, see levels.ts) -- and the LIVES from the active run, NEVER fresh.
-   * Quit-to-title, a game-over/completion restart, and a practice session ending all
-   * land here. Before this consolidation each called switchTo with no `lives`
-   * argument at all, which defaults to full LIVES (arena.ts's `createWorldFor`)
-   * rather than the run's real count -- the literal #152 exploit, reachable from
-   * three call sites instead of one.
+   * beats level 1, see levels.ts) -- and the LIVES from the active run, EXCEPT for a
+   * dev-flag jump, which gets fresh lives instead -- see campaignActive's doc
+   * comment (defect 1, adjudicated review of #156). Quit-to-title, a
+   * game-over/completion restart, and a practice session ending all land here.
+   * Before this consolidation each called switchTo with no `lives` argument at
+   * all, which defaults to full LIVES (arena.ts's `createWorldFor`) rather than
+   * the run's real count -- the literal #152 exploit, reachable from three call
+   * sites instead of one.
    *
    * `mayCreateRun` is true only for a real campaign game-over/completion restart:
    * the run that just ended is already gone (sm.onChange's 'lose'/final-'win'
    * branch calls endRun() the instant the state flips, not deferred to this call),
    * and playing on needs somewhere to persist the next death/clear -- created AT
-   * `deps.levels.start`, so a dev-flag jump is still where a died-and-retried session
-   * lands. Quitting and leaving practice must NOT create one -- landing on a
-   * "no run yet" board is correct there: Continue stays hidden, New Game remains the
-   * only way in.
+   * `deps.levels.start`. Every caller passes `campaignActive()` (or a hardcoded
+   * `false`) for this argument, so it is already false for a dev-flag jump; a
+   * died-and-retried jumped session lands on the jumped level same as any other
+   * jumped landing, but creates nothing. Quitting and leaving practice must NOT
+   * create one either -- landing on a "no run yet" board is correct there:
+   * Continue stays hidden, New Game remains the only way in.
    *
-   * Reads `deps.run` only when `deps.levels.tracksProgress` -- for the sandbox
-   * (`?dev=1&level=sandbox`) both the guard and `mayCreateRun`'s effect fall through
-   * to nothing, so this is `switchTo(deps.levels.start)` there, exactly as before the
-   * run model existed. The sandbox must never create OR read a real campaign run.
+   * The run-creation guard below reads `deps.run` when `deps.levels.tracksProgress`
+   * -- for the sandbox (`?dev=1&level=sandbox`) both it and `mayCreateRun`'s effect
+   * fall through to nothing, so this is `switchTo(deps.levels.start)` there, exactly
+   * as before the run model existed. The sandbox must never create OR read a real
+   * campaign run. The LIVES line just below is gated on the narrower
+   * `campaignActive()` instead (which is `tracksProgress && !isDevJump` here,
+   * since `inPractice` is unconditionally false at this point) -- a jumped session
+   * must not even READ the run's lives, or a stray quit/retry would leak an
+   * unrelated level's life count into a board the player did not reach by playing.
    */
   function landOnCampaignBoard(mayCreateRun: boolean): void {
     inPractice = false;
@@ -748,7 +783,7 @@ export function startGameWith(
     if (deps.levels.tracksProgress && deps.run.active() === null && mayCreateRun) {
       deps.run.startNewRun(startLevel);
     }
-    const lives = deps.levels.tracksProgress ? deps.run.active()?.livesRemaining : undefined;
+    const lives = campaignActive() ? deps.run.active()?.livesRemaining : undefined;
     switchTo(startLevel, lives);
     if (deps.levels.tracksProgress) hud.setContinueAvailable(deps.run.active() !== null);
   }

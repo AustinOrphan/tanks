@@ -704,13 +704,13 @@
   color: #fff;
 }
 
-.hud-run-summary {
+.hud-attempt-summary {
   margin-top: -6px;
   opacity: 0.9;
   font-variant-numeric: tabular-nums;
 }
 
-.hud-run-summary--hidden {
+.hud-attempt-summary--hidden {
   display: none;
 }
 

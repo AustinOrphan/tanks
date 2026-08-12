@@ -36,10 +36,31 @@ describe('createRunStore: no run yet', () => {
     expect(createRunStore(localStorage).active()).toBeNull();
   });
 
-  it('advanceLevel, setLivesRemaining and endRun are no-ops with nothing active', () => {
+  // Split into ISOLATED per-method tests, each on its own fresh store, each checked
+  // immediately after its one call. The combined version of this test (advanceLevel,
+  // then setLivesRemaining, then endRun, one assertion at the end) masked a mutation
+  // that made advanceLevel CONJURE a run when none was active: endRun's own no-op
+  // guard still fires last and writes the shadow back to null, cleaning up the
+  // evidence before the single trailing assertion ever ran. All 25 of this file's
+  // tests stayed green under that mutation. Checking `active()` right after each
+  // individual call, with nothing after it to clean up, is what makes each one able
+  // to fail on its own defect rather than only on the composite's.
+  it('advanceLevel alone does not conjure a run into existence', () => {
     const r = createRunStore(localStorage);
     r.advanceLevel(3, 2);
+    expect(r.active()).toBeNull();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull();
+  });
+
+  it('setLivesRemaining alone does not conjure a run into existence', () => {
+    const r = createRunStore(localStorage);
     r.setLivesRemaining(1);
+    expect(r.active()).toBeNull();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull();
+  });
+
+  it('endRun alone does not conjure a run into existence', () => {
+    const r = createRunStore(localStorage);
     r.endRun(); // must not throw
     expect(r.active()).toBeNull();
     expect(localStorage.getItem(RUN_KEY)).toBeNull();
@@ -162,6 +183,10 @@ describe('createRunStore: corrupt or foreign data reads as no run', () => {
     ['a non-integer livesRemaining', JSON.stringify({ ...validBase, livesRemaining: 2.5 })],
     ['a missing currentLevelId', JSON.stringify({ campaignId: DEFAULT_CAMPAIGN_ID, livesRemaining: 3, status: 'active' })],
     ['an empty currentLevelId', JSON.stringify({ ...validBase, currentLevelId: '' })],
+    // isActiveRun requires `typeof livesRemaining === 'number'`: a stringified digit
+    // parses as valid JSON but fails that type check, so it reads as no run rather
+    // than being coerced.
+    ['a string livesRemaining', JSON.stringify({ ...validBase, livesRemaining: '3' })],
   ])('%s', (_label, junk) => {
     localStorage.setItem(RUN_KEY, junk);
     expect(createRunStore(localStorage).active()).toBeNull();
@@ -170,6 +195,18 @@ describe('createRunStore: corrupt or foreign data reads as no run', () => {
   it('a well-formed record still round-trips', () => {
     localStorage.setItem(RUN_KEY, JSON.stringify(validBase));
     expect(createRunStore(localStorage).active()).toEqual(validBase);
+  });
+
+  it('an absurdly large livesRemaining is ACCEPTED, by design -- no magnitude cap', () => {
+    // isActiveRun checks type, finiteness, integrality and non-negativity, but no
+    // upper bound -- the same convention stats.ts's read() uses for its counters
+    // (CLAUDE.md: "no upper bound check, only type/shape"). That is deliberate here
+    // too, not an oversight: the spec's run model explicitly allows a life pool
+    // larger than the campaign's starting count ("unless another life has been
+    // deliberately awarded by game design"), so a large-but-well-formed integer must
+    // round-trip rather than being rejected as corrupt.
+    localStorage.setItem(RUN_KEY, JSON.stringify({ ...validBase, livesRemaining: 999 }));
+    expect(createRunStore(localStorage).active()).toEqual({ ...validBase, livesRemaining: 999 });
   });
 });
 
@@ -227,5 +264,60 @@ describe('two stores over one storage (the second-tab case)', () => {
       livesRemaining: 1,
       status: 'active',
     });
+  });
+
+  it('defect #2: a stale tab must not resurrect a run this tab (or another) already ended', () => {
+    // The reviewer's exact repro: tabA starts a run and tabB constructs alongside it,
+    // snapshotting the same run into its own shadow. tabA then advances AND ends the
+    // run entirely -- storage now holds nothing. tabB never saw either write; its
+    // shadow still believes the run is active at level 0 with full lives. tabB's next
+    // mutating call must not spread that stale shadow over an ended run and bring it
+    // back as a 0-life 'active' record -- verified against the sim, a 0-life world
+    // with the player still alive is playable, which is exactly the degenerate extra
+    // attempt this guards against.
+    const tabA = createRunStore(localStorage);
+    tabA.startNewRun(0);
+    const tabB = createRunStore(localStorage);
+    tabA.advanceLevel(2, 1);
+    tabA.endRun();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull(); // the run is genuinely gone
+
+    tabB.setLivesRemaining(0); // tabB's stale shadow: level 0, full lives
+
+    expect(tabB.active(), "tabB's own view must see the run as ended too").toBeNull();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull(); // must not have written anything back
+    expect(createRunStore(localStorage).active(), 'a fresh store agrees: still no run').toBeNull();
+  });
+
+  it('the resync guard does not fire under a THROWING storage -- the shadow stays the truth, unchanged from before this fix', () => {
+    // Same paranoia as "createRunStore: a storage that throws" below, but exercising
+    // the NEW resync path specifically: a storage whose setItem/removeItem always
+    // throw (Safari private mode) but whose getItem keeps working -- because nothing
+    // ever actually lands, getItem always reads back empty. Without excluding a
+    // known-broken storage from the resync, that empty read would misread as
+    // "another tab ended it" and erase the very shadow this degrade path exists to
+    // protect, on a session that never had a second tab at all.
+    const map = new Map<string, string>();
+    const s = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (): void => {
+        throw new Error('denied');
+      },
+      removeItem: (): void => {
+        throw new Error('denied');
+      },
+      clear: (): void => map.clear(),
+      key: (): string | null => null,
+      get length(): number {
+        return map.size;
+      },
+    } as unknown as Storage;
+    const r = createRunStore(s);
+    r.startNewRun(0); // write() catches the throw here -- storage is now known broken
+    expect(r.active()?.currentLevelId).toBe('0');
+    r.setLivesRemaining(2); // must consult the shadow, not the (always-empty) storage
+    expect(r.active()?.livesRemaining, 'the shadow remains the truth').toBe(2);
+    r.advanceLevel(1, 2);
+    expect(r.active()?.currentLevelId, 'the shadow remains the truth').toBe('1');
   });
 });

@@ -182,7 +182,7 @@ describe('hud.css is syntactically whole', () => {
       '.hud-continue--hidden', '.hud-new-game--hidden', '.hud-action--hidden',
       // stats: without the hidden rules the page covers everything from load
       '.hud-stats', '.hud-stats--hidden', '.hud-stats-open', '.hud-stats-open--hidden',
-      '.hud-danger', '.hud-danger--armed', '.hud-run-summary', '.hud-run-summary--hidden',
+      '.hud-danger', '.hud-danger--armed', '.hud-attempt-summary', '.hud-attempt-summary--hidden',
       // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
       '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
       '.hud-swatch', '.hud-swatch--selected',

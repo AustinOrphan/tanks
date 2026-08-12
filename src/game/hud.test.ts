@@ -1352,13 +1352,13 @@ describe('hud: the stats page', () => {
     const { hud: h, root } = mount();
     h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
     h.setState('win');
-    const line = (root.querySelector('.hud-run-summary') as HTMLElement).textContent ?? '';
+    const line = (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
     expect(line).toContain('3 kills');
     expect(line).toContain('50%');
     // And updates if the final batch lands after the panel opened -- the winning
     // kill is recorded a beat after the state flips.
     h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
-    expect((root.querySelector('.hud-run-summary') as HTMLElement).textContent).toContain('4 kills');
+    expect((root.querySelector('.hud-attempt-summary') as HTMLElement).textContent).toContain('4 kills');
   });
 });
 

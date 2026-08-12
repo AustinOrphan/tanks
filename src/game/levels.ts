@@ -18,6 +18,20 @@ export interface LevelSystem {
   /** Whether wins here record progress. TRUE for the shipped sequence; the sandbox is
    *  a test rig, and a sandbox win must never unlock real levels. */
   readonly tracksProgress: boolean;
+  /**
+   * Whether `start` came from a `?dev=1&level=N` jump rather than the active run.
+   *
+   * `tracksProgress` alone cannot tell a real campaign session apart from a jumped
+   * one -- both are `true`, only the sandbox is `false`. A jumped session still
+   * records permanent progress on a win (that was always true of dev jumps and stays
+   * true -- see loop.ts's `sm.onChange`), but it must NOT be treated as owning the
+   * active RUN: it opened on a level the run's own position did not choose, so
+   * writing an advance/end back to the run would move it to a level the player did
+   * not actually reach by playing the campaign in order (see loop.ts's
+   * `campaignActive`). False for the sandbox too, which is excluded from run
+   * bookkeeping already via `tracksProgress`.
+   */
+  readonly isDevJump: boolean;
   /** Build the world for a level. `lives` carries a cleared level's remainder forward. */
   world(level: number, seed: number, unarmedTrigger?: UnarmedTrigger, lives?: number): World;
   /**
@@ -35,6 +49,7 @@ export function createLevelSystem(flags: DevFlags, run: RunStore): LevelSystem {
       count: 1,
       start: 0,
       tracksProgress: false,
+      isDevJump: false,
       // The sandbox is built on the standard board (see sandboxArena).
       bounds: () => ({ ...arenaBounds(ARENAS[0]), cellSize: ARENAS[0].cellSize }),
       world: (_level, seed, unarmedTrigger) =>
@@ -76,6 +91,7 @@ export function createLevelSystem(flags: DevFlags, run: RunStore): LevelSystem {
       return Math.min(levelIndexFromId(active.currentLevelId), ARENAS.length - 1);
     },
     tracksProgress: true,
+    isDevJump: jump !== null,
     world: (level, seed, unarmedTrigger, lives) =>
       createWorldFor(ARENAS[level], seed, unarmedTrigger, lives),
     bounds: (level) => ({ ...arenaBounds(ARENAS[level]), cellSize: ARENAS[level].cellSize }),

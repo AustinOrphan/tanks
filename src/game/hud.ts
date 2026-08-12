@@ -116,13 +116,16 @@ export interface Hud {
   onFireTap(cb: () => void): void;
   /**
    * Both tallies, pushed by the loop whenever they change. The HUD re-renders the
-   * stats table only while it is visible, and keeps the win/lose run-summary line
-   * live -- the winning kill is recorded a beat AFTER the state flips.
+   * stats table only while it is visible, and keeps the win/lose attempt-summary
+   * line live -- the winning kill is recorded a beat AFTER the state flips.
    *
    * `attempt` (not `run`, see stats.ts): a level-sized tally, zeroed on every
    * switchTo. The visible copy still reads "This run" -- that is user-facing
    * wording, not the codebase's ambiguous use of the word issue #153 asks to
-   * remove, and changing it is out of this change's scope.
+   * remove, and changing it is out of this change's scope (nit 4, adjudicated
+   * review of #156: renaming `hud-run-summary`/`runSummaryEl`/`renderRunSummary`
+   * to their attempt-scoped names was trivial and safe, and is done; the visible
+   * "This run: ..." copy is a separate, user-facing decision and stays as-is).
    */
   setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void;
   /** Two-click-confirmed on the stats page. */
@@ -445,7 +448,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-panel hud-panel--hidden" tabindex="-1" aria-labelledby="hud-panel-title">
       <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
-      <p class="hud-run-summary hud-run-summary--hidden"></p>
+      <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
@@ -537,7 +540,7 @@ export function createHud(root: HTMLElement): Hud {
   const achCountEl = el.querySelector('.hud-achievements-count') as HTMLElement;
   const achBackBtn = el.querySelector('.hud-achievements-back') as HTMLButtonElement;
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
-  const runSummaryEl = el.querySelector('.hud-run-summary') as HTMLElement;
+  const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
@@ -779,16 +782,16 @@ export function createHud(root: HTMLElement): Hud {
     statsTable.innerHTML = `<tr><th></th><td>Lifetime</td><td>This run</td></tr>${rows}`;
   }
 
-  function renderRunSummary(): void {
+  function renderAttemptSummary(): void {
     if (!statsData) {
-      runSummaryEl.classList.add('hud-run-summary--hidden');
+      attemptSummaryEl.classList.add('hud-attempt-summary--hidden');
       return;
     }
     const r = statsData.attempt;
     const kills = r.shellKills + r.mineKills;
-    runSummaryEl.textContent =
+    attemptSummaryEl.textContent =
       `This run: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
-    runSummaryEl.classList.remove('hud-run-summary--hidden');
+    attemptSummaryEl.classList.remove('hud-attempt-summary--hidden');
   }
 
   /**
@@ -1303,9 +1306,9 @@ export function createHud(root: HTMLElement): Hud {
     continueBtn.classList.toggle('hud-continue--hidden', s !== 'title' || !hasProgress);
     newGameBtn.classList.toggle('hud-new-game--hidden', s !== 'title');
     actionBtn.classList.toggle('hud-action--hidden', s === 'title');
-    // The run summary belongs to the END screens alone.
-    runSummaryEl.classList.toggle('hud-run-summary--hidden', s !== 'win' && s !== 'lose');
-    if (s === 'win' || s === 'lose') renderRunSummary();
+    // The attempt summary belongs to the END screens alone.
+    attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', s !== 'win' && s !== 'lose');
+    if (s === 'win' || s === 'lose') renderAttemptSummary();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
@@ -1525,7 +1528,7 @@ export function createHud(root: HTMLElement): Hud {
     setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void {
       statsData = data;
       if (!statsView.classList.contains('hud-stats--hidden')) renderStatsTable();
-      if (!runSummaryEl.classList.contains('hud-run-summary--hidden')) renderRunSummary();
+      if (!attemptSummaryEl.classList.contains('hud-attempt-summary--hidden')) renderAttemptSummary();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);

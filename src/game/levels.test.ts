@@ -122,6 +122,32 @@ describe('createLevelSystem: the active run', () => {
       createLevelSystem({ ...DEV_FLAGS_OFF, level: 'sandbox' as const }, noRun()).tracksProgress,
     ).toBe(false);
   });
+
+  // Defect 1 (adjudicated review of #156): `tracksProgress` alone does not tell a real
+  // campaign session apart from a dev-flag jump -- both are `true`. A jumped session
+  // must not be mistaken for one that owns the active RUN (loop.ts's campaignActive),
+  // which is what let a win at a jumped level regress a mid-campaign run and a loss
+  // destroy it outright. `isDevJump` is the seam that lets loop.ts tell them apart,
+  // right where `jump` is already computed.
+  describe('isDevJump', () => {
+    it('is false for a plain session, with or without an active run', () => {
+      expect(createLevelSystem(DEV_FLAGS_OFF, noRun()).isDevJump).toBe(false);
+      expect(createLevelSystem(DEV_FLAGS_OFF, runAt(3)).isDevJump).toBe(false);
+    });
+
+    it('is true whenever ?dev=1&level=N is present, regardless of the run', () => {
+      expect(createLevelSystem({ ...DEV_FLAGS_OFF, level: 1 }, noRun()).isDevJump).toBe(true);
+      expect(createLevelSystem({ ...DEV_FLAGS_OFF, level: 1 }, runAt(3)).isDevJump).toBe(true);
+      // Out-of-range jumps still clamp `start`, and are still a jump.
+      expect(createLevelSystem({ ...DEV_FLAGS_OFF, level: 99 }, noRun()).isDevJump).toBe(true);
+    });
+
+    it('is false for the sandbox -- already excluded from campaign-run play via tracksProgress', () => {
+      expect(
+        createLevelSystem({ ...DEV_FLAGS_OFF, level: 'sandbox' as const }, noRun()).isDevJump,
+      ).toBe(false);
+    });
+  });
 });
 
 describe('createLevelSystem: start is live, not a boot-time snapshot', () => {

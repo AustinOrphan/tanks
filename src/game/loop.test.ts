@@ -44,6 +44,7 @@ import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeInput, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENAS } from '../sim/arena';
+import { createLevelSystem } from './levels';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -155,7 +156,7 @@ interface Recorder {
   inputOptions: Array<{ gamepad?: boolean } | null>;
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
   deps: GameDeps;
   rec: Recorder;
   storage: Storage;
@@ -822,13 +823,17 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       // one-level sequence still does. Progression tests opt into more.
       count: opts.levelCount ?? 1,
       // LIVE, like the real system: an unlock earned mid-session must move the
-      // session's start. A fixed opts.levelStart models a dev-flag jump.
+      // session's start. A fixed opts.levelStart models a dev-flag jump OR a plain
+      // resumed run's own position -- opts.isDevJump (default false) says which, and
+      // is what loop.ts's campaignActive() reads (see "the active campaign run"
+      // below, and levels.test.ts for the real system's own version of this field).
       get start(): number {
         if (opts.levelStart !== undefined) return opts.levelStart;
         const cleared = Math.max(opts.progressHighest ?? 0, ...rec.cleared, 0);
         return Math.min(cleared, (opts.levelCount ?? 1) - 1);
       },
       tracksProgress: opts.tracksProgress ?? true,
+      isDevJump: opts.isDevJump ?? false,
       bounds: (level: number) =>
         // Width/height are world-space (arenaBounds(ARENA_01)); cellSize is DELIBERATELY
         // not ARENA_01.cellSize. While the fake echoed the shipped constant, the
@@ -2130,15 +2135,29 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
 
-    it('a game-over Retry lands wherever deps.levels.start says, not hardcoded level 1', () => {
-      // Retry's fresh run is created AT deps.levels.start (levels.ts: dev-jump beats
-      // the run beats level 1), not a bare 0 -- a dev testing level 2 who dies must
-      // still retry level 2, the same as before the run model existed.
-      const h = boot(makeDeps({ levelCount: 3, levelStart: 1, savedRun: { level: 2, lives: 1 } }));
+    it('a dev-flag jump\'s game-over Retry must not touch an unrelated run -- defect 1, adjudicated review of #156', () => {
+      // Before the fix: Retry's fresh run was created AT deps.levels.start (dev-jump
+      // beats the run beats level 1), which meant a JUMPED session's loss ended
+      // whatever real run existed elsewhere, and Retry then created a brand-new one
+      // pinned to the jumped level -- discarding the real run's own position and
+      // lives entirely. A dev-flag jump is now excluded from campaign-run
+      // bookkeeping the same way practice is (see campaignActive): the loss must not
+      // end it, Retry must not replace it, and the jumped session lands on the
+      // jumped level with fresh lives, leaving the untouched run exactly where it
+      // was.
+      const h = boot(makeDeps({ levelCount: 3, levelStart: 1, isDevJump: true, savedRun: { level: 2, lives: 1 } }));
       h.setState('playing');
       h.setState('lose');
+      expect(h.rec.runEnds).toBe(0);
       h.hud.startRestart();
-      expect(h.rec.runNewRuns).toEqual([1]);
+      expect(h.rec.runNewRuns).toEqual([]);
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '2',
+        livesRemaining: 1,
+        status: 'active',
+      } satisfies ActiveRun);
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: undefined });
       h.handle.dispose();
     });
 
@@ -2192,6 +2211,144 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.setState('lose'); // game over ends the run
       h.setState('title'); // arriving at the title screen refreshes the signal
       expect(h.rec.continueAvailable.at(-1), 'the run that just ended is gone').toBe(false);
+      h.handle.dispose();
+    });
+  });
+
+  describe('a dev-flag level jump must not touch an unrelated run (defect 1, adjudicated review of #156)', () => {
+    // Reviewer's exact repro: a real run sitting at level 4 (currentLevelId '3'), a
+    // boot jump to level 1 (index 0). Before the fix, `tracksProgress` alone could
+    // not tell a jumped session apart from a real campaign one -- both are true, only
+    // the sandbox is false -- so a win at the jumped level regressed the run to level
+    // 2, and a loss destroyed it outright. `deps.levels.isDevJump` is now the seam
+    // campaignActive() reads to exclude a jump the same structural way it already
+    // excludes practice and the sandbox.
+    it('a win at the jumped level does not advance, regress or complete the untouched run', () => {
+      const won = { ...createArenaWorld(1), lives: 2 };
+      const h = boot(makeDeps({
+        levelCount: 11,
+        levelStart: 0,
+        isDevJump: true,
+        world: won,
+        savedRun: { level: 3, lives: LIVES },
+      }));
+      h.setState('win'); // the jumped level's own win, not the run's level 4
+      expect(h.rec.runAdvances).toEqual([]);
+      expect(h.rec.runEnds).toBe(0);
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '3',
+        livesRemaining: LIVES,
+        status: 'active',
+      } satisfies ActiveRun); // byte-for-byte unchanged
+      // Permanent progress is NOT part of this exclusion and keeps its pre-existing
+      // behaviour -- it is monotonic and was always writable from a dev jump.
+      expect(h.rec.cleared).toEqual([1]);
+      h.handle.dispose();
+    });
+
+    it('a loss at the jumped level does not end the untouched run', () => {
+      const h = boot(makeDeps({
+        levelCount: 11,
+        levelStart: 0,
+        isDevJump: true,
+        savedRun: { level: 3, lives: LIVES },
+      }));
+      h.setState('playing');
+      h.setState('lose'); // the jumped level's own game over
+      expect(h.rec.runEnds).toBe(0);
+      expect(h.deps.run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '3',
+        livesRemaining: LIVES,
+        status: 'active',
+      } satisfies ActiveRun);
+      h.handle.dispose();
+    });
+
+    it('a life lost during a jumped session never reaches the run store', () => {
+      // Same shape as the practice-isolation test above: the jumped session's own
+      // death must not persist against a run it does not own.
+      const world = worldWithPlayerAboutToDie();
+      const h = boot(makeDeps({
+        levelCount: 11,
+        levelStart: 0,
+        isDevJump: true,
+        world,
+        savedRun: { level: 3, lives: LIVES },
+      }));
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(h.rec.deathSignals).toBe(1); // the death really happened
+      expect(h.rec.runLivesSets).toEqual([]);
+      expect(h.deps.run.active()?.livesRemaining, 'untouched by the jumped session').toBe(LIVES);
+      h.handle.dispose();
+    });
+
+    it('boots with fresh lives, not the unrelated run\'s -- decided: a jumped session gets fresh lives, like practice', () => {
+      // adopting the run's lives without ever writing them back was the odd half of
+      // this defect: a jumped session would show a life count that belongs to a
+      // level it is not showing, and there is no way it could ever change (the
+      // session never writes back either). Fresh lives, matching bootLives' comment.
+      const h = boot(makeDeps({ levelCount: 11, levelStart: 0, isDevJump: true, savedRun: { level: 3, lives: 1 } }));
+      expect(h.rec.levelBuilds[0]).toEqual({ level: 0, lives: undefined });
+      h.handle.dispose();
+    });
+
+    it('quitting a jumped session shows the jumped board with fresh lives, never leaking the unrelated run\'s', () => {
+      const h = boot(makeDeps({ levelCount: 11, levelStart: 0, isDevJump: true, savedRun: { level: 3, lives: 1 } }));
+      h.setState('playing');
+      h.keydown({ key: 'Escape' });
+      h.hud.quitToTitle();
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 0, lives: undefined });
+      expect(h.deps.run.active()?.livesRemaining, 'untouched').toBe(1); // exactly as saved
+      h.handle.dispose();
+    });
+  });
+
+  // The tests above drive the fake `levels` object's own `isDevJump` field, which
+  // levels.test.ts separately proves the REAL createLevelSystem computes correctly.
+  // These two reproduce the reviewer's original probe with NEITHER faked: the real
+  // createLevelSystem, over a real createRunStore, wired into a real startGameWith --
+  // only the renderer/audio/HUD/input collaborators stay fake, the same as every
+  // other test in this file.
+  describe('defect 1, reproduced with the REAL createLevelSystem + createRunStore (not the fake levels object above)', () => {
+    function realJumpDeps(): { deps: GameDeps; run: ReturnType<typeof createRunStore>; base: ReturnType<typeof makeDeps> } {
+      const storage = createMemoryStorage();
+      const run = createRunStore(storage);
+      run.startNewRun(0);
+      run.advanceLevel(3, LIVES); // the run: currentLevelId '3', full lives
+      const jumpFlags: DevFlags = { ...DEV_FLAGS_OFF, level: 1 }; // ?dev=1&level=1 -> index 0
+      const levels = createLevelSystem(jumpFlags, run);
+      const base = makeDeps({ world: { ...createArenaWorld(1), lives: 2 } });
+      const deps: GameDeps = { ...base.deps, levels, run, devFlags: jumpFlags };
+      return { deps, run, base };
+    }
+
+    it('a win at the jumped level leaves a real run at level 4 byte-for-byte unchanged', () => {
+      const { deps, run, base } = realJumpDeps();
+      const h = boot({ ...base, deps });
+      h.setState('win');
+      expect(run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '3',
+        livesRemaining: LIVES,
+        status: 'active',
+      } satisfies ActiveRun);
+      h.handle.dispose();
+    });
+
+    it('a loss at the jumped level does not destroy a real run at level 4', () => {
+      const { deps, run, base } = realJumpDeps();
+      const h = boot({ ...base, deps });
+      h.setState('playing');
+      h.setState('lose');
+      expect(run.active()).toEqual({
+        campaignId: DEFAULT_CAMPAIGN_ID,
+        currentLevelId: '3',
+        livesRemaining: LIVES,
+        status: 'active',
+      } satisfies ActiveRun);
       h.handle.dispose();
     });
   });
@@ -2995,7 +3152,7 @@ describe('startGameWith: achievements wiring', () => {
     h.handle.dispose();
   });
 
-  it('evaluates per frame-batch with NO clearedLevel, so run feats stay dormant', () => {
+  it('evaluates per frame-batch with NO clearedLevel, so attempt feats stay dormant', () => {
     // Same fixture as the stats test, for the same reason: the driver only calls
     // onFrameEvents on EVENTFUL frames, so a countdown frame would leave the
     // assertion below vacuous. The mine's fuse expires within the first tick.
@@ -3005,7 +3162,7 @@ describe('startGameWith: achievements wiring', () => {
     h.setState('playing');
     h.fireFrame(100);
     // The mid-play checks must all carry a null clearedLevel; a non-null one here
-    // would credit run feats on a level still being played.
+    // would credit attempt feats on a level still being played.
     expect(h.rec.achChecks.length).toBeGreaterThan(0);
     expect(h.rec.achChecks.every((c) => c.clearedLevel === null)).toBe(true);
     h.handle.dispose();
