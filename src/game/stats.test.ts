@@ -146,6 +146,55 @@ describe('two stores over one storage (the second-tab case)', () => {
   });
 });
 
+describe('a tab left open across reset (PR #62\'s sibling defect)', () => {
+  it('does not resurrect pre-reset lifetime numbers on its next write', () => {
+    // achievements.ts's exact repro, adapted to stats's per-field max-merge:
+    // tabB constructs while disk already holds shotsFired: 2, snapshotting it
+    // into its own shadow. tabA then runs the two-click-confirmed Reset stats --
+    // disk now holds zeros. tabB never saw that write; its shadow still believes
+    // shotsFired is 2. tabB's next mutating call (laying a mine, an unrelated
+    // field) must not spread that stale shotsFired count back onto disk merely
+    // because the old per-key max-merge compared against it.
+    const tabA = createStatsStore(localStorage);
+    tabA.record([fire(P), fire(P)], P); // tabA racks up shotsFired: 2
+    const tabB = createStatsStore(localStorage); // boots with shotsFired: 2 in its shadow
+    expect(tabB.lifetime().shotsFired).toBe(2);
+
+    tabA.resetLifetime();
+    expect(createStatsStore(localStorage).lifetime()).toEqual(ZERO_STATS); // disk really is reset
+
+    tabB.record([mineDropped(P)], P); // tabB lays a mine, unrelated to the reset field
+
+    expect(tabB.lifetime().shotsFired, 'the reset must stick even from a stale tab').toBe(0);
+    expect(tabB.lifetime().minesLaid, 'the newly recorded field must still land').toBe(1);
+  });
+});
+
+describe('a storage whose writes never land (PR #62\'s sibling: the latch)', () => {
+  it('keeps the shadow as the session truth: resync must never erase it', () => {
+    // Mirrors achievements.ts's equivalent test. getItem keeps working off a
+    // real backing map (so it is NOT the read-throws case already covered
+    // above), but setItem always throws, so nothing this instance writes ever
+    // actually lands and getItem reads back empty forever. Once a write has
+    // failed, resync must stop trusting that empty read as "another tab reset
+    // it" -- otherwise the second record() call below would wipe shotsFired
+    // from the shadow even though no reset ever happened.
+    const map = new Map<string, string>();
+    const s = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (): void => {
+        throw new Error('denied');
+      },
+    } as unknown as Storage;
+    const store = createStatsStore(s);
+    store.record([fire(P)], P); // write() catches the throw -- storage is now known broken
+    expect(store.lifetime().shotsFired).toBe(1);
+    store.record([mineDropped(P)], P); // a second mutating call, an unrelated field
+    expect(store.lifetime().shotsFired, 'the shadow remains the truth, not wiped by the always-empty read').toBe(1);
+    expect(store.lifetime().minesLaid).toBe(1);
+  });
+});
+
 describe('per-field validation (found in review: was only tested with whole-object junk)', () => {
   it('drops the corrupt fields and keeps the valid siblings', () => {
     localStorage.setItem(STATS_KEY, '{"shotsFired":-5,"deaths":3,"shellKills":2.7,"ricochets":4}');

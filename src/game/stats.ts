@@ -80,30 +80,47 @@ function read(storage: Storage): StatCounts {
 }
 
 export function createStatsStore(storage: Storage): StatsStore {
-  const life = read(storage);
+  let life = read(storage);
   let attempt: StatCounts = { ...ZERO_STATS };
 
-  function persist(): void {
-    // Max-merge against CURRENT storage before writing: a second tab persists too,
-    // and a blind write of this tab's copy erased whatever the other tab had counted
-    // since we booted (found in review -- the progress store had the same clobber).
-    // Max is the no-loss choice for monotonic counters, not exact cross-tab addition;
-    // KNOWN RESIDUAL: a tab still open across a Reset stats can resurrect pre-reset
-    // numbers with its next write. Accepted for a local single-player tally.
-    const stored = read(storage);
-    for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) {
-      life[key] = Math.max(life[key], stored[key]);
-    }
+  // Flips to false the first time a write catches an exception, and never flips
+  // back. Guards resync() below -- same convention as run.ts's storageIsWritable
+  // and the identical fix in achievements.ts/progress.ts, for the same reason:
+  // a storage that has already failed to persist THIS instance's own writes
+  // must not be trusted to answer "what does disk actually hold" (Safari
+  // private mode: setItem throws, getItem still works, reading back whatever it
+  // always read -- never this instance's own writes).
+  let storageIsWritable = true;
+
+  function writeRaw(counts: StatCounts): void {
     try {
-      storage.setItem(STATS_KEY, JSON.stringify(life));
+      storage.setItem(STATS_KEY, JSON.stringify(counts));
     } catch {
       // Private mode or quota: the in-memory tally carries the session.
+      storageIsWritable = false;
     }
   }
 
-  function bump(key: keyof StatCounts): void {
-    life[key] += 1;
-    attempt[key] += 1;
+  /**
+   * Resync the lifetime tally to disk before this call's deltas are applied, so
+   * DISK -- not this instance's own running total -- is the base a Reset stats
+   * must survive. This is stats.ts's half of PR #62's defect class: the old
+   * per-key `Math.max(life[key], stored[key])` let a stale shadow's higher
+   * count keep winning that max forever, so a tab left open across Reset stats
+   * never stayed reset once this tab recorded anything at all, however
+   * unrelated the field. Resyncing first and adding only this call's deltas on
+   * top makes the write (disk + this-call's-increments), not
+   * max(shadow, disk) -- a reset elsewhere stays reset.
+   *
+   * Gated on storageIsWritable, exactly like the sibling fixes: once this
+   * instance's own write has failed, a later getItem can keep succeeding while
+   * reporting nothing this instance ever wrote, and treating that as "someone
+   * else reset it" would erase the shadow -- the one copy of this session's
+   * tally this degrade path exists to protect.
+   */
+  function resync(): void {
+    if (!storageIsWritable) return;
+    life = read(storage);
   }
 
   return {
@@ -113,63 +130,60 @@ export function createStatsStore(storage: Storage): StatsStore {
       attempt = { ...ZERO_STATS };
     },
     resetLifetime(): void {
+      // Deliberately does NOT call resync(): reset is the one explicit action
+      // allowed to replace whatever disk currently holds, the same way run.ts's
+      // startNewRun skips refreshShadowIfEnded -- see resync's doc comment.
       for (const key of Object.keys(ZERO_STATS) as Array<keyof StatCounts>) life[key] = 0;
-      // A direct write, NOT persist(): the max-merge would instantly resurrect the
-      // numbers the player just asked to erase.
-      try {
-        storage.setItem(STATS_KEY, JSON.stringify(life));
-      } catch {
-        // The in-memory zeros still hold for this session.
-      }
+      writeRaw(life); // a direct write, NOT resync+persist: that would instantly resurrect the numbers just erased
     },
     record(events: SimEvent[], playerId: number): void {
+      // Deltas accumulate here, NOT directly into `life`: resync() below must
+      // replace `life` with a fresh disk read before this call's increments are
+      // added on top, and it can only do that if `life` was never mutated
+      // mid-loop.
+      const delta: Partial<Record<keyof StatCounts, number>> = {};
       let changed = false;
+      const bump = (key: keyof StatCounts): void => {
+        delta[key] = (delta[key] ?? 0) + 1;
+        attempt[key] += 1; // purely in-memory per attempt; never persisted, never resynced
+        changed = true;
+      };
       for (const e of events) {
         switch (e.type) {
           case 'fire':
-            if (e.ownerId === playerId) {
-              bump('shotsFired');
-              changed = true;
-            }
+            if (e.ownerId === playerId) bump('shotsFired');
             break;
           case 'ricochet':
-            if (e.ownerId === playerId) {
-              bump('ricochets');
-              changed = true;
-            }
+            if (e.ownerId === playerId) bump('ricochets');
             break;
           case 'mine-dropped':
-            if (e.ownerId === playerId) {
-              bump('minesLaid');
-              changed = true;
-            }
+            if (e.ownerId === playerId) bump('minesLaid');
             break;
           case 'wall-destroyed':
-            if (e.ownerId === playerId) {
-              bump('wallsDestroyed');
-              changed = true;
-            }
+            if (e.ownerId === playerId) bump('wallsDestroyed');
             break;
           case 'tank-destroyed':
             if (e.kind === 'player') {
               bump('deaths');
               // Dying to your OWN ricochet or mine is additionally a self kill.
               if (e.by.ownerId === playerId) bump('selfKills');
-              changed = true;
             } else if (e.by.ownerId === playerId) {
               bump(e.by.source === 'shell' ? 'shellKills' : 'mineKills');
-              changed = true;
             } else {
               // An enemy destroyed by a non-player owner: the AI shot its own side.
               bump('friendlyFireKills');
-              changed = true;
             }
             break;
           default:
             break;
         }
       }
-      if (changed) persist();
+      if (!changed) return;
+      resync();
+      for (const key of Object.keys(delta) as Array<keyof StatCounts>) {
+        life[key] += delta[key] ?? 0;
+      }
+      writeRaw(life);
     },
   };
 }

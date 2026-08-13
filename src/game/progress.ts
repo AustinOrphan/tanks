@@ -85,11 +85,21 @@ export function createProgressStore(
     return campaignLevels.find((l) => l.arenaId === arenaId)?.id ?? null;
   }
 
+  // Flips to false the first time writeRaw() catches an exception, and never
+  // flips back. Guards resync() below -- same convention as run.ts's
+  // storageIsWritable and achievements.ts's identical fix, for the same reason:
+  // a storage that has already failed to persist THIS instance's own writes
+  // must not be trusted to answer "what does disk actually hold" (Safari
+  // private mode: setItem throws, getItem still works, reading back whatever it
+  // always read -- never this instance's own writes).
+  let storageIsWritable = true;
+
   function writeRaw(levelId: string | null): void {
     try {
       storage.setItem(PROGRESS_KEY, JSON.stringify({ levelId } satisfies StoredProgressV2));
     } catch {
       // Private mode or quota: the shadow carries the session; nothing persists.
+      storageIsWritable = false;
     }
   }
 
@@ -133,6 +143,28 @@ export function createProgressStore(
   // what keeps it correct after a future campaign reorder.
   let shadow = read();
 
+  /**
+   * Resync the shadow to disk before recordCleared decides what the current
+   * best is, so DISK -- not the shadow's own history -- is the base a newly
+   * cleared level's ordinal is compared against. This is progress.ts's half of
+   * PR #62's defect class: the old three-way max (shadow, newly-cleared level,
+   * disk) let a stale shadow's higher ordinal keep winning even after Reset
+   * progress wrote null to disk elsewhere -- a reset in another tab never stuck
+   * once this tab cleared anything again, however early. Resyncing first makes
+   * disk-null adoptable as "a reset happened": the max collapses to (disk,
+   * newly-cleared level), so a stale shadow can no longer outrank either.
+   *
+   * Gated on storageIsWritable, exactly like the achievements.ts and run.ts
+   * fixes: once this instance's own write has failed, a later getItem can keep
+   * succeeding while reporting nothing this instance ever wrote, and treating
+   * that as "someone else reset it" would erase the shadow -- the one copy of
+   * this session's progress this degrade path exists to protect.
+   */
+  function resync(): void {
+    if (!storageIsWritable) return;
+    shadow = read();
+  }
+
   return {
     highestCleared(): number {
       const ord = ordinalOf(shadow);
@@ -143,20 +175,18 @@ export function createProgressStore(
       // matching the old guard's style (`!Number.isInteger(level) || level <= 0`):
       // there is no safe position to record it at.
       if (ordinalOf(level.id) === -1) return;
-      // Keep whichever of {current shadow, the newly-cleared level, a fresh disk
-      // read} sits LATEST in the CURRENT campaign order -- another tab may have
+      resync();
+      // Keep whichever of {disk, as just resynced, and the newly-cleared level}
+      // sits LATEST in the CURRENT campaign order -- another tab may have
       // cleared further since this instance's shadow was last set, and a blind
-      // write would clobber its unlock. Generalizes the old `Math.max(shadow,
-      // level, read())` from raw integers to ids compared by campaign position.
-      const diskLevelId = read();
-      let best = shadow;
-      for (const candidate of [shadow, level.id, diskLevelId]) {
-        if (ordinalOf(candidate) > ordinalOf(best)) best = candidate;
-      }
-      shadow = best;
+      // write would clobber its unlock.
+      if (ordinalOf(level.id) > ordinalOf(shadow)) shadow = level.id;
       writeRaw(shadow);
     },
     reset(): void {
+      // Deliberately does NOT call resync(): reset is the one explicit action
+      // allowed to replace whatever disk currently holds, the same way run.ts's
+      // startNewRun skips refreshShadowIfEnded -- see resync's doc comment.
       shadow = null;
       writeRaw(null);
     },
