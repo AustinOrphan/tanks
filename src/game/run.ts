@@ -20,25 +20,34 @@ import { LIVES } from '../sim/constants';
  * combine two tabs' independent positions in the same campaign run. This is a plain
  * last-write-wins document, the same as any other single-writer save slot.
  */
-export const RUN_KEY = 'tanks.run.v1';
+export const RUN_KEY = 'tanks.run.v2';
 
 /**
- * The one campaign this build ships. A placeholder identity: #154 is the tracked
- * decoupling that gives campaigns and levels real ids (see the spec's "Campaign levels
- * and arenas" section). Until then, a stored run is checked against this constant so a
- * record from some other campaign -- reachable only by hand-editing storage today --
- * reads as corrupt rather than being silently adopted.
+ * The v1 key this store used before issue #154 gave `currentLevelId` real campaign-
+ * level ids instead of a stringified ARENAS index. A v1 record's `currentLevelId` means
+ * something this build no longer reads the same way, so the bump makes it invisible
+ * (`active()` returns null) rather than silently misresolved -- see CLAUDE.md's
+ * Migration notes. `createRunStore` best-effort deletes it on construction so it does
+ * not sit as permanently inert dead data in every returning player's storage.
+ */
+const LEGACY_RUN_KEY_V1 = 'tanks.run.v1';
+
+/**
+ * The one campaign this build ships -- matches `CAMPAIGN.id` in
+ * `sim/config/campaign.ts` (issue #154). A stored run is checked against this
+ * constant so a record from some other campaign -- reachable only by hand-editing
+ * storage today, since only one campaign is ever validated -- reads as corrupt
+ * rather than being silently adopted.
  */
 export const DEFAULT_CAMPAIGN_ID = 'main';
 
 export interface ActiveRun {
   campaignId: string;
   /**
-   * A stringified 0-based level index -- ARENAS' own array position, which is what
-   * every other module in the tree already uses to name a level. The spec's shape
-   * calls for `currentLevelId: string`; a real `CampaignLevel` id does not exist yet
-   * (#154), so this is the minimal string that satisfies the shape without inventing
-   * that infrastructure early. See levelIdFromIndex/levelIndexFromId below.
+   * A real `CampaignLevel.id` (issue #154), verbatim -- never resolved against
+   * campaign data inside this file. Resolving a string id to a `CampaignLevel` is
+   * levels.ts's job, not this module's: run.ts stays a pure key-value store and never
+   * imports campaign.ts, which is exactly the layering #154 exists to establish.
    */
   currentLevelId: string;
   livesRemaining: number;
@@ -56,18 +65,24 @@ export interface RunStore {
   active(): ActiveRun | null;
   /**
    * New Run: explicitly replaces whatever was active with a fresh run at
-   * `startLevel`, full campaign starting lives (LIVES). The spec requires this to be
-   * a deliberate action, "not... an accident as a side effect of menu navigation" --
-   * callers must not reach this from anywhere but a dedicated New Game affordance.
+   * `startLevelId`, full campaign starting lives (LIVES). The spec requires this to
+   * be a deliberate action, "not... an accident as a side effect of menu navigation"
+   * -- callers must not reach this from anywhere but a dedicated New Game affordance.
+   *
+   * Throws on a non-string or empty id: unlike the old numeric index this replaces,
+   * there is no safe value this function could compute on its own -- the caller
+   * (levels.ts, via `deps.levels.start.id`) always has a real level id to hand, so a
+   * bad argument here is a programmer error, not user-reachable data.
    */
-  startNewRun(startLevel: number): ActiveRun;
+  startNewRun(startLevelId: string): ActiveRun;
   /**
-   * Level clear: advance to `level`, carrying `livesRemaining` forward unchanged
+   * Level clear: advance to `levelId`, carrying `livesRemaining` forward unchanged
    * from what the run already had. No-op if no run is active -- practice and any
    * other non-campaign session must not be able to conjure one into existence by
-   * calling this.
+   * calling this. Also a no-op on a non-string/empty `levelId`, matching this
+   * method's existing silent-refusal style rather than throwing.
    */
-  advanceLevel(level: number, livesRemaining: number): void;
+  advanceLevel(levelId: string, livesRemaining: number): void;
   /**
    * Player death: persist the reduced life count before the player can escape it by
    * refreshing or leaving gameplay (issue #152). No-op if no run is active.
@@ -75,20 +90,6 @@ export interface RunStore {
   setLivesRemaining(lives: number): void;
   /** Game over or campaign completion: the run stops existing. No-op if none is active. */
   endRun(): void;
-}
-
-/** `currentLevelId` -> the 0-based level index every other module uses. */
-export function levelIdFromIndex(index: number): string {
-  return String(index);
-}
-
-/**
- * The inverse. A garbage id (never written by this module, only reachable by hand-
- * editing storage) defaults to 0 rather than propagating NaN into a level lookup.
- */
-export function levelIndexFromId(id: string): number {
-  const n = Number(id);
-  return Number.isFinite(n) && Number.isInteger(n) && n >= 0 ? n : 0;
 }
 
 function isActiveRun(v: unknown): v is ActiveRun {
@@ -110,6 +111,14 @@ export function createRunStore(storage: Storage): RunStore {
   // In-memory shadow: the truth when storage throws, a cache when it works. Same
   // convention as progress.ts and stats.ts.
   let shadow = read();
+  // Best-effort: the orphaned v1 record (see LEGACY_RUN_KEY_V1's doc comment) is
+  // never read again after the bump, so this is pure hygiene, not correctness --
+  // swallowed like every other write on a storage that refuses (private mode).
+  try {
+    storage.removeItem(LEGACY_RUN_KEY_V1);
+  } catch {
+    // Nothing to degrade to: this key is already unread either way.
+  }
   // Flips to false the first time write() catches an exception, and never flips
   // back. Guards refreshShadowIfEnded below -- see its doc comment for why a
   // storage that has already failed to persist THIS instance's own writes must
@@ -200,23 +209,25 @@ export function createRunStore(storage: Storage): RunStore {
     active(): ActiveRun | null {
       return shadow;
     },
-    startNewRun(startLevel: number): ActiveRun {
-      const level = Number.isInteger(startLevel) && startLevel >= 0 ? startLevel : 0;
+    startNewRun(startLevelId: string): ActiveRun {
+      if (typeof startLevelId !== 'string' || startLevelId === '') {
+        throw new Error(`startNewRun requires a non-empty level id, got ${JSON.stringify(startLevelId)}`);
+      }
       const fresh: ActiveRun = {
         campaignId: DEFAULT_CAMPAIGN_ID,
-        currentLevelId: levelIdFromIndex(level),
+        currentLevelId: startLevelId,
         livesRemaining: LIVES,
         status: 'active',
       };
       write(fresh);
       return fresh;
     },
-    advanceLevel(level: number, livesRemaining: number): void {
+    advanceLevel(levelId: string, livesRemaining: number): void {
       refreshShadowIfEnded();
       if (shadow === null) return;
-      if (!Number.isInteger(level) || level < 0) return;
+      if (typeof levelId !== 'string' || levelId === '') return;
       if (!Number.isInteger(livesRemaining) || livesRemaining < 0) return;
-      write({ ...shadow, currentLevelId: levelIdFromIndex(level), livesRemaining });
+      write({ ...shadow, currentLevelId: levelId, livesRemaining });
     },
     setLivesRemaining(lives: number): void {
       refreshShadowIfEnded();

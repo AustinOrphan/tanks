@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ARENAS, createWorldFor } from '../sim/arena';
+import { ARENAS, arenaById, createWorldFor } from '../sim/arena';
 import { cloneWorld, step, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import { COUNTDOWN_TICKS } from '../sim/constants';
@@ -21,7 +21,7 @@ import {
 } from './replay';
 
 const META: ReplayMeta = {
-  level: 0,
+  arenaId: 'arena-01',
   seed: 12345,
   lives: 3,
   unarmedTrigger: 'none',
@@ -58,7 +58,7 @@ function scriptedInputs(seed: number): { sample(): InputState; calls: number; la
 }
 
 function worldFor(meta: ReplayMeta): World {
-  return createWorldFor(ARENAS[meta.level], meta.seed, meta.unarmedTrigger, meta.lives);
+  return createWorldFor(arenaById(meta.arenaId), meta.seed, meta.unarmedTrigger, meta.lives);
 }
 
 describe('canonical / fingerprint', () => {
@@ -208,7 +208,7 @@ describe('createRecordingInput', () => {
     rec.sample();
     rec.sample();
     rec.sample(); // truncates
-    const next: ReplayMeta = { ...META, level: 2, seed: 99 };
+    const next: ReplayMeta = { ...META, arenaId: 'arena-03', seed: 99 };
     rec.begin(next);
     expect(rec.trace().ticks).toEqual([]);
     expect(rec.trace().truncated).toBe(false);
@@ -232,8 +232,8 @@ describe('createRecordingInput', () => {
 describe('replayMetaFor', () => {
   it('reads the world, not the flags that built it', () => {
     const world = createWorldFor(ARENAS[1], 4242, 'both', 2);
-    expect(replayMetaFor(world, 1)).toEqual({
-      level: 1,
+    expect(replayMetaFor(world, 'arena-02')).toEqual({
+      arenaId: 'arena-02',
       seed: 4242,
       lives: 2,
       unarmedTrigger: 'both',
@@ -247,7 +247,7 @@ describe('replayMetaFor', () => {
     // recorded run did not.
     const world = createWorldFor(ARENAS[0], 5, 'none', 3);
     world.tanks.find((t) => t.kind === 'player')!.invincible = true;
-    expect(replayMetaFor(world, 0).invincible).toBe(true);
+    expect(replayMetaFor(world, 'arena-01').invincible).toBe(true);
   });
 });
 
@@ -256,7 +256,7 @@ describe('replayTrace', () => {
     // The claim the whole feature rests on. Record a real run through the real
     // sim, then rebuild the world from meta and re-apply the recorded inputs: the
     // final worlds must be identical, structurally, not merely "still playing".
-    const meta = replayMetaFor(worldFor(META), 0);
+    const meta = replayMetaFor(worldFor(META), 'arena-01');
     const rec = createRecordingInput(scriptedInputs(2024), meta);
 
     let live = worldFor(meta);
@@ -283,7 +283,7 @@ describe('replayTrace', () => {
   it('diverges when a single tick is dropped -- the equality above is load-bearing', () => {
     // The negative control for the test above: if the comparison could not see a
     // one-tick difference, it would pass for a recorder that dropped ticks.
-    const meta = replayMetaFor(worldFor(META), 0);
+    const meta = replayMetaFor(worldFor(META), 'arena-01');
     const rec = createRecordingInput(scriptedInputs(2024), meta);
     let live = worldFor(meta);
     for (let i = 0; i < COUNTDOWN_TICKS + 120; i++) live = step(live, rec.sample()).world;

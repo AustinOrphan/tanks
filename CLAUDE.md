@@ -102,9 +102,10 @@ nothing stops a direct push. The CI gate above is on the DEPLOY, not on the bran
 commit can still land on `main`, it just will not publish. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
 one localStorage namespace (the game's **six** keys are all `tanks.*`-prefixed —
-`progress`, `touch`, `stats`, `custom`, `achievements`, `run`, each `.v1`; this sentence
-said "four" until the mobile-release investigation counted them, and "five" until the
-campaign-run model added a sixth), and the
+`progress`, `touch`, `stats`, `custom`, `achievements`, `run`; five stay `.v1`, and
+`run` is `.v2` since issue #154 gave `currentLevelId` real campaign-level ids instead
+of a stringified `ARENAS` index — this sentence said "four" until the mobile-release
+investigation counted them, and "five" until the campaign-run model added a sixth), and the
 portfolio's root-scoped `/sw.js` service worker controls `/tanks/` and deletes every
 CacheStorage entry it does not own — so an offline feature here needs coordination first.
 
@@ -430,7 +431,17 @@ exist purely to recompute quoted prose — arena-02's `12 of 16`, arena-04's cov
 ratios, and arena-04's bank-reach count (275 cells reached by ricochet, covering
 171 of the 284 nothing else sees) — because all three were measured once by hand
 and nothing checked them again. Quote a measurement in `notes` and you owe it a
-recomputing test.
+recomputing test. **This whole checklist is the `ARENA_DEFS` side only.** Since
+issue #154, a new board joining the catalog (`arenas.json`) and a new LEVEL
+joining the campaign (`config/data/campaign.json` / `CAMPAIGN_LEVELS`) are two
+separate, consciously-linked edits — `campaign.test.ts`'s arenaId-set pin forces
+the link (an arena shipped but not placed in the campaign, or the reverse, fails
+there), but nothing on the list above does. Landing an arena without a matching
+campaign entry is a legal, deliberate state (the campaign's own "out of scope":
+not every shipped arena has to be in play), so a new arena alone does not
+necessarily mean a new level's worth of pins moved — check `campaign.test.ts`
+and `achievements.test.ts`'s demolition-threshold sum (now over `CAMPAIGN_LEVELS`,
+not raw `ARENAS`) if it does.
 
 **Walls load as geometry, not as cells.** `loadArena` merges SOLID cells into maximal
 rectangles (`mergeSolidRuns`) and numbers tanks from a counter of their own. Both exist
@@ -646,6 +657,20 @@ proof, name the dimension it sorts, rounds or aggregates away.
   `gh pr edit --body-file`, re-published the UNCHANGED body and printed "edited". Read the
   value back and grep it for the string you expect to be **gone**, not only the one you
   expect to be there.
+
+**A cleanup call at the end of a combined test can erase exactly the state its own
+assertion exists to catch.** The #156 review's adversarial mutation made `advanceLevel`
+CONJURE a run into existence when none was active — a real defect, since practice and
+any non-campaign session must never be able to do that. It passed all 25 of
+`run.test.ts`'s tests anyway: the pre-existing test called `advanceLevel`, then
+`setLivesRemaining`, then `endRun`, with one assertion at the very end — and `endRun`'s
+own no-op-when-no-run guard fires last regardless, writing the shadow back to `null` and
+cleaning up the mutation's evidence before the single trailing assertion ever ran. Split
+into ISOLATED per-method tests — each on its own fresh store, each checked immediately
+after its one call, nothing after it to clean up — and the mutation is caught. The
+general form: a test combining several calls with one assertion at the end is blind to
+any defect a LATER call's own no-op path happens to undo: `run.test.ts`'s
+`describe('createRunStore: no run yet', ...)` block carries the repaired version.
 
 ## Merge bar
 

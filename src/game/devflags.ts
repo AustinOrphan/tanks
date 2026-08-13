@@ -68,9 +68,9 @@ export interface DevFlags {
   mineTimer: boolean;
 
   /**
-   * Jump straight to a level: a 1-based index into the shipped sequence, or the
-   * word `sandbox`. Range-checking against ARENAS is the caller's job -- knowing
-   * how many levels exist would mean importing the sim here.
+   * Jump straight to a level: a 1-based index into CAMPAIGN_LEVELS, or the word
+   * `sandbox`. Range-checking against it is the caller's job -- knowing how many
+   * levels exist would mean importing the sim here.
    */
   level: number | 'sandbox' | null;
   /**

@@ -3,6 +3,18 @@ import { createWorld, type World } from './world';
 import { LIVES } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { SPAWN_LETTERS } from './config/arena-types';
+import {
+  CAMPAIGN,
+  CAMPAIGN_LEVELS,
+  campaignLevelById,
+  FIRST_CAMPAIGN_LEVEL,
+} from './config/campaign';
+import type { CampaignDefinition, CampaignLevel } from './config/campaign-types';
+
+// Re-exported so `src/game/` keeps importing campaign identity from the same place
+// it already imports arena identity (`ARENAS`/`arenaById`) -- see config/campaign.ts.
+export { CAMPAIGN, CAMPAIGN_LEVELS, campaignLevelById, FIRST_CAMPAIGN_LEVEL };
+export type { CampaignDefinition, CampaignLevel };
 
 export interface Arena {
   cols: number;
@@ -20,6 +32,12 @@ export const ARENA_02: Arena = arenaById('arena-02');
 export const ARENA_03: Arena = arenaById('arena-03');
 export const ARENA_04: Arena = arenaById('arena-04');
 export const ARENAS: Arena[] = ARENA_DEFS;
+// Re-exported (not just consumed above) so a CampaignLevel's arenaId -- a level's
+// only pointer to its board, since #154 -- can be resolved from the same module
+// `src/game/` already imports arena identity from. ARENA_DEFS carries `id`; the
+// narrower `Arena` shape above deliberately does not, so a caller that needs an
+// arena's id reaches for this rather than `ARENAS[i]`.
+export { arenaById, ARENA_DEFS };
 
 /**
  * The playable area, in world units. Derived from the same `cols * cellSize`

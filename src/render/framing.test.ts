@@ -253,9 +253,11 @@ describe('the board actually fills the screen', () => {
     // below cannot fail from any PRODUCTION change -- both sides move together -- so it
     // is kept only as a loop-integrity check (it would catch a stray `continue` added
     // to this test), and it is this line that carries the production sensitivity: it
-    // fails when a level is added, which is exactly when the floor deserves
-    // re-measuring.
-    expect(ARENAS.length, 'a level was added; re-measure the coverage floor').toBe(5);
+    // fails when an arena is added, which is exactly when the floor deserves
+    // re-measuring. Scoped to the raw catalog on purpose (issue #154: ARENAS is
+    // catalog order, not campaign/level order) -- this floor is a property of the
+    // BOARDS that ship, independent of which level plays which.
+    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(5);
     expect(checked).toBe(ARENAS.length * ASPECTS.length);
     expect(thin).toEqual([]);
   });

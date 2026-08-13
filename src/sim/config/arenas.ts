@@ -4,9 +4,12 @@ import { validateArenas } from './validate';
 import arenasJson from './data/arenas.json';
 
 /**
- * The shipped arenas, in PLAY ORDER -- array order is level order, so there is no
- * parallel index to drift. Validated at load: a bad edit is a boot failure naming
- * the exact path (arenas[2].grid[4]), never a silently malformed board.
+ * The shipped arenas -- a catalog of reusable boards, looked up by id. Array order
+ * is CATALOG order, not level order; campaign order (issue #154, which level plays
+ * which arena and in what sequence) lives in `campaign.ts`, decoupled on purpose so
+ * the two can be edited independently. Validated at load: a bad edit is a boot
+ * failure naming the exact path (arenas[2].grid[4]), never a silently malformed
+ * board.
  */
 export const ARENA_DEFS: ArenaDefinition[] = validateArenas(arenasJson);
 

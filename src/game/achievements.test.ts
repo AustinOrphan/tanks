@@ -7,7 +7,7 @@ import {
   type AchievementContext,
 } from './achievements';
 import { ZERO_STATS } from './stats';
-import { ARENAS, loadArena } from '../sim/arena';
+import { arenaById, loadArena, CAMPAIGN_LEVELS } from '../sim/arena';
 
 const ctx = (over: Partial<AchievementContext> = {}): AchievementContext => ({
   lifetime: { ...ZERO_STATS },
@@ -205,9 +205,14 @@ describe('demolition is scaled to the walls the game actually contains', () => {
     // "less than one clear of level 2". Nothing caught it: no test referenced the number.
     //
     // Recomputed from the shipped arenas rather than pinned as a literal, so a future
-    // rescale fails HERE instead of silently retuning the achievement.
-    const total = ARENAS.reduce(
-      (n, a) => n + loadArena(a).walls.filter((w) => w.kind === 'destructible').length,
+    // rescale fails HERE instead of silently retuning the achievement. Summed over
+    // CAMPAIGN_LEVELS (issue #154), not the raw ARENAS catalog: an arena shipped but
+    // never placed in the campaign would otherwise silently inflate the assumed
+    // playthrough count. Numerically identical today -- campaign.json mirrors
+    // ARENA_DEFS 1:1 -- so this closes a latent staleness gap rather than fixing an
+    // active defect.
+    const total = CAMPAIGN_LEVELS.reduce(
+      (n, l) => n + loadArena(arenaById(l.arenaId)).walls.filter((w) => w.kind === 'destructible').length,
       0,
     );
     expect(total).toBeGreaterThan(0); // population guard: not a vacuous ratio
