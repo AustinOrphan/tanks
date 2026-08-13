@@ -1,16 +1,26 @@
 /**
- * Runs the golden trace (tools/baseline/trace.ts) in a REAL browser and prints its
- * fingerprint, per engine.
+ * Runs the golden trace (tools/baseline/trace.ts) AND the large-magnitude angle probe
+ * (tools/baseline/angles.ts) in a REAL browser and prints both fingerprints, per engine.
+ * One page load runs both measurements (tools/baseline/page.html) so the cost of starting
+ * vite and launching each browser is paid once, not twice.
  *
- * Why this exists: the sim's cross-engine bit-equality is the single gating measurement
- * for any peer-deterministic multiplayer -- lockstep and rollback both die if two engines
- * disagree by one ULP on Math.hypot or Math.cos, and the sim has 21 transcendental calls
- * on 18 lines (docs/research/multiplayer.md). This tool does not ANSWER that question. It
- * makes the answer a one-command check:
+ * Why the golden trace exists: the sim's cross-engine bit-equality is the single gating
+ * measurement for any peer-deterministic multiplayer -- lockstep and rollback both die if
+ * two engines disagree by one ULP on Math.hypot or Math.cos, and the sim has 21
+ * transcendental calls on 18 lines (docs/research/multiplayer.md). This tool does not
+ * ANSWER that question. It makes the answer a one-command check:
  *
  *   npm run trace:browser -- --browser chromium,firefox,webkit
  *
- * What a green run proves is bounded, and the bound matters:
+ * Why the angle probe rides along: the golden trace runs 2500 ticks per (arena, seed) and,
+ * measured on this checkout, never drives an accumulated bodyAngle/turretAngle past ~5.8
+ * rad -- inside its own first reachability band. tools/baseline/angles.ts sweeps sin/cos
+ * out to +/-1e8, plus atan2/hypot/sqrt combinatorics, so a clean trace agreement is not
+ * mistaken for evidence about the large-magnitude regime issue #133's gate actually needs.
+ * See that module's header for the full argument and for what ANGLE_HASH does and does not
+ * cover.
+ *
+ * What a green run proves is bounded, and the bound matters, for BOTH measurements:
  *   - Playwright's webkit is a JavaScriptCore build, NOT shipped Safari, and there is no
  *     iOS engine here at all. The Safari/iOS half of the question stays OPEN however this
  *     exits. Take that half by opening tools/baseline/page.html by hand on the device
@@ -82,6 +92,7 @@ vite.on('exit', () => {
 
 let failed = 0;
 const results = [];
+const angleResults = [];
 try {
   for (let i = 0; ; i++) {
     if (viteExited) throw new Error('vite exited before serving; is the port taken?');
@@ -106,10 +117,17 @@ try {
       page.on('pageerror', (e) => pageErrors.push(String(e)));
       await page.goto(`${BASE}tools/baseline/page.html`, { waitUntil: 'load' });
       // Generous: the trace is ~4 s of blocked main thread under Node and slower engines
-      // are slower still. A timeout here is a real failure, not flake -- report it.
-      await page.waitForFunction(() => !!window.__traceResult, { timeout: 180_000 });
+      // are slower still. A timeout here is a real failure, not flake -- report it. Waits
+      // for BOTH results: the page sets each independently once it is fully built (see
+      // page.html), so waiting on the pair never reads a half-filled object of either.
+      await page.waitForFunction(() => !!window.__traceResult && !!window.__angleResult, {
+        timeout: 180_000,
+      });
       const r = await page.evaluate(() => window.__traceResult);
+      const ar = await page.evaluate(() => window.__angleResult);
       for (const e of pageErrors) console.log(`  page error [${name}] -- ${e}`);
+
+      // ---- golden trace: identical reporting to before the angle probe rode along ----
       results.push({ name, ...r, pageErrors: pageErrors.length });
       if (r.error) {
         failed++;
@@ -120,6 +138,28 @@ try {
         );
         console.log(`        ${r.userAgent}`);
         if (!r.match) failed++;
+      }
+
+      // ---- angle probe: same shape, its own line, prefixed so the two never blur --------
+      // NOT wired into `failed`/the exit code on a MISMATCH, unlike the trace above. The
+      // trace's BASELINE_HASH is a validated invariant (proven to hold across three real
+      // engines when it was pinned), so any deviation is a regression worth a red exit.
+      // ANGLE_HASH is not that: it is simply whatever Node's V8 computed, and measured on
+      // this checkout, chromium/firefox/webkit never agree with it or with each other on
+      // this sweep (see angles.ts's header and the commit that introduced this file). CI's
+      // "Baseline trace (chromium)" step runs this file with no arguments -- one engine --
+      // and gates the Pages deploy; wiring an unfixable, structural mismatch into `failed`
+      // would turn that gate permanently red for a finding, not a defect. A hard error
+      // (the sweep throwing, e.g. crypto.subtle missing) is still a real tool failure and
+      // still counts.
+      angleResults.push({ name, ...ar });
+      if (ar.error) {
+        failed++;
+        console.log(`  FAIL  angle ${name}: ${ar.error}`);
+      } else {
+        console.log(
+          `  ${ar.match ? 'MATCH' : 'MISMATCH'}  angle ${name}  ${ar.hash}  (${ar.ms} ms, ${ar.bands.length} bands)`,
+        );
       }
     } catch (e) {
       failed++;
@@ -148,6 +188,53 @@ try {
     console.log('Engines covered: ' + opts.browsers.join(', ') + '.');
     console.log('NOT covered: shipped Safari, iOS, and any non-x86-64 CPU.');
   }
+
+  // ---- angle probe agreement, reported the same way, plus per-band bisection ----
+  const angleHashes = new Set(angleResults.filter((r) => r.hash).map((r) => r.hash));
+  console.log('');
+  if (angleHashes.size > 1) {
+    console.log(
+      `ANGLE PROBE: ENGINES DISAGREE: ${angleHashes.size} distinct hashes across ` +
+        `${angleResults.length} run(s).`,
+    );
+    console.log('That is a direct, large-magnitude-regime observation for issue #133:');
+    console.log('these engines do not agree on sin/cos/atan2/hypot everywhere the sim can');
+    console.log('reach, even though they agree on the golden trace.');
+    // Bisect: compare every band's own sub-hash across engines, so the report names WHICH
+    // function/reachability-band diverges instead of only the rolled-up hash.
+    const withBands = angleResults.filter((r) => Array.isArray(r.bands));
+    if (withBands.length > 1) {
+      const bandNames = withBands[0].bands.map((b) => b.name);
+      for (const bandName of bandNames) {
+        const perEngine = withBands.map((r) => {
+          const b = r.bands.find((x) => x.name === bandName);
+          return { name: r.name, hash: b?.hash };
+        });
+        const distinct = new Set(perEngine.map((e) => e.hash));
+        if (distinct.size > 1) {
+          const detail = perEngine.map((e) => `${e.name}=${(e.hash ?? '?').slice(0, 12)}`).join('  ');
+          console.log(`  DIVERGES  ${bandName}  ${detail}`);
+        }
+      }
+    }
+  } else if (angleResults.length > 0 && angleResults.every((r) => !r.error && r.match)) {
+    // Only reachable when every engine run this session BOTH agrees with each other
+    // (angleHashes.size <= 1, the branch above) AND matches the Node-pinned ANGLE_HASH --
+    // `r.match` is checked explicitly here because a single mismatching engine also has
+    // angleHashes.size 1 (one hash trivially "agrees" with itself), which would otherwise
+    // print this same line while being wrong.
+    console.log(
+      `angle probe: all ${angleResults.length} engine(s) agree with the pinned baseline: ` +
+        `${[...angleHashes][0]}`,
+    );
+  } else if (angleResults.length > 0 && angleResults.every((r) => !r.error)) {
+    console.log(
+      `angle probe: does not match the pinned V8 baseline (ANGLE_HASH) on at least one ` +
+        'engine -- see the MISMATCH line(s) above.',
+    );
+  }
+
+  console.log('');
   console.log(failed === 0 ? '' : `${failed} check(s) FAILED`);
   process.exitCode = failed === 0 ? 0 : 1;
 } finally {
