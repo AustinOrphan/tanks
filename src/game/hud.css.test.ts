@@ -336,6 +336,30 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
+  it('centres the win/lose/pause/title panel text, so a wrapped heading does not read as left-shifted (issue #151)', () => {
+    // `.hud-title` is 56px/900: at phone widths a two- or three-digit level number
+    // ("Level 12 cleared!") does not fit one line and wraps. A wrapped block-level
+    // heading with no declared width takes the FULL flex-item width -- fit-content
+    // collapses to the container's available width once max-content exceeds it -- so
+    // the browser's default `text-align: left` flushed both lines against the left
+    // edge while `.hud-subtitle` and `.hud-action`, short enough to never wrap, stayed
+    // shrink-to-fit and genuinely centred beside it. Measured in real Chromium against
+    // the production DOM (390x844, "Level 3 cleared!", a Range over each wrapped
+    // line's text node rather than the block's own line box, which always spans the
+    // full container width regardless of glyph extent): before this fix the two lines'
+    // glyph runs centred 99.6px and 89.2px off the 195px viewport centre; after,
+    // within 0.1px of it. `.hud-achievements` and `.hud-levelselect` already carry
+    // `text-align: center` for the same reason (see `still carries the rules the
+    // features depend on` above) -- `.hud-panel` did not.
+    //
+    // Breaks if `text-align: center` is removed (or renamed) on `.hud-panel`.
+    const panel = document.createElement('div');
+    panel.className = 'hud-panel';
+    document.body.appendChild(panel);
+    expect(getComputedStyle(panel).textAlign).toBe('center');
+    document.body.innerHTML = '';
+  });
+
   it('gives the preview canvas an explicit size', () => {
     // A real browser falls a sizeless <canvas> back to 300x150 (the HTML
     // replaced-element default) -- jsdom does not model that (a bare canvas here
