@@ -27,9 +27,11 @@ a fixed position, so couch co-op needs no split-screen work at all.
 
 **The one thing that decides whether online is possible on the cheap — bit-identical floating
 point across Chrome, Firefox and Safari — was UNMEASURED when this was written.** It is now
-half-measured: see the update under open question 1. Three engines (V8, SpiderMonkey and
-Playwright's JavaScriptCore) agree with the Node baseline on Linux x86-64; shipped Safari,
-iOS and non-x86-64 remain untested.
+half-measured, and known to be narrower than it first looked: see the update under open
+question 1, and the note under "Cross-engine floating point is genuinely uncertain" below.
+Three engines (V8, SpiderMonkey and Playwright's JavaScriptCore) agree with the Node baseline
+on Linux x86-64 for the golden TRACE; shipped Safari, iOS and non-x86-64 remain untested, and
+the underlying transcendental functions themselves do NOT agree (see below).
 
 ---
 
@@ -112,10 +114,41 @@ it is the only such site.
 ### Cross-engine floating point is genuinely uncertain
 
 - ECMA-262 recommends but does not require fdlibm for `Math.cos`/`sin`/`tan`.
-  > **UNSUPPORTED as cited.** The spec text was not retrieved verbatim (four WebFetch
-  > attempts on tc39.es and 262.ecma-international.org returned only the table of contents).
-  > Corroborated by search but not by the primary document. Settle it against the ECMA-262
-  > PDF, sections 4.4.1 and 21.3.2.
+  > **SUPPORTED, retrieved verbatim 2026-08-12.** Two more WebFetch attempts this session, both
+  > against this same URL, hit the same wall as before — the tool's summarizing model returned
+  > only the multipage table of contents and reported the body "truncated due to length" (six
+  > failed direct attempts at this section's text across two sessions now: four before this
+  > one, two here). A third WebFetch this session, against the multipage INDEX page rather
+  > than the section itself, was a discovery probe for a working link and also returned only a
+  > summary of the table of contents — not counted in the six above, since it never targeted
+  > the section text. A direct `curl` of the same URL, parsed by hand, retrieved the clause.
+  > ECMA-262 §21.3.2 "Function Properties of the Math Object" is
+  > byte-identical between the ratified ES2025 edition (16th edition, ratified 2025-06-25)
+  > (https://262.ecma-international.org/16.0/index.html#sec-function-properties-of-the-math-object)
+  > and the current living draft
+  > (https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-function-properties-of-the-math-object,
+  > self-titled "ECMAScript® 2027 Language Specification" at retrieval), both retrieved
+  > 2026-08-12. Quoted in full:
+  >
+  > > The behaviour of the functions acos, acosh, asin, asinh, atan, atanh, atan2, cbrt, cos,
+  > > cosh, exp, expm1, hypot, log, log1p, log2, log10, pow, random, sin, sinh, tan, and tanh
+  > > is not precisely specified here except to require specific results for certain argument
+  > > values that represent boundary cases of interest. For other argument values, these
+  > > functions are intended to compute approximations to the results of familiar
+  > > mathematical functions, but some latitude is allowed in the choice of approximation
+  > > algorithms. The general intent is that an implementer should be able to use the same
+  > > mathematical library for ECMAScript on a given hardware platform that is available to C
+  > > programmers on that platform.
+  > >
+  > > Although the choice of algorithms is left to the implementation, it is recommended (but
+  > > not specified by this standard) that implementations use the approximation algorithms
+  > > for IEEE 754-2019 arithmetic contained in fdlibm, the freely distributable mathematical
+  > > library from Sun Microsystems (http://www.netlib.org/fdlibm).
+  >
+  > `sin`, `cos`, `tan` and `atan2` are all named in that first sentence's implementation-
+  > approximated list (so is `hypot`, see below); `sqrt` is not (see the next flag).
+  > "Recommends but does not require" is now the primary document's own wording, retrieved
+  > rather than paraphrased.
 - V8 ships an fdlibm port, and as of a 2026-07-12 measurement `Math.sin/cos/tan/exp/pow/log/
   atan/atan2` do not leak the host OS — **but `Math.tanh` now does**, because V8 commit
   `c1486295ae5` replaced its bundled fdlibm `tanh` with `std::tanh` reading the host libm,
@@ -134,16 +167,92 @@ it is the only such site.
   Nightly. No primary source was found showing SpiderMonkey ships fdlibm by default today.
 - JavaScriptCore's (Safari's) status could not be verified from a primary source.
 
-> **UNSUPPORTED:** "`Math.sqrt` is safe because it is a hardware operation and correctly
-> rounded." IEEE 754-2019 does require `squareRoot` to be correctly rounded, and search
-> suggests `Math.sqrt` is not in ECMAScript's implementation-approximated set — but the spec
-> text confirming ECMAScript binds `Math.sqrt` to IEEE `squareRoot` was not retrieved, and
-> "hardware operation" is an implementation detail, not a spec guarantee.
+> **SUPPORTED (spec + measurement), retrieved/measured 2026-08-12.** "Hardware operation"
+> was, and remains, the unsupported part — the spec makes no claim about hardware, and this
+> discharge does not resurrect it. Two independent legs now stand in its place:
+>
+> **Spec leg.** The §21.3.2 note quoted above lists 23 functions as implementation-
+> approximated (counted from the quote above: acos, acosh, asin, asinh, atan, atanh, atan2,
+> cbrt, cos, cosh, exp, expm1, hypot, log, log1p, log2, log10, pow, random, sin, sinh, tan,
+> tanh); `sqrt` is not one of them. Its own clause, ES2025 §21.3.2.33
+> (https://262.ecma-international.org/16.0/index.html#sec-math.sqrt, byte-identical in the
+> current tc39.es living draft, both retrieved verbatim 2026-08-12), reads in full:
+>
+> > This function returns the square root of x.
+> >
+> > It performs the following steps when called:
+> > 1. Let n be ? ToNumber(x).
+> > 2. If n is one of NaN, +0𝔽, -0𝔽, or +∞𝔽, return n.
+> > 3. If n < -0𝔽, return NaN.
+> > 4. Return 𝔽(the square root of ℝ(n)).
+>
+> Step 4 takes ℝ(n) — the EXACT real-number square root — and converts it through 𝔽, the
+> spec's "Number value for" operator, defined (ES2025 §6.1.6.1,
+> https://262.ecma-international.org/16.0/index.html#number-value-for, retrieved verbatim
+> 2026-08-12) as choosing the closest representable double to the exact value, ties broken to
+> the even significand: round-to-nearest, ties-to-even, applied to the true mathematical
+> result. That is the textbook definition of "correctly rounded" — established by reading the
+> primary document's own two clauses together, not inferred from a blog, even though the
+> literal phrase "correctly rounded" appears in neither.
+>
+> **Measured leg.** `tools/baseline/angles.ts` (PR #160, commit `87d9855`) swept `sqrt` as a
+> control band — 2,000 samples spanning denormal-to-near-overflow magnitudes — across
+> Node/V8, chromium 151 (V8), firefox 153 (SpiderMonkey) and Playwright's webkit
+> (JavaScriptCore, Linux build): all four produced the same sqrt sub-hash, the only one of
+> the five functions swept (sin, cos, atan2, hypot, sqrt) that did not diverge. See
+> `tools/baseline/angles.ts`'s module header ("MEASURED" paragraph) and [issue #133's
+> comment](https://github.com/AustinOrphan/tanks/issues/133#issuecomment-5275673368).
 
-> **UNSUPPORTED:** "`Math.hypot` is not part of the fdlibm set engines converged on." The
-> cited measurement neither tests nor mentions `hypot`. Supported by omission only, which is
-> not support — and it was the stated justification for a proposed hypot→sqrt rewrite. **Do
-> not execute that rewrite on this reasoning.**
+> **PARTIALLY DISCHARGED, updated 2026-08-12.** The fdlibm-history claim — "not part of the
+> fdlibm set engines converged on" — stays UNVERIFIED: no primary source for fdlibm's own
+> hypot history was retrieved this session either, and the cited 2026-07-12 scrapfly
+> measurement still neither tests nor mentions `hypot`. Supported by omission only is still
+> not support.
+>
+> But that historical question turns out to be orthogonal to what this doc actually needs,
+> which is whether `hypot` is safe to assume portable, not why it might not be. PR #160
+> (`tools/baseline/angles.ts`, commit `87d9855`) measured portability directly: 2,000 pairs
+> spanning denormal-to-near-overflow magnitudes, hashed over exact float64 bits, across
+> Node/V8, chromium 151 (V8), firefox 153 (SpiderMonkey) and Playwright's webkit
+> (JavaScriptCore, Linux build). Result: hypot diverges THREE-WAY — chromium, firefox and
+> webkit each produced a distinct sub-hash, and only Node and chromium agreed with each other
+> (verified at the full 64-hex-digit hash, not the runner's truncated print). See
+> `tools/baseline/angles.ts`'s module header and [issue #133's
+> comment](https://github.com/AustinOrphan/tanks/issues/133#issuecomment-5275673368).
+>
+> **Do not execute the proposed hypot→sqrt rewrite on the fdlibm-history reasoning — it is
+> still unverified — but the measured three-way divergence is now an independent, sufficient
+> reason `Math.hypot` cannot be assumed portable as written.**
+
+**This section's uncertainty is no longer only hypothetical — PR #160 (commit `87d9855`)
+measured it directly.** `tools/baseline/angles.ts` runs a deterministic, exact-bit-input
+sweep of the sim's five transcendental functions (sin, cos, atan2, hypot, sqrt) across five
+magnitude bands, hashed over raw float64 bits, in Node/V8, chromium 151 (V8), firefox 153
+(SpiderMonkey) and Playwright's webkit (JavaScriptCore, Linux build, UA-spoofed as macOS
+Safari). Measured (`npm run trace:browser -- --all`, this checkout, verified twice —
+implementer then adjudicator, hashes matched verbatim): chromium (`6fb1a390…`), firefox
+(`01c09fbb…`) and webkit (`702a88b5…`) each produce a hash distinct from Node's pinned
+`ANGLE_HASH` (`d5d81535…`) and from each other. sin/cos disagree pairwise across all three
+browser engines on every band swept, including ±2π — the same order of magnitude the golden
+trace itself already samples. atan2 splits two camps (chromium ≡ webkit, firefox ≡ Node);
+hypot disagrees three-way (Node ≡ chromium only, per the flag above). sqrt — the control, the
+one function ES2025 specifies as correctly rounded (see the flag above) — agreed across all
+four runtimes, which is what makes the rest of this a measurement of sin/cos/atan2/hypot
+rather than a broken harness.
+
+**The lattice caveat, so this is not overclaimed:** the golden trace (`BASELINE_HASH`) still
+agrees on all three browser engines (open question 1, below). Instrumented across all 5
+shipped arenas × 6 seeds × 2500 ticks, neither `bodyAngle` nor `turretAngle` ever exceeds
+5.81 rad / 5.19 rad — inside `angles.ts`'s own smallest reachability band (±2π) — and
+gameplay visits a sparse, structured lattice of angle values within it that happens to miss
+the inputs where sin/cos/atan2/hypot diverge. So the trace's three-engine agreement is a
+lattice artifact of what gameplay happens to sample, not evidence the functions themselves
+agree; that is exactly what this measurement now shows directly instead of leaving inferred.
+Sim-LEVEL divergence — an actual replay desyncing a peer — remains unobserved; #160 measured
+the functions, not gameplay. See `tools/baseline/angles.ts`'s module header for the full
+derivation and [issue #133's
+comment](https://github.com/AustinOrphan/tanks/issues/133#issuecomment-5275673368) for the
+write-up.
 
 ### The camera already frames the whole board
 
@@ -276,6 +385,16 @@ behaviour under the `/tanks/` deploy are all unverified.
    two engines disagree by one ULP on `Math.hypot` or `Math.cos`, peers diverge within
    seconds and no netcode engineering fixes it — the fallback is an authoritative server,
    which is the most expensive of the four designs. No second engine is installed here.
+
+   > **Updated 2026-08-12** (PR #160, commit `87d9855`, issue #133). The "if" in this
+   > blocker's second sentence is no longer hypothetical for the functions themselves:
+   > chromium, firefox and webkit disagree on both `Math.hypot` (three-way) and `Math.cos`
+   > (pairwise, on every band swept). See "Cross-engine floating point is genuinely
+   > uncertain" above and `tools/baseline/angles.ts`. What is still unmeasured is the
+   > SIM-level consequence — no divergent input has been shown to reach a real replay,
+   > because the golden trace's sampled lattice never leaves the smallest band. **The
+   > blocker stands**: "unmeasured" now means unmeasured at the gameplay level specifically,
+   > not at the function level generally.
 4. **Changing `step()`'s signature risks the project's only behavioural regression guard.**
    `tools/baseline/trace.test.ts:14` calls `step(w, { move, aim, fire, mine })` with a single
    `InputState` and pins the hash at :42. A multi-input refactor either re-records that hash
@@ -311,6 +430,25 @@ behaviour under the `/tanks/` deploy are all unverified.
    > about the code paths that trajectory exercises, not a proof about `Math.hypot`
    > generally. The Safari/iOS half is now a task with a known method — open the page on
    > the device — rather than an unknown.
+   >
+   > **Further measured 2026-08-12** (PR #160, commit `87d9855`, issue #133). "Not a proof
+   > about `Math.hypot` generally" turned out to be exactly right, and it is no longer only a
+   > caveat — `tools/baseline/angles.ts` tested the general claim directly, on the same three
+   > engines, and it fails: chromium (`6fb1a390…`), firefox (`01c09fbb…`) and webkit
+   > (`702a88b5…`) produced three MUTUALLY DISTINCT hashes on a dense transcendental sweep,
+   > none matching Node's `d5d81535…`. sin/cos disagree pairwise on every magnitude band
+   > swept, including ±2π; atan2 splits chromium ≡ webkit vs firefox ≡ Node; hypot disagrees
+   > three-way (Node ≡ chromium only). sqrt — ES2025's one correctly-rounded function, see
+   > the flags above — agreed across all four, which is the harness's own validity check.
+   > The golden trace's agreement is a LATTICE ARTIFACT: instrumented across all 5 arenas × 6
+   > seeds × 2500 ticks, `bodyAngle`/`turretAngle` never exceed 5.81/5.19 rad — inside
+   > `angles.ts`'s own smallest band — and gameplay's sampled inputs within that band happen
+   > to miss where the functions diverge. **So this question's headline answer is now more
+   > precise: YES for this one sampled trajectory, NO for the underlying functions in
+   > general** — the gate this doc opened with ("bit-identical floating point... was
+   > UNMEASURED") is now answered at the function level, and the answer is divergence, not
+   > agreement. See `tools/baseline/angles.ts`'s module header and [issue #133's
+   > comment](https://github.com/AustinOrphan/tanks/issues/133#issuecomment-5275673368).
 2. **Should a second player be a new `TankKind` (`'player2'`) or a new field on `Tank`
    (e.g. `controlledBy`)?** Prototype both far enough to count touched files. The `TankKind`
    route gets compiler help — a new kind is a compile error until `TANK_KINDS` lists it,
@@ -364,6 +502,18 @@ Other PR-able items, filed as issues alongside this document: gamepad support be
 browser (which builds the rig the determinism question needs); and correcting CLAUDE.md's
 localStorage key count from four to five.
 
-**Deliberately NOT proposed as a PR:** replacing `Math.hypot` with `Math.sqrt(x*x + y*y)`.
-The case for it rests on an uncited spec claim about `Math.sqrt` and an inference from a blog
-post that never mentions `hypot`. Read ECMA-262 §21.3.2 first.
+**Still not proposed as a PR — but both of this paragraph's original grounds are now resolved
+above rather than open, so the reasoning that stands has changed.** The spec claim is no
+longer uncited: ES2025 §21.3.2.33 is quoted in full at the `Math.sqrt` flag above. The
+blog-inference problem is gone too — the `Math.hypot` flag above measured it diverging
+three-way directly, stronger evidence against `hypot`'s portability than anything cited here
+originally. That measurement could read as strengthening the case FOR the rewrite; it does
+not, for a reason neither original ground touched: `Math.sqrt(x*x + y*y)` is not the same
+computation as `Math.hypot(x, y)`. `x*x + y*y` overflows to `Infinity` before `sqrt` ever
+runs, at magnitudes where `hypot` scales internally to avoid exactly that (see
+`tools/baseline/angles.ts`'s `MAGNITUDE_DECADES` comment, which exists for this reason), and
+nothing measured here checked what `sqrt(x*x + y*y)` itself returns, cross-engine, at the
+sim's own coordinate scale — only that bare `sqrt` is portable in general and bare `hypot` is
+not. **Read ECMA-262 §21.3.2 first, and then measure the substitute FORMULA itself before
+proposing this as a PR** — `sqrt`'s portability does not transfer to a different expression
+just because `sqrt` appears in it.
