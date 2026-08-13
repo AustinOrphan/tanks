@@ -255,11 +255,17 @@ export function reflectSweep(
     let reflected: Vec2;
 
     if (corner) {
-      // Exact corner: reflect both axes -> retroreflection, two hit records.
+      // Exact corner: reflect both axes -> retroreflection. ONE hit record, not
+      // two: the two axis flips are one physical deflection point, not two
+      // separate bounces, and bouncesLeft below charges exactly one for it either
+      // way -- so a corner used to emit an extra ricochet event beyond what the
+      // budget accounted for (double audio/particles, and a bounceIndex that could
+      // repeat across ticks in bullets.ts's consumedBefore + i indexing). Collapsing
+      // to one record makes events-emitted and budget-consumed move 1:1, matching
+      // bankShot's own single-reflection corner model (targeting.ts).
       const nx = Math.abs(pt.x - box.minX) < SWEEP_EPS ? -1 : 1;
       const ny = Math.abs(pt.y - box.minY) < SWEEP_EPS ? -1 : 1;
-      hits.push({ point: pt, normal: { x: nx, y: 0 }, wallIndex: bestWall });
-      hits.push({ point: pt, normal: { x: 0, y: ny }, wallIndex: bestWall });
+      hits.push({ point: pt, normal: { x: nx, y: ny }, wallIndex: bestWall });
       reflected = { x: -remaining.x, y: -remaining.y };
     } else {
       hits.push({ point: pt, normal: best.normal, wallIndex: bestWall });

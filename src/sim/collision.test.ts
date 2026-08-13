@@ -172,20 +172,28 @@ describe('reflectSweep', () => {
     expect(res.expired).toBe(false);
   });
 
-  it('EXACT corner hit produces TWO SweepHits at the same point (both axes reflect)', () => {
+  it('EXACT corner hit produces ONE SweepHit at the point (both axes still retroreflect)', () => {
+    // SUBJECT CHANGED from "produces TWO SweepHits at the same point": the corner
+    // branch used to push two hit records for one physical deflection point, which
+    // double-fired ricochet audio/particles for a single bounce (director.ts:31-33,
+    // particles.ts:88-90) while bouncesLeft decremented only once -- and let
+    // bounceIndex repeat across ticks in bullets.ts's consumedBefore + i indexing.
+    // Adjudicated fix: a corner is ONE deflection, so it is ONE hit record, matching
+    // bankShot's own corner model (see backlog.md) and this codebase's existing rule
+    // that a same-tick/same-position double event is a bug (tank-destroyed dedup in
+    // particles.ts:94-98, director.ts:37-42). The retroreflected DIRECTION is
+    // unchanged by this fix -- both axes still flip -- only the bookkeeping collapses.
     const wall: AABB = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     const res = reflectSweep({ x: -1, y: -1 }, { x: 1, y: 1 }, [wall], 3);
-    expect(res.hits).toHaveLength(2);
+    expect(res.hits).toHaveLength(1);
     expect(res.hits[0].point.x).toBeCloseTo(0, 9);
     expect(res.hits[0].point.y).toBeCloseTo(0, 9);
-    expect(res.hits[1].point.x).toBeCloseTo(0, 9);
-    expect(res.hits[1].point.y).toBeCloseTo(0, 9);
-    // one hit per axis
-    const normals = res.hits.map((h) => `${h.normal.x},${h.normal.y}`).sort();
-    expect(normals).toEqual(['-1,0', '0,-1']);
-    // both components of travel reversed -> retroreflection back toward origin
+    expect(res.hits[0].normal).toEqual({ x: -1, y: -1 });
+    // both components of travel reversed -> retroreflection back toward origin, unchanged
     expect(res.dir.x).toBeLessThan(0);
     expect(res.dir.y).toBeLessThan(0);
+    // charged as exactly ONE bounce, not two
+    expect(res.bouncesLeft).toBe(2);
   });
 
   it('with bounces:0, stops at the wall and marks expired', () => {
