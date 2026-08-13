@@ -6,24 +6,39 @@
     <style>
       body { font: 14px/1.5 ui-monospace, monospace; margin: 2rem; }
       .ok { color: #0a0 } .bad { color: #c00 }
+      h2 { margin-top: 1.5rem; }
     </style>
   </head>
   <body>
     <h1>Tanks! baseline trace</h1>
     <!--
-      Runs the golden trace (tools/baseline/trace.ts) in whatever engine loaded this page
-      and prints the fingerprint. tools/baseline/run.mjs drives it under Playwright and
-      reads window.__traceResult; open it by hand in any browser to get the same number
-      from an engine Playwright does not ship (shipped Safari, iOS, a phone).
+      Runs the golden trace (tools/baseline/trace.ts) AND the large-magnitude angle probe
+      (tools/baseline/angles.ts) in whatever engine loaded this page, and prints both
+      fingerprints. tools/baseline/run.mjs drives it under Playwright and reads
+      window.__traceResult / window.__angleResult; open it by hand in any browser to get
+      the same numbers from an engine Playwright does not ship (shipped Safari, iOS, a
+      phone).
 
       MUST be served from localhost (or https): crypto.subtle is secure-context only.
+
+      The two measurements are independent and each sets its own `window.*Result` only once
+      it is fully built, same rule as before (a runner that polls for it can never read a
+      half-filled object) -- adding the second measurement does not change what the first
+      one computes or when it is set.
     -->
-    <pre id="out">running... (a few seconds; the main thread is blocked while it simulates)</pre>
+    <h2>golden trace (tools/baseline/trace.ts)</h2>
+    <pre id="trace-out">running... (a few seconds; the main thread is blocked while it simulates)</pre>
+    <h2>angle probe (tools/baseline/angles.ts)</h2>
+    <pre id="angle-out">running...</pre>
     <script type="module">
       import { traceText, sha256Hex, BASELINE_HASH } from '/tools/baseline/trace.ts';
+      import { computeAngleBands, computeAngleHash, ANGLE_HASH } from '/tools/baseline/angles.ts';
 
-      const out = document.getElementById('out');
-      const started = performance.now();
+      const traceOut = document.getElementById('trace-out');
+      const angleOut = document.getElementById('angle-out');
+
+      // ---- golden trace: unchanged from before this page grew a second measurement ----
+      const traceStarted = performance.now();
       try {
         if (!globalThis.crypto?.subtle) {
           throw new Error(
@@ -36,25 +51,60 @@
           hash,
           expected: BASELINE_HASH,
           match: hash === BASELINE_HASH,
-          ms: Math.round(performance.now() - started),
+          ms: Math.round(performance.now() - traceStarted),
           textLength: text.length,
           userAgent: navigator.userAgent,
         };
-        out.textContent =
+        traceOut.textContent =
           `${result.match ? 'MATCH' : 'MISMATCH'}\n` +
           `hash     ${result.hash}\n` +
           `expected ${result.expected}\n` +
           `chars    ${result.textLength}\n` +
           `took     ${result.ms} ms\n` +
           `ua       ${result.userAgent}`;
-        out.className = result.match ? 'ok' : 'bad';
+        traceOut.className = result.match ? 'ok' : 'bad';
         // Set LAST, so a runner that polls for it can never read a half-filled object.
         window.__traceResult = result;
       } catch (e) {
         const result = { error: String(e?.stack ?? e), userAgent: navigator.userAgent };
-        out.textContent = `FAILED\n${result.error}`;
-        out.className = 'bad';
+        traceOut.textContent = `FAILED\n${result.error}`;
+        traceOut.className = 'bad';
         window.__traceResult = result;
+      }
+
+      // ---- angle probe: same shape, its own measurement, its own bands for diagnosis ----
+      const angleStarted = performance.now();
+      try {
+        if (!globalThis.crypto?.subtle) {
+          throw new Error(
+            'crypto.subtle is unavailable -- this page must be served from localhost or over https',
+          );
+        }
+        const bands = await computeAngleBands();
+        const hash = await computeAngleHash(bands);
+        const result = {
+          hash,
+          expected: ANGLE_HASH,
+          match: hash === ANGLE_HASH,
+          ms: Math.round(performance.now() - angleStarted),
+          bands: bands.map((b) => ({ name: b.name, count: b.count, hash: b.hash })),
+          userAgent: navigator.userAgent,
+        };
+        angleOut.textContent =
+          `${result.match ? 'MATCH' : 'MISMATCH'}\n` +
+          `hash     ${result.hash}\n` +
+          `expected ${result.expected}\n` +
+          `bands    ${result.bands.length}\n` +
+          `took     ${result.ms} ms\n` +
+          `ua       ${result.userAgent}`;
+        angleOut.className = result.match ? 'ok' : 'bad';
+        // Set LAST, same rule as window.__traceResult above.
+        window.__angleResult = result;
+      } catch (e) {
+        const result = { error: String(e?.stack ?? e), userAgent: navigator.userAgent };
+        angleOut.textContent = `FAILED\n${result.error}`;
+        angleOut.className = 'bad';
+        window.__angleResult = result;
       }
     </script>
   </body>
