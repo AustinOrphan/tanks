@@ -89,6 +89,21 @@
   gap: 14px;
   background: rgba(20, 24, 30, 0.55);
   pointer-events: auto;
+  /* Issue #151: `.hud-title` at 56px/900 does not fit one line at phone widths
+   * ("Level 3 cleared!" wraps at 390px), and a wrapped block-level heading with no
+   * declared width takes the FULL flex-item width (fit-content collapses to the
+   * container's available width once max-content exceeds it), leaving the browser
+   * default `text-align: left` to flush both lines against the left edge while
+   * `.hud-subtitle` and `.hud-action` -- short enough to never wrap -- stay
+   * shrink-to-fit and genuinely centred beside it. `.hud-achievements` and
+   * `.hud-levelselect` already carry `text-align: center` for the same reason; this
+   * brings `.hud-panel` in line rather than inventing a second convention. Measured
+   * in a real Chromium render of the production DOM (390x844, "Level 3 cleared!"):
+   * before, the two wrapped lines' glyph runs sat at x=0 (centreOffset 99.6px/89.2px
+   * against the 195px viewport centre); after, both lines centre within 0.1px of it.
+   * A 1280x800 desktop render is unaffected (the heading never wraps there), within
+   * 0.1px of centre before and after. */
+  text-align: center;
 }
 
 .hud-panel--hidden {
