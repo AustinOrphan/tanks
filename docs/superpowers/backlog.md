@@ -903,16 +903,15 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **84 lines below** — 17 / 31 / 25 / 11 across four groups. **75** came from the
+Counts: **83 lines below** — 16 / 31 / 25 / 11 across four groups. **74** came from the
 harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
 
 ### Gaps with a reachability argument
 
-- `resolveBulletHits` skips dead tanks, so a shell whose target died earlier in the same tick is never consumed. #2
-- `muzzlePoint` tests the spawn point against `world.walls` and not `world.tanks`, so a shell can be born inside an adjacent tank's silhouette. #42
-- A corner emits two ricochet events but decrements `bouncesLeft` once (`collision.ts:257-269`), so a corner is charged one bounce for two reflections AND `bounceIndex` can repeat across ticks. One defect, two symptoms. #1
+- `resolveBulletHits` skips dead tanks, so a shell whose target died earlier in the same tick is never consumed — verified at c8f1557: mechanism real, 0 of 42,820 golden-trace ticks reach it, fix measured hash-neutral; awaiting a GHOST-vs-WALL corpse-semantics call. #2
+- `muzzlePoint` tests the spawn point against `world.walls` and not `world.tanks`, so a shell can be born inside an adjacent tank's silhouette — verified at c8f1557: harmful variant is a ~0.5-3 degree tangent-escape sliver at exact minimum separation, 0 of 1370 trace fire events; every fix changes point-blank feel — awaiting that call. #42
 - `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:333` documents the divergence as negligible rather than closing it. #1
 - The retroreflecting-seam fix is open: it must distinguish a coplanar neighbour that continues the surface from a perpendicular one that merely touches it. CLAUDE.md §Known holes owns the measurement and the record of the fix that was tried and reverted — do not restate them here. #1
 - A tab left open across "Reset progress" resurrects pre-reset achievement ids on its next write; `achievements.ts` persists by union and no `storage` listener exists. #62
@@ -1017,9 +1016,9 @@ was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, s
 
 The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the tree" — they
 are listed, not dropped, which an earlier draft's arithmetic missed by mapping the 76 onto
-all 75 in-scope lines including that section.
+all 74 in-scope lines including that section.
 
-The 76 open became the **66** in-scope lines of the first three groups, near enough
+The 76 open became the **65** in-scope lines of the first three groups, near enough
 one-to-one, with these
 adjustments: 4 are PR #75's residuals and live in the "Follow-ups from walls as geometry"
 spike; 1 is the intensity spike; 1 is a null item (no save system references tank ids);
@@ -1032,7 +1031,10 @@ a figure that exists in no PR body; it is rewritten to the two figures that do. 
 those 16 removals the review also split or corrected lines that were understated, which is
 why 76 − 16 lands above 60 rather than at it. Issue #137 closed one line here (enemy tanks
 wearing skins) and opened another in its place (the shared-geometry limitation that closing
-it exposed), which is why the live count still reads 66 rather than one lower.
+it exposed), netting to zero and holding the count at 66. The corner-bounce fix (this PR)
+closed the reachability line at `collision.ts:257-269` outright — the two-event corner
+defect it named is fixed, and nothing replaced the line — which is the one real decrease
+since: the live count now reads 65.
 
 The remaining **9** lines came from prose-only PRs outside the heading scope and are marked
 `*(prose-only PR)*`. They are a spot-check of 4 such PRs, not a sweep of the ~15.

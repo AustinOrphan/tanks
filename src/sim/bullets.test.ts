@@ -149,7 +149,15 @@ describe('stepBullets', () => {
     expect(b.pos.x).toBeLessThan(5)
   })
 
-  it('emits a ricochet event per bounce with increasing bounceIndex in a single tick (corner double-reflect)', () => {
+  it('emits exactly ONE ricochet event for a corner hit (corner double-reflect, charged as a single bounce)', () => {
+    // SUBJECT CHANGED from "emits a ricochet event per bounce with increasing
+    // bounceIndex in a single tick": the corner branch in collision.ts used to push
+    // two SweepHits for one physical deflection point, so this same scenario used to
+    // emit TWO ricochet events (bounceIndex 0 and 1) at the identical pos and tick --
+    // while bouncesLeft only decremented once, and the NEXT real bounce's bounceIndex
+    // collided with the corner's second event (measured sequence [0, 1, 1]). Fixed by
+    // collapsing the corner branch to one hit record, so events-emitted and
+    // budget-consumed move 1:1 for every bounce including corners.
     const walls: Wall[] = [mkWall(1, { minX: 1, minY: 1, maxX: 3, maxY: 3 })]
     const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
     const s = Math.SQRT1_2
@@ -171,9 +179,133 @@ describe('stepBullets', () => {
       SimEvent,
       { type: 'ricochet' }
     >[]
-    expect(ric.length).toBe(2)
+    expect(ric.length).toBe(1)
     expect(ric[0].bounceIndex).toBe(0)
-    expect(ric[1].bounceIndex).toBe(1)
+  })
+
+  // Three new pins for the collapsed-corner fix (issue: a corner hit pushed two
+  // SweepHits for one physical deflection point while bouncesLeft only decremented
+  // once). Written and run red against the unfixed collision.ts before the fix
+  // landed -- see the commit message for the recorded counts.
+
+  it('an exact corner emits exactly ONE ricochet event, and the shell velocity retroreflects (physics unchanged by the fix)', () => {
+    const walls: Wall[] = [mkWall(1, { minX: 1, minY: 1, maxX: 3, maxY: 3 })]
+    const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
+    const s = Math.SQRT1_2
+    const b: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'ricochet',
+      pos: { x: 0, y: 0 },
+      vel: { x: RICOCHET_SPEED * s, y: RICOCHET_SPEED * s },
+      bouncesLeft: bulletConfig.ricochet.bounces,
+      alive: true,
+    }
+    world.bullets.push(b)
+    const events: SimEvent[] = []
+    stepBullets(world, 1, events) // big dt so it reaches the (1,1) corner this tick
+    const ric = events.filter((e) => e.type === 'ricochet') as Extract<
+      SimEvent,
+      { type: 'ricochet' }
+    >[]
+    // One physical deflection point -> one event, not two at the same pos/tick.
+    expect(ric.length).toBe(1)
+    expect(ric[0].bounceIndex).toBe(0)
+    expect(ric[0].pos.x).toBeCloseTo(1, 9)
+    expect(ric[0].pos.y).toBeCloseTo(1, 9)
+    // The retroreflection itself is unchanged by this fix: both incoming
+    // components still flip sign.
+    expect(b.vel.x).toBeLessThan(0)
+    expect(b.vel.y).toBeLessThan(0)
+  })
+
+  it('bounceIndex does not repeat across ticks when a corner bounce is followed by a flush bounce', () => {
+    const walls: Wall[] = [
+      mkWall(1, { minX: 1, minY: 1, maxX: 3, maxY: 3 }),
+      mkWall(2, { minX: 10, minY: -5, maxX: 11, maxY: 5 }),
+    ]
+    const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
+    const s = Math.SQRT1_2
+    const b: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'ricochet',
+      pos: { x: 0, y: 0 },
+      vel: { x: RICOCHET_SPEED * s, y: RICOCHET_SPEED * s },
+      bouncesLeft: bulletConfig.ricochet.bounces,
+      alive: true,
+    }
+    world.bullets.push(b)
+    const allIndices: number[] = []
+
+    // Tick A: the corner.
+    let events: SimEvent[] = []
+    stepBullets(world, 1, events)
+    allIndices.push(
+      ...(events.filter((e) => e.type === 'ricochet') as Extract<SimEvent, { type: 'ricochet' }>[]).map(
+        (e) => e.bounceIndex,
+      ),
+    )
+
+    // Tick B, later: re-present the shell at a DIFFERENT, flush wall so the second
+    // bounce lands in its own stepBullets call -- separating the two bounces in
+    // time is what exposes consumedBefore repeating a value.
+    b.pos = { x: 9.95, y: 0 }
+    b.vel = { x: RICOCHET_SPEED, y: 0 }
+    events = []
+    stepBullets(world, DT, events)
+    allIndices.push(
+      ...(events.filter((e) => e.type === 'ricochet') as Extract<SimEvent, { type: 'ricochet' }>[]).map(
+        (e) => e.bounceIndex,
+      ),
+    )
+
+    expect(allIndices).toEqual([0, 1])
+  })
+
+  it('a ricochet shell (bounces:2) is spent after a corner then a flush bounce -- no third reflection', () => {
+    const walls: Wall[] = [
+      mkWall(1, { minX: 1, minY: 1, maxX: 3, maxY: 3 }),
+      mkWall(2, { minX: 10, minY: -5, maxX: 11, maxY: 5 }),
+    ]
+    const world = createWorld({ walls, tanks: [], spawns: [], lives: 3 })
+    const s = Math.SQRT1_2
+    const b: Bullet = {
+      id: 1,
+      ownerId: 1,
+      type: 'ricochet',
+      pos: { x: 0, y: 0 },
+      vel: { x: RICOCHET_SPEED * s, y: RICOCHET_SPEED * s },
+      bouncesLeft: bulletConfig.ricochet.bounces,
+      alive: true,
+    }
+    world.bullets.push(b)
+    let totalRicochets = 0
+
+    // Corner: charged as one bounce.
+    let events: SimEvent[] = []
+    stepBullets(world, 1, events)
+    totalRicochets += events.filter((e) => e.type === 'ricochet').length
+
+    // Flush: the second and last bounce this budget allows.
+    b.pos = { x: 9.95, y: 0 }
+    b.vel = { x: RICOCHET_SPEED, y: 0 }
+    events = []
+    stepBullets(world, DT, events)
+    totalRicochets += events.filter((e) => e.type === 'ricochet').length
+    expect(b.bouncesLeft).toBe(0)
+    expect(b.alive).toBe(true)
+
+    // A third contact must not reflect -- the budget is spent.
+    b.pos = { x: 9.95, y: 0 }
+    b.vel = { x: RICOCHET_SPEED, y: 0 }
+    events = []
+    stepBullets(world, DT, events)
+    expect(events.filter((e) => e.type === 'ricochet').length).toBe(0)
+    expect(b.alive).toBe(false)
+
+    // Two bounces consumed a two-event budget exactly -- not three.
+    expect(totalRicochets).toBe(2)
   })
 
   it('is deterministic across identical steps', () => {
