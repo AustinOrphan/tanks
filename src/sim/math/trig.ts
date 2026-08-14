@@ -38,6 +38,38 @@
  *     on the extra rounding those case-2/3 expressions introduce. Ported with V8's
  *     `m &= 1`.
  *
+ * Both deltas are small, V8-authored expressions (a widened hex threshold; one mask),
+ * not whole function bodies -- the surrounding functions are still netlib's, under the
+ * Sun Microsystems notice above. V8's own license is addended here for those two
+ * specific expressions rather than assumed:
+ *
+ *   Copyright 2014, the V8 project authors. All rights reserved.
+ *   Redistribution and use in source and binary forms, with or without
+ *   modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright notice,
+ *       this list of conditions and the following disclaimer in the documentation
+ *       and/or other materials provided with the distribution.
+ *     * Neither the name of Google Inc. nor the names of its contributors may be
+ *       used to endorse or promote products derived from this software without
+ *       specific prior written permission.
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ *   ANY EXPRESS OR IMPLIED WARRANTIES ARE DISCLAIMED. See
+ *   https://chromium.googlesource.com/v8/v8/+/branch-heads/13.6/LICENSE for the
+ *   verbatim, unabridged text.
+ *
+ * WHAT THE FULL-SWEEP BIT-COMPARE DOES NOT ISOLATE: the atan threshold delta's own
+ * window, |x| in [2**-29, 2**-27), is narrow enough (about 5.6e-9 wide) that the
+ * angle probe's quasi-uniform sampling over +/-2*pi..+/-1e8 lands inside it by chance
+ * essentially never. NO test pins the threshold constant, and none can: review swept
+ * 200,000 evenly spaced points across the whole window and the fast path (`return x`)
+ * and the full polynomial path are bit-identical on every one -- the correction term
+ * rounds away below half a ULP at this magnitude, so a threshold-constant mutation is
+ * behaviour-invisible. trig.test.ts's `between = 6e-9` spot test exercises the window
+ * but cannot discriminate the constant. The delta's correctness rests entirely on the
+ * netlib/V8 source comparison in this header.
+ *
  * PRESERVES OPERATION ORDER AND BRANCH STRUCTURE EXACTLY. Do not simplify.
  */
 import { getHighWord, getLowWord, setHighWord } from './bits';

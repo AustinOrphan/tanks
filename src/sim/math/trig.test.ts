@@ -145,7 +145,10 @@ describe('detAtan2: spot values', () => {
 
   it('tiny |x| just below/above the V8 atan threshold delta (2**-27 vs netlib\'s', () => {
     // 2**-29): matches Node-native either side of the boundary this file's header
-    // documents as a verified V8-vs-netlib difference.
+    // documents as a verified V8-vs-netlib difference. NOTE: this exercises the
+    // window but cannot discriminate the threshold constant -- review measured the
+    // fast and full paths bit-identical at all 200,000 swept points in it; the
+    // constant is pinned by source comparison only (see trig.ts's header).
     const below = Math.pow(2, -30); // < 2**-29: below both thresholds
     const between = 6e-9; // between 2**-29 (~1.86e-9) and 2**-27 (~7.45e-9)
     expect(detAtan2(below, 1)).toBe(Math.atan2(below, 1));
