@@ -536,10 +536,19 @@ baseline** — so V8, SpiderMonkey and JSC agree on this trace, on Linux x86-64,
 (The 4-arena trace's three-engine agreement on `015a5d17…` was the same result at the
 previous baseline; a new arena moves the hash by construction, so this re-run is owed
 again after every arena. CI's `Baseline trace (chromium)` step keeps V8 current on every
-push; firefox and webkit only re-verify when someone runs `npm run trace:browser --
---all`.) **That is not the whole question**: shipped Safari, iOS and non-x86-64 CPUs are
-untested, and one matching hash is agreement on the sampled trajectory, not a proof
-about `Math.hypot`. Take the remaining half by opening `page.html` by hand on the device.
+push; firefox and webkit re-verify on push to `main`, weekly, and on demand, via
+`.github/workflows/engines.yml` ("Engines matrix") — a SEPARATE workflow from `CI`,
+deliberately: see "The deploy waits for CI" above for why a checking job that can fail for
+reasons unrelated to the tree must not sit inside `ci.yml`. It runs the angle probe
+(`tools/baseline/angles.ts`, `ANGLE_HASH`) alongside the golden trace on every run, since
+`--all` always runs both, and prints and uploads both hashes per (OS, engine) — the future
+acceptance harness for issue #133's vendored-math work.) **That is not the whole
+question**: shipped Safari and iOS stay untested by any of this — a macOS Playwright run
+is a closer proxy than the Linux build above, but is still JavaScriptCore, not shipped
+Safari — and one matching hash is agreement on the sampled trajectory, not a proof about
+`Math.hypot`. The engines workflow extends this machine coverage to macOS (arm64) and
+Windows once its first run completes; take the shipped-Safari/iOS remainder by opening
+`page.html` by hand on the device.
 
 ## Testing conventions, learned the hard way
 
