@@ -158,7 +158,7 @@ function mantissa(i: number): number {
   return 1 + (unit(i) + 1) * 4.5;
 }
 
-interface Band {
+export interface Band {
   name: string;
   max: number;
 }
@@ -166,9 +166,13 @@ interface Band {
 /**
  * The reachability ladder: within +/-2*PI is the largest magnitude the golden trace itself
  * ever measures (see the header), and +/-1e2 .. +/-1e8 extend past it into territory a long
- * session can reach but no existing test does.
+ * session can reach but no existing test does. Exported (along with bandSamples,
+ * atan2Samples and hypotPairs below) so issue #133's vendored-math port can run the
+ * identical input sweep against src/sim/math's detSin/detCos/detAtan2/detHypot -- both
+ * the one-time Node-native bit-compare (see that PR body) and computeVendoredAngleBands
+ * below need the SAME samples the native bands use, not a re-derived approximation of them.
  */
-const REACHABILITY_BANDS: Band[] = [
+export const REACHABILITY_BANDS: Band[] = [
   { name: '2pi', max: 2 * Math.PI },
   { name: '1e2', max: 1e2 },
   { name: '1e4', max: 1e4 },
@@ -209,7 +213,7 @@ function breakpointBandSamples(max: number): number[] {
   return out;
 }
 
-function bandSamples(band: Band): number[] {
+export function bandSamples(band: Band): number[] {
   return [...genericBandSamples(band.max), ...breakpointBandSamples(band.max)];
 }
 
@@ -260,7 +264,7 @@ function atan2RatioPairs(): Array<[number, number]> {
   return pairs;
 }
 
-function atan2Samples(): Array<[number, number]> {
+export function atan2Samples(): Array<[number, number]> {
   return [...ATAN2_EDGE_CASES, ...atan2RatioPairs()];
 }
 
@@ -269,7 +273,7 @@ const HYPOT_PAIR_SAMPLES = 2000;
 /** hypot over pairs spanning many decades, including denormal-adjacent and near-overflow
  *  scaling (MAGNITUDE_DECADES covers both ends). Disjoint index offsets (i vs i+500_000)
  *  for the two mantissas keep them from moving in lockstep. */
-function hypotPairs(): Array<[number, number]> {
+export function hypotPairs(): Array<[number, number]> {
   const pairs: Array<[number, number]> = [];
   const n = MAGNITUDE_DECADES.length;
   for (let i = 0; i < HYPOT_PAIR_SAMPLES; i++) {
