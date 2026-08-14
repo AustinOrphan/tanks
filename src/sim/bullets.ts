@@ -6,6 +6,7 @@ import type { World } from './world'
 import type { SimEvent } from './events'
 import { bulletConfig, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
 import { configFor } from './config'
+import { detHypot } from './math/hypot'
 
 /**
  * Where the shell is born: at the muzzle, unless the muzzle is inside a wall.
@@ -115,7 +116,7 @@ function closestApproach(a0: Vec2, a1: Vec2, b0: Vec2, b1: Vec2): number {
   t = t < 0 ? 0 : t > 1 ? 1 : t
   const dx = px + vx * t
   const dy = py + vy * t
-  return Math.hypot(dx, dy)
+  return detHypot(dx, dy)
 }
 
 /**

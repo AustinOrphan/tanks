@@ -2,6 +2,8 @@ import type { Vec2, AABB, Tank, Wall } from './types';
 import { vadd, vsub, vscale, vlen, vnorm, vdot, angleDelta, slewAngle, angleOf } from './types';
 import { SWEEP_EPS, SWEEP_MAX_ITERATIONS, TANK_RADIUS } from './constants';
 import { configFor } from './config';
+import { detHypot } from './math/hypot';
+import { detSin, detCos } from './math/trig';
 
 export interface Hit {
   hit: boolean;
@@ -149,7 +151,7 @@ export interface SweepResult {
 function headingInto(start: Vec2, target: Vec2, box: AABB): boolean {
   const dx = target.x - start.x;
   const dy = target.y - start.y;
-  const len = Math.hypot(dx, dy);
+  const len = detHypot(dx, dy);
   if (len === 0) return false;
   const step = SWEEP_EPS / len;
   const px = start.x + dx * step;
@@ -382,7 +384,7 @@ export function resolveWalls(tank: Tank, walls: Wall[]): void {
       if (wall.destroyed) continue;
       const hit = circleVsAABB(tank.pos, TANK_RADIUS, wall.aabb);
       if (!hit.hit) continue;
-      const depth = Math.hypot(hit.push.x, hit.push.y);
+      const depth = detHypot(hit.push.x, hit.push.y);
       if (depth > bestDepth || (depth === bestDepth && best !== null &&
           (hit.push.x > best.x || (hit.push.x === best.x && hit.push.y > best.y)))) {
         bestDepth = depth;
@@ -419,7 +421,7 @@ export function moveTank(tank: Tank, walls: Wall[], dt: number): void {
     const aim = angleDelta(0, reverse ? want + Math.PI : want);
     tank.bodyAngle = slewAngle(tank.bodyAngle, aim, cfg.rotationSpeed * dt);
 
-    const heading = { x: Math.cos(tank.bodyAngle), y: Math.sin(tank.bodyAngle) };
+    const heading = { x: detCos(tank.bodyAngle), y: detSin(tank.bodyAngle) };
     const gear = reverse ? -1 : 1;
     const travel = { x: heading.x * gear, y: heading.y * gear };
     // Speed still falls off with how far the hull has left to swing, so a turn costs
