@@ -6,6 +6,9 @@
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24.0.0"
   },
+  "workspaces": [
+    "tools/mutate"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -25,6 +28,7 @@
   },
   "devDependencies": {
     "@types/howler": "^2.2.11",
+    "@types/node": "^20.19.0",
     "@types/three": "^0.169.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.6.3",

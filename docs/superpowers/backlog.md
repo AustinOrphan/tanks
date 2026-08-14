@@ -354,15 +354,22 @@ the one most likely to be wrong there. The game HAS been played — that is not 
 gap is that no judgement on these four constants has been stated on any device, and
 `HULL_DRAG_RAD_PER_PX` in particular is a touch constant whose only evidence is a mouse.
 
-**9. `tools/` is not typechecked by anything.** `tsconfig.json`'s `include` is
-`["src", "vite.config.ts"]`, so `npm test`'s `tsc --noEmit` never reads
-`tools/gl/harness.ts`, `tools/gallery/`, `tools/baseline/` or the rest — and vitest
-transforms without typechecking. This is not new, but it was found the hard way while
-adding the async GL checks above: a duplicate `checkAsync` declaration passed `npm test`
-cleanly and surfaced only as a vite 500 when the harness was actually loaded, which
-`npm run test:gl` reports as a bare timeout with no error text. So the GL harness is
-checked only by running it, and a typo there costs a 30-second timeout to diagnose.
-Widening `include` was not attempted here and may surface pre-existing errors.
+**9. Most of `tools/` is not typechecked by anything; `tools/mutate/` now is.**
+`tsconfig.json`'s `include` was `["src", "vite.config.ts"]`, so `npm test`'s
+`tsc --noEmit` never read `tools/gl/harness.ts`, `tools/gallery/`, `tools/baseline/`,
+`tools/mutate/` or the rest — and vitest transforms without typechecking. This is not
+new, but it was found the hard way while adding the async GL checks above: a duplicate
+`checkAsync` declaration passed `npm test` cleanly and surfaced only as a vite 500 when
+the harness was actually loaded, which `npm run test:gl` reports as a bare timeout with
+no error text. So the GL harness is checked only by running it, and a typo there costs a
+30-second timeout to diagnose. Widening `include` for the tree at large was not attempted
+here and may surface pre-existing errors. Issue #134 narrowed this for one directory:
+extracting `tools/mutate/` into its own workspace package added
+`tools/mutate/orchestrate.test.ts` to `include` with `allowJs`/`checkJs` on, which pulls
+its three `.mjs` files (`lib.mjs`, `orchestrate.mjs`, `run.mjs`) into the same `tsc
+--noEmit` transitively through the imports that test file already makes. `tools/gl/`,
+`tools/gallery/`, `tools/baseline/` and the rest are exactly as untypechecked as this
+item originally described.
 
 ---
 

@@ -1,0 +1,16 @@
+{
+  "name": "mutation-harness",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hand-picked mutation testing: apply an exact find/replace to a source file, run a scoped slice of the suite, restore, and check the declared outcome. See README.md.",
+  "type": "module",
+  "bin": {
+    "mutate": "./run.mjs"
+  },
+  "files": [
+    "run.mjs",
+    "lib.mjs",
+    "orchestrate.mjs",
+    "README.md"
+  ]
+}

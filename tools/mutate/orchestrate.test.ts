@@ -48,6 +48,7 @@ import {
   parseArgs, formatResult, dirtyReport, unreachableReport, resolveManifestPath, runTestsReal,
   classifySubprocessFailure, relatedFilesFor,
 } from './run.mjs';
+import type { ManifestEntry } from './lib.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
 
@@ -88,6 +89,7 @@ describe('applyAt', () => {
     const content = 'sounds[key] = null;\nx();\nsounds[key] = null;';
     const r = applyAt(content, 'sounds[key] = null;', 'sounds[key] = undefined;', 2);
     expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('unreachable: asserted above'); // narrows r for TS below
     expect(r.content).toBe('sounds[key] = null;\nx();\nsounds[key] = undefined;');
   });
 
@@ -98,7 +100,15 @@ describe('applyAt', () => {
 });
 
 describe('validateEntry', () => {
-  const base = () => ({
+  // `why?` (and the rest) are typed loosely on purpose: these fixtures exist to feed
+  // validateEntry deliberately-invalid shapes (a missing field, an out-of-range
+  // occurrence, a mismatched expect/expectFailures pair), which a stricter type would
+  // fight rather than help.
+  type EntryFixture = {
+    id: string; file: string; find: string; replace: string; why?: string;
+    expect: string; tests: string[]; occurrence?: number; expectFailures?: number;
+  };
+  const base = (): EntryFixture => ({
     id: 'x', file: 'src/a.ts', find: 'a', replace: 'b', why: 'because',
     expect: 'killed', tests: ['src/a.test.ts'],
   });
@@ -191,7 +201,17 @@ describe('validateManifest', () => {
  *     post-mutation check) -- this is what most existing tests already set, and
  *     keeping it as "the post-mutation result" is what lets them stay unchanged.
  */
-function fakeDeps(overrides = {}) {
+type TestRunResult = { failed: number; total: number; failedSuites?: number };
+type FakeDepsOverrides = {
+  initialFiles?: [string, string][];
+  runTests?: (tests: string[]) => TestRunResult;
+  dirty?: string;
+  corruptRestore?: boolean;
+  baselineThrow?: unknown;
+  baseline?: TestRunResult;
+  extraDeps?: Record<string, unknown>;
+};
+function fakeDeps(overrides: FakeDepsOverrides = {}) {
   const files = new Map(overrides.initialFiles ?? [['f.ts', 'const X = 1;']]);
   const calls = { readFile: 0, applyToDisk: 0, restoreToDisk: 0, runTests: 0 };
   const post = overrides.runTests ?? (() => ({ failed: 1, total: 3, failedSuites: 0 }));
@@ -199,9 +219,13 @@ function fakeDeps(overrides = {}) {
   return {
     calls,
     files,
-    readFile: vi.fn((file) => {
+    readFile: vi.fn((file: string) => {
       calls.readFile++;
-      return files.get(file);
+      // Non-null assertion, not a fallback: every test here sets up `files` to already
+      // contain the key it reads, so an undefined `.get()` would be a genuine fixture
+      // bug -- a fallback like `?? ''` would hide that behind a passing-looking read
+      // instead of surfacing it as the type error / runtime mismatch it should be.
+      return files.get(file)!;
     }),
     gitPorcelain: vi.fn(() => overrides.dirty ?? ''),
     applyToDisk: vi.fn((file, content) => {
@@ -226,7 +250,7 @@ function fakeDeps(overrides = {}) {
   };
 }
 
-const entry = (over = {}) => ({
+const entry = (over: Partial<ManifestEntry> = {}): ManifestEntry => ({
   id: 'e1', file: 'f.ts', find: 'const X = 1;', replace: 'const X = 2;',
   why: 'test', expect: 'killed', tests: ['f.test.ts'], ...over,
 });
@@ -519,12 +543,13 @@ describe('computeExitCode', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseArgs', () => {
-  it('defaults to the shipped manifest and no --only filter', () => {
-    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null });
+  it('defaults to the shipped manifest, no --only filter, and root = process.cwd()', () => {
+    expect(parseArgs([])).toEqual({ manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd() });
   });
 
-  it('accepts --manifest and --only overrides', () => {
-    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id'])).toEqual({ manifest: 'x.json', only: 'my-id' });
+  it('accepts --manifest, --only and --root overrides', () => {
+    expect(parseArgs(['--manifest', 'x.json', '--only', 'my-id', '--root', '/elsewhere']))
+      .toEqual({ manifest: 'x.json', only: 'my-id', root: '/elsewhere' });
   });
 
   it('rejects an unknown flag rather than silently ignoring it', () => {
@@ -896,7 +921,7 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
 // ---------------------------------------------------------------------------
 
 describe('relatedFilesFor against real broken subprocesses (the exact function and bug review found)', () => {
-  const scratchDir = join(tmpdir(), `tanks-mutate-relatedFilesFor-test-${process.pid}`);
+  const scratchDir = join(tmpdir(), `mutate-relatedFilesFor-test-${process.pid}`);
 
   afterAll(() => {
     rmSync(scratchDir, { recursive: true, force: true });
@@ -914,7 +939,7 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     const stub = makeStub('#!/bin/sh\necho "stub vitest: simulated crash" >&2\nexit 1\n');
     let caught: unknown;
     try {
-      relatedFilesFor('src/render/skins.ts::stub-exit-1', stub);
+      relatedFilesFor('src/render/skins.ts::stub-exit-1', ROOT, stub);
     } catch (e) {
       caught = e;
     }
@@ -929,7 +954,7 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     expect(existsSync(missing)).toBe(false); // never created
     let caught: unknown;
     try {
-      relatedFilesFor('src/render/skins.ts::missing-binary', missing);
+      relatedFilesFor('src/render/skins.ts::missing-binary', ROOT, missing);
     } catch (e) {
       caught = e;
     }
@@ -941,7 +966,7 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     const stub = makeStub('#!/bin/sh\nexit 130\n');
     let caught: unknown;
     try {
-      relatedFilesFor('src/render/skins.ts::stub-130', stub);
+      relatedFilesFor('src/render/skins.ts::stub-130', ROOT, stub);
     } catch (e) {
       caught = e;
     }
@@ -969,7 +994,7 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     const outcomes: string[] = [];
     for (const [label, bin] of [['crash', crashStub], ['missing', missing], ['sigint', sigintStub]] as const) {
       try {
-        relatedFilesFor(`src/render/skins.ts::pairwise-${label}`, bin);
+        relatedFilesFor(`src/render/skins.ts::pairwise-${label}`, ROOT, bin);
         outcomes.push('ok');
       } catch (e) {
         const err = e as Error & { interrupted?: boolean; indeterminate?: boolean };
