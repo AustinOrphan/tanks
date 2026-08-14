@@ -12,30 +12,37 @@
   <body>
     <h1>Tanks! baseline trace</h1>
     <!--
-      Runs the golden trace (tools/baseline/trace.ts) AND the large-magnitude angle probe
-      (tools/baseline/angles.ts) in whatever engine loaded this page, and prints both
-      fingerprints. tools/baseline/run.mjs drives it under Playwright and reads
-      window.__traceResult / window.__angleResult; open it by hand in any browser to get
-      the same numbers from an engine Playwright does not ship (shipped Safari, iOS, a
-      phone).
+      Runs the golden trace (tools/baseline/trace.ts), the large-magnitude angle probe
+      (tools/baseline/angles.ts, native Math.*) AND the vendored-math angle probe (same
+      file, src/sim/math's detSin/detCos/detAtan2/detHypot -- issue #133) in whatever
+      engine loaded this page, and prints all three fingerprints. tools/baseline/run.mjs
+      drives it under Playwright and reads window.__traceResult / window.__angleResult /
+      window.__vendoredAngleResult; open it by hand in any browser to get the same numbers
+      from an engine Playwright does not ship (shipped Safari, iOS, a phone).
 
       MUST be served from localhost (or https): crypto.subtle is secure-context only.
 
-      The two measurements are independent and each sets its own `window.*Result` only once
-      it is fully built, same rule as before (a runner that polls for it can never read a
-      half-filled object) -- adding the second measurement does not change what the first
-      one computes or when it is set.
+      The three measurements are independent and each sets its own `window.*Result` only
+      once it is fully built, same rule as before (a runner that polls for it can never
+      read a half-filled object) -- adding a third measurement does not change what the
+      others compute or when they are set.
     -->
     <h2>golden trace (tools/baseline/trace.ts)</h2>
     <pre id="trace-out">running... (a few seconds; the main thread is blocked while it simulates)</pre>
-    <h2>angle probe (tools/baseline/angles.ts)</h2>
+    <h2>angle probe (tools/baseline/angles.ts, native Math.*)</h2>
     <pre id="angle-out">running...</pre>
+    <h2>vendored angle probe (tools/baseline/angles.ts, src/sim/math -- issue #133)</h2>
+    <pre id="vendored-angle-out">running...</pre>
     <script type="module">
       import { traceText, sha256Hex, BASELINE_HASH } from '/tools/baseline/trace.ts';
-      import { computeAngleBands, computeAngleHash, ANGLE_HASH } from '/tools/baseline/angles.ts';
+      import {
+        computeAngleBands, computeAngleHash, ANGLE_HASH,
+        computeVendoredAngleBands, computeVendoredAngleHash, VENDORED_ANGLE_HASH,
+      } from '/tools/baseline/angles.ts';
 
       const traceOut = document.getElementById('trace-out');
       const angleOut = document.getElementById('angle-out');
+      const vendoredAngleOut = document.getElementById('vendored-angle-out');
 
       // ---- golden trace: unchanged from before this page grew a second measurement ----
       const traceStarted = performance.now();
@@ -105,6 +112,41 @@
         angleOut.textContent = `FAILED\n${result.error}`;
         angleOut.className = 'bad';
         window.__angleResult = result;
+      }
+
+      // ---- vendored angle probe: same shape again, issue #133's src/sim/math sweep -----
+      const vendoredAngleStarted = performance.now();
+      try {
+        if (!globalThis.crypto?.subtle) {
+          throw new Error(
+            'crypto.subtle is unavailable -- this page must be served from localhost or over https',
+          );
+        }
+        const bands = await computeVendoredAngleBands();
+        const hash = await computeVendoredAngleHash(bands);
+        const result = {
+          hash,
+          expected: VENDORED_ANGLE_HASH,
+          match: hash === VENDORED_ANGLE_HASH,
+          ms: Math.round(performance.now() - vendoredAngleStarted),
+          bands: bands.map((b) => ({ name: b.name, count: b.count, hash: b.hash })),
+          userAgent: navigator.userAgent,
+        };
+        vendoredAngleOut.textContent =
+          `${result.match ? 'MATCH' : 'MISMATCH'}\n` +
+          `hash     ${result.hash}\n` +
+          `expected ${result.expected}\n` +
+          `bands    ${result.bands.length}\n` +
+          `took     ${result.ms} ms\n` +
+          `ua       ${result.userAgent}`;
+        vendoredAngleOut.className = result.match ? 'ok' : 'bad';
+        // Set LAST, same rule as window.__traceResult/window.__angleResult above.
+        window.__vendoredAngleResult = result;
+      } catch (e) {
+        const result = { error: String(e?.stack ?? e), userAgent: navigator.userAgent };
+        vendoredAngleOut.textContent = `FAILED\n${result.error}`;
+        vendoredAngleOut.className = 'bad';
+        window.__vendoredAngleResult = result;
       }
     </script>
   </body>

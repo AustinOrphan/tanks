@@ -124,6 +124,8 @@
  * which is what makes the rest of this paragraph a measurement of sin/cos/atan2/hypot
  * rather than a broken harness: the one function ES2025 promises will agree, did.
  */
+import { detSin, detCos, detAtan2 } from '../../src/sim/math/trig';
+import { detHypot } from '../../src/sim/math/hypot';
 
 // ---- Deterministic, exact-arithmetic sample generation --------------------------------
 
@@ -321,6 +323,34 @@ function buildGroups(): AngleGroup[] {
   return groups;
 }
 
+/**
+ * The vendored half of the same sweep (issue #133): the EXACT SAME input generators
+ * (bandSamples, atan2Samples, hypotPairs -- imported below, never re-derived), fed to
+ * src/sim/math's detSin/detCos/detAtan2/detHypot instead of the engine's native
+ * Math.*. No `vsqrt` group -- Math.sqrt is left native (ES2025 correctly-rounded, out
+ * of #133's scope), so there is nothing vendored to sweep.
+ *
+ * This is a SEPARATE group list from buildGroups' native one, not a parameterised
+ * variant of it: the native list's names (`sin:2pi`, `atan2`, ...) feed the pinned
+ * ANGLE_HASH, and changing what those names mean would move that pin for a reason
+ * having nothing to do with a native-engine finding. `v`-prefixed names keep the two
+ * rollups from ever colliding.
+ */
+function buildVendoredGroups(): AngleGroup[] {
+  const groups: AngleGroup[] = [];
+  for (const band of REACHABILITY_BANDS) {
+    const inputs = bandSamples(band);
+    groups.push({ name: `vsin:${band.name}`, compute: () => inputs.map((x) => detSin(x)) });
+    groups.push({ name: `vcos:${band.name}`, compute: () => inputs.map((x) => detCos(x)) });
+  }
+  groups.push({
+    name: 'vatan2',
+    compute: () => atan2Samples().map(([y, x]) => detAtan2(y, x)),
+  });
+  groups.push({ name: 'vhypot', compute: () => hypotPairs().map(([a, b]) => detHypot(a, b)) });
+  return groups;
+}
+
 /** SHA-256 of the values' exact IEEE 754 bit patterns, serialised LITTLE-ENDIAN
  *  explicitly (DataView, not typed-array buffer aliasing, whose byte order follows the
  *  host CPU) -- so the hash is a function of the float64 bits alone and the pinned
@@ -371,3 +401,34 @@ export async function computeAngleHash(bands?: AngleBandResult[]): Promise<strin
  * (chromium/firefox/webkit agreement or divergence), which this constant does not encode.
  */
 export const ANGLE_HASH = 'd5d81535dc54cfae47ae7bc6db940544182454f2d5788c59b48ce663697351ec';
+
+/** The vendored mirror of computeAngleBands: src/sim/math's detSin/detCos/detAtan2/
+ *  detHypot over the identical sample sweep, not Math.*. */
+export async function computeVendoredAngleBands(): Promise<AngleBandResult[]> {
+  const results: AngleBandResult[] = [];
+  for (const g of buildVendoredGroups()) {
+    const values = g.compute();
+    results.push({ name: g.name, count: values.length, hash: await hashFloat64s(values) });
+  }
+  return results;
+}
+
+/** The vendored mirror of computeAngleHash. */
+export async function computeVendoredAngleHash(bands?: AngleBandResult[]): Promise<string> {
+  const b = bands ?? (await computeVendoredAngleBands());
+  const rollup = b.map((x) => `${x.name}:${x.count}:${x.hash}`).join('|');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rollup));
+  return Array.from(new Uint8Array(digest), (b2) => b2.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * The vendored-math fingerprint, pinned. CRITICAL DIFFERENCE from ANGLE_HASH: this one
+ * is asserted equal ACROSS ENGINES (chromium/firefox/webkit), not merely self-stable on
+ * one -- see tools/baseline/run.mjs, which wires a mismatch here into its exit code,
+ * unlike the native ANGLE_HASH block. src/sim/math's port is built only from
+ * `+ - * / %`, `Math.sqrt`/`abs`/`trunc`/`floor`/`max` and `DataView` bit access -- all
+ * exactly specified by ECMA-262 -- so bit-identical output on every conformant engine is
+ * a construction guarantee, not a hope; cross-engine agreement on this hash is the
+ * measurement that proves the guarantee actually holds, not merely that it should.
+ */
+export const VENDORED_ANGLE_HASH = 'a4fdbbfb32debaae48844ba04f7492a55d9a03e53ada569f12c2ee344cd95aed';

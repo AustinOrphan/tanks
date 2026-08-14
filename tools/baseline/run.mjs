@@ -106,6 +106,7 @@ vite.on('exit', () => {
 let failed = 0;
 const results = [];
 const angleResults = [];
+const vendoredAngleResults = [];
 try {
   for (let i = 0; ; i++) {
     if (viteExited) throw new Error('vite exited before serving; is the port taken?');
@@ -131,13 +132,15 @@ try {
       await page.goto(`${BASE}tools/baseline/page.html`, { waitUntil: 'load' });
       // Generous: the trace is ~4 s of blocked main thread under Node and slower engines
       // are slower still. A timeout here is a real failure, not flake -- report it. Waits
-      // for BOTH results: the page sets each independently once it is fully built (see
-      // page.html), so waiting on the pair never reads a half-filled object of either.
-      await page.waitForFunction(() => !!window.__traceResult && !!window.__angleResult, {
-        timeout: 180_000,
-      });
+      // for ALL THREE results: the page sets each independently once it is fully built
+      // (see page.html), so waiting on the trio never reads a half-filled object of any.
+      await page.waitForFunction(
+        () => !!window.__traceResult && !!window.__angleResult && !!window.__vendoredAngleResult,
+        { timeout: 180_000 },
+      );
       const r = await page.evaluate(() => window.__traceResult);
       const ar = await page.evaluate(() => window.__angleResult);
+      const vr = await page.evaluate(() => window.__vendoredAngleResult);
       for (const e of pageErrors) console.log(`  page error [${name}] -- ${e}`);
 
       // ---- golden trace: identical reporting to before the angle probe rode along ----
@@ -173,6 +176,25 @@ try {
         console.log(
           `  ${ar.match ? 'MATCH' : 'MISMATCH'}  angle ${name}  ${ar.hash}  (${ar.ms} ms, ${ar.bands.length} bands)`,
         );
+      }
+
+      // ---- vendored angle probe (issue #133): same shape again, its own line ------------
+      // UNLIKE the native angle block above, a MISMATCH here IS wired into `failed`. The
+      // native ANGLE_HASH is expected to diverge across engines -- that is the finding
+      // issue #133 exists to report, not a bug this tool could fix. VENDORED_ANGLE_HASH is
+      // the opposite case: src/sim/math is built only from ECMA-262's exactly-specified
+      // operations, so every conformant engine SHOULD compute the identical bit pattern.
+      // A mismatch here means the construction guarantee angles.ts's header promises does
+      // not actually hold on this engine -- a real regression, not a structural finding.
+      vendoredAngleResults.push({ name, ...vr });
+      if (vr.error) {
+        failed++;
+        console.log(`  FAIL  vendored angle ${name}: ${vr.error}`);
+      } else {
+        console.log(
+          `  ${vr.match ? 'MATCH' : 'MISMATCH'}  vendored angle ${name}  ${vr.hash}  (${vr.ms} ms, ${vr.bands.length} bands)`,
+        );
+        if (!vr.match) failed++;
       }
     } catch (e) {
       failed++;
@@ -249,6 +271,47 @@ try {
     console.log(
       `angle probe: does not match the pinned V8 baseline (ANGLE_HASH) on at least one ` +
         'engine -- see the MISMATCH line(s) above.',
+    );
+  }
+
+  // ---- vendored angle probe agreement (issue #133): the pin this file's build ----
+  // guarantee is actually FOR. A mismatch here is already counted into `failed` above;
+  // this block only narrates it, plus the same per-band bisection the native block does.
+  const vendoredHashes = new Set(vendoredAngleResults.filter((r) => r.hash).map((r) => r.hash));
+  console.log('');
+  if (vendoredHashes.size > 1) {
+    console.log(
+      `VENDORED ANGLE PROBE: ENGINES DISAGREE: ${vendoredHashes.size} distinct hashes ` +
+        `across ${vendoredAngleResults.length} run(s).`,
+    );
+    console.log('That is a REGRESSION for issue #133: the vendored math is built only from');
+    console.log('exactly-specified ECMA-262 operations, so every conformant engine should');
+    console.log('compute the identical bit pattern -- this construction guarantee does not');
+    console.log('hold on this run.');
+    const withBands = vendoredAngleResults.filter((r) => Array.isArray(r.bands));
+    if (withBands.length > 1) {
+      const bandNames = withBands[0].bands.map((b) => b.name);
+      for (const bandName of bandNames) {
+        const perEngine = withBands.map((r) => {
+          const b = r.bands.find((x) => x.name === bandName);
+          return { name: r.name, hash: b?.hash };
+        });
+        const distinct = new Set(perEngine.map((e) => e.hash));
+        if (distinct.size > 1) {
+          const detail = perEngine.map((e) => `${e.name}=${(e.hash ?? '?').slice(0, 12)}`).join('  ');
+          console.log(`  DIVERGES  ${bandName}  ${detail}`);
+        }
+      }
+    }
+  } else if (vendoredAngleResults.length > 0 && vendoredAngleResults.every((r) => !r.error && r.match)) {
+    console.log(
+      `vendored angle probe: all ${vendoredAngleResults.length} engine(s) agree with the ` +
+        `pinned baseline: ${[...vendoredHashes][0]}`,
+    );
+  } else if (vendoredAngleResults.length > 0 && vendoredAngleResults.every((r) => !r.error)) {
+    console.log(
+      'vendored angle probe: does not match the pinned baseline (VENDORED_ANGLE_HASH) on ' +
+        'at least one engine -- see the MISMATCH line(s) above. Counted into failed.',
     );
   }
 
