@@ -33,6 +33,7 @@
  */
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from './args.mjs';
 
 let opts;
@@ -83,8 +84,20 @@ if (await respondsOn(BASE)) {
   process.exit(2);
 }
 
-const VITE_BIN = new URL('../../node_modules/.bin/vite', import.meta.url).pathname;
-const vite = spawn(VITE_BIN, ['--port', String(opts.port), '--strictPort'], { stdio: 'ignore' });
+// `.pathname` on a file:// URL is wrong on Windows: it keeps the URL's leading slash
+// ("/C:/repo/...", not a path Windows accepts) and leaves %-escapes undecoded.
+// fileURLToPath is this repo's established idiom for the same conversion (see
+// tools/mutate/run.mjs, tools/icons/render.mjs) and handles both. Windows also has no
+// bare `vite` executable in node_modules/.bin -- npm puts a `vite.cmd` shim there --
+// and spawning a .cmd/.bat file without `shell: true` throws EINVAL on current Node
+// (the CVE-2024-27980 fix). Neither branch has been exercised on a real Windows
+// runner; this is a read-the-code fix, not a verified one.
+const VITE_PATH = fileURLToPath(new URL('../../node_modules/.bin/vite', import.meta.url));
+const VITE_BIN = process.platform === 'win32' ? `${VITE_PATH}.cmd` : VITE_PATH;
+const vite = spawn(VITE_BIN, ['--port', String(opts.port), '--strictPort'], {
+  stdio: 'ignore',
+  shell: process.platform === 'win32',
+});
 let viteExited = false;
 vite.on('exit', () => {
   viteExited = true;
@@ -186,7 +199,12 @@ try {
       `all ${results.length} engine(s) agree with the pinned baseline: ${[...hashes][0]}`,
     );
     console.log('Engines covered: ' + opts.browsers.join(', ') + '.');
-    console.log('NOT covered: shipped Safari, iOS, and any non-x86-64 CPU.');
+    // Host-qualified: on an arm64 macOS runner (the engines.yml matrix) the old
+    // unconditional "any non-x86-64 CPU" line would be literally false.
+    console.log(
+      `This run: ${process.platform}/${process.arch}. Still NOT covered anywhere: ` +
+        'shipped Safari and iOS; other platforms/CPUs only as the engines matrix runs them.',
+    );
   }
 
   // ---- angle probe agreement, reported the same way, plus per-band bisection ----
@@ -238,14 +256,27 @@ try {
   console.log(failed === 0 ? '' : `${failed} check(s) FAILED`);
   process.exitCode = failed === 0 ? 0 : 1;
 } finally {
-  vite.kill('SIGTERM');
+  // On win32 `vite` was spawned with shell: true (see VITE_BIN above), so `vite.pid` is
+  // cmd.exe running the .cmd shim, which in turn runs a `node` grandchild that holds the
+  // port -- Windows has no process-group SIGTERM the way POSIX does, so killing only the
+  // top process would leave that grandchild running. `taskkill /t` kills the whole tree;
+  // it ships with every Windows install, so this needs no new dependency. Unverified on a
+  // real Windows runner.
+  const killVite = (hard) => {
+    if (process.platform === 'win32') {
+      if (vite.pid) spawn('taskkill', ['/pid', String(vite.pid), '/t', hard ? '/f' : ''].filter(Boolean), { stdio: 'ignore' });
+    } else {
+      vite.kill(hard ? 'SIGKILL' : 'SIGTERM');
+    }
+  };
+  killVite(false);
   let freed = false;
   for (let i = 0; i < 20; i++) {
     if (!(await respondsOn(BASE, 300))) { freed = true; break; }
     await sleep(250);
   }
   if (!freed) {
-    vite.kill('SIGKILL');
+    killVite(true);
     for (let i = 0; i < 20; i++) {
       if (!(await respondsOn(BASE, 300))) { freed = true; break; }
       await sleep(250);

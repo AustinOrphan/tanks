@@ -1,0 +1,147 @@
+# Cross-OS / cross-engine determinism matrix -- reports, does not gate.
+#
+# WHY THIS IS ITS OWN WORKFLOW, NOT A JOB IN ci.yml: pages.yml deploys on `workflow_run`
+# for the workflow named `CI`, gated on `github.event.workflow_run.conclusion == 'success'`
+# (CLAUDE.md, "The deploy waits for CI"). That conclusion is the CI WORKFLOW's overall
+# result, so a red job anywhere inside ci.yml -- for any reason -- stops the site
+# publishing. CLAUDE.md already documents what that costs when the red job can fail for
+# reasons unrelated to the tree: "A flaky `visual` now stops the site updating... the
+# symptom is a pages run with every job SKIPPED, not a red run." macos-latest and
+# windows-latest are runner classes this repo has never exercised; a first-run flake on
+# either (a slow package mirror during browser install, a runner image quirk) is exactly
+# that failure mode, and it must not be able to hold the deploy hostage over nothing the
+# tree did. So this workflow lives outside `ci.yml`'s name entirely -- pages.yml's trigger
+# only matches workflows named `CI`, so nothing here can ever be in that gate, red or green.
+# `main` also carries no branch protection (CLAUDE.md), so this was a deliberate placement
+# choice, not a gap plugged by some other mechanism.
+#
+# WHAT IT MEASURES: tools/baseline/run.mjs's golden trace (tools/baseline/trace.ts,
+# BASELINE_HASH) and large-magnitude angle probe (tools/baseline/angles.ts, ANGLE_HASH),
+# across axes ci.yml's ubuntu-only runners cannot reach -- macOS (the closest available
+# proxy to shipped Safari: Playwright webkit there is still JavaScriptCore, not shipped
+# Safari, but closer than the Linux build ci.yml already runs), arm64 (macos-latest runners
+# are arm64), and Windows. PR #160 measured chromium/firefox/webkit already diverging on
+# sin/cos/atan2/hypot on Linux x86-64 while the golden trace still agrees (a lattice
+# artifact -- see angles.ts's header); this workflow is the harness that finds out whether
+# that picture changes on a different OS or CPU. It also doubles as the acceptance harness
+# issue #133's vendored-math work will assert against once that lands: it prints AND
+# uploads both hashes per (os, engine), so a later PR can diff cross-OS agreement of
+# vendored functions without re-deriving this plumbing.
+name: Engines matrix
+
+on:
+  push:
+    branches: [main]
+  # Weekly rather than only push-triggered: a runner-image or browser-mirror regression on
+  # one OS should not need a commit to this repo before anyone notices it.
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  engines:
+    name: engines (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Generous: browser install dominates, not the harness (the trace itself runs in
+    # ~15s total on Linux locally). `playwright install-deps` shells out to apt-get, and
+    # that has been measured elsewhere in this repo taking up to ~10 minutes on a bad
+    # mirror day for chromium ALONE (ci.yml's `visual` job comment, from `--with-deps`) --
+    # three browsers, and two OSes this repo has never run on at all, get real headroom
+    # rather than a guess.
+    timeout-minutes: 30
+    strategy:
+      # One OS failing (a runner flake, a mirror timeout) must not cancel the other two --
+      # the whole point of this workflow is to see each axis independently.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            pw-cache-path: ~/.cache/ms-playwright
+          - os: macos-latest
+            pw-cache-path: ~/Library/Caches/ms-playwright
+          - os: windows-latest
+            pw-cache-path: ~\AppData\Local\ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # Same pin as ci.yml's `visual` job, and for the same reason: a fixed version makes
+      # the cache key below meaningful and a Playwright bump a visible diff rather than
+      # silent drift. Not a devDependency for the same reason as ci.yml: it downloads
+      # browsers on install, a cost only this workflow (and `visual`) should pay.
+      - name: Install Playwright
+        run: npm i --no-save playwright@1.62.0
+
+      # ci.yml's `visual` job caches ~/.cache/ms-playwright keyed on runner.os -- that path
+      # is Linux-only. Playwright's own cache root differs per OS (Linux:
+      # ~/.cache/ms-playwright, macOS: ~/Library/Caches/ms-playwright, Windows:
+      # ~\AppData\Local\ms-playwright), hence the per-OS path in the matrix rather than one
+      # literal path. All three browsers share one cache root, so one cache entry covers
+      # chromium+firefox+webkit together.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.pw-cache-path }}
+          key: playwright-all-1.62.0-${{ runner.os }}
+
+      # Binaries only, gated on the cache exactly like ci.yml's `visual` job. On Linux this
+      # is deliberately SEPARATE from the system-library install below: the two live in
+      # different places, and folding them into one step gated on cache-hit was tried first
+      # and is wrong -- see that step's comment.
+      - name: Install browsers (Linux)
+        if: runner.os == 'Linux' && steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium firefox webkit
+
+      # NOT gated on cache-hit. apt's system libraries firefox/webkit need beyond what
+      # ubuntu-latest ships (ci.yml's `visual` job only skips this for chromium ALONE,
+      # which the image already carries -- firefox/webkit are a different claim) live under
+      # /usr, not in ~/.cache/ms-playwright, so a cache HIT restores the browser binaries but
+      # not the libraries -- an ephemeral runner never keeps apt state between jobs. Gating
+      # this on cache-hit the same way as the binaries would make every run after the first
+      # (a cache miss, which installs deps as a side effect of --with-deps) launch webkit
+      # against missing libraries and fail. `install-deps` is idempotent -- safe, and fast,
+      # to run on a runner that already has them -- so it runs every Linux job unconditionally.
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: npx playwright install-deps chromium firefox webkit
+
+      # macOS and Windows installs are self-contained (no separate OS-package step), so
+      # gating on the binary cache alone is correct there.
+      - name: Install browsers (macOS/Windows)
+        if: runner.os != 'Linux' && steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium firefox webkit
+
+      # tools/baseline/run.mjs already prints every engine's golden-trace hash and angle
+      # hash (MATCH/MISMATCH lines) and exits non-zero on a GOLDEN TRACE mismatch against
+      # the pinned BASELINE_HASH, or on a hard tool failure -- verified by reading run.mjs:
+      # `if (!r.match) failed++` for the trace, gating this step and therefore this job. An
+      # ANGLE hash mismatch does NOT flip `failed` (see run.mjs's angle-probe reporting
+      # block and angles.ts's header): it is a structural, already-measured disagreement
+      # (PR #160), not a regression, so it must not turn a reporting-only job red either.
+      # `shell: bash` (not the platform default, which is pwsh on Windows) so `tee` and
+      # pipefail behave the same on all three runners -- GitHub Actions invokes `bash` with
+      # `-eo pipefail` by default, and `set -o pipefail` is kept explicit here so the step
+      # still fails correctly on the trace exit code even if that default ever changes.
+      - name: Run the golden trace + angle probe (all engines)
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run trace:browser -- --all 2>&1 | tee "trace-${{ runner.os }}.log"
+
+      # Per-OS artifact name so all three logs -- and both hashes each contains -- are
+      # diffable side by side without scrolling three separate job logs. `if: always()`:
+      # the log is exactly as useful when the step above failed.
+      - name: Upload trace output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-trace-${{ runner.os }}
+          path: trace-${{ runner.os }}.log
+          retention-days: 90
