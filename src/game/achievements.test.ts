@@ -185,6 +185,65 @@ describe('the achievements store', () => {
     expect(s.earned().has('first-blood')).toBe(true); // latched in memory, no throw
   });
 
+  it('a tab left open across Reset progress does not resurrect pre-reset ids on its next write (PR #62)', () => {
+    // The backlog's exact repro: tabB constructs while disk already holds first-blood,
+    // snapshotting it into its own shadow. tabA then runs the two-click-confirmed
+    // reset -- disk now holds nothing. tabB never saw that write; its shadow still
+    // believes first-blood is earned. tabB's next mutating call (earning something
+    // unrelated) must not spread that stale shadow back onto disk.
+    const tabA = createAchievementsStore(localStorage);
+    tabA.check(ctx({ lifetime: { ...ZERO_STATS, shellKills: 1 } })); // tabA earns first-blood
+    const tabB = createAchievementsStore(localStorage); // boots with first-blood in its shadow
+    expect(tabB.earned().has('first-blood')).toBe(true);
+
+    tabA.reset();
+    expect(localStorage.getItem(ACHIEVEMENTS_KEY)).toBe(JSON.stringify({ earned: [] })); // disk really is reset
+
+    tabB.check(ctx({ lifetime: { ...ZERO_STATS, minesLaid: 50 } })); // tabB earns minelayer, unrelated to the reset id
+
+    expect(tabB.earned().has('first-blood'), 'the reset must stick even from a stale tab').toBe(false);
+    expect(tabB.earned().has('minelayer'), 'the newly earned id must still land').toBe(true);
+    expect(JSON.parse(localStorage.getItem(ACHIEVEMENTS_KEY)!).earned).toEqual(['minelayer']);
+  });
+
+  it('concurrent earning across two live tabs still merges losslessly, with no reset involved', () => {
+    // The other half of the same fix: dropping the shadow from the write's union must
+    // not cost the no-loss merge that made a union the right choice in the first
+    // place. tabA and tabB boot together (both empty), each earns a DIFFERENT
+    // achievement, and both must survive.
+    const tabA = createAchievementsStore(localStorage);
+    const tabB = createAchievementsStore(localStorage); // booted alongside tabA, same empty disk
+    tabA.check(ctx({ lifetime: { ...ZERO_STATS, shellKills: 1 } })); // tabA earns first-blood (X)
+    tabB.check(ctx({ lifetime: { ...ZERO_STATS, minesLaid: 50 } })); // tabB earns minelayer (Y)
+    const fresh = createAchievementsStore(localStorage).earned();
+    expect([...fresh].sort()).toEqual(['first-blood', 'minelayer']);
+  });
+
+  it('a storage whose writes never land keeps the shadow as the session truth: resync must never erase it', () => {
+    // Mirrors run.ts's "resync guard does not fire under a THROWING storage" test.
+    // getItem keeps working off a real backing map (so it is NOT the read-throws
+    // case already covered above), but setItem always throws, so nothing this
+    // instance writes ever actually lands and getItem reads back empty forever.
+    // Once a write has failed, resync must stop trusting that empty read as "another
+    // tab reset it" -- otherwise the second check() call below would wipe first-blood
+    // from the shadow even though no reset ever happened.
+    const map = new Map<string, string>();
+    const s = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (): void => {
+        throw new Error('denied');
+      },
+    } as unknown as Storage;
+    const store = createAchievementsStore(s);
+    store.check(ctx({ lifetime: { ...ZERO_STATS, shellKills: 1 } })); // write() catches the throw -- storage is now known broken
+    expect(store.earned().has('first-blood')).toBe(true);
+    store.check(ctx({ lifetime: { ...ZERO_STATS, minesLaid: 50 } })); // a second mutating call
+    expect(store.earned().has('first-blood'), 'the shadow remains the truth, not wiped by the always-empty read').toBe(
+      true,
+    );
+    expect(store.earned().has('minelayer')).toBe(true);
+  });
+
   it('returns several at once when a single moment earns them', () => {
     const s = createAchievementsStore(localStorage);
     const ids = s

@@ -216,23 +216,55 @@ function read(storage: Storage): Set<AchievementId> {
 export function createAchievementsStore(storage: Storage): AchievementsStore {
   let shadow = read(storage);
 
+  // Flips to false the first time write() catches an exception, and never flips
+  // back. Guards resync() below -- same convention as run.ts's storageIsWritable,
+  // for the same reason: a storage that has already failed to persist THIS
+  // instance's own writes must not be trusted to answer "what does disk actually
+  // hold". Safari private mode lets getItem keep succeeding -- reading back empty,
+  // because nothing this instance wrote ever actually landed -- even though
+  // setItem always throws. Treating that empty read as ground truth would erase
+  // the one copy of this session's earned ids the degrade path exists to protect.
+  let storageIsWritable = true;
+
   /** The blind write. Only reset() may use it: a union would resurrect what it clears. */
   function write(ids: Iterable<AchievementId>): void {
     try {
       storage.setItem(ACHIEVEMENTS_KEY, JSON.stringify({ earned: [...ids] }));
     } catch {
       // Private mode or quota: the shadow carries the session.
+      storageIsWritable = false;
     }
   }
 
+  /**
+   * Resync the shadow to disk before evaluating what's newly earned, so DISK --
+   * not the shadow's own history -- decides what "already earned" means. This is
+   * the fix for PR #62's residual: a tab left open across Reset progress keeps a
+   * shadow full of pre-reset ids, and the old persist() unioned that shadow INTO
+   * disk, which brought every one of them back the next time this tab earned
+   * anything at all. Resyncing first means the write becomes (disk ∪
+   * newly-earned-this-call), not (shadow ∪ disk ∪ new) -- a reset in another tab
+   * stays reset, because the ids it cleared are no longer in the base this tab
+   * unions onto.
+   *
+   * Gated on storageIsWritable, exactly like run.ts's refreshShadowIfEnded: once
+   * this instance's own write has failed, a later getItem can keep succeeding
+   * while reporting nothing, because nothing this instance wrote ever actually
+   * landed (see storageIsWritable's doc comment). Treating that empty read as "a
+   * reset happened elsewhere" would erase the shadow -- the one copy of this
+   * session's earned ids this degrade path exists to protect -- on a session that
+   * may never have had a second tab at all. So a known-broken storage is
+   * excluded, and the shadow stays the truth for the rest of the session, exactly
+   * as before this fix existed.
+   */
+  function resync(): void {
+    if (!storageIsWritable) return;
+    shadow = read(storage);
+  }
+
   function persist(): void {
-    // UNION-merge against current storage before writing, exactly as stats.ts and
-    // progress.ts do and for the same reason found in review there: a blind write
-    // of this tab's copy erases what another tab earned since we booted. Union is
-    // the no-loss choice for a latched set.
-    // KNOWN RESIDUAL, shared with the siblings: a tab still open across a Reset
-    // progress can resurrect pre-reset ids with its next write.
-    for (const id of read(storage)) shadow.add(id);
+    // shadow is already (disk ∪ this call's fresh ids) once resync() has run --
+    // see its doc comment. Nothing left to union here.
     write(shadow);
   }
 
@@ -243,6 +275,7 @@ export function createAchievementsStore(storage: Storage): AchievementsStore {
     // a held reference no longer updates itself.
     earned: () => new Set(shadow),
     check(ctx: AchievementContext): AchievementDef[] {
+      resync();
       const fresh = ACHIEVEMENTS.filter((a) => !shadow.has(a.id) && a.earned(ctx));
       if (fresh.length === 0) return [];
       for (const a of fresh) shadow.add(a.id);
@@ -252,6 +285,10 @@ export function createAchievementsStore(storage: Storage): AchievementsStore {
     reset(): void {
       // clear(), not a new Set: a swap leaves any held reference pointing at the
       // pre-reset ids, which is a different behaviour from the in-place add above.
+      //
+      // Deliberately does NOT call resync(): reset is the one explicit action
+      // allowed to replace whatever disk currently holds, the same way run.ts's
+      // startNewRun skips refreshShadowIfEnded -- see resync's doc comment.
       shadow.clear();
       write(shadow); // NOT persist(): the union would instantly resurrect everything
     },

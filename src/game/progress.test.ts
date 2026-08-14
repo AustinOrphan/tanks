@@ -97,6 +97,55 @@ describe('reset', () => {
   });
 });
 
+describe('a tab left open across reset (PR #62\'s sibling defect)', () => {
+  it('does not resurrect a pre-reset clear on its next write', () => {
+    // achievements.ts's exact repro, adapted to progress's max-by-ordinal merge:
+    // tabB constructs while disk already holds a clear through level 3,
+    // snapshotting it into its own shadow. tabA then runs the two-click-confirmed
+    // reset -- disk now holds nothing cleared. tabB never saw that write; its
+    // shadow still believes level 3 is the highest clear. tabB's next mutating
+    // call (replaying level 1, an EARLIER level) must not spread that stale
+    // shadow's higher ordinal back onto disk merely because the three-way max
+    // used to compare against it.
+    const tabA = createProgressStore(localStorage);
+    tabA.recordCleared(CAMPAIGN_LEVELS[2]); // tabA clears through level 3
+    const tabB = createProgressStore(localStorage); // boots with level 3 in its shadow
+    expect(tabB.highestCleared()).toBe(3);
+
+    tabA.reset();
+    expect(createProgressStore(localStorage).highestCleared()).toBe(0); // disk really is reset
+
+    tabB.recordCleared(CAMPAIGN_LEVELS[0]); // tabB replays level 1, unaware of the reset
+
+    expect(tabB.highestCleared(), 'the reset must stick even from a stale tab').toBe(1);
+    expect(createProgressStore(localStorage).highestCleared()).toBe(1);
+  });
+});
+
+describe('a storage whose writes never land (PR #62\'s sibling: the latch)', () => {
+  it('keeps the shadow as the session truth: resync must never erase it', () => {
+    // Mirrors achievements.ts's equivalent test. getItem keeps working off a real
+    // backing map (so it is NOT the read-throws case already covered above), but
+    // setItem always throws, so nothing this instance writes ever actually lands
+    // and getItem reads back empty forever. Once a write has failed, resync must
+    // stop trusting that empty read as "another tab reset it" -- otherwise the
+    // second recordCleared call below would regress highestCleared from 3 to 1
+    // even though no reset ever happened.
+    const map = new Map<string, string>();
+    const s = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (): void => {
+        throw new Error('denied');
+      },
+    } as unknown as Storage;
+    const p = createProgressStore(s);
+    p.recordCleared(CAMPAIGN_LEVELS[2]); // write() catches the throw -- storage is now known broken
+    expect(p.highestCleared()).toBe(3);
+    p.recordCleared(CAMPAIGN_LEVELS[0]); // a second mutating call, an earlier level
+    expect(p.highestCleared(), 'the shadow remains the truth, not wiped by the always-empty read').toBe(3);
+  });
+});
+
 describe('legacy migration: eager write-back (issue #154)', () => {
   it('translates a legacy bare-ordinal value once, immediately, and reports the right position', () => {
     // Day-one campaign.json mirrors arenas.json 1:1, so legacy "3" (cleared through

@@ -903,7 +903,7 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **83 lines below** — 16 / 31 / 25 / 11 across four groups. **74** came from the
+Counts: **82 lines below** — 15 / 31 / 25 / 11 across four groups. **73** came from the
 harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
@@ -914,7 +914,6 @@ items triaged; the difference is itemised at the end. All five figures are recom
 - `muzzlePoint` tests the spawn point against `world.walls` and not `world.tanks`, so a shell can be born inside an adjacent tank's silhouette — verified at c8f1557: harmful variant is a ~0.5-3 degree tangent-escape sliver at exact minimum separation, 0 of 1370 trace fire events; every fix changes point-blank feel — awaiting that call. #42
 - `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:333` documents the divergence as negligible rather than closing it. #1
 - The retroreflecting-seam fix is open: it must distinguish a coplanar neighbour that continues the surface from a perpendicular one that merely touches it. CLAUDE.md §Known holes owns the measurement and the record of the fix that was tried and reverted — do not restate them here. #1
-- A tab left open across "Reset progress" resurrects pre-reset achievement ids on its next write; `achievements.ts` persists by union and no `storage` listener exists. #62
 - `melody.ts:99`'s density knob is inert at and above 0.5: the predicate is `rnd() < spec.density * 2`. **13 of 42** generated layers ship at ≥ 0.5. *(pinned)* #70
 - `melody.ts` carries `previous` as a palette *index* across bars whose palettes may differ in size, weakening the contour guarantee. #70
 - Six tracks — blitz, dread, hunt, siege, standoff, triumph — belong to no suite, so nothing can select them: **25 of 31** reachable. *(pinned)* #71, #74
@@ -1016,9 +1015,9 @@ was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, s
 
 The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the tree" — they
 are listed, not dropped, which an earlier draft's arithmetic missed by mapping the 76 onto
-all 74 in-scope lines including that section.
+all 73 in-scope lines including that section.
 
-The 76 open became the **65** in-scope lines of the first three groups, near enough
+The 76 open became the **64** in-scope lines of the first three groups, near enough
 one-to-one, with these
 adjustments: 4 are PR #75's residuals and live in the "Follow-ups from walls as geometry"
 spike; 1 is the intensity spike; 1 is a null item (no save system references tank ids);
@@ -1031,10 +1030,14 @@ a figure that exists in no PR body; it is rewritten to the two figures that do. 
 those 16 removals the review also split or corrected lines that were understated, which is
 why 76 − 16 lands above 60 rather than at it. Issue #137 closed one line here (enemy tanks
 wearing skins) and opened another in its place (the shared-geometry limitation that closing
-it exposed), netting to zero and holding the count at 66. The corner-bounce fix (this PR)
+it exposed), netting to zero and holding the count at 66. The corner-bounce fix (#159)
 closed the reachability line at `collision.ts:257-269` outright — the two-event corner
-defect it named is fixed, and nothing replaced the line — which is the one real decrease
-since: the live count now reads 65.
+defect it named is fixed, and nothing replaced the line — the live count read 65 after
+that. The achievements-reset fix (this PR) closes the reachability line naming
+`achievements.ts`'s union-write resurrection defect (PR #62's residual) the same way:
+`achievements.ts` now resyncs its shadow against disk before evaluating what is newly
+earned, so a tab left open across Reset progress can no longer bring pre-reset ids back —
+which is the one further decrease since: the live count now reads 64.
 
 The remaining **9** lines came from prose-only PRs outside the heading scope and are marked
 `*(prose-only PR)*`. They are a spot-check of 4 such PRs, not a sweep of the ~15.
