@@ -8,6 +8,8 @@ import {
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig, SWEEP_EPS,
 } from '../constants';
 import type { World } from '../world';
+import { detHypot } from '../math/hypot';
+import { detSin, detCos } from '../math/trig';
 
 /**
  * Wall-only visibility test. Deliberately says NOTHING about tanks on the line -- see
@@ -31,7 +33,7 @@ function pointSegmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
   const len2 = abx * abx + aby * aby;
   let t = len2 === 0 ? 0 : ((p.x - a.x) * abx + (p.y - a.y) * aby) / len2;
   t = t < 0 ? 0 : t > 1 ? 1 : t;
-  return Math.hypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
+  return detHypot(p.x - (a.x + abx * t), p.y - (a.y + aby * t));
 }
 
 /**
@@ -121,7 +123,7 @@ function minApproach(a: Vec2, b: Vec2, legTime: number, legStart: number, p: Vec
   const w2 = w.x * w.x + w.y * w.y;
   let s = w2 < VEC_EPS ? 0 : -(d0.x * w.x + d0.y * w.y) / w2;
   s = s < 0 ? 0 : s > legTime ? legTime : s;
-  return Math.hypot(d0.x + w.x * s, d0.y + w.y * s);
+  return detHypot(d0.x + w.x * s, d0.y + w.y * s);
 }
 
 /**
@@ -212,7 +214,7 @@ export function mirrorAcrossAABB(point: Vec2, box: AABB): Vec2[] {
 function headingIntoBox(start: Vec2, target: Vec2, box: AABB): boolean {
   const dx = target.x - start.x;
   const dy = target.y - start.y;
-  const len = Math.hypot(dx, dy);
+  const len = detHypot(dx, dy);
   if (len === 0) return false;
   const step = SWEEP_EPS / len;
   const px = start.x + dx * step;
@@ -248,7 +250,7 @@ function headingIntoBox(start: Vec2, target: Vec2, box: AABB): boolean {
  * the same unit, which is what makes the two branches mean what the paragraph above says.
  */
 function losIgnoring(from: Vec2, to: Vec2, walls: Wall[], ignore: Wall): boolean {
-  const len = Math.hypot(to.x - from.x, to.y - from.y);
+  const len = detHypot(to.x - from.x, to.y - from.y);
   for (const w of walls) {
     if (w === ignore || w.destroyed) continue;
     const hit = raySegmentVsAABB(from, to, w.aabb);
@@ -393,7 +395,7 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
   const out: Bullet[] = [];
   for (const b of world.bullets) {
     if (!b.alive) continue;
-    const speed = Math.hypot(b.vel.x, b.vel.y);
+    const speed = detHypot(b.vel.x, b.vel.y);
     if (speed < VEC_EPS) continue;
     const dir = vnorm(b.vel);
     const rel = { x: tank.pos.x - b.pos.x, y: tank.pos.y - b.pos.y };
@@ -403,7 +405,7 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
     if (along < 0) continue;                     // bullet already past / moving away
     if (along > speed * THREAT_HORIZON) continue; // too far ahead in time
     const perp = { x: rel.x - dir.x * along, y: rel.y - dir.y * along };
-    if (Math.hypot(perp.x, perp.y) <= DANGER_CORRIDOR) out.push(b);
+    if (detHypot(perp.x, perp.y) <= DANGER_CORRIDOR) out.push(b);
   }
   return out;
 }
@@ -611,7 +613,7 @@ function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | nu
   for (const m of mines) {
     const d = vsub(tank.pos, m.pos);
     // Standing exactly on a mine gives no direction to prefer, so it constrains nothing.
-    if (Math.hypot(d.x, d.y) < VEC_EPS) continue;
+    if (detHypot(d.x, d.y) < VEC_EPS) continue;
     away.push(vnorm(d));
   }
 
@@ -623,7 +625,7 @@ function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | nu
     const a = (i * 2 * Math.PI) / ESCAPE_SAMPLES;
     // Snapped so the axis directions are exact rather than 1e-16 off, which would make
     // "flees straight away from a single mine" fail a 6-decimal comparison.
-    const cand = { x: Math.round(Math.cos(a) * 1e12) / 1e12, y: Math.round(Math.sin(a) * 1e12) / 1e12 };
+    const cand = { x: Math.round(detCos(a) * 1e12) / 1e12, y: Math.round(detSin(a) * 1e12) / 1e12 };
     let score = Infinity;
     for (const u of away) {
       const dot = cand.x * u.x + cand.y * u.y;

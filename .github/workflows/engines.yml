@@ -16,17 +16,21 @@
 # choice, not a gap plugged by some other mechanism.
 #
 # WHAT IT MEASURES: tools/baseline/run.mjs's golden trace (tools/baseline/trace.ts,
-# BASELINE_HASH) and large-magnitude angle probe (tools/baseline/angles.ts, ANGLE_HASH),
-# across axes ci.yml's ubuntu-only runners cannot reach -- macOS (the closest available
-# proxy to shipped Safari: Playwright webkit there is still JavaScriptCore, not shipped
-# Safari, but closer than the Linux build ci.yml already runs), arm64 (macos-latest runners
-# are arm64), and Windows. PR #160 measured chromium/firefox/webkit already diverging on
+# BASELINE_HASH), large-magnitude angle probe (tools/baseline/angles.ts, ANGLE_HASH) and
+# vendored-math angle probe (same file, VENDORED_ANGLE_HASH -- issue #133), across axes
+# ci.yml's ubuntu-only runners cannot reach -- macOS (the closest available proxy to
+# shipped Safari: Playwright webkit there is still JavaScriptCore, not shipped Safari, but
+# closer than the Linux build ci.yml already runs), arm64 (macos-latest runners are
+# arm64), and Windows. PR #160 measured chromium/firefox/webkit already diverging on
 # sin/cos/atan2/hypot on Linux x86-64 while the golden trace still agrees (a lattice
 # artifact -- see angles.ts's header); this workflow is the harness that finds out whether
-# that picture changes on a different OS or CPU. It also doubles as the acceptance harness
-# issue #133's vendored-math work will assert against once that lands: it prints AND
-# uploads both hashes per (os, engine), so a later PR can diff cross-OS agreement of
-# vendored functions without re-deriving this plumbing.
+# that picture changes on a different OS or CPU. **#133 landed against this exact
+# harness**: on Linux x86-64 chromium/firefox/webkit all produced the same
+# VENDORED_ANGLE_HASH, and a mismatch there IS wired into run.mjs's exit code (unlike a
+# native ANGLE_HASH mismatch, which stays structural and unfixable) -- so this workflow is
+# what extends that same cross-engine agreement check to macOS (arm64) and Windows, not a
+# forward reference to work that hasn't landed yet. It still prints and uploads all three
+# hashes per (os, engine).
 name: Engines matrix
 
 on:

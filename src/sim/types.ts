@@ -1,3 +1,5 @@
+import { detSin, detCos, detAtan2 } from './math/trig';
+
 // ---- Geometry ----
 export type Vec2 = { x: number; y: number };
 
@@ -170,11 +172,11 @@ export function vdist(a: Vec2, b: Vec2): number {
 }
 
 export function angleOf(a: Vec2): number {
-  return Math.atan2(a.y, a.x);
+  return detAtan2(a.y, a.x);
 }
 
 export function fromAngle(r: number): Vec2 {
-  return { x: Math.cos(r), y: Math.sin(r) };
+  return { x: detCos(r), y: detSin(r) };
 }
 
 // Steps `current` toward `target` by at most `maxDelta` radians (`maxDelta` must be

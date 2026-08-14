@@ -541,8 +541,28 @@ push; firefox and webkit re-verify on push to `main`, weekly, and on demand, via
 deliberately: see "The deploy waits for CI" above for why a checking job that can fail for
 reasons unrelated to the tree must not sit inside `ci.yml`. It runs the angle probe
 (`tools/baseline/angles.ts`, `ANGLE_HASH`) alongside the golden trace on every run, since
-`--all` always runs both, and prints and uploads both hashes per (OS, engine) — the future
-acceptance harness for issue #133's vendored-math work.) **That is not the whole
+`--all` always runs both, and prints and uploads both hashes per (OS, engine) — the
+acceptance harness issue #133's vendored-math work landed against, now a THIRD result on
+the same run rather than a future one. **#133 is closed**: `src/sim/math/` ports
+netlib.org/fdlibm's sin/cos/atan2 and V8's own Torque hypot formula, wired at all 17 of
+the sim's former `Math.sin`/`cos`/`atan2`/`hypot` call sites (the 4 `Math.sqrt` sites
+stay native — ES2025 correctly-rounded). `BASELINE_HASH` did **not** move — measured, not
+assumed: `324aa9b5…` is unchanged pre- and post-migration, on Node and on all three
+browser engines alike, which the plan's own Node/V8-13.6-provenance argument predicted as
+plausible but not certain. `ANGLE_HASH` is unaffected by construction (it sweeps native
+`Math.*`, never touched by this work) and the three engines still disagree on it, same
+finding as before. The new **`VENDORED_ANGLE_HASH`** is the pin this paragraph used to
+describe only as a future acceptance harness: `tools/baseline/angles.ts`'s vendored bands
+(`vsin`/`vcos`/`vatan2`/`vhypot`), asserted equal ACROSS ENGINES rather than merely
+self-stable on Node, and measured — chromium, firefox and webkit all produced
+`a4fdbbfb32de…`, matching the pin — which is the actual demonstration that a JS port
+built only from ECMA-262's exactly-specified operations achieves what native
+`Math.sin`/`cos`/`atan2`/`hypot` cannot: bit-identical output on every engine. `npm run
+trace:browser -- --all`'s exit code now reflects this: a vendored-hash mismatch counts
+into `failed`, unlike a native `ANGLE_HASH` mismatch, which stays structural and
+unfixable. **What #133 does not fix**: `InputState.aim`'s canvas-size dependence and
+`SimEvent`'s missing tick field, both still open, both recorded in the multiplayer spike
+in `docs/superpowers/backlog.md`.) **That is not the whole
 question**: shipped Safari and iOS stay untested by any of this — a macOS Playwright run
 is a closer proxy than the Linux build above, but is still JavaScriptCore, not shipped
 Safari — and one matching hash is agreement on the sampled trajectory, not a proof about

@@ -708,8 +708,13 @@ serialisation boundary between the sim and its five event consumers, where today
   three-engine agreement. What is still open is narrower — shipped Safari, iOS, and any
   ARM engine, none of which this box can run (see the multiplayer spike's gating bullet
   above for the method) — and it is one sampled trajectory, not a proof about `Math.hypot`.
-  The replacement work is issue #133, still open; **it should not be pre-empted by a
-  rewrite, and neither should a rewrite be justified by a divergence nobody has observed.**
+  The replacement work was issue #133, now closed: `src/sim/math/` vendors fdlibm's
+  sin/cos/atan2 and V8's own hypot formula, and `VENDORED_ANGLE_HASH`
+  (`tools/baseline/angles.ts`) measured chromium, firefox and webkit agreeing bit-for-bit
+  on all of them, in JS, with no rewrite. **That closes the arithmetic argument for a
+  native/WASM rewrite on the engines it measured** — the divergence a rewrite would have
+  existed to fix is gone at the JS layer. The residual is the same one #128 left: shipped
+  Safari, iOS and any ARM engine are still unmeasured by anything in this repo.
 - **Second, whether multiplayer is actually being built.** Bit-identical arithmetic is
   worth a rewrite only if lockstep netcode is a commitment rather than an interest. See the
   multiplayer spike above — its gating measurement is the same one, and is half answered.
