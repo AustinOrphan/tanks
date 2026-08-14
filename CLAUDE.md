@@ -578,7 +578,7 @@ sweep had trials. That is catchable by reading alone, but only if the population
 the page.
 
 **Counts are a property of the tree at the moment you ran them**, so measure them LAST:
-writing a test changes them. `tools/mutate/run.mjs:30` exists because of this — "fails 4
+writing a test changes them. `tools/mutate/run.mjs:32` exists because of this — "fails 4
 of 12" quietly becoming "fails 5 of 13" when a test is added is `killed` both times, which
 is why the manifest carries `expectFailures` rather than an outcome alone. The same
 applies to any test total quoted in a PR body.
@@ -646,12 +646,20 @@ proof, name the dimension it sorts, rounds or aggregates away.
   was luck: a stale tree can as easily go green on something CI fails. If a local result
   disagrees with CI, check `npx vitest --version` against the lock before debugging the
   code.
-- **`tools/` is typechecked by nothing.** `tsconfig.json` includes only `["src",
-  "vite.config.ts"]`, while `vite.config.ts` runs `tools/**/*.test.ts` — so those tests
-  RUN under `npm test` and `tsc` never reads the files. A duplicate declaration there
-  passes the gate and surfaces as a bare timeout under `npm run test:gl`. See backlog item
-  9, under "Customize preview residuals" — that numbering is section-relative, so grep the
-  title rather than trusting the number.
+- **Most of `tools/` is typechecked by nothing — `tools/mutate/` is now the exception.**
+  `tsconfig.json`'s `include` was `["src", "vite.config.ts"]`, while `vite.config.ts` runs
+  `tools/**/*.test.ts` — so those tests RUN under `npm test` and `tsc` never read the
+  files. A duplicate declaration there passes the gate and surfaces as a bare timeout
+  under `npm run test:gl`. Issue #134 extracted `tools/mutate/` into its own workspace
+  package and added `tools/mutate/orchestrate.test.ts` to `include`, with `allowJs` +
+  `checkJs` on: that one entry point imports all three `.mjs` files DIRECTLY at value
+  level (`lib.mjs`, `orchestrate.mjs`, and `run.mjs` at its line ~50), so all four files
+  are real, `noImplicitAny`-checked TypeScript input now — not just the `.ts` file.
+  Proven active, not assumed: an injected JSDoc type violation fires TS2322 in each of
+  the three `.mjs` files. Every OTHER tool (`tools/gl/harness.ts`, `tools/gallery/`,
+  `tools/baseline/`, …) is still exactly as unchecked as this bullet used to describe. See
+  backlog item 9, under "Customize preview residuals" — that numbering is
+  section-relative, so grep the title rather than trusting the number.
 - **A zero exit code is not verification.** Separate shell lines do not inherit the
   previous line's failure: a heredoc `python3` that raised and wrote nothing, followed by
   `gh pr edit --body-file`, re-published the UNCHANGED body and printed "edited". Read the

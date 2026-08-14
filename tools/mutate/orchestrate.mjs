@@ -38,6 +38,22 @@
  * and runOne checks the error, not a flag. See run.mjs's classifySubprocessFailure.
  */
 
+/**
+ * @typedef {import('./lib.mjs').ManifestEntry} ManifestEntry
+ * @typedef {import('./lib.mjs').ApplyResult} ApplyResult
+ * @typedef {(content: string, find: string, replace: string, occurrence?: number) => ApplyResult} ApplyAt
+ * @typedef {{ failed: number, total: number, failedSuites?: number }} TestRunResult
+ * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number }} MutationResult
+ * @typedef {{
+ *   readFile: (file: string) => string,
+ *   gitPorcelain: (file: string) => string,
+ *   applyToDisk: (file: string, content: string) => void,
+ *   restoreToDisk: (file: string, content: string) => void,
+ *   runTests: (testFiles: string[]) => TestRunResult,
+ *   onResult: (result: MutationResult, index: number, count: number, entry: ManifestEntry) => void,
+ * }} Deps
+ */
+
 export const STATUS = {
   KILLED: 'KILLED',
   SURVIVES: 'SURVIVES',
@@ -63,6 +79,8 @@ export const NO_VERDICT_STATUSES = new Set([
  *  runOne's own comment on `deps.runTests`. */
 export class RestoreFailedError extends Error {}
 
+/** Only ever called with the `ok: false` branch of ApplyResult -- see runOne's `if (!applied.ok)`.
+ * @param {Extract<ApplyResult, { ok: false }>} applied @param {string} file */
 function reasonText(applied, file) {
   if (applied.reason === 'not-found') return `find string not present in ${file}`;
   if (applied.reason === 'ambiguous') {
@@ -79,7 +97,8 @@ function reasonText(applied, file) {
  *  directly rather than trusting vitest's own `success` boolean as a THIRD,
  *  separately-fakeable signal -- these two numbers are what `success` is itself
  *  derived from. Used both for the pre-mutation baseline (must NOT be red) and the
- *  post-mutation outcome (red = killed) -- the same signal, two different questions. */
+ *  post-mutation outcome (red = killed) -- the same signal, two different questions.
+ * @param {TestRunResult} result */
 function isRed(result) {
   return result.failed > 0 || (result.failedSuites ?? 0) > 0;
 }
@@ -100,6 +119,7 @@ function isRed(result) {
  * breaks its own syntax/imports): {failed: 0, total: 22, failedSuites: 1}. Only THAT
  * asymmetric shape is called out by name below; a normal failure (`failed > 0`) is not
  * given a misleading "failed to collect" gloss just because its suite total moved too.
+ * @param {TestRunResult} result
  */
 function suiteNote(result) {
   return result.failed === 0 && (result.failedSuites ?? 0) > 0
@@ -107,10 +127,12 @@ function suiteNote(result) {
     : '';
 }
 
+/** @param {TestRunResult} baseline */
 function baselineDetail(baseline) {
   return `baseline is red before any mutation: ${baseline.failed} of ${baseline.total} failing${suiteNote(baseline)}`;
 }
 
+/** @param {TestRunResult} result */
 function resultDetail(result) {
   return `${result.failed} of ${result.total} test(s) failed${suiteNote(result)}`;
 }
@@ -119,6 +141,10 @@ function resultDetail(result) {
  * Runs exactly one manifest entry. Returns a result object for every ordinary outcome
  * -- killed, survives, failed-to-apply, a red baseline, or a caught interruption -- and
  * throws ONLY a RestoreFailedError, only when the post-restore byte-compare fails.
+ * @param {ManifestEntry} entry
+ * @param {Deps} deps
+ * @param {ApplyAt} applyAt
+ * @returns {MutationResult}
  */
 export function runOne(entry, deps, applyAt) {
   const dirty = deps.gitPorcelain(entry.file).trim();
@@ -159,7 +185,10 @@ export function runOne(entry, deps, applyAt) {
   let baseline;
   try {
     baseline = deps.runTests(entry.tests);
-  } catch (e) {
+  } catch (/** @type {any} */ e) {
+    // `.interrupted` is a duck-typed flag run.mjs's classifySubprocessFailure attaches
+    // to a thrown Error (see this file's header comment) -- there is no narrower real
+    // type for a caught exception's shape here, so `any` is the honest annotation.
     if (e?.interrupted) {
       return { id: entry.id, status: STATUS.INTERRUPTED, matches: false, detail: 'interrupted during the baseline check; nothing was mutated' };
     }
@@ -193,7 +222,7 @@ export function runOne(entry, deps, applyAt) {
     let result;
     try {
       result = deps.runTests(entry.tests);
-    } catch (e) {
+    } catch (/** @type {any} */ e) {
       // A thrown runTests (vitest killed mid-run) is ONLY non-fatal when we already
       // know why: the error itself says it was an interruption. Anything else is a
       // real, unexplained failure and must still abort the run -- the outer `finally`
@@ -252,6 +281,10 @@ export function runOne(entry, deps, applyAt) {
  * completes. Stops immediately if runOne throws -- which by construction is only ever
  * a RestoreFailedError, since every other failure mode (an interrupted test run) is
  * caught inside runOne and returned as an ordinary INTERRUPTED result instead.
+ * @param {ManifestEntry[]} entries
+ * @param {Deps} deps
+ * @param {ApplyAt} applyAt
+ * @returns {MutationResult[]}
  */
 export function runManifest(entries, deps, applyAt) {
   const results = [];
@@ -260,7 +293,7 @@ export function runManifest(entries, deps, applyAt) {
     let result;
     try {
       result = runOne(entry, deps, applyAt);
-    } catch (e) {
+    } catch (/** @type {any} */ e) {
       deps.onResult(
         { id: entry.id, status: 'FATAL', matches: false, detail: String(e?.message ?? e) },
         i + 1,
@@ -278,7 +311,9 @@ export function runManifest(entries, deps, applyAt) {
   return results;
 }
 
-/** Non-zero when any entry's actual outcome did not match what the manifest declared. */
+/** Non-zero when any entry's actual outcome did not match what the manifest declared.
+ * Narrower than `MutationResult[]` on purpose: `.matches` is the only field this reads.
+ * @param {{ matches: boolean }[]} results */
 export function computeExitCode(results) {
   return results.some((r) => !r.matches) ? 1 : 0;
 }

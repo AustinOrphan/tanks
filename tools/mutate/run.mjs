@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Hand-picked mutation testing: apply a hand-picked edit to a src/ file, run a scoped
+ * Hand-picked mutation testing: apply a hand-picked edit to a source file, run a scoped
  * slice of the suite, restore, and report KILLED / SURVIVES / FAILED-TO-APPLY /
  * BASELINE-RED / INTERRUPTED.
  *
@@ -43,6 +43,7 @@
  *   npm run mutate
  *   npm run mutate -- --manifest tools/mutate/manifest.json
  *   npm run mutate -- --only skins-min-accent-delta-200
+ *   npm run mutate -- --root /path/to/checkout
  *
  * Exit codes: 0 clean, every entry matched its declared outcome. 1 ran clean but at
  * least one entry's actual outcome (or expectFailures count) did not match. 2 refused
@@ -59,7 +60,7 @@
  * match must report FAILED-TO-APPLY, and a manifest with a wrong declared outcome
  * must produce a non-zero exit.
  */
-import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, isAbsolute, relative } from 'node:path';
@@ -67,11 +68,36 @@ import { fileURLToPath } from 'node:url';
 import { applyAt, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFailedError } from './orchestrate.mjs';
 
-// fileURLToPath, not `new URL(...).pathname`: the latter leaves percent-encoding in
-// place (a repo checked out under a path with a space or a non-ASCII character would
-// get a ROOT that does not exist on disk), and does the wrong thing on Windows drive
-// letters. fileURLToPath is the platform-correct inverse of pathToFileURL.
-const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+/**
+ * @typedef {import('./lib.mjs').ManifestEntry} ManifestEntry
+ * @typedef {{ failed: number, total: number, failedSuites?: number }} TestRunResult
+ * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number }} MutationResult
+ * @typedef {{ reason: 'interrupted' | 'timeout' | 'indeterminate', detail: string }} FailureVerdict
+ * @typedef {{ status: number | null, signal: string | null, error?: Error }} SpawnResultLike
+ * @typedef {{ id: string, file: string, tests: string[], related: string[] }} UnreachableProblem
+ * @typedef {{
+ *   readFile: (file: string) => string,
+ *   gitPorcelain: (file: string) => string,
+ *   applyToDisk: (file: string, content: string) => void,
+ *   restoreToDisk: (file: string, content: string) => void,
+ *   runTests: (testFiles: string[]) => TestRunResult,
+ *   onResult: (result: MutationResult, index: number, count: number, entry: ManifestEntry) => void,
+ * }} Deps
+ */
+
+// This package knows nothing about where it lives relative to the project it is
+// mutating -- it is a plain npm dependency (a workspace member here, potentially an
+// installed one elsewhere), not a fixed number of directories below a repo root. Every
+// path this file touches is resolved against an explicit `root`, sourced from `--root`
+// and defaulting to `process.cwd()`: an `npm run` script (the primary way this is
+// invoked) already sets cwd to the directory holding the package.json that defines the
+// script, which for the normal "mutate" script IS the target repo's root, so the
+// default needs no help there. `--root` exists for every other caller -- a bin invoked
+// from a subdirectory, or a script that `cd`s before running this.
+//
+// fileURLToPath is still imported below, but now only for the CLI entry-point guard at
+// the bottom of this file, not for computing a location relative to import.meta.url the
+// way the old fixed-depth ROOT did.
 
 // A blocking subprocess (vitest, or `vitest related`) with no timeout cannot be
 // interrupted by vitest's OWN test timeout when this harness's meta-tests run it
@@ -81,27 +107,33 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const SUBPROCESS_TIMEOUT_MS = 180_000;
 const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 
+/** @param {string[]} argv
+ * @returns {{ manifest: string, only: string | null, root: string }} */
 export function parseArgs(argv) {
-  const args = { manifest: 'tools/mutate/manifest.json', only: null };
+  /** @type {{ manifest: string, only: string | null, root: string }} */
+  const args = { manifest: 'tools/mutate/manifest.json', only: null, root: process.cwd() };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--manifest') args.manifest = argv[++i];
     else if (argv[i] === '--only') args.only = argv[++i];
+    else if (argv[i] === '--root') args.root = argv[++i];
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   return args;
 }
 
 /** `--manifest` may be given as an absolute path (a reviewer pointing at a scratch
- *  copy outside the repo, say) -- `join(ROOT, x)` on an absolute `x` does NOT jump to
+ *  copy outside the repo, say) -- `join(root, x)` on an absolute `x` does NOT jump to
  *  filesystem root the way `path.resolve` would; it silently concatenates, so an
- *  absolute path was being resolved as if it were repo-relative. */
+ *  absolute path was being resolved as if it were repo-relative.
+ * @param {string} root @param {string} manifestArg @returns {string} */
 export function resolveManifestPath(root, manifestArg) {
   return isAbsolute(manifestArg) ? manifestArg : join(root, manifestArg);
 }
 
-function sh(cmd, argv) {
+/** @param {string} cmd @param {string[]} argv @param {string} cwd @returns {string} */
+function sh(cmd, argv, cwd) {
   return execFileSync(cmd, argv, {
-    cwd: ROOT,
+    cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: SUBPROCESS_TIMEOUT_MS,
     killSignal: SUBPROCESS_KILL_SIGNAL,
@@ -110,7 +142,8 @@ function sh(cmd, argv) {
 
 /** Pure decision on top of a `git status --porcelain` string, so it is testable without
  *  shelling out to git. Kept separate from assertAllClean's process.exit -- a test can
- *  assert the message without a real git repo or a real process exit. */
+ *  assert the message without a real git repo or a real process exit.
+ * @param {string} porcelain @returns {string | null} */
 export function dirtyReport(porcelain) {
   const dirty = porcelain.trim();
   if (!dirty) return null;
@@ -123,9 +156,10 @@ export function dirtyReport(porcelain) {
 
 /** Files this run will touch, dirty-checked up front so an interrupted PRIOR run or
  *  unrelated in-progress edit is caught before anything is mutated -- the same
- *  refuse-if-dirty precedent tools/gallery/run.mjs follows for its --sweep. */
-function assertAllClean(files) {
-  const report = dirtyReport(sh('git', ['status', '--porcelain', '--', ...files]));
+ *  refuse-if-dirty precedent tools/gallery/run.mjs follows for its --sweep.
+ * @param {string[]} files @param {string} root */
+function assertAllClean(files, root) {
+  const report = dirtyReport(sh('git', ['status', '--porcelain', '--', ...files], root));
   if (report) {
     console.error(report);
     process.exit(2);
@@ -133,7 +167,8 @@ function assertAllClean(files) {
 }
 
 /** Pure formatting for the reachability preflight's refusal, so it is testable without
- *  a real vitest subprocess. */
+ *  a real vitest subprocess.
+ * @param {UnreachableProblem[]} problems @returns {string | null} */
 export function unreachableReport(problems) {
   if (problems.length === 0) return null;
   const lines = problems.map(
@@ -182,6 +217,7 @@ export function unreachableReport(problems) {
  *     report is therefore never a legitimate "found nothing" -- reporting one as such
  *     is the exact false claim ("nothing tests this file at all") this classifier
  *     exists to prevent when the true state is "the probe itself never completed".
+ * @param {SpawnResultLike} res @returns {FailureVerdict}
  */
 export function classifySubprocessFailure(res) {
   if (res.signal === SUBPROCESS_KILL_SIGNAL) {
@@ -199,38 +235,45 @@ export function classifySubprocessFailure(res) {
 /** Turns a classifySubprocessFailure verdict into a thrown, appropriately-flagged
  *  Error. `.interrupted` is what runOne's catch blocks check; `.timeout` and
  *  `.indeterminate` are not treated as interruptions anywhere -- they propagate as
- *  real failures, restored-but-surfaced (see run()'s runManifest catch below). */
+ *  real failures, restored-but-surfaced (see run()'s runManifest catch below).
+ * @param {FailureVerdict} verdict @param {string} what */
 function failureError(verdict, what) {
   const err = new Error(
     verdict.reason === 'interrupted'
       ? `${what} was interrupted (${verdict.detail})`
       : `${what} failed -- ${verdict.detail}`,
   );
-  err[verdict.reason] = true; // .interrupted, .timeout, or .indeterminate
+  // Duck-typed flag, not a real Error subtype -- see the FailureVerdict/catch-site
+  // comments elsewhere in this file for why `any` is the honest annotation here.
+  /** @type {any} */ (err)[verdict.reason] = true; // .interrupted, .timeout, or .indeterminate
   return err;
 }
 
 const relatedCache = new Map();
 
 /** The set of test files vitest's OWN dependency graph says are related to `file`,
- *  relative to ROOT. One real `vitest related` subprocess per DISTINCT file in the
- *  manifest (cached), run once up front, before anything is mutated -- this is a
- *  manifest-correctness check, not a per-mutation cost.
+ *  relative to `root`. One real `vitest related` subprocess per DISTINCT (root, file)
+ *  pair in the manifest (cached), run once up front, before anything is mutated -- this
+ *  is a manifest-correctness check, not a per-mutation cost.
  *
- *  `vitestBin` is overridable (default: the real binary) so tests can point this at a
- *  deliberately broken stub without touching the real installation every other test
- *  in this process depends on -- see orchestrate.test.ts's real end-to-end cases for
- *  a stub that exits 1 and one that does not exist at all. Exported for the same
- *  reason: this is the exact function that produced review's false "nothing tests
- *  this file at all" claim, and it had no test of its own. */
-export function relatedFilesFor(file, vitestBin = join(ROOT, 'node_modules/.bin/vitest')) {
-  const cacheKey = `${vitestBin}\0${file}`;
+ *  `root` defaults to `process.cwd()`, same reasoning as parseArgs. `vitestBin` is
+ *  separately overridable (default: the real binary under `<root>/node_modules/.bin/`)
+ *  so tests can point this at a deliberately broken stub without touching the real
+ *  installation every other test in this process depends on -- see
+ *  orchestrate.test.ts's real end-to-end cases for a stub that exits 1 and one that
+ *  does not exist at all. Exported for the same reason: this is the exact function
+ *  that produced review's false "nothing tests this file at all" claim, and it had no
+ *  test of its own.
+ * @param {string} file @param {string} [root] @param {string} [vitestBin] @returns {Set<string>} */
+export function relatedFilesFor(file, root = process.cwd(), vitestBin = join(root, 'node_modules/.bin/vitest')) {
+  const cacheKey = `${root}\0${vitestBin}\0${file}`;
   if (relatedCache.has(cacheKey)) return relatedCache.get(cacheKey);
-  const outFile = join(tmpdir(), `tanks-mutate-related-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  const outFile = join(tmpdir(), `mutate-related-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+  /** @type {Set<string>} */
   let related;
   try {
     const res = spawnSync(vitestBin, ['related', file, '--run', '--reporter=json', `--outputFile=${outFile}`], {
-      cwd: ROOT,
+      cwd: root,
       encoding: 'utf8',
       timeout: SUBPROCESS_TIMEOUT_MS,
       killSignal: SUBPROCESS_KILL_SIGNAL,
@@ -238,8 +281,9 @@ export function relatedFilesFor(file, vitestBin = join(ROOT, 'node_modules/.bin/
     if (!existsSync(outFile)) {
       throw failureError(classifySubprocessFailure(res), `vitest related, probing ${file},`);
     }
+    /** @type {any} */
     const report = JSON.parse(readFileSync(outFile, 'utf8'));
-    related = new Set((report.testResults ?? []).map((r) => relative(ROOT, r.name).split('\\').join('/')));
+    related = new Set((report.testResults ?? []).map((/** @type {any} */ r) => relative(root, r.name).split('\\').join('/')));
   } finally {
     rmSync(outFile, { force: true });
   }
@@ -253,13 +297,14 @@ export function relatedFilesFor(file, vitestBin = join(ROOT, 'node_modules/.bin/
  *  applied and something ran, not how many assertions failed, and says nothing at all
  *  about a file that failed to collect. --outputFile keeps the JSON off stdout, which
  *  also carries vite/test console noise that would otherwise have to be stripped
- *  first. */
-export function runTestsReal(testFiles) {
-  const outFile = join(tmpdir(), `tanks-mutate-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
+ *  first. `root` defaults to `process.cwd()`, same reasoning as parseArgs.
+ * @param {string[]} testFiles @param {string} [root] @returns {TestRunResult} */
+export function runTestsReal(testFiles, root = process.cwd()) {
+  const outFile = join(tmpdir(), `mutate-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
   try {
-    const vitestBin = join(ROOT, 'node_modules/.bin/vitest');
+    const vitestBin = join(root, 'node_modules/.bin/vitest');
     const res = spawnSync(vitestBin, ['run', ...testFiles, '--reporter=json', `--outputFile=${outFile}`], {
-      cwd: ROOT,
+      cwd: root,
       encoding: 'utf8',
       timeout: SUBPROCESS_TIMEOUT_MS,
       killSignal: SUBPROCESS_KILL_SIGNAL,
@@ -278,6 +323,10 @@ export function runTestsReal(testFiles) {
   }
 }
 
+/** Narrower than `ManifestEntry` for `entry` on purpose: `expect`/`expectFailures`/
+ * `equivalent` are the only fields this reads.
+ * @param {MutationResult} result @param {number} index @param {number} count
+ * @param {{ expect: string, expectFailures?: number, equivalent?: boolean }} entry */
 export function formatResult(result, index, count, entry) {
   const head = `[${index}/${count}] ${result.id}`;
   if (NO_VERDICT_STATUSES.has(result.status)) {
@@ -324,6 +373,7 @@ export function formatResult(result, index, count, entry) {
 // stay alive long enough to finish restoring, nothing more.
 let secondSignal = false;
 function installSignalHandlers() {
+  /** @param {NodeJS.Signals} sig */
   function onSignal(sig) {
     if (secondSignal) {
       // second Ctrl+C: stop being polite and let the default action kill us. (Since
@@ -345,7 +395,14 @@ function installSignalHandlers() {
 async function run() {
   installSignalHandlers();
   const args = parseArgs(process.argv.slice(2));
-  const manifestPath = resolveManifestPath(ROOT, args.manifest);
+  const root = args.root;
+  const manifestPath = resolveManifestPath(root, args.manifest);
+  // Cast, not inferred: JSON.parse returns `any`, and validateManifest's own parameter
+  // type is deliberately `any[]` (it is what checks the shape of untrusted JSON in the
+  // first place -- see lib.mjs). This annotation is the point past which the manifest
+  // is trusted to be well-formed, which is true at runtime only because the
+  // validateManifest call immediately below throws first if it is not.
+  /** @type {ManifestEntry[]} */
   const allEntries = JSON.parse(readFileSync(manifestPath, 'utf8'));
   validateManifest(allEntries);
 
@@ -360,7 +417,7 @@ async function run() {
   // post-mutation counts, unnoticed because it never flips killed/survives on its
   // own -- only the exact numbers would be wrong, and wrong quietly.
   const files = [...new Set(entries.flatMap((e) => [e.file, ...e.tests]))];
-  assertAllClean(files);
+  assertAllClean(files, root);
 
   // Reachability preflight: refuse to start (nothing mutated yet) if any entry's
   // declared `tests` cannot possibly exercise its `file`. One `vitest related` call
@@ -376,8 +433,8 @@ async function run() {
   // "nothing tests this file" (a confident, false, zero-coverage claim).
   let unreachable;
   try {
-    unreachable = findUnreachableEntries(entries, relatedFilesFor);
-  } catch (e) {
+    unreachable = findUnreachableEntries(entries, (file) => relatedFilesFor(file, root));
+  } catch (/** @type {any} */ e) {
     if (e?.interrupted) {
       console.error(`\ninterrupted during the reachability preflight; nothing was mutated`);
       process.exitCode = 130;
@@ -391,19 +448,20 @@ async function run() {
     process.exit(2);
   }
 
+  /** @type {Deps} */
   const deps = {
-    readFile: (file) => readFileSync(join(ROOT, file), 'utf8'),
-    gitPorcelain: (file) => sh('git', ['status', '--porcelain', '--', file]),
-    applyToDisk: (file, content) => writeFileSync(join(ROOT, file), content),
-    restoreToDisk: (file, content) => writeFileSync(join(ROOT, file), content),
-    runTests: runTestsReal,
+    readFile: (file) => readFileSync(join(root, file), 'utf8'),
+    gitPorcelain: (file) => sh('git', ['status', '--porcelain', '--', file], root),
+    applyToDisk: (file, content) => writeFileSync(join(root, file), content),
+    restoreToDisk: (file, content) => writeFileSync(join(root, file), content),
+    runTests: (testFiles) => runTestsReal(testFiles, root),
     onResult: (result, index, count, entry) => console.log(formatResult(result, index, count, entry)),
   };
 
   let results;
   try {
     results = runManifest(entries, deps, applyAt);
-  } catch (e) {
+  } catch (/** @type {any} */ e) {
     if (e instanceof RestoreFailedError) {
       // The one truly alarming case: the post-mutation byte-compare disagreed, so the
       // working tree really may be left mutated. Exit 3 is reserved for exactly this.
@@ -450,7 +508,7 @@ async function run() {
 async function main() {
   try {
     await run();
-  } catch (e) {
+  } catch (/** @type {any} */ e) {
     // A bad manifest, an unreadable file, or any other setup-time failure: a distinct
     // exit code (2, matching the "refuse to start" precedent above) so this can never
     // be confused with exit 1 (ran cleanly, but a declared outcome did not match) or
@@ -462,6 +520,15 @@ async function main() {
 
 // Guarded so tests can import parseArgs/formatResult/dirtyReport/runTestsReal without
 // running the CLI (and without it fighting the test runner over argv/exit codes).
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// Compared by REALPATH, not `import.meta.url === \`file://${process.argv[1]}\`` alone:
+// this package declares a `bin`, and npm's bin mechanism symlinks that name into
+// node_modules/.bin/. When invoked through the symlink, Node resolves import.meta.url
+// to the target's realpath while process.argv[1] stays the symlink path itself -- a
+// plain string comparison never matches, and main() silently never runs. Running this
+// file directly (`node tools/mutate/run.mjs`, what `npm run mutate` does) is unaffected:
+// realpathSync on a path that is not a symlink returns that same path.
+const entryArg = process.argv[1];
+if (entryArg && existsSync(entryArg) && fileURLToPath(import.meta.url) === realpathSync(entryArg)) {
   main();
 }

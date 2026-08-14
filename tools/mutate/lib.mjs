@@ -4,7 +4,22 @@
  * what makes it cheap to test with fixture strings instead of real files.
  */
 
-/** Every non-overlapping start index of `find` inside `content`. */
+/**
+ * @typedef {{
+ *   id: string, file: string, find: string, replace: string, why: string,
+ *   expect: 'killed' | 'survives', tests: string[],
+ *   occurrence?: number, expectFailures?: number, equivalent?: boolean,
+ * }} ManifestEntry
+ */
+
+/**
+ * @typedef {{ ok: true, content: string, count: number } | { ok: false, reason: 'not-found' | 'ambiguous' | 'bad-occurrence', count: number }} ApplyResult
+ */
+
+/** Every non-overlapping start index of `find` inside `content`.
+ * @param {string} content
+ * @param {string} find
+ * @returns {number[]} */
 export function findOccurrences(content, find) {
   if (typeof find !== 'string' || find.length === 0) {
     throw new Error('find must be a non-empty string');
@@ -30,6 +45,11 @@ export function findOccurrences(content, find) {
  * documented case (`sounds[key] = null` at two lines) where an unscoped find edited
  * the wrong occurrence and nobody noticed until review. `occurrence` is required
  * the moment `find` is not unique.
+ * @param {string} content
+ * @param {string} find
+ * @param {string} replace
+ * @param {number} [occurrence]
+ * @returns {ApplyResult}
  */
 export function applyAt(content, find, replace, occurrence) {
   const occurrences = findOccurrences(content, find);
@@ -55,6 +75,11 @@ const REQUIRED_STRINGS = ['id', 'file', 'find', 'replace', 'why'];
  * Throws with the offending entry's id (or index, if the id itself is missing) and
  * the exact field at fault -- a bad manifest edit should fail loudly and specifically,
  * the same standard `config/validate.ts` holds JSON data to elsewhere in this repo.
+ * `entry` is untrusted, arbitrary JSON at this point (that is the whole point of a
+ * validator), so it is typed `any` deliberately rather than as `ManifestEntry` --
+ * every field access below is itself a check that the shape is what it claims.
+ * @param {any} entry
+ * @param {number} index
  */
 export function validateEntry(entry, index) {
   const label = typeof entry?.id === 'string' && entry.id ? entry.id : `entry #${index}`;
@@ -69,7 +94,7 @@ export function validateEntry(entry, index) {
   if (entry.expect !== 'killed' && entry.expect !== 'survives') {
     throw new Error(`manifest ${label}: "expect" must be "killed" or "survives", got ${JSON.stringify(entry.expect)}`);
   }
-  if (!Array.isArray(entry.tests) || entry.tests.length === 0 || !entry.tests.every((t) => typeof t === 'string' && t.length > 0)) {
+  if (!Array.isArray(entry.tests) || entry.tests.length === 0 || !entry.tests.every((/** @type {any} */ t) => typeof t === 'string' && t.length > 0)) {
     throw new Error(`manifest ${label}: "tests" must be a non-empty array of file-path strings`);
   }
   if (entry.occurrence !== undefined && (!Number.isInteger(entry.occurrence) || entry.occurrence < 1)) {
@@ -98,7 +123,8 @@ export function validateEntry(entry, index) {
   }
 }
 
-/** Validates the whole manifest: every entry, plus id uniqueness across the set. */
+/** Validates the whole manifest: every entry, plus id uniqueness across the set.
+ * @param {any[]} entries untrusted, arbitrary parsed JSON -- see validateEntry. */
 export function validateManifest(entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
     throw new Error('manifest must be a non-empty array');
@@ -120,6 +146,14 @@ export function validateManifest(entries) {
  * says are related to `file` (real implementation: `vitest related`, in run.mjs). This
  * function is pure given that collaborator, so it is testable with a fake graph
  * instead of a real vitest subprocess per case.
+ *
+ * Only the three fields this function actually reads are required in the param type --
+ * deliberately narrower than the full `ManifestEntry`, so a caller holding some other
+ * (structurally compatible) entry shape does not have to conform to fields this
+ * function never touches.
+ * @param {{ id: string, file: string, tests: string[] }[]} entries
+ * @param {(file: string) => Set<string>} relatedFilesFor
+ * @returns {{ id: string, file: string, tests: string[], related: string[] }[]}
  */
 export function findUnreachableEntries(entries, relatedFilesFor) {
   const problems = [];
