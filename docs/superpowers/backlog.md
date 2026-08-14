@@ -526,12 +526,13 @@ index alignment; and there is no gamepad code, so local versus has no second con
   (JavaScriptCore) printed
   `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4`, matching Node.
   **Still open:** shipped Safari and iOS — Playwright's WebKit is a Linux JSC build, not
-  Safari — and every engine here ran on x86-64, so ARM is untested. The method for the
-  rest is now known rather than unknown: open `tools/baseline/page.html` from a localhost
-  server on the device (`crypto.subtle` needs a secure context). If a device diverges, the
-  choice is quantizing the sim's 18 transcendental lines (bounded — 10 `hypot`, 4 `sqrt`,
-  3 `cos`, 3 `sin`, 1 `atan2`) or falling back to an authoritative Node server, which is
-  the most expensive design.
+  Safari. ARM is no longer untested: the engines matrix's macos-latest legs are arm64 and
+  agree on both pinned hashes (run 31842261852). The divergence choice this line used to
+  pose is settled — issue #133 vendored fdlibm into `src/sim/math/` (PR #165), measured
+  bit-identical on all 9 OS×engine legs — so a diverging device would now indicate a bug
+  in the vendored port or the harness, not a fork in the road. The method for the Safari/
+  iOS half is unchanged: open `tools/baseline/page.html` from a localhost server on the
+  device (`crypto.subtle` needs a secure context).
 - **Decide win/lose semantics before touching `resolveStatus`**, which currently encodes
   exactly one answer. Co-op: is `world.lives` shared or per-player, and does one death reset
   the arena? Versus: "every non-player tank dead" and a HUD reading "Enemies remaining" mean

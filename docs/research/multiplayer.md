@@ -27,11 +27,21 @@ a fixed position, so couch co-op needs no split-screen work at all.
 
 **The one thing that decides whether online is possible on the cheap — bit-identical floating
 point across Chrome, Firefox and Safari — was UNMEASURED when this was written.** It is now
-half-measured, and known to be narrower than it first looked: see the update under open
-question 1, and the note under "Cross-engine floating point is genuinely uncertain" below.
-Three engines (V8, SpiderMonkey and Playwright's JavaScriptCore) agree with the Node baseline
-on Linux x86-64 for the golden TRACE; shipped Safari, iOS and non-x86-64 remain untested, and
-the underlying transcendental functions themselves do NOT agree (see below).
+CLOSED at the function level for the sim's own call sites, updated 2026-08-14: PR #165
+(issue #133, merged `ac981b4`) vendors fdlibm's sin/cos/atan2 and V8's own hypot formula into
+`src/sim/math/`, migrating all 17 of the sim's former native transcendental call sites
+(`Math.sqrt`'s 4 sites stay native — ES2025 correctly-rounded, unaffected). `VENDORED_ANGLE_HASH`
+(`a4fdbbfb32debaae48844ba04f7492a55d9a03e53ada569f12c2ee344cd95aed`) matched on all **9** OS×
+engine legs of the post-merge engines matrix — chromium 151, firefox 153 and Playwright webkit
+(JSC), each on ubuntu x86-64, macos-latest arm64 and windows (run `31842261852` at `ac981b4`,
+recorded in issue #133's closing comment). See the update under "Cross-engine floating point is
+genuinely uncertain" and open question 1 below for the full measurement. The native functions
+themselves still do NOT agree cross-engine — unchanged, see below — the sim just no longer
+depends on them. Still open: shipped Safari and iOS remain untested by any of this (open
+question 1's residual), and two sim-boundary items #165 deliberately left untouched —
+`InputState.aim`'s canvas-size-dependent quantization and `SimEvent`'s missing tick field for
+rollback de-duplication (both unchanged since this doc was first written, see Blocker 3's
+update below) — are now the actual frontier of the determinism work.
 
 ---
 
@@ -110,6 +120,17 @@ earlier draft said "19 call sites", "sqrt (5)" and "eight AI hypot sites" — al
 One AI site already quantizes trig output to a 1e-12 grid — `ai/targeting.ts:626` — but the
 comment says it is for a 6-decimal test comparison, **not** for cross-engine determinism, and
 it is the only such site.
+
+> **Historical count, pre-#165, superseded 2026-08-14.** This inventory describes the tree
+> before PR #165 (issue #133, merged `ac981b4`) vendored the math — the counts and the "these
+> are native `Math.*` calls" framing no longer describe `src/sim/`. Post-migration,
+> `grep -rn "Math\.\(sin\|cos\|atan2\|hypot\)\b" src/sim --include="*.ts"` excluding
+> `.test.ts` files and `src/sim/math/` itself (which legitimately names them in comments and
+> spot-value tests against the Node oracle) returns **zero** hits: all 17 occurrences on the
+> 14 non-sqrt lines above now call `detSin`/`detCos`/`detAtan2`/`detHypot` from
+> `src/sim/math/`. The 4 `Math.sqrt` lines are unchanged and still native. The quantization
+> note immediately above still holds unchanged — same site, same 1e-12 grid, now sourced from
+> `detCos`/`detSin` rather than `Math.cos`/`Math.sin`.
 
 ### Cross-engine floating point is genuinely uncertain
 
@@ -254,6 +275,37 @@ derivation and [issue #133's
 comment](https://github.com/AustinOrphan/tanks/issues/133#issuecomment-5275673368) for the
 write-up.
 
+> **RESOLVED for the sim's own math, 2026-08-14** (PR #165, issue #133 closed). The
+> uncertainty this whole section documents was real, and the sharpest single fact for it comes
+> from the post-merge engines matrix itself (run `31842261852` at `ac981b4`,
+> `.github/workflows/engines.yml`, PR #164, per issue #133's closing comment): on that one run,
+> **webkit's native angle hash was three different values across the three OSes it ran on**
+> (ubuntu x86-64, macos-latest arm64, windows), and firefox split on the arm64 leg too — native
+> math cannot agree even within one engine family across platforms, let alone across engines.
+>
+> The sim no longer depends on any of it. `src/sim/math/` ports netlib fdlibm's sin/cos/atan2
+> — cross-checked against V8's own historical `branch-heads/13.6` copy, since this repo's Node
+> (v24.15.0, V8 13.6) still runs classic fdlibm while current chromium has migrated `sin`/
+> `cos`/`atan2` to LLVM-libc (see the plan at
+> `docs/superpowers/plans/2026-08-14-vendored-math.md`) — plus V8's own Torque `hypot`
+> formula, wired at all 17 of the sim's former native call sites (`Math.sqrt`'s 4 sites stay
+> native, ES2025 correctly-rounded, measured agreeing everywhere above). Two headline
+> measurements, each taken twice (implementer then adjudicator, re-derived from scratch):
+> the port is bit-identical to Node-native (0 mismatches of 17,500 sin samples, 17,500 cos,
+> 3,026 atan2; 0 ULP over 2,000 hypot pairs), so the golden trace's `BASELINE_HASH`
+> (`324aa9b5…`) did **not** move; and `VENDORED_ANGLE_HASH`
+> (`a4fdbbfb32debaae48844ba04f7492a55d9a03e53ada569f12c2ee344cd95aed`) matched on all **9**
+> legs of that same matrix run — chromium 151, firefox 153 and Playwright webkit (JSC), each
+> on ubuntu/macos-arm64/windows.
+>
+> `npm run trace:browser -- --all` now fails on a vendored-hash mismatch, unlike a native
+> `ANGLE_HASH` mismatch, which stays structural and unfixable and is left reporting-only; the
+> engines matrix re-runs both on every push to `main`, weekly, and on demand, so a regression
+> cannot land silently. The historical flags and measurements above are the record that
+> justified doing this work and are left in place, not deleted. Not covered by any of this:
+> shipped Safari and iOS, still untested by anything here (see open question 1's residual,
+> below).
+
 ### The camera already frames the whole board
 
 `src/render/framing.ts` — `framedBounds` returns `worldWidth + boundary * 2`;
@@ -395,6 +447,30 @@ behaviour under the `/tanks/` deploy are all unverified.
    > because the golden trace's sampled lattice never leaves the smallest band. **The
    > blocker stands**: "unmeasured" now means unmeasured at the gameplay level specifically,
    > not at the function level generally.
+   >
+   > **RESOLVED for the sim's own math, 2026-08-14** (PR #165, issue #133 closed). The sim no
+   > longer calls native `Math.hypot`/`Math.cos` (or `sin`/`atan2`) anywhere: `src/sim/math/`
+   > vendors fdlibm's sin/cos/atan2 and V8's own hypot formula, all 17 former call sites
+   > migrated, and `VENDORED_ANGLE_HASH`
+   > (`a4fdbbfb32debaae48844ba04f7492a55d9a03e53ada569f12c2ee344cd95aed`) matched on all 9 legs
+   > of the post-merge engines matrix (run `31842261852` at `ac981b4`) — see the resolution
+   > note under "Cross-engine floating point is genuinely uncertain" above. **This blocker no
+   > longer applies to the sim's transcendental math**, gameplay-level or function-level; the
+   > "if two engines disagree by one ULP" premise in this blocker's first sentence cannot
+   > happen at these 17 sites any more, by construction (both engines run the same JS, not
+   > two different native libms).
+   >
+   > **What replaces it as the actual frontier of the determinism work** is two sim-boundary
+   > items #165 explicitly left untouched, both unchanged since this doc was first written and
+   > both recorded in the multiplayer spike in `docs/superpowers/backlog.md`: `InputState.aim`
+   > is a world-space point produced by unprojecting a mouse position against the ground plane
+   > (`input/input.ts:153`), so it depends on canvas size — it must be quantized at the input
+   > boundary before the sim consumes it, or two peers with different window sizes simulate
+   > different inputs (see "`InputState.aim` is a world POINT" above; unbuilt, not yet
+   > confirmed). And `SimEvent` (`src/sim/events.ts`) still carries no tick field, so
+   > re-simulating N frames under rollback re-emits the same event N times into five
+   > unconditional consumers (see "Rollback would break audio and particles" above); keying
+   > events on tick + identity remains a design proposal, not validated.
 4. **Changing `step()`'s signature risks the project's only behavioural regression guard.**
    `tools/baseline/trace.test.ts:14` calls `step(w, { move, aim, fire, mine })` with a single
    `InputState` and pins the hash at :42. A multi-input refactor either re-records that hash
@@ -410,7 +486,9 @@ behaviour under the `/tanks/` deploy are all unverified.
 
 1. **Do Chrome, Firefox and Safari (desktop and iOS) produce a bit-identical baseline trace
    hash?** Run the extracted trace body in each and compare against
-   `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4`. If all match, lockstep
+   `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4` *(the 4-arena
+   baseline of this question's writing; the pin has been `324aa9b5…` since arena-05
+   landed, and the comparison below predates that move)*. If all match, lockstep
    and rollback are both live options. If they diverge, either quantize the sim's 18
    transcendental lines (bounded) or abandon peer-deterministic netcode for an authoritative
    Node server. **This is THE gating measurement and nothing else should be decided before
@@ -449,6 +527,20 @@ behaviour under the `/tanks/` deploy are all unverified.
    > UNMEASURED") is now answered at the function level, and the answer is divergence, not
    > agreement. See `tools/baseline/angles.ts`'s module header and [issue #133's
    > comment](https://github.com/AustinOrphan/tanks/issues/133#issuecomment-5275673368).
+   >
+   > **ANSWERED, 2026-08-14** (PR #165, issue #133 closed). For the sim's own shipped math
+   > path the answer is now **YES**: `VENDORED_ANGLE_HASH`
+   > (`a4fdbbfb32debaae48844ba04f7492a55d9a03e53ada569f12c2ee344cd95aed`) matched across all 9
+   > legs of the post-merge engines matrix — chromium 151, firefox 153 and Playwright webkit
+   > (JSC), each on ubuntu x86-64, macos-latest arm64 and windows (run `31842261852` at
+   > `ac981b4`, per issue #133's closing comment) — while that same run's NATIVE angle bands
+   > still disagree: webkit alone produced three different hashes across the three OSes, and
+   > firefox split on arm64. The golden trace's `BASELINE_HASH` (`324aa9b5…`) stayed unchanged
+   > across all 9 legs too, since the port is bit-identical to the Node/V8-13.6 fdlibm it was
+   > pinned under. The standing residual is unchanged in kind, only narrower: shipped Safari
+   > and iOS are still untested by any of this — the macOS webkit legs above are the closest
+   > proxy measured so far but are not shipped Safari — take that remainder by opening
+   > `tools/baseline/page.html` by hand on the device.
 2. **Should a second player be a new `TankKind` (`'player2'`) or a new field on `Tank`
    (e.g. `controlledBy`)?** Prototype both far enough to count touched files. The `TankKind`
    route gets compiler help — a new kind is a compile error until `TANK_KINDS` lists it,
@@ -492,7 +584,10 @@ change for all four modes, and it can land alone and *provably* behaviour-preser
 order, keep a one-argument adapter, and assert the pinned hash
 `015a5d17…` is **unchanged**. That assertion is the entire point — it is the one test that
 can prove the refactor did not alter single-player behaviour, and CLAUDE.md is explicit that
-`determinism.test.ts` cannot.
+`determinism.test.ts` cannot. *(This refactor has since SHIPPED exactly as described —
+`stepInputs(world, inputs)` with the one-line `step` adapter, hash-proven; CLAUDE.md's
+"the step boundary takes a LIST" section is the record. The pin it held unchanged was
+this 4-arena hash; the current 5-arena pin is `324aa9b5…`.)*
 
 Size: **M** — `src/sim/world.ts` plus every caller. Biggest unknown: how many of the 34 test
 files mentioning `'player'` construct an `InputState` positionally and break on the signature.
@@ -517,3 +612,13 @@ sim's own coordinate scale — only that bare `sqrt` is portable in general and 
 not. **Read ECMA-262 §21.3.2 first, and then measure the substitute FORMULA itself before
 proposing this as a PR** — `sqrt`'s portability does not transfer to a different expression
 just because `sqrt` appears in it.
+
+> **Superseded, 2026-08-14.** This whole caution was about a specific naive substitute —
+> `Math.sqrt(x*x + y*y)` in place of `Math.hypot` — and that substitute was never built. PR
+> #165 (issue #133) took a different route that sidesteps the overflow hazard this section
+> warns about entirely: it vendors V8's own `hypot` formula (the scaled `max`+`sqrt` Torque
+> implementation, which avoids the `x*x + y*y` overflow by construction) rather than
+> approximating one. `detHypot` replaced all 10 of the sim's `Math.hypot` call sites, measured
+> bit-identical to Node-native (0 ULP over 2,000 pairs) and cross-engine (`VENDORED_ANGLE_HASH`
+> on 9 legs, see above). The naive-substitute question this section asks is moot for the sim;
+> it may still be worth reading as a general caution against that specific shortcut elsewhere.
