@@ -3722,11 +3722,16 @@ describe('startGameWith: the input recorder', () => {
     expect(checkTrace(t)).toEqual({ ok: true, reason: null });
 
     const live = h.rec.renders[h.rec.renders.length - 1].curr;
+    // ALL meta fields thread through, including the two sim switches -- a rebuild
+    // that silently defaults them reproduces today's defaults, not the recorded
+    // run's behaviour (the review of this PR caught exactly that staleness here).
     const rebuilt = createWorldFor(
       arenaById(t.meta.arenaId),
       t.meta.seed,
       t.meta.unarmedTrigger,
       t.meta.lives,
+      t.meta.corpseBlocksShells,
+      t.meta.muzzleClearsTanks,
     );
     const replayed = replayTrace(t, rebuilt);
     expect(replayed.world.tick).toBe(live.tick);

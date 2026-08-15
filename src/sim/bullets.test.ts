@@ -892,7 +892,10 @@ describe('resolveBulletHits: corpseBlocksShells (Austin, 2026-08-14: ghost-vs-wa
   function corpseFixture() {
     const target = mkTank({ id: 2, kind: 'player', pos: { x: 0, y: 0 } })
     const a: Bullet = { id: 30, ownerId: 10, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true }
-    const b: Bullet = { id: 31, ownerId: 11, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true }
+    // B sits OFFSET from the target (0.3 < TANK_RADIUS + BULLET_RADIUS = 0.6, still a
+    // hit) so the WALL test below can tell a corpse-positioned explosion from a
+    // bullet-positioned one -- at (0,0) the two would be indistinguishable.
+    const b: Bullet = { id: 31, ownerId: 11, type: 'normal', pos: { x: 0.3, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true }
     return { target, a, b }
   }
 
@@ -924,8 +927,12 @@ describe('resolveBulletHits: corpseBlocksShells (Austin, 2026-08-14: ghost-vs-wa
     expect(events.find((e) => e.type === 'tank-destroyed')).toMatchObject({
       type: 'tank-destroyed', tankId: 2, by: { source: 'shell', ownerId: 10 }, // credited to A, not B
     })
-    // Two explosions: A's kill, and B's corpse-block landing at the same spot.
-    expect(events.filter((e) => e.type === 'explosion')).toHaveLength(2)
+    // Two explosions: A's kill, and B's corpse-block. Both at the CORPSE's position
+    // (the live-kill convention, t.pos not b.pos) -- B sits at (0.3, 0), so this
+    // fails if the corpse branch ever switches to the bullet's own position.
+    const explosions = events.filter((e) => e.type === 'explosion')
+    expect(explosions).toHaveLength(2)
+    for (const e of explosions) expect(e.pos).toEqual({ x: 0, y: 0 })
   })
 
   it('an EARLIER-stage corpse (already dead before the pass starts) still ghosts even with the switch on', () => {

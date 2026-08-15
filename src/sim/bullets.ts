@@ -211,6 +211,9 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
         // WALL variant: a corpse that was alive when THIS pass started still stops a
         // later bullet -- consumed, one explosion, no re-kill and no second
         // 'tank-destroyed'. Off (or a corpse from an earlier stage), it ghosts as always.
+        // Deliberately NO ownerId exemption here, unlike the live branch below: the
+        // live guard exists so a shell leaving the muzzle cannot kill its own firer,
+        // but a wreck is a wall, and a wall stops your own ricochet too.
         if (aliveAtPassStart?.has(t.id) && circleVsCircle(b.pos, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
           b.alive = false
           events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
