@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ARENAS, arenaById, createWorldFor } from '../sim/arena';
-import { cloneWorld, step, type World } from '../sim/world';
+import { cloneWorld, step, stepInputs, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import { COUNTDOWN_TICKS } from '../sim/constants';
 import balanceJson from '../sim/config/data/balance.json';
@@ -9,6 +9,7 @@ import {
   fingerprint,
   encodeInput,
   decodeInput,
+  decodeTick,
   createRecordingInput,
   replayMetaFor,
   replayTrace,
@@ -35,31 +36,40 @@ const META: ReplayMeta = {
  *
  * A constant input would make "the recorder captured the stream" untestable: any
  * per-tick mix-up (an off-by-one, a dropped tick, a repeated one) replays
- * identically when every tick is the same. This varies every field.
+ * identically when every tick is the same. This varies every field, and every SLOT:
+ * `slotCount` > 1 gives each slot its own draw from the same stream rather than
+ * cloning slot 0's value, so a slot mix-up (the driver-layer twin of
+ * step-inputs.test.ts's pairing tests) has something to catch.
  */
-function scriptedInputs(seed: number): { sample(): InputState; calls: number; last: InputState | null } {
+function scriptedInputs(
+  seed: number,
+  slotCount = 1,
+): { sample(): InputState[]; calls: number; last: InputState[] | null } {
   let s = seed >>> 0;
+  const nextInput = (): InputState => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    const a = (s % 1000) / 1000;
+    return {
+      move: { x: a * 2 - 1, y: 1 - a },
+      aim: { x: 10 * a, y: -7 * a },
+      fire: (s & 8) !== 0,
+      mine: (s & 16) !== 0,
+    };
+  };
   const src = {
     calls: 0,
-    /** The exact object last handed out, so a caller can assert IDENTITY. */
-    last: null as InputState | null,
-    sample(): InputState {
-      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    /** The exact array last handed out, so a caller can assert IDENTITY. */
+    last: null as InputState[] | null,
+    sample(): InputState[] {
       src.calls += 1;
-      const a = (s % 1000) / 1000;
-      src.last = {
-        move: { x: a * 2 - 1, y: 1 - a },
-        aim: { x: 10 * a, y: -7 * a },
-        fire: (s & 8) !== 0,
-        mine: (s & 16) !== 0,
-      };
+      src.last = Array.from({ length: slotCount }, nextInput);
       return src.last;
     },
   };
   return src;
 }
 
-function worldFor(meta: ReplayMeta): World {
+function worldFor(meta: ReplayMeta, playerCount = 1): World {
   return createWorldFor(
     arenaById(meta.arenaId),
     meta.seed,
@@ -67,6 +77,7 @@ function worldFor(meta: ReplayMeta): World {
     meta.lives,
     meta.corpseBlocksShells,
     meta.muzzleClearsTanks,
+    playerCount,
   );
 }
 
@@ -168,21 +179,21 @@ describe('createRecordingInput', () => {
     const rec = createRecordingInput(inner, META);
     const seen = rec.sample();
     expect(inner.calls).toBe(1);
-    // IDENTITY, not value equality: the driver hands this object straight to
-    // step(), so a recorder that returned its own reconstruction (through
+    // IDENTITY, not value equality: the driver hands this array straight to
+    // stepInputs(), so a recorder that returned its own reconstruction (through
     // encode/decode, say) would pass a `toEqual` while substituting a different
-    // object for the real one.
+    // array for the real one.
     expect(seen).toBe(inner.last);
-    expect(decodeInput(rec.trace().ticks[0])).toEqual(seen);
+    expect(decodeTick(rec.trace().ticks[0])).toEqual(seen);
   });
 
   it('records exactly one tick per sample, in order', () => {
     const rec = createRecordingInput(scriptedInputs(7), META);
-    const taken: InputState[] = [];
+    const taken: InputState[][] = [];
     for (let i = 0; i < 25; i++) taken.push(rec.sample());
     const trace = rec.trace();
     expect(trace.ticks).toHaveLength(25);
-    expect(trace.ticks.map(decodeInput)).toEqual(taken);
+    expect(trace.ticks.map(decodeTick)).toEqual(taken);
   });
 
   it('stamps the format, schema and sim fingerprint', () => {
@@ -232,9 +243,12 @@ describe('createRecordingInput', () => {
     const first = rec.trace();
     rec.sample();
     expect(first.ticks).toHaveLength(1);
-    // and the encoded tuples are copies, not the live rows
-    (first.ticks[0] as EncodedInput)[0] = 999;
-    expect(rec.trace().ticks[0][0]).not.toBe(999);
+    // The encoded tuples are copies at every level -- outer tick array, per-slot
+    // array, and the tuple itself -- so mutate at the DEEPEST level (slot 0's tuple's
+    // first number), not the tick or slot array, or a shallow-copy regression would
+    // pass this the same way a bare `[...t]` at the outer level alone would.
+    (first.ticks[0][0] as EncodedInput)[0] = 999;
+    expect(rec.trace().ticks[0][0][0]).not.toBe(999);
   });
 });
 
@@ -304,7 +318,7 @@ describe('replayTrace', () => {
     // shots rather than only the blocked opening.
     const TICKS = COUNTDOWN_TICKS + 240;
     for (let i = 0; i < TICKS; i++) {
-      const result = step(live, rec.sample());
+      const result = stepInputs(live, rec.sample());
       live = result.world;
       liveEvents.push(result.events.length);
     }
@@ -325,7 +339,7 @@ describe('replayTrace', () => {
     const meta = replayMetaFor(worldFor(META), 'arena-01');
     const rec = createRecordingInput(scriptedInputs(2024), meta);
     let live = worldFor(meta);
-    for (let i = 0; i < COUNTDOWN_TICKS + 120; i++) live = step(live, rec.sample()).world;
+    for (let i = 0; i < COUNTDOWN_TICKS + 120; i++) live = stepInputs(live, rec.sample()).world;
 
     const trace = rec.trace();
     const short = { ...trace, ticks: trace.ticks.filter((_, i) => i !== COUNTDOWN_TICKS + 10) };
@@ -338,6 +352,85 @@ describe('replayTrace', () => {
     const result = replayTrace(createRecordingInput(scriptedInputs(1), META).trace(), world);
     expect(result.ticks).toBe(0);
     expect(result.world).toBe(world);
+  });
+
+  it('at a 1-length array (single player, no coop), reproduces EXACTLY what the pre-change step()-based path produced', () => {
+    // Non-circular by construction: the LEFT side never touches the recorder, the new
+    // EncodedTick shape, or stepInputs -- it is `step()`, structurally unchanged by
+    // this PR, driving the same scripted sequence one InputState at a time, exactly
+    // as every caller in the tree did before this PR. The RIGHT side is the new
+    // pipeline: a 1-length-array sample() of the IDENTICAL sequence, recorded and
+    // replayed through encodeTick/decodeTick/stepInputs. Byte-identical worlds here
+    // is the regression this PR must not move: single-player behaviour under the new
+    // schema has to equal single-player behaviour under the old one.
+    let s = 555 >>> 0;
+    const nextInput = (): InputState => {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      const a = (s % 1000) / 1000;
+      return {
+        move: { x: a * 2 - 1, y: 1 - a },
+        aim: { x: 10 * a, y: -7 * a },
+        fire: (s & 8) !== 0,
+        mine: (s & 16) !== 0,
+      };
+    };
+    const TICKS = COUNTDOWN_TICKS + 200;
+    const script: InputState[] = Array.from({ length: TICKS }, nextInput);
+
+    let viaStep = worldFor(META);
+    const spawnPos = viaStep.tanks.find((t) => t.kind === 'player')!.pos;
+    // Tracked across the WHOLE run, not read once at the end: arena-01 has real
+    // enemies, and a player who dies mid-run respawns exactly at spawn under a fresh
+    // countdown -- so a final-position check can land back on spawnPos by unlucky
+    // timing even though the tank plainly moved in between. "Ever moved" is immune
+    // to that; a final-position check on this exact seed was not (measured: it did).
+    let everMoved = false;
+    for (const input of script) {
+      viaStep = step(viaStep, input).world;
+      const p = viaStep.tanks.find((t) => t.kind === 'player');
+      if (p && (p.pos.x !== spawnPos.x || p.pos.y !== spawnPos.y)) everMoved = true;
+    }
+
+    let i = 0;
+    const rec = createRecordingInput(
+      { sample: () => [script[i++]] },
+      replayMetaFor(worldFor(META), 'arena-01'),
+    );
+    for (let t = 0; t < TICKS; t++) rec.sample();
+    const replayed = replayTrace(rec.trace(), worldFor(META));
+
+    expect(replayed.ticks).toBe(TICKS);
+    expect(cloneWorld(replayed.world)).toEqual(cloneWorld(viaStep));
+    // Non-vacuous: prove the script actually drove the tank away from spawn at some
+    // point, or an all-idle comparison would pass with the inputs discarded on both
+    // sides alike.
+    expect(everMoved).toBe(true);
+  });
+
+  it('round-trips TWO slots -- each player replays its OWN recorded input; swapping the two slots diverges', () => {
+    const meta = replayMetaFor(worldFor(META, 2), 'arena-01');
+    const rec = createRecordingInput(scriptedInputs(4242, 2), meta);
+
+    let live = worldFor(meta, 2);
+    const TICKS = COUNTDOWN_TICKS + 120;
+    for (let i = 0; i < TICKS; i++) live = stepInputs(live, rec.sample()).world;
+
+    const trace = rec.trace();
+    const replayed = replayTrace(trace, worldFor(meta, 2));
+    expect(replayed.ticks).toBe(TICKS);
+    expect(cloneWorld(replayed.world)).toEqual(cloneWorld(live));
+
+    // Non-vacuous, and immune to arena-01's real enemies possibly killing (and
+    // respawning) a player mid-run: rather than reason about final positions, swap
+    // the two slots in EVERY recorded tick and replay again. If the per-slot pairing
+    // were not actually preserved through record/encodeTick/decodeTick -- both slots
+    // silently fed the same entry, or slot order lost in the round trip -- this would
+    // replay IDENTICALLY to the unswapped trace. It must not: this is
+    // step-inputs.test.ts's "pairs by position, not by which one is first" claim,
+    // proven again at the encoding layer.
+    const swapped = { ...trace, ticks: trace.ticks.map(([a, b]) => [b, a]) };
+    const replayedSwapped = replayTrace(swapped, worldFor(meta, 2));
+    expect(cloneWorld(replayedSwapped.world)).not.toEqual(cloneWorld(live));
   });
 });
 
