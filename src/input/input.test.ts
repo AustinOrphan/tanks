@@ -3,6 +3,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createInputController, InputController } from './input';
 import {
   AIM_PROJECTION_UNITS,
+  AIM_GRID,
   STICK_RADIUS_PX,
   STICK_DEADZONE,
   FIRE_MODES,
@@ -707,9 +708,14 @@ describe('createInputController — touch: stick scheme', () => {
     // A diagonal push changes the DIRECTION but must land the same reach from the
     // player -- the projection distance is constant regardless of how hard the thumb
     // is thrown, which is the property AIM_PROJECTION_UNITS exists to guarantee.
+    // Precision loosened from 6dp to 1dp by AIM_GRID's arrival: aim.x/aim.y are now each
+    // independently snapped to a 0.01 grid, so a diagonal's distance from the player can
+    // be off by up to sqrt(2) * AIM_GRID/2 ~= 0.00707 (measured here: 0.000959) -- well
+    // inside 1dp's 0.05 tolerance, which still fails on a real projection bug (anything
+    // past a couple of grid cells).
     touch(window, 'pointermove', { x: RIGHT + 200, y: 400 });
     const aim2 = controller.sample().aim;
-    expect(Math.hypot(aim2.x - 5, aim2.y - -3)).toBeCloseTo(AIM_PROJECTION_UNITS, 6);
+    expect(Math.hypot(aim2.x - 5, aim2.y - -3)).toBeCloseTo(AIM_PROJECTION_UNITS, 1);
   });
 
   it('holds the last aim inside the dead zone rather than snapping it away', () => {
@@ -1344,6 +1350,80 @@ describe('createInputController — fire modes: switching mid-gesture', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('createInputController — aim quantization', () => {
+  // The one boundary all four producers converge into a single InputState: quantizeAim
+  // is applied inside sample()'s return, so a universal fix rather than a per-producer
+  // one is what these tests are proving.
+  function isGridAligned(v: number): boolean {
+    const n = v / AIM_GRID;
+    return Math.abs(n - Math.round(n)) < 1e-6;
+  }
+
+  it('collapses two mouse positions inside the same grid cell to the same point', () => {
+    // A ground projection fine enough that a 1px client delta is well under AIM_GRID/2
+    // (0.005) in world units -- exactly the gap quantization exists to close. Raw,
+    // pre-quantization these are two distinct floats (1.001 vs 1.002); this fails today.
+    const fineGround = (clientX: number, clientY: number): Vec2 => ({
+      x: clientX / 1000,
+      y: clientY / 1000,
+    });
+    const target = makeTarget();
+    controller = createInputController(target, fineGround);
+
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 1001, clientY: 2001 }));
+    const first = controller.sample().aim;
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 1002, clientY: 2002 }));
+    const second = controller.sample().aim;
+
+    expect(second).toEqual(first);
+  });
+
+  it('snaps mouse aim to an exact multiple of AIM_GRID', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 42.567, clientY: -13.333 }));
+    const aim = controller.sample().aim;
+    expect(isGridAligned(aim.x), `x=${aim.x}`).toBe(true);
+    expect(isGridAligned(aim.y), `y=${aim.y}`).toBe(true);
+  });
+
+  it('snaps touch point-scheme aim to an exact multiple of AIM_GRID', () => {
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('point');
+    touch(target, 'pointerdown', { x: RIGHT + 0.567, y: 250.333 });
+    const aim = controller.sample().aim;
+    expect(isGridAligned(aim.x), `x=${aim.x}`).toBe(true);
+    expect(isGridAligned(aim.y), `y=${aim.y}`).toBe(true);
+  });
+
+  it('snaps touch stick-scheme aim to an exact multiple of AIM_GRID', () => {
+    // A diagonal push: dir/len * AIM_PROJECTION_UNITS on a 45-degree ratio is never
+    // grid-aligned by construction, unlike the axis-aligned pushes pinned elsewhere in
+    // this file.
+    const target = makeTarget();
+    controller = createInputController(target, echoGround);
+    controller.setTouchScheme('stick');
+    controller.setPlayerPosition({ x: 5, y: -3 });
+    touch(target, 'pointerdown', { x: RIGHT, y: 200 });
+    touch(window, 'pointermove', { x: RIGHT + 200, y: 400 });
+    const aim = controller.sample().aim;
+    expect(isGridAligned(aim.x), `x=${aim.x}`).toBe(true);
+    expect(isGridAligned(aim.y), `y=${aim.y}`).toBe(true);
+  });
+
+  it('snaps gamepad aim to an exact multiple of AIM_GRID', () => {
+    // Same diagonal-push shape, on the right stick.
+    const target = makeTarget();
+    const getGamepads = (): GamepadLike[] => [{ axes: [0, 0, 1, 1], buttons: [] }];
+    controller = createInputController(target, echoGround, { gamepad: true, getGamepads });
+    controller.setPlayerPosition({ x: 0, y: 0 });
+    const aim = controller.sample().aim;
+    expect(isGridAligned(aim.x), `x=${aim.x}`).toBe(true);
+    expect(isGridAligned(aim.y), `y=${aim.y}`).toBe(true);
   });
 });
 
