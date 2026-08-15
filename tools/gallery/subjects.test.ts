@@ -48,4 +48,19 @@ describe('compose still lays subjects out the way the camera assumes', () => {
     const w = compose(['tank'], 0).world;
     expect(w.tanks.filter((t) => t.kind === 'player')).toHaveLength(1);
   });
+
+  it('the coop element places two DIFFERENTLY-slotted player tanks, each with its own shell', () => {
+    // Below 2 player-kind tanks entities.ts draws no identity ring at all -- this is the
+    // element `--elements coop` exists to get past that threshold reliably, without
+    // depending on a second live input source the gallery cannot drive.
+    const w = compose(['coop'], 0).world;
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players).toHaveLength(2);
+    expect(players.map((t) => t.controlledBy).sort()).toEqual([0, 1]);
+    expect(w.bullets).toHaveLength(2);
+    // Each bullet's ownerId resolves back to ONE of the two tanks placed above, not to
+    // an id nothing in this world has (which would render untinted regardless of slot).
+    const tankIds = new Set(players.map((t) => t.id));
+    for (const b of w.bullets) expect(tankIds.has(b.ownerId)).toBe(true);
+  });
 });
