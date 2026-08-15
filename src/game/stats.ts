@@ -163,7 +163,16 @@ export function createStatsStore(storage: Storage): StatsStore {
             if (e.ownerId === playerId) bump('wallsDestroyed');
             break;
           case 'tank-destroyed':
-            if (e.kind === 'player') {
+            // e.tankId, not e.kind === 'player': at playerCount > 1 a second
+            // player-kind tank exists, and kind alone can no longer tell "the
+            // TRACKED player died" apart from "some OTHER player-kind tank died".
+            // tank-destroyed already carries tankId (events.ts), so this is the
+            // exact identity check. Zero behavior change at N=1 -- the only
+            // player-kind tank's id IS playerId. A co-op teammate's death still
+            // falls into the branches below (scored as a kill/friendly-fire, same
+            // as any other non-tracked tank) -- correct per-player attribution for
+            // a SECOND human is deferred, unreached by any runtime call site today.
+            if (e.tankId === playerId) {
               bump('deaths');
               // Dying to your OWN ricochet or mine is additionally a self kill.
               if (e.by.ownerId === playerId) bump('selfKills');

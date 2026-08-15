@@ -27,6 +27,9 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // Teal does NOT hold fire while dodging and has no patience counter — it dodges and
   // shoots in the same tick, same as Grey used to. Nothing below consumes tank.aiTimer,
   // so nextTimer is always 0 on every path.
+  // Finds the FIRST alive player-kind tank -- correct-as-P1-preferred, not wrong, at
+  // playerCount > 1: a second human is simply invisible to this AI. Who AI targets
+  // when two humans are on the board is balance work, deferred.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
     // No target, but Teal is the MOBILE personality (spec §7): keep roaming, exactly as

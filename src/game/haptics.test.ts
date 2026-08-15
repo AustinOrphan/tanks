@@ -73,6 +73,18 @@ describe('createHapticsDirector', () => {
     // review flagged it as decorative and it is deleted rather than kept for show.
   });
 
+  it('does NOT vibrate for a SECOND player-kind tank dying -- discriminate by tankId, not kind', () => {
+    // Unreached by any runtime call site today (playerCount stays 1 everywhere),
+    // but this is exactly the co-op misattribution the fix exists for: a second
+    // player-kind tank (co-op's controlledBy: 1, its OWN distinct id) dying must
+    // not pulse the DEVICE tracking a different player.
+    const OTHER_PLAYER_ID = 99;
+    const { vibrate, calls } = fakeVibrate();
+    const d = createHapticsDirector(vibrate, PLAYER_ID);
+    d.handle([destroyedEvent('player', OTHER_PLAYER_ID)]);
+    expect(calls).toHaveLength(0);
+  });
+
   it('pins MINE_DANGER_RADIUS to the sim kill reach it claims to be', () => {
     // The boundary tests below probe RELATIVE to the constant, so they survive any
     // magnitude -- review proved a x10 mutation (radius 25, larger than arena-01's

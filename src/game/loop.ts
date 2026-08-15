@@ -251,15 +251,20 @@ export function playerShellsInFlight(world: World, playerId: number | undefined)
 }
 
 /**
- * Did the PLAYER die this frame?
+ * Did THIS tracked player die this frame?
  *
  * The event stream is shared, so `some(e => e.type === 'tank-destroyed')` is
  * true for every enemy kill as well -- the presence-only mistake CLAUDE.md
  * warns about. Exported so the discrimination is testable without engineering
  * a real death inside a driven frame.
+ *
+ * Discriminated by `tankId`, not `kind === 'player'`: at playerCount > 1 a
+ * second player-kind tank exists, and kind alone can no longer tell "the
+ * tracked player died" apart from "some OTHER player-kind tank died". Zero
+ * behavior change at N=1 -- the only player-kind tank's id IS playerId.
  */
-export function isPlayerDeath(events: SimEvent[]): boolean {
-  return events.some((e) => e.type === 'tank-destroyed' && e.kind === 'player');
+export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
+  return events.some((e) => e.type === 'tank-destroyed' && e.tankId === playerId);
 }
 
 /**
@@ -655,9 +660,10 @@ export function startGameWith(
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
-    // CLAUDE.md warns about. Discriminate on kind.
+    // CLAUDE.md warns about. Discriminate on tankId: kind alone stops being unique
+    // the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
-      if (isPlayerDeath(events)) {
+      if (isPlayerDeath(events, playerId ?? -1)) {
         hud.signalPlayerDeath();
         // The #152 fix: persist the reduced life count on the RUN before the player
         // can escape it by refreshing or leaving gameplay -- not deferred to any

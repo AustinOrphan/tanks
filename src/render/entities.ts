@@ -16,13 +16,18 @@ export interface EntityViews {
   /** `dt` drives animated skins; omitting it freezes them, which is what tests want. */
   sync(prev: World, curr: World, alpha: number, dt?: number): void;
   /**
-   * The paint shop: override the PLAYER's hull colour (a CSS hex, null for the roster
-   * default), skin, and the skin's accent tone (a CSS hex, null for `auto` -- derive
-   * the tone from the hull, as skins.ts always has). Takes effect on the next sync via
-   * the same rebuild path a kind change uses -- live, even for the tank already
-   * standing behind the menu.
+   * The paint shop: override a co-op SLOT's hull colour (a CSS hex, null for the
+   * roster default), skin, and the skin's accent tone (a CSS hex, null for `auto` --
+   * derive the tone from the hull, as skins.ts always has). Takes effect on the next
+   * sync via the same rebuild path a kind change uses -- live, even for the tank
+   * already standing behind the menu.
+   *
+   * `slot` is `Tank.controlledBy` (0-based), trailing and defaulting to 0 -- every
+   * shipped call site styles P1 and stays unchanged. A slot that has never been
+   * styled falls back to today's roster default at slot 0, or a neutral placeholder
+   * swatch at any other slot -- see `styleFor` in entities.ts.
    */
-  setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null): void;
+  setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null, slot?: number): void;
   dispose(): void;
 }
 
@@ -304,15 +309,52 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // paint-shop generation: bumping it forces the same rebuild path, which is how a
   // swatch click repaints the tank already standing behind the menu.
   const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number }>();
-  let playerHex: string | null = null;
-  // The one skin texture, owned HERE: disposeObject deliberately skips material maps
-  // (walls borrow the shared TextureSet), so per-style disposal happens on change.
-  let playerSkinMap: THREE.DataTexture | null = null;
-  /** Which skin `playerSkinMap` was painted for -- the stripe skin needs its own UVs. */
-  let playerSkin: SkinId = 'solid';
-  // Resolved once per restyle, not per frame: sync runs at 60fps.
-  let playerScroll: { u: number; v: number } | null = null;
-  let colorGen = 0;
+
+  /** One co-op SLOT's paint-shop state -- see `styleFor` and `setPlayerStyle` below. */
+  interface PlayerStyle {
+    hex: string | null;
+    // The one skin texture, owned HERE: disposeObject deliberately skips material maps
+    // (walls borrow the shared TextureSet), so per-style disposal happens on change.
+    skinMap: THREE.DataTexture | null;
+    /** Which skin `skinMap` was painted for -- the stripe skin needs its own UVs. */
+    skin: SkinId;
+    // Resolved once per restyle, not per frame: sync runs at 60fps.
+    scroll: { u: number; v: number } | null;
+    gen: number;
+  }
+  /**
+   * Per co-op SLOT (`Tank.controlledBy`, defaulting to 0) rather than one global
+   * player style -- issue: couch co-op foundation. Absent for a slot that has never
+   * been styled; `styleFor` fills in the default. Was four module-level singletons
+   * (`playerHex`/`playerSkinMap`/`playerSkin`/`colorGen`) keyed to slot 0 implicitly;
+   * this is the one piece of this PR that is load-bearing rather than inert plumbing,
+   * since it is what makes per-player customization structurally possible later.
+   */
+  const playerStyles = new Map<number, PlayerStyle>();
+  /**
+   * A hue for an unstyled co-op slot >= 1, distinct from P1's roster default and
+   * every roster kind's own colour (pinned by entities.test.ts's diff-against-
+   * `configFor` sweep) -- a feel value, implementer's pick, same treatment CLAUDE.md
+   * gives `TANK_TURN_RATE`.
+   */
+  const UNSTYLED_SLOT_HEX = '#c23b8f';
+  /** The bit-identical-to-boot default for slot 0: no hex override, no skin map. */
+  const DEFAULT_SLOT_0_STYLE: PlayerStyle = { hex: null, skinMap: null, skin: 'solid', scroll: null, gen: 0 };
+  /** The placeholder for any other slot until it is explicitly styled. */
+  const DEFAULT_OTHER_SLOT_STYLE: PlayerStyle = {
+    hex: UNSTYLED_SLOT_HEX, skinMap: null, skin: 'solid', scroll: null, gen: 0,
+  };
+
+  /**
+   * Resolves the style for a co-op slot. Lookup order: an entry for THIS slot wins;
+   * slot 0 with no entry falls back to today's roster default (bit-identical boot
+   * state, before `setPlayerStyle` is ever called); any other slot with no entry
+   * gets the neutral placeholder swatch, so a second player reads as visibly
+   * distinct from P1 before anyone styles it.
+   */
+  function styleFor(slot: number): PlayerStyle {
+    return playerStyles.get(slot) ?? (slot === 0 ? DEFAULT_SLOT_0_STYLE : DEFAULT_OTHER_SLOT_STYLE);
+  }
   /**
    * One two-tone texture PER ENEMY KIND, shared by every tank of that kind -- issue
    * #137. A kind's colour never changes at runtime (it is roster data, not a paint
@@ -643,9 +685,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     uv.needsUpdate = true;
   }
 
-  function makeTank(kind: TankKind): { group: THREE.Group; turret: THREE.Object3D } {
+  function makeTank(kind: TankKind, controlledBy?: number): { group: THREE.Group; turret: THREE.Object3D } {
     const group = new THREE.Group();
-    const color = kind === 'player' && playerHex ? cssHex(playerHex) : tankColor(kind);
+    // Resolved per-tank from its OWN slot -- see styleFor -- not off a single global,
+    // so two player-kind tanks in the same world can carry different paint.
+    const style = kind === 'player' ? styleFor(controlledBy ?? 0) : null;
+    const color = kind === 'player' && style?.hex ? cssHex(style.hex) : tankColor(kind);
 
     // Painted steel: rough enough to stay matte, metallic enough to pick up the rim.
     // A patterned skin rides as a map on the hull and turret ONLY -- tracks keep
@@ -659,12 +704,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // right after) are the player-specific branches left in this function, each for
     // the same reason: the player's texture is a paint-shop CHOICE while an enemy's is
     // fixed roster data.
-    const skinMap = kind === 'player' ? playerSkinMap : enemySkinMapFor(kind);
+    const skinMap = kind === 'player' ? style!.skinMap : enemySkinMapFor(kind);
     // The skin id THIS tank is actually wearing -- the player's own pick, or `two-tone`
-    // for every enemy. Resolved per tank (not read off the module-level `playerSkin`)
-    // because that slot only ever describes the player; an enemy's UV treatment must
-    // follow ITS OWN skin, which is what `striped` below now keys on.
-    const resolvedSkin: SkinId = kind === 'player' ? playerSkin : 'two-tone';
+    // for every enemy. Resolved per tank, off its OWN slot's style (not a single
+    // module-level slot) because a co-op player's UV treatment must follow ITS OWN
+    // skin, which is what `striped` below now keys on.
+    const resolvedSkin: SkinId = kind === 'player' ? style!.skin : 'two-tone';
     const matColor = skinMap ? 0xffffff : color;
     const bodyMat = new THREE.MeshStandardMaterial({
       color: matColor,
@@ -687,7 +732,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // Only a MAPPED tank is re-projected -- which, since issue #137, is every tank:
     // enemies now carry a two-tone map too, so their hulls get the same continuous UV
     // treatment the player's always has. Geometry is rebuilt whenever the style changes
-    // (setPlayerStyle bumps colorGen for the player; an enemy's kind never changes once
+    // (setPlayerStyle bumps its slot's own gen; an enemy's kind never changes once
     // built, so its geometry is built once and never re-touched by a restyle).
     const mapped = skinMap !== null;
     // The stripe skin is the one pattern whose DIRECTION matters, so its turret and
@@ -960,16 +1005,20 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       if (!t.alive) continue;
       seen.add(t.id);
       let view = tankViews.get(t.id);
+      const slot = t.controlledBy ?? 0;
       // The paint generation only matters for the PLAYER: rebuilding every enemy on
       // a swatch click churned ~25 geometries per click for tanks whose colour never
-      // changes (measured in review; bounded but pointless).
-      if (view && (view.kind !== t.kind || (view.gen !== colorGen && t.kind === 'player'))) {
+      // changes (measured in review; bounded but pointless). Compared per-SLOT now,
+      // not against one shared counter, so restyling one co-op player does not
+      // rebuild a tank driven by a different slot.
+      if (view && (view.kind !== t.kind || (t.kind === 'player' && view.gen !== styleFor(slot).gen))) {
         disposeObject(view.group);
         tankViews.delete(t.id);
         view = undefined;
       }
       if (!view) {
-        view = { ...makeTank(t.kind), kind: t.kind, gen: colorGen };
+        const gen = t.kind === 'player' ? styleFor(slot).gen : 0;
+        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen };
         tankViews.set(t.id, view);
       }
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
@@ -1150,10 +1199,16 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   function sync(prev: World, curr: World, alpha: number, dt = 0): void {
     // Animated skins drift their texture offset; speed is per-skin DATA in the skin
-    // defs. RepeatWrapping makes the offset cyclic, so no clamping is needed.
-    if (playerSkinMap && playerScroll && dt > 0) {
-      playerSkinMap.offset.x = (playerSkinMap.offset.x + playerScroll.u * dt) % 1;
-      playerSkinMap.offset.y = (playerSkinMap.offset.y + playerScroll.v * dt) % 1;
+    // defs. RepeatWrapping makes the offset cyclic, so no clamping is needed. Every
+    // STYLED slot animates independently -- an unstyled slot (styleFor's synthetic
+    // default) never has a skinMap, so this loop is a no-op for it.
+    if (dt > 0) {
+      for (const style of playerStyles.values()) {
+        if (style.skinMap && style.scroll) {
+          style.skinMap.offset.x = (style.skinMap.offset.x + style.scroll.u * dt) % 1;
+          style.skinMap.offset.y = (style.skinMap.offset.y + style.scroll.v * dt) % 1;
+        }
+      }
     }
     // Clamp at the boundary rather than trusting the caller. alpha is in [0,1)
     // today only because loop.ts's accumulator drains below DT before
@@ -1172,11 +1227,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   }
 
   function dispose(): void {
-    playerSkinMap?.dispose();
-    // Five enemy kinds, five textures (today) -- disposing only the player's map, as
+    for (const style of playerStyles.values()) style.skinMap?.dispose();
+    playerStyles.clear();
+    // Five enemy kinds, five textures (today) -- disposing only the player's maps, as
     // this used to, leaked one DataTexture per enemy KIND for the life of the game.
     // `dispose()` only runs once per createEntityViews instance (teardown), so unlike
-    // `playerSkinMap` these are never replaced mid-game and need no per-restyle
+    // a slot's skinMap these are never replaced mid-game and need no per-restyle
     // disposal path of their own.
     for (const tex of enemySkinMaps.values()) tex.dispose();
     enemySkinMaps.clear();
@@ -1194,13 +1250,18 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   return {
     sync,
-    setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null): void {
-      playerHex = hex;
-      playerSkinMap?.dispose();
-      playerSkinMap = createSkinTexture(skin, hex ?? configFor('player').color, accentHex);
-      playerSkin = skin;
-      playerScroll = skinScroll(skin);
-      colorGen++;
+    setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null, slot: number = 0): void {
+      const prev = playerStyles.get(slot);
+      prev?.skinMap?.dispose();
+      playerStyles.set(slot, {
+        hex,
+        skinMap: createSkinTexture(skin, hex ?? configFor('player').color, accentHex),
+        skin,
+        scroll: skinScroll(skin),
+        // Bumped from THIS slot's own previous gen (0 if never styled), not a shared
+        // counter -- styling slot 1 must not force slot 0's tank to rebuild too.
+        gen: (prev?.gen ?? 0) + 1,
+      });
     },
     dispose,
   };

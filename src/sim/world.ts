@@ -299,6 +299,13 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
   // pushes a second `win` -- and a second victory stinger.
   if (world.status !== 'playing') return;
 
+  // `.find` takes the FIRST player-kind tank -- correct-as-P1, deliberately not
+  // generalised here. At playerCount > 1 a second player-kind tank exists and its
+  // life/death is invisible to this function entirely: only P1's death drains
+  // `world.lives`, and a co-op teammate dying neither costs a life nor can end the
+  // round. What win/lose MEAN in co-op (shared lives? does a survivor play on?) is
+  // a product decision, not a bug fix -- see docs/research/multiplayer.md's open
+  // question 3, "Write the rule down before touching resolveStatus".
   const player = world.tanks.find((t) => t.kind === 'player');
   const enemies = world.tanks.filter((t) => t.kind !== 'player');
   // Snapshot BEFORE resetArena, which revives every tank. Reading it afterwards

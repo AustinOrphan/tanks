@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ARENA_01, arenaBounds, loadArena, createArenaWorld } from './arena';
+import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld } from './arena';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
@@ -32,6 +32,25 @@ describe('arenaBounds', () => {
 });
 
 describe('loadArena', () => {
+  // Regression pin, written and passing BEFORE loadArena grew a playerCount param's
+  // real logic: at playerCount 1 (the default, and passed explicitly), output must
+  // stay byte-identical to today's single-arg call -- across all 5 shipped arenas,
+  // not just ARENA_01, since the co-op spawn-offset rule reads every arena's own
+  // grid. This is the claim CLAUDE.md's arena.ts section calls "stronger than the
+  // prototype made": conditional controlledBy stamping means PASS 1a is the ENTIRE
+  // function body relevant to spawns at playerCount 1, so nothing here should ever
+  // need editing when PASS 1b (playerCount > 1) lands.
+  it('at playerCount 1 (default and explicit) is byte-identical to the single-arg call, on all 5 shipped arenas', () => {
+    ARENAS.forEach((arena, i) => {
+      const noArg = loadArena(arena);
+      const explicit1 = loadArena(arena, 1);
+      expect(explicit1, `ARENAS[${i}]`).toEqual(noArg);
+      for (const t of noArg.tanks) {
+        expect(t.controlledBy, `ARENAS[${i}] tank ${t.id}`).toBeUndefined();
+      }
+    });
+  });
+
   it('produces the interior walls plus exactly 4 solid boundary walls', () => {
     const { walls } = loadArena(ARENA_01);
     const destructibleCells = countChar(ARENA_01.grid, 'x');
@@ -121,6 +140,114 @@ describe('loadArena', () => {
       expect(tanks[i].kind).toBe(spawns[i].kind);
       expect(tanks[i].pos).toEqual(spawns[i].pos);
     }
+  });
+
+  // Measured directly (ring 1, cellsNeeded=2 at the shipped cellSize 2/3, all 8
+  // RING_DIRECTIONS in priority order): the FIRST candidate, E (+2 cols, +0 rows),
+  // is open ('.', in-bounds) in all 5 of 5 shipped arenas. arena-01/02/03 share a P
+  // spawn at (row 22, col 16) and resolve P2 to (row 22, col 18); arena-04/05 share
+  // (row 28, col 22) and resolve to (row 28, col 24). Zero grid edits needed.
+  it('resolves P2 to the measured E-ring cell on every shipped arena, with controlledBy 0/1', () => {
+    const cases: [string, number, number][] = [
+      ['arena-01', 22, 18],
+      ['arena-02', 22, 18],
+      ['arena-03', 22, 18],
+      ['arena-04', 28, 24],
+      ['arena-05', 28, 24],
+    ];
+    for (const [id, row, col] of cases) {
+      const arena = arenaById(id);
+      const { tanks } = loadArena(arena, 2);
+      const players = tanks.filter((t) => t.kind === 'player');
+      expect(players, id).toHaveLength(2);
+
+      const p1 = players.find((t) => t.controlledBy === 0)!;
+      const p2 = players.find((t) => t.controlledBy === 1)!;
+      expect(p1, id).toBeDefined();
+      expect(p2, id).toBeDefined();
+
+      const expectedPos = { x: (col + 0.5) * arena.cellSize, y: (row + 0.5) * arena.cellSize };
+      expect(p2.pos, id).toEqual(expectedPos);
+      expect(p2.alive, id).toBe(true);
+    }
+  });
+
+  it('appends P2 strictly after every enemy, so every enemy id is unchanged from playerCount 1', () => {
+    for (const arena of ARENAS) {
+      const single = loadArena(arena, 1);
+      const coop = loadArena(arena, 2);
+      const singleEnemyIds = single.tanks.filter((t) => t.kind !== 'player').map((t) => t.id);
+      const coopEnemyIds = coop.tanks.filter((t) => t.kind !== 'player').map((t) => t.id);
+      expect(coopEnemyIds).toEqual(singleEnemyIds);
+
+      // P2 is the LAST tank, appended after PASS 1a finished.
+      const last = coop.tanks[coop.tanks.length - 1];
+      expect(last.kind).toBe('player');
+      expect(last.controlledBy).toBe(1);
+
+      // And its id CONTINUES the shared counter with no gap or reuse -- one `id`
+      // variable threads PASS 1a -> 1b -> the wall pass, and this is what keeps every
+      // wall id merely SHIFTED (not scrambled) at playerCount 2. Breaks if PASS 1b
+      // ever grows its own counter.
+      const maxSingleId = Math.max(...single.tanks.map((t) => t.id));
+      expect(last.id).toBe(maxSingleId + 1);
+      expect(coop.walls[0]?.id ?? last.id + 1).toBe(last.id + 1);
+    }
+  });
+
+  describe('co-op spawn, ring-expansion and the co-locate fallback (synthetic fixtures)', () => {
+    // cellSize 2/3 matches every shipped arena, so cellsNeeded (ceil(1.0 / 0.6667) = 2)
+    // matches production. No shipped arena is cramped enough to reach ring-expansion
+    // or the fallback, so these are the only way to exercise that code at all.
+    const CELL_SIZE = 2 / 3;
+
+    it('reaches ring 2 when ring 1 is fully blocked', () => {
+      // P at (2,2). Ring 1 (dist 2) candidates all land on row/col 0 or 4 -- surround
+      // those with '#' so every ring-1 direction is blocked, leaving only ring 2
+      // (dist 4) open, which is out of a 5x5 grid on every axis except staying at
+      // distance 4 wraps out of bounds too -- so use a 9x9 grid instead so ring 2 has
+      // room to land in-bounds.
+      const cols = 9, rows = 9;
+      const grid: string[] = [];
+      for (let r = 0; r < rows; r++) {
+        let row = '';
+        for (let c = 0; c < cols; c++) {
+          if (r === 4 && c === 4) row += 'P';
+          else row += '.';
+          }
+        grid.push(row);
+      }
+      // Ring 1 = distance 2 from (4,4): block every one of the 8 ring-1 cells.
+      const ring1: [number, number][] = [
+        [6, 4], [4, 6], [2, 4], [4, 2], [6, 6], [2, 6], [6, 2], [2, 2],
+      ];
+      for (const [r, c] of ring1) {
+        grid[r] = grid[r].slice(0, c) + '#' + grid[r].slice(c + 1);
+      }
+      const arena = { cols, rows, cellSize: CELL_SIZE, legend: { '#': 'solid' as const }, grid } as never;
+      const { tanks } = loadArena(arena, 2);
+      const p2 = tanks.find((t) => t.controlledBy === 1)!;
+      expect(p2).toBeDefined();
+      // Ring 2 = distance 4, first direction E: (row 4, col 8).
+      expect(p2.pos).toEqual({ x: (8 + 0.5) * CELL_SIZE, y: (4 + 0.5) * CELL_SIZE });
+    });
+
+    it('co-locates P2 with P1 when every ring (1..4) is fully boxed in solid walls', () => {
+      // P boxed in on all sides within reach of any of the 4 searched rings: an 11x11
+      // grid with every non-P cell solid guarantees no ring candidate is ever '.'.
+      const cols = 11, rows = 11;
+      const grid: string[] = [];
+      for (let r = 0; r < rows; r++) {
+        let row = '';
+        for (let c = 0; c < cols; c++) row += (r === 5 && c === 5) ? 'P' : '#';
+        grid.push(row);
+      }
+      const arena = { cols, rows, cellSize: CELL_SIZE, legend: { '#': 'solid' as const }, grid } as never;
+      const { tanks } = loadArena(arena, 2);
+      const p1 = tanks.find((t) => t.controlledBy === 0)!;
+      const p2 = tanks.find((t) => t.controlledBy === 1)!;
+      expect(p2.pos).toEqual(p1.pos);
+    });
   });
 
   it('encloses the play area with 4 boundary walls and no corner gaps', () => {

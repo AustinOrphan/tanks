@@ -491,6 +491,10 @@ export function profileAimSpread(cfg: ResolvedTankConfig): number {
  */
 export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec2 {
   const wander = wanderMove(world, tank);
+  // Finds the FIRST alive player-kind tank -- correct-as-P1-preferred, not wrong, at
+  // playerCount > 1: a second human is simply invisible to this AI, which still
+  // engages whichever player-kind tank comes first in tank-array order. Who AI
+  // targets when two humans are on the board is balance work, deferred.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) return wander;
 

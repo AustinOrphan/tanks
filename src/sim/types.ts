@@ -84,6 +84,18 @@ export interface Tank {
    * of their inputs. Set by the game layer on the PLAYER under ?dev=1&invincible=1.
    */
   invincible?: boolean;
+  /**
+   * Which input-list SLOT drives this tank, 0-based (docs/research/multiplayer.md open
+   * question 2, route B -- kind stays 'player' for every human-driven tank, so every
+   * `kind === 'player'` identity check in the tree still matches all of them). OPTIONAL
+   * like `disarmed`/`invincible`, for the same reason: the many existing `kind: 'player'`
+   * fixtures stay valid without an edit. Absent on every enemy, always. Present on a
+   * player-kind tank only when `loadArena` was called with `playerCount > 1` -- at the
+   * default `playerCount` of 1 it is never stamped, so every fixture built against
+   * today's single-player output (including a full-object `toEqual`) is unaffected by
+   * this field's existence, not merely tolerant of it. See arena.ts's `loadArena`.
+   */
+  controlledBy?: number;
 }
 
 export interface Bullet {

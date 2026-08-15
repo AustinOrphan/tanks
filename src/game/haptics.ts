@@ -97,7 +97,11 @@ export function createHapticsDirector(
         if (e.ownerId === playerId) vibrate(FIRE_PULSE_MS);
         break;
       case 'tank-destroyed':
-        if (e.kind === 'player') vibrate(DESTROYED_PATTERN_MS);
+        // e.tankId, not e.kind === 'player' -- same fix and same reason as
+        // stats.ts's record(): at playerCount > 1 a second player-kind tank can
+        // die without being the one THIS device tracks. Zero behavior change at
+        // N=1, where the only player-kind tank's id is playerId.
+        if (e.tankId === playerId) vibrate(DESTROYED_PATTERN_MS);
         break;
       case 'mine-detonate':
         if (playerPos !== null && distance(e.pos, playerPos) <= MINE_DANGER_RADIUS) {

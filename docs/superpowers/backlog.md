@@ -537,9 +537,14 @@ index alignment; and there is no gamepad code, so local versus has no second con
   exactly one answer. Co-op: is `world.lives` shared or per-player, and does one death reset
   the arena? Versus: "every non-player tank dead" and a HUD reading "Enemies remaining" mean
   nothing with no AI.
-- **Decide `TankKind` vs a `controlledBy` field on `Tank`** by prototyping both far enough to
-  count touched files. The kind route gets compiler help; the field route avoids four AI
-  files and the spawn-letter table. The file count is the deciding number.
+- **`TankKind` vs a `controlledBy` field on `Tank`: ANSWERED, route B (the field).** A
+  scratch prototype (branch `p2-prototype`, commit `297bdaf`, off `be1bda8`) touched only
+  `types.ts` and `arena.ts`, stayed `tsc --noEmit` clean, and needed no edit to any
+  existing `kind: 'player'` fixture -- kind never diverges, so every `kind === 'player'`
+  identity check in the tree keeps matching a second human-driven tank unchanged. The
+  couch co-op foundation (`docs/superpowers/plans/2026-08-15-coop-foundation.md`) adopted
+  it: `Tank.controlledBy?: number`, stamped only when `loadArena` is called with
+  `playerCount > 1`, landed on `coop-foundation`.
 - **Price the zero-infrastructure option first:** manual SDP copy-paste works on the current
   static deploy today, with no signalling server at all, and would let an online prototype be
   measured before anyone signs up for Cloudflare or depends on Trystero's public relays.

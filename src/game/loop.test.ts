@@ -1857,31 +1857,57 @@ describe('startGameWith: composition (a real frame, pumped)', () => {
 });
 
 describe('isPlayerDeath', () => {
-  const destroyed = (kind: string): SimEvent =>
-    ({ type: 'tank-destroyed', tankId: 1, kind, pos: { x: 0, y: 0 } }) as SimEvent;
+  // Distinct tankIds per case, deliberately -- the whole point of the id-based fix
+  // (loop.ts) is that `kind === 'player'` alone can no longer tell "the TRACKED
+  // player died" apart from "some OTHER player-kind tank died" once a second
+  // human-driven tank exists. A shared tankId (as this fixture used to hardcode,
+  // regardless of kind) cannot exercise that distinction at all.
+  const TRACKED_PLAYER_ID = 1;
+  const OTHER_PLAYER_ID = 2;
 
-  it('is true for the player', () => {
-    expect(isPlayerDeath([destroyed('player')])).toBe(true);
+  const destroyed = (kind: string, tankId: number): SimEvent =>
+    ({ type: 'tank-destroyed', tankId, kind, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  it('is true when the TRACKED player\'s own tankId dies', () => {
+    expect(isPlayerDeath([destroyed('player', TRACKED_PLAYER_ID)], TRACKED_PLAYER_ID)).toBe(true);
   });
 
-  it('is FALSE for every enemy kind', () => {
+  it('is FALSE for every enemy kind, each at its OWN distinct (non-tracked) id', () => {
     // The whole point: the stream is shared, so a presence-only check would
-    // flash the screen red every time the player scored a kill.
+    // flash the screen red every time the player scored a kill. Real tank ids
+    // are unique across the world (arena.ts), so a realistic enemy death never
+    // carries the tracked player's own id -- this fixture matches that.
     // Population: DERIVED -- every non-player kind in the canonical TANK_KINDS,
     // so a new enemy kind is swept the moment it exists (review: this was a
     // hand-kept list of three whose "all" claim silently went stale).
-    for (const kind of TANK_KINDS.filter((k) => k !== 'player')) {
-      expect(isPlayerDeath([destroyed(kind)])).toBe(false);
-    }
+    TANK_KINDS.filter((k) => k !== 'player').forEach((kind, i) => {
+      const enemyId = 100 + i; // distinct from TRACKED_PLAYER_ID and from each other
+      expect(isPlayerDeath([destroyed(kind, enemyId)], TRACKED_PLAYER_ID)).toBe(false);
+    });
   });
 
-  it('finds the player among a mixed frame', () => {
-    expect(isPlayerDeath([destroyed('brown'), destroyed('player'), destroyed('teal')])).toBe(true);
+  it('is FALSE for a player-KIND tank whose id is not the tracked player -- ' +
+    'the actual point of keying on tankId instead of kind', () => {
+    // Unreached by any runtime call site today (no path sets playerCount > 1 yet),
+    // but this is exactly the co-op case the fix exists for: a second player-kind
+    // tank (controlledBy: 1) dying must not read as the tracked player dying.
+    expect(isPlayerDeath([destroyed('player', OTHER_PLAYER_ID)], TRACKED_PLAYER_ID)).toBe(false);
+  });
+
+  it('finds the tracked player among a mixed frame', () => {
+    expect(
+      isPlayerDeath(
+        [destroyed('brown', 3), destroyed('player', TRACKED_PLAYER_ID), destroyed('teal', 4)],
+        TRACKED_PLAYER_ID,
+      ),
+    ).toBe(true);
   });
 
   it('is false for a frame with no deaths at all', () => {
-    expect(isPlayerDeath([{ type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 0 } as SimEvent])).toBe(false);
-    expect(isPlayerDeath([])).toBe(false);
+    expect(
+      isPlayerDeath([{ type: 'ricochet', pos: { x: 0, y: 0 }, bounceIndex: 0 } as SimEvent], TRACKED_PLAYER_ID),
+    ).toBe(false);
+    expect(isPlayerDeath([], TRACKED_PLAYER_ID)).toBe(false);
   });
 });
 
