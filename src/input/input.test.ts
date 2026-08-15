@@ -711,8 +711,8 @@ describe('createInputController — touch: stick scheme', () => {
     // Precision loosened from 6dp to 1dp by AIM_GRID's arrival: aim.x/aim.y are now each
     // independently snapped to a 0.01 grid, so a diagonal's distance from the player can
     // be off by up to sqrt(2) * AIM_GRID/2 ~= 0.00707 (measured here: 0.000959) -- well
-    // inside 1dp's 0.05 tolerance, which still fails on a real projection bug (anything
-    // past a couple of grid cells).
+    // inside 1dp's 0.05 tolerance, which a real projection bug (off by whole units, not
+    // grid noise) would still fail.
     touch(window, 'pointermove', { x: RIGHT + 200, y: 400 });
     const aim2 = controller.sample().aim;
     expect(Math.hypot(aim2.x - 5, aim2.y - -3)).toBeCloseTo(AIM_PROJECTION_UNITS, 1);
