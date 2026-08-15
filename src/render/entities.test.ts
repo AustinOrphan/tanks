@@ -16,6 +16,7 @@ import { MINE_TIMER } from '../sim/constants';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { configFor } from '../sim/config';
+import { TANK_KINDS } from '../sim/config/validate';
 import { createSkinTexture } from './skins';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
@@ -1566,5 +1567,86 @@ describe('enemy skins (issue #137)', () => {
     expect(disposedCount, 'not every enemy kind\'s texture was disposed -- a per-kind leak').toBe(
       ENEMY_KINDS.length,
     );
+  });
+});
+
+describe('co-op per-slot player styling', () => {
+  const hexToInt = (hex: string): number => parseInt(hex.slice(1), 16);
+
+  // TWO kind: 'player' tanks is not a loadable arena -- config/validate.ts still
+  // hard-fails any grid without exactly one 'P'. Built via createWorld directly,
+  // same construction style as step-inputs.test.ts's twoPlayerWorld: this is the
+  // only way to reach the per-slot render seam before a second input exists.
+  function twoPlayerWorld(): World {
+    const p1: Tank = { ...makeTank(1, 'player', 3, 3), controlledBy: 0 };
+    const p2: Tank = { ...makeTank(2, 'player', 9, 9), controlledBy: 1 };
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 3, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 9, y: 9 }, angle: 0 },
+    ];
+    return createWorld({ walls: [], tanks: [p1, p2], spawns, lives: 3 });
+  }
+
+  const hullColor = (scene: THREE.Scene, x: number): number => {
+    let c = -1;
+    scene.traverse((o) => {
+      if (o.name === 'hull') {
+        let g: THREE.Object3D | null = o;
+        while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+        if (g && (g as THREE.Group).position.x === x) {
+          c = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+        }
+      }
+    });
+    return c;
+  };
+
+  it('resolves two DIFFERENT styles for two co-op slots in the same world', () => {
+    // Fails before the per-slot Map exists: the old four module-level singletons had
+    // exactly one slot to colour, so a second styled player tank either did not
+    // exist or repainted on top of the first.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.setPlayerStyle('#d64545', 'solid', null, 0);
+    views.setPlayerStyle('#2255aa', 'solid', null, 1);
+    views.sync(w, w, 0);
+
+    expect(hullColor(scene, 3)).toBe(0xd64545);
+    expect(hullColor(scene, 9)).toBe(0x2255aa);
+    views.dispose();
+  });
+
+  it('leaves an unstyled slot 1 on the placeholder when only P1 is styled', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.setPlayerStyle('#d64545', 'solid', null, 0); // slot defaults to 0
+    views.sync(w, w, 0);
+
+    const p1Color = hullColor(scene, 3);
+    const p2Color = hullColor(scene, 9);
+    expect(p1Color).toBe(0xd64545);
+    // Distinct from P1's styled colour AND from the roster's own player-kind
+    // default -- a placeholder, not an accidental match either way.
+    expect(p2Color).not.toBe(p1Color);
+    expect(p2Color).not.toBe(hexToInt(configFor('player').color));
+    views.dispose();
+  });
+
+  it('the unstyled-slot placeholder is distinct from every roster kind\'s own colour', () => {
+    // Verified against the REAL rendered colour, not a hardcoded expected hex -- the
+    // placeholder's exact value is a feel pick (CLAUDE.md's TANK_TURN_RATE
+    // treatment); what this pins is only that it never collides with a roster kind.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0); // neither slot styled: slot 1 renders on the placeholder
+    const placeholder = hullColor(scene, 9);
+
+    for (const kind of TANK_KINDS) {
+      expect(placeholder, `placeholder vs ${kind}`).not.toBe(hexToInt(configFor(kind).color));
+    }
+    views.dispose();
   });
 });
