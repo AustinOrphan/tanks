@@ -12,6 +12,9 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
   // The tank's weapon comes from its resolved config, not a hardcoded 'normal':
   // Brown fires the STANDARD_SHELL its definition names (config/roster.ts).
   const weapon = cfg.weapon;
+  // Finds the FIRST alive player-kind tank -- correct-as-P1-preferred, not wrong, at
+  // playerCount > 1: a second human is simply invisible to this AI. Who AI targets
+  // when two humans are on the board is balance work, deferred.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
     return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };

@@ -48,6 +48,9 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // `sees` is computed BEFORE the patience early-return: a dodging grey still
   // SEES the player, and the reaction clock (dispatcher, aimTicks) must keep
   // running through a dodge -- suppression is patience, not blindness.
+  // Finds the FIRST alive player-kind tank -- correct-as-P1-preferred, not wrong, at
+  // playerCount > 1: a second human is simply invisible to this AI. Who AI targets
+  // when two humans are on the board is balance work, deferred.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   const sees = player !== undefined && lineOfSight(tank.pos, player.pos, world.walls);
   if (underFire && dodgeTicks < patienceTicks) {
