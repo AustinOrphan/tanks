@@ -42,7 +42,7 @@ import {
 } from './loop';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
-import { decodeInput, replayTrace, checkTrace } from './replay';
+import { decodeTick, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
 
@@ -154,6 +154,16 @@ interface Recorder {
   samples: number;
   hudRoots: HTMLElement[];
   inputOptions: Array<{ gamepad?: boolean } | null>;
+  /** How many times deps.createGamepadSource() was called -- co-op's slot 1. */
+  gamepadSourceBuilds: number;
+  /** Every value passed to slot 1's setPlayerPosition, in order. */
+  slot1Positions: Array<{ x: number; y: number } | null>;
+  /** How many times slot 1's sample() was called. */
+  slot1Samples: number;
+  /** True once slot 1's dispose() was called. */
+  slot1Disposed: boolean;
+  /** Every playerCount passed to deps.levels.world(...), in order. */
+  playerCounts: Array<number | undefined>;
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
@@ -281,6 +291,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     samples: 0,
     hudRoots: [],
     inputOptions: [],
+    gamepadSourceBuilds: 0,
+    slot1Positions: [],
+    slot1Samples: 0,
+    slot1Disposed: false,
+    playerCounts: [],
   };
 
   let pending: ((now: number) => void) | null = null;
@@ -450,6 +465,30 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       dispose(): void {
         rec.disposed.push('input');
       },
+      };
+    },
+    // Co-op's slot 1 -- see GameDeps's own doc comment for why this is a factory
+    // rather than an inline default: going through it is what makes "constructed
+    // exactly once" and "constructed with the right value" both assertable.
+    // Distinct move/aim from slot 0's fake (which never moves: move is always
+    // {x:0,y:0}) so a test can tell the two tanks apart by whether they moved at all,
+    // not just by which one moved which way.
+    createGamepadSource: () => {
+      rec.gamepadSourceBuilds += 1;
+      return {
+        sample() {
+          rec.slot1Samples += 1;
+          return { move: { x: 1, y: 0 }, aim: { x: 2, y: 0 }, fire: false, mine: false };
+        },
+        setPlayerPosition(pos: { x: number; y: number } | null): void {
+          rec.slot1Positions.push(pos);
+        },
+        gamepadConnected(): boolean {
+          return false;
+        },
+        dispose(): void {
+          rec.slot1Disposed = true;
+        },
       };
     },
     createAudio: () => ({
@@ -867,13 +906,31 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // framing.test.ts passing. An unshipped value makes the assertion discriminate.
         return opts.boundsByLevel?.[i] ?? { width: 22, height: 18, cellSize: 1.5 };
       },
-      world: (level, seed, policy, lives) => {
+      world: (level, seed, policy, lives, playerCount) => {
         const i = fakeLevels.indexOf(level);
         rec.levelBuilds.push({ level: i, lives });
         // The same reference the loop receives: post-build mutations (invincibility)
         // are visible here.
         rec.seeds.push(seed);
         rec.worldPolicies.push(policy);
+        rec.playerCounts.push(playerCount);
+        // Co-op: bypass every synthetic-fixture knob below (opts.world, the id shift,
+        // enemiesByLevel trimming) and build a REAL arena world instead. Those knobs
+        // exist to make single-player fixtures easy to script; co-op's whole claim is
+        // that slot i drives the tank with REAL `controlledBy === i`, which only a
+        // REAL `loadArena`-produced world can carry (the foundation plan's own spawn
+        // alignment, not something this harness can fake convincingly).
+        if (playerCount !== undefined && playerCount > 1) {
+          const real = createWorldFor(
+            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount,
+          );
+          // Back-dated past COUNTDOWN_TICKS, same convention every live-play fixture
+          // in this file uses (see winningWorld below): a fresh world cannot act on
+          // its first ticks, and a co-op test wants input live immediately.
+          const built = { ...real, roundStartTick: -100000 };
+          rec.builtWorlds.push(built);
+          return built;
+        }
         // The real createArenaWorld returns a FRESH world each call, and
         // resetArena moves roundStartTick forward -- so a fixed fixture object
         // would make every round look like the same round to loop.ts. Advance it
@@ -3241,6 +3298,95 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
   });
 });
 
+describe('startGameWith: couch co-op input routing (coop devflag)', () => {
+  // (a) The regression signal: `coop` off must leave every pre-existing fake and
+  // assertion in this file unchanged. The other 201 tests in this file already prove
+  // this by construction (none of them touch `coop`, and all pass unmodified against
+  // the harness changes this PR made) -- this test states the invariant explicitly,
+  // for the specific new surfaces this PR added, so a future change that leaks coop
+  // machinery into the off path fails HERE rather than only being caught implicitly.
+  it('coop off: no gamepad source is built, no playerCount is passed, slot 1 never samples or receives a position', () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.gamepadSourceBuilds).toBe(0);
+    expect(h.rec.playerCounts).toEqual([undefined]);
+    expect(h.rec.slot1Samples).toBe(0);
+    expect(h.rec.slot1Positions).toEqual([]);
+    // Slot 0's own gamepad option is governed by `gamepad` alone, exactly as before
+    // this PR -- `coop` off must not perturb it either way.
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    h.handle.dispose();
+    expect(h.rec.slot1Disposed).toBe(false); // nothing was ever built to dispose
+  });
+
+  // (b) The §5 integration test: ties input-slot order to loadArena's REAL
+  // controlledBy alignment, not a hand-built fixture. deps.levels.world's fake
+  // constructs a genuine 2-player world via createWorldFor/loadArena when handed
+  // playerCount 2 (see the `world:` fake above), so `controlledBy === i` here is the
+  // production spawn rule, not a stand-in for it.
+  it('coop on: builds a REAL 2-player world (playerCount 2), and each slot\'s setPlayerPosition receives its OWN controlledBy tank\'s position', () => {
+    const h = boot(makeDeps({ devFlags: { coop: true } }));
+    expect(h.rec.playerCounts).toEqual([2]);
+    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    // Mutual exclusion by construction: slot 0 must never claim gamepad[0] once co-op
+    // owns it, whatever `devFlags.gamepad` says (default off here).
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+
+    const world = h.rec.builtWorlds[0];
+    const p0 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+    const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+    expect(p0).toBeDefined();
+    expect(p1).toBeDefined();
+    expect(p0.pos).not.toEqual(p1.pos); // sanity: a real, distinct co-op spawn pair
+
+    h.setState('playing');
+    h.fireFrame(100); // several simulated ticks, past countdown (world is back-dated)
+
+    expect(h.rec.playerPosPushes).toBeGreaterThan(0);
+    expect(h.rec.slot1Positions.length).toBeGreaterThan(0);
+    expect(h.rec.slot1Positions.every((pos) => pos !== null)).toBe(true);
+
+    // Slot 0's fake never moves (move is always {x:0,y:0}); slot 1's fake always
+    // drives +x. So by the last frame, the tank slot 0 was pushed the position OF
+    // has NOT moved from spawn, and the one slot 1 was pushed HAS -- proving the two
+    // positions are not just both non-null, but each tied to the RIGHT tank.
+    const lastSlot0Pos = h.rec.lastPlayerPos!;
+    const lastSlot1Pos = h.rec.slot1Positions[h.rec.slot1Positions.length - 1]!;
+    expect(lastSlot0Pos.x).toBeCloseTo(p0.pos.x, 6);
+    expect(lastSlot1Pos.x).toBeGreaterThan(p1.pos.x);
+    h.handle.dispose();
+    expect(h.rec.slot1Disposed).toBe(true);
+  });
+
+  // (c) Mutual exclusion, the other half: with BOTH flags on, slot 0 must still never
+  // build its own gamepad reader, and slot 1 must be built EXACTLY once -- not zero
+  // (co-op silently not wired) and not two (a duplicate reader racing the same pad).
+  it('coop=1 + gamepad=1 together: slot 0 stays gamepad:false, and exactly ONE gamepad source is built', () => {
+    const h = boot(makeDeps({ devFlags: { coop: true, gamepad: true } }));
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    h.handle.dispose();
+  });
+
+  // (d) The sandbox exclusion: createSandboxWorld takes no playerCount and has no
+  // co-op spawn rule to inherit from loadArena, so `coop` must degrade to a single
+  // slot rather than either crashing or silently no-opping.
+  it('coop=1 + level=sandbox: degrades to a single-slot session -- no gamepad source, no playerCount 2', () => {
+    const h = boot(makeDeps({ devFlags: { coop: true, level: 'sandbox' } }));
+    expect(h.rec.gamepadSourceBuilds).toBe(0);
+    expect(h.rec.playerCounts).toEqual([undefined]);
+    // Slot 0 is unaffected: with coop excluded, its own gamepad option reverts to
+    // devFlags.gamepad alone (off here, matching every non-coop boot).
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    h.setState('playing');
+    h.fireFrame(100);
+    expect(h.rec.slot1Samples).toBe(0);
+    expect(h.rec.slot1Positions).toEqual([]);
+    h.handle.dispose();
+  });
+});
+
 describe('startGameWith: achievements wiring', () => {
   /**
    * A world one tick from being cleared: the last enemy stands on a player-owned
@@ -3711,8 +3857,9 @@ describe('startGameWith: the input recorder', () => {
     expect(h.rec.samples).toBe(0); // the real controller was never asked
     expect(t.ticks.length).toBeGreaterThan(COUNTDOWN_TICKS);
     // and the scripted player really moved: an all-zero move stream would replay
-    // as a tank standing still, which no assertion on LENGTH can see.
-    expect(t.ticks.some((tick) => decodeInput(tick).move.x !== 0)).toBe(true);
+    // as a tank standing still, which no assertion on LENGTH can see. Slot 0 (index
+    // 0 of each tick, the only slot outside co-op) is autoplay's own.
+    expect(t.ticks.some((tick) => decodeTick(tick)[0].move.x !== 0)).toBe(true);
     h.handle.dispose();
   });
 
