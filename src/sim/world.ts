@@ -15,6 +15,38 @@ export interface World {
   seed: number;
   /** What may detonate an UNARMED mine. See UnarmedTrigger. */
   unarmedTrigger: UnarmedTrigger;
+  /**
+   * Whether a tank killed earlier in the SAME resolveBulletHits pass still blocks a
+   * later bullet aimed at it, instead of letting it pass through untouched.
+   *
+   * Default false: today's shipped rule, a GHOST -- resolveBulletHits skips any tank
+   * whose `alive` is already false, so a second shell in the same tick sails through
+   * the spot its target just vacated. Austin (2026-08-14): "Just-killed tank is a
+   * ghost for now. Flippable switch in the future to playtest." `true` is the WALL
+   * variant: resolveBulletHits snapshots which tanks were alive at the START of its
+   * pass, and a bullet that reaches one which died EARLIER IN THE SAME PASS is
+   * consumed right there -- `b.alive = false`, one 'explosion' event at the hit --
+   * without re-killing the tank or re-emitting 'tank-destroyed'. A corpse from an
+   * EARLIER stage (a mine kill from a prior tick, or from the shell-detonates-a-mine
+   * loop earlier in this same resolveBulletHits call) is not in that snapshot and
+   * keeps ghosting in BOTH positions -- this switch changes only the same-pass case.
+   * See bullets.ts's resolveBulletHits.
+   */
+  corpseBlocksShells: boolean;
+  /**
+   * Whether a shell's muzzle spawn point falls back to the owner's centre when it
+   * would land inside a LIVE non-owner tank's hit circle (TANK_RADIUS + BULLET_RADIUS
+   * -- resolveBulletHits' own collision threshold), the same fallback shape
+   * muzzlePoint already uses for a muzzle inside a wall.
+   *
+   * Default true -- Austin's lean (2026-08-14): "Spawn at hull center might be the
+   * way to go but im not certain. Maybe set that up but also have it be flippable."
+   * `false` restores today's shipped behaviour, where the muzzle can spawn already
+   * inside a neighbour's hit circle -- the triage that motivated this switch measured
+   * the harmful variant as a ~0.5-3 degree tangent-escape sliver at exact minimum
+   * separation. See bullets.ts's muzzlePoint.
+   */
+  muzzleClearsTanks: boolean;
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
@@ -43,6 +75,10 @@ export function createWorld(init: {
   seed?: number;
   /** Defaults to 'none', the shipped rule. */
   unarmedTrigger?: UnarmedTrigger;
+  /** Defaults to false, the shipped GHOST rule. See World.corpseBlocksShells. */
+  corpseBlocksShells?: boolean;
+  /** Defaults to true, Austin's lean. See World.muzzleClearsTanks. */
+  muzzleClearsTanks?: boolean;
 }): World {
   const maxId = Math.max(
     0,
@@ -54,6 +90,8 @@ export function createWorld(init: {
     nextId: maxId + 1,
     seed: init.seed ?? 1,
     unarmedTrigger: init.unarmedTrigger ?? 'none',
+    corpseBlocksShells: init.corpseBlocksShells ?? false,
+    muzzleClearsTanks: init.muzzleClearsTanks ?? true,
     tanks: init.tanks,
     bullets: [],
     mines: [],
@@ -83,6 +121,8 @@ export function cloneWorld(world: World): World {
     nextId: world.nextId,
     seed: world.seed,
     unarmedTrigger: world.unarmedTrigger,
+    corpseBlocksShells: world.corpseBlocksShells,
+    muzzleClearsTanks: world.muzzleClearsTanks,
     status: world.status,
     lives: world.lives,
     roundStartTick: world.roundStartTick,

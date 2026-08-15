@@ -230,8 +230,10 @@ export function createWorldFor(
   seed?: number,
   unarmedTrigger?: UnarmedTrigger,
   lives: number = LIVES,
+  corpseBlocksShells?: boolean,
+  muzzleClearsTanks?: boolean,
 ): World {
-  return createWorld({ ...loadArena(arena), lives, seed, unarmedTrigger });
+  return createWorld({ ...loadArena(arena), lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks });
 }
 
 /**

@@ -54,6 +54,40 @@ describe('createLevelSystem: the shipped sequence', () => {
   });
 });
 
+describe('createLevelSystem: corpseBlock/muzzleInside reach the built world (composition, not unit)', () => {
+  // Unit tests on bullets.ts prove World.corpseBlocksShells/muzzleClearsTanks change
+  // resolveBulletHits/muzzlePoint. They cannot see whether the DEV FLAG that is
+  // supposed to set those fields actually does, through createLevelSystem's closure --
+  // that is a composition question, the same distinction step-pipeline.test.ts draws
+  // for sim stages.
+  it('corpseBlock off leaves the shipped GHOST default', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).corpseBlocksShells).toBe(false);
+  });
+
+  it('corpseBlock on reaches world.corpseBlocksShells', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, corpseBlock: true }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).corpseBlocksShells).toBe(true);
+  });
+
+  it('muzzleInside off leaves the new clearance ON (Austin\'s default lean)', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).muzzleClearsTanks).toBe(true);
+  });
+
+  it('muzzleInside on turns world.muzzleClearsTanks OFF, restoring the old spawn', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, muzzleInside: true }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).muzzleClearsTanks).toBe(false);
+  });
+
+  it('both flags are independent of each other', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, corpseBlock: true, muzzleInside: true }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42);
+    expect(w.corpseBlocksShells).toBe(true);
+    expect(w.muzzleClearsTanks).toBe(false);
+  });
+});
+
 describe('createLevelSystem: the sandbox', () => {
   const sandboxFlags = { ...DEV_FLAGS_OFF, level: 'sandbox' as const };
 
@@ -83,6 +117,13 @@ describe('createLevelSystem: the sandbox', () => {
     const sys = createLevelSystem({ ...sandboxFlags, sandboxWalls: 5 }, noRun());
     // 4 boundary walls always exist; the knob adds interior ones.
     expect(sys.world(sys.start, 7).walls).toHaveLength(4 + 5);
+  });
+
+  it('the sandbox branch wires corpseBlock/muzzleInside too, the same as the campaign branch', () => {
+    const sys = createLevelSystem({ ...sandboxFlags, corpseBlock: true, muzzleInside: true }, noRun());
+    const w = sys.world(sys.start, 7);
+    expect(w.corpseBlocksShells).toBe(true);
+    expect(w.muzzleClearsTanks).toBe(false);
   });
 
   it('the sandbox start ignores the active run entirely -- it is a test rig, not a level', () => {

@@ -70,6 +70,10 @@ export interface ReplayMeta {
   lives: number;
   unarmedTrigger: UnarmedTrigger;
   invincible: boolean;
+  /** See World.corpseBlocksShells. Read off the world, same as unarmedTrigger. */
+  corpseBlocksShells: boolean;
+  /** See World.muzzleClearsTanks. Read off the world, same as unarmedTrigger. */
+  muzzleClearsTanks: boolean;
 }
 
 /** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. */
@@ -249,6 +253,8 @@ export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
     lives: world.lives,
     unarmedTrigger: world.unarmedTrigger,
     invincible: world.tanks.find((t) => t.kind === 'player')?.invincible ?? false,
+    corpseBlocksShells: world.corpseBlocksShells,
+    muzzleClearsTanks: world.muzzleClearsTanks,
   };
 }
 
