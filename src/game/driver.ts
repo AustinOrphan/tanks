@@ -61,6 +61,24 @@ export interface DriverDeps {
   onFrameEvents(events: SimEvent[]): void;
 }
 
+/**
+ * A `SimEvent`, stamped with the sim tick that produced it -- lost by the time it
+ * reaches consumers otherwise: `stepInputs` (world.ts) increments `draft.tick` before
+ * running the stage block that populates `events`, so `result.world.tick` already
+ * IS the tick that produced `result.events`, for every call. What actually loses that
+ * identity is the per-frame flatten below: a catch-up frame can run `plan.ticks > 1`,
+ * and pushing bare `SimEvent`s into one array discards which of those ticks each one
+ * came from.
+ *
+ * Deliberately a structural superset of `SimEvent`, not a `{tick, events}[]` envelope:
+ * every consumer today (`renderer.render`, `particles.spawn`, `director.handle`,
+ * `haptics.handle`, `state.onEvents`, `loop.ts`'s `onFrameEvents`) takes a plain
+ * `SimEvent[]`, and a `FrameEvent[]` is assignable there without touching any of them.
+ * Nothing reads `.tick` yet -- it exists for a future rollback layer's dedup, which does
+ * not exist today (no transport, no rollback buffer, no peer protocol).
+ */
+export type FrameEvent = SimEvent & { tick: number };
+
 export interface Driver {
   /** Live, not a snapshot -- see the getter note in createDriver. */
   readonly world: World;
@@ -90,7 +108,7 @@ export function createDriver(deps: DriverDeps): Driver {
     last = now;
     acc = plan.acc;
 
-    const frameEvents: SimEvent[] = [];
+    const frameEvents: FrameEvent[] = [];
 
     // Read LIVE, and deliberately not hoisted into a const shared with the
     // alpha read below: onEvents can flip 'playing' -> 'win'/'lose' in between,
@@ -101,7 +119,10 @@ export function createDriver(deps: DriverDeps): Driver {
         prev = curr;
         const result = step(curr, deps.input.sample());
         curr = result.world;
-        for (const ev of result.events) frameEvents.push(ev);
+        // Stamped per-step, with THIS step's tick -- not the frame's final tick after
+        // the loop ends. A catch-up frame's earlier events must report the tick that
+        // actually produced them.
+        for (const ev of result.events) frameEvents.push({ ...ev, tick: result.world.tick });
       }
       if (frameEvents.length > 0) {
         deps.director.handle(frameEvents);

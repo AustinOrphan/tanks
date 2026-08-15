@@ -11,7 +11,7 @@ import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { InputState } from '../sim/types';
 import type { GameState } from './state';
-import { createDriver, type Driver, type RafScheduler } from './driver';
+import { createDriver, type Driver, type RafScheduler, type FrameEvent } from './driver';
 import { MAX_FRAME_DT } from './frame';
 
 const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
@@ -290,6 +290,26 @@ describe('driver: event routing', () => {
     expect(h.framed).toHaveLength(1);
     expect(h.framed[0].filter((e) => e.type === 'fire' && e.ownerId === playerId)).toHaveLength(1);
     expect(h.framed[0]).toEqual(h.directed[0]);
+  });
+
+  it('stamps each event with the tick that produced it, not the frame\'s final tick', () => {
+    // Same fixture firedByPlayer() uses (backdated roundStartTick, held fire) but driven
+    // through ONE frame spanning several ticks, so the shot -- fired on the frame's
+    // FIRST simulated tick -- is not also the frame's last tick. That is what makes the
+    // assertion below discriminate both a missing stamp (undefined is never < anything)
+    // and a mutant that stamps every event with the frame's final tick (equal is not
+    // strictly less).
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const h = harness({
+      world,
+      input: { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: true, mine: false },
+    });
+    h.driver.start();
+    h.raf.fire(60); // dtReal 60ms at DT ~16.667ms -> floor(0.06 * 60) = 3 ticks, one frame
+    const events = h.directed[0] as FrameEvent[];
+    const fire = events.find((e) => e.type === 'fire');
+    expect(fire).toBeDefined();
+    expect(fire!.tick).toBeLessThan(h.driver.world.tick);
   });
 
   it('routes nothing when the frame produced no events', () => {
