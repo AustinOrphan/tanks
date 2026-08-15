@@ -26,6 +26,19 @@
       once it is fully built, same rule as before (a runner that polls for it can never
       read a half-filled object) -- adding a third measurement does not change what the
       others compute or when they are set.
+
+      BEACON MODE (?beacon=<collector URL>): the driverless path for a browser we can only
+      OPEN, not drive -- the iOS Simulator (tools/baseline/harness.mjs's
+      startBeaconCollector, wired up by run.mjs's `--beacon` and engines.yml's iOS
+      Simulator leg), a physical device, a kiosk browser. When the query param is present,
+      once all three window.* results above are set this page POSTs them as one JSON body
+      to that URL. The value must be a FULL url (e.g.
+      `?beacon=http://localhost:5179/report`), not the literal `1` a first draft of this
+      mechanism used: vite (which serves this page) only serves static files and ES
+      modules, so a same-origin `./beacon` path has nothing to receive a POST -- the
+      collector is a second, plain node:http server on its own port, and the browser must
+      be told its exact address. The window.__* path above is completely unchanged by this
+      -- beacon mode is additive, read only by a page that was asked for it.
     -->
     <h2>golden trace (tools/baseline/trace.ts)</h2>
     <pre id="trace-out">running... (a few seconds; the main thread is blocked while it simulates)</pre>
@@ -147,6 +160,36 @@
         vendoredAngleOut.textContent = `FAILED\n${result.error}`;
         vendoredAngleOut.className = 'bad';
         window.__vendoredAngleResult = result;
+      }
+
+      // ---- beacon mode: POST the three results to a collector on another origin -------
+      // See the header comment above for why the value must be a full URL. All three
+      // window.__*Result values are guaranteed set by this point (each block above sets
+      // its own before falling through to the next).
+      const beaconUrl = new URLSearchParams(location.search).get('beacon');
+      if (beaconUrl) {
+        const beaconOut = document.createElement('pre');
+        try {
+          const res = await fetch(beaconUrl, {
+            method: 'POST',
+            mode: 'cors',
+            keepalive: true,
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              traceResult: window.__traceResult,
+              angleResult: window.__angleResult,
+              vendoredAngleResult: window.__vendoredAngleResult,
+              userAgent: navigator.userAgent,
+            }),
+          });
+          beaconOut.textContent = res.ok ? `beacon: reported to ${beaconUrl}` : `beacon: collector returned HTTP ${res.status}`;
+          beaconOut.className = res.ok ? 'ok' : 'bad';
+        } catch (e) {
+          // Surface on the page itself: a phone or the Simulator has no attached console.
+          beaconOut.textContent = `beacon: POST to ${beaconUrl} failed -- ${e?.message ?? e}`;
+          beaconOut.className = 'bad';
+        }
+        document.body.appendChild(beaconOut);
       }
     </script>
   </body>

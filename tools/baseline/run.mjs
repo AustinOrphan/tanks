@@ -21,20 +21,27 @@
  * cover.
  *
  * What a green run proves is bounded, and the bound matters, for BOTH measurements:
- *   - Playwright's webkit is a JavaScriptCore build, NOT shipped Safari, and there is no
- *     iOS engine here at all. The Safari/iOS half of the question stays OPEN however this
- *     exits. Take that half by opening tools/baseline/page.html by hand on the device
- *     (`npx vite` then http://localhost:5173/tools/baseline/page.html -- localhost is
- *     required, crypto.subtle is secure-context only).
- *   - It says nothing about other CPU architectures; every run here is x86-64.
+ *   - Playwright's webkit is a JavaScriptCore build, NOT shipped Safari. tools/baseline/
+ *     safari.mjs (raw WebDriver against a real `safaridriver`) and this file's `--beacon`
+ *     mode (driven by the iOS Simulator leg in .github/workflows/engines.yml) are what
+ *     close that gap, on a macOS CI runner -- neither runs from this Linux dev box.
+ *   - It says nothing about other CPU architectures beyond what the engines matrix
+ *     (.github/workflows/engines.yml) covers.
  *
  * Structure follows tools/gl/run.mjs, including its two hard-won refusals: never test a
  * server we did not start, and spawn vite directly rather than through npx.
  */
-import { spawn } from 'node:child_process';
-import { setTimeout as sleep } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
+import { networkInterfaces } from 'node:os';
 import { parseArgs } from './args.mjs';
+import {
+  refuseIfAnswering,
+  reportResult,
+  spawnVite,
+  startBeaconCollector,
+  stopVite,
+  verifyServedMarker,
+  waitForVite,
+} from './harness.mjs';
 
 let opts;
 try {
@@ -45,17 +52,6 @@ try {
 }
 
 const BASE = `http://localhost:${opts.port}/`;
-/** Something only THIS page serves, used to prove we are testing our own checkout. */
-const MARKER = '__traceResult';
-
-async function respondsOn(url, ms = 1000) {
-  try {
-    await fetch(url, { signal: AbortSignal.timeout(ms) });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function loadPlaywright() {
   const tried = [];
@@ -75,275 +71,278 @@ async function loadPlaywright() {
   throw new Error(`playwright not found. Tried:\n  ${tried.join('\n  ')}`);
 }
 
-if (await respondsOn(BASE)) {
-  console.error(
-    `Something is already listening on ${BASE}.\n` +
-      'Refusing to run: it would be traced instead of this checkout.\n' +
-      "Stop it (pkill -f 'vite --port') or pass --port with a free port.",
-  );
-  process.exit(2);
+function findLanIPv4() {
+  for (const ifaces of Object.values(networkInterfaces())) {
+    for (const iface of ifaces ?? []) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return null;
 }
 
-// `.pathname` on a file:// URL is wrong on Windows: it keeps the URL's leading slash
-// ("/C:/repo/...", not a path Windows accepts) and leaves %-escapes undecoded.
-// fileURLToPath is this repo's established idiom for the same conversion (see
-// tools/mutate/run.mjs, tools/icons/render.mjs) and handles both. Windows also has no
-// bare `vite` executable in node_modules/.bin -- npm puts a `vite.cmd` shim there --
-// and spawning a .cmd/.bat file without `shell: true` throws EINVAL on current Node
-// (the CVE-2024-27980 fix). Neither branch has been exercised on a real Windows
-// runner; this is a read-the-code fix, not a verified one.
-const VITE_PATH = fileURLToPath(new URL('../../node_modules/.bin/vite', import.meta.url));
-const VITE_BIN = process.platform === 'win32' ? `${VITE_PATH}.cmd` : VITE_PATH;
-const vite = spawn(VITE_BIN, ['--port', String(opts.port), '--strictPort'], {
-  stdio: 'ignore',
-  shell: process.platform === 'win32',
-});
-let viteExited = false;
-vite.on('exit', () => {
-  viteExited = true;
-});
-
-let failed = 0;
-const results = [];
-const angleResults = [];
-const vendoredAngleResults = [];
-try {
-  for (let i = 0; ; i++) {
-    if (viteExited) throw new Error('vite exited before serving; is the port taken?');
-    if (await respondsOn(BASE)) break;
-    if (i > 60) throw new Error(`vite did not start on ${BASE} within 30s`);
-    await sleep(500);
+/**
+ * Beacon mode: the driverless path for any browser we can merely OPEN (the iOS Simulator
+ * via `xcrun simctl openurl`, a physical device typing a URL, a kiosk browser) rather than
+ * drive. This process serves the page (vite, as always) and a tiny second HTTP server (the
+ * "beacon collector", tools/baseline/harness.mjs's startBeaconCollector) on ITS OWN port;
+ * the URL printed below embeds the collector's address as a `?beacon=` query param, and
+ * page.html POSTs its three results there once they are all computed. No new dependency:
+ * both servers are vite (already a dependency) and node:http.
+ *
+ * localhost is the SUPPORTED path -- the iOS Simulator shares the host's own loopback
+ * interface, so a simulator opening this exact URL reaches this exact vite/collector pair
+ * with no extra plumbing (verify this assumption; see engines.yml's iOS Simulator leg,
+ * where it is stated as unproven until that job's first real run). `--host` additionally
+ * binds vite (and, since node:http's default listen has no host argument, the collector)
+ * to every interface for a phone on the same LAN -- but crypto.subtle, which every
+ * measurement here needs, is a secure-context API and plain http://<lan-ip> is NOT secure.
+ * This does not solve that: it prints a clear warning and leaves LAN access best-effort,
+ * needing a tunnel/https proxy in front of the printed address to actually work. localhost
+ * (and therefore the Simulator) is unaffected -- http://localhost is always a secure
+ * context regardless of scheme.
+ */
+async function runBeaconMode(opts) {
+  // Preserves the original run.mjs's exit(2) contract for "something is already
+  // listening" -- refuseIfAnswering throws (it is shared with safari.mjs, which has its
+  // own reason to want a rejection rather than a direct process.exit), so this is the one
+  // place that turns it back into the clean two-line message + exit 2 this tool always
+  // gave for a taken port, instead of an unhandled-rejection stack trace at a different
+  // exit code.
+  try {
+    await refuseIfAnswering(BASE);
+  } catch (e) {
+    console.error(String(e.message ?? e));
+    process.exit(2);
   }
+  const displayHost = opts.host ? findLanIPv4() ?? 'localhost' : 'localhost';
+  const collectorBase = `http://${displayHost}:${opts.beaconPort}`;
+  const pageBase = `http://${displayHost}:${opts.port}`;
+  const beaconUrl = `${pageBase}/tools/baseline/page.html?beacon=${encodeURIComponent(`${collectorBase}/report`)}`;
 
-  const served = await (await fetch(`${BASE}tools/baseline/page.html`)).text();
-  if (!served.includes(MARKER)) {
-    throw new Error(`the server on ${BASE} is not serving this checkout's page`);
-  }
+  const vite = spawnVite(opts.port, { host: opts.host });
+  const { server: collector, reportPromise } = await startBeaconCollector(opts.beaconPort);
+  try {
+    await waitForVite(BASE, vite);
+    await verifyServedMarker(BASE);
 
-  const playwright = await loadPlaywright();
-
-  for (const name of opts.browsers) {
-    let browser;
-    try {
-      browser = await playwright[name].launch();
-      const page = await browser.newPage();
-      const pageErrors = [];
-      page.on('pageerror', (e) => pageErrors.push(String(e)));
-      await page.goto(`${BASE}tools/baseline/page.html`, { waitUntil: 'load' });
-      // Generous: the trace is ~4 s of blocked main thread under Node and slower engines
-      // are slower still. A timeout here is a real failure, not flake -- report it. Waits
-      // for ALL THREE results: the page sets each independently once it is fully built
-      // (see page.html), so waiting on the trio never reads a half-filled object of any.
-      await page.waitForFunction(
-        () => !!window.__traceResult && !!window.__angleResult && !!window.__vendoredAngleResult,
-        { timeout: 180_000 },
+    console.log(`BEACON_URL ${beaconUrl}`);
+    console.log('Open that URL in the browser/engine you want to measure.');
+    console.log(`Waiting up to ${opts.timeout}ms for its report to arrive at ${collectorBase}/report ...`);
+    if (opts.host) {
+      console.log('');
+      console.log(`--host was passed: vite and the beacon collector are bound to every interface.`);
+      console.log(
+        displayHost === 'localhost'
+          ? 'No non-internal IPv4 address was found on this machine -- LAN access is unavailable; use localhost/the Simulator instead.'
+          : `LAN address in use: ${displayHost}`,
       );
-      const r = await page.evaluate(() => window.__traceResult);
-      const ar = await page.evaluate(() => window.__angleResult);
-      const vr = await page.evaluate(() => window.__vendoredAngleResult);
-      for (const e of pageErrors) console.log(`  page error [${name}] -- ${e}`);
+      console.log(
+        'WARNING: crypto.subtle requires a secure context. Plain http://<lan-ip> is NOT one, and',
+      );
+      console.log(
+        'the page will report a hard error on that path (see page.html\'s own secure-context check).',
+      );
+      console.log(
+        'localhost (the iOS Simulator shares the host loopback) is the supported path; LAN needs a',
+      );
+      console.log('tunnel or an https proxy in front of the address above to actually work.');
+    }
 
-      // ---- golden trace: identical reporting to before the angle probe rode along ----
-      results.push({ name, ...r, pageErrors: pageErrors.length });
-      if (r.error) {
-        failed++;
-        console.log(`  FAIL  ${name}: ${r.error}`);
-      } else {
-        console.log(
-          `  ${r.match ? 'MATCH' : 'MISMATCH'}  ${name}  ${r.hash}  (${r.ms} ms, ${r.textLength} chars)`,
-        );
-        console.log(`        ${r.userAgent}`);
-        if (!r.match) failed++;
-      }
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`no report received within ${opts.timeout}ms`)), opts.timeout);
+    });
+    const report = await Promise.race([reportPromise, timeoutPromise]);
+    console.log('');
+    console.log(`report received from: ${report.userAgent ?? '(no userAgent in report)'}`);
+    const failed = reportResult(
+      'beacon',
+      report.traceResult ?? { error: 'report is missing traceResult' },
+      report.angleResult ?? { error: 'report is missing angleResult' },
+      report.vendoredAngleResult ?? { error: 'report is missing vendoredAngleResult' },
+    );
+    console.log('');
+    console.log(failed === 0 ? '' : `${failed} check(s) FAILED`);
+    process.exitCode = failed === 0 ? 0 : 1;
+  } finally {
+    collector.close();
+    await stopVite(vite, BASE);
+  }
+}
 
-      // ---- angle probe: same shape, its own line, prefixed so the two never blur --------
-      // NOT wired into `failed`/the exit code on a MISMATCH, unlike the trace above. The
-      // trace's BASELINE_HASH is a validated invariant (proven to hold across three real
-      // engines when it was pinned), so any deviation is a regression worth a red exit.
-      // ANGLE_HASH is not that: it is simply whatever Node's V8 computed, and measured on
-      // this checkout, chromium/firefox/webkit never agree with it or with each other on
-      // this sweep (see angles.ts's header and the commit that introduced this file). CI's
-      // "Baseline trace (chromium)" step runs this file with no arguments -- one engine --
-      // and gates the Pages deploy; wiring an unfixable, structural mismatch into `failed`
-      // would turn that gate permanently red for a finding, not a defect. A hard error
-      // (the sweep throwing, e.g. crypto.subtle missing) is still a real tool failure and
-      // still counts.
-      angleResults.push({ name, ...ar });
-      if (ar.error) {
-        failed++;
-        console.log(`  FAIL  angle ${name}: ${ar.error}`);
-      } else {
-        console.log(
-          `  ${ar.match ? 'MATCH' : 'MISMATCH'}  angle ${name}  ${ar.hash}  (${ar.ms} ms, ${ar.bands.length} bands)`,
-        );
-      }
+async function runPlaywrightMode(opts) {
+  // Same exit(2) contract as runBeaconMode above -- see its comment.
+  try {
+    await refuseIfAnswering(BASE);
+  } catch (e) {
+    console.error(String(e.message ?? e));
+    process.exit(2);
+  }
 
-      // ---- vendored angle probe (issue #133): same shape again, its own line ------------
-      // UNLIKE the native angle block above, a MISMATCH here IS wired into `failed`. The
-      // native ANGLE_HASH is expected to diverge across engines -- that is the finding
-      // issue #133 exists to report, not a bug this tool could fix. VENDORED_ANGLE_HASH is
-      // the opposite case: src/sim/math is built only from ECMA-262's exactly-specified
-      // operations, so every conformant engine SHOULD compute the identical bit pattern.
-      // A mismatch here means the construction guarantee angles.ts's header promises does
-      // not actually hold on this engine -- a real regression, not a structural finding.
-      vendoredAngleResults.push({ name, ...vr });
-      if (vr.error) {
-        failed++;
-        console.log(`  FAIL  vendored angle ${name}: ${vr.error}`);
-      } else {
-        console.log(
-          `  ${vr.match ? 'MATCH' : 'MISMATCH'}  vendored angle ${name}  ${vr.hash}  (${vr.ms} ms, ${vr.bands.length} bands)`,
+  const vite = spawnVite(opts.port);
+  let failed = 0;
+  const results = [];
+  const angleResults = [];
+  const vendoredAngleResults = [];
+  try {
+    await waitForVite(BASE, vite);
+    await verifyServedMarker(BASE);
+
+    const playwright = await loadPlaywright();
+
+    for (const name of opts.browsers) {
+      let browser;
+      try {
+        browser = await playwright[name].launch();
+        const page = await browser.newPage();
+        const pageErrors = [];
+        page.on('pageerror', (e) => pageErrors.push(String(e)));
+        await page.goto(`${BASE}tools/baseline/page.html`, { waitUntil: 'load' });
+        // Generous: the trace is ~4 s of blocked main thread under Node and slower engines
+        // are slower still. A timeout here is a real failure, not flake -- report it. Waits
+        // for ALL THREE results: the page sets each independently once it is fully built
+        // (see page.html), so waiting on the trio never reads a half-filled object of any.
+        await page.waitForFunction(
+          () => !!window.__traceResult && !!window.__angleResult && !!window.__vendoredAngleResult,
+          { timeout: 180_000 },
         );
-        if (!vr.match) failed++;
+        const r = await page.evaluate(() => window.__traceResult);
+        const ar = await page.evaluate(() => window.__angleResult);
+        const vr = await page.evaluate(() => window.__vendoredAngleResult);
+        for (const e of pageErrors) console.log(`  page error [${name}] -- ${e}`);
+
+        results.push({ name, ...r, pageErrors: pageErrors.length });
+        angleResults.push({ name, ...ar });
+        vendoredAngleResults.push({ name, ...vr });
+        failed += reportResult(name, r, ar, vr);
+      } catch (e) {
+        failed++;
+        console.log(`  FAIL  ${name}: ${e.message ?? e}`);
+      } finally {
+        if (browser) await browser.close();
       }
-    } catch (e) {
+    }
+
+    // An empty result set must not read as success -- the same trap tools/gl/run.mjs names.
+    if (results.length === 0) {
       failed++;
-      console.log(`  FAIL  ${name}: ${e.message ?? e}`);
-    } finally {
-      if (browser) await browser.close();
+      console.log('  FAIL  no browser produced a result at all');
     }
-  }
 
-  // An empty result set must not read as success -- the same trap tools/gl/run.mjs names.
-  if (results.length === 0) {
-    failed++;
-    console.log('  FAIL  no browser produced a result at all');
-  }
+    const hashes = new Set(results.filter((r) => r.hash).map((r) => r.hash));
+    console.log('');
+    if (hashes.size > 1) {
+      console.log(`ENGINES DISAGREE: ${hashes.size} distinct hashes across ${results.length} run(s).`);
+      console.log('That is the answer to docs/research/multiplayer.md open question 1 for');
+      console.log('these engines: peer-deterministic netcode needs the sim quantized first.');
+    } else if (failed === 0) {
+      console.log(
+        `all ${results.length} engine(s) agree with the pinned baseline: ${[...hashes][0]}`,
+      );
+      console.log('Engines covered: ' + opts.browsers.join(', ') + '.');
+      // Host-qualified: on an arm64 macOS runner (the engines.yml matrix) the old
+      // unconditional "any non-x86-64 CPU" line would be literally false.
+      console.log(
+        `This run: ${process.platform}/${process.arch}. Still NOT covered here: shipped Safari ` +
+          'and iOS -- see tools/baseline/safari.mjs and this file\'s --beacon mode.',
+      );
+    }
 
-  const hashes = new Set(results.filter((r) => r.hash).map((r) => r.hash));
-  console.log('');
-  if (hashes.size > 1) {
-    console.log(`ENGINES DISAGREE: ${hashes.size} distinct hashes across ${results.length} run(s).`);
-    console.log('That is the answer to docs/research/multiplayer.md open question 1 for');
-    console.log('these engines: peer-deterministic netcode needs the sim quantized first.');
-  } else if (failed === 0) {
-    console.log(
-      `all ${results.length} engine(s) agree with the pinned baseline: ${[...hashes][0]}`,
-    );
-    console.log('Engines covered: ' + opts.browsers.join(', ') + '.');
-    // Host-qualified: on an arm64 macOS runner (the engines.yml matrix) the old
-    // unconditional "any non-x86-64 CPU" line would be literally false.
-    console.log(
-      `This run: ${process.platform}/${process.arch}. Still NOT covered anywhere: ` +
-        'shipped Safari and iOS; other platforms/CPUs only as the engines matrix runs them.',
-    );
-  }
-
-  // ---- angle probe agreement, reported the same way, plus per-band bisection ----
-  const angleHashes = new Set(angleResults.filter((r) => r.hash).map((r) => r.hash));
-  console.log('');
-  if (angleHashes.size > 1) {
-    console.log(
-      `ANGLE PROBE: ENGINES DISAGREE: ${angleHashes.size} distinct hashes across ` +
-        `${angleResults.length} run(s).`,
-    );
-    console.log('That is a direct, large-magnitude-regime observation for issue #133:');
-    console.log('these engines do not agree on sin/cos/atan2/hypot everywhere the sim can');
-    console.log('reach, even though they agree on the golden trace.');
-    // Bisect: compare every band's own sub-hash across engines, so the report names WHICH
-    // function/reachability-band diverges instead of only the rolled-up hash.
-    const withBands = angleResults.filter((r) => Array.isArray(r.bands));
-    if (withBands.length > 1) {
-      const bandNames = withBands[0].bands.map((b) => b.name);
-      for (const bandName of bandNames) {
-        const perEngine = withBands.map((r) => {
-          const b = r.bands.find((x) => x.name === bandName);
-          return { name: r.name, hash: b?.hash };
-        });
-        const distinct = new Set(perEngine.map((e) => e.hash));
-        if (distinct.size > 1) {
-          const detail = perEngine.map((e) => `${e.name}=${(e.hash ?? '?').slice(0, 12)}`).join('  ');
-          console.log(`  DIVERGES  ${bandName}  ${detail}`);
+    // ---- angle probe agreement, reported the same way, plus per-band bisection ----
+    const angleHashes = new Set(angleResults.filter((r) => r.hash).map((r) => r.hash));
+    console.log('');
+    if (angleHashes.size > 1) {
+      console.log(
+        `ANGLE PROBE: ENGINES DISAGREE: ${angleHashes.size} distinct hashes across ` +
+          `${angleResults.length} run(s).`,
+      );
+      console.log('That is a direct, large-magnitude-regime observation for issue #133:');
+      console.log('these engines do not agree on sin/cos/atan2/hypot everywhere the sim can');
+      console.log('reach, even though they agree on the golden trace.');
+      // Bisect: compare every band's own sub-hash across engines, so the report names WHICH
+      // function/reachability-band diverges instead of only the rolled-up hash.
+      const withBands = angleResults.filter((r) => Array.isArray(r.bands));
+      if (withBands.length > 1) {
+        const bandNames = withBands[0].bands.map((b) => b.name);
+        for (const bandName of bandNames) {
+          const perEngine = withBands.map((r) => {
+            const b = r.bands.find((x) => x.name === bandName);
+            return { name: r.name, hash: b?.hash };
+          });
+          const distinct = new Set(perEngine.map((e) => e.hash));
+          if (distinct.size > 1) {
+            const detail = perEngine.map((e) => `${e.name}=${(e.hash ?? '?').slice(0, 12)}`).join('  ');
+            console.log(`  DIVERGES  ${bandName}  ${detail}`);
+          }
         }
       }
+    } else if (angleResults.length > 0 && angleResults.every((r) => !r.error && r.match)) {
+      // Only reachable when every engine run this session BOTH agrees with each other
+      // (angleHashes.size <= 1, the branch above) AND matches the Node-pinned ANGLE_HASH --
+      // `r.match` is checked explicitly here because a single mismatching engine also has
+      // angleHashes.size 1 (one hash trivially "agrees" with itself), which would otherwise
+      // print this same line while being wrong.
+      console.log(
+        `angle probe: all ${angleResults.length} engine(s) agree with the pinned baseline: ` +
+          `${[...angleHashes][0]}`,
+      );
+    } else if (angleResults.length > 0 && angleResults.every((r) => !r.error)) {
+      console.log(
+        `angle probe: does not match the pinned V8 baseline (ANGLE_HASH) on at least one ` +
+          'engine -- see the MISMATCH line(s) above.',
+      );
     }
-  } else if (angleResults.length > 0 && angleResults.every((r) => !r.error && r.match)) {
-    // Only reachable when every engine run this session BOTH agrees with each other
-    // (angleHashes.size <= 1, the branch above) AND matches the Node-pinned ANGLE_HASH --
-    // `r.match` is checked explicitly here because a single mismatching engine also has
-    // angleHashes.size 1 (one hash trivially "agrees" with itself), which would otherwise
-    // print this same line while being wrong.
-    console.log(
-      `angle probe: all ${angleResults.length} engine(s) agree with the pinned baseline: ` +
-        `${[...angleHashes][0]}`,
-    );
-  } else if (angleResults.length > 0 && angleResults.every((r) => !r.error)) {
-    console.log(
-      `angle probe: does not match the pinned V8 baseline (ANGLE_HASH) on at least one ` +
-        'engine -- see the MISMATCH line(s) above.',
-    );
-  }
 
-  // ---- vendored angle probe agreement (issue #133): the pin this file's build ----
-  // guarantee is actually FOR. A mismatch here is already counted into `failed` above;
-  // this block only narrates it, plus the same per-band bisection the native block does.
-  const vendoredHashes = new Set(vendoredAngleResults.filter((r) => r.hash).map((r) => r.hash));
-  console.log('');
-  if (vendoredHashes.size > 1) {
-    console.log(
-      `VENDORED ANGLE PROBE: ENGINES DISAGREE: ${vendoredHashes.size} distinct hashes ` +
-        `across ${vendoredAngleResults.length} run(s).`,
-    );
-    console.log('That is a REGRESSION for issue #133: the vendored math is built only from');
-    console.log('exactly-specified ECMA-262 operations, so every conformant engine should');
-    console.log('compute the identical bit pattern -- this construction guarantee does not');
-    console.log('hold on this run.');
-    const withBands = vendoredAngleResults.filter((r) => Array.isArray(r.bands));
-    if (withBands.length > 1) {
-      const bandNames = withBands[0].bands.map((b) => b.name);
-      for (const bandName of bandNames) {
-        const perEngine = withBands.map((r) => {
-          const b = r.bands.find((x) => x.name === bandName);
-          return { name: r.name, hash: b?.hash };
-        });
-        const distinct = new Set(perEngine.map((e) => e.hash));
-        if (distinct.size > 1) {
-          const detail = perEngine.map((e) => `${e.name}=${(e.hash ?? '?').slice(0, 12)}`).join('  ');
-          console.log(`  DIVERGES  ${bandName}  ${detail}`);
+    // ---- vendored angle probe agreement (issue #133): the pin this file's build ----
+    // guarantee is actually FOR. A mismatch here is already counted into `failed` above;
+    // this block only narrates it, plus the same per-band bisection the native block does.
+    const vendoredHashes = new Set(vendoredAngleResults.filter((r) => r.hash).map((r) => r.hash));
+    console.log('');
+    if (vendoredHashes.size > 1) {
+      console.log(
+        `VENDORED ANGLE PROBE: ENGINES DISAGREE: ${vendoredHashes.size} distinct hashes ` +
+          `across ${vendoredAngleResults.length} run(s).`,
+      );
+      console.log('That is a REGRESSION for issue #133: the vendored math is built only from');
+      console.log('exactly-specified ECMA-262 operations, so every conformant engine should');
+      console.log('compute the identical bit pattern -- this construction guarantee does not');
+      console.log('hold on this run.');
+      const withBands = vendoredAngleResults.filter((r) => Array.isArray(r.bands));
+      if (withBands.length > 1) {
+        const bandNames = withBands[0].bands.map((b) => b.name);
+        for (const bandName of bandNames) {
+          const perEngine = withBands.map((r) => {
+            const b = r.bands.find((x) => x.name === bandName);
+            return { name: r.name, hash: b?.hash };
+          });
+          const distinct = new Set(perEngine.map((e) => e.hash));
+          if (distinct.size > 1) {
+            const detail = perEngine.map((e) => `${e.name}=${(e.hash ?? '?').slice(0, 12)}`).join('  ');
+            console.log(`  DIVERGES  ${bandName}  ${detail}`);
+          }
         }
       }
+    } else if (vendoredAngleResults.length > 0 && vendoredAngleResults.every((r) => !r.error && r.match)) {
+      console.log(
+        `vendored angle probe: all ${vendoredAngleResults.length} engine(s) agree with the ` +
+          `pinned baseline: ${[...vendoredHashes][0]}`,
+      );
+    } else if (vendoredAngleResults.length > 0 && vendoredAngleResults.every((r) => !r.error)) {
+      console.log(
+        'vendored angle probe: does not match the pinned baseline (VENDORED_ANGLE_HASH) on ' +
+          'at least one engine -- see the MISMATCH line(s) above. Counted into failed.',
+      );
     }
-  } else if (vendoredAngleResults.length > 0 && vendoredAngleResults.every((r) => !r.error && r.match)) {
-    console.log(
-      `vendored angle probe: all ${vendoredAngleResults.length} engine(s) agree with the ` +
-        `pinned baseline: ${[...vendoredHashes][0]}`,
-    );
-  } else if (vendoredAngleResults.length > 0 && vendoredAngleResults.every((r) => !r.error)) {
-    console.log(
-      'vendored angle probe: does not match the pinned baseline (VENDORED_ANGLE_HASH) on ' +
-        'at least one engine -- see the MISMATCH line(s) above. Counted into failed.',
-    );
-  }
 
-  console.log('');
-  console.log(failed === 0 ? '' : `${failed} check(s) FAILED`);
-  process.exitCode = failed === 0 ? 0 : 1;
-} finally {
-  // On win32 `vite` was spawned with shell: true (see VITE_BIN above), so `vite.pid` is
-  // cmd.exe running the .cmd shim, which in turn runs a `node` grandchild that holds the
-  // port -- Windows has no process-group SIGTERM the way POSIX does, so killing only the
-  // top process would leave that grandchild running. `taskkill /t` kills the whole tree;
-  // it ships with every Windows install, so this needs no new dependency. Unverified on a
-  // real Windows runner.
-  const killVite = (hard) => {
-    if (process.platform === 'win32') {
-      if (vite.pid) spawn('taskkill', ['/pid', String(vite.pid), '/t', hard ? '/f' : ''].filter(Boolean), { stdio: 'ignore' });
-    } else {
-      vite.kill(hard ? 'SIGKILL' : 'SIGTERM');
-    }
-  };
-  killVite(false);
-  let freed = false;
-  for (let i = 0; i < 20; i++) {
-    if (!(await respondsOn(BASE, 300))) { freed = true; break; }
-    await sleep(250);
+    console.log('');
+    console.log(failed === 0 ? '' : `${failed} check(s) FAILED`);
+    process.exitCode = failed === 0 ? 0 : 1;
+  } finally {
+    await stopVite(vite, BASE);
   }
-  if (!freed) {
-    killVite(true);
-    for (let i = 0; i < 20; i++) {
-      if (!(await respondsOn(BASE, 300))) { freed = true; break; }
-      await sleep(250);
-    }
-  }
-  if (!freed) console.error(`warning: ${BASE} still answering after SIGKILL`);
+}
+
+if (opts.beacon) {
+  await runBeaconMode(opts);
+} else {
+  await runPlaywrightMode(opts);
 }
