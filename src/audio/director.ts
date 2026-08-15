@@ -49,6 +49,14 @@ export function createAudioDirector(
       case 'mine-detonate':
         engine.play('mine-boom');
         break;
+      case 'respawn':
+        // Deferred, explicitly (see the coop semantics plan,
+        // docs/superpowers/plans/2026-08-15-coop-semantics.md): a respawn cue needs
+        // either a NEW synthesized sound (a feel decision nobody has heard yet) or
+        // repurposing an existing one, which risks a death-adjacent cue like
+        // ping/mine-arm reading as the wrong thing on revival. Not free the way the
+        // particle burst is (render/particles.ts).
+        break;
       case 'wall-destroyed':
         // No dedicated sound: the accompanying explosion / mine-boom already
         // covers the blast that destroyed the wall.

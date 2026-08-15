@@ -110,6 +110,11 @@ export function createHapticsDirector(
         break;
       // Conservative default set (issue #112): everything else is deliberately
       // silent for now. Tuning which of these deserve a cue is explicit follow-up.
+      // 'respawn' joins this set deliberately, not by omission: haptics has no
+      // per-player attribution machinery yet (setPlayerPosition is P1-only -- see
+      // the module doc comment), and building it just for respawn is out of scope
+      // for the coop semantics plan (docs/superpowers/plans/2026-08-15-coop-semantics.md).
+      case 'respawn':
       case 'ricochet':
       case 'explosion':
       case 'mine-dropped':

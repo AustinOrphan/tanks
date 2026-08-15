@@ -12,6 +12,7 @@ function label(e: SimEvent): string {
     case 'mine-armed': return 'mine-armed';
     case 'mine-detonate': return 'mine-detonate';
     case 'tank-destroyed': return 'tank-destroyed';
+    case 'respawn': return 'respawn';
     case 'wall-destroyed': return 'wall-destroyed';
     case 'win': return 'win';
     case 'lose': return 'lose';
@@ -32,13 +33,14 @@ describe('SimEvent', () => {
       { type: 'mine-armed', mineId: 7, ownerId: 1, pos: { x: 3, y: 3 } },
       { type: 'mine-detonate', mineId: 7, ownerId: 1, pos: { x: 3, y: 3 } },
       { type: 'tank-destroyed', tankId: 4, kind: 'brown', by: { source: 'shell', ownerId: 9 }, pos: { x: 4, y: 4 } },
+      { type: 'respawn', tankId: 4, controlledBy: 1, pos: { x: 4, y: 4 } },
       { type: 'wall-destroyed', wallId: 9, ownerId: 1, pos: { x: 5, y: 5 } },
       { type: 'win' },
       { type: 'lose' },
     ];
     expect(events.map(label)).toEqual([
       'fire', 'ricochet', 'explosion', 'mine-dropped', 'mine-armed', 'mine-detonate',
-      'tank-destroyed', 'wall-destroyed', 'win', 'lose',
+      'tank-destroyed', 'respawn', 'wall-destroyed', 'win', 'lose',
     ]);
   });
 });
