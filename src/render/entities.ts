@@ -57,7 +57,8 @@ function tankColor(kind: TankKind): number {
  * owner's own first suggestion ("P1 blue-white, P2 orange"). Neither value equals any
  * roster kind's own `color` (config/data/tank-defs.json)
  * or the co-op placeholder hull swatch (`UNSTYLED_SLOT_HEX` below) -- pinned by
- * entities.test.ts's placeholder-distinctness sweep, extended to cover these two.
+ * entities.test.ts's identity-ring distinctness sweep, which diffs BOTH ring hexes
+ * against every roster colour and the placeholder.
  * Values are brighter/more saturated than the customization palette's own blue
  * (#3d7bd6) and orange (#e08a2e) swatches on purpose: the ring is drawn unlit
  * (`MeshBasicMaterial`) with additive blending, so it needs to read as a glow against
@@ -77,8 +78,10 @@ function identityColor(slot: number): number {
 /**
  * How many player-kind tanks a world has to have before identity rings/shell tints draw
  * at all. Below this, both are the single-player game exactly as shipped before this
- * feature -- byte-identical, not merely visually similar -- which is the owner's stated
- * requirement and what the gallery byte-compare in the PR body verifies.
+ * feature -- byte-identical, not merely visually similar -- which is the stated
+ * requirement. Held by the three single-player negative-control tests below this
+ * threshold, and verified once manually by md5-comparing gallery renders against an
+ * unmodified checkout (a method, not a checked-in tool -- rerun it if this area moves).
  */
 const MULTIPLAYER_THRESHOLD = 2;
 function countPlayerTanks(tanks: readonly { kind: TankKind }[]): number {
@@ -1149,8 +1152,9 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // Identity ring: WHO, not WHAT style -- see IDENTITY_RING_COLORS. Only a
       // player-kind tank ever gets one, and only once a second player exists in the
       // world; below that threshold this is a no-op every tick, which is what keeps
-      // single-player pixel-identical to before this feature (verified by gallery
-      // byte-compare, not just argued -- see the PR body). Recomputed from the
+      // single-player pixel-identical to before this feature (the negative-control
+      // tests pin the no-op; a manual gallery md5-compare verified the pixels once).
+      // Recomputed from the
       // CURRENT world every sync rather than latched at tank-view creation, since
       // `multiPlayer` is a property of the world, not of this one tank.
       if (t.kind === 'player') {
@@ -1193,9 +1197,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
    * The identity colour a shell owned by `ownerId` should glow, or null for the
    * standard untinted brass. Resolved by looking the owner up in `curr.tanks` --
    * `Bullet` carries only `ownerId` (types.ts), never the owner's kind or slot
-   * directly -- and returning null for anything that is not a live player-kind tank,
-   * which covers a dead/removed owner and every enemy shell in one check. The caller
-   * gates this on `multiPlayer` first, so it is never even reached at playerCount 1.
+   * directly -- and returning null for any owner that is not a player-kind tank,
+   * which covers every enemy shell. A DEAD player owner still resolves to its colour
+   * on purpose: a shell must not lose its firer's identity mid-flight because the
+   * firer died a tick after shooting -- pinned by the dead-owner test. (An owner id
+   * absent from the world entirely also returns null; unreachable today, since tanks
+   * are never removed from the array.) The caller gates this on `multiPlayer` first,
+   * so it is never even reached at playerCount 1.
    */
   function shellTintFor(curr: World, ownerId: number): number | null {
     const owner = curr.tanks.find((t) => t.id === ownerId);

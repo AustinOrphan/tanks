@@ -1742,6 +1742,51 @@ describe('player identity: ring and shell tint', () => {
     views.dispose();
   });
 
+  it('both identity ring colours are distinct from every roster colour and the placeholder', () => {
+    // Makes entities.ts's own distinctness claim TRUE rather than asserted: the ring
+    // says WHO, the hull says WHAT STYLE, so an identity hex colliding with a hull a
+    // player could be wearing (or the unstyled-slot placeholder) would blur exactly
+    // the channel the ring exists to carry. Reads the REAL rendered placeholder off
+    // the scene, same as the placeholder-distinctness sweep above. Breaks if either
+    // IDENTITY_RING_COLORS entry is changed onto a roster/placeholder hue.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0); // slot 1 unstyled: renders the placeholder hull
+    // Local copy of the co-op styling block's hullColor reader (scoped there).
+    let placeholder = -1;
+    scene.traverse((o) => {
+      if (o.name !== 'hull') return;
+      let g: THREE.Object3D | null = o;
+      while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+      if (g && (g as THREE.Group).position.x === 9) {
+        placeholder = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+      }
+    });
+    expect(placeholder, 'placeholder hull was found in the scene').not.toBe(-1);
+    for (const ring of IDENTITY_RING_COLORS) {
+      for (const kind of TANK_KINDS) {
+        expect(ring, `ring vs ${kind}`).not.toBe(parseInt(configFor(kind).color.slice(1), 16));
+      }
+      expect(ring, 'ring vs unstyled placeholder').not.toBe(placeholder);
+    }
+    views.dispose();
+  });
+
+  it("a DEAD player owner's shell keeps its identity tint -- a shell must not lose its firer's colour mid-flight", () => {
+    // Pins the deliberate absence of an .alive check in shellTintFor: the firer dying
+    // a tick after shooting must not strip the shell's identity. Breaks if the lookup
+    // ever adds an alive-only filter.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    w.tanks[1].alive = false; // P2 (id 2, controlledBy 1) is a corpse
+    w.bullets.push(playerBullet(60, 2, 6)); // P2's shell, still in flight
+    views.sync(w, w, 0);
+    expect(shellEmissiveAt(scene, 6)).toBe(IDENTITY_RING_COLORS[1]);
+    views.dispose();
+  });
+
   it('the ring sits entirely outside the hull\'s own collision radius', () => {
     // A ring that started inside TANK_RADIUS would be drawn UNDER the hull from
     // overhead and read as nothing at all -- the same class of mistake HULL_WIDTH's
