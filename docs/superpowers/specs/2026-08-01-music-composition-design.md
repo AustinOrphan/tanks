@@ -1,6 +1,6 @@
 # Composed music (approved 2026-08-01)
 
-Austin: "I'm probably going to want to orchestrate/compose some concepts or tunes
+The design feedback: "I'm probably going to want to orchestrate/compose some concepts or tunes
 or whatever for some of these / Perhaps especially music bed."
 
 ## Why this exists
@@ -11,7 +11,7 @@ content is *code*: `BASS_HZ`, `DRONE_HZ` and `STEP_SECONDS` are constants inside
 editing a scheduling module, which is the wrong job for the person writing tunes.
 
 It also sidesteps the licensing bar entirely. `CREDITS.md` forbids AI-generated
-audio and unverified-licence samples; music Austin writes himself has no
+audio and unverified-licence samples; self-composed music has no
 provenance to verify.
 
 ## Approved shape
@@ -92,7 +92,7 @@ modules — a preview that reimplemented the synth would be worthless.
 
 ## Explicitly later
 
-Per-context tracks (menu theme, per-level pieces, victory sting) — Austin chose
-"composed tracks, bed as fallback" over per-context routing for this pass, so the
+Per-context tracks (menu theme, per-level pieces, victory sting) — "composed tracks, bed
+as fallback" was chosen over per-context routing for this pass, so the
 selection layer is one track at a time. MIDI import. Sustain/tie markers, velocity
 per note, and any form of automation.

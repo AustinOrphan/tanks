@@ -334,8 +334,8 @@ Spam policy, verbatim
 ([answer/9899034](https://support.google.com/googleplay/android-developer/answer/9899034),
 checked 2026-08-09): "We don't allow apps whose primary purpose is to drive affiliate
 traffic to a website or provide a webview of a website without permission from the website
-owner or administrator." Austin owns austinorphan.com, and a Capacitor build does not load
-it at all.
+owner or administrator." austinorphan.com is this project's own domain, and a Capacitor
+build does not load it at all.
 
 The live rule is on the page titled **"Functionality, Content, and User Experience"**
 ([answer/9898783](https://support.google.com/googleplay/android-developer/answer/9898783),

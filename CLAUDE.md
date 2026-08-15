@@ -187,8 +187,8 @@ a wall clock there would break replay.
 `entities.ts` is the only place this lives, and each rule exists because a render was
 wrong in a way no numeric probe caught.
 
-The HULL must read as one continuous surface — Austin's "the hull should be distinctly
-one piece". `ExtrudeGeometry` carries THREE parameterisations: the caps come from the
+The HULL must read as one continuous surface — the design ruling's "the hull should be
+distinctly one piece". `ExtrudeGeometry` carries THREE parameterisations: the caps come from the
 shape's own (x, y), while the bevel ring and side walls come from `generateSideWallUV`,
 which returns `(x, 1 - z)` or `(y, 1 - z)` and **chooses between them per quad** on
 `Math.abs(a_y - b_y) < Math.abs(a_x - b_x)`. So the perimeter's own u axis flipped with
@@ -213,8 +213,8 @@ Both of those mutations, and collapsing `projectPlanarUV`'s `along` axis, each l
 full suite green before those tests existed.
 
 The TURRET keeps `LatheGeometry`'s own wrap and **must not be touched**: u around the
-axis is what makes checker a pinwheel and flow a swirl, and Austin asked for both by
-name. The generalisation that "fixes" the hull everywhere is exactly the wrong move
+axis is what makes checker a pinwheel and flow a swirl, and the design feedback asked for
+both by name. The generalisation that "fixes" the hull everywhere is exactly the wrong move
 here; a test compares the dome's position, normal and uv arrays against a freshly built
 reference so that move fails loudly.
 
@@ -231,7 +231,7 @@ segments and the silhouette rotates with it.
 
 `stripes` is the exception to all of it: a hard-edged band wrapped around a lathe axis
 arrives as pie slices, so its turret and barrel are projected flat. `STRIPE_TURRET_MODE`
-is `'body'` — one field at world scale, 0.084 wide on every part, which Austin chose from
+is `'body'` — one field at world scale, 0.084 wide on every part, which was chosen from
 renders ("I like continuous stripes actually"). `'part'` normalises each part to its own
 half-width (0.084 / 0.069 / 0.025 on hull / turret / barrel) and was rejected because the
 three sets do not line up. Pinned through the behaviour — all three parts must share one
@@ -239,7 +239,7 @@ v scale — not through the constant alone.
 
 **CAMO AND CLOUDS ARE DIFFERENT SHAPE LANGUAGES — but only camo got a new generator.**
 They shared one `blotches` helper (lobed clusters of circles) and differed only in count,
-radius and lobes, so Austin twice reported them as swapped. The coverage WAS backwards
+radius and lobes, so review twice reported them as swapped. The coverage WAS backwards
 and swapping it was necessary — camo covers, clouds does not — but it was not sufficient,
 because two skins cut from one silhouette generator read as versions of each other at any
 density. `camoCells` is now a seeded power diagram: hard-edged interlocking polygons,

@@ -1051,7 +1051,7 @@ earned, so a tab left open across Reset progress can no longer bring pre-reset i
 which is the one further decrease since: the live count read 64 after that. The
 sim-switches PR closes the two reachability lines naming `resolveBulletHits`' dead-tank
 ghost and `muzzlePoint`'s tank-overlap gap the same way, both awaiting exactly the call
-they named: Austin ruled on 2026-08-14 that the ghost stays the default (a flippable
+they named: the ruling on 2026-08-14 was that the ghost stays the default (a flippable
 `corpseBlocksShells` WALL variant behind it) and that the muzzle clearance ships ON by
 default (a flippable `muzzleClearsTanks` restoring the old spawn), closing both lines
 without deciding a THIRD way — which is the two further decreases since: the live count

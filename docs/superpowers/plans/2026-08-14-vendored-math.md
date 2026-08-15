@@ -144,6 +144,6 @@ Follow `tools/gl/idle-cost.ts`'s established convention: a measurement tool, not
 
 `InputState.aim` quantization (canvas-size-dependent, a separate input-boundary change per the issue's own text). `SimEvent` tick-field/de-duplication for rollback. `hypot`'s N-arg/Kahan path (no call site needs it). Vendoring `Math.sqrt` (ES2025 correctly-rounded, explicitly excluded by the issue). Chasing V8's LLVM-libc migration as a validation target (documented as a residual finding, not pursued — see option comparison).
 
-## Open questions for Austin
+## Open questions for the project owner
 
 None identified as blocking. Every provenance, layout, naming, and validation-design choice above is decided with evidence in hand; the one genuine uncertainty (does `BASELINE_HASH` move) is not a decision but a measurement the plan already specifies how to take and record either way.
