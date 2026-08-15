@@ -563,12 +563,13 @@ into `failed`, unlike a native `ANGLE_HASH` mismatch, which stays structural and
 unfixable. **What #133 does not fix**: `InputState.aim`'s canvas-size dependence and
 `SimEvent`'s missing tick field, both still open, both recorded in the multiplayer spike
 in `docs/superpowers/backlog.md`.) **That is not the whole
-question**: shipped Safari and iOS stay untested by any of this — a macOS Playwright run
-is a closer proxy than the Linux build above, but is still JavaScriptCore, not shipped
-Safari — and one matching hash is agreement on the sampled trajectory, not a proof about
-`Math.hypot`. The engines workflow extends this machine coverage to macOS (arm64) and
-Windows once its first run completes; take the shipped-Safari/iOS remainder by opening
-`page.html` by hand on the device.
+question**: one matching hash is agreement on the sampled trajectory, not a proof about
+`Math.hypot`. The shipped-Safari/iOS half is now MEASURED, not open: the engines
+workflow's macOS legs (PR #168, first run at `15989dd`, 2026-08-15) drove real shipped
+Safari 26.5.2 via safaridriver and real iOS WebKit (Mobile Safari, iOS 18.7 Simulator,
+arm64) via the beacon, and both matched `BASELINE_HASH` and `VENDORED_ANGLE_HASH`. The
+sole remaining gap is a physical iOS device — one URL away:
+`npm run trace:browser -- --beacon`, open the printed URL on the phone.
 
 ## Testing conventions, learned the hard way
 
