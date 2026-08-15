@@ -49,11 +49,13 @@ function tankColor(kind: TankKind): number {
  * identity colour collide with that choice by construction, which ties both palettes to
  * the same list would risk.
  *
- * Slot 0: a bright cyan-blue. Slot 1: a saturated amber-orange. Blue/orange is the
- * Okabe-Ito colourblind-safe pairing (chosen for hue separation under protanopia,
+ * Slot 0: a bright cyan-blue. Slot 1: a saturated amber-orange -- the blue/orange axis
+ * Okabe-Ito uses for CVD safety (chosen for hue separation under protanopia,
  * deuteranopia AND tritanopia -- unlike a red/green pair, which collapses under the
- * first two), and it is also the owner's own first suggestion ("P1 blue-white, P2
- * orange"). Neither value equals any roster kind's own `color` (config/data/tank-defs.json)
+ * first two), though these two exact hexes are not lifted from that palette (its
+ * #0072B2/#E69F00 read too dark unlit against this scene's ground). It is also the
+ * owner's own first suggestion ("P1 blue-white, P2 orange"). Neither value equals any
+ * roster kind's own `color` (config/data/tank-defs.json)
  * or the co-op placeholder hull swatch (`UNSTYLED_SLOT_HEX` below) -- pinned by
  * entities.test.ts's placeholder-distinctness sweep, extended to cover these two.
  * Values are brighter/more saturated than the customization palette's own blue
@@ -945,10 +947,14 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   /** The untinted shell's own emissive -- a dim brass glint, not a signal of anything. */
   const SHELL_EMISSIVE = 0x444422;
   /**
-   * How strongly a tinted shell's owner colour reads over the brass body. Kept below 1
-   * so the shell still reads as brass with a coloured glow, not as a solid ball of the
-   * identity colour -- the tint is meant to say WHOSE shell this is, the same
-   * disambiguating job the ring does, not to hide what a shell looks like.
+   * How strongly a tinted shell's owner colour reads over the brass body. ABOVE 1,
+   * deliberately, not swept against a lower value: a shell is small and moving, so the
+   * choice was to go bold rather than risk a hint nobody can read in flight -- the
+   * tint's whole job is disambiguation, the same one the ring does. Confirmed at 1.15
+   * in gallery-out/coop-game: the identity hue reads as the shell's dominant colour,
+   * not a background tinge -- a tinted shell reads as "whose" before it reads as
+   * "brass". Retune by eye (`npm run gallery -- --elements coop`) if that trade looks
+   * wrong; nothing else depends on the exact number.
    */
   const SHELL_TINT_INTENSITY = 1.15;
 
@@ -968,8 +974,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     const group = new THREE.Group();
     // Brass: the one genuinely metallic thing on the board, and small enough that it
     // needs the specular to be visible at all against the felt. A tinted shell keeps
-    // the same brass body colour -- only the emissive glow carries the owner's hue, so
-    // a shell in flight still reads as a shell first and a coloured signal second.
+    // the same brass BODY colour -- only the emissive glow carries the owner's hue --
+    // but that glow is bold (SHELL_TINT_INTENSITY), not a hint: at this scale a subtle
+    // tint reads as brass full stop, and the whole point is a shell that visibly says
+    // whose it is while still being recognisably a shell shape.
     const mat = new THREE.MeshStandardMaterial({
       color: 0xf5f0d0,
       emissive: tint ?? SHELL_EMISSIVE,
