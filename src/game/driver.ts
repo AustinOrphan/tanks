@@ -1,4 +1,4 @@
-import { step, type World } from '../sim/world';
+import { stepInputs, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import type { GameState } from './state';
@@ -39,7 +39,15 @@ export interface DriverDeps {
   /** Monotonic milliseconds. `performance.now` in the browser. */
   now(): number;
   raf: RafScheduler;
-  input: { sample(): InputState };
+  /**
+   * List-shaped ALWAYS, even at playerCount 1 -- no `if (n === 1) step() else
+   * stepInputs()` branch below. `step-inputs.test.ts`'s "step() is an adapter over
+   * stepInputs" describe block proves `stepInputs(world, [input])` is value-identical
+   * to `step(world, input)`, byte for byte; `driver.test.ts`'s own N=1 structural
+   * regression proves this DRIVER wires that adapter correctly, one layer up (the
+   * composition-blindness gap CLAUDE.md names for `step-pipeline.test.ts`).
+   */
+  input: { sample(): InputState[] };
   renderer: {
     render(prev: World, curr: World, alpha: number, events: SimEvent[], dt: number): void;
   };
@@ -117,7 +125,7 @@ export function createDriver(deps: DriverDeps): Driver {
     if (deps.stateMachine.state === 'playing') {
       for (let i = 0; i < plan.ticks; i++) {
         prev = curr;
-        const result = step(curr, deps.input.sample());
+        const result = stepInputs(curr, deps.input.sample());
         curr = result.world;
         // Stamped per-step, with THIS step's tick -- not the frame's final tick after
         // the loop ends. A catch-up frame's earlier events must report the tick that
