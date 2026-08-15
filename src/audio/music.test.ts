@@ -280,7 +280,7 @@ describe('composed tracks', () => {
   });
 
   it('bridges with material from the SECTIONS THEMSELVES, nothing invented', () => {
-    // Austin, after four iterations of composed interstitial material: "you're
+    // The verdict, after four iterations of composed interstitial material: "you're
     // still using something that exists in neither section to bridge between
     // the two and it's off". This is that sentence as an assertion: every pitch
     // scheduled across the whole run, transition included, must come from one
@@ -417,7 +417,7 @@ describe('composed tracks', () => {
   });
 
   it('carries the OUTGOING melody over the pickup, fading, then gone', () => {
-    // The overlap Austin asked for, bounded by the no-invented-material law:
+    // The overlap the design feedback asked for, bounded by the no-invented-material law:
     // the overlapping notes are the outgoing track's own last-bar lead line.
     // It must sound DURING the pickup and be silent once the cycle proper
     // starts -- an overlap that lingers is two melodies fighting.

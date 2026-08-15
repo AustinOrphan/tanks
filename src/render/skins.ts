@@ -202,8 +202,8 @@ function autoAccent(base: RGB, delta = AUTO_ACCENT_DELTA): RGB {
  * The twin racing stripes, in texture units -- which are WORLD units, because every
  * surface they land on is mapped at one texture repeat per unit.
  *
- * TWO stripes straddling the centreline, not one: Austin asked for a single stripe
- * first, then for two once he saw it on the tank. They sit at +/- CENTRE from the
+ * TWO stripes straddling the centreline, not one: the design feedback asked for a single
+ * stripe first, then for two once it was seen on the tank. They sit at +/- CENTRE from the
  * centreline and are 2 x HALF wide each, so together they lay down about the same ink
  * the single stripe did (0.168 of the hull's 0.875 width) but read as a pair.
  *
@@ -263,10 +263,10 @@ function cloudTone(base: RGB, delta: number): RGB {
  * WHY CAMO AND CLOUDS NO LONGER SHARE A GENERATOR -- and why only ONE of them moved.
  *
  * They used to share `blotches`, differing only in count, radius and lobe count. That is
- * why Austin kept reporting them as swapped. Coverage WAS wrong and swapping it helped --
- * he confirmed the dense/sparse split is now the right way round -- but it could never be
- * enough on its own, because two skins cut from one silhouette generator read as each
- * other at different densities. His verdict after the swap: "Clouds turret top could be
+ * why they kept being reported as swapped in review. Coverage WAS wrong and swapping it
+ * helped -- review confirmed the dense/sparse split is now the right way round -- but it
+ * could never be enough on its own, because two skins cut from one silhouette generator
+ * read as each other at different densities. The verdict after the swap: "Clouds turret top could be
  * made to look a bit more cloudlike in shape. Same with some spots on the hull. Camo also
  * could use some shape-improvement on the hull."
  *
@@ -275,9 +275,9 @@ function cloudTone(base: RGB, delta: number): RGB {
  * circle-based generator cannot produce at any parameter setting.
  *
  * CLOUDS got one too and it was REJECTED ON LOOK. `cumulus` drew soft-edged bulbous puffs
- * with a ramped rim; shown the pair, Austin said "before clouds looks better actually".
+ * with a ramped rim; shown the pair, the verdict was "before clouds looks better actually".
  * So clouds is back on `blotches` at the sparse post-swap setting -- exactly the texture
- * he was comparing against, which is `tiles/A-current.png`'s bottom row and the BEFORE
+ * that was being compared against, which is `tiles/A-current.png`'s bottom row and the BEFORE
  * panel of `compare/swap-*-clouds.png`. `cumulus` is DELETED rather than parked behind a
  * switch, because a generator nothing calls rots. If a later reader thinks "clouds should
  * be puffier": it was built, rendered and rejected -- see PR #139.
@@ -387,7 +387,7 @@ function blotches(
       const cy = rnd() * SIZE;
       const r = rMin + rnd() * (rMax - rMin);
       // Each patch is a CLUSTER of overlapping circles rather than one circle. A single
-      // circle per patch reads as polka dots -- Austin's "camo still doesn't look camo"
+      // circle per patch reads as polka dots -- the feedback's "camo still doesn't look camo"
       // -- because real camouflage is irregular and interlocking. Overlapping lobes cost
       // nothing and are what turn a dot into a blob.
       for (let lobe = 0; lobe < lobes; lobe++) {

@@ -165,7 +165,7 @@ export function membersOf(suite: SuiteDef): MusicTrackDef[] {
 /**
  * How related two KEYS are, for choosing the next suite.
  *
- * Austin: "probably weight same keys higher and then related keys." The tiers:
+ * The design feedback: "probably weight same keys higher and then related keys." The tiers:
  *
  *   4 -- the same key: no harmonic distance at all.
  *   2 -- relative major/minor (Am and C share every note), or a fifth apart in
@@ -190,7 +190,7 @@ export function keyAffinity(a: string, b: string): number {
   return 0;
 }
 
-/** Within 20% tempo, per Austin: beyond that a ramp reads as a gear change. */
+/** Within 20% tempo, per the design ruling: beyond that a ramp reads as a gear change. */
 export const TEMPO_RATIO_LIMIT = 1.2;
 
 export interface RankedSuite {

@@ -92,7 +92,7 @@ export interface DevFlags {
    * Let a tank killed earlier in the SAME tick still stop a bullet aimed at it,
    * instead of the shipped GHOST rule where the bullet passes straight through.
    *
-   * Austin (2026-08-14): "Just-killed tank is a ghost for now. Flippable switch in
+   * Adopted ruling (2026-08-14): "Just-killed tank is a ghost for now. Flippable switch in
    * the future to playtest." This turns `World.corpseBlocksShells` ON to playtest the
    * WALL alternative; off (the default) leaves today's ghost behaviour unchanged. See
    * `src/sim/bullets.ts`'s `resolveBulletHits`.
@@ -102,9 +102,9 @@ export interface DevFlags {
    * Restore today's shipped muzzle spawn: a shell can be born already inside an
    * adjacent LIVE tank's hit circle.
    *
-   * Austin (2026-08-14): "Spawn at hull center might be the way to go but im not
+   * Adopted ruling (2026-08-14): "Spawn at hull center might be the way to go but im not
    * certain. Maybe set that up but also have it be flippable." The new clearance
-   * check (`World.muzzleClearsTanks`) is ON by default -- his lean -- so this flag is
+   * check (`World.muzzleClearsTanks`) is ON by default -- the adopted lean -- so this flag is
    * the escape hatch: on, it turns the clearance back OFF for an A/B comparison
    * against the old feel. See `src/sim/bullets.ts`'s `muzzlePoint`.
    */

@@ -21,7 +21,7 @@ export interface World {
    *
    * Default false: today's shipped rule, a GHOST -- resolveBulletHits skips any tank
    * whose `alive` is already false, so a second shell in the same tick sails through
-   * the spot its target just vacated. Austin (2026-08-14): "Just-killed tank is a
+   * the spot its target just vacated. Adopted ruling (2026-08-14): "Just-killed tank is a
    * ghost for now. Flippable switch in the future to playtest." `true` is the WALL
    * variant: resolveBulletHits snapshots which tanks were alive at the START of its
    * pass, and a bullet that reaches one which died EARLIER IN THE SAME PASS is
@@ -39,7 +39,7 @@ export interface World {
    * -- resolveBulletHits' own collision threshold), the same fallback shape
    * muzzlePoint already uses for a muzzle inside a wall.
    *
-   * Default true -- Austin's lean (2026-08-14): "Spawn at hull center might be the
+   * Default true -- the adopted lean (2026-08-14): "Spawn at hull center might be the
    * way to go but im not certain. Maybe set that up but also have it be flippable."
    * `false` restores today's shipped behaviour, where the muzzle can spawn already
    * inside a neighbour's hit circle -- the triage that motivated this switch measured
@@ -77,7 +77,7 @@ export function createWorld(init: {
   unarmedTrigger?: UnarmedTrigger;
   /** Defaults to false, the shipped GHOST rule. See World.corpseBlocksShells. */
   corpseBlocksShells?: boolean;
-  /** Defaults to true, Austin's lean. See World.muzzleClearsTanks. */
+  /** Defaults to true, the adopted lean. See World.muzzleClearsTanks. */
   muzzleClearsTanks?: boolean;
 }): World {
   const maxId = Math.max(

@@ -183,7 +183,7 @@ describe('the camera elevation is pinned', () => {
 
 describe('the board actually fills the screen', () => {
   /**
-   * Austin, with a Wii Play: Tanks! screenshot for reference: "the play area should take
+   * The design feedback, with a Wii Play: Tanks! screenshot for reference: "the play area should take
    * up the full screen (of course no stretching allowed lol) much like it does in Wii
    * play tanks".
    *

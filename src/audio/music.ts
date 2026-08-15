@@ -156,7 +156,7 @@ export function createMusicBed(
    * A tempo ramp in progress, across the incoming piece's pickup bar. This is
    * ALL that remains of the transition machinery: after four iterations of
    * composing interstitial material (a held pad, then arpeggios, then rolled
-   * swells), Austin named the actual flaw -- "you're still using something that
+   * swells), the actual flaw was named -- "you're still using something that
    * exists in neither section to bridge between the two". So nothing is
    * invented any more. The through-line construction ends every progression on
    * its own dominant, which means the incoming piece's FINAL BAR is already the
@@ -166,7 +166,7 @@ export function createMusicBed(
   let ramp: { played: number; steps: number; fromStep: number; toStep: number } | null = null;
   /**
    * The OUTGOING section's melody, carried over the incoming pickup bar and
-   * fading as it goes -- Austin: "maybe we can have an overlap of the two sound
+   * fading as it goes -- the design feedback: "maybe we can have an overlap of the two sound
    * types for melody". The overlap material is the outgoing track's own last-bar
    * lead line, so the no-invented-material law holds. Harmonically it is safe by
    * construction: the outgoing final bar is its V, the incoming pickup is ITS V,
@@ -486,7 +486,7 @@ export function createMusicBed(
    *
    * Third design, each correcting a heard fault. The first collapsed the mix to
    * a bare pulse (heard as the music breaking). The second kept the outgoing
-   * skeleton and dropped a HELD TRIAD PAD over it -- Austin: "sloppy and
+   * skeleton and dropped a HELD TRIAD PAD over it -- the verdict: "sloppy and
    * sudden" -- and it was: the pad was a texture nothing in these pieces uses,
    * and the outgoing pads went on playing the OLD harmony underneath it, two
    * keys at once.
