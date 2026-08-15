@@ -5,7 +5,7 @@ import {
   isTap,
   isDoubleTap,
   AIM_PROJECTION_UNITS,
-  AIM_GRID,
+  quantizeAim,
   type TouchIndicator,
   type TouchScheme,
   type TouchSample,
@@ -406,20 +406,6 @@ export function createInputController(
     if (keys.has('w') || keys.has('arrowup')) y -= 1;
     if (keys.has('s') || keys.has('arrowdown')) y += 1;
     return { x, y };
-  }
-
-  /**
-   * Snaps a point to the `AIM_GRID` -- applied ONCE, here, at the boundary all four aim
-   * producers (mouse, touch point, touch stick, gamepad) converge into. `Math.round(NaN
-   * / g) * g` and the `Infinity` case both stay non-finite, so `driveTank`'s existing
-   * `Number.isFinite` guard on `aimDir` (`world.ts`) still catches an unlaid-out-canvas
-   * NaN exactly as before -- quantization does not reopen that bug.
-   */
-  function quantizeAim(v: Vec2): Vec2 {
-    return {
-      x: Math.round(v.x / AIM_GRID) * AIM_GRID,
-      y: Math.round(v.y / AIM_GRID) * AIM_GRID,
-    };
   }
 
   return {
