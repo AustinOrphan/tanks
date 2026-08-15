@@ -1,6 +1,6 @@
 import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger } from './types';
 import { createWorld, type World } from './world';
-import { LIVES } from './constants';
+import { LIVES, TANK_RADIUS } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { SPAWN_LETTERS } from './config/arena-types';
 import {
@@ -53,8 +53,18 @@ export function arenaBounds(arena: Arena): { width: number; height: number } {
   return { width: arena.cols * arena.cellSize, height: arena.rows * arena.cellSize };
 }
 
-export function makeTank(id: number, kind: TankKind, pos: { x: number; y: number }, angle: number): Tank {
-  return {
+// `controlledBy` trailing and optional, so every positional call site (this file's own
+// PASS 1a, and every `makeTank(id, kind, pos, angle)` fixture across the tree) compiles
+// and behaves unchanged. Only stamped when the caller passes it -- see loadArena's PASS
+// 1a/1b split for why that matters to full-object `toEqual` fixtures.
+export function makeTank(
+  id: number,
+  kind: TankKind,
+  pos: { x: number; y: number },
+  angle: number,
+  controlledBy?: number,
+): Tank {
+  const tank: Tank = {
     id,
     kind,
     pos: { ...pos },
@@ -68,6 +78,56 @@ export function makeTank(id: number, kind: TankKind, pos: { x: number; y: number
     aiState: 'idle',
     aiTimer: 0,
   };
+  if (controlledBy !== undefined) tank.controlledBy = controlledBy;
+  return tank;
+}
+
+// The 8 ring-search directions, cardinal before diagonal, E first: P2 conventionally
+// spawns "to the right" of P1. (Δcol, Δrow).
+const RING_DIRECTIONS: [number, number][] = [
+  [1, 0], [0, 1], [-1, 0], [0, -1], // E, S, W, N
+  [1, 1], [-1, 1], [1, -1], [-1, -1], // SE, SW, NE, NW
+];
+
+/**
+ * Finds a spawn cell for co-player `index` (1-based additional player, P1 is index 0
+ * and already placed), deterministic and pure so a future netcode peer can recompute
+ * it locally without transmitting positions.
+ *
+ * `cellsNeeded` is the smallest integer cell-count whose center-to-center distance
+ * clears two tank hulls without overlap: `ceil(2 * TANK_RADIUS / cellSize)`. Searches
+ * rings at radius `cellsNeeded, 2x, 3x, 4x` (bounded, generous, not exhaustive), trying
+ * the 8 RING_DIRECTIONS in order at each ring. A candidate is valid iff in-bounds,
+ * `grid[row][col] === '.'` (open floor -- excludes solid, destructible and every other
+ * spawn letter in one check), and not already claimed by an earlier co-player this call.
+ *
+ * Falls back to co-locating at P1's own cell if every ring exhausts: `separateTanks`
+ * (world.ts) already runs every tick and already handles worse overlaps, so this is the
+ * total, no-throw path -- a cramped custom/sandbox arena degrades instead of crashing.
+ */
+function findCoPlayerSpawnCell(
+  grid: string[],
+  cols: number,
+  rows: number,
+  cellSize: number,
+  p1Row: number,
+  p1Col: number,
+  claimed: Set<string>,
+): { row: number; col: number } {
+  const cellsNeeded = Math.ceil((2 * TANK_RADIUS) / cellSize);
+  for (let ring = 1; ring <= 4; ring++) {
+    const dist = ring * cellsNeeded;
+    for (const [dCol, dRow] of RING_DIRECTIONS) {
+      const row = p1Row + dRow * dist;
+      const col = p1Col + dCol * dist;
+      if (row < 0 || row >= rows || col < 0 || col >= cols) continue;
+      if (grid[row][col] !== '.') continue;
+      const key = `${row},${col}`;
+      if (claimed.has(key)) continue;
+      return { row, col };
+    }
+  }
+  return { row: p1Row, col: p1Col };
 }
 
 /**
@@ -114,7 +174,10 @@ function mergeSolidRuns(mask: boolean[][], cols: number, rows: number): [number,
   return rects;
 }
 
-export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[] } {
+export function loadArena(
+  arena: Arena,
+  playerCount: number = 1,
+): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[] } {
   const { cols, rows, cellSize, grid, legend } = arena;
 
   // Validate grid dimensions
@@ -145,12 +208,18 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
   const tanks: Tank[] = [];
   const spawns: Spawn[] = [];
 
-  // PASS 1 — spawns. Tank ids must be a function of the SPAWN ORDER alone. They used
-  // to share a counter with walls, which made every tank's id a function of how many
-  // wall cells preceded it -- and tank.id seeds all four per-tank RNG streams in
-  // ai/targeting.ts (wanderMove, aimJitter, mineInclination, seekMove's retreat draw),
-  // so re-slicing the grid silently rerolled every enemy's behaviour for the whole game.
+  // PASS 1a — spawns, UNCHANGED from before playerCount existed. Tank ids must be a
+  // function of the SPAWN ORDER alone. They used to share a counter with walls, which
+  // made every tank's id a function of how many wall cells preceded it -- and tank.id
+  // seeds all four per-tank RNG streams in ai/targeting.ts (wanderMove, aimJitter,
+  // mineInclination, seekMove's retreat draw), so re-slicing the grid silently rerolled
+  // every enemy's behaviour for the whole game. At playerCount 1 this loop, unmodified,
+  // is the entire function body relevant to spawns -- no controlledBy is stamped, so
+  // the returned tanks/spawns stay byte-identical to before this param existed (pinned
+  // by arena.test.ts's regression test above).
   let id = 1;
+  let p1Row = -1;
+  let p1Col = -1;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const kind = SPAWN_LETTERS[grid[r][c]];
@@ -158,6 +227,25 @@ export function loadArena(arena: Arena): { walls: Wall[]; tanks: Tank[]; spawns:
       const pos = { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
       spawns.push({ kind, pos: { ...pos }, angle: 0 });
       tanks.push(makeTank(id++, kind, pos, 0));
+      if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; }
+    }
+  }
+
+  // PASS 1b — co-op players, ONLY when playerCount > 1. Runs strictly after PASS 1a,
+  // so every enemy's id (and therefore its seeded RNG stream) is identical between
+  // playerCount 1 and >1 -- appending at the end, rather than interleaving at the P
+  // cell, is what makes that true. Only wall ids (PASS 2, already after all tanks)
+  // shift, which is harmless.
+  if (playerCount > 1 && p1Row >= 0) {
+    const p1Tank = tanks.find((t) => t.kind === 'player')!;
+    p1Tank.controlledBy = 0;
+    const claimed = new Set<string>([`${p1Row},${p1Col}`]);
+    for (let i = 1; i < playerCount; i++) {
+      const cell = findCoPlayerSpawnCell(grid, cols, rows, cellSize, p1Row, p1Col, claimed);
+      claimed.add(`${cell.row},${cell.col}`);
+      const pos = { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
+      spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
+      tanks.push(makeTank(id++, 'player', pos, 0, i));
     }
   }
 
@@ -232,8 +320,17 @@ export function createWorldFor(
   lives: number = LIVES,
   corpseBlocksShells?: boolean,
   muzzleClearsTanks?: boolean,
+  // Trailing and optional, same precedent as corpseBlocksShells/muzzleClearsTanks above:
+  // every positional caller (createArenaWorld, tools/baseline/trace.ts's 2-arg call,
+  // tools/gl/harness.ts's createArenaWorld(1) calls, levels.ts's 5-arg call) is
+  // untouched. Threaded straight to loadArena; no call site in the tree passes a
+  // non-default value yet -- that is the second-input-routing PR's job.
+  playerCount: number = 1,
 ): World {
-  return createWorld({ ...loadArena(arena), lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks });
+  return createWorld({
+    ...loadArena(arena, playerCount),
+    lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks,
+  });
 }
 
 /**

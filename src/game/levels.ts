@@ -39,8 +39,19 @@ export interface LevelSystem {
    * bookkeeping already via `tracksProgress`.
    */
   readonly isDevJump: boolean;
-  /** Build the world for a level. `lives` carries a cleared level's remainder forward. */
-  world(level: CampaignLevel, seed: number, unarmedTrigger?: UnarmedTrigger, lives?: number): World;
+  /**
+   * Build the world for a level. `lives` carries a cleared level's remainder forward.
+   * `playerCount` threads straight to `createWorldFor`/`loadArena`; no real call site
+   * passes a non-default value yet -- see arena.ts's `loadArena` for the co-op spawn
+   * rule this exists to reach.
+   */
+  world(
+    level: CampaignLevel,
+    seed: number,
+    unarmedTrigger?: UnarmedTrigger,
+    lives?: number,
+    playerCount?: number,
+  ): World;
   /**
    * The level's board size, for the renderer's per-level refit. From the arena's own
    * cols/rows -- walls are deliberately NOT measurable (the boundary ring overhangs).
@@ -130,8 +141,11 @@ export function createLevelSystem(
     // session, not a per-call construction parameter the way unarmedTrigger and lives
     // are (both vary call to call -- unarmedTrigger per dev-flag override, lives
     // across a level transition).
-    world: (level, seed, unarmedTrigger, lives) =>
-      createWorldFor(arenaById(level.arenaId), seed, unarmedTrigger, lives, flags.corpseBlock, !flags.muzzleInside),
+    world: (level, seed, unarmedTrigger, lives, playerCount) =>
+      createWorldFor(
+        arenaById(level.arenaId), seed, unarmedTrigger, lives,
+        flags.corpseBlock, !flags.muzzleInside, playerCount,
+      ),
     bounds: (level) => ({
       ...arenaBounds(arenaById(level.arenaId)),
       cellSize: arenaById(level.arenaId).cellSize,
