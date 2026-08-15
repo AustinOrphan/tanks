@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
-  STRIPE_TURRET_MODE,
+  STRIPE_TURRET_MODE, IDENTITY_RING_COLORS, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R,
 } from './entities';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
@@ -1647,6 +1647,188 @@ describe('co-op per-slot player styling', () => {
     for (const kind of TANK_KINDS) {
       expect(placeholder, `placeholder vs ${kind}`).not.toBe(hexToInt(configFor(kind).color));
     }
+    views.dispose();
+  });
+});
+
+describe('player identity: ring and shell tint', () => {
+  // Same construction as the co-op styling block above -- two `kind: 'player'` tanks is
+  // not a loadable arena (config/validate.ts hard-fails any grid without exactly one
+  // 'P'), so this is the only way to reach the >=2-player render path pre-second-input.
+  function twoPlayerWorld(): World {
+    const p1: Tank = { ...makeTank(1, 'player', 3, 3), controlledBy: 0 };
+    const p2: Tank = { ...makeTank(2, 'player', 9, 9), controlledBy: 1 };
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 3, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 9, y: 9 }, angle: 0 },
+    ];
+    return createWorld({ walls: [], tanks: [p1, p2], spawns, lives: 3 });
+  }
+
+  function threePlayerWorldWithOneEnemy(): World {
+    const p1: Tank = { ...makeTank(1, 'player', 3, 3), controlledBy: 0 };
+    const p2: Tank = { ...makeTank(2, 'player', 9, 9), controlledBy: 1 };
+    const enemy: Tank = makeTank(3, 'brown', 6, 6);
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 3, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 9, y: 9 }, angle: 0 },
+      { kind: 'brown', pos: { x: 6, y: 6 }, angle: 0 },
+    ];
+    return createWorld({ walls: [], tanks: [p1, p2, enemy], spawns, lives: 3 });
+  }
+
+  function identityRings(scene: THREE.Scene): THREE.Mesh[] {
+    const rings: THREE.Mesh[] = [];
+    scene.traverse((o) => {
+      if (o.name === 'identity-ring') rings.push(o as THREE.Mesh);
+    });
+    return rings;
+  }
+
+  /** The ring's colour, found by walking up to the tank GROUP sitting at world x. */
+  function ringColorAt(scene: THREE.Scene, x: number): number {
+    let c = -1;
+    scene.traverse((o) => {
+      if (o.name !== 'identity-ring') return;
+      let g: THREE.Object3D | null = o;
+      while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+      if (g && (g as THREE.Group).position.x === x) {
+        c = ((o as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHex();
+      }
+    });
+    return c;
+  }
+
+  it('draws no identity ring in a single-player world', () => {
+    // The gap this proves: single-player must stay pixel-identical to before this
+    // feature existed, which the ring itself would visibly break if it ever drew with
+    // only one player-kind tank in the world.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    views.sync(w, w, 0);
+    expect(identityRings(scene)).toHaveLength(0);
+    views.dispose();
+  });
+
+  it('draws one identity ring per player tank once a second player joins', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0);
+    expect(identityRings(scene)).toHaveLength(2);
+    views.dispose();
+  });
+
+  it('draws no ring on an enemy tank sharing a >=2-player world', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = threePlayerWorldWithOneEnemy();
+    views.sync(w, w, 0);
+    // Two players, one enemy: exactly two rings, none of them on the enemy at x=6.
+    expect(identityRings(scene)).toHaveLength(2);
+    expect(ringColorAt(scene, 6)).toBe(-1);
+    views.dispose();
+  });
+
+  it('colours each slot\'s ring from IDENTITY_RING_COLORS, distinctly', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    views.sync(w, w, 0);
+    expect(ringColorAt(scene, 3)).toBe(IDENTITY_RING_COLORS[0]);
+    expect(ringColorAt(scene, 9)).toBe(IDENTITY_RING_COLORS[1]);
+    expect(IDENTITY_RING_COLORS[0]).not.toBe(IDENTITY_RING_COLORS[1]);
+    views.dispose();
+  });
+
+  it('the ring sits entirely outside the hull\'s own collision radius', () => {
+    // A ring that started inside TANK_RADIUS would be drawn UNDER the hull from
+    // overhead and read as nothing at all -- the same class of mistake HULL_WIDTH's
+    // own test exists to catch for the hull itself.
+    expect(IDENTITY_RING_INNER_R).toBeGreaterThan(TANK_RADIUS);
+    expect(IDENTITY_RING_OUTER_R).toBeGreaterThan(IDENTITY_RING_INNER_R);
+  });
+
+  it('removing the second player (rebuilding down to one) drops the ring on the next sync', () => {
+    // There is no live path that shrinks playerCount mid-game today, but the render
+    // layer should not depend on that: the ring is a property of the CURRENT world's
+    // player count, recomputed every sync, not latched at first draw.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const two = twoPlayerWorld();
+    views.sync(two, two, 0);
+    expect(identityRings(scene)).toHaveLength(2);
+
+    const one = makeWorld();
+    views.sync(one, one, 0);
+    expect(identityRings(scene)).toHaveLength(0);
+    views.dispose();
+  });
+
+  function playerBullet(id: number, ownerId: number, x: number): Bullet {
+    return { id, ownerId, type: 'normal', pos: { x, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true };
+  }
+
+  /** The shell body's emissive colour, by matching the group's world x position. */
+  function shellEmissiveAt(scene: THREE.Scene, x: number): number {
+    let c = -1;
+    scene.traverse((o) => {
+      if (!(o instanceof THREE.Group)) return;
+      if (!o.children.some((k) => (k as THREE.Mesh).geometry instanceof THREE.CylinderGeometry)) return;
+      if (Math.abs(o.position.x - x) > 1e-9) return;
+      const body = o.children.find((k) => (k as THREE.Mesh).geometry instanceof THREE.CylinderGeometry) as THREE.Mesh;
+      c = (body.material as THREE.MeshStandardMaterial).emissive.getHex();
+    });
+    return c;
+  }
+
+  const UNTINTED_EMISSIVE = 0x444422; // the shipped brass shell's own emissive, untinted
+
+  it('does not tint a shell in a single-player world, even one owned by the player', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld(); // one player tank, id 1
+    w.bullets.push(playerBullet(50, 1, 4));
+    views.sync(w, w, 0);
+    expect(shellEmissiveAt(scene, 4)).toBe(UNTINTED_EMISSIVE);
+    views.dispose();
+  });
+
+  it('does not tint an enemy-owned shell even in a >=2-player world', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = threePlayerWorldWithOneEnemy();
+    w.bullets.push(playerBullet(50, 3, 7)); // owned by the enemy tank, id 3
+    views.sync(w, w, 0);
+    expect(shellEmissiveAt(scene, 7)).toBe(UNTINTED_EMISSIVE);
+    views.dispose();
+  });
+
+  it('tints a shell with its owner\'s slot identity colour once a second player exists', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    w.bullets.push(playerBullet(50, 1, 4)); // owned by P1 (tank id 1, slot 0)
+    w.bullets.push(playerBullet(51, 2, 10)); // owned by P2 (tank id 2, slot 1)
+    views.sync(w, w, 0);
+    expect(shellEmissiveAt(scene, 4)).toBe(IDENTITY_RING_COLORS[0]);
+    expect(shellEmissiveAt(scene, 10)).toBe(IDENTITY_RING_COLORS[1]);
+    views.dispose();
+  });
+
+  it('resolves the tint ONCE, at the bullet view\'s creation tick, like kind/gen for tanks', () => {
+    // Mirrors the tank-view rebuild-trigger comment: ownership never changes over a
+    // shell's life, so there is nothing to re-resolve per frame. This proves the tint
+    // set at creation survives further sync calls with the SAME bullet id untouched.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = twoPlayerWorld();
+    w.bullets.push(playerBullet(50, 1, 4));
+    views.sync(w, w, 0);
+    views.sync(w, w, 0.5);
+    views.sync(w, w, 1);
+    expect(shellEmissiveAt(scene, 4)).toBe(IDENTITY_RING_COLORS[0]);
     views.dispose();
   });
 });

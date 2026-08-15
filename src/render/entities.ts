@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { BULLET_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
+import { BULLET_RADIUS, SHELL_SPAWN_FORWARD, TANK_RADIUS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, type SkinId } from '../game/customization';
@@ -39,6 +39,93 @@ function cssHex(color: string): number {
 }
 function tankColor(kind: TankKind): number {
   return cssHex(configFor(kind).color);
+}
+
+/**
+ * Player IDENTITY colours -- WHO is driving, indexed by co-op SLOT (`Tank.controlledBy`).
+ * Deliberately a separate palette from `customization.ts`'s `PALETTE` (hull paint, WHAT
+ * style): the owner's brief draws the line explicitly -- "the ring says WHO, the hull
+ * says WHAT STYLE" -- so a player who paints their hull orange must not have their own
+ * identity colour collide with that choice by construction, which ties both palettes to
+ * the same list would risk.
+ *
+ * Slot 0: a bright cyan-blue. Slot 1: a saturated amber-orange. Blue/orange is the
+ * Okabe-Ito colourblind-safe pairing (chosen for hue separation under protanopia,
+ * deuteranopia AND tritanopia -- unlike a red/green pair, which collapses under the
+ * first two), and it is also the owner's own first suggestion ("P1 blue-white, P2
+ * orange"). Neither value equals any roster kind's own `color` (config/data/tank-defs.json)
+ * or the co-op placeholder hull swatch (`UNSTYLED_SLOT_HEX` below) -- pinned by
+ * entities.test.ts's placeholder-distinctness sweep, extended to cover these two.
+ * Values are brighter/more saturated than the customization palette's own blue
+ * (#3d7bd6) and orange (#e08a2e) swatches on purpose: the ring is drawn unlit
+ * (`MeshBasicMaterial`) with additive blending, so it needs to read as a glow against
+ * its own hull paint, not just be a different hue from it.
+ */
+export const IDENTITY_RING_COLORS: readonly number[] = [0x3fd0ff, 0xff8a1e];
+/**
+ * Ring/tint colour for any slot beyond the identity palette. Unreached today -- co-op
+ * caps at two players (devflags.ts's `coop`) -- defined so a hypothetical third slot
+ * degrades to a colour rather than `undefined` reaching a THREE material constructor.
+ */
+const IDENTITY_COLOR_FALLBACK = 0xffffff;
+function identityColor(slot: number): number {
+  return IDENTITY_RING_COLORS[slot] ?? IDENTITY_COLOR_FALLBACK;
+}
+
+/**
+ * How many player-kind tanks a world has to have before identity rings/shell tints draw
+ * at all. Below this, both are the single-player game exactly as shipped before this
+ * feature -- byte-identical, not merely visually similar -- which is the owner's stated
+ * requirement and what the gallery byte-compare in the PR body verifies.
+ */
+const MULTIPLAYER_THRESHOLD = 2;
+function countPlayerTanks(tanks: readonly { kind: TankKind }[]): number {
+  let n = 0;
+  for (const t of tanks) if (t.kind === 'player') n++;
+  return n;
+}
+
+/**
+ * Ring geometry, in world units. The tank's own collision footprint is a circle of
+ * TANK_RADIUS (0.5) -- see HULL_WIDTH's own comment on why the hull mesh matches that
+ * exactly. INNER_R clears it with margin (rather than sitting flush) so the ring never
+ * hides under the hull's rounded-corner geometry or the tracks' TRACK_OVERHANG from
+ * directly overhead; OUTER_R is thick enough to read as a band rather than a hairline
+ * at the game's own camera distance (VIEWS.game in tools/gallery/subjects.ts). Both are
+ * exported so entities.test.ts can pin the "outside the hull" invariant directly rather
+ * than trusting the multiplier.
+ */
+export const IDENTITY_RING_INNER_R = TANK_RADIUS * 1.3;
+export const IDENTITY_RING_OUTER_R = TANK_RADIUS * 1.6;
+/** Just off the felt, at track level, matching the RING_Y precedent in minedebug.ts. */
+const IDENTITY_RING_Y = 0.03;
+const IDENTITY_RING_SEGMENTS = 48;
+const IDENTITY_RING_OPACITY = 0.85;
+
+/**
+ * One player's identity ring: an unlit, additively-blended flat annulus, matching the
+ * treatment particles.ts already uses for glow (sparks, muzzle flash) rather than
+ * inventing a new one -- see the comment on ParticleSystem's material. Unlit because a
+ * lit ring would dim on the far side of the tank from the key light, which is exactly
+ * the side a teammate most needs it legible from; additive blending is what turns a
+ * flat colour into a "glow" over the dark ground plane cheaply, with no extra lights.
+ */
+function makeIdentityRing(color: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.RingGeometry(IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R, IDENTITY_RING_SEGMENTS),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: IDENTITY_RING_OPACITY,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  mesh.name = 'identity-ring';
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = IDENTITY_RING_Y;
+  return mesh;
 }
 
 const TANK_BODY_H = 0.4;
@@ -308,7 +395,16 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // draws the old tank's mesh and colour under the new tank's position. `gen` is the
   // paint-shop generation: bumping it forces the same rebuild path, which is how a
   // swatch click repaints the tank already standing behind the menu.
-  const tankViews = new Map<number, { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number }>();
+  // `ring` travels WITH the view rather than in a map of its own, deliberately: it is
+  // disposed for free whenever `view.group` is (disposeObject traverses children), so
+  // there is no second lifecycle to keep in step with tankViews' own rebuild/eviction
+  // paths -- a stale ring reference after a rebuild would otherwise be a real bug class,
+  // the same one `view.group`'s own re-creation on a kind/gen change already had to
+  // solve once.
+  const tankViews = new Map<
+    number,
+    { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number; ring: THREE.Mesh | null }
+  >();
 
   /** One co-op SLOT's paint-shop state -- see `styleFor` and `setPlayerStyle` below. */
   interface PlayerStyle {
@@ -846,19 +942,40 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   const SHELL_R = BULLET_RADIUS * 1.0;
   const SHELL_BODY_LEN = BULLET_RADIUS * 4.5;
 
+  /** The untinted shell's own emissive -- a dim brass glint, not a signal of anything. */
+  const SHELL_EMISSIVE = 0x444422;
+  /**
+   * How strongly a tinted shell's owner colour reads over the brass body. Kept below 1
+   * so the shell still reads as brass with a coloured glow, not as a solid ball of the
+   * identity colour -- the tint is meant to say WHOSE shell this is, the same
+   * disambiguating job the ring does, not to hide what a shell looks like.
+   */
+  const SHELL_TINT_INTENSITY = 1.15;
+
   /**
    * A shell: a cylinder with a rounded nose, pointed along its own velocity.
    *
    * Built as a Group rather than one mesh so the nose can be a hemisphere. The parts are
    * laid out along local +x and the group is then yawed, which keeps the orientation maths
    * in one place and matching the barrel (entities.ts lays that along +x too).
+   *
+   * `tint` is the owner's identity colour (IDENTITY_RING_COLORS), or null for the
+   * standard untinted brass -- resolved once by the caller at the shell VIEW's creation
+   * tick (syncBullets), never re-touched per frame, because a shell's owner cannot
+   * change over its life.
    */
-  function makeBullet(): THREE.Group {
+  function makeBullet(tint: number | null): THREE.Group {
     const group = new THREE.Group();
     // Brass: the one genuinely metallic thing on the board, and small enough that it
-    // needs the specular to be visible at all against the felt.
+    // needs the specular to be visible at all against the felt. A tinted shell keeps
+    // the same brass body colour -- only the emissive glow carries the owner's hue, so
+    // a shell in flight still reads as a shell first and a coloured signal second.
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xf5f0d0, emissive: 0x444422, roughness: 0.3, metalness: 0.7,
+      color: 0xf5f0d0,
+      emissive: tint ?? SHELL_EMISSIVE,
+      emissiveIntensity: tint !== null ? SHELL_TINT_INTENSITY : 1,
+      roughness: 0.3,
+      metalness: 0.7,
     });
 
     const body = new THREE.Mesh(new THREE.CylinderGeometry(SHELL_R, SHELL_R, SHELL_BODY_LEN, 14), mat);
@@ -998,7 +1115,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     return mesh;
   }
 
-  function syncTanks(prev: World, curr: World, alpha: number, snap: boolean): void {
+  function syncTanks(prev: World, curr: World, alpha: number, snap: boolean, multiPlayer: boolean): void {
     const prevMap = indexById(prev.tanks);
     const seen = new Set<number>();
     for (const t of curr.tanks) {
@@ -1018,8 +1135,24 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       }
       if (!view) {
         const gen = t.kind === 'player' ? styleFor(slot).gen : 0;
-        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen };
+        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null };
         tankViews.set(t.id, view);
+      }
+      // Identity ring: WHO, not WHAT style -- see IDENTITY_RING_COLORS. Only a
+      // player-kind tank ever gets one, and only once a second player exists in the
+      // world; below that threshold this is a no-op every tick, which is what keeps
+      // single-player pixel-identical to before this feature (verified by gallery
+      // byte-compare, not just argued -- see the PR body). Recomputed from the
+      // CURRENT world every sync rather than latched at tank-view creation, since
+      // `multiPlayer` is a property of the world, not of this one tank.
+      if (t.kind === 'player') {
+        if (multiPlayer && !view.ring) {
+          view.ring = makeIdentityRing(identityColor(slot));
+          view.group.add(view.ring);
+        } else if (!multiPlayer && view.ring) {
+          disposeObject(view.ring);
+          view.ring = null;
+        }
       }
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
       // `snap` covers the other discontinuity: resetArena teleports every tank
@@ -1048,7 +1181,21 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     }
   }
 
-  function syncBullets(prev: World, curr: World, alpha: number): void {
+  /**
+   * The identity colour a shell owned by `ownerId` should glow, or null for the
+   * standard untinted brass. Resolved by looking the owner up in `curr.tanks` --
+   * `Bullet` carries only `ownerId` (types.ts), never the owner's kind or slot
+   * directly -- and returning null for anything that is not a live player-kind tank,
+   * which covers a dead/removed owner and every enemy shell in one check. The caller
+   * gates this on `multiPlayer` first, so it is never even reached at playerCount 1.
+   */
+  function shellTintFor(curr: World, ownerId: number): number | null {
+    const owner = curr.tanks.find((t) => t.id === ownerId);
+    if (!owner || owner.kind !== 'player') return null;
+    return identityColor(owner.controlledBy ?? 0);
+  }
+
+  function syncBullets(prev: World, curr: World, alpha: number, multiPlayer: boolean): void {
     const prevMap = indexById(prev.bullets);
     const seen = new Set<number>();
     for (const b of curr.bullets) {
@@ -1056,7 +1203,11 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       seen.add(b.id);
       let mesh = bulletViews.get(b.id);
       if (!mesh) {
-        mesh = makeBullet();
+        // Resolved ONCE, at creation -- a shell's owner never changes over its life,
+        // exactly mirroring how tankViews captures `kind`/`gen` once rather than
+        // re-deriving them every frame.
+        const tint = multiPlayer ? shellTintFor(curr, b.ownerId) : null;
+        mesh = makeBullet(tint);
         bulletViews.set(b.id, mesh);
       }
       const p = prevMap.get(b.id);
@@ -1219,9 +1370,15 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // resetArena re-anchors roundStartTick, which is the one signal that
     // distinguishes a round boundary (teleports) from ordinary motion.
     const snap = prev.roundStartTick !== curr.roundStartTick;
+    // Identity rings and shell tints both gate on this ONE flag, computed from the
+    // CURRENT world so a level switch or (hypothetically) a shrinking player count is
+    // picked up on the very next sync, the same way `snap` is. At playerCount 1 this
+    // is false on every call, which is what keeps single-player pixel-identical to the
+    // game before this feature -- see IDENTITY_RING_COLORS' own comment.
+    const multiPlayer = countPlayerTanks(curr.tanks) >= MULTIPLAYER_THRESHOLD;
     syncWalls(curr);
-    syncTanks(prev, curr, a, snap);
-    syncBullets(prev, curr, a);
+    syncTanks(prev, curr, a, snap, multiPlayer);
+    syncBullets(prev, curr, a, multiPlayer);
     syncMines(prev, curr, a);
     syncBlasts(prev, curr, a);
   }
