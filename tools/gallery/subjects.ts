@@ -71,6 +71,42 @@ export const ELEMENTS: Record<string, ElementDef> = {
       });
     },
   },
+  /**
+   * Two player-kind tanks, distinct co-op slots, each with a shell already in flight --
+   * the identity ring and the shell tint side by side, in one still. `createWorld`
+   * (not a loadable arena -- config/validate.ts still hard-fails a grid without exactly
+   * one 'P') is what lets two `kind: 'player'` tanks coexist at all; see
+   * entities.test.ts's own `twoPlayerWorld` for the same construction.
+   */
+  coop: {
+    width: 4.0, frames: 1, focusY: 0.3,
+    place: (w, x) => {
+      const p1 = 1 + w.tanks.length;
+      w.tanks.push({
+        id: p1, kind: 'player', controlledBy: 0,
+        pos: { x: x - 1.1, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+        desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+        aiState: 'idle', aiTimer: 0,
+      });
+      const p2 = 1 + w.tanks.length;
+      w.tanks.push({
+        id: p2, kind: 'player', controlledBy: 1,
+        pos: { x: x + 1.1, y: 0 }, bodyAngle: Math.PI, turretAngle: Math.PI, alive: true,
+        desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+        aiState: 'idle', aiTimer: 0,
+      });
+      // Each tank's own shell, mid-flight and owned accordingly -- shows the tint
+      // matches the FIRING tank's ring, not just "a" identity colour.
+      w.bullets.push({
+        id: 100 + w.bullets.length, ownerId: p1, type: 'normal', bouncesLeft: 1, alive: true,
+        pos: { x: x - 0.3, y: -0.45 }, vel: { x: NORMAL_SPEED, y: 0 },
+      });
+      w.bullets.push({
+        id: 100 + w.bullets.length, ownerId: p2, type: 'normal', bouncesLeft: 1, alive: true,
+        pos: { x: x + 0.3, y: 0.45 }, vel: { x: -NORMAL_SPEED, y: 0 },
+      });
+    },
+  },
   /** One shell broadside and one nose-on: a shell's read changes with angle. */
   shell: {
     width: 1.0, frames: 1, focusY: BULLET_Y,
