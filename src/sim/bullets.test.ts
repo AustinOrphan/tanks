@@ -616,7 +616,8 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     // rather than the player's ability to fire.
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, unarmedTrigger: 'none' as const, tanks: [], mines: [], blasts: [],
+      roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -632,7 +633,8 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     // for being embedded, or every ricochet would die on contact.
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, unarmedTrigger: 'none' as const, tanks: [], mines: [], blasts: [],
+      roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -742,7 +744,8 @@ describe('shells versus wall kinds', () => {
   function shellAtWall(kind: WallKind, destroyed: boolean) {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
-      roundStartTick: 0, unarmedTrigger: 'none' as const, tanks: [], mines: [], blasts: [],
+      roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: 2, minY: -2, maxX: 3, maxY: 2 }, kind, destroyed }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -814,6 +817,47 @@ describe('spawnBullet: where the shell is born', () => {
   })
 })
 
+describe('spawnBullet: muzzleClearsTanks (Austin, 2026-08-14: "spawn at hull centre" switch)', () => {
+  // Same adjacent-tank fixture in every case: owner at the origin firing along +x, a
+  // non-owner LIVE neighbour sitting exactly on the muzzle point -- so the neighbour's
+  // hit circle contains the muzzle with room to spare, whatever TANK_RADIUS/
+  // BULLET_RADIUS happen to be tuned to.
+  function riflemanAndNeighbour(neighbourAlive: boolean) {
+    const owner = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const neighbour = mkTank({
+      id: 2, kind: 'brown', pos: { x: SHELL_SPAWN_FORWARD, y: 0 }, alive: neighbourAlive,
+    })
+    return { owner, neighbour }
+  }
+
+  it('ON (the default): falls back to owner.pos when the muzzle would land inside a live neighbour', () => {
+    const { owner, neighbour } = riflemanAndNeighbour(true)
+    const world = createWorld({ walls: [], tanks: [owner, neighbour], spawns: [], lives: 3 })
+    expect(world.muzzleClearsTanks).toBe(true) // the shipped default -- Austin's lean
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos).toEqual({ x: 0, y: 0 })
+  })
+
+  it('OFF: restores the old behaviour -- the shell spawns already inside the neighbour', () => {
+    const { owner, neighbour } = riflemanAndNeighbour(true)
+    const world = createWorld({
+      walls: [], tanks: [owner, neighbour], spawns: [], lives: 3, muzzleClearsTanks: false,
+    })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+    expect(world.bullets[0].pos.y).toBeCloseTo(0, 9)
+  })
+
+  it('ON, but the neighbour is already dead: a corpse never blocks a muzzle, switch or not', () => {
+    // Discriminates the ON case above from a fallback that fires on ANY tank in range --
+    // muzzlePoint's own rule is a LIVE non-owner tank, independent of corpseBlocksShells.
+    const { owner, neighbour } = riflemanAndNeighbour(false)
+    const world = createWorld({ walls: [], tanks: [owner, neighbour], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+  })
+})
+
 describe('resolveBulletHits: invincible tanks (dev playtest mode)', () => {
   it('the shell detonates on an invincible tank, which survives it', () => {
     // The shell must still die -- an invincible tank that shells pass THROUGH would
@@ -835,5 +879,65 @@ describe('resolveBulletHits: invincible tanks (dev playtest mode)', () => {
     world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
     resolveBulletHits(world, [])
     expect(world.tanks[0].alive).toBe(false)
+  })
+})
+
+describe('resolveBulletHits: corpseBlocksShells (Austin, 2026-08-14: ghost-vs-wall switch)', () => {
+  // The triage's 2-bullet fixture (docs/superpowers/backlog.md's now-deleted ledger
+  // line): one tank, two bullets both already overlapping it. Bullet A is processed
+  // first (array order == push order) and kills the tank; bullet B then reaches a
+  // tank that died EARLIER IN THIS SAME PASS. Neither bullet is a self-shot -- owner
+  // ids 10 and 11 both differ from the target's id 2 -- so the self-destruct guard
+  // never engages and cannot confound the result.
+  function corpseFixture() {
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 0, y: 0 } })
+    const a: Bullet = { id: 30, ownerId: 10, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true }
+    const b: Bullet = { id: 31, ownerId: 11, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true }
+    return { target, a, b }
+  }
+
+  it('GHOST (the default): the second bullet passes straight through, pinning today\'s behaviour', () => {
+    const { target, a, b } = corpseFixture()
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    expect(world.corpseBlocksShells).toBe(false) // the shipped default
+    world.bullets.push(a, b)
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(target.alive).toBe(false) // bullet A still kills it
+    expect(a.alive).toBe(false)
+    expect(b.alive).toBe(true) // the ghost: B is untouched by the corpse
+    expect(events.filter((e) => e.type === 'tank-destroyed')).toHaveLength(1)
+    expect(events.filter((e) => e.type === 'explosion')).toHaveLength(1) // only A's hit
+  })
+
+  it('WALL: the second bullet is consumed by the corpse -- one tank-destroyed, an explosion at the hit', () => {
+    const { target, a, b } = corpseFixture()
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3, corpseBlocksShells: true })
+    world.bullets.push(a, b)
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(target.alive).toBe(false)
+    expect(a.alive).toBe(false)
+    expect(b.alive).toBe(false) // consumed by the corpse, not a ghost
+    // Exactly one kill -- B does not re-kill the already-dead tank or re-credit anyone.
+    expect(events.filter((e) => e.type === 'tank-destroyed')).toHaveLength(1)
+    expect(events.find((e) => e.type === 'tank-destroyed')).toMatchObject({
+      type: 'tank-destroyed', tankId: 2, by: { source: 'shell', ownerId: 10 }, // credited to A, not B
+    })
+    // Two explosions: A's kill, and B's corpse-block landing at the same spot.
+    expect(events.filter((e) => e.type === 'explosion')).toHaveLength(2)
+  })
+
+  it('an EARLIER-stage corpse (already dead before the pass starts) still ghosts even with the switch on', () => {
+    // The ruling's other half: corpseBlocksShells covers only a kill that happens
+    // WITHIN this resolveBulletHits pass. A tank already dead when the pass begins
+    // (a prior tick's kill, modelled here directly) is not in the snapshot.
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 0, y: 0 }, alive: false })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3, corpseBlocksShells: true })
+    world.bullets.push({ id: 40, ownerId: 10, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(world.bullets[0].alive).toBe(true) // ghosts through: not in aliveAtPassStart
+    expect(events).toHaveLength(0)
   })
 })

@@ -9,7 +9,8 @@ import { configFor } from './config'
 import { detHypot } from './math/hypot'
 
 /**
- * Where the shell is born: at the muzzle, unless the muzzle is inside a wall.
+ * Where the shell is born: at the muzzle, unless the muzzle is inside a wall or
+ * (when World.muzzleClearsTanks is on) inside a live neighbour's hit circle.
  *
  * SHELL_SPAWN_FORWARD reaches past the tank's own collision radius, so a tank
  * nose-to-wall has its muzzle INSIDE that wall. Spawning there would put a live shell
@@ -19,6 +20,11 @@ import { detHypot } from './math/hypot'
  * So the muzzle is used only when it is clear, and the tank's centre is the fallback,
  * which is exactly the pre-offset behaviour. That keeps the degenerate case working
  * the way it always has rather than inventing a new one.
+ *
+ * The tank check is the same fallback shape, gated on World.muzzleClearsTanks (see
+ * its doc comment for the ruling): a muzzle landing inside a LIVE non-owner tank's
+ * hit circle -- TANK_RADIUS + BULLET_RADIUS, resolveBulletHits' own threshold --
+ * falls back to owner.pos exactly as the wall case does.
  */
 function muzzlePoint(world: World, owner: Tank, dir: Vec2): Vec2 {
   const muzzle = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))
@@ -26,6 +32,14 @@ function muzzlePoint(world: World, owner: Tank, dir: Vec2): Vec2 {
     if (w.destroyed) continue
     if (circleVsAABB(muzzle, BULLET_RADIUS, w.aabb).hit) {
       return { x: owner.pos.x, y: owner.pos.y }
+    }
+  }
+  if (world.muzzleClearsTanks) {
+    for (const t of world.tanks) {
+      if (t.id === owner.id || !t.alive) continue
+      if (circleVsCircle(muzzle, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
+        return { x: owner.pos.x, y: owner.pos.y }
+      }
     }
   }
   return muzzle
@@ -182,10 +196,28 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
   }
   world.mines = world.mines.filter((m) => !m.detonated)
 
+  // Snapshotted HERE, after the mine loop above: a tank that loop just killed (a
+  // shell detonating the mine it stood on) is already gone from it, so it keeps
+  // ghosting either way -- only a tank alive at the START of the tank-hit pass below
+  // can be "killed earlier in the same pass". See World.corpseBlocksShells.
+  const aliveAtPassStart = world.corpseBlocksShells
+    ? new Set(world.tanks.filter((t) => t.alive).map((t) => t.id))
+    : null
+
   for (const b of world.bullets) {
     if (!b.alive) continue
     for (const t of world.tanks) {
-      if (!t.alive) continue
+      if (!t.alive) {
+        // WALL variant: a corpse that was alive when THIS pass started still stops a
+        // later bullet -- consumed, one explosion, no re-kill and no second
+        // 'tank-destroyed'. Off (or a corpse from an earlier stage), it ghosts as always.
+        if (aliveAtPassStart?.has(t.id) && circleVsCircle(b.pos, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
+          b.alive = false
+          events.push({ type: 'explosion', pos: { x: t.pos.x, y: t.pos.y } })
+          break
+        }
+        continue
+      }
       if (t.id === b.ownerId) {
         // Avoid self-destruct while the shell is still leaving the muzzle:
         // only vulnerable once the shell heads back toward its owner (e.g. after a ricochet).

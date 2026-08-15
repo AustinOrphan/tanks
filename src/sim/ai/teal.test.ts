@@ -26,7 +26,8 @@ function wall(id: number, minX: number, minY: number, maxX: number, maxY: number
 function world(over: Partial<World>): World {
   return {
     tick: 0, nextId: 100, seed: 3, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
-    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const, ...over,
+    spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+    corpseBlocksShells: false, muzzleClearsTanks: true, ...over,
   };
 }
 

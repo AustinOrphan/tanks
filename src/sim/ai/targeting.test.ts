@@ -45,6 +45,7 @@ function wanderWorld(seed: number, tick: number): World {
   return {
     tick, nextId: 100, seed, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+    corpseBlocksShells: false, muzzleClearsTanks: true,
   };
 }
 
@@ -452,6 +453,7 @@ describe('shotHitsOwnSide', () => {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls,
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true,
     };
   }
 
@@ -563,6 +565,7 @@ describe('friendlyInMineBlast', () => {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true,
     };
   }
 

@@ -60,6 +60,23 @@ describe('cloneWorld', () => {
     expect(w.walls[0].aabb.minX).toBe(0);
     expect(w.lives).toBe(3);
   });
+
+  it('carries corpseBlocksShells/muzzleClearsTanks across the clone -- a dropped field would silently', () => {
+    // reset to false/true (the defaults) every tick, since stepInputs clones on every
+    // call. Neither the golden trace nor a direct resolveBulletHits/spawnBullet unit
+    // test can see that: the trace shows 0 reachability for the muzzle case and the
+    // corpse default IS false, so a drop reproduces both. This is the only place that
+    // proves the field survives the clone at all.
+    const tanks = [makeTank(5, 2, 3)];
+    const walls = [makeWall(9)];
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
+    const w = createWorld({
+      walls, tanks, spawns, lives: 3, corpseBlocksShells: true, muzzleClearsTanks: false,
+    });
+    const c = cloneWorld(w);
+    expect(c.corpseBlocksShells).toBe(true);
+    expect(c.muzzleClearsTanks).toBe(false);
+  });
 });
 
 describe('step (skeleton)', () => {
@@ -84,5 +101,20 @@ describe('step (skeleton)', () => {
     const a = step(makeWorld(), noInput).world;
     const b = step(makeWorld(), noInput).world;
     expect(a).toEqual(b);
+  });
+
+  it('does not let corpseBlocksShells/muzzleClearsTanks decay across repeated real ticks', () => {
+    // stepInputs clones every tick (cloneWorld) -- a field cloneWorld dropped would read
+    // as `undefined` (falsy) from tick 2 onward even though tick 1 was built correctly,
+    // which neither a single-clone test nor the golden trace would catch.
+    const tanks = [makeTank(5, 2, 3)];
+    const walls = [makeWall(9)];
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 2, y: 3 }, angle: 0 }];
+    let w = createWorld({
+      walls, tanks, spawns, lives: 3, corpseBlocksShells: true, muzzleClearsTanks: false,
+    });
+    for (let i = 0; i < 5; i++) w = step(w, noInput).world;
+    expect(w.corpseBlocksShells).toBe(true);
+    expect(w.muzzleClearsTanks).toBe(false);
   });
 });

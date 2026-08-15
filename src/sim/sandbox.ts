@@ -209,7 +209,12 @@ export function sandboxArena(opts: SandboxOptions): Arena {
   return { cols, rows, cellSize, legend, grid: cells.map((row) => row.join('')) };
 }
 
-export function createSandboxWorld(opts: SandboxOptions, unarmedTrigger?: UnarmedTrigger): World {
+export function createSandboxWorld(
+  opts: SandboxOptions,
+  unarmedTrigger?: UnarmedTrigger,
+  corpseBlocksShells?: boolean,
+  muzzleClearsTanks?: boolean,
+): World {
   const loaded = loadArena(sandboxArena(opts));
   const disarmed = opts.disarmed ?? true;
   if (disarmed) {
@@ -217,5 +222,5 @@ export function createSandboxWorld(opts: SandboxOptions, unarmedTrigger?: Unarme
       if (t.kind !== 'player') t.disarmed = true;
     }
   }
-  return createWorld({ ...loaded, lives: LIVES, seed: opts.seed, unarmedTrigger });
+  return createWorld({ ...loaded, lives: LIVES, seed: opts.seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks });
 }

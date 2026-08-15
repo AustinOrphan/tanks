@@ -189,6 +189,8 @@ export function previewWorld(): World {
     nextId: 2,
     seed: 1,
     unarmedTrigger: 'none',
+    corpseBlocksShells: false,
+    muzzleClearsTanks: true,
     tanks: [tank],
     bullets: [],
     mines: [],
