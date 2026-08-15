@@ -1,6 +1,6 @@
 import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
-import type { Vec2, InputState } from '../sim/types';
+import type { Vec2, InputState, Tank } from '../sim/types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from '../sim/ai/player-profile';
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, type LevelSystem } from './levels';
@@ -19,6 +19,7 @@ import {
   type ReplayTrace,
 } from './replay';
 import { createInputController, type InputController } from '../input/input';
+import { createGamepadInputSource, readNavigatorGamepads, type PlayerInputSource } from '../input/gamepad';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -102,6 +103,17 @@ export interface GameDeps {
     screenToGround: (clientX: number, clientY: number) => Vec2,
     options?: { gamepad?: boolean },
   ) => InputController;
+  /**
+   * Co-op's slot 1: a standalone gamepad-only `PlayerInputSource`, built only when
+   * `coop` is on (see `startGameWith`'s `coopActive`). Injected for the same reason
+   * every other collaborator here is -- `createGamepadInputSource` itself is a plain
+   * module function with no lifecycle to fake, but going through GameDeps keeps its
+   * CONSTRUCTION SITE (and how many times it is called) inside the tested function,
+   * which is what proves slot 0 and slot 1 can never both claim gamepad[0] -- see
+   * `input.ts`'s `gamepad` option and `gamepad.ts`'s module doc comment for the
+   * mutual-exclusion argument this seam lets loop.test.ts check.
+   */
+  readonly createGamepadSource: () => PlayerInputSource;
   readonly createAudio: () => AudioEngine;
   /**
    * playerId is required here even though createAudioDirector defaults it. The
@@ -349,6 +361,7 @@ export function createBrowserDeps(): GameDeps {
     createRenderer,
     createPreview: createTankPreview,
     createInput: createInputController,
+    createGamepadSource: () => createGamepadInputSource(readNavigatorGamepads),
     createAudio: () => createAudioEngine(AUDIO_MANIFEST),
     createDirector: createAudioDirector,
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
@@ -388,6 +401,17 @@ export function startGameWith(
   let shownBounds = deps.levels.bounds(deps.levels.start);
   const { width, height } = shownBounds;
 
+  /**
+   * `coop` read once, not re-read per world: mirrors `createLevelSystem`'s own
+   * `flags.level === 'sandbox'` branch (levels.ts) rather than a new field on
+   * `LevelSystem` -- the sandbox is excluded by checking the SAME flag that decided
+   * which `LevelSystem` this session got, so the two can never disagree about which
+   * session is the sandbox one. `createSandboxWorld` takes no `playerCount` and has
+   * no co-op spawn rule to inherit from `loadArena` -- see devflags.ts's `coop` doc
+   * comment for why this is excluded rather than built.
+   */
+  const coopActive = deps.devFlags.coop && deps.devFlags.level !== 'sandbox';
+
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
   // for a before/after comparison.
@@ -400,7 +424,10 @@ export function startGameWith(
    * checked line-by-line in review instead of being structural.
    */
   function buildWorld(atLevel: CampaignLevel, lives?: number): World {
-    const w = deps.levels.world(atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives);
+    const w = deps.levels.world(
+      atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives,
+      coopActive ? 2 : undefined,
+    );
     if (deps.devFlags.invincible) {
       const p = w.tanks.find((t) => t.kind === 'player');
       if (p) p.invincible = true;
@@ -495,7 +522,12 @@ export function startGameWith(
     quality: qualityFor(deps.devFlags.quality),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
-    gamepad: deps.devFlags.gamepad,
+    // Mutually exclusive with `coop` BY CONSTRUCTION: when co-op is on, slot 0 is
+    // ALWAYS built with gamepad:false, whatever `devFlags.gamepad` says -- the merge's
+    // own reader is then never even constructed (input.ts's own "off means the reader
+    // is never constructed" idiom), so slot 1 below can own gamepad[0] exclusively
+    // with no runtime arbitration needed between the two.
+    gamepad: coopActive ? false : deps.devFlags.gamepad,
   });
   // The saved scheme, pushed at boot so the very first touch already uses it -- see the
   // echo-back wiring below for what happens when the player changes it in the HUD.
@@ -503,6 +535,14 @@ export function startGameWith(
   // Same convention for the saved fire mode: pushed at boot so the very first tap on
   // the aim side already reads under the right gesture.
   input.setFireMode(deps.touchSettings.fireMode());
+  /**
+   * Co-op's slot 1: a standalone gamepad-only source, owning gamepad[0] exclusively
+   * (see the `gamepad: false` above). `null` when `coop` is off or excluded by the
+   * sandbox -- the seam for N later is populating more slots here, with no change to
+   * the driver, recorder or replay layers, all of which only ever see "the list."
+   */
+  const slot1: PlayerInputSource | null = coopActive ? deps.createGamepadSource() : null;
+  const slots: PlayerInputSource[] = slot1 !== null ? [input, slot1] : [input];
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
   // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
@@ -522,14 +562,20 @@ export function startGameWith(
    * takes a World and returns an InputState exactly like the real controller's sample()
    * does, so step() cannot tell which one produced it, and a replay stays an exact
    * function of its inputs whether autoplay was on or not.
+   *
+   * Substitutes SLOT 0 only: autoplay predates co-op and only ever demos P1. Under
+   * `coop`, slot 1's real gamepad still samples through on the same tick -- the two
+   * are not exclusive of each other.
    */
   const autoplayRnd = mulberry32(deriveSeed(deps.wallMs()) + 1);
   const autoplayState = createPlayerAiState(autoplayRnd);
   const effectiveInput = {
-    sample: (): InputState =>
-      deps.devFlags.autoplay && playerId !== undefined
-        ? decidePlayerInput(driver.world, playerId, autoplayRnd, autoplayState)
-        : input.sample(),
+    sample: (): InputState[] =>
+      slots.map((src, i) =>
+        i === 0 && deps.devFlags.autoplay && playerId !== undefined
+          ? decidePlayerInput(driver.world, playerId, autoplayRnd, autoplayState)
+          : src.sample(),
+      ),
   };
   /**
    * `?dev=1&replay=1`: remember what was sampled, tick by tick.
@@ -641,16 +687,29 @@ export function startGameWith(
     world,
     onSimulated(w): void {
       refreshStats(w);
-      // The aim STICK needs the player's WORLD position to project a point from --
-      // see setPlayerPosition's doc comment. `null` when there is no player tank in
-      // this world, in which case the input layer simply holds its last aim.
-      const player = w.tanks.find((t) => t.kind === 'player');
-      const playerPos = player ? { x: player.pos.x, y: player.pos.y } : null;
-      input.setPlayerPosition(playerPos);
-      // Same position, to the haptics director: mine-detonate is the only cue that
-      // needs a distance from the player, and the event stream never carries the
-      // player's own position (mine-detonate carries only the mine's).
-      haptics.setPlayerPosition(playerPos);
+      // The aim STICK needs EACH SLOT's own WORLD position to project a point from --
+      // see setPlayerPosition's doc comment. `controlledBy ?? 0` mirrors the render
+      // seam's own adopted convention (the foundation plan's render/entities.ts style
+      // map): at playerCount 1 this is identical to today's lookup, since no
+      // controlledBy is stamped and `?? 0` defaults the one player-kind tank found to
+      // slot 0. `null` when there is no tank for that slot, in which case the source
+      // simply holds its last aim.
+      const tankForSlot = (slot: number): Tank | undefined =>
+        w.tanks.find((t) => t.kind === 'player' && (t.controlledBy ?? 0) === slot);
+      const p1 = tankForSlot(0);
+      const p1Pos = p1 ? { x: p1.pos.x, y: p1.pos.y } : null;
+      slots.forEach((src, i) => {
+        const tank = i === 0 ? p1 : tankForSlot(i);
+        src.setPlayerPosition(tank ? { x: tank.pos.x, y: tank.pos.y } : null);
+      });
+      // Same position, to the haptics director -- P1-ONLY, explicitly deferred (see
+      // the co-op input-routing plan's "assumes THE player" audit): mine-detonate is
+      // the only cue that needs a distance from the player, and there is no
+      // per-player attribution anywhere in haptics.ts/stats.ts/director.ts yet.
+      haptics.setPlayerPosition(p1Pos);
+      // Touch indicator, gamepad-connected toast: slot 0 (the multi-device
+      // controller) only, unaffected by co-op -- see the co-op plan's audit for why a
+      // P2-specific connect affordance is out of this PR's scope.
       hud.setTouchIndicator(input.touchIndicator());
       const gamepadConnected = input.gamepadConnected();
       if (gamepadConnected && !wasGamepadConnected) hud.showToast('Gamepad connected');
@@ -1216,6 +1275,10 @@ export function startGameWith(
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
+      // Slot 1's standalone gamepad source, when co-op built one -- no listeners of
+      // its own (see GamepadReader.dispose's doc comment), but disposed alongside
+      // slot 0 for symmetry and so a future stateful slot 1 has somewhere to release.
+      slot1?.dispose();
       renderer.dispose();
       // The panel can still be open at teardown (main.ts's pagehide path can fire
       // any time) -- dispose whatever live preview context is holding, same as the

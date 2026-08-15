@@ -144,8 +144,30 @@ export interface DevFlags {
    * keyboard/mouse/touch -- see `src/input/gamepad.ts`. Single player only: gamepad[1]
    * onward is ignored, matching every other input path (nothing about multiplayer exists
    * beyond `stepInputs` taking a list -- see CLAUDE.md).
+   *
+   * Mutually exclusive with `coop` BY CONSTRUCTION, not merely by convention: when
+   * `coop` is on, slot 0 is always built with `{gamepad: false}` regardless of this
+   * flag's value, so the two features can never both claim gamepad[0] -- see loop.ts.
    */
   gamepad: boolean;
+  /**
+   * Couch co-op: a second player, on gamepad[0] (`?dev=1&coop=1`).
+   *
+   * Boolean, not valued (`coop=N`), on purpose -- this PR wires exactly one additional
+   * input source (gamepad[0] -> slot 1), so `coop` on means playerCount 2, full stop.
+   * A valued flag would advertise an N>2 assignment capability that does not exist yet;
+   * upgrade to valued when a third real source (gamepad[1], keyboard split) exists.
+   *
+   * Deliberately NOT in the `playtest` bundle: that bundle is single-player numeric
+   * playtesting, and co-op is an orthogonal, riskier experimental mode a shared
+   * `?playtest=1` link must not silently enable.
+   *
+   * Excluded from the sandbox (`?dev=1&level=sandbox`): `createSandboxWorld` takes no
+   * `playerCount` and has no co-op spawn rule to inherit from `loadArena`, so `coop` is
+   * read but never wired there -- no slot-1 source is constructed and `playerCount`
+   * passed to `world()` stays 1. See loop.ts's `coopActive`.
+   */
+  coop: boolean;
   /**
    * A render quality preset -- `low` | `medium` | `high` -- see `render/quality.ts` for
    * what each one sets (antialias, pixel ratio cap, shadow map size, shadow filter).
@@ -185,6 +207,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   saveIo: false,
   replay: false,
   gamepad: false,
+  coop: false,
   quality: null,
 };
 
@@ -286,6 +309,7 @@ export function parseDevFlags(search: string): DevFlags {
     saveIo: isOn(params, 'saveIo'),
     replay: isOn(params, 'replay'),
     gamepad: isOn(params, 'gamepad'),
+    coop: isOn(params, 'coop'),
     quality: asQuality(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest

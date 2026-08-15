@@ -103,9 +103,12 @@ export const TOUCH_SCHEMES: readonly TouchScheme[] = ['stick', 'point'];
 export const AIM_PROJECTION_UNITS = 100;
 
 /**
- * The grid `InputState.aim` is snapped to, in world units, at `input.ts`'s `sample()`
- * boundary -- the one point all four aim producers (mouse, touch point, touch stick,
- * gamepad) converge into one `InputState`.
+ * The grid `InputState.aim` is snapped to, in world units, at the `quantizeAim`
+ * boundary below. Two producers converge through it: `input.ts`'s merged `sample()`
+ * (mouse, touch point, touch stick, gamepad[0] merged in) and, since couch co-op's
+ * input routing PR, `gamepad.ts`'s standalone `createGamepadInputSource` (co-op slot
+ * 1) at its own `sample()` -- the same function, not a second copy of it, which is
+ * why `quantizeAim` lives here rather than in either caller.
  *
  * A DECIMAL step, not a power of two: `Math.round`, `*` and `/` on doubles are
  * IEEE-754 exactly-specified operations (unlike `sin`/`cos`/`hypot`, which is exactly
@@ -120,6 +123,26 @@ export const AIM_PROJECTION_UNITS = 100;
  * by a hardcoded expected trajectory.
  */
 export const AIM_GRID = 0.01;
+
+/**
+ * Snaps a point to `AIM_GRID` -- applied ONCE, at the boundary every aim producer
+ * converges into (see `AIM_GRID`'s own doc comment for which). Relocated here from
+ * `input.ts` (where it lived un-exported) so `gamepad.ts`'s standalone per-slot
+ * source can reuse the identical quantization instead of a second copy -- this file
+ * is already imported by both `input.ts` and `gamepad.ts`, so the relocation avoids
+ * introducing an `input.ts` <-> `gamepad.ts` import cycle.
+ *
+ * `Math.round(NaN / g) * g` and the `Infinity` case both stay non-finite, so
+ * `driveTank`'s existing `Number.isFinite` guard on `aimDir` (`world.ts`) still
+ * catches an unlaid-out-canvas NaN exactly as before -- quantization does not reopen
+ * that bug.
+ */
+export function quantizeAim(v: Vec2): Vec2 {
+  return {
+    x: Math.round(v.x / AIM_GRID) * AIM_GRID,
+    y: Math.round(v.y / AIM_GRID) * AIM_GRID,
+  };
+}
 
 /**
  * How the right thumb pulls the trigger.

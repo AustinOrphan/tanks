@@ -6,8 +6,8 @@
 // blind to whether the loop actually simulates, which is the entire defect
 // being closed here.
 import { describe, it, expect } from 'vitest';
-import { createArenaWorld } from '../sim/arena';
-import type { World } from '../sim/world';
+import { createArenaWorld, createWorldFor, arenaById } from '../sim/arena';
+import { step, type World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { InputState } from '../sim/types';
 import type { GameState } from './state';
@@ -75,6 +75,12 @@ function harness(
   opts: {
     state?: GameState;
     input?: InputState;
+    /**
+     * The FULL per-slot list `sample()` returns, for a co-op fixture. Takes priority
+     * over `input` when given -- `input` alone stays the single-slot shorthand every
+     * pre-existing test in this file uses.
+     */
+    inputs?: InputState[];
     world?: World;
     /** Mirrors the real machine: onEvents can flip 'playing' -> 'win'/'lose'. */
     endOnEvents?: GameState;
@@ -106,9 +112,9 @@ function harness(
     now: () => 0,
     raf: raf.scheduler,
     input: {
-      sample(): InputState {
+      sample(): InputState[] {
         box.samples += 1;
-        return opts.input ?? IDLE;
+        return opts.inputs ?? [opts.input ?? IDLE];
       },
     },
     renderer: {
@@ -320,6 +326,77 @@ describe('driver: event routing', () => {
     expect(h.hapticsSaw).toHaveLength(0);
     expect(h.machineSaw).toHaveLength(0);
     expect(h.framed).toHaveLength(0);
+  });
+});
+
+describe('driver: list-shaped input (couch co-op)', () => {
+  // driver.ts's own step -> stepInputs migration: `DriverDeps.input` is now
+  // `sample(): InputState[]`, always, even at playerCount 1 -- no branch on list
+  // length. These two tests are the driver-layer half of that claim; the sim-layer
+  // half (stepInputs pairs inputs[i] with the i-th player tank, and step() is exactly
+  // stepInputs(world, [input])) is pinned in sim/step-inputs.test.ts and is NOT
+  // re-proven here -- what step-inputs.test.ts cannot see is whether THIS driver
+  // actually calls stepInputs with the list its own input collaborator hands it,
+  // which is the composition-blindness gap CLAUDE.md names for step-pipeline.test.ts.
+
+  it('pairs slot i with the i-th controlledBy tank in a REAL 2-player world -- the driver-layer twin of step-inputs.test.ts\'s "pairs by position" test', () => {
+    const base = createWorldFor(arenaById('arena-01'), 1, 'none', 3, false, true, 2);
+    // Past countdown+grace, so input is live -- same convention firedByPlayer() above
+    // uses, for the same reason (a fresh world cannot act on tick 1).
+    const world = { ...base, roundStartTick: -1000 };
+    const spawnA = world.tanks.find((t) => t.controlledBy === 0)!.pos;
+    const spawnB = world.tanks.find((t) => t.controlledBy === 1)!.pos;
+    // Sanity: this is really a co-op world, or the test below would pass vacuously
+    // with only one player tank ever driven.
+    expect(world.tanks.filter((t) => t.kind === 'player')).toHaveLength(2);
+
+    const inputA: InputState = { move: { x: 1, y: 0 }, aim: { x: 5, y: 15 }, fire: false, mine: false };
+    const inputB: InputState = { move: { x: -1, y: 0 }, aim: { x: -5, y: 15 }, fire: false, mine: false };
+    const h = harness({ world, inputs: [inputA, inputB] });
+    h.driver.start();
+    h.raf.fire(20); // one tick
+
+    const a = h.driver.world.tanks.find((t) => t.controlledBy === 0)!;
+    const b = h.driver.world.tanks.find((t) => t.controlledBy === 1)!;
+    expect(a.desiredMove).toEqual({ x: 1, y: 0 });
+    expect(b.desiredMove).toEqual({ x: -1, y: 0 });
+    // Positions too, not just the intent field, and each relative to its OWN spawn --
+    // a slot mix-up would move A the way B's input says instead.
+    expect(a.pos.x).toBeGreaterThan(spawnA.x);
+    expect(b.pos.x).toBeLessThan(spawnB.x);
+  });
+
+  it('N=1 structural identity: the resulting world and events equal what a step()-based driver would have produced', () => {
+    // "Feed the OLD driver-shape fixture as a 1-length list" (the plan's own framing):
+    // the LEFT side here never touches the driver at all -- it drives step(), the
+    // pre-existing single-input adapter, directly and by hand. The RIGHT side is the
+    // real driver, whose own input collaborator hands it a 1-length list every tick.
+    const world = { ...createArenaWorld(1), roundStartTick: -1000 };
+    const input: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: true, mine: false };
+    const TICKS = 3;
+
+    let expectedWorld = world;
+    const expectedEvents: SimEvent[] = [];
+    for (let i = 0; i < TICKS; i++) {
+      const r = step(expectedWorld, input);
+      expectedWorld = r.world;
+      for (const ev of r.events) expectedEvents.push(ev);
+    }
+
+    const h = harness({ world, input });
+    h.driver.start();
+    h.raf.fire(60); // dtReal 60ms at DT ~16.667ms -> floor(0.06 * 60) = 3 ticks
+
+    expect(h.driver.world).toEqual(expectedWorld);
+    // Compare events with the FrameEvent stamp stripped: the driver adds `.tick`,
+    // which step() driven by hand here never produces, and is not part of this claim.
+    const stripTick = (events: SimEvent[]): unknown[] =>
+      events.map((e) => {
+        const { tick: _tick, ...rest } = e as SimEvent & { tick?: number };
+        return rest;
+      });
+    expect(stripTick(h.directed.flat())).toEqual(stripTick(expectedEvents));
+    expect(expectedEvents.length).toBeGreaterThan(0); // non-vacuous: the shot really fired
   });
 });
 

@@ -1,4 +1,4 @@
-import { step, type World } from '../sim/world';
+import { stepInputs, type World } from '../sim/world';
 import type { InputState, UnarmedTrigger } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import balanceJson from '../sim/config/data/balance.json';
@@ -33,7 +33,7 @@ export const REPLAY_FORMAT = 'tanks.replay';
  * Bump it when the encoding changes; it says nothing about whether the sim would
  * produce the same run, which is what the fingerprint is for.
  */
-export const REPLAY_SCHEMA = 1;
+export const REPLAY_SCHEMA = 2;
 
 /**
  * Ten minutes at 60 Hz. A trace that grows forever is a memory leak in a flag
@@ -76,8 +76,18 @@ export interface ReplayMeta {
   muzzleClearsTanks: boolean;
 }
 
-/** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. */
+/** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. Still the per-SLOT shape:
+ * co-op reuses this encoding once per active slot rather than inventing a second one. */
 export type EncodedInput = [number, number, number, number, number];
+
+/**
+ * One tick's worth of input, one `EncodedInput` per active slot, in `stepInputs`'
+ * pairing order (slot index = tank-array position among `kind === 'player'` tanks --
+ * see world.ts's `applyPlayerInputs`). A single-player trace is a 1-length array at
+ * every tick, which is what keeps `REPLAY_SCHEMA` 2 a strict superset of 1's meaning
+ * rather than a different concept wearing the same field name.
+ */
+export type EncodedTick = EncodedInput[];
 
 export interface ReplayTrace {
   format: string;
@@ -88,7 +98,7 @@ export interface ReplayTrace {
    */
   data: string;
   meta: ReplayMeta;
-  ticks: EncodedInput[];
+  ticks: EncodedTick[];
   /** True once the tick limit was reached and inputs stopped being appended. */
   truncated: boolean;
 }
@@ -122,6 +132,14 @@ export function fingerprint(value: unknown): string {
 }
 
 /**
+ * `REPLAY_SCHEMA`'s history: 1 was the single-slot flat `EncodedInput[]` shape. 2 (this
+ * PR) is the per-tick `EncodedTick[]` = `EncodedInput[][]` shape below, one entry per
+ * active input slot -- couch co-op's input routing. There is no migration layer for
+ * replays anywhere in this codebase; a schema mismatch is already outright rejection
+ * (`checkTrace`), never reinterpreted, and `?dev=1&replay=1` traces are a dev-console
+ * debug capture, not user save data, so rejecting an old trace rather than reading it
+ * under the new shape is the low-risk, in-convention choice.
+ *
  * THE VERSION-STAMP DECISION, since a trace recorded against different constants
  * diverges silently and there is no way to tell from the divergence alone.
  *
@@ -188,9 +206,24 @@ export function decodeInput(t: EncodedInput): InputState {
   };
 }
 
-/** The slice of the input controller the driver -- and therefore this -- uses. */
+/** `encodeInput` over every active slot, in slot order. */
+export function encodeTick(inputs: InputState[]): EncodedTick {
+  return inputs.map(encodeInput);
+}
+
+/** `decodeInput` over every encoded slot, in slot order. */
+export function decodeTick(t: EncodedTick): InputState[] {
+  return t.map(decodeInput);
+}
+
+/**
+ * The slice of the input collaborator the driver -- and therefore this -- uses.
+ * List-shaped since `driver.ts`'s `DriverDeps.input` is: co-op's `effectiveInput`
+ * (`loop.ts`) samples every active slot every tick, always as a list (length 1 at
+ * playerCount 1, exactly as `stepInputs` itself stays list-shaped at N=1).
+ */
 export interface InputSource {
-  sample(): InputState;
+  sample(): InputState[];
 }
 
 export interface RecordingInput extends InputSource {
@@ -217,15 +250,15 @@ export function createRecordingInput(
   limit: number = DEFAULT_TICK_LIMIT,
 ): RecordingInput {
   let current = meta;
-  let ticks: EncodedInput[] = [];
+  let ticks: EncodedTick[] = [];
   let truncated = false;
 
   return {
-    sample(): InputState {
-      const input = inner.sample();
-      if (ticks.length < limit) ticks.push(encodeInput(input));
+    sample(): InputState[] {
+      const inputs = inner.sample();
+      if (ticks.length < limit) ticks.push(encodeTick(inputs));
       else truncated = true;
-      return input;
+      return inputs;
     },
     begin(next: ReplayMeta): void {
       current = next;
@@ -238,7 +271,10 @@ export function createRecordingInput(
         schema: REPLAY_SCHEMA,
         data: simDataFingerprint(),
         meta: { ...current },
-        ticks: ticks.map((t) => [...t] as EncodedInput),
+        // Copies at every level: the OUTER array, each tick's slot array, and each
+        // slot's own tuple -- a snapshot must not let a later sample() mutate a trace
+        // already handed out (pinned by replay.test.ts's "hands back a SNAPSHOT" case).
+        ticks: ticks.map((t) => t.map((e) => [...e] as EncodedInput)),
         truncated,
       };
     },
@@ -297,13 +333,19 @@ export interface ReplayResult {
  *
  * Does NOT check the stamp -- `checkTrace` is separate on purpose, so a
  * deliberately-stale replay (what did this trace do under the NEW balance?) is
- * possible.
+ * possible. Restating that contract now that it matters more: this function assumes
+ * the CURRENT schema's tick shape (`EncodedTick[]`, decoded via `decodeTick`), not
+ * merely the current sim data. A schema-1 trace's `ticks` were bare `EncodedInput`
+ * tuples -- `decodeTick`'s `.map` over one would read numbers as if they were
+ * five-element arrays and throw, not silently misinterpret. A caller that wants
+ * "refuse this if it isn't fresh, including on schema" already has that mechanism:
+ * call `checkTrace` first, exactly as today.
  */
 export function replayTrace(trace: ReplayTrace, world: World): ReplayResult {
   let w = world;
   const events: SimEvent[] = [];
   for (const t of trace.ticks) {
-    const result = step(w, decodeInput(t));
+    const result = stepInputs(w, decodeTick(t));
     w = result.world;
     for (const ev of result.events) events.push(ev);
   }

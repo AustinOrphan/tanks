@@ -2,13 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
   deadzoneVector,
   createGamepadReader,
+  createGamepadInputSource,
   GAMEPAD_DEADZONE,
   GAMEPAD_FIRE_BUTTON,
   GAMEPAD_MINE_BUTTON,
   type GamepadLike,
   type GetGamepads,
 } from './gamepad';
-import { AIM_PROJECTION_UNITS } from './touch';
+import { AIM_PROJECTION_UNITS, AIM_GRID } from './touch';
 
 describe('deadzoneVector', () => {
   it('reads exactly zero, and any noise no larger than the dead zone, as no input', () => {
@@ -207,5 +208,80 @@ describe('createGamepadReader: fire and mine are edges, never held state', () =>
     // A fresh connection with the same physical button state reads as a new press,
     // because the reader cannot know whether it is the SAME press that survived the gap.
     expect(reader.poll(null).fire).toBe(true);
+  });
+});
+
+/**
+ * `createGamepadInputSource` is production code today runs `gamepad.ts` detached
+ * from `input.ts`'s merge -- this is co-op's slot 1, driven by NOTHING but a
+ * `GetGamepads` function. No `@vitest-environment jsdom` pragma on this file (see
+ * vite.config.ts's default `environment: 'node'`): these tests running clean under
+ * plain node is itself evidence no keyboard/mouse/touch DOM machinery is reachable
+ * from this source, since none of that machinery would even construct under node.
+ */
+describe('createGamepadInputSource: standalone per-slot source', () => {
+  it('produces a quantized InputState from the pad alone -- move, a projected aim, and fire/mine as edges', () => {
+    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 1, 0], buttons: [true, false] })]);
+    src.setPlayerPosition({ x: 5, y: 5 });
+    const state = src.sample();
+    expect(state.move).toEqual(deadzoneVector(1, 0));
+    // Quantized to AIM_GRID, the SAME boundary function input.ts's merged sample() uses
+    // (touch.ts's quantizeAim) -- not a second, differently-rounded copy.
+    const expectedAim = {
+      x: Math.round((5 + AIM_PROJECTION_UNITS) / AIM_GRID) * AIM_GRID,
+      y: Math.round(5 / AIM_GRID) * AIM_GRID,
+    };
+    expect(state.aim).toEqual(expectedAim);
+    expect(state.fire).toBe(true);
+    expect(state.mine).toBe(false);
+  });
+
+  it('defaults aim to the quantized origin before any stick deflection is ever seen', () => {
+    const src = createGamepadInputSource(() => [fakePad({ axes: [0, 0, 0, 0] })]);
+    src.setPlayerPosition({ x: 5, y: 5 });
+    expect(src.sample().aim).toEqual({ x: 0, y: 0 });
+  });
+
+  it('self-corrects to the real aim on the first deflection after a neutral start', () => {
+    let axes = [0, 0, 0, 0];
+    const src = createGamepadInputSource(() => [fakePad({ axes })]);
+    src.setPlayerPosition({ x: 0, y: 0 });
+    expect(src.sample().aim).toEqual({ x: 0, y: 0 }); // no deflection yet
+    axes = [0, 0, 1, 0];
+    const aim = src.sample().aim;
+    expect(aim.x).toBeGreaterThan(0);
+  });
+
+  it('holds the last aim across a poll where the stick recentres -- no mouse/touch fallback exists to keep it alive otherwise', () => {
+    let axes = [0, 0, 1, 0];
+    const src = createGamepadInputSource(() => [fakePad({ axes })]);
+    src.setPlayerPosition({ x: 0, y: 0 });
+    const deflected = src.sample().aim;
+    axes = [0, 0, 0, 0]; // stick recentres: GamepadReader.poll returns aim: null
+    const recentred = src.sample().aim;
+    expect(recentred).toEqual(deflected);
+  });
+
+  it('gamepadConnected() mirrors the wrapped reader, not a hardcoded true', () => {
+    let present = true;
+    const src = createGamepadInputSource(() => (present ? [fakePad()] : []));
+    src.sample();
+    expect(src.gamepadConnected()).toBe(true);
+    present = false;
+    src.sample();
+    expect(src.gamepadConnected()).toBe(false);
+  });
+
+  it('works with no player position at all: move and fire/mine still resolve, aim stays at the default', () => {
+    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 1, 0], buttons: [true, false] })]);
+    const state = src.sample(); // setPlayerPosition never called
+    expect(state.move).toEqual(deadzoneVector(1, 0));
+    expect(state.fire).toBe(true);
+    expect(state.aim).toEqual({ x: 0, y: 0 });
+  });
+
+  it('dispose() forwards to the wrapped reader without throwing', () => {
+    const src = createGamepadInputSource(() => []);
+    expect(() => src.dispose()).not.toThrow();
   });
 });

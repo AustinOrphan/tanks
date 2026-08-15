@@ -1,13 +1,18 @@
-import type { Vec2 } from '../sim/types';
-import { AIM_PROJECTION_UNITS } from './touch';
+import type { InputState, Vec2 } from '../sim/types';
+import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
 
 /**
  * Gamepad API reader: `navigator.getGamepads()`, mapped to the same `InputState` shape
  * keyboard and touch already produce.
  *
- * Single player only, gamepad[0] only -- `stepInputs` (sim/world.ts) takes a LIST, but
- * nothing else about multiplayer exists (CLAUDE.md), so a second connected pad is
- * silently ignored rather than plumbed anywhere.
+ * Gamepad[0] only, in both consumers below -- gamepad[1] onward stays unplumbed.
+ * `createGamepadReader` alone backs `input.ts`'s single-player MERGE (`?dev=1&gamepad=1`,
+ * OR'd into keyboard/mouse/touch). `createGamepadInputSource`, further down this file,
+ * wraps it into a standalone `PlayerInputSource` for couch co-op's slot 1
+ * (`?dev=1&coop=1`) -- see CLAUDE.md's input-routing entry and `loop.ts`'s `slots`
+ * array. The two are mutually exclusive BY CONSTRUCTION, not merely by convention: when
+ * `coop` is on, slot 0 is built with `{gamepad: false}` so the merge's own reader is
+ * never constructed, and slot 1 owns gamepad[0] exclusively.
  *
  * Split in two on purpose. `deadzoneVector` is the pure mapping core: raw axis pair in,
  * a analog vector out, no DOM. `createGamepadReader` is the stateful edge at `poll()` --
@@ -176,8 +181,69 @@ export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
 }
 
 /**
+ * The slice of an input collaborator co-op's per-slot array needs. `InputController`
+ * (`input.ts`) satisfies this structurally -- it has every member here plus more (touch
+ * indicator, latched presses, scheme/fire-mode setters) -- so slot 0 (the multi-device
+ * controller) and slot 1 (`createGamepadInputSource` below) can sit in the same
+ * `PlayerInputSource[]` in `loop.ts` with no shared base class or adapter.
+ */
+export interface PlayerInputSource {
+  sample(): InputState;
+  /** Same contract as `InputController.setPlayerPosition` -- see its doc comment. */
+  setPlayerPosition(pos: Vec2 | null): void;
+  gamepadConnected(): boolean;
+  dispose(): void;
+}
+
+/**
+ * A standalone, per-slot input source over one `GamepadReader` -- couch co-op's slot 1
+ * (`?dev=1&coop=1`), never merged into slot 0's keyboard/mouse/touch stream (see this
+ * file's module doc comment for the mutual-exclusion argument).
+ *
+ * Holds its own `aim`, defaulting to `{0, 0}` and updated only when the right stick is
+ * outside the dead zone (`poll().aim !== null`). This is NOT redundant with the
+ * reader's own dead-zone handling: `input.ts`'s merged controller survives a centred
+ * stick because mouse/touch keep its `aim` variable alive between gamepad polls, but a
+ * standalone slot 1 has no such fallback producer, so it has to persist its own last
+ * aim the same way the merged controller's closure does.
+ *
+ * Quantized through `quantizeAim` (`touch.ts`) -- the SAME boundary function
+ * `input.ts`'s `sample()` applies, not a second, differently-rounded copy. See
+ * `touch.ts`'s `AIM_GRID` doc comment for why the function lives there.
+ */
+export function createGamepadInputSource(getGamepads: GetGamepads): PlayerInputSource {
+  const reader = createGamepadReader(getGamepads);
+  let aim: Vec2 = { x: 0, y: 0 };
+  let playerPos: Vec2 | null = null;
+
+  return {
+    sample(): InputState {
+      const gp = reader.poll(playerPos);
+      if (gp.aim !== null) aim = gp.aim;
+      return {
+        move: gp.move,
+        aim: quantizeAim(aim),
+        fire: gp.fire,
+        mine: gp.mine,
+      };
+    },
+    setPlayerPosition(pos: Vec2 | null): void {
+      playerPos = pos === null ? null : { x: pos.x, y: pos.y };
+    },
+    gamepadConnected(): boolean {
+      return reader.connected();
+    },
+    dispose(): void {
+      reader.dispose();
+    },
+  };
+}
+
+/**
  * The one production `GetGamepads`: reads `navigator.getGamepads` if the platform has
- * it, an empty list forever if not. `input.ts`'s only call site for this module.
+ * it, an empty list forever if not. Two production call sites: `input.ts`'s merge and
+ * `loop.ts`'s `createBrowserDeps` (co-op slot 1) -- both read the SAME live pads,
+ * mutually exclusive by construction rather than by which one happens to call this.
  */
 export function readNavigatorGamepads(): ArrayLike<GamepadLike | null | undefined> {
   if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return [];

@@ -514,8 +514,15 @@ one-argument adapter) and pairs inputs with player tanks by position, so `applyP
 finding one tank by kind is no longer the only path. The other four are untouched.
 `resolveStatus` still finds one tank by kind; the arena validator **hard-fails at module load**
 on any grid without exactly one `P` (`config/validate.ts:257`); four AI target-acquisition
-sites take the FIRST player found; a death resets the whole arena by `tanks[i]` ↔ `spawns[i]`
-index alignment; and there is no gamepad code, so local versus has no second controller.
+sites take the FIRST player found; and a death resets the whole arena by `tanks[i]` ↔
+`spawns[i]` index alignment. The fifth, "no gamepad code, so local versus has no second
+controller," is now stale: couch co-op's input-routing PR
+(`docs/superpowers/plans/2026-08-15-coop-input-routing.md`, branch `coop-input`) gives
+`?dev=1&coop=1` a real second controller — a standalone gamepad-only `PlayerInputSource`
+driving the `controlledBy === 1` tank end to end through `stepInputs`. That still is not
+"local versus": `resolveStatus`'s win/lose stays P1-only and `world.lives` stays one shared
+pool (this line's own open question, immediately below, unchanged), so a second player can
+drive but the round does not yet know how to end around two humans.
 
 **What would answer it:**
 
