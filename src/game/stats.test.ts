@@ -62,6 +62,21 @@ describe('createStatsStore: attribution rules', () => {
     const { life } = afterEvents([killed('brown', 'shell', 5), killed('brown', 'blast', P)]);
     expect(life.friendlyFireKills).toBe(1); // the player's mine kill is not friendly fire
   });
+
+  it('a SECOND player-kind tank dying is not mistaken for the tracked player dying', () => {
+    // Unreached by any runtime call site today (playerCount stays 1 everywhere),
+    // but this is exactly the co-op misattribution the fix (record's tank-destroyed
+    // branch keying on e.tankId, not e.kind === 'player') exists for: P2 (co-op's
+    // controlledBy: 1, its OWN distinct tank id) dying must not bump the tracked
+    // player's deaths/selfKills.
+    const P2 = 23; // a second player-kind tank's id, distinct from P (the tracked one)
+    const p2Killed: SimEvent = {
+      type: 'tank-destroyed', tankId: P2, kind: 'player', by: { source: 'shell', ownerId: P }, pos: { x: 0, y: 0 },
+    };
+    const { life } = afterEvents([p2Killed]);
+    expect(life.deaths).toBe(0);
+    expect(life.selfKills).toBe(0);
+  });
 });
 
 describe('createStatsStore: attempt vs lifetime', () => {
