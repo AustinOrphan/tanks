@@ -525,14 +525,14 @@ index alignment; and there is no gamepad code, so local versus has no second con
   run each of chromium 151 (V8), firefox 153 (SpiderMonkey) and Playwright's webkit
   (JavaScriptCore) printed
   `015a5d1745ce2d3a9ca11e150b2874c10b1b8ca6d77988599787e2269fd198e4`, matching Node.
-  **Still open:** shipped Safari and iOS — Playwright's WebKit is a Linux JSC build, not
-  Safari. ARM is no longer untested: the engines matrix's macos-latest legs are arm64 and
-  agree on both pinned hashes (run 31842261852). The divergence choice this line used to
-  pose is settled — issue #133 vendored fdlibm into `src/sim/math/` (PR #165), measured
-  bit-identical on all 9 OS×engine legs — so a diverging device would now indicate a bug
-  in the vendored port or the harness, not a fork in the road. The method for the Safari/
-  iOS half is unchanged: open `tools/baseline/page.html` from a localhost server on the
-  device (`crypto.subtle` needs a secure context).
+  **Now measured, not open:** shipped Safari 26.5.2 and real iOS WebKit (Mobile Safari,
+  iOS 18.7 Simulator, arm64) both matched `BASELINE_HASH` and `VENDORED_ANGLE_HASH` on
+  PR #168's first engines-matrix run (`15989dd`, 2026-08-15) — safaridriver for Safari,
+  the beacon for the simulator. ARM was already covered (run 31842261852). The divergence
+  choice this line used to pose is settled — issue #133 vendored fdlibm into
+  `src/sim/math/` (PR #165) — so a diverging device would indicate a bug in the vendored
+  port or the harness, not a fork in the road. Sole remaining gap: a physical iOS device,
+  one URL away (`npm run trace:browser -- --beacon`, open the printed URL on the phone).
 - **Decide win/lose semantics before touching `resolveStatus`**, which currently encodes
   exactly one answer. Co-op: is `world.lives` shared or per-player, and does one death reset
   the arena? Versus: "every non-player tank dead" and a HUD reading "Enemies remaining" mean
@@ -706,9 +706,10 @@ serialisation boundary between the sim and its five event consumers, where today
   Playwright's webkit (JSC) each printed the pinned
   `015a5d17…`, matching Node, with the 21 transcendental occurrences **untouched**. So the
   arithmetic argument for Rust is not merely unproven, it is running against a
-  three-engine agreement. What is still open is narrower — shipped Safari, iOS, and any
-  ARM engine, none of which this box can run (see the multiplayer spike's gating bullet
-  above for the method) — and it is one sampled trajectory, not a proof about `Math.hypot`.
+  three-engine agreement — since extended by the engines matrix and PR #168's legs to
+  shipped Safari, iOS WebKit (Simulator) and arm64, all matching (see the multiplayer
+  spike's gating bullet above). Still one sampled trajectory, not a proof about
+  `Math.hypot`; the sole unmeasured runtime is a physical iOS device.
   The replacement work was issue #133, now closed: `src/sim/math/` vendors fdlibm's
   sin/cos/atan2 and V8's own hypot formula, and `VENDORED_ANGLE_HASH`
   (`tools/baseline/angles.ts`) measured chromium, firefox and webkit agreeing bit-for-bit

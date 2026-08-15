@@ -103,6 +103,25 @@ export const TOUCH_SCHEMES: readonly TouchScheme[] = ['stick', 'point'];
 export const AIM_PROJECTION_UNITS = 100;
 
 /**
+ * The grid `InputState.aim` is snapped to, in world units, at `input.ts`'s `sample()`
+ * boundary -- the one point all four aim producers (mouse, touch point, touch stick,
+ * gamepad) converge into one `InputState`.
+ *
+ * A DECIMAL step, not a power of two: `Math.round`, `*` and `/` on doubles are
+ * IEEE-754 exactly-specified operations (unlike `sin`/`cos`/`hypot`, which is exactly
+ * why PR #165 had to vendor those), so a decimal grid is already bit-identical across
+ * V8/SpiderMonkey/JSC with no vendoring needed -- mirroring the existing `1e-12` idiom
+ * at `ai/targeting.ts`'s `bestEscapeDirection`. A power of two would only matter for a
+ * future fixed-point wire encoding, which doesn't exist yet.
+ *
+ * 0.01 world units is a feel value, not a measured perceptual threshold -- see
+ * `constants.ts`'s `TANK_TURN_RATE`/`AI_AIM_SPREAD` for the same "numbers that are
+ * feel, not measurement" discipline: pinned by reference, revisited by eye rather than
+ * by a hardcoded expected trajectory.
+ */
+export const AIM_GRID = 0.01;
+
+/**
  * How the right thumb pulls the trigger.
  *
  * The FIRE button exists in every mode -- these ADD a gesture, they never replace it.

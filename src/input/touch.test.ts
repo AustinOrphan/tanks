@@ -10,6 +10,7 @@ import {
   TAP_SLOP_PX,
   DOUBLE_TAP_MAX_MS,
   DOUBLE_TAP_SLOP_PX,
+  AIM_GRID,
   type TouchSample,
 } from './touch';
 
@@ -96,6 +97,15 @@ describe('which thumb is which', () => {
     // midpoint -- where the driving thumb would suddenly be aiming.
     expect(touchSide(500, 800)).toBe('aim');
     expect(touchSide(500, 1600)).toBe('move');
+  });
+});
+
+describe('the aim quantization grid', () => {
+  it('is a decimal step, pinned the same way AI_AIM_SPREAD/PLAYER_TURRET_TURN_RATE are', () => {
+    // A decimal grid keeps Math.round(v/AIM_GRID)*AIM_GRID exactly-specified IEEE-754
+    // arithmetic (unlike sin/cos/hypot, see PR #165) -- so a power-of-two here would be
+    // solving a problem the design doesn't have yet. See input.ts's quantizeAim.
+    expect(AIM_GRID).toBe(0.01);
   });
 });
 
