@@ -18,6 +18,8 @@
     "portability": "node tools/portability/check.mjs dist",
     "test:gl": "node tools/gl/run.mjs",
     "trace:browser": "node tools/baseline/run.mjs",
+    "trace:safari": "node tools/baseline/safari.mjs",
+    "trace:beacon:check": "node tools/baseline/beacon-check.mjs",
     "gallery": "node tools/gallery/run.mjs",
     "audio": "node tools/audio/render.mjs",
     "mutate": "node tools/mutate/run.mjs"

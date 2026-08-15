@@ -31,6 +31,18 @@
 # what extends that same cross-engine agreement check to macOS (arm64) and Windows, not a
 # forward reference to work that hasn't landed yet. It still prints and uploads all three
 # hashes per (os, engine).
+#
+# TWO MORE JOBS below close the gap this file's own header used to call permanently open:
+# "the Safari/iOS half of the question stays OPEN however this exits" (run.mjs's old
+# wording). `safari-leg` drives SHIPPED Safari via `safaridriver` (Apple's own WebDriver,
+# raw-HTTP client in tools/baseline/safari.mjs -- no new npm dependency). `ios-simulator-leg`
+# opens tools/baseline/run.mjs's new `--beacon` mode in a real iOS Simulator via `xcrun
+# simctl openurl`, the driverless mechanism page.html/harness.mjs grew for exactly this
+# (any browser you can merely open, not drive). Both are BRAND NEW and have never run on a
+# real macOS runner from this Linux dev box -- see each job's own comments for what is
+# proven only by their first execution. Both are separate top-level jobs with no `needs:`
+# on `engines` above (and nothing depends on them), so GitHub Actions runs and reports them
+# independently: a first-run flake in either cannot fail or cancel the 3-OS matrix job.
 name: Engines matrix
 
 on:
@@ -148,4 +160,140 @@ jobs:
         with:
           name: engine-trace-${{ runner.os }}
           path: trace-${{ runner.os }}.log
+          retention-days: 90
+
+  # SHIPPED Safari, not Playwright's JavaScriptCore "webkit" build above. safaridriver only
+  # exists on macOS and needs a one-time, privileged enable step before it will accept a
+  # session -- done here, not inside safari.mjs, since it needs `sudo` and this job is the
+  # only caller.
+  #
+  # FIRST RUN ON A REAL RUNNER: this job has never executed outside this Linux dev box's
+  # simulation (a mock WebDriver server, see tools/baseline/safari.test.ts). safaridriver's
+  # actual startup timing, whether `{browserName: 'safari'}` alone is a sufficient
+  # capability, and the exact shape of a real session's `capabilities` object are all
+  # unproven until this job runs for real -- expect iteration. It is its own job (no
+  # `needs:`, nothing depends on it) for exactly that reason: a flake here must not fail
+  # `engines` above or cancel it via fail-fast.
+  safari-leg:
+    name: Safari (safaridriver, real macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # One-time, privileged: without this, safaridriver refuses every session with a
+      # permission error. Idempotent -- safe to run on every job invocation.
+      - name: Enable safaridriver
+        run: sudo safaridriver --enable
+
+      # safari.mjs prints Safari's own version (from the WebDriver session's capabilities)
+      # and applies run.mjs's own reportResult exit-code semantics (tools/baseline/
+      # harness.mjs): a golden-trace or vendored-angle MISMATCH fails this step; a native
+      # angle-probe MISMATCH is reported but does not, matching every other leg in this
+      # workflow.
+      - name: Run the golden trace + angle probe (Safari)
+        run: node tools/baseline/safari.mjs 2>&1 | tee trace-safari.log
+
+      - name: Upload trace output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-trace-safari
+          path: trace-safari.log
+          retention-days: 90
+
+  # Real iOS WebKit, on the runner's own arm64 -- the other half of "shipped Safari and iOS
+  # stay open" that Playwright's engines (including its webkit) cannot reach at all. Uses
+  # `--beacon` mode (mechanism 1: tools/baseline/harness.mjs's startBeaconCollector, wired
+  # into page.html and run.mjs) rather than a driver: there is no iOS WebDriver equivalent
+  # to safaridriver that this workflow can reach, so the Simulator is instead simply OPENED
+  # at the right URL and left to report back on its own, the same trick a physical device
+  # would use.
+  #
+  # FIRST RUN ON A REAL RUNNER: this job has never executed outside this Linux dev box's
+  # simulation (a real Playwright chromium standing in for "any browser we can merely open"
+  # -- see tools/baseline/beacon-check.mjs). The load-bearing ASSUMPTION, unverified until
+  # this job runs for real, is that Mobile Safari inside the iOS Simulator shares the
+  # HOST's own loopback interface, so the `http://localhost:<port>` URLs run.mjs prints
+  # (unchanged from its normal local usage) are reachable from inside the Simulator exactly
+  # as from the host -- no `--host`/LAN address needed. If that assumption is wrong, the
+  # fix is to pass `--host` and swap the printed URL's host for the LAN address run.mjs
+  # already computes for that case (see run.mjs's own comment on why LAN is best-effort:
+  # crypto.subtle needs a secure context, which plain http://<lan-ip> is not). Also
+  # unproven: exact `xcrun simctl` timing and CLI surface on this runner image. Its own job,
+  # same reasoning as safari-leg above: a flake here cannot fail `engines` or cancel it.
+  ios-simulator-leg:
+    name: iOS Simulator (beacon, Mobile Safari)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Pick and boot a simulator
+        run: |
+          set -euo pipefail
+          UDID=$(node tools/baseline/find-simulator.mjs)
+          echo "picked simulator $UDID"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$UDID" -b
+
+      # run.mjs --beacon backgrounds itself here so this step can extract the BEACON_URL it
+      # prints (only after vite is confirmed serving THIS checkout's page.html) and hand it
+      # to the Simulator; `wait` on the backgrounded PID afterwards is what makes this
+      # step's exit code the trace's real pass/fail, not just "did we manage to open a URL".
+      - name: Open the beacon URL in the Simulator and wait for its report
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/baseline/run.mjs --beacon --timeout 180000 > beacon-ios.log 2>&1 &
+          RUNNER_PID=$!
+          URL=""
+          for i in $(seq 1 60); do
+            if grep -q '^BEACON_URL ' beacon-ios.log 2>/dev/null; then
+              URL=$(grep '^BEACON_URL ' beacon-ios.log | head -1 | cut -d' ' -f2-)
+              break
+            fi
+            if ! kill -0 "$RUNNER_PID" 2>/dev/null; then
+              echo "run.mjs --beacon exited before printing a URL"; cat beacon-ios.log; exit 1
+            fi
+            sleep 1
+          done
+          if [ -z "$URL" ]; then
+            echo "beacon collector never printed a URL within 60s"; cat beacon-ios.log
+            kill "$RUNNER_PID" 2>/dev/null || true
+            exit 1
+          fi
+          echo "opening $URL in simulator $SIM_UDID"
+          xcrun simctl openurl "$SIM_UDID" "$URL"
+          set +e
+          wait "$RUNNER_PID"
+          EXIT=$?
+          set -e
+          cat beacon-ios.log
+          exit $EXIT
+
+      - name: Shut down the simulator
+        if: always()
+        run: xcrun simctl shutdown "$SIM_UDID" || true
+
+      - name: Upload trace output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-trace-ios-simulator
+          path: beacon-ios.log
           retention-days: 90
