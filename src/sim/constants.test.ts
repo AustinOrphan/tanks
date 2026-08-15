@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  bulletConfig, DT, TICK_HZ, COUNTDOWN_TICKS, SHELL_CAP, MINE_CAP,
+  bulletConfig, DT, TICK_HZ, COUNTDOWN_TICKS, RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS, SHELL_CAP, MINE_CAP,
   NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES,
   PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE,
   TANK_RADIUS, TANK_SPEED, TANK_TURN_RATE, BULLET_RADIUS, MINE_TRIGGER_RADIUS,
@@ -43,6 +43,13 @@ describe('constants', () => {
     // leave all of that silently wrong with a green suite -- expressed as seconds
     // so the pin fails on a tick-rate change too.
     expect(COUNTDOWN_TICKS / TICK_HZ).toBe(3);
+  });
+
+  it('coop respawn: 2.0s corpse delay, 1.5s post-revival shield', () => {
+    // Feel values (CLAUDE.md), pinned as seconds so a tick-rate change fails this
+    // too -- same convention as the countdown pin above.
+    expect(RESPAWN_DELAY_TICKS / TICK_HZ).toBe(2);
+    expect(RESPAWN_SHIELD_TICKS / TICK_HZ).toBe(1.5);
   });
 
   it('carries the spec default caps and lives (caps apply to every tank, player and AI)', () => {

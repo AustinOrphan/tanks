@@ -129,6 +129,23 @@ export const COUNTDOWN_TICKS = 180;
 // 'grace' whenever this is positive -- so restoring it is this one number.
 export const GRACE_TICKS = 0;
 
+// ---- Coop per-tank respawn (stepRespawns, resolveStatusCoop -- world.ts) ----
+// Feel values, same treatment as TANK_TURN_RATE/MINE_BLAST_EXPAND_TICKS: tests pin
+// behavior against the constant, not a hardcoded tick count, so retuning either is a
+// one-line edit. Deliberately NOT GRACE_TICKS/roundPhase -- that machinery is
+// world-scoped (one roundStartTick drives every tank), and reusing it for an
+// individual respawn would freeze the surviving partner's fire/movement too, which
+// is exactly wrong mid-fight. See the coop semantics plan
+// (docs/superpowers/plans/2026-08-15-coop-semantics.md).
+//
+// RESPAWN_DELAY_TICKS = 120 ticks = 2.0s at 60Hz: how long a corpse waits before
+// reviving at its own spawn.
+export const RESPAWN_DELAY_TICKS = 120;
+// RESPAWN_SHIELD_TICKS = 90 ticks = 1.5s: post-revival damage immunity. Stands in for
+// everything resetArena would otherwise have guaranteed safe (wall state, the
+// partner's live ordnance, a no-sightline spawn) -- see isDamageImmune (types.ts).
+export const RESPAWN_SHIELD_TICKS = 90;
+
 // ---- Collision sweep (reflectSweep) ----
 export const SWEEP_EPS = 1e-7;
 export const SWEEP_MAX_ITERATIONS = 16;
