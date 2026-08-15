@@ -96,6 +96,27 @@ export interface Tank {
    * this field's existence, not merely tolerant of it. See arena.ts's `loadArena`.
    */
   controlledBy?: number;
+  /**
+   * Coop's per-tank respawn: the absolute tick (world.tick, not a countdown) this
+   * corpse revives on. Set only by resolveStatus's coop branch (resolveStatusCoop,
+   * world.ts) the tick a tracked player dies with lives still in the shared pool,
+   * and cleared by the stage that resolves it (stepRespawns, world.ts). An absolute
+   * tick, deliberately mirroring world.roundStartTick's own convention rather than
+   * fireCooldown's decrementing-counter one -- see the coop semantics plan
+   * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for why. OPTIONAL like
+   * `controlledBy`: absent on every enemy always, and absent on every player-kind
+   * tank at playerCount 1, so no existing fixture is affected by this field's mere
+   * existence.
+   */
+  respawnAtTick?: number;
+  /**
+   * Coop's post-respawn damage immunity: the absolute tick (world.tick) until which
+   * this tank cannot be killed -- see isDamageImmune below. Set only at the moment
+   * of revival (stepRespawns, world.ts); no explicit clear, self-expires by
+   * comparison, the same idiom round.ts's roundPhase already uses for elapsed-based
+   * checks. OPTIONAL for the same reason as `respawnAtTick`.
+   */
+  shieldUntilTick?: number;
 }
 
 export interface Bullet {
