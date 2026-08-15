@@ -33,6 +33,7 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     // Optional flags must pass through, or a fixture claiming them tests the default.
     disarmed: p.disarmed,
     invincible: p.invincible,
+    shieldUntilTick: p.shieldUntilTick,
   }
 }
 
@@ -607,6 +608,28 @@ describe('blasts and invincible tanks (dev playtest mode)', () => {
     // No corpse event for the ghost. Discriminated by id, not presence: the mortal
     // twin's tank-destroyed is in the same stream.
     expect(events.filter((e) => e.type === 'tank-destroyed').map((e) => (e as { tankId: number }).tankId)).toEqual([3])
+  })
+})
+
+describe('blasts and shielded tanks (coop post-respawn immunity)', () => {
+  it('a live shieldUntilTick washes over the blast; an expired one does not protect', () => {
+    // Three tanks: a live shield, an expired one, and a mortal control -- the control
+    // is what proves the fixture is genuinely lethal, same shape as the invincible
+    // block above.
+    const shielded = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, shieldUntilTick: 100 })
+    const expired = mkTank({ id: 3, kind: 'player', pos: { x: -1, y: 0 }, shieldUntilTick: 5 })
+    const mortal = mkTank({ id: 4, kind: 'brown', pos: { x: 0, y: 1 } })
+    const world = createWorld({ walls: [], tanks: [shielded, expired, mortal], spawns: [], lives: 3 })
+    world.tick = 10 // < 100 (shielded's shield is live); >= 5 (expired's has lapsed)
+    const mine: Mine = { id: 50, ownerId: 9, pos: { x: 0, y: 0 }, timer: 0, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+    detonateMine(world, mine, events)
+    for (let i = 0; i < MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS + 2; i++) stepBlasts(world, events)
+    expect(world.tanks.find((t) => t.id === 2)!.alive).toBe(true) // shielded
+    expect(world.tanks.find((t) => t.id === 3)!.alive).toBe(false) // expired shield
+    expect(world.tanks.find((t) => t.id === 4)!.alive).toBe(false) // mortal control
+    expect(events.filter((e) => e.type === 'tank-destroyed').map((e) => (e as { tankId: number }).tankId).sort()).toEqual([3, 4]);
   })
 })
 

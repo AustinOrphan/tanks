@@ -1,5 +1,5 @@
 import type { Blast, Mine, Vec2, AABB, Wall } from './types'
-import { vdist } from './types'
+import { vdist, isDamageImmune } from './types'
 import type { World } from './world'
 import { raySegmentVsAABB } from './collision'
 import type { SimEvent } from './events'
@@ -124,9 +124,10 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     // Testing the centre alone let a tank whose hull was well inside the blast
     // walk away untouched, and made the two damage systems disagree about
     // where a tank actually is.
-    // An invincible tank (dev playtest mode) stands in the blast unharmed. Checked
-    // here rather than at the loop top so the wall/radius reasoning stays identical.
-    if (t.invincible) continue
+    // A damage-immune tank (dev invincible, or coop's post-respawn shield -- see
+    // isDamageImmune, types.ts) stands in the blast unharmed. Checked here rather
+    // than at the loop top so the wall/radius reasoning stays identical.
+    if (isDamageImmune(t, world.tick)) continue
     if (
       vdist(t.pos, blast.pos) <= radius + TANK_RADIUS &&
       blastReaches(world.walls, blast.pos, t.pos)

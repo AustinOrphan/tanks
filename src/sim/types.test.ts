@@ -1,8 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
   vadd, vsub, vscale, vlen, vnorm, vdot, vdist, angleOf, fromAngle, nextRng, slewAngle,
+  isDamageImmune,
 } from './types';
-import type { Vec2 } from './types';
+import type { Vec2, Tank } from './types';
+
+function baseTank(overrides: Partial<Tank> = {}): Tank {
+  return {
+    id: 1, kind: 'player', pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+    aiState: 'idle', aiTimer: 0, ...overrides,
+  };
+}
 
 describe('vec math', () => {
   it('vadd / vsub add and subtract componentwise', () => {
@@ -111,6 +120,28 @@ describe('slewAngle', () => {
     // silently flips the tie-break direction is caught.
     const maxDelta = 0.5;
     expect(slewAngle(0, Math.PI, maxDelta)).toBeCloseTo(maxDelta, 12);
+  });
+});
+
+describe('isDamageImmune', () => {
+  it('is false for a plain tank (neither flag set)', () => {
+    expect(isDamageImmune(baseTank(), 100)).toBe(false);
+  });
+
+  it('invincible protects regardless of tick, and regardless of shieldUntilTick', () => {
+    expect(isDamageImmune(baseTank({ invincible: true }), 0)).toBe(true);
+    expect(isDamageImmune(baseTank({ invincible: true }), 1_000_000)).toBe(true);
+  });
+
+  it('a live shieldUntilTick protects; an expired one does not', () => {
+    const t = baseTank({ shieldUntilTick: 100 });
+    expect(isDamageImmune(t, 99)).toBe(true); // 99 < 100
+    expect(isDamageImmune(t, 100)).toBe(false); // 100 < 100 is false: expires ON the tick
+    expect(isDamageImmune(t, 101)).toBe(false);
+  });
+
+  it('invincible: false is not the same as absent -- explicit false grants no immunity', () => {
+    expect(isDamageImmune(baseTank({ invincible: false, shieldUntilTick: undefined }), 0)).toBe(false);
   });
 });
 

@@ -119,6 +119,25 @@ export interface Tank {
   shieldUntilTick?: number;
 }
 
+/**
+ * Is this tank immune to damage on the current tick?
+ *
+ * Two ways in: `invincible` (dev playtest mode, permanent for the tank's life) or a
+ * live `shieldUntilTick` (coop's post-respawn grace -- see world.ts's stepRespawns).
+ * Lives here, not in world.ts, for the same reason round.ts's own placement gives:
+ * world.ts already imports bullets.ts/mines.ts, so a helper there importing back
+ * would be circular.
+ *
+ * Replaces bullets.ts's and mines.ts's separate `t.invincible` checks -- both
+ * already have `world` in scope at their call sites, so `world.tick` is available.
+ * Value-identical at N=1: `shieldUntilTick` is only ever set by the coop respawn
+ * stage, so it is always undefined in single-player, and the OR collapses to
+ * today's `t.invincible` check exactly.
+ */
+export function isDamageImmune(t: Tank, tick: number): boolean {
+  return t.invincible === true || (t.shieldUntilTick !== undefined && tick < t.shieldUntilTick);
+}
+
 export interface Bullet {
   id: number;
   ownerId: number;
