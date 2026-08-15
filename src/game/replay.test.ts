@@ -26,6 +26,8 @@ const META: ReplayMeta = {
   lives: 3,
   unarmedTrigger: 'none',
   invincible: false,
+  corpseBlocksShells: false,
+  muzzleClearsTanks: true,
 };
 
 /**
@@ -58,7 +60,14 @@ function scriptedInputs(seed: number): { sample(): InputState; calls: number; la
 }
 
 function worldFor(meta: ReplayMeta): World {
-  return createWorldFor(arenaById(meta.arenaId), meta.seed, meta.unarmedTrigger, meta.lives);
+  return createWorldFor(
+    arenaById(meta.arenaId),
+    meta.seed,
+    meta.unarmedTrigger,
+    meta.lives,
+    meta.corpseBlocksShells,
+    meta.muzzleClearsTanks,
+  );
 }
 
 describe('canonical / fingerprint', () => {
@@ -238,7 +247,37 @@ describe('replayMetaFor', () => {
       lives: 2,
       unarmedTrigger: 'both',
       invincible: false,
+      corpseBlocksShells: false,
+      muzzleClearsTanks: true,
     });
+  });
+
+  it('reads the two playtest switches off the world too, not just unarmedTrigger', () => {
+    // Same claim as the case above, for the two NEW World-level switches: a replay
+    // must reproduce whatever corpseBlocksShells/muzzleClearsTanks the recorded world
+    // was actually built with, not today's defaults.
+    const world = createWorldFor(ARENAS[0], 7, 'none', 3, true, false);
+    expect(replayMetaFor(world, 'arena-01')).toEqual({
+      arenaId: 'arena-01',
+      seed: 7,
+      lives: 3,
+      unarmedTrigger: 'none',
+      invincible: false,
+      corpseBlocksShells: true,
+      muzzleClearsTanks: false,
+    });
+  });
+
+  it('round-trips through createWorldFor: a rebuilt world still carries the recorded switches', () => {
+    // The discriminating case: replayMetaFor alone proves the meta carries the right
+    // values, but a replay is only faithful if REBUILDING from that meta reproduces
+    // them too. worldFor() in this file is the same rebuild loop.test.ts's replay
+    // round-trip performs against a live game.
+    const recorded = createWorldFor(ARENAS[0], 9, 'none', 3, true, false);
+    const meta = replayMetaFor(recorded, 'arena-01');
+    const rebuilt = worldFor(meta);
+    expect(rebuilt.corpseBlocksShells).toBe(true);
+    expect(rebuilt.muzzleClearsTanks).toBe(false);
   });
 
   it('carries the dev invincibility that loop.ts applies AFTER the world is built', () => {

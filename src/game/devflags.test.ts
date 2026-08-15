@@ -203,6 +203,27 @@ describe('parseDevFlags: invincibility and the playtest bundle', () => {
   });
 });
 
+describe('parseDevFlags: corpseBlock and muzzleInside', () => {
+  it('both need dev, like every other flag', () => {
+    expect(parseDevFlags('?corpseBlock=1').corpseBlock).toBe(false);
+    expect(parseDevFlags('?dev=1&corpseBlock=1').corpseBlock).toBe(true);
+    expect(parseDevFlags('?muzzleInside=1').muzzleInside).toBe(false);
+    expect(parseDevFlags('?dev=1&muzzleInside=1').muzzleInside).toBe(true);
+  });
+
+  it('are independent of each other', () => {
+    const only = parseDevFlags('?dev=1&corpseBlock=1');
+    expect(only.corpseBlock).toBe(true);
+    expect(only.muzzleInside).toBe(false);
+  });
+
+  it('are NOT part of the playtest bundle -- unlike invincible/shellCount/mineReach/mineTimer', () => {
+    const f = parseDevFlags('?dev=1&playtest=1');
+    expect(f.corpseBlock).toBe(false);
+    expect(f.muzzleInside).toBe(false);
+  });
+});
+
 describe('parseDevFlags: playtest is additive, never a veto', () => {
   it('an explicit =0 on a bundled flag loses to the bundle, by documented OR semantics', () => {
     // The one surprising interaction: playtest=1&mineTimer=0 keeps mineTimer ON.

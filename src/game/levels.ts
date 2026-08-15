@@ -83,6 +83,10 @@ export function createLevelSystem(
             seed,
           },
           unarmedTrigger,
+          // Same two playtest switches as the campaign branch below -- see there for why
+          // these are closed over rather than threaded as `world()` parameters.
+          flags.corpseBlock,
+          !flags.muzzleInside,
         ),
     };
   }
@@ -120,8 +124,14 @@ export function createLevelSystem(
     },
     tracksProgress: true,
     isDevJump: jump !== null,
+    // corpseBlock/muzzleInside are closed over rather than added to the `world()`
+    // signature, the same treatment sandboxTanks/sandboxDisarmed/sandboxWalls already
+    // get: they are devFlags-driven playtest switches with one value for the whole
+    // session, not a per-call construction parameter the way unarmedTrigger and lives
+    // are (both vary call to call -- unarmedTrigger per dev-flag override, lives
+    // across a level transition).
     world: (level, seed, unarmedTrigger, lives) =>
-      createWorldFor(arenaById(level.arenaId), seed, unarmedTrigger, lives),
+      createWorldFor(arenaById(level.arenaId), seed, unarmedTrigger, lives, flags.corpseBlock, !flags.muzzleInside),
     bounds: (level) => ({
       ...arenaBounds(arenaById(level.arenaId)),
       cellSize: arenaById(level.arenaId).cellSize,

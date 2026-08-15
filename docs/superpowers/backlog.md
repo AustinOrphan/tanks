@@ -916,15 +916,13 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **82 lines below** — 15 / 31 / 25 / 11 across four groups. **73** came from the
+Counts: **80 lines below** — 13 / 31 / 25 / 11 across four groups. **71** came from the
 harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
 
 ### Gaps with a reachability argument
 
-- `resolveBulletHits` skips dead tanks, so a shell whose target died earlier in the same tick is never consumed — verified at c8f1557: mechanism real, 0 of 42,820 golden-trace ticks reach it, fix measured hash-neutral; awaiting a GHOST-vs-WALL corpse-semantics call. #2
-- `muzzlePoint` tests the spawn point against `world.walls` and not `world.tanks`, so a shell can be born inside an adjacent tank's silhouette — verified at c8f1557: harmful variant is a ~0.5-3 degree tangent-escape sliver at exact minimum separation, 0 of 1370 trace fire events; every fix changes point-blank feel — awaiting that call. #42
 - `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:333` documents the divergence as negligible rather than closing it. #1
 - The retroreflecting-seam fix is open: it must distinguish a coplanar neighbour that continues the surface from a perpendicular one that merely touches it. CLAUDE.md §Known holes owns the measurement and the record of the fix that was tried and reverted — do not restate them here. #1
 - `melody.ts:99`'s density knob is inert at and above 0.5: the predicate is `rnd() < spec.density * 2`. **13 of 42** generated layers ship at ≥ 0.5. *(pinned)* #70
@@ -1030,7 +1028,7 @@ The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the t
 are listed, not dropped, which an earlier draft's arithmetic missed by mapping the 76 onto
 all 73 in-scope lines including that section.
 
-The 76 open became the **64** in-scope lines of the first three groups, near enough
+The 76 open became the **62** in-scope lines of the first three groups, near enough
 one-to-one, with these
 adjustments: 4 are PR #75's residuals and live in the "Follow-ups from walls as geometry"
 spike; 1 is the intensity spike; 1 is a null item (no save system references tank ids);
@@ -1050,7 +1048,14 @@ that. The achievements-reset fix (this PR) closes the reachability line naming
 `achievements.ts`'s union-write resurrection defect (PR #62's residual) the same way:
 `achievements.ts` now resyncs its shadow against disk before evaluating what is newly
 earned, so a tab left open across Reset progress can no longer bring pre-reset ids back —
-which is the one further decrease since: the live count now reads 64.
+which is the one further decrease since: the live count read 64 after that. The
+sim-switches PR closes the two reachability lines naming `resolveBulletHits`' dead-tank
+ghost and `muzzlePoint`'s tank-overlap gap the same way, both awaiting exactly the call
+they named: Austin ruled on 2026-08-14 that the ghost stays the default (a flippable
+`corpseBlocksShells` WALL variant behind it) and that the muzzle clearance ships ON by
+default (a flippable `muzzleClearsTanks` restoring the old spawn), closing both lines
+without deciding a THIRD way — which is the two further decreases since: the live count
+now reads 62.
 
 The remaining **9** lines came from prose-only PRs outside the heading scope and are marked
 `*(prose-only PR)*`. They are a spot-check of 4 such PRs, not a sweep of the ~15.
