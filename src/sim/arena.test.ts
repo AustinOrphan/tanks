@@ -184,6 +184,14 @@ describe('loadArena', () => {
       const last = coop.tanks[coop.tanks.length - 1];
       expect(last.kind).toBe('player');
       expect(last.controlledBy).toBe(1);
+
+      // And its id CONTINUES the shared counter with no gap or reuse -- one `id`
+      // variable threads PASS 1a -> 1b -> the wall pass, and this is what keeps every
+      // wall id merely SHIFTED (not scrambled) at playerCount 2. Breaks if PASS 1b
+      // ever grows its own counter.
+      const maxSingleId = Math.max(...single.tanks.map((t) => t.id));
+      expect(last.id).toBe(maxSingleId + 1);
+      expect(coop.walls[0]?.id ?? last.id + 1).toBe(last.id + 1);
     }
   });
 

@@ -660,7 +660,8 @@ export function startGameWith(
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
-    // CLAUDE.md warns about. Discriminate on kind.
+    // CLAUDE.md warns about. Discriminate on tankId: kind alone stops being unique
+    // the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
       if (isPlayerDeath(events, playerId ?? -1)) {
         hud.signalPlayerDeath();
