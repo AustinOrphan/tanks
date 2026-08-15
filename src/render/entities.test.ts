@@ -881,10 +881,10 @@ describe('skins (player texture override)', () => {
   };
 
   it('maps the turret and barrel planar for the STRIPE skin, and only for it', () => {
-    // Austin: "Racing stripes pattern on turret is weird like pie slices?" -- confirmed
-    // by screenshot, a white pinwheel on the dome while the hull carried clean bands.
+    // The design feedback: "Racing stripes pattern on turret is weird like pie slices?" --
+    // confirmed by screenshot, a white pinwheel on the dome while the hull carried clean bands.
     //
-    // The fix is deliberately narrow. Austin also said the radial mapping was GOOD on
+    // The fix is deliberately narrow. The same feedback also said the radial mapping was GOOD on
     // the other skins ("the turret of checkerboard is what I meant with the pinwheel",
     // "I liked the flow skin turret previously"), so every skin except `stripes` keeps
     // the lathe's own wrap. This test pins BOTH halves of that -- a fix applied to all
@@ -940,8 +940,8 @@ describe('skins (player texture override)', () => {
   });
 
   /**
-   * The hull's UV must be a CONTINUOUS FUNCTION OF POSITION -- which is exactly Austin's
-   * "the hull should be distinctly one piece", stated so a machine can check it.
+   * The hull's UV must be a CONTINUOUS FUNCTION OF POSITION -- which is exactly the design
+   * ruling's "the hull should be distinctly one piece", stated so a machine can check it.
    *
    * ExtrudeGeometry is non-indexed, so the ring of positions where the top cap meets the
    * bevel, and where the bevel meets the side wall, exists several times over with a
@@ -1140,7 +1140,7 @@ describe('skins (player texture override)', () => {
   });
 
   it('runs ONE stripe field across the whole tank, at a single width', () => {
-    // STRIPE_TURRET_MODE is 'body' -- Austin, having seen both rendered: "I like
+    // STRIPE_TURRET_MODE is 'body' -- the verdict, having seen both rendered: "I like
     // continuous stripes actually." Nothing outside entities.ts referred to it, so the
     // shipped choice was pinned by nothing and the rejected mode exercised by nothing.
     //
@@ -1190,7 +1190,7 @@ describe('skins (player texture override)', () => {
     expect(STRIPE_TURRET_MODE).toBe('body');
   });
 
-  it('leaves the turret geometry EXACTLY as it was, which is what Austin asked for', () => {
+  it('leaves the turret geometry EXACTLY as it was, which is what the design feedback asked for', () => {
     // "The turret looks great on flow and checkerplate so don't change the turret."
     //
     // Rebuilt here from the profile as it stands, and compared against the mesh the tank
@@ -1200,15 +1200,15 @@ describe('skins (player texture override)', () => {
     //
     // It fails if anyone projects the turret for a non-stripe skin -- the obvious
     // "fix it everywhere" generalisation of the hull change, and the one thing here
-    // Austin explicitly ruled out.
+    // was explicitly ruled out.
     //
     // The three literals below DUPLICATE TURRET_H, TURRET_R and TURRET_FILLET, which is
     // a second home for those numbers and is deliberate: importing production's own
     // profile would compare it against itself and pass however the turret was rebuilt.
     // An independent reconstruction is the whole value here. The cost is real -- retune
     // the turret and this test fails until the literals are updated too -- and that
-    // failure is the correct signal, because retuning the turret IS the change Austin
-    // asked not to happen by accident.
+    // failure is the correct signal, because retuning the turret IS the change the
+    // design feedback asked not to happen by accident.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = makeWorld();
@@ -1246,7 +1246,7 @@ describe('skins (player texture override)', () => {
   });
 
   it('paints the barrel at the TURRET\'s texel density, so the two mesh', () => {
-    // Austin: "just change the barrel skin so it meshes with the existing turret
+    // The design feedback: "just change the barrel skin so it meshes with the existing turret
     // appearances of those skins."
     //
     // Both parts are lathes, and LatheGeometry normalises u to one full texture repeat

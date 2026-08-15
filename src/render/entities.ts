@@ -129,7 +129,7 @@ export const TRACK_OVERHANG = 0.05;
 export const TURRET_R = 0.36;
 
 /**
- * RACING STRIPES RUN THE WHOLE TANK AS ONE STRIPE. Austin, after seeing both rendered:
+ * RACING STRIPES RUN THE WHOLE TANK AS ONE STRIPE. The verdict, after seeing both rendered:
  * "I like continuous stripes actually."
  *
  *   'body'  SHIPPED. One continuous field. Every part is projected at world scale
@@ -467,7 +467,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
    *    happens to run, and its v is the EXTRUSION DEPTH, a different space again.
    *
    * Three spaces on one mesh, one of them switching per facet, is exactly the panelled
-   * read Austin reported: on camo you can see a blotch stop dead at the top edge and an
+   * read reported from the render: on camo you can see a blotch stop dead at the top edge and an
    * unrelated patch start on the shoulder below it. PR #101 found this for `stripes` and
    * projected the whole body planar -- but only for that one skin.
    *
@@ -598,7 +598,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   /**
    * Re-scale a lathe part's UVs so its pattern is the SAME WORLD SIZE as the turret's.
    *
-   * Austin: "just change the barrel skin so it meshes with the existing turret
+   * The design feedback: "just change the barrel skin so it meshes with the existing turret
    * appearances of those skins." The turret's mapping is kept exactly as it is -- the
    * checker's pinwheel and the flow's swirl are the liked look, and nothing here touches
    * the turret. What was wrong is the BARREL, and the defect is density, not topology.
@@ -693,8 +693,8 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // The stripe skin is the one pattern whose DIRECTION matters, so its turret and
     // barrel are projected flat. Every other skin -- including `two-tone`, which is
     // what every enemy wears -- keeps each part's own lathe wrap on the TURRET, which
-    // is what makes the checker's turret a pinwheel and the flow's a swirl; Austin
-    // asked for both of those to stay untouched. Keyed on the tank's own RESOLVED skin
+    // is what makes the checker's turret a pinwheel and the flow's a swirl; the design
+    // feedback asked for both of those to stay untouched. Keyed on the tank's own RESOLVED skin
     // rather than on `kind`, deliberately: `kind === 'player'` was equivalent to "is
     // this the tank whose skin might be stripes" only while stripes was player-only.
     // Now that every kind carries a skin, the question this gate answers is "is THIS

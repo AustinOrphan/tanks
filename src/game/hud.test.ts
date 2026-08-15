@@ -1586,13 +1586,13 @@ describe('hud: the paint shop', () => {
   });
 
   // The accent-hint feature (a <p> shown only for solid+explicit-accent) was removed
-  // along with the rest of the panel's prose: Austin asked for exactly two labelled
-  // sections (Hull, Skin) with the rest self-explanatory once the panel has a real
-  // preview. The preview does not resolve the ambiguity the hint used to name (a
+  // along with the rest of the panel's prose: the design feedback asked for exactly two
+  // labelled sections (Hull, Skin) with the rest self-explanatory once the panel has a
+  // real preview. The preview does not resolve the ambiguity the hint used to name (a
   // solid-skin tank still shows no visible change when an accent is picked) any more
   // than the old background tank did -- it makes the absence of change more vivid,
   // not less confusing on its own -- but the selection ring still confirms the pick
-  // registered, and Austin's instruction is explicit enough on its own to cut this
+  // registered, and that instruction is explicit enough on its own to cut this
   // narrow an edge case. See the PR body for the fuller argument.
 
   it('has exactly two labelled sections -- Hull and Skin -- and no prose at rest', () => {

@@ -457,7 +457,7 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
 /**
  * Per-profile aim spread, derived from the global anchor: AI_AIM_SPREAD is the
  * jitter of a PERFECT-accuracy profile (aimAccuracy 1.0), and lower accuracy
- * widens it -- Austin's framing: the anchor is maximal accuracy, profiles
+ * widens it -- the adopted framing: the anchor is maximal accuracy, profiles
  * derate from there. Curve chosen by sweep (see AI_AIM_SPREAD's comment in
  * constants.ts). Every shipped profile has accuracy < 1, so every enemy
  * jitters MORE than the old uniform spread -- a deliberate, measured

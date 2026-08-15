@@ -70,7 +70,7 @@ describe('createLevelSystem: corpseBlock/muzzleInside reach the built world (com
     expect(sys.world(CAMPAIGN_LEVELS[0], 42).corpseBlocksShells).toBe(true);
   });
 
-  it('muzzleInside off leaves the new clearance ON (Austin\'s default lean)', () => {
+  it('muzzleInside off leaves the new clearance ON (the adopted default lean)', () => {
     const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
     expect(sys.world(CAMPAIGN_LEVELS[0], 42).muzzleClearsTanks).toBe(true);
   });

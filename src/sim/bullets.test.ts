@@ -817,7 +817,7 @@ describe('spawnBullet: where the shell is born', () => {
   })
 })
 
-describe('spawnBullet: muzzleClearsTanks (Austin, 2026-08-14: "spawn at hull centre" switch)', () => {
+describe('spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: "spawn at hull centre" switch)', () => {
   // Same adjacent-tank fixture in every case: owner at the origin firing along +x, a
   // non-owner LIVE neighbour sitting exactly on the muzzle point -- so the neighbour's
   // hit circle contains the muzzle with room to spare, whatever TANK_RADIUS/
@@ -833,7 +833,7 @@ describe('spawnBullet: muzzleClearsTanks (Austin, 2026-08-14: "spawn at hull cen
   it('ON (the default): falls back to owner.pos when the muzzle would land inside a live neighbour', () => {
     const { owner, neighbour } = riflemanAndNeighbour(true)
     const world = createWorld({ walls: [], tanks: [owner, neighbour], spawns: [], lives: 3 })
-    expect(world.muzzleClearsTanks).toBe(true) // the shipped default -- Austin's lean
+    expect(world.muzzleClearsTanks).toBe(true) // the shipped default -- the adopted lean
     expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
     expect(world.bullets[0].pos).toEqual({ x: 0, y: 0 })
   })
@@ -882,7 +882,7 @@ describe('resolveBulletHits: invincible tanks (dev playtest mode)', () => {
   })
 })
 
-describe('resolveBulletHits: corpseBlocksShells (Austin, 2026-08-14: ghost-vs-wall switch)', () => {
+describe('resolveBulletHits: corpseBlocksShells (adopted ruling, 2026-08-14: ghost-vs-wall switch)', () => {
   // The triage's 2-bullet fixture (docs/superpowers/backlog.md's now-deleted ledger
   // line): one tank, two bullets both already overlapping it. Bullet A is processed
   // first (array order == push order) and kills the tank; bullet B then reaches a

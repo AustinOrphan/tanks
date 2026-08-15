@@ -165,8 +165,8 @@ describe('createSkinTexture', () => {
     };
 
     it('the racing stripe runs along the tank, not across it', () => {
-      // Austin: "The hull also appears to have stripes running the wrong direction. They
-      // should run parallel to the treads." He was right, and the cause is in the UVs:
+      // The design feedback: "The hull also appears to have stripes running the wrong
+      // direction. They should run parallel to the treads." That was right, and the cause is in the UVs:
       // the hull is an ExtrudeGeometry whose cap UVs are the shape's (x, y) = (LENGTH,
       // width), so banding on u held the LENGTH constant and ran the band across the
       // tank -- a belt, perpendicular to the treads.
@@ -187,8 +187,8 @@ describe('createSkinTexture', () => {
     });
 
     it('there are exactly TWO stripes, straddling the centreline', () => {
-      // Austin asked for a single stripe first, then for two once he saw it on the
-      // tank. Counting RUNS on the WRAPPED row sequence is what makes this exact: the
+      // The design feedback asked for a single stripe first, then for two once it was seen
+      // on the tank. Counting RUNS on the WRAPPED row sequence is what makes this exact: the
       // centreline is v = 0, which RepeatWrapping puts on the tile's edge, so a single
       // centred stripe would appear as two half-bands and count as ONE run, while these
       // two flanking stripes count as two. The wrap is why a naive scan would confuse
@@ -315,13 +315,13 @@ describe('createSkinTexture', () => {
 
     it('camo COVERS the hull; clouds leaves it as the majority tone', () => {
       // THIS TEST USED TO ASSERT THE OPPOSITE, and the assertion was the defect rather
-      // than the guard against it. Austin: "camo and clouds need to be swapped, the
-      // skins appear to have their names reversed." Camouflage is dense interlocking
-      // patches that cover most of a surface; clouds are separated puffs over a field
-      // that stays visible. Camo shipped sparse (hull surviving on 57.8%) and clouds
-      // dense (27.9%), so each read as the other's name, and this test pinned it that
-      // way. He confirmed the swap after seeing it rendered, so these thresholds are
-      // now the right way round.
+      // than the guard against it. The design feedback: "camo and clouds need to be
+      // swapped, the skins appear to have their names reversed." Camouflage is dense
+      // interlocking patches that cover most of a surface; clouds are separated puffs
+      // over a field that stays visible. Camo shipped sparse (hull surviving on 57.8%)
+      // and clouds dense (27.9%), so each read as the other's name, and this test pinned
+      // it that way. The swap was confirmed after seeing it rendered, so these thresholds
+      // are now the right way round.
       //
       // Coverage is invisible to a spread metric, which is why it needs its own test:
       // both arrangements have identical tone spreads, because only the AREAS moved.
@@ -364,9 +364,9 @@ describe('createSkinTexture', () => {
 
     it('gives camo and clouds DIFFERENT shape languages, not one shape at two densities', () => {
       // This is the test that would have caught what two rounds of density-swapping
-      // could not. Austin reported the two as swapped, the coverage WAS backwards, it
-      // was fixed -- and he still said "clouds turret top could be made to look a bit
-      // more cloudlike in shape. Same with some spots on the hull." They shared one
+      // could not. The two were reported as swapped in review, the coverage WAS backwards,
+      // it was fixed -- and the review still said "clouds turret top could be made to
+      // look a bit more cloudlike in shape. Same with some spots on the hull." They shared one
       // generator, so they were one silhouette at two densities and could only ever read
       // as versions of each other.
       //
@@ -714,7 +714,7 @@ describe('createSkinTexture', () => {
       expect(drifted).toEqual([]);
     });
 
-    it('no auto combination is invisible on its own hull -- the bug Austin reported', () => {
+    it('no auto combination is invisible on its own hull -- the bug reported in review', () => {
       // white/stripes measured 14.3 and white/flow 11.4 against 33.6-141.6 for the other
       // 22 pairs; both were indistinguishable from a bare hull on screen. The floor is
       // set at 50, below the current worst (68.5, measured across all 30) and far above
@@ -747,7 +747,7 @@ describe('createSkinTexture', () => {
     it('the auto derivation is pinned: changing it is deliberate, never incidental', () => {
       // This test USED to assert auto was byte-identical to the pre-accent-feature
       // derivation, so an existing save rendered exactly as before. That guarantee is
-      // now deliberately broken -- Austin reported that some auto combinations were
+      // now deliberately broken -- review reported that some auto combinations were
       // indistinguishable from the bare hull, and fixing that had to change what every
       // saved tank looks like. The machinery is kept and re-pinned rather than deleted,
       // because its real value was never the specific bytes: it is that a tweak inside
@@ -772,7 +772,7 @@ describe('createSkinTexture', () => {
       //
       // The six clouds entries below are not newly captured: they are byte-identical to
       // what this table held at 76ef38a, before `cumulus` existed. That equality is the
-      // evidence that the revert landed on the exact texture Austin compared against,
+      // evidence that the revert landed on the exact texture that comparison was made against,
       // rather than on something merely similar to it.
       const GOLDEN: Record<string, string> = {
         'blue/stripes': '68c745c5', 'blue/camo': '892c9da9', 'blue/clouds': 'cbe3c968', 'blue/checker': '126d1dc5', 'blue/flow': 'ffda8c06', 'blue/two-tone': '5b6d1dc5',
