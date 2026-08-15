@@ -273,7 +273,7 @@ always with `'solid'`.)
    skin. Options: (i) render it anyway and gate only the picker; (ii) fall back to
    `DEFAULT_SKIN` on read — small, since `customization.ts`'s `read()` already validates each
    field independently, but it silently repaints someone's tank; (iii) do not gate skins on
-   achievements at all. **A decision from Austin, not a measurement.**
+   achievements at all. **A design decision, not a measurement.**
 4. **Does a nearest-filtered, unmipmapped 128px tile shimmer or step visibly when scrolled at
    play distance?** Eyes, via `npm run gallery --scene game --slowmo` with `flow` saved. If it
    does, the fix is `magFilter`/`minFilter = LinearFilter` + `generateMipmaps = true` on the

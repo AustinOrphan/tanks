@@ -14,7 +14,7 @@ Decisions taken at adoption (the plan's open questions, resolved for this PR):
 
 1. The `tanks.run.v1` -> `v2` bump ships as planned. Losing an in-flight run
    (position + that attempt's lives) is a one-time, narrow regression, flagged in
-   the PR body for Austin's reversal; permanent progress is untouched.
+   the PR body for reversal on review; permanent progress is untouched.
 2. The frozen-table silent-drop (a legacy clear whose arena later leaves the
    campaign reads as never-cleared) stays SILENT, matching every other store's
    corrupt-data convention.
@@ -236,7 +236,7 @@ Legacy ordinal N translates to `LEGACY_ORDINAL_ARENA_IDS[N-1]` (an **arena** id,
 
 Matches issue #154's own "Out of scope" section, re-verified via `gh issue view 154` rather than assumed: finalizing the complete campaign level count; finalizing the placement of every existing arena (this PR ships `campaign.json` as a 1:1 mirror of today's order — no reordering happens here); designing post-eleven content; adding player-facing names/thumbnails/mastery records to `CampaignLevel` (the type stays `{id, arenaId}` only, exactly as the issue's own sketch allows extending additively later). Also out of scope, named explicitly rather than silently dropped: arena reuse (one arena at two campaign positions) — `CampaignLevel.id === arenaId`-shaped 1:1 assumption is baked into today's `campaign.json`, though the type itself (`id` and `arenaId` as separate fields) already supports it once a real second-position use case exists; a `campaigns.json`-wrapping multi-campaign shape (the single-object root is a deliberate YAGNI call, reversible without touching `CampaignLevel`/`CampaignDefinition`); JSON-file-based `firstMission`-by-campaign-position validation (the difficulty-curve spec's `docs/superpowers/specs/2026-08-02-difficulty-curve-design.md:87` line describing this is, per the backlog's own spike, not implemented in the tree today regardless of #154).
 
-## Open questions only Austin can settle
+## Open questions only the project owner can settle
 
 1. **Losing an in-flight run is an accepted, deliberate regression of this PR** (see Migration) — confirm that's acceptable, since it's a real, if narrow and one-time, player-facing UX hit at the moment this ships, distinct from #154's own required outcomes.
 2. **Does the frozen `LEGACY_ORDINAL_ARENA_IDS` table's silent-drop behaviour (a legacy clear whose arena has since been removed from the campaign entirely is treated as "never cleared") need a louder signal** — e.g., a console warning in dev builds — or is silent-degrade-to-reset consistent enough with every other store's existing convention that no signal is warranted? This plan defaults to silent, matching the rest of the codebase, but it is a real (if narrow) loss of permanent progress under a scenario #154 itself makes newly possible (removing an arena from the campaign).

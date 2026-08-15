@@ -1,6 +1,6 @@
 # Music suites: sets of interchangeable tracks, and the joins between sets
 
-Austin, 2026-08-02: *"the tracks … may need to be longer or at least be categorized
+The design feedback, 2026-08-02: *"the tracks … may need to be longer or at least be categorized
 such that there can be, like, four tracks that are very similar in theme and
 construction and build and flow together nicely no matter what order they're put
 in, and they can at the beginning and end of those tracks have a smooth transition
@@ -32,7 +32,7 @@ that drifted would desynchronise the grid, which is why the existing
 
 ## Transitions: three strategies, one implemented first
 
-Austin: *"we have to prepare to be able to use any of these, but we can start with
+The design feedback: *"we have to prepare to be able to use any of these, but we can start with
 one and try out the others."* So the strategy is **data, per suite**, and the
 mechanism is chosen by name. All three are described here; only `dominant` ships
 in the first pass.
@@ -40,7 +40,7 @@ in the first pass.
 ### 1. `dominant` — the pickup entry (the shipped strategy, fifth design)
 
 Four earlier attempts each composed interstitial material — a held pad, then
-arpeggios, then rolled swells — and Austin rejected every one, finally naming
+arpeggios, then rolled swells — and review rejected every one, finally naming
 the law they all broke: *"you're still using something that exists in neither
 section to bridge between the two and it's off."* **A bridge may use only
 material the sections themselves contain.**
@@ -95,9 +95,9 @@ data error in this repo.
 
 ## Compatibility rules (added 2026-08-02, after the siege join jarred)
 
-Austin heard the assault-to-siege join as "suddenly and pretty jarringly"
+The assault-to-siege join was heard as "suddenly and pretty jarringly"
 transformed, and the diagnosis was contrast, not machinery: 47% tempo gap, on
-top of a key and texture change. Rules, per his direction "within 20% tempo and
+top of a key and texture change. Rules, per the direction "within 20% tempo and
 related keys, probably weight same keys higher and then related keys":
 
 - **Tempo is a hard limit**: adjacent suites must be within 20% (`TEMPO_RATIO_LIMIT`).
@@ -110,7 +110,7 @@ related keys, probably weight same keys higher and then related keys":
 
 ## The through line
 
-Austin: "maybe there needs to be a reasonably consistent through line in sets?
+The design feedback: "maybe there needs to be a reasonably consistent through line in sets?
 Not monotonous but clearly related." Made structural rather than hoped for:
 sibling suites share **construction**, not material. The vanguard family is the
 arena family's shape in another key -- the same progression *skeleton*

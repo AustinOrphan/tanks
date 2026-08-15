@@ -1,6 +1,6 @@
 # Achievements (approved 2026-08-01)
 
-Austin: "achievements might be a good idea / and eventually we can tie some of these
+The design feedback: "achievements might be a good idea / and eventually we can tie some of these
 customizations to those achievements."
 
 ## What this is
@@ -84,7 +84,7 @@ with a single life remaining).
 
 ## Explicitly later
 
-**Tying customization to achievements.** Austin said "eventually". Skins and paint stay
+**Tying customization to achievements.** The design feedback said "eventually". Skins and paint stay
 free in this pass. The hook is the store's `earned()` set — a future gate reads it in
 the customize pane and refuses locked ids the same way the palette already refuses
 off-list ones. Designing that gate (which skins, what criteria, what a locked swatch
