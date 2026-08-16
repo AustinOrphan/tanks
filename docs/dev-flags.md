@@ -13,13 +13,12 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (13)
+## Boolean flags (12)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
 | `aimRay` | `aimRay` | `false` | Draws the player's computed aim: a ray along the turret and a marker where the cursor maps to on the ground. |
 | `autoplay` | `autoplay` | `false` | Drives the player with the scripted "competent player" AI instead of reading the input controller -- the game demos itself. |
-| `coop` | `coop` | `false` | Turns on couch co-op: a second player on gamepad[0]. |
 | `corpseBlock` | `corpseBlock` | `false` | Lets a tank killed earlier in the same tick still block a bullet aimed at it, instead of the shipped ghost rule where the bullet passes through. |
 | `gamepad` | `gamepad` | `false` | Merges gamepad[0] into the input stream alongside keyboard/mouse/touch. |
 | `invincible` | `invincible` | `false` | Makes the player unkillable: shells detonate harmlessly, blasts wash over. |
@@ -33,13 +32,9 @@ accident.
 
 Notes:
 
-- **coop**: Mutually exclusive with `gamepad` by construction: coop always claims gamepad slot 0.
-- **coop**: Not part of the playtest bundle.
-- **coop**: Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds for one player.
-- **coop**: Excluded from writing to the active run: the shared life pool has no decided meaning against the single-player-shaped run record yet.
 - **corpseBlock**: Applies in both the campaign and the sandbox.
 - **gamepad**: Single player only: gamepad[1] onward is ignored.
-- **gamepad**: Mutually exclusive with `coop` by construction: when `coop` is on, slot 0 is always built without the gamepad merge, regardless of this flag.
+- **gamepad**: Mutually exclusive with `players` >= 2 by construction: once a second player is active, slot 0 is always built without the gamepad merge, regardless of this flag.
 - **invincible**: In the playtest bundle.
 - **mineReach**: In the playtest bundle.
 - **mineTimer**: In the playtest bundle.
@@ -48,12 +43,13 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (6)
+## Valued flags (7)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
+| `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
 | `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter) instead of the shipped `high` default. |
 | `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
 | `sandboxWalls` | `walls` | a positive integer, bare or as `random:N` | `null` | Sets how many interior walls the sandbox scatters. |
@@ -62,6 +58,10 @@ Notes:
 Notes:
 
 - **level**: A jump does not consume, restore, advance, or complete the active run.
+- **players**: Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 always claims gamepad slot 0 for the standalone co-player source instead.
+- **players**: Not part of the playtest bundle.
+- **players**: Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds for one player.
+- **players**: Excluded from writing to the active run: the shared life pool has no decided meaning against the single-player-shaped run record yet.
 - **sandboxTanks**: Only read when `level=sandbox`.
 - **sandboxTanks**: Any unrecognised kind rejects the whole list to null rather than dropping entries.
 - **sandboxWalls**: Only read when `level=sandbox`.
@@ -79,12 +79,12 @@ itself; it expands at parse time into:
 Notes:
 
 - Additive only: an explicit `=0` on one of the four loses to the bundle -- individual flags can ADD to the kit, not veto it.
-- Deliberately excludes `coop`: an orthogonal, riskier experimental mode a shared `?playtest=1` link must not silently enable.
+- Deliberately excludes `players`: an orthogonal, riskier experimental mode a shared `?playtest=1` link must not silently enable -- and structurally impossible anyway, since `players` is valued, not boolean, so `expandsTo`'s own BooleanFlagKey type excludes it from ever being listed here.
 
 ## Examples
 
 - `?dev=1&aimRay=1` -- draw the aim ray.
 - `?dev=1&playtest=1` -- the whole playtest kit in one flag.
 - `?dev=1&level=sandbox&tanks=brown,teal,teal&walls=8&disarmed=0` -- a scripted, armed sandbox arena -- repeats in `tanks` are kept, not deduplicated.
-- `?dev=1&coop=1` -- couch co-op, second player on gamepad[0].
+- `?dev=1&players=3` -- 3-player couch co-op, ring-spawned around P1.
 - `?dev=1&quality=low` -- force the low render quality preset.

@@ -145,9 +145,10 @@ export interface DevFlags {
    * onward is ignored, matching every other input path (nothing about multiplayer exists
    * beyond `stepInputs` taking a list -- see CLAUDE.md).
    *
-   * Mutually exclusive with `coop` BY CONSTRUCTION, not merely by convention: when
-   * `coop` is on, slot 0 is always built with `{gamepad: false}` regardless of this
-   * flag's value, so the two features can never both claim gamepad[0] -- see loop.ts.
+   * Mutually exclusive with `players >= 2` BY CONSTRUCTION, not merely by convention:
+   * once a second player is active, slot 0 is always built with `{gamepad: false}`
+   * regardless of this flag's value, so the two features can never both claim
+   * gamepad[0] -- see loop.ts.
    */
   gamepad: boolean;
   /**
@@ -167,7 +168,24 @@ export interface DevFlags {
    * read but never wired there -- no slot-1 source is constructed and `playerCount`
    * passed to `world()` stays 1. See loop.ts's `coopActive`.
    */
-  coop: boolean;
+  /**
+   * How many player-controlled tanks share the world: couch co-op generalized past two
+   * (owner directive 3: ceiling to 4).
+   *
+   * Valued, not boolean (unlike the `coop` flag it replaces) -- a co-player COUNT is
+   * the actual shape of the feature, and `coop=1` was always secretly "playerCount 2,
+   * full stop." 1 is an explicit no-op (matches omission, so a `players=1..4` sweep
+   * script never needs a special case for the unflagged default); 2-4 add co-players.
+   * Anything else (0, negative, non-integer, 5+) rejects to `null`, which resolves to
+   * the unflagged default of 1 -- matching `quality`'s reject-to-null idiom rather than
+   * clamping an out-of-range value into a different meaning.
+   *
+   * Excluded from the sandbox (`?dev=1&level=sandbox`): `createSandboxWorld` takes no
+   * `playerCount` and has no co-op spawn rule to inherit from `loadArena`, so `players`
+   * is read but never wired there -- no extra slot is constructed and `playerCount`
+   * passed to `world()` stays 1. See loop.ts's `playerCount`.
+   */
+  players: number | null;
   /**
    * A render quality preset -- `low` | `medium` | `high` -- see `render/quality.ts` for
    * what each one sets (antialias, pixel ratio cap, shadow map size, shadow filter).
@@ -207,7 +225,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   saveIo: false,
   replay: false,
   gamepad: false,
-  coop: false,
+  players: null,
   quality: null,
 };
 
@@ -241,6 +259,17 @@ function asSeed(params: URLSearchParams, name: string): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
   return n;
+}
+
+/** 1-4, or null when absent, empty, non-integer, or out of that range -- reject-to-null
+ *  (asQuality's idiom), not clamped: an out-of-range value must not silently become a
+ *  different, unrequested player count. */
+function asPlayers(params: URLSearchParams): number | null {
+  const raw = params.get('players');
+  if (raw === null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  return n >= 1 && n <= 4 ? n : null;
 }
 
 /** A 1-based level number, the word 'sandbox', or null. Case-sensitive on purpose. */
@@ -309,7 +338,7 @@ export function parseDevFlags(search: string): DevFlags {
     saveIo: isOn(params, 'saveIo'),
     replay: isOn(params, 'replay'),
     gamepad: isOn(params, 'gamepad'),
-    coop: isOn(params, 'coop'),
+    players: asPlayers(params),
     quality: asQuality(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
@@ -396,8 +425,10 @@ export const PLAYTEST_BUNDLE: BundleSpec = {
   notes: [
     'Additive only: an explicit `=0` on one of the four loses to the bundle -- individual ' +
       'flags can ADD to the kit, not veto it.',
-    'Deliberately excludes `coop`: an orthogonal, riskier experimental mode a shared ' +
-      '`?playtest=1` link must not silently enable.',
+    'Deliberately excludes `players`: an orthogonal, riskier experimental mode a shared ' +
+      '`?playtest=1` link must not silently enable -- and structurally impossible anyway, ' +
+      'since `players` is valued, not boolean, so `expandsTo`\'s own BooleanFlagKey type ' +
+      'excludes it from ever being listed here.',
   ],
 };
 
@@ -509,15 +540,19 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description: 'Merges gamepad[0] into the input stream alongside keyboard/mouse/touch.',
     notes: [
       'Single player only: gamepad[1] onward is ignored.',
-      'Mutually exclusive with `coop` by construction: when `coop` is on, slot 0 is always ' +
-        'built without the gamepad merge, regardless of this flag.',
+      'Mutually exclusive with `players` >= 2 by construction: once a second player is ' +
+        'active, slot 0 is always built without the gamepad merge, regardless of this flag.',
     ],
   },
-  coop: {
-    kind: 'boolean',
-    description: 'Turns on couch co-op: a second player on gamepad[0].',
+  players: {
+    kind: 'valued',
+    type: 'an integer 1-4 (1 is an explicit no-op; 2-4 add co-players)',
+    description:
+      'Sets how many player-controlled tanks share the world -- couch co-op, generalized ' +
+      'past two.',
     notes: [
-      'Mutually exclusive with `gamepad` by construction: coop always claims gamepad slot 0.',
+      'Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 ' +
+        'always claims gamepad slot 0 for the standalone co-player source instead.',
       'Not part of the playtest bundle.',
       'Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds ' +
         'for one player.',

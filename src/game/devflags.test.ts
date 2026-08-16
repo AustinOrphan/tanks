@@ -246,6 +246,36 @@ describe('parseDevFlags: gamepad', () => {
   });
 });
 
+describe('parseDevFlags: players', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?players=3').players).toBeNull();
+  });
+
+  it('is null when absent', () => {
+    expect(parseDevFlags('?dev=1').players).toBeNull();
+  });
+
+  it('accepts 1 as an explicit no-op, matching the unflagged default', () => {
+    expect(parseDevFlags('?dev=1&players=1').players).toBe(1);
+  });
+
+  it('accepts 2-4, the co-player range -- population: all 3 values', () => {
+    for (const v of [2, 3, 4]) {
+      expect(parseDevFlags(`?dev=1&players=${v}`).players).toBe(v);
+    }
+  });
+
+  it('rejects anything else to null rather than clamping -- population: the 6 forms below', () => {
+    for (const v of ['0', '5', '-1', '1.5', 'abc', '']) {
+      expect(parseDevFlags(`?dev=1&players=${v}`).players).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&players=3')).toEqual({ ...DEV_FLAGS_OFF, players: 3 });
+  });
+});
+
 describe('the sandbox roster tracks the canonical kind list', () => {
   it('every enemy kind in TANK_KINDS parses in tanks= -- a new kind is spawnable the moment it exists', () => {
     // Pins the derivation in devflags.ts (review: it was built to admit new

@@ -105,8 +105,8 @@ export interface GameDeps {
     options?: { gamepad?: boolean },
   ) => InputController;
   /**
-   * Co-op's slot 1: a standalone gamepad-only `PlayerInputSource`, built only when
-   * `coop` is on (see `startGameWith`'s `coopActive`). Injected for the same reason
+   * Slot 1's standalone gamepad-only `PlayerInputSource`, built only when `playerCount`
+   * is 2 or more (see `startGameWith`'s `playerCount`). Injected for the same reason
    * every other collaborator here is -- `createGamepadInputSource` itself is a plain
    * module function with no lifecycle to fake, but going through GameDeps keeps its
    * CONSTRUCTION SITE (and how many times it is called) inside the tested function,
@@ -223,6 +223,53 @@ export type DevConsoleTarget = Record<string, unknown>;
  */
 export function deriveSeed(wallMs: number): number {
   return (wallMs ^ (wallMs >>> 9)) >>> 0 || 1;
+}
+
+/**
+ * A `PlayerInputSource` for a co-player slot with no real controller behind it yet
+ * (slots 2..playerCount-1 -- see `startGameWith`'s `slots` construction). Never moves,
+ * never fires, never lays a mine -- but its AIM matters, and a naive `{move: {0,0},
+ * aim: {0,0}, fire: false, mine: false}` constant is NOT neutral there.
+ *
+ * `world.ts`'s `driveTank` computes `aimDir = vsub(input.aim, player.pos)` and only
+ * skips the turret slew when `aimDir` is EXACTLY `{0,0}`. A literal `aim: {0,0}` is
+ * only that zero for a tank spawned at the world origin -- for every other spawn it is
+ * a real, nonzero direction, so the turret slews to face world-origin and sticks there.
+ * This is the same shape `createGamepadInputSource` (`input/gamepad.ts`) has when no pad
+ * is ever connected: its `aim` never leaves its own `{0,0}` default either, which is why
+ * shipped co-op's slot 1 already had this defect with no pad plugged in.
+ *
+ * The fix here is to echo the tank's OWN current position back as `aim`: `vsub(pos, pos)`
+ * is `{0,0}` by construction, so the guard fails and the turret holds whatever heading it
+ * already has -- the actual "idle" behaviour, not a slew toward a coordinate that happens
+ * to be `{0,0}`. `lastPos` starts at the same `{0,0}` literal every other input source in
+ * this tree defaults `aim` to (see `input/input.ts`'s own `let aim: Vec2 = {0, 0}`) --
+ * `setPlayerPosition` is called once per simulated tick from `onSimulated` below, so this
+ * default is live only for whatever handful of ticks (typically off-screen, during
+ * splash/title) precede the first call.
+ *
+ * Deliberately NOT run through `quantizeAim` (`input/touch.ts`), unlike every real
+ * controller's sample(): quantizing rounds `aim` to the nearest `AIM_GRID` step, and for
+ * an off-grid spawn (e.g. (11, 16.333)) that rounding makes `aimDir` a small but NONZERO
+ * vector -- the guard would fire on a rounding artifact and the turret would creep
+ * instead of holding. The echo has to be exact, not merely close.
+ */
+export function createIdleInputSource(): PlayerInputSource {
+  let lastPos: Vec2 = { x: 0, y: 0 };
+  return {
+    sample(): InputState {
+      return { move: { x: 0, y: 0 }, aim: { ...lastPos }, fire: false, mine: false };
+    },
+    setPlayerPosition(pos: Vec2 | null): void {
+      if (pos !== null) lastPos = { x: pos.x, y: pos.y };
+    },
+    gamepadConnected(): boolean {
+      return false;
+    },
+    dispose(): void {
+      // No resources: no listeners, no timers, no wrapped reader.
+    },
+  };
 }
 
 /**
@@ -432,15 +479,20 @@ export function startGameWith(
   const { width, height } = shownBounds;
 
   /**
-   * `coop` read once, not re-read per world: mirrors `createLevelSystem`'s own
+   * `players` read once, not re-read per world: mirrors `createLevelSystem`'s own
    * `flags.level === 'sandbox'` branch (levels.ts) rather than a new field on
    * `LevelSystem` -- the sandbox is excluded by checking the SAME flag that decided
    * which `LevelSystem` this session got, so the two can never disagree about which
    * session is the sandbox one. `createSandboxWorld` takes no `playerCount` and has
-   * no co-op spawn rule to inherit from `loadArena` -- see devflags.ts's `coop` doc
+   * no co-op spawn rule to inherit from `loadArena` -- see devflags.ts's `players` doc
    * comment for why this is excluded rather than built.
+   *
+   * The sandbox exclusion is folded directly into `playerCount` (rather than kept as a
+   * separate boolean the way `coopActive` was): 1 in the sandbox regardless of what the
+   * flag says, else `players ?? 1` -- so every site below that used to read `coopActive`
+   * generalizes uniformly to `playerCount >= 2` / `playerCount`.
    */
-  const coopActive = deps.devFlags.coop && deps.devFlags.level !== 'sandbox';
+  const playerCount = deps.devFlags.level === 'sandbox' ? 1 : (deps.devFlags.players ?? 1);
 
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
@@ -456,7 +508,7 @@ export function startGameWith(
   function buildWorld(atLevel: CampaignLevel, lives?: number): World {
     const w = deps.levels.world(
       atLevel, nextSeed(), deps.devFlags.mineTrigger ?? undefined, lives,
-      coopActive ? 2 : undefined,
+      playerCount >= 2 ? playerCount : undefined,
     );
     if (deps.devFlags.invincible) {
       const p = w.tanks.find((t) => t.kind === 'player');
@@ -500,12 +552,13 @@ export function startGameWith(
     return i >= 0 && i + 1 < deps.levels.levels.length ? deps.levels.levels[i + 1] : null;
   }
 
-  // `&& !coopActive`: a coop boot gets fresh LIVES from balance.json, the same as a
-  // dev jump -- see campaignActive's doc comment for why coop must not adopt (or
-  // later write) the real run's life count. Without this, a coop session opened
-  // mid-campaign would silently inherit whatever life count the solo run happened
-  // to be sitting on, which has no decided meaning for a shared pool.
-  const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump && !coopActive
+  // `&& playerCount === 1`: a multiplayer boot gets fresh LIVES from balance.json, the
+  // same as a dev jump -- see campaignActive's doc comment for why a multiplayer
+  // session must not adopt (or later write) the real run's life count. Without this, a
+  // multiplayer session opened mid-campaign would silently inherit whatever life count
+  // the solo run happened to be sitting on, which has no decided meaning for a shared
+  // pool.
+  const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump && playerCount === 1
     ? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
@@ -536,18 +589,18 @@ export function startGameWith(
    * pre-existing behaviour -- it is monotonic and was always writable from a dev
    * jump; only the position/life-pool bookkeeping this function gates is new here.
    *
-   * `!coopActive` (coop semantics plan, docs/superpowers/plans/2026-08-15-coop-semantics.md):
-   * the simpler, safer call the plan itself flags. Coop's shared life pool has no
-   * decided meaning against the single-player-shaped `RunState.livesRemaining` field
-   * (does P2's death count against the solo player's progress if coop is later
-   * abandoned mid-run?) -- writing to it now would be writing data whose meaning
-   * nobody has decided. Excluded identically to practice/dev-jump/sandbox, at zero
-   * cost today since coop is dev-flag-only with no menu path; a future "ship coop for
-   * real" PR can revisit deliberately. See bootLives below for the matching boot-time
-   * half of this exclusion.
+   * `playerCount === 1` (coop semantics plan, docs/superpowers/plans/2026-08-15-coop-semantics.md;
+   * generalized past two players in the N-player PR): the simpler, safer call the plan
+   * itself flags. A shared life pool has no decided meaning against the
+   * single-player-shaped `RunState.livesRemaining` field (does P2's death count against
+   * the solo player's progress if the session is later abandoned mid-run?) -- writing to
+   * it now would be writing data whose meaning nobody has decided. Excluded identically
+   * to practice/dev-jump/sandbox, at zero cost today since `players` is dev-flag-only
+   * with no menu path; a future "ship multiplayer for real" PR can revisit deliberately.
+   * See bootLives above for the matching boot-time half of this exclusion.
    */
   function campaignActive(): boolean {
-    return deps.levels.tracksProgress && !deps.levels.isDevJump && !inPractice && !coopActive;
+    return deps.levels.tracksProgress && !deps.levels.isDevJump && !inPractice && playerCount === 1;
   }
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
@@ -567,12 +620,12 @@ export function startGameWith(
     quality: qualityFor(deps.devFlags.quality),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
-    // Mutually exclusive with `coop` BY CONSTRUCTION: when co-op is on, slot 0 is
-    // ALWAYS built with gamepad:false, whatever `devFlags.gamepad` says -- the merge's
-    // own reader is then never even constructed (input.ts's own "off means the reader
-    // is never constructed" idiom), so slot 1 below can own gamepad[0] exclusively
-    // with no runtime arbitration needed between the two.
-    gamepad: coopActive ? false : deps.devFlags.gamepad,
+    // Mutually exclusive with a second player BY CONSTRUCTION: once `playerCount >= 2`,
+    // slot 0 is ALWAYS built with gamepad:false, whatever `devFlags.gamepad` says -- the
+    // merge's own reader is then never even constructed (input.ts's own "off means the
+    // reader is never constructed" idiom), so slot 1 below can own gamepad[0]
+    // exclusively with no runtime arbitration needed between the two.
+    gamepad: playerCount >= 2 ? false : deps.devFlags.gamepad,
   });
   // The saved scheme, pushed at boot so the very first touch already uses it -- see the
   // echo-back wiring below for what happens when the player changes it in the HUD.
@@ -581,13 +634,21 @@ export function startGameWith(
   // the aim side already reads under the right gesture.
   input.setFireMode(deps.touchSettings.fireMode());
   /**
-   * Co-op's slot 1: a standalone gamepad-only source, owning gamepad[0] exclusively
-   * (see the `gamepad: false` above). `null` when `coop` is off or excluded by the
-   * sandbox -- the seam for N later is populating more slots here, with no change to
-   * the driver, recorder or replay layers, all of which only ever see "the list."
+   * Slot 1: a standalone gamepad-only source, owning gamepad[0] exclusively (see the
+   * `gamepad: false` above). `null` when `playerCount` is 1 or the session is excluded
+   * by the sandbox.
    */
-  const slot1: PlayerInputSource | null = coopActive ? deps.createGamepadSource() : null;
-  const slots: PlayerInputSource[] = slot1 !== null ? [input, slot1] : [input];
+  const slot1: PlayerInputSource | null = playerCount >= 2 ? deps.createGamepadSource() : null;
+  /**
+   * Slots 2..playerCount-1: no real per-index controller routing exists yet (that is
+   * PR3's job -- see the N-player arc), so every co-player beyond slot 1 is filled with
+   * `createIdleInputSource()`, which holds its tank's spawn heading instead of slewing
+   * toward world-origin (see that function's own doc comment). Empty at playerCount <= 2,
+   * so this changes nothing about today's shipped two-player shape.
+   */
+  const idleSlots: PlayerInputSource[] = [];
+  for (let i = 2; i < playerCount; i++) idleSlots.push(createIdleInputSource());
+  const slots: PlayerInputSource[] = slot1 !== null ? [input, slot1, ...idleSlots] : [input];
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
   // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
@@ -608,9 +669,9 @@ export function startGameWith(
    * does, so step() cannot tell which one produced it, and a replay stays an exact
    * function of its inputs whether autoplay was on or not.
    *
-   * Substitutes SLOT 0 only: autoplay predates co-op and only ever demos P1. Under
-   * `coop`, slot 1's real gamepad still samples through on the same tick -- the two
-   * are not exclusive of each other.
+   * Substitutes SLOT 0 only: autoplay predates multiplayer and only ever demos P1. At
+   * `playerCount >= 2`, every other slot's own source still samples through on the same
+   * tick -- the two are not exclusive of each other.
    */
   const autoplayRnd = mulberry32(deriveSeed(deps.wallMs()) + 1);
   const autoplayState = createPlayerAiState(autoplayRnd);
@@ -806,9 +867,9 @@ export function startGameWith(
       // the win/lose run-summary line updates a beat after the state flips -- the
       // winning kill is in THIS batch, not the one before the panel opened.
       hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
-      // Gated on the WORLD's real player count, not the coopActive flag -- the same
+      // Gated on the WORLD's real player count, not the playerCount variable -- the same
       // convention replayMetaFor uses, and the two never diverge in practice (the
-      // sandbox exclusion keeps coopActive and countPlayerTanks(world) in lockstep by
+      // sandbox exclusion keeps playerCount and countPlayerTanks(world) in lockstep by
       // construction). null means "never show", not merely "hide right now".
       hud.setCoopKills(countPlayerTanks(driver.world) >= 2 ? coopKills : null);
     },
@@ -1341,10 +1402,12 @@ export function startGameWith(
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
-      // Slot 1's standalone gamepad source, when co-op built one -- no listeners of
-      // its own (see GamepadReader.dispose's doc comment), but disposed alongside
-      // slot 0 for symmetry and so a future stateful slot 1 has somewhere to release.
-      slot1?.dispose();
+      // Every co-player slot beyond slot 0 (slot 1's standalone gamepad source, when
+      // one was built, plus any idle-filled slots) -- none hold listeners of their own
+      // today (see GamepadReader.dispose's and createIdleInputSource's own doc
+      // comments), but disposed alongside slot 0 for symmetry and so a future stateful
+      // slot has somewhere to release.
+      slots.slice(1).forEach((s) => s.dispose());
       renderer.dispose();
       // The panel can still be open at teardown (main.ts's pagehide path can fire
       // any time) -- dispose whatever live preview context is holding, same as the

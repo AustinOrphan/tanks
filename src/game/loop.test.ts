@@ -21,7 +21,7 @@ import {
 } from '../input/touch';
 import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
 import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
-import type { World } from '../sim/world';
+import { createWorld, applyPlayerInput, type World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
@@ -31,6 +31,7 @@ import {
   playerShellsInFlight,
   startGameWith,
   deriveSeed,
+  createIdleInputSource,
   isMuteHotkey,
   musicIntensity,
   isPauseHotkey,
@@ -1089,6 +1090,66 @@ describe('deriveSeed', () => {
 
   it('varies with wall-clock time', () => {
     expect(deriveSeed(1000)).not.toBe(deriveSeed(2000));
+  });
+});
+
+describe('createIdleInputSource', () => {
+  it('never moves, fires, or lays a mine', () => {
+    const src = createIdleInputSource();
+    const state = src.sample();
+    expect(state.move).toEqual({ x: 0, y: 0 });
+    expect(state.fire).toBe(false);
+    expect(state.mine).toBe(false);
+  });
+
+  it('defaults aim to {0,0} before any setPlayerPosition call, matching every other input source\'s own boot-time default', () => {
+    const src = createIdleInputSource();
+    expect(src.sample().aim).toEqual({ x: 0, y: 0 });
+  });
+
+  it('echoes the position handed to setPlayerPosition back as its own aim, exactly (not quantized)', () => {
+    const src = createIdleInputSource();
+    src.setPlayerPosition({ x: 11, y: 16.333 });
+    expect(src.sample().aim).toEqual({ x: 11, y: 16.333 });
+  });
+
+  it('tracks a moving position across repeated calls, always echoing the LATEST one', () => {
+    const src = createIdleInputSource();
+    src.setPlayerPosition({ x: 1, y: 1 });
+    expect(src.sample().aim).toEqual({ x: 1, y: 1 });
+    src.setPlayerPosition({ x: 2, y: 5 });
+    expect(src.sample().aim).toEqual({ x: 2, y: 5 });
+  });
+
+  it('a null setPlayerPosition call does not clear the last known one', () => {
+    const src = createIdleInputSource();
+    src.setPlayerPosition({ x: 3, y: 4 });
+    src.setPlayerPosition(null);
+    expect(src.sample().aim).toEqual({ x: 3, y: 4 });
+  });
+
+  it('gamepadConnected() is always false: an idle slot has no controller', () => {
+    expect(createIdleInputSource().gamepadConnected()).toBe(false);
+  });
+
+  it('dispose() does not throw', () => {
+    expect(() => createIdleInputSource().dispose()).not.toThrow();
+  });
+
+  it('RED-FIRST: driven through the REAL sim (driveTank via applyPlayerInput), a non-origin ' +
+    'tank\'s turret holds its spawn heading instead of slewing toward world-origin -- the ' +
+    'bug this source exists to avoid, pinned at the mechanism level in world.test.ts', () => {
+    const tank: Tank = {
+      id: 1, kind: 'player', pos: { x: 11, y: 16.333 }, bodyAngle: 0, turretAngle: 0,
+      alive: true, desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0,
+      mineCooldown: 0, aiState: 'idle', aiTimer: 0,
+    };
+    const spawns = [{ kind: 'player' as const, pos: { x: tank.pos.x, y: tank.pos.y }, angle: 0 }];
+    const world = createWorld({ walls: [], tanks: [tank], spawns, lives: 3 });
+    const src = createIdleInputSource();
+    src.setPlayerPosition({ x: tank.pos.x, y: tank.pos.y });
+    applyPlayerInput(world, src.sample(), []);
+    expect(tank.turretAngle).toBe(0); // held, not slewed toward (0,0)
   });
 });
 
@@ -2612,7 +2673,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     // case is the TRACKED player (P1/playerId) dying in a coop session, where
     // campaignActive() would otherwise still read true.
     it('the TRACKED player dying in coop never reaches the run store, even though tracksProgress/isDevJump/inPractice all say it could', () => {
-      const h = boot(makeDeps({ devFlags: { coop: true }, savedRun: { level: 0, lives: LIVES } }));
+      const h = boot(makeDeps({ devFlags: { players: 2 }, savedRun: { level: 0, lives: LIVES } }));
       const world = h.rec.builtWorlds[0];
       const p0 = world.tanks.find((t: Tank) => t.kind === 'player')!; // the tracked player
       const enemy = world.tanks.find((t: Tank) => t.kind !== 'player')!;
@@ -2630,7 +2691,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     it('a coop boot with an existing real run in progress gets fresh LIVES, not the run\'s stale count', () => {
       // 1 life, deliberately not LIVES: both the buggy and fixed paths would boot at
       // a value indistinguishable from LIVES if the saved run already held LIVES.
-      const h = boot(makeDeps({ devFlags: { coop: true }, savedRun: { level: 0, lives: 1 } }));
+      const h = boot(makeDeps({ devFlags: { players: 2 }, savedRun: { level: 0, lives: 1 } }));
       expect(h.rec.levelBuilds[0].lives).toBeUndefined();
       h.handle.dispose();
     });
@@ -2643,7 +2704,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     // all. This drives a REAL kill through a driven frame and checks the tally
     // reaches the HUD -- the composition, not the arithmetic.
     it('a kill credited to P2 flows through tallyCoopKills into hud.setCoopKills, in a real driven frame', () => {
-      const h = boot(makeDeps({ devFlags: { coop: true } }));
+      const h = boot(makeDeps({ devFlags: { players: 2 } }));
       const world = h.rec.builtWorlds[0];
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       const enemy = world.tanks.find((t: Tank) => t.kind !== 'player')!;
@@ -3429,14 +3490,15 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
   });
 });
 
-describe('startGameWith: couch co-op input routing (coop devflag)', () => {
-  // (a) The regression signal: `coop` off must leave every pre-existing fake and
-  // assertion in this file unchanged. The other 201 tests in this file already prove
-  // this by construction (none of them touch `coop`, and all pass unmodified against
-  // the harness changes this PR made) -- this test states the invariant explicitly,
-  // for the specific new surfaces this PR added, so a future change that leaks coop
-  // machinery into the off path fails HERE rather than only being caught implicitly.
-  it('coop off: no gamepad source is built, no playerCount is passed, slot 1 never samples or receives a position', () => {
+describe('startGameWith: couch co-op input routing (players devflag)', () => {
+  // (a) The regression signal: `players` unset (playerCount 1) must leave every
+  // pre-existing fake and assertion in this file unchanged. The other 201 tests in this
+  // file already prove this by construction (none of them touch `players`, and all pass
+  // unmodified against the harness changes this PR made) -- this test states the
+  // invariant explicitly, for the specific new surfaces this PR added, so a future
+  // change that leaks multiplayer machinery into the off path fails HERE rather than
+  // only being caught implicitly.
+  it('players unset: no gamepad source is built, no playerCount is passed, slot 1 never samples or receives a position', () => {
     const h = boot(makeDeps());
     h.setState('playing');
     h.fireFrame(100);
@@ -3445,7 +3507,7 @@ describe('startGameWith: couch co-op input routing (coop devflag)', () => {
     expect(h.rec.slot1Samples).toBe(0);
     expect(h.rec.slot1Positions).toEqual([]);
     // Slot 0's own gamepad option is governed by `gamepad` alone, exactly as before
-    // this PR -- `coop` off must not perturb it either way.
+    // this PR -- `players` unset must not perturb it either way.
     expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
     h.handle.dispose();
     expect(h.rec.slot1Disposed).toBe(false); // nothing was ever built to dispose
@@ -3456,12 +3518,12 @@ describe('startGameWith: couch co-op input routing (coop devflag)', () => {
   // constructs a genuine 2-player world via createWorldFor/loadArena when handed
   // playerCount 2 (see the `world:` fake above), so `controlledBy === i` here is the
   // production spawn rule, not a stand-in for it.
-  it('coop on: builds a REAL 2-player world (playerCount 2), and each slot\'s setPlayerPosition receives its OWN controlledBy tank\'s position', () => {
-    const h = boot(makeDeps({ devFlags: { coop: true } }));
+  it('players=2: builds a REAL 2-player world (playerCount 2), and each slot\'s setPlayerPosition receives its OWN controlledBy tank\'s position', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
     expect(h.rec.playerCounts).toEqual([2]);
     expect(h.rec.gamepadSourceBuilds).toBe(1);
-    // Mutual exclusion by construction: slot 0 must never claim gamepad[0] once co-op
-    // owns it, whatever `devFlags.gamepad` says (default off here).
+    // Mutual exclusion by construction: slot 0 must never claim gamepad[0] once a
+    // second player owns it, whatever `devFlags.gamepad` says (default off here).
     expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
 
     const world = h.rec.builtWorlds[0];
@@ -3493,27 +3555,84 @@ describe('startGameWith: couch co-op input routing (coop devflag)', () => {
   // (c) Mutual exclusion, the other half: with BOTH flags on, slot 0 must still never
   // build its own gamepad reader, and slot 1 must be built EXACTLY once -- not zero
   // (co-op silently not wired) and not two (a duplicate reader racing the same pad).
-  it('coop=1 + gamepad=1 together: slot 0 stays gamepad:false, and exactly ONE gamepad source is built', () => {
-    const h = boot(makeDeps({ devFlags: { coop: true, gamepad: true } }));
+  it('players=2 + gamepad=1 together: slot 0 stays gamepad:false, and exactly ONE gamepad source is built', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, gamepad: true } }));
     expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
     expect(h.rec.gamepadSourceBuilds).toBe(1);
     h.handle.dispose();
   });
 
   // (d) The sandbox exclusion: createSandboxWorld takes no playerCount and has no
-  // co-op spawn rule to inherit from loadArena, so `coop` must degrade to a single
+  // co-op spawn rule to inherit from loadArena, so `players` must degrade to a single
   // slot rather than either crashing or silently no-opping.
-  it('coop=1 + level=sandbox: degrades to a single-slot session -- no gamepad source, no playerCount 2', () => {
-    const h = boot(makeDeps({ devFlags: { coop: true, level: 'sandbox' } }));
+  it('players=2 + level=sandbox: degrades to a single-slot session -- no gamepad source, no playerCount 2', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, level: 'sandbox' } }));
     expect(h.rec.gamepadSourceBuilds).toBe(0);
     expect(h.rec.playerCounts).toEqual([undefined]);
-    // Slot 0 is unaffected: with coop excluded, its own gamepad option reverts to
-    // devFlags.gamepad alone (off here, matching every non-coop boot).
+    // Slot 0 is unaffected: with the sandbox excluding multiplayer, its own gamepad
+    // option reverts to devFlags.gamepad alone (off here, matching every
+    // single-player boot).
     expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.slot1Samples).toBe(0);
     expect(h.rec.slot1Positions).toEqual([]);
+    h.handle.dispose();
+  });
+
+  // (e)-(g): N=3/4, the idle-fill for slots 2..playerCount-1 this PR adds. Slot 1 keeps
+  // its real gamepad source (unaffected by N); slots 2 and 3 get createIdleInputSource()
+  // instead -- no gamepad source built for them (gamepadSourceBuilds stays 1), and they
+  // are exercised through the SAME production `slots.map` sample() path as slot 0/1,
+  // not called directly -- the composition-blindness class CLAUDE.md's testing
+  // conventions section warns about.
+  it('players=3: builds a REAL 3-player world, exactly one gamepad source (slot 1), and slot 2 tracks its own tank\'s position via setPlayerPosition', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } }));
+    expect(h.rec.playerCounts).toEqual([3]);
+    expect(h.rec.gamepadSourceBuilds).toBe(1); // slot 1 only -- slots 2+ are idle-filled
+
+    const world = h.rec.builtWorlds[0];
+    const players = world.tanks.filter((t: Tank) => t.kind === 'player');
+    expect(players).toHaveLength(3);
+    const p2 = players.find((t: Tank) => t.controlledBy === 2)!;
+    expect(p2).toBeDefined();
+    const spawnPos = { x: p2.pos.x, y: p2.pos.y };
+
+    h.setState('playing');
+    h.fireFrame(100);
+    // Slot 2's idle source has no fake recorder of its own (it is real production code,
+    // not an injected GameDeps collaborator -- see createIdleInputSource's own doc
+    // comment for why it needs none), so its effect is observed on the TANK: an idle
+    // source never moves (unlike slot 1's fake, which always drives +x) and holds its
+    // spawn heading -- the actual defect this PR fixes, proven negatively at the
+    // production wiring layer, not just at createIdleInputSource's own unit tests.
+    expect(p2.pos).toEqual(spawnPos);
+    expect(p2.turretAngle).toBe(0); // held at spawn, never slewed toward world-origin
+    h.handle.dispose();
+  });
+
+  it('players=4: fills two idle slots (2 and 3), still exactly one real gamepad source', () => {
+    const h = boot(makeDeps({ devFlags: { players: 4 } }));
+    expect(h.rec.playerCounts).toEqual([4]);
+    expect(h.rec.gamepadSourceBuilds).toBe(1);
+
+    const world = h.rec.builtWorlds[0];
+    const players = world.tanks.filter((t: Tank) => t.kind === 'player');
+    expect(players).toHaveLength(4);
+    h.setState('playing');
+    h.fireFrame(100);
+    for (const slot of [2, 3]) {
+      const p = players.find((t: Tank) => t.controlledBy === slot)!;
+      expect(p, `slot ${slot}`).toBeDefined();
+      expect(p.turretAngle, `slot ${slot} turretAngle`).toBe(0); // idle-held, not slewed
+    }
+    h.handle.dispose();
+  });
+
+  it('players=1 (explicit no-op): behaves identically to players unset', () => {
+    const h = boot(makeDeps({ devFlags: { players: 1 } }));
+    expect(h.rec.playerCounts).toEqual([undefined]);
+    expect(h.rec.gamepadSourceBuilds).toBe(0);
     h.handle.dispose();
   });
 });
