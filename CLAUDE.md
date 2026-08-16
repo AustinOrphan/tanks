@@ -746,6 +746,10 @@ expands to invincible + shellCount + mineReach + mineTimer. `parseDevFlags` deri
 boolean list from `DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what
 they cover.
 
+`docs/dev-flags.md` is the generated, programmatically-kept-current flag reference —
+one row per flag, built from `devflags.ts`'s `FLAG_REGISTRY` by `npm run devflags:doc`
+and guarded against drift by `tools/devflags/doc.test.ts`.
+
 **`roundPhaseHud` is the first flag to complete the cycle: it SHIPPED, so the flag is
 gone and the behaviour is on.** The round opens with `COUNTDOWN_TICKS` (3.0s) in which
 movement is blocked; with no HUD, the player pressed a direction and the game read as
