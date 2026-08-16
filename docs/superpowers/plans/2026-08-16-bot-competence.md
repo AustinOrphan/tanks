@@ -88,11 +88,23 @@ decision" can mean: `wallShotPoint` names the DECISION (a clean, plausible shot 
 obstacle that looks breakable) rather than a claim that the shot opens the path, and its
 doc comment says so explicitly. Whether the shot ever pays off is a `bullets.ts`
 question, out of `player-profile.ts`'s scope by the hard constraint above — surfaced
-here rather than silently built on the plan's stated premise. It was also checked
-empirically for cost: the re-measured headline win rate did not regress (see the
-re-measurement commit; 51/125, 40.8%, comfortably above the file's own `> 0.2` guard),
-so spending a shell this way was not found to cost the metric this PR is judged by,
-though that is one population's evidence, not a proof for every arena/seed.
+here rather than silently built on the plan's stated premise, and it is the one
+judgment call in this PR that only Austin can make: keep it as a plausible-but-currently-
+inert tactic, or treat "shells don't break destructible walls" as a gap worth closing in
+`bullets.ts` separately.
+
+**On cost: the evidence is weaker than a clean before/after and should be read that
+way.** The re-measured win rate (51/125, 40.8%) sits comfortably above the file's own
+`> 0.2` regression guard, but the number it would need to be compared against — the
+pre-existing "50/100 (50%)" comment — is not a valid baseline for that comparison: it
+was measured at a DIFFERENT population (4 arenas, not 5; arena-05 alone moves the
+denominator and adds the hardest arena in the roster, independent of anything this PR
+changed). So the honest claim is narrower than "directive A part 1 didn't cost
+anything": it is that the new behavior stays well above the guard that would catch a
+real regression, not that a same-population before/after was measured. No same-
+population comparison was taken because directive A part 1 (destructible-wall shots)
+and part 2 (centroid retreat) both landed before any re-measurement was taken, so their
+individual costs are not separated in this evidence either.
 
 **Implementation.** `wallShotPoint(from, opponent, walls)`: casts `raySegmentVsAABB`
 from `from` toward `opponent.pos` against every non-destroyed wall; if EXACTLY one wall
@@ -115,7 +127,11 @@ the positive case, `kind: 'solid'` for the negative control, byte-identical othe
   passed** before any production code existed (nothing yet caused a fire on a solid
   wall either) — it exists to catch a wrong, over-eager implementation later, not to be
   red now, exactly as the plan's own wording predicts ("the solid-wall negative control
-  CAN fail").
+  CAN fail"). That "can fail" claim was ITSELF checked, not left as an assumption: after
+  implementation, `wallShotPoint`'s `kind === 'destructible'` gate was temporarily
+  dropped (returning `point` unconditionally, i.e. "fire on any single wall in the way,
+  solid or not") and the negative control failed exactly as expected — **1 of 1** —
+  before the gate was restored and read back clean (`git diff --stat` empty).
 - After the first implementation pass: the positive test still failed, but for a TEST
   bug, not a production one — a loop-index-vs-ticks-held off-by-one (asserting
   `firedAt >= REACTION_TICKS` against a 0-indexed loop counter that fires at index 47
@@ -132,17 +148,24 @@ the positive case, `kind: 'solid'` for the negative control, byte-identical othe
 ## Directive A, part 2 — whole-map threat summary, centroid-aware retreat
 
 **Implementation.** `assessThreats(world, subject)` is a single bounded `O(tanks)` pass
-(no pairwise term) building `{ nearest, second, opponentCount, centroid }` — nearest and
-second-nearest opponent by straight-line distance (positional, not LOS-gated, the same
-sense `nearestEnemy` always used), a count, and the centroid of every opponent's
-position. `centroid` is defined to equal `nearest.pos` exactly when `opponentCount` is
-1, which is what makes every consumer that reads `centroid` in place of `nearest.pos`
-behavior-identical in the single-opponent case and only diverge once a second opponent
-presses at the same time. Computed ONCE per call in `decidePlayerInput` (`const threats
-= assessThreats(world, player)`) and threaded to `seekLikeMove`, the directive-A-part-1
-wall-shot fallback, and the mine gate — replacing three separate lookups (the old
-standalone `nearestEnemy`, called twice redundantly) with one, which is also what keeps
-the whole function `O(tanks+mines+walls)` per tick rather than adding a second scan.
+(no pairwise term) building `{ nearest, centroid }` — nearest opponent by straight-line
+distance (positional, not LOS-gated, the same sense `nearestEnemy` always used) and the
+centroid of every opponent's position. `centroid` is defined to equal `nearest.pos`
+exactly when there is one opponent, which is what makes every consumer that reads
+`centroid` in place of `nearest.pos` behavior-identical in the single-opponent case and
+only diverge once a second opponent presses at the same time. Computed ONCE per call in
+`decidePlayerInput` (`const threats = assessThreats(world, player)`) and threaded to
+`seekLikeMove`, the directive-A-part-1 wall-shot fallback, and the mine gate — replacing
+three separate lookups (the old standalone `nearestEnemy`, called twice redundantly)
+with one, which is also what keeps the whole function `O(tanks+mines+walls)` per tick
+rather than adding a second scan.
+
+An earlier draft additionally tracked second-nearest opponent and a bare opponent count
+(the plan's own prose lists both as summary contents) but neither ever gained a
+consumer — `seekLikeMove`'s retreat branch only needed `nearest`/`centroid`, `wallShotPoint`
+only needs `nearest`, and the mine gate only needs `nearest`. Caught by the advisor
+before landing (a mutation to the second-nearest tracking would have survived the whole
+suite, since nothing read it) and cut in a follow-up commit — see Deviations below.
 `seekLikeMove`'s retreat branch (`d < PLAYER_MINIMUM_DISTANCE`) now blends away from
 `threats.centroid ?? nearest.pos` instead of `nearest.pos` directly; the aim/mine gates
 still read `threats.nearest` directly, since a shot or a mine drop is about ONE specific
@@ -287,3 +310,24 @@ engine to disagree with the first about.
    numbers being corrected — flagged here as a deviation from "only directive A/B's own
    numbers" scope, done because leaving it would have made the corrected comment block
    self-contradictory.
+4. **`ThreatSummary.second`/`.opponentCount` were computed, shipped in one commit, and
+   removed in a later one.** The plan's own directive A part 2 text lists second-nearest
+   and opponent count as summary contents; the actual behavior change (centroid-aware
+   retreat) never needed either, and nothing in `player-profile.ts` ever read them —
+   caught by the advisor before this work was reported done, not by any test (a
+   mutation to the second-nearest tracking would have survived the whole suite). Fixed
+   in a follow-up commit (`5d91dfc`) rather than by amending the commit that introduced
+   them, per this repo's standing "always create NEW commits rather than amending" rule.
+5. **Commit `94cc922` (directive A part 1's implementation) is transiently red if
+   checked out on its own**, because it was committed together with directive A part
+   2's not-yet-implemented test fixture (both were written in one red-first pass before
+   either directive's production code existed). `assessThreats` does not exist yet at
+   that commit, so `npx vitest run src/sim/ai/player-profile.test.ts` at that exact SHA
+   fails the centroid-retreat test. The tip of the branch is green (confirmed by the
+   Full gate above), and no commit's PRODUCTION code is wrong at the point it lands —
+   only a test for a not-yet-built later directive is present early. The clean fix is a
+   history rewrite (move that one test into `62bf6f1`), which was not done: rewriting
+   already-created, non-tip commits (reset/rebase/amend) is exactly what this repo's
+   standing git-safety rule reserves for an explicit request, and none was made. Flagged
+   here as the documented alternative the advisor named, rather than silently left
+   unmentioned.
