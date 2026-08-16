@@ -201,6 +201,35 @@ export interface DevFlags {
    * indefinitely.
    */
   quality: QualityPreset | null;
+  /**
+   * How many of the `players` slots are computer-controlled -- bots as simulated
+   * players (owner directive 1's literal ask), riding the SAME per-slot substitution
+   * `autoplay` already uses at slot 0 (see `game/loop.ts`'s `effectiveInput.sample()`).
+   *
+   * Valued, same `asPlayers` idiom: 0 is an explicit no-op (matches omission), 1-4
+   * claim that many of the LAST slots (`bots=2` at `players=4` claims slots 2 and 3,
+   * leaving 0 and 1 on their real sources) -- simplest possible rule, chosen because at
+   * this PR no per-slot controller routing exists yet to arbitrate against (see the
+   * n-player arc's PR2). `bots` may equal `players` -- including at the unflagged
+   * default of 1 player, where `bots=1` puts a bot in the ONLY slot, the fully
+   * autonomous match owner directive 1 literally asks for ("simulate multiplayer using
+   * computer players"). Anything else (negative, non-integer, 5+) rejects to null,
+   * matching `players`' own reject-to-null idiom rather than clamping into a different
+   * meaning.
+   *
+   * A bot-claimed slot never constructs its slot's real controller (slot 1's gamepad
+   * reader, slots 2+'s idle source) -- there is nothing for it to drive.
+   *
+   * Clamped against the resolved `playerCount`, not rejected: `bots=4` at `players=2`
+   * silently claims both slots rather than erroring, since the two flags are read
+   * independently and neither can see the other's value while parsing.
+   *
+   * Unlike `players`, NOT excluded from the sandbox: the sandbox always resolves to a
+   * single slot, and `bots=1` there is exactly what `autoplay=1` already does
+   * unguarded -- the sandbox's one player-kind tank driven by the scripted brain
+   * instead of the input controller.
+   */
+  bots: number | null;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -226,6 +255,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   players: null,
   coopPool: false,
   quality: null,
+  bots: null,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -269,6 +299,18 @@ function asPlayers(params: URLSearchParams): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
   return n >= 1 && n <= 4 ? n : null;
+}
+
+/** 0-4, or null when absent, empty, non-integer, or out of that range -- reject-to-null
+ *  (asPlayers' own idiom), not clamped: an out-of-range value must not silently become a
+ *  different, unrequested bot count. Clamping AGAINST playerCount (a different flag,
+ *  read separately) happens downstream in loop.ts, not here. */
+function asBots(params: URLSearchParams): number | null {
+  const raw = params.get('bots');
+  if (raw === null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  return n >= 0 && n <= 4 ? n : null;
 }
 
 /** A 1-based level number, the word 'sandbox', or null. Case-sensitive on purpose. */
@@ -340,6 +382,7 @@ export function parseDevFlags(search: string): DevFlags {
     players: asPlayers(params),
     coopPool: isOn(params, 'coopPool'),
     quality: asQuality(params),
+    bots: asBots(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -576,6 +619,23 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and ' +
       'filter) instead of the shipped `high` default.',
+  },
+  bots: {
+    kind: 'valued',
+    type: 'an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots)',
+    description:
+      'Sets how many of the player slots are computer-controlled -- simulated players ' +
+      "riding the same substitution mechanism the `autoplay` flag already uses at slot 0.",
+    notes: [
+      'May equal `players` (including the unflagged default of 1), for a fully ' +
+        'autonomous match.',
+      'Clamped against the resolved player count, not rejected: `bots=4` with ' +
+        '`players=2` claims both slots rather than erroring.',
+      'A bot-claimed slot never builds its slot\'s real controller (slot 1\'s gamepad ' +
+        'reader, slots 2+\'s idle source).',
+      'Not excluded from the sandbox, unlike `players`: the sandbox always resolves to ' +
+        'one slot, and `bots=1` there is the same substitution `autoplay=1` already does.',
+    ],
   },
 };
 
