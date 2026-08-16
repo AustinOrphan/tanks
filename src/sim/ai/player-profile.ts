@@ -145,20 +145,24 @@ function isOpponent(_world: World, _subject: Tank, other: Tank): boolean {
  * single bounded per-tick pass that replaces the old standalone `nearestEnemy` scan:
  * one O(tanks) loop, no pairwise term, so folding it into `decidePlayerInput` keeps the
  * whole function O(tanks+mines+walls) per tick, the order it already was.
+ *
+ * Carries only what has a real consumer today: `nearest` (the wall-shot fallback and
+ * the mine gate both still reason about ONE specific opponent) and `centroid` (the
+ * retreat branch's whole-map answer to "which way is actually away"). Second-nearest
+ * and a bare opponent count were part of an earlier draft and were cut before landing
+ * -- nothing in this file ever read them, and a computed value with no consumer is
+ * untestable dead weight, not scaffolding for later; add them back only alongside the
+ * consumer that needs them.
  */
 interface ThreatSummary {
   /** Same tank the old nearestEnemy(world, subject) returned. */
   nearest: Tank | null;
-  /** Second-nearest opponent, or null with fewer than two in play. */
-  second: Tank | null;
-  /** How many opponents this pass counted. */
-  opponentCount: number;
   /**
    * Centroid of every opponent's position, or null when there are none. Equal to
-   * `nearest.pos` when `opponentCount` is 1 -- every consumer that reads this in place
-   * of `nearest.pos` is UNCHANGED in the single-opponent case, and only diverges once a
-   * second opponent presses at the same time, which is exactly the case directive A
-   * asks the movement band to handle differently.
+   * `nearest.pos` when there is exactly one opponent -- every consumer that reads this
+   * in place of `nearest.pos` is UNCHANGED in the single-opponent case, and only
+   * diverges once a second opponent presses at the same time, which is exactly the
+   * case directive A asks the movement band to handle differently.
    */
   centroid: Vec2 | null;
 }
@@ -166,8 +170,6 @@ interface ThreatSummary {
 function assessThreats(world: World, subject: Tank): ThreatSummary {
   let nearest: Tank | null = null;
   let nearestDist = Infinity;
-  let second: Tank | null = null;
-  let secondDist = Infinity;
   let count = 0;
   let sumX = 0;
   let sumY = 0;
@@ -178,19 +180,12 @@ function assessThreats(world: World, subject: Tank): ThreatSummary {
     sumY += t.pos.y;
     const d = vdist(subject.pos, t.pos);
     if (d < nearestDist) {
-      second = nearest;
-      secondDist = nearestDist;
-      nearest = t;
       nearestDist = d;
-    } else if (d < secondDist) {
-      second = t;
-      secondDist = d;
+      nearest = t;
     }
   }
   return {
     nearest,
-    second,
-    opponentCount: count,
     centroid: count > 0 ? { x: sumX / count, y: sumY / count } : null,
   };
 }
