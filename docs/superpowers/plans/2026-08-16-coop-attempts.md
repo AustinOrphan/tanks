@@ -224,6 +224,32 @@ against worlds that explicitly set `coopAttempts: false`, and both pass. What is
 unverified by construction is only the literal claim "the pre-existing file needs zero
 edits to keep passing," which this session's evidence contradicts.
 
+**Why this is a different case from the guard-first split's first two uses.**
+`resolveStatus`'s guard-first branch on `countPlayerTanks(world) >= 2` (the 2026-08-15
+plan) and this PR's second guard-first inside `resolveStatusCoop` both kept every
+*existing* test green the moment they landed, because the new branch only ever served
+*new* inputs (N&ge;2-tank worlds) that no pre-existing test constructed — there was
+nothing for the new code to change out from under. This time that assumption breaks: the
+new default is selected by the SAME discriminator (`coopAttempts`, defaulting `true`) at
+the SAME construction primitive (`createWorld`) that `coop-respawn.test.ts`'s own
+N&ge;2-tank fixtures already used, before this field existed. So the new branch does not
+serve only new inputs — it silently re-serves an EXISTING test's inputs under new
+semantics. That is the precise reason "guard-first, existing tests stay green" — true
+twice before in this file's own history — was the wrong prior to carry into this change,
+and it is why report-not-edit is the correct call rather than a shortcut: the tension is
+structural, not a mistake to route around.
+
+**The trivial remedy, named for the owner rather than applied.** Adding one field,
+`coopAttempts: false`, to `coop-respawn.test.ts`'s `twoPlayerWorld` helper would make all
+22 of its tests pass again while still testing exactly what they always tested (pool
+mode) — the identical fix `muzzleClearsTanks`'s own default flip received at the time it
+landed. This was deliberately NOT applied, per the explicit instruction not to edit that
+file. If the owner wants it applied, it is a one-line, low-risk change; if the owner
+wants `coop-respawn.test.ts` left exactly as shipped with 3 known-red tests as a
+permanent marker, that is also a coherent, defensible choice. Either way it is a decision
+for the owner to make, not one this session should make unilaterally by either editing
+the file or asserting the residual away.
+
 ## Gate
 
 All run explicitly, in order, after committing (`tools/mutate` refuses to run against
@@ -257,12 +283,28 @@ uncommitted changes to files it mutates):
 
 ## HUD
 
-Checked, no change made. `hud.ts` shows `Lives: <span class="hud-lives">3</span>` and
-"Out of lives." on the lose panel; `refreshStats` feeds it straight from `w.lives`. In
-attempts mode that number IS the attempt count the ruling describes — "lives" reads
-correctly as "shared attempts remaining" without new copy, and nothing in the shipped
-strings claims per-player lives or implies per-death loss. No test or string needed
-updating.
+The NUMBER is checked and correct, no change made: `hud.ts` shows
+`Lives: <span class="hud-lives">3</span>` and "Out of lives." on the lose panel;
+`refreshStats` feeds it straight from `w.lives`, which in attempts mode already IS the
+attempt count the ruling describes. Nothing in the shipped strings claims per-player
+lives or implies per-death loss, so no copy needed changing.
+
+**One real gap found, not fixed — a design decision, not a "smallest honest change".**
+`signalPlayerDeath()` (`hud.ts:1523`) unconditionally flashes `.hud-lives` with
+`hud-lives--hit` (a "you just lost one" cue) every time it runs, and `loop.ts`
+(`onFrameEvents`, line 848) calls it whenever `isPlayerDeath(events, playerId)` — the
+TRACKED player (slot 0) — dies THIS frame, regardless of coop mode. In attempts mode, a
+solo P1 death (survivor continues, `world.lives` untouched) still fires this flash: the
+lives counter visibly reddens as if an attempt was spent when it was not. This is new
+exposure from this PR, not a pre-existing bug — under the shipped pool model every
+tracked-player death also decremented the pool 1:1, so the flash and the number always
+agreed; attempts mode breaks that correlation for the survivor-carries case specifically.
+Not fixed here: whether the flash should be suppressed for a no-cost solo death, replaced
+with a different "teammate down" cue, or left as-is (arguably still a legible "you were
+hit" signal, just not a "you lost a life" one) is a feel/product call, the same class of
+decision this file's own "Deferred, named explicitly" precedent (shield visual indicator,
+respawn audio cue) leaves for the owner rather than guessing. Dev-flag-only and unshipped
+today (`?dev=1&players=2`), so not blocking — named here so it is not silently missed.
 
 ## Deviations from the brief
 
