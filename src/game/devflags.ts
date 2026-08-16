@@ -315,11 +315,241 @@ export function parseDevFlags(search: string): DevFlags {
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
   // its meaning. OR semantics -- individual flags can add to the kit, not veto it.
+  // The membership itself lives in PLAYTEST_BUNDLE.expandsTo (below), the single list
+  // both this loop and the generated doc (tools/devflags/render.ts) read, so the two
+  // cannot name a different four flags.
   if (isOn(params, 'playtest')) {
-    flags.invincible = true;
-    flags.shellCount = true;
-    flags.mineReach = true;
-    flags.mineTimer = true;
+    for (const f of PLAYTEST_BUNDLE.expandsTo) {
+      flags[f] = true;
+    }
   }
   return flags;
+}
+
+// ---------------------------------------------------------------------------
+// The FLAG REGISTRY: the machine-readable metadata docs/dev-flags.md is
+// generated from (tools/devflags/render.ts, `npm run devflags:doc`).
+//
+// `Record<keyof DevFlags, FlagSpec>` is the completeness gate, the same idiom
+// `TANK_KINDS` uses in sim/config/validate.ts: a `DevFlags` field with no entry
+// here is a COMPILE error (a missing required property), and a stray entry that
+// names no real field is also a compile error (excess-property checking on a
+// directly-typed object literal) -- so a flag literally cannot land without a
+// registry entry. devflags.test.ts adds the runtime half (`registryKeyMismatch`,
+// tested against synthetic fixtures so its own failure mode is proven, then run
+// against the real pair) so the guarantee survives even if this annotation is
+// ever loosened to something wider like `Record<string, FlagSpec>`.
+//
+// `playtest` and `dev` are NOT `DevFlags` fields -- see `PLAYTEST_BUNDLE` and the
+// generated doc's own header -- so neither belongs in this Record; adding either
+// here is a type error (excess property), which is deliberate.
+// ---------------------------------------------------------------------------
+
+/** Whether a flag is an on/off switch or one that carries a value. */
+export type FlagKind = 'boolean' | 'valued';
+
+export interface FlagSpec {
+  /** The query-string parameter, only when it differs from the DevFlags field name
+   *  (the three sandbox knobs: `tanks`, `disarmed`, `walls`). */
+  param?: string;
+  kind: FlagKind;
+  /** For a `valued` flag whose values are a small enumerable set (mineTrigger,
+   *  quality, the sandbox roster's element vocabulary): the allowed values, in the
+   *  order the parser accepts them. */
+  values?: readonly string[];
+  /** For a `valued` flag whose value isn't itself one of a small enumerable set (seed,
+   *  level, the sandbox wall count): a free-form description of the accepted shape. A
+   *  `valued` entry carries at least one of `values`/`type` -- `sandboxTanks` carries
+   *  both, `type` framing the multiset shape and `values` giving the per-element
+   *  vocabulary. */
+  type?: string;
+  /** One line, impersonal phrasing: what the flag does. */
+  description: string;
+  /** Requirements and interactions beyond the blanket `dev=1` gate every flag
+   *  already shares (sandbox-only, mutual exclusions, playtest-bundle membership). */
+  notes?: readonly string[];
+}
+
+/** The keys of DevFlags whose value type is boolean -- what PLAYTEST_BUNDLE.expandsTo
+ *  is allowed to contain, so `flags[f] = true` below type-checks without a cast. */
+type BooleanFlagKey = {
+  [K in keyof DevFlags]: DevFlags[K] extends boolean ? K : never;
+}[keyof DevFlags];
+
+export interface BundleSpec {
+  readonly kind: 'bundle';
+  /** The query-string parameter. */
+  readonly param: string;
+  readonly description: string;
+  /** The DevFlags fields it flips on, in application order -- the parser's `playtest`
+   *  branch and the generated doc both read this list, never a hand-kept duplicate. */
+  readonly expandsTo: readonly BooleanFlagKey[];
+  readonly notes?: readonly string[];
+}
+
+export const PLAYTEST_BUNDLE: BundleSpec = {
+  kind: 'bundle',
+  param: 'playtest',
+  description:
+    'Switches on the flags a single-player numeric playtest session always wants, in one flag.',
+  expandsTo: ['invincible', 'shellCount', 'mineReach', 'mineTimer'],
+  notes: [
+    'Additive only: an explicit `=0` on one of the four loses to the bundle -- individual ' +
+      'flags can ADD to the kit, not veto it.',
+    'Deliberately excludes `coop`: an orthogonal, riskier experimental mode a shared ' +
+      '`?playtest=1` link must not silently enable.',
+  ],
+};
+
+export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
+  aimRay: {
+    kind: 'boolean',
+    description:
+      "Draws the player's computed aim: a ray along the turret and a marker where the " +
+      'cursor maps to on the ground.',
+  },
+  shellCount: {
+    kind: 'boolean',
+    description: 'Shows the count of shells currently in flight against SHELL_CAP.',
+    notes: ['In the playtest bundle.'],
+  },
+  seed: {
+    kind: 'valued',
+    type: 'a positive integer',
+    description:
+      "Fixes the world's PRNG seed instead of deriving one from the clock, for a " +
+      'reproducible playthrough.',
+  },
+  mineTrigger: {
+    kind: 'valued',
+    values: [...MINE_TRIGGERS],
+    description:
+      "Overrides what may detonate an UNARMED mine (the shipped world default is 'none').",
+  },
+  mineReach: {
+    kind: 'boolean',
+    description: "Rings a mine's proximity-trigger radius and its kill radius.",
+    notes: ['In the playtest bundle.'],
+  },
+  mineTimer: {
+    kind: 'boolean',
+    description: "Shows each mine's remaining fuse, in seconds, beside it.",
+    notes: ['In the playtest bundle.'],
+  },
+  level: {
+    kind: 'valued',
+    type: 'a 1-based integer index into the campaign, or the literal `sandbox`',
+    description: 'Jumps straight to a level, or to the sandbox rig, instead of resuming the active run.',
+    notes: ['A jump does not consume, restore, advance, or complete the active run.'],
+  },
+  sandboxTanks: {
+    param: 'tanks',
+    kind: 'valued',
+    values: [...TANK_KINDS],
+    type: 'a comma-separated multiset (repeats and order kept), each element one of the values below',
+    description: 'Sets the sandbox enemy roster.',
+    notes: [
+      'Only read when `level=sandbox`.',
+      'Any unrecognised kind rejects the whole list to null rather than dropping entries.',
+    ],
+  },
+  sandboxDisarmed: {
+    param: 'disarmed',
+    kind: 'boolean',
+    description: 'Controls whether sandbox enemies carry weapons.',
+    notes: [
+      'Only read when `level=sandbox`.',
+      'The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even ' +
+        'with `dev=1` alone, and `disarmed=0` re-arms it.',
+    ],
+  },
+  sandboxWalls: {
+    param: 'walls',
+    kind: 'valued',
+    type: 'a positive integer, bare or as `random:N`',
+    description: 'Sets how many interior walls the sandbox scatters.',
+    notes: ['Only read when `level=sandbox`.'],
+  },
+  invincible: {
+    kind: 'boolean',
+    description: 'Makes the player unkillable: shells detonate harmlessly, blasts wash over.',
+    notes: ['In the playtest bundle.'],
+  },
+  corpseBlock: {
+    kind: 'boolean',
+    description:
+      'Lets a tank killed earlier in the same tick still block a bullet aimed at it, instead ' +
+      'of the shipped ghost rule where the bullet passes through.',
+    notes: ['Applies in both the campaign and the sandbox.'],
+  },
+  muzzleInside: {
+    kind: 'boolean',
+    description:
+      "Restores today's pre-clearance behaviour: a shell can be born already inside an " +
+      "adjacent live tank's hit circle.",
+    notes: ['Applies in both the campaign and the sandbox.'],
+  },
+  autoplay: {
+    kind: 'boolean',
+    description:
+      "Drives the player with the scripted \"competent player\" AI instead of reading the " +
+      'input controller -- the game demos itself.',
+  },
+  saveIo: {
+    kind: 'boolean',
+    description: 'Publishes save export/import on the dev console object (`__tanks`).',
+  },
+  replay: {
+    kind: 'boolean',
+    description:
+      'Records the per-tick input stream and publishes it on the dev console object.',
+  },
+  gamepad: {
+    kind: 'boolean',
+    description: 'Merges gamepad[0] into the input stream alongside keyboard/mouse/touch.',
+    notes: [
+      'Single player only: gamepad[1] onward is ignored.',
+      'Mutually exclusive with `coop` by construction: when `coop` is on, slot 0 is always ' +
+        'built without the gamepad merge, regardless of this flag.',
+    ],
+  },
+  coop: {
+    kind: 'boolean',
+    description: 'Turns on couch co-op: a second player on gamepad[0].',
+    notes: [
+      'Mutually exclusive with `gamepad` by construction: coop always claims gamepad slot 0.',
+      'Not part of the playtest bundle.',
+      'Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds ' +
+        'for one player.',
+      'Excluded from writing to the active run: the shared life pool has no decided meaning ' +
+        'against the single-player-shaped run record yet.',
+    ],
+  },
+  quality: {
+    kind: 'valued',
+    values: [...QUALITY_PRESET_NAMES],
+    description:
+      'Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and ' +
+      'filter) instead of the shipped `high` default.',
+  },
+};
+
+/**
+ * Both-directions key comparison, factored out so it has its own failure mode to test
+ * against synthetic fixtures -- a bare `Object.keys(FLAG_REGISTRY).toEqual(...)` against
+ * the real registry can never go red while the `Record<keyof DevFlags, FlagSpec>`
+ * annotation stands, which would make the guard decorative. devflags.test.ts proves this
+ * function itself can catch a missing or an extra key before relying on it to check the
+ * real FLAG_REGISTRY / DEV_FLAGS_OFF pair.
+ */
+export function registryKeyMismatch(
+  registry: object,
+  flags: object,
+): { missing: string[]; extra: string[] } {
+  const registryKeys = new Set(Object.keys(registry));
+  const flagKeys = new Set(Object.keys(flags));
+  return {
+    missing: [...flagKeys].filter((k) => !registryKeys.has(k)).sort(),
+    extra: [...registryKeys].filter((k) => !flagKeys.has(k)).sort(),
+  };
 }

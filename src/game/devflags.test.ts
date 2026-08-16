@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { TANK_KINDS } from '../sim/config';
-import { parseDevFlags, DEV_FLAGS_OFF } from './devflags';
+import {
+  parseDevFlags,
+  DEV_FLAGS_OFF,
+  FLAG_REGISTRY,
+  PLAYTEST_BUNDLE,
+  registryKeyMismatch,
+} from './devflags';
 
 describe('parseDevFlags', () => {
   it('is off for an empty query', () => {
@@ -274,6 +280,100 @@ describe('parseDevFlags: quality', () => {
 
   it('does not disturb the boolean flags', () => {
     expect(parseDevFlags('?dev=1&quality=low')).toEqual({ ...DEV_FLAGS_OFF, quality: 'low' });
+  });
+});
+
+describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
+  // The point of factoring this out: a check written directly against FLAG_REGISTRY can
+  // never fail while `Record<keyof DevFlags, FlagSpec>` stands (a missing or extra key is
+  // already a compile error), which would make the assertion decorative. These fixtures
+  // are not FLAG_REGISTRY or DEV_FLAGS_OFF -- they prove the FUNCTION can catch a mismatch
+  // before the next test trusts it to check the real pair.
+  it('reports neither missing nor extra when the key sets agree', () => {
+    expect(registryKeyMismatch({ a: 1, b: 2 }, { a: 1, b: 2 })).toEqual({ missing: [], extra: [] });
+  });
+
+  it('names a DevFlags key with no registry entry as missing', () => {
+    expect(registryKeyMismatch({ a: 1 }, { a: 1, b: 2 })).toEqual({ missing: ['b'], extra: [] });
+  });
+
+  it('names a registry entry with no matching DevFlags key as extra', () => {
+    expect(registryKeyMismatch({ a: 1, b: 2, c: 3 }, { a: 1, b: 2 })).toEqual({ missing: [], extra: ['c'] });
+  });
+
+  it('reports both directions at once, each sorted', () => {
+    expect(registryKeyMismatch({ z: 1, x: 1 }, { y: 1, x: 1 })).toEqual({ missing: ['y'], extra: ['z'] });
+  });
+});
+
+describe('FLAG_REGISTRY: the "programmatically kept up to date" guarantee', () => {
+  it('has exactly one entry per DevFlags field, in both directions', () => {
+    // The compile-time half is the `Record<keyof DevFlags, FlagSpec>` annotation on
+    // FLAG_REGISTRY itself -- a field added to DevFlags with no registry entry, or a
+    // registry entry naming no real field, is already a `tsc` error. This is the runtime
+    // half, so the guarantee survives even if that annotation is ever loosened.
+    expect(registryKeyMismatch(FLAG_REGISTRY, DEV_FLAGS_OFF)).toEqual({ missing: [], extra: [] });
+  });
+
+  it('gives every entry a description', () => {
+    for (const [name, spec] of Object.entries(FLAG_REGISTRY)) {
+      expect(spec.description.length, `${name} has no description`).toBeGreaterThan(0);
+    }
+  });
+
+  it('gives every valued entry at least one of `values` or `type`', () => {
+    // Population: every FLAG_REGISTRY entry whose kind is 'valued' -- seed, mineTrigger,
+    // level, sandboxTanks, sandboxWalls, quality, at the time of writing. sandboxTanks
+    // carries both (a multiset shape plus its per-element vocabulary), so this is an
+    // "at least one" check, not an XOR.
+    const valued = Object.entries(FLAG_REGISTRY).filter(([, s]) => s.kind === 'valued');
+    expect(valued.length).toBeGreaterThan(0);
+    for (const [name, spec] of valued) {
+      const hasValues = spec.values !== undefined;
+      const hasType = spec.type !== undefined;
+      expect(hasValues || hasType, `${name} must carry values and/or type`).toBe(true);
+    }
+  });
+
+  it('every entry carrying a `param` really differs from its DevFlags key', () => {
+    // Catches a copy-paste `param` that restates the key -- the field only exists for the
+    // three sandbox knobs whose query param is shorter than their DevFlags name.
+    for (const [name, spec] of Object.entries(FLAG_REGISTRY)) {
+      if (spec.param !== undefined) expect(spec.param).not.toBe(name);
+    }
+  });
+
+  it("mineTrigger's and quality's documented values equal the parser's own sets", () => {
+    // Derived via spread from the same MINE_TRIGGERS/QUALITY_PRESET_NAMES sets
+    // parseDevFlags reads, so this cannot drift by construction -- this test guards the
+    // derivation itself: swap either spread for a hand-written literal and this fails.
+    for (const v of ['none', 'proximity', 'bullet', 'both']) {
+      expect(FLAG_REGISTRY.mineTrigger.values).toContain(v);
+    }
+    expect(FLAG_REGISTRY.mineTrigger.values).toHaveLength(4);
+    for (const v of ['low', 'medium', 'high']) {
+      expect(FLAG_REGISTRY.quality.values).toContain(v);
+    }
+    expect(FLAG_REGISTRY.quality.values).toHaveLength(3);
+  });
+
+  it("sandboxTanks' documented values track TANK_KINDS minus the player, live", () => {
+    const enemies = TANK_KINDS.filter((k) => k !== 'player');
+    expect([...(FLAG_REGISTRY.sandboxTanks.values ?? [])].sort()).toEqual([...enemies].sort());
+  });
+});
+
+describe('PLAYTEST_BUNDLE: the single list the parser and the doc both read', () => {
+  it('names exactly the four flags the playtest tests above observe', () => {
+    expect([...PLAYTEST_BUNDLE.expandsTo].sort()).toEqual(
+      ['invincible', 'mineReach', 'mineTimer', 'shellCount'].sort(),
+    );
+  });
+
+  it('every expandsTo entry is a real boolean DevFlags field', () => {
+    for (const key of PLAYTEST_BUNDLE.expandsTo) {
+      expect(typeof DEV_FLAGS_OFF[key]).toBe('boolean');
+    }
   });
 });
 
