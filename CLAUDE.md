@@ -736,19 +736,17 @@ The deciding reason is CI. Code on `main` is exercised on every run; a branch is
 only when someone updates it. `round-ux` passes today, and nobody would learn the day it
 stopped.
 
-The flags today: `aimRay`, `shellCount`, `seed`, `mineTrigger`, `mineReach`, `mineTimer`,
-`quality` (a valued flag, `low|medium|high` — render preset, see `render/quality.ts`),
-`invincible`, `autoplay`, `saveIo`, `replay`, `gamepad` (issue #114: merges gamepad[0]
-into keyboard/mouse/touch, single player only -- see `src/input/gamepad.ts`), `level` (a
-1-based jump, or `level=sandbox`), and the sandbox knobs
-`tanks`, `disarmed`, `walls`. `playtest=1` is a parse-time BUNDLE, not a field: it
-expands to invincible + shellCount + mineReach + mineTimer. `parseDevFlags` derives the
-boolean list from `DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what
-they cover.
-
-`docs/dev-flags.md` is the generated, programmatically-kept-current flag reference —
-one row per flag, built from `devflags.ts`'s `FLAG_REGISTRY` by `npm run devflags:doc`
-and guarded against drift by `tools/devflags/doc.test.ts`.
+**The flag list lives in `docs/dev-flags.md`** — generated from `devflags.ts`'s
+`FLAG_REGISTRY` by `npm run devflags:doc`, guarded against drift by
+`tools/devflags/doc.test.ts` (editing a flag without regenerating goes red; the fix is
+the generator, never the test), and structurally complete: `FLAG_REGISTRY` is a
+`Record<keyof DevFlags, …>`, so a new flag without a registry entry is a compile
+error. This paragraph deliberately enumerates nothing — a hand-kept list here went
+stale three flags deep before the registry replaced it. `playtest=1` is a parse-time
+BUNDLE, not a field: its expansion is the registry's `PLAYTEST_BUNDLE.expandsTo`, the
+single source both the parser and the doc read. `parseDevFlags` derives the boolean
+list from `DEV_FLAGS_OFF` in its tests, so adding one cannot quietly shrink what they
+cover.
 
 **`roundPhaseHud` is the first flag to complete the cycle: it SHIPPED, so the flag is
 gone and the behaviour is on.** The round opens with `COUNTDOWN_TICKS` (3.0s) in which
