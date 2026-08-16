@@ -292,6 +292,40 @@ describe('parseDevFlags: players', () => {
   });
 });
 
+describe('parseDevFlags: bots', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?bots=2').bots).toBeNull();
+  });
+
+  it('is null when absent', () => {
+    expect(parseDevFlags('?dev=1').bots).toBeNull();
+  });
+
+  it('accepts 0 as an explicit no-op, matching the unflagged default', () => {
+    expect(parseDevFlags('?dev=1&bots=0').bots).toBe(0);
+  });
+
+  it('accepts 1-4, the full bot-count range -- population: all 4 values', () => {
+    for (const v of [1, 2, 3, 4]) {
+      expect(parseDevFlags(`?dev=1&bots=${v}`).bots).toBe(v);
+    }
+  });
+
+  it('rejects anything else to null rather than clamping -- population: the 6 forms below', () => {
+    for (const v of ['-1', '5', '1.5', 'abc', '', 'NaN']) {
+      expect(parseDevFlags(`?dev=1&bots=${v}`).bots).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags or players', () => {
+    expect(parseDevFlags('?dev=1&bots=2&players=4')).toEqual({
+      ...DEV_FLAGS_OFF,
+      bots: 2,
+      players: 4,
+    });
+  });
+});
+
 describe('the sandbox roster tracks the canonical kind list', () => {
   it('every enemy kind in TANK_KINDS parses in tanks= -- a new kind is spawnable the moment it exists', () => {
     // Pins the derivation in devflags.ts (review: it was built to admit new

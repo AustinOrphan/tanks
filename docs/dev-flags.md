@@ -45,10 +45,11 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (7)
+## Valued flags (8)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
+| `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
 | `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
@@ -59,6 +60,10 @@ Notes:
 
 Notes:
 
+- **bots**: May equal `players` (including the unflagged default of 1), for a fully autonomous match.
+- **bots**: Clamped against the resolved player count, not rejected: `bots=4` with `players=2` claims both slots rather than erroring.
+- **bots**: A bot-claimed slot never builds its slot's real controller (slot 1's gamepad reader, slots 2+'s idle source).
+- **bots**: Not excluded from the sandbox, unlike `players`: the sandbox always resolves to one slot, and `bots=1` there is the same substitution `autoplay=1` already does.
 - **level**: A jump does not consume, restore, advance, or complete the active run.
 - **players**: Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 is built without the gamepad merge, and SLOT 1 claims gamepad[0] as its own standalone co-player source instead.
 - **players**: Not part of the playtest bundle.
