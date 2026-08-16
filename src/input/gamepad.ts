@@ -221,6 +221,9 @@ export interface PlayerInputSource {
  * this shares). `reader.connected()` is what tells the two cases apart: false only means
  * "no pad," so the fallback below fires only there, leaving the CONNECTED-but-centred
  * case (a real pad, stick at rest) to keep holding its last REAL aim exactly as before.
+ * "No pad" includes a MID-GAME UNPLUG, not only never-connected: the instant a pad
+ * disconnects, the stale deflected aim gives way to the position echo and the turret
+ * holds -- verified by a live disconnect probe in review, benign by the same argument.
  *
  * The fallback echoes `playerPos` RAW, bypassing `quantizeAim`: a spawn is rarely
  * exactly on the AIM_GRID, and driveTank's turret-hold guard requires `aimDir` to be

@@ -251,7 +251,9 @@ export function deriveSeed(wallMs: number): number {
  * during splash/title at all). The `{0,0}` default is therefore live only for the
  * ticks inside the FIRST playing frame, before that frame's own `onSimulated` runs for
  * the first time -- a sub-tick-batch transient right at round start, not an
- * off-screen one. loop.test.ts's N=3/4 integration tests take one small warm-up frame
+ * off-screen one. Bounded: at PLAYER_TURRET_TURN_RATE (8 rad/s) a single 1/60 tick
+ * slews at most ~0.133 rad before the position echo lands -- an eighth of a radian,
+ * once, at spawn. loop.test.ts's N=3/4 integration tests take one small warm-up frame
  * to let it settle before asserting the turret holds steady afterward.
  *
  * Deliberately NOT run through `quantizeAim` (`input/touch.ts`), unlike every real

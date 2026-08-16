@@ -152,23 +152,6 @@ export interface DevFlags {
    */
   gamepad: boolean;
   /**
-   * Couch co-op: a second player, on gamepad[0] (`?dev=1&coop=1`).
-   *
-   * Boolean, not valued (`coop=N`), on purpose -- this PR wires exactly one additional
-   * input source (gamepad[0] -> slot 1), so `coop` on means playerCount 2, full stop.
-   * A valued flag would advertise an N>2 assignment capability that does not exist yet;
-   * upgrade to valued when a third real source (gamepad[1], keyboard split) exists.
-   *
-   * Deliberately NOT in the `playtest` bundle: that bundle is single-player numeric
-   * playtesting, and co-op is an orthogonal, riskier experimental mode a shared
-   * `?playtest=1` link must not silently enable.
-   *
-   * Excluded from the sandbox (`?dev=1&level=sandbox`): `createSandboxWorld` takes no
-   * `playerCount` and has no co-op spawn rule to inherit from `loadArena`, so `coop` is
-   * read but never wired there -- no slot-1 source is constructed and `playerCount`
-   * passed to `world()` stays 1. See loop.ts's `coopActive`.
-   */
-  /**
    * How many player-controlled tanks share the world: couch co-op generalized past two
    * (owner directive 3: ceiling to 4).
    *
@@ -551,8 +534,9 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Sets how many player-controlled tanks share the world -- couch co-op, generalized ' +
       'past two.',
     notes: [
-      'Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 ' +
-        'always claims gamepad slot 0 for the standalone co-player source instead.',
+      'Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 is ' +
+        'built without the gamepad merge, and SLOT 1 claims gamepad[0] as its own ' +
+        'standalone co-player source instead.',
       'Not part of the playtest bundle.',
       'Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds ' +
         'for one player.',

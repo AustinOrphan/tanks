@@ -58,7 +58,7 @@ Notes:
 Notes:
 
 - **level**: A jump does not consume, restore, advance, or complete the active run.
-- **players**: Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 always claims gamepad slot 0 for the standalone co-player source instead.
+- **players**: Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 is built without the gamepad merge, and SLOT 1 claims gamepad[0] as its own standalone co-player source instead.
 - **players**: Not part of the playtest bundle.
 - **players**: Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds for one player.
 - **players**: Excluded from writing to the active run: the shared life pool has no decided meaning against the single-player-shaped run record yet.
