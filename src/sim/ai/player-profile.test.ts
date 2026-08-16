@@ -1,7 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { ARENAS, createWorldFor } from '../arena';
-import { step } from '../world';
+import { step, createWorld } from '../world';
+import type { Tank, Wall, Vec2 } from '../types';
+import { angleDelta, fromAngle, vnorm, vsub, vdist } from '../types';
+import { configFor } from '../config';
+import { TICK_HZ } from '../constants';
+import { profileAimSpread } from './targeting';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from './player-profile';
+
+function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
+  return {
+    id, kind, pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
+    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+    aiState: 'idle', aiTimer: 0,
+  };
+}
 
 /**
  * The competent-player headline metric: the same shape as pacifist.test.ts (a
@@ -187,6 +200,132 @@ describe('a competent scripted player against the shipped arenas', () => {
     const selfMine = losses.filter((r) => r.selfMineDeath).length;
     expect(losses.length, 'population: losses only, out of 100 games').toBeGreaterThan(0);
     expect(selfMine / losses.length, `${selfMine}/${losses.length} losses were self-mine`).toBeLessThan(0.5);
+  });
+});
+
+/**
+ * Directive A, part 1: when the direct line to the nearest KNOWN opponent (positional,
+ * not LOS-gated) crosses exactly one intact wall and that wall is destructible, aiming
+ * at and firing on the wall's own surface point is a valid decision -- "shooting it is
+ * a path". A solid wall in identical geometry must never trigger it: the two fixtures
+ * below are byte-identical except for `kind`.
+ *
+ * Reads on this sim's actual mechanics (verified by a throwaway probe, not assumed):
+ * a shell never destroys a destructible wall -- only a mine blast does
+ * (mines.ts's applyBlast). So this directive is a DECISION the player-brain makes (aim
+ * and fire at a plausible-looking obstacle), not a claim that the shot opens the path;
+ * see this file's own measured win-rate numbers above for whether spending a shot this
+ * way costs anything.
+ */
+describe('directive A part 1: an intact destructible wall in the only path to the nearest opponent', () => {
+  const PLAYER_ID = 1;
+  const ENEMY_ID = 2;
+  const REACTION_TICKS = Math.round(configFor('player').ai.reactionTime * TICK_HZ);
+
+  function fixture(wallKind: Wall['kind']) {
+    const player = makeTank('player', PLAYER_ID, 5, 5);
+    const enemy = makeTank('brown', ENEMY_ID, 15, 5);
+    // Spans x in [9,10], y in [4,6] -- the segment (5,5)->(15,5) enters its left face
+    // at exactly (9,5), the wall's own nearest surface point on that line.
+    const wall: Wall = { id: 99, kind: wallKind, destroyed: false, aabb: { minX: 9, minY: 4, maxX: 10, maxY: 6 } };
+    return createWorld({ walls: [wall], tanks: [player, enemy], spawns: [], lives: 3 });
+  }
+
+  it('fires on the destructible wall\'s surface once a solution has been held for reactionTime (RED before the wall-shot path exists)', () => {
+    const world = fixture('destructible');
+    const rnd = mulberry32(1);
+    const state = createPlayerAiState(rnd);
+    let callsWhenFired = -1; // ticks the solution has been HELD, i.e. state.aimTicks at fire time
+    let firedAim: Vec2 | null = null;
+    // Never stepped -- the fixture holds the same geometry every call, which is exactly
+    // what "a solution held for N ticks" means to test without needing the tank to
+    // actually move.
+    for (let calls = 1; calls <= REACTION_TICKS + 5 && callsWhenFired === -1; calls++) {
+      const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+      if (input.fire) { callsWhenFired = calls; firedAim = input.aim; }
+    }
+    expect(callsWhenFired, 'never fired on the destructible wall blocking the only path to the nearest opponent')
+      .toBeGreaterThan(0);
+    expect(callsWhenFired, `population: the profile's own reactionTime is ${REACTION_TICKS} ticks; must not fire before the solution has been held that long`)
+      .toBeGreaterThanOrEqual(REACTION_TICKS);
+
+    // The aim actually targets the wall's surface (9,5) from the player at (5,5) --
+    // straight +x, angle 0 -- not the enemy behind it at (15,5) (same angle here, so
+    // the real discriminator is that it fires AT ALL before ever seeing the enemy;
+    // the angle check below guards against a wrong-point regression separately).
+    const player = world.tanks[0];
+    const actualAngle = Math.atan2(firedAim!.y - player.pos.y, firedAim!.x - player.pos.x);
+    const wallAngle = Math.atan2(5 - player.pos.y, 9 - player.pos.x);
+    const bound = profileAimSpread(configFor('player')) + 1e-6;
+    expect(Math.abs(angleDelta(actualAngle, wallAngle)), 'aim did not target the wall surface within the jitter bound')
+      .toBeLessThanOrEqual(bound);
+  });
+
+  it('does NOT fire on a solid wall in identical geometry (negative control)', () => {
+    const world = fixture('solid');
+    const rnd = mulberry32(1);
+    const state = createPlayerAiState(rnd);
+    for (let i = 0; i < REACTION_TICKS + 30; i++) {
+      const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+      expect(input.fire, `fired at tick ${i} on a solid wall blocking the only path`).toBe(false);
+    }
+  });
+});
+
+/**
+ * Directive A, part 2: whole-map awareness. A bounded per-tick pass builds a threat
+ * summary (nearest, second-nearest, count, centroid) that the movement band's retreat
+ * branch reads instead of nearest-only distance -- retreating away from the opponent
+ * MASS, not just whichever one happens to be closest, once several are in play.
+ *
+ * Fixture: player at the origin, one opponent close enough to trigger retreat (within
+ * PLAYER_MINIMUM_DISTANCE) directly south, a second opponent further north. Retreating
+ * from the NEAREST alone points north (away from the close one); retreating from the
+ * CENTROID of both points south (the centroid sits north of the player, since the far
+ * opponent pulls it past the midpoint) -- the two disagree by construction, which is
+ * what makes this fixture able to actually distinguish the two rules.
+ *
+ * Seed 3 was found by scanning seeds 1..300 against the CURRENT (pre-threat-summary)
+ * code and keeping one where the retreat draw actually fires -- see the self-check
+ * assertion below, which fails loudly (not vacuously) if a future change stops
+ * reaching the retreat branch on this seed.
+ */
+describe('directive A part 2: whole-map threat summary informs retreat', () => {
+  const PLAYER_ID = 1;
+
+  it('retreats from the opponent centroid, not just the nearest, when a second opponent is in play (RED before assessThreats exists)', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const near = makeTank('brown', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
+    const far = makeTank('grey', 3, 0, 6);    // pulls the centroid to (0, 2)
+    const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3 });
+    const rnd = mulberry32(3); // found by scanning seeds 1..300 for one where the retreat draw fires
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    // Reconstruct both candidate directions using the SAME wander heading this exact
+    // call drew (read back from state, mutated in place) -- blend/normalize are shared
+    // infrastructure pinned elsewhere; only WHICH point feeds them is in question here.
+    const wander = fromAngle(state.wanderHeading);
+    const blend = (toward: Vec2): Vec2 => vnorm({
+      x: toward.x * 0.5 + wander.x * 0.5,
+      y: toward.y * 0.5 + wander.y * 0.5,
+    });
+    const oldNearestAway = blend(vnorm(vsub(player.pos, near.pos)));
+    const centroid = { x: (near.pos.x + far.pos.x) / 2, y: (near.pos.y + far.pos.y) / 2 };
+    const newCentroidAway = blend(vnorm(vsub(player.pos, centroid)));
+
+    // Self-check: the fixture must actually discriminate the two rules (retreat fired,
+    // and the two candidate directions are genuinely far apart) or the assertion below
+    // would pass vacuously.
+    expect(vdist(input.move, wander), 'the retreat draw never fired on this seed -- fixture is vacuous')
+      .toBeGreaterThan(0.05);
+    expect(vdist(oldNearestAway, newCentroidAway), 'fixture does not actually discriminate the two rules')
+      .toBeGreaterThan(0.5);
+
+    expect(input.move.x, `move.x: old nearest-away=${oldNearestAway.x.toFixed(4)} new centroid-away=${newCentroidAway.x.toFixed(4)}`)
+      .toBeCloseTo(newCentroidAway.x, 5);
+    expect(input.move.y, `move.y: old nearest-away=${oldNearestAway.y.toFixed(4)} new centroid-away=${newCentroidAway.y.toFixed(4)}`)
+      .toBeCloseTo(newCentroidAway.y, 5);
   });
 });
 

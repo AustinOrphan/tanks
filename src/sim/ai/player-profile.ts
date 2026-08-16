@@ -1,8 +1,8 @@
 import type { World } from '../world';
-import type { InputState, Tank, Vec2 } from '../types';
-import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
+import type { InputState, Tank, Vec2, Wall } from '../types';
+import { vsub, vdist, vnorm, vlen, fromAngle, angleOf } from '../types';
 import { lineOfSight, aimLead, dangerAvoidMove, profileAimSpread } from './targeting';
-import { driveVelocity, circleVsAABB } from '../collision';
+import { driveVelocity, circleVsAABB, raySegmentVsAABB } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
 import {
   TANK_RADIUS, DT, TICK_HZ, WANDER_TICKS, SEEK_APPROACH_BIAS, VEC_EPS,
@@ -150,6 +150,43 @@ function nearestEnemy(world: World, subject: Tank): Tank | null {
   return best;
 }
 
+/**
+ * The wall's own surface point if the straight line from `from` to `opponent` crosses
+ * EXACTLY one intact wall and that wall is an intact DESTRUCTIBLE -- directive A's
+ * "shooting it is a path". A second wall on the same line (of either kind), or a lone
+ * SOLID wall, returns null: this is a narrow "one clean pane of glass in the way" case,
+ * not "shoot any wall that happens to be in the way".
+ *
+ * Player-local, and deliberately not a call to targeting.ts's `lineOfSight`: that
+ * helper answers "is anything at all in the way" and does not discriminate wall KIND,
+ * which is exactly the distinction this decision needs (see the module comment for why
+ * this file writes its own raycast rather than touching targeting.ts). Built on
+ * `raySegmentVsAABB` directly -- the same primitive `lineOfSight`/`bankShot` call --
+ * since `collision.ts` is shared infrastructure already imported by this file, not
+ * enemy-AI-owned code.
+ *
+ * Note on this sim's actual mechanics, read by probe rather than assumed: a shell never
+ * destroys a destructible wall -- only a mine blast does (mines.ts's `applyBlast`).
+ * This function still names the DECISION correctly ("is this a clean, plausible shot at
+ * an obstacle that looks breakable"); whether that shot ever pays off is a question
+ * about `bullets.ts`, out of this file's scope, not about whether the decision is a
+ * sound one to make.
+ */
+function wallShotPoint(from: Vec2, opponent: Tank | null, walls: Wall[]): Vec2 | null {
+  if (!opponent) return null;
+  let point: Vec2 | null = null;
+  let kind: Wall['kind'] | null = null;
+  for (const w of walls) {
+    if (w.destroyed) continue;
+    const hit = raySegmentVsAABB(from, opponent.pos, w.aabb);
+    if (!hit) continue;
+    if (point !== null) return null; // a second wall on the line: not a clean shot
+    point = hit.point;
+    kind = w.kind;
+  }
+  return kind === 'destructible' ? point : null;
+}
+
 /** True if stepping one tick along `dir` at `speed` would put the tank's hull inside a
  *  wall. Mirrors targeting.ts's private wallBlocksStep (not exported there), so a seek
  *  direction that would net zero displacement falls back to wander here exactly as it
@@ -251,8 +288,15 @@ export function decidePlayerInput(
     if (d < bestDist) { bestDist = d; target = t; }
   }
 
+  // No tank in sight: directive A, part 1 -- if the straight line to the nearest KNOWN
+  // opponent (positional, not LOS-gated, same sense nearestEnemy always used) crosses
+  // exactly one intact wall and that wall is destructible, treat aiming at and firing
+  // on its surface as a valid decision instead of just holding heading. See
+  // wallShotPoint's own doc comment for what "valid" means here and what it does not.
+  const wallAimPoint = target ? null : wallShotPoint(player.pos, nearestEnemy(world, player), world.walls);
+
   let aimPoint: Vec2;
-  const hasSolution = target !== null;
+  const hasSolution = target !== null || wallAimPoint !== null;
   if (target) {
     const targetVel = driveVelocity(target);
     const lead = aimLead(player.pos, target.pos, targetVel, cfg.weapon.speed);
@@ -261,8 +305,16 @@ export function decidePlayerInput(
     const jitter = (rnd() * 2 - 1) * profileAimSpread(cfg);
     const dir = fromAngle(lead + jitter);
     aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
+  } else if (wallAimPoint) {
+    // A fixed point needs no lead term (aimLead solves for a MOVING target) -- jittered
+    // the same way a live solution is, so a held wall-shot scatters like any other.
+    const angle = angleOf(vsub(wallAimPoint, player.pos));
+    const jitter = (rnd() * 2 - 1) * profileAimSpread(cfg);
+    const dir = fromAngle(angle + jitter);
+    aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
   } else {
-    // No target: hold the current turret heading rather than snapping to some default.
+    // No target and no clean wall shot: hold the current turret heading rather than
+    // snapping to some default.
     const dir = fromAngle(player.turretAngle);
     aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
   }
