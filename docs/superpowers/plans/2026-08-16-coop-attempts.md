@@ -185,10 +185,11 @@ compile error, so `npx tsc --noEmit` is itself part of this guard. `docs/dev-fla
 was regenerated via `npm run devflags:doc` and `tools/devflags/doc.test.ts` (which
 compares the committed file against what the renderer produces right now) passes.
 
-## Pool-mode regression: the shipped tests, byte-unchanged — and the finding
+## Pool-mode regression: the shipped tests, and the fix the owner adjudicated
 
-Per instruction, `src/sim/coop-respawn.test.ts` was **not edited**. **3 of its 22 tests
-now fail**, unmodified, against the implementation above:
+Per the original instruction, `src/sim/coop-respawn.test.ts` was left unedited through
+the first pass of this session. **3 of its 22 tests failed**, unmodified, against the
+implementation above:
 
 - `a single player death drains the pool by 1 and schedules a respawn, without reviving
   immediately`
@@ -197,74 +198,101 @@ now fail**, unmodified, against the implementation above:
   to 0`
 
 The other 19 (including, non-obviously, `does not stamp a respawn a second time...` and
-`simultaneous double death at pool 1...`) still pass — the first because its only
+`simultaneous double death at pool 1...`) still passed — the first because its only
 observable death is a single player's, which is a no-op in both models; the second
 because a shared pool of 1 reaches `lives: 0` either way, by coincidence of arithmetic,
 not by design.
 
-**Root cause, named precisely**: all three failures build their world via a bare
-`twoPlayerWorld` helper that calls `createWorld({...})` with no `coopAttempts` field —
-which, under the new default, silently starts testing attempts-mode semantics instead of
-the pool-mode semantics the assertions were written against. This is the direct,
-structural consequence of `coopAttempts` defaulting to `true` at the `createWorld`
-primitive itself (the literal instruction: "same pattern as corpseBlocksShells... DEFAULT
-TRUE"), the same layer every one of these tests constructs its fixtures at. It is not a
-new failure mode for this codebase — `muzzleClearsTanks` flipped an existing shipped
-default the same way when it landed, and every fixture that needed the *old* behavior
-was updated at the time to pass `muzzleClearsTanks: false` explicitly (visible today in
-`bullets.test.ts`'s literal `muzzleClearsTanks: true`/`false` fixtures). The same fix
-would apply here — one field added to `twoPlayerWorld` — but is deliberately not applied
-in this PR, per instruction, so this paragraph is that instruction's residual rather than
-an oversight.
+**Adjudicated, then applied**: the owner chose the trivial remedy over leaving the file
+red. `twoPlayerWorld` (the one shared fixture builder all three failing tests, and 19 of
+the file's other tests, are built from) now passes `coopAttempts: false` explicitly to
+`createWorld`, with a comment naming the 2026-08-16 default flip and stating that this
+file pins the POOL branch specifically — attempts mode's own pins live in
+`coop-attempts.test.ts`. **All 22 of `coop-respawn.test.ts`'s tests pass again**, and
+they test exactly what they always tested (pool mode), not a weakened or reinterpreted
+version of it.
 
-The pool-mode BEHAVIOR itself was not left unverified: `coop-attempts.test.ts`'s "POOL
-MODE, explicitly requested" block reproduces the same claims (single death schedules a
-respawn; simultaneous death at pool 2 splits into one revival and one permanent corpse)
-against worlds that explicitly set `coopAttempts: false`, and both pass. What is left
-unverified by construction is only the literal claim "the pre-existing file needs zero
-edits to keep passing," which this session's evidence contradicts.
+**Re-verified against CLAUDE.md's own subject-change rule** ("when you change what a
+test's subject is, re-run that test's own mutation against it") rather than trusted on
+inspection: `resolveStatusCoop`'s `if (!world.coopAttempts) {` guard was temporarily
+forced to `if (false) {` — disabling the pool branch entirely, so every 2-player world
+(including these now-explicit `coopAttempts: false` ones) ran the attempts-mode body
+instead — and the file was re-run. **Exactly the same 3 tests, and only those 3, went
+red** (population: the file's 22 tests; the other 19 stayed green under the disabled
+branch, confirming they do not depend on which branch runs). The mutation was reverted
+via the editor and the restore verified with `git diff` reporting an empty diff against
+`src/sim/world.ts` — a byte-exact restore, not a re-typed approximation.
 
-**Why this is a different case from the guard-first split's first two uses.**
+**Root cause, named precisely**: all three failures built their world via the shared
+`twoPlayerWorld` helper, which called `createWorld({...})` with no `coopAttempts`
+field — which, under the new default, silently started testing attempts-mode semantics
+instead of the pool-mode semantics the assertions were written against. This was the
+direct, structural consequence of `coopAttempts` defaulting to `true` at the
+`createWorld` primitive itself (the literal instruction: "same pattern as
+corpseBlocksShells... DEFAULT TRUE"), the same layer every one of these tests constructs
+its fixtures at. It was not a new failure mode for this codebase — `muzzleClearsTanks`
+flipped an existing shipped default the same way when it landed, and every fixture that
+needed the *old* behavior was updated at the time to pass `muzzleClearsTanks: false`
+explicitly (visible today in `bullets.test.ts`'s literal `muzzleClearsTanks: true`/
+`false` fixtures). That is the fix `twoPlayerWorld` now carries too.
+
+The pool-mode BEHAVIOR itself was never left unverified, even in the interval before the
+fix landed: `coop-attempts.test.ts`'s "POOL MODE, explicitly requested" block reproduces
+the same claims (single death schedules a respawn; simultaneous death at pool 2 splits
+into one revival and one permanent corpse) against worlds that explicitly set
+`coopAttempts: false`, and both pass — an independent confirmation, from a different
+file, that the fix's premise (pool mode's own logic is intact) was correct before the
+fix was ever applied to `coop-respawn.test.ts` itself.
+
+**Why this was a different case from the guard-first split's first two uses.**
 `resolveStatus`'s guard-first branch on `countPlayerTanks(world) >= 2` (the 2026-08-15
 plan) and this PR's second guard-first inside `resolveStatusCoop` both kept every
 *existing* test green the moment they landed, because the new branch only ever served
-*new* inputs (N&ge;2-tank worlds) that no pre-existing test constructed — there was
+*new* inputs (N>=2-tank worlds) that no pre-existing test constructed — there was
 nothing for the new code to change out from under. This time that assumption breaks: the
 new default is selected by the SAME discriminator (`coopAttempts`, defaulting `true`) at
 the SAME construction primitive (`createWorld`) that `coop-respawn.test.ts`'s own
-N&ge;2-tank fixtures already used, before this field existed. So the new branch does not
+N>=2-tank fixtures already used, before this field existed. So the new branch does not
 serve only new inputs — it silently re-serves an EXISTING test's inputs under new
 semantics. That is the precise reason "guard-first, existing tests stay green" — true
 twice before in this file's own history — was the wrong prior to carry into this change,
-and it is why report-not-edit is the correct call rather than a shortcut: the tension is
-structural, not a mistake to route around.
+and it is why report-not-edit was the right FIRST move rather than a shortcut: the
+tension was structural, not a mistake to silently route around by guessing at the
+owner's intent.
 
-**The trivial remedy, named for the owner rather than applied.** Adding one field,
-`coopAttempts: false`, to `coop-respawn.test.ts`'s `twoPlayerWorld` helper would make all
-22 of its tests pass again while still testing exactly what they always tested (pool
-mode) — the identical fix `muzzleClearsTanks`'s own default flip received at the time it
-landed. This was deliberately NOT applied, per the explicit instruction not to edit that
-file. If the owner wants it applied, it is a one-line, low-risk change; if the owner
-wants `coop-respawn.test.ts` left exactly as shipped with 3 known-red tests as a
-permanent marker, that is also a coherent, defensible choice. Either way it is a decision
-for the owner to make, not one this session should make unilaterally by either editing
-the file or asserting the residual away.
+**The trivial remedy: reported first, then adjudicated and applied.** Adding one field,
+`coopAttempts: false`, to `coop-respawn.test.ts`'s `twoPlayerWorld` helper made all 22 of
+its tests pass again while still testing exactly what they always tested (pool mode) —
+the identical fix `muzzleClearsTanks`'s own default flip received at the time it landed.
+This was reported rather than applied in the first pass, per the original instruction not
+to edit that file without sign-off; the owner then adjudicated "apply the one-line fix"
+and it was applied, with a comment at the helper naming the 2026-08-16 default flip and
+stating explicitly that this file pins the POOL branch (attempts mode's own pins live in
+`coop-attempts.test.ts`) — so a future reader does not have to reconstruct why the field
+is there.
 
 ## Gate
 
 All run explicitly, in order, after committing (`tools/mutate` refuses to run against
-uncommitted changes to files it mutates):
+uncommitted changes to files it mutates). Two full `npm test` runs are recorded below,
+deliberately, rather than only the final one: the first is what this PR's implementation
+alone produced, and the second is what it produced after the owner's adjudicated fix to
+`coop-respawn.test.ts` landed — the delta between them is exactly, and only, the 3 tests
+that fix touches.
 
-- `npx tsc --noEmit`: exit 0.
-- `npm test` (`tsc --noEmit && vitest run`): **exit 1** (checked directly, not read off a
-  piped command whose exit code a `tail` would have swallowed) — 2502 passed, 3 failed
-  (the `coop-respawn.test.ts` residual above), 2 skipped, of 2507 tests total, across
-  113 test files (111 passed — including `player-profile.test.ts`, which has 1 skipped
-  test but is not itself a skipped file; 1 file fully skipped,
-  `ai/engagement.measure.test.ts`; 1 failed, `coop-respawn.test.ts`). The failure is the
-  reported, expected residual, not a regression discovered after the fact — the same 3
-  failures were observed both before and after the mutation-manifest/build/trace steps
-  below, and before/after the loop.test.ts harness fix.
+- `npx tsc --noEmit`: exit 0 (both before and after the `coop-respawn.test.ts` fix).
+- `npm test`, BEFORE the fix (`tsc --noEmit && vitest run`): **exit 1** (checked
+  directly, not read off a piped command whose exit code a `tail` would have swallowed)
+  — 2502 passed, 3 failed (the `coop-respawn.test.ts` residual above), 2 skipped, of
+  2507 tests total, across 113 test files (111 passed — including
+  `player-profile.test.ts`, which has 1 skipped test but is not itself a skipped file;
+  1 file fully skipped, `ai/engagement.measure.test.ts`; 1 failed,
+  `coop-respawn.test.ts`).
+- `npm test`, AFTER the fix: **exit 0** — 2505 passed, 0 failed, 2 skipped, of the same
+  2507 tests total, across 113 test files (112 passed, 1 fully skipped
+  `ai/engagement.measure.test.ts`, 0 failed). The 3-test delta from the run above is
+  exactly `coop-respawn.test.ts`'s three previously-red tests, now green; nothing else
+  in the tree moved between the two runs (no other file was touched in between).
 - `npm run mutate`: exit 0 — 13/13 manifest entries ran, 11 killed, 2 survives (both
   declared as such: `skins-ensure-contrast-pole-clamp`, an equivalent mutant, and
   `preview-drops-the-rotate-buttons`), 0 mismatches against declared outcomes. One entry
@@ -308,9 +336,12 @@ today (`?dev=1&players=2`), so not blocking — named here so it is not silently
 
 ## Deviations from the brief
 
-- **`coop-respawn.test.ts`**: not edited, 3 of 22 tests fail unmodified — see the
-  dedicated section above. This is the one instruction-level deviation from a fully
-  green `npm test`, and it is deliberate, not an oversight.
+- **`coop-respawn.test.ts`**: initially not edited, per the original instruction — 3 of
+  22 tests failed unmodified. Reported as a fork requiring owner sign-off rather than
+  resolved unilaterally; the owner then adjudicated "apply the one-line fix," which was
+  applied and re-verified against CLAUDE.md's subject-change mutation rule (see the
+  dedicated section above). `npm test` is green as of the final commit — this item
+  started as a deviation and ended as none.
 - **`loop.test.ts`'s fake `levels.world()` harness**: one line added (threading
   `opts.devFlags?.coopPool` into the fake coop-world builder's `createWorldFor` call) —
   not itself part of the shipped game, but needed for the new `coopPool=1` loop-level
