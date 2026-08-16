@@ -108,21 +108,25 @@ describe.skip('competent-player measurement (flip skip off to run locally)', () 
 });
 
 // ---------------------------------------------------------------------------
-// PINNED assertions, run on every `npm test`. Population: the 4 shipped arenas x 25
-// seeds each = 100 games -- a smaller sample than the measurement block above (60 seeds)
-// purely to keep this file's runtime down (a 5-simulated-minute cap x 100 games still
-// takes real wall-clock seconds); re-measured directly AT this population rather than
-// assumed from the 60-seed numbers, since a smaller sample is not guaranteed to land on
-// the same rate. Computed once, in the describe body (mirrors pacifist.test.ts's `rows`),
-// so every `it` below reads the same 100 games instead of re-simulating per assertion.
+// PINNED assertions, run on every `npm test`. Population: ALL shipped arenas
+// (ARENAS.length, 5 as of arena-05) x 25 seeds each = 125 games -- a smaller sample
+// than the measurement block above (60 seeds/arena) purely to keep this file's runtime
+// down (a 5-simulated-minute cap x 125 games still takes real wall-clock seconds);
+// re-measured directly AT this population rather than assumed from the 60-seed
+// numbers, since a smaller sample is not guaranteed to land on the same rate. Computed
+// once, in the describe body (mirrors pacifist.test.ts's `rows`), so every `it` below
+// reads the same 125 games instead of re-simulating per assertion.
 //
-// Measured at this population (headless run of this exact file, current
-// decidePlayerInput):
-//   arena1: 21/25 wins  arena2: 16/25  arena3: 7/25  arena4: 6/25
-//   total: 50/100 wins, 50/100 losses, 0/100 timeouts
-//   self-mine deaths: 5/50 losses (all 5 in arena2)
-//   fires/game: arena1 21.7 arena2 14.4 arena3 49.6 arena4 34.7
-//   mines/game: arena1 1.48 arena2 6.52 arena3 4.40 arena4 3.12
+// Re-measured at this population after directive A parts 1 and 2 (destructible-wall
+// shots, centroid-aware retreat) landed -- the prior comment here quoted a 4-arena,
+// 100-game population from before arena-05 shipped, which this correction also fixes
+// while it's being touched for the same reason (both are population changes, not
+// values this file otherwise had reason to revisit together):
+//   arena1: 22/25 wins  arena2: 15/25  arena3: 6/25  arena4: 5/25  arena5: 3/25
+//   total: 51/125 wins (40.8%), 74/125 losses, 0/125 timeouts
+//   self-mine deaths: 6/74 losses (5 in arena2, 1 in arena3)
+//   fires/game: arena1 21.8 arena2 17.4 arena3 48.8 arena4 36.5 arena5 40.9
+//   mines/game: arena1 1.52 arena2 8.00 arena3 4.64 arena4 2.68 arena5 6.68
 // ---------------------------------------------------------------------------
 describe('a competent scripted player against the shipped arenas', () => {
   const SEEDS = 25;
@@ -131,51 +135,60 @@ describe('a competent scripted player against the shipped arenas', () => {
   const winRate = (a: number) => perArena[a].filter((r) => r.outcome === 'win').length / SEEDS;
 
   it('wins a meaningful share of games against the shipped roster', () => {
-    // Population: 100 games (4 shipped arenas x 25 seeds). Measured 50/100 (50%).
+    // Population: 125 games (5 shipped arenas x 25 seeds). Measured 51/125 (40.8%).
     // Bounded well below that so ordinary AI/arena tuning does not fail the build; a
     // regression that makes the scripted player hapless (rate collapses toward 0) trips
-    // it -- confirmed: `fire = false` drops this to 5/100 and dies here.
+    // it -- confirmed: `fire = false` drops this to 5/100 and dies here (that specific
+    // check predates arena-05 and directive A/B and was not rerun at the current
+    // population/behavior; the mechanism it guards -- fire wired to false -- is
+    // unaffected by either change).
     //
     // NO upper bound: an "aimbot ceiling" was tried and dropped. Three escalating
     // buffs -- perfect aim + instant fire (zero jitter, reactionTicks 0), the same plus
     // ignoring lineOfSight for targeting, and the same plus permanent full-speed
-    // kiting -- were each applied in isolation and measured on this exact 100-game
-    // population: 48/100, 15/100 and 15/100 respectively. None exceeded the unmodified
-    // 50/100, and two were WORSE (a wall-blind target wastes fire on an enemy it cannot
-    // hit; permanent kiting forfeits position). So win rate here is bounded by
-    // survival/positioning, not by offense, and no buff to THIS file's own levers was
-    // found that pushes it toward 1 -- an upper bound would have been unfalsifiable by
-    // any mutation actually tried, which is exactly the decorative-assertion trap
-    // CLAUDE.md warns against. If a real "shoots through everything, never misses,
-    // never dies" bug ever needs catching, it will need a mutation this file's movement
-    // model cannot express (e.g. bypassing dangerAvoidMove's own geometry), which is
-    // out of this issue's scope.
+    // kiting -- were each applied in isolation and measured on the THEN-current 100-game,
+    // 4-arena population: 48/100, 15/100 and 15/100 respectively, none exceeding the
+    // unmodified 50/100 and two WORSE (a wall-blind target wastes fire on an enemy it
+    // cannot hit; permanent kiting forfeits position). That experiment has not been
+    // rerun at the current 125-game, 5-arena population or against directive A/B's
+    // added behavior -- named here as a historical argument for why no upper bound is
+    // asserted, not as a current measurement. So win rate here is bounded by
+    // survival/positioning, not by offense; an upper bound would have been unfalsifiable
+    // by any mutation actually tried at the time, which is exactly the decorative-
+    // assertion trap CLAUDE.md warns against. If a real "shoots through everything,
+    // never misses, never dies" bug ever needs catching, it will need a mutation this
+    // file's movement model cannot express (e.g. bypassing dangerAvoidMove's own
+    // geometry), which is out of this issue's scope.
     const wins = all.filter((r) => r.outcome === 'win').length;
     const rate = wins / all.length;
     expect(rate, `${wins}/${all.length} games won`).toBeGreaterThan(0.2);
   });
 
   it('reads arena-01 as easier than arena-03 and arena-04', () => {
-    // Measured win rates: arena-01 21/25 (84%), arena-03 7/25 (28%), arena-04 6/25 (24%)
-    // -- a >50-point gap either way, wide enough to stay a stable ordinal claim under
+    // Measured win rates: arena-01 22/25 (88%), arena-03 6/25 (24%), arena-04 5/25 (20%)
+    // -- a >60-point gap either way, wide enough to stay a stable ordinal claim under
     // ordinary tuning rather than sitting on a fragile boundary. This is the
     // "level 4 is harder than level 1" kind of claim the issue asks this harness to make
-    // measurable; it does not by itself distinguish arena-03 from arena-04 (28% vs 24%
-    // is within the noise a small tuning change could flip).
+    // measurable; it does not by itself distinguish arena-03 from arena-04 (24% vs 20%
+    // is within the noise a small tuning change could flip). Arena-05 is not part of
+    // this specific ordinal claim (it predates arena-05's addition and nothing in
+    // directive A/B required extending it); for reference it is currently the hardest
+    // of the five at 3/25 (12%).
     //
-    // Mutation note: every production mutation tried against this assertion (disabling
-    // dodging, forcing point-blank ramming, both together) collapsed EVERY arena's win
-    // rate toward 0 rather than closing the gap non-degenerately, so the cleanest kill
-    // found was arena-01 and arena-03 both landing at 0/25 (`0 > 0` correctly fails).
-    // The real, unmutated 56-84-point gaps above are the actual evidence this assertion
-    // is not a tautology; no mutation was found that flips the order while both sides
-    // stay above zero.
+    // Mutation note (from before arena-05/directive A/B; not rerun at the current tree):
+    // every production mutation tried against this assertion (disabling dodging,
+    // forcing point-blank ramming, both together) collapsed EVERY arena's win rate
+    // toward 0 rather than closing the gap non-degenerately, so the cleanest kill found
+    // was arena-01 and arena-03 both landing at 0/25 (`0 > 0` correctly fails). The
+    // real, unmutated gaps above are the actual evidence this assertion is not a
+    // tautology; no mutation was found that flips the order while both sides stay above
+    // zero.
     expect(winRate(0), 'arena-01 vs arena-03').toBeGreaterThan(winRate(2));
     expect(winRate(0), 'arena-01 vs arena-04').toBeGreaterThan(winRate(3));
   });
 
   it('still shoots: reaction-gated fire is not the same as passive', () => {
-    // Population: same 100 games. Measured per-arena averages 14.4-49.6 fires/game; the
+    // Population: same 125 games. Measured per-arena averages 17.4-48.8 fires/game; the
     // bar sits far below the lowest observed so it only catches an accidental
     // "never/rarely fires" regression, not ordinary aim/reaction retuning.
     const fires = all.reduce((n, r) => n + r.fires, 0);
@@ -183,7 +196,7 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('lays mines occasionally rather than never or constantly', () => {
-    // Population: same 100 games. Measured per-arena averages 1.48-6.52 mines/game.
+    // Population: same 125 games. Measured per-arena averages 1.52-8.00 mines/game.
     const mines = all.reduce((n, r) => n + r.mines, 0);
     const perGame = mines / all.length;
     expect(perGame, `${mines} mines over ${all.length} games`).toBeGreaterThan(0.3);
@@ -191,9 +204,9 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('does not routinely kill itself with its own mine', () => {
-    // Population: all LOSSES across the 100 games (a self-mine death can only happen in
-    // a loss), measured at 50. Self-mine share measured 5/50 (10%), all in arena-02. The
-    // residual is real and documented (PLAYER_MINE_CHANCE's comment in
+    // Population: all LOSSES across the 125 games (a self-mine death can only happen in
+    // a loss), measured at 74. Self-mine share measured 6/74 (8.1%), 5 in arena-02 and 1
+    // in arena-03. The residual is real and documented (PLAYER_MINE_CHANCE's comment in
     // player-profile.ts) -- this is a regression guard against it becoming the DOMINANT
     // cause of death, not a claim that it is eliminated.
     const losses = all.filter((r) => r.outcome === 'lose');

@@ -109,10 +109,13 @@ const PLAYER_RETREAT_CHANCE = 0.4;
  * three chance values tried, "consistent with" is as far as this evidence goes.
  *
  * Shipped at 0.05: rare enough to read as occasional rather than compulsive
- * (minesPerGame 1.6-7.7 across the 4 arenas; full numbers in the measurement block's
- * console output), with the residual self-mine risk left in on purpose -- see
- * player-profile.test.ts's pinned self-mine-share assertion, which is the honest way to
- * hold this open rather than papering over it.
+ * (minesPerGame 1.73-7.15 across the 5 arenas, re-measured after directive A parts 1
+ * and 2 landed -- this range moved from an earlier 1.6-7.7-across-4-arenas figure
+ * measured before arena-05 shipped, which is a population change more than a behavior
+ * one; full numbers in the measurement block's console output), with the residual
+ * self-mine risk left in on purpose -- see player-profile.test.ts's pinned
+ * self-mine-share assertion, which is the honest way to hold this open rather than
+ * papering over it.
  */
 const PLAYER_MINE_CHANCE = 0.05;
 
@@ -306,13 +309,17 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
  *
  * Behaviour, in priority order (see the issue): dodge incoming shells / flee armed mines
  * (dangerAvoidMove, unchanged from the enemy AI -- fully deterministic, no RNG at all);
- * otherwise keep a sensible distance from the nearest enemy rather than ramming; aim at
- * the nearest enemy actually in sight, jittered by the player's own resolved profile's
- * aimAccuracy (STATIC_BASIC, 0.55 -- worse than Grey's 0.6, better than Brown's... same
- * 0.55, since Brown IS StaticBasic); fire only once that solution has been HELD for the
- * profile's own reactionTime (0.8s) -- so the player does not snap to a frame-perfect
- * shot the instant an enemy peeks a corner; occasionally lay a mine when an enemy is
- * close enough for one to matter.
+ * otherwise keep a sensible distance from the nearest enemy rather than ramming --
+ * retreating from the whole-map opponent CENTROID rather than just whichever one is
+ * closest, once a second opponent is in play (see ThreatSummary); aim at the nearest
+ * enemy actually in sight, jittered by the player's own resolved profile's aimAccuracy
+ * (STATIC_BASIC, 0.55 -- worse than Grey's 0.6, better than Brown's... same 0.55, since
+ * Brown IS StaticBasic); with no tank in sight, aim at and fire on an intact
+ * destructible wall if it is the ONLY thing blocking the nearest known opponent (see
+ * wallShotPoint); fire only once a solution has been HELD for the profile's own
+ * reactionTime (0.8s) -- so the player does not snap to a frame-perfect shot the
+ * instant an enemy peeks a corner; occasionally lay a mine when an enemy is close
+ * enough for one to matter.
  */
 export function decidePlayerInput(
   world: World,
