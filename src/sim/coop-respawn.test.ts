@@ -192,8 +192,10 @@ describe('resolveStatus: coop guard (countPlayerTanks(world) >= 2)', () => {
 
   it('players.length < 2 regression pin: 1-player and 0-player worlds are byte-identical to the pre-guard body', () => {
     // Guards the guard: proves the coop branch is genuinely unreachable at N < 2, not
-    // merely untested. Captures full-world + event-stream output and compares against
-    // hand-reasoned pre-change behaviour (the original, single-player-only body).
+    // merely untested. Compares status, lives, respawn state and the full event stream
+    // against hand-reasoned pre-change behaviour -- a targeted subset, not a whole-World
+    // toEqual; the forward byte-identity guarantee for the 1P path is carried by the
+    // golden trace's BASELINE_HASH, not by this pin.
     const onePlayer = createWorld({
       walls: [],
       tanks: [makeTank('player', A_ID, 5, 5, false), makeTank('brown', 3, 10, 10, false)],
@@ -281,6 +283,23 @@ describe('stepRespawns', () => {
     expect(a.aiTimer).toBe(0);
     expect(a.aimTicks).toBe(0);
     expect(a.desiredMove).toEqual({ x: 0, y: 0 });
+  });
+
+  it('revives P2 (tanks[1]) at ITS appended spawn, not P1\'s -- the index invariant, insurance', () => {
+    // Review probed this correct by construction (index-based, no special-casing) but
+    // every shipped revival test exercised only tanks[0]; this pins the P2 half so a
+    // future special-case or index bug cannot regress it silently. Breaks if
+    // stepRespawns ever resolves the spawn by anything other than the tank's own index.
+    const w = twoPlayerWorld(3);
+    const b = tankById(w, B_ID);
+    b.alive = false;
+    b.pos = { x: 3, y: 3 }; // off both spawns
+    b.respawnAtTick = 220;
+    w.tick = 220;
+    stepRespawns(w, []);
+    expect(b.alive).toBe(true);
+    expect(b.pos).toEqual(PLAYER_SPAWNS[1].pos); // index 1, never PLAYER_SPAWNS[0]
+    expect(b.bodyAngle).toBe(PLAYER_SPAWNS[1].angle);
   });
 
   it('emits a respawn event carrying controlledBy and the revival position', () => {

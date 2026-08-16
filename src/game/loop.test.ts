@@ -1992,6 +1992,17 @@ describe('tallyCoopKills', () => {
     expect(into[1]).toBe(1);
   });
 
+  it('a MINE kill credits its owner\'s slot too -- by.source is irrelevant to attribution', () => {
+    // Review probed this correct (tallyCoopKills reads only by.ownerId) but every
+    // shipped case was shell-shaped; this pins the blast path so a future
+    // source-discriminating refactor cannot silently drop mine kills from the tally.
+    const into: number[] = [];
+    const mineKill = { type: 'tank-destroyed', tankId: 3, kind: 'brown', by: { source: 'blast', ownerId: 2 }, pos: { x: 0, y: 0 } } as SimEvent;
+    tallyCoopKills([mineKill], twoPlayerWorld(), into);
+    expect(into[1]).toBe(1); // P2's mine, P2's kill
+    expect(into[0]).toBeUndefined();
+  });
+
   it('an enemy killed by P1\'s shell increments coopKills[0], not coopKills[1]', () => {
     const into: number[] = [];
     tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into); // by tankId 1 = P1 (controlledBy 0)
