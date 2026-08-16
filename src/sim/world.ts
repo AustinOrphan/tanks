@@ -474,10 +474,11 @@ export function resolveStatus(world: World, events: SimEvent[]): void {
   // pushes a second `win` -- and a second victory stinger.
   if (world.status !== 'playing') return;
 
-  // Two or more player-kind tanks: shared-pool coop semantics, entirely separate
-  // machinery (resolveStatusCoop above) -- see the coop semantics plan
-  // (docs/superpowers/plans/2026-08-15-coop-semantics.md), which answers
-  // docs/research/multiplayer.md's open question 3. Returns unconditionally, so
+  // Two or more player-kind tanks: coop semantics, entirely separate machinery
+  // (resolveStatusCoop above) -- shared ATTEMPTS by default since the 2026-08-16
+  // ruling (docs/superpowers/plans/2026-08-16-coop-attempts.md), with the original
+  // shared-pool model behind ?dev=1&coopPool=1 (the 2026-08-15 plan, which answered
+  // docs/research/multiplayer.md's open question 3). Returns unconditionally, so
   // nothing below this line ever runs at playerCount >= 2 -- everything below is
   // today's 1P body, byte-for-byte, unmodified (pinned in coop-respawn.test.ts and by
   // tools/baseline/trace.test.ts's BASELINE_HASH, which drives exactly one player and

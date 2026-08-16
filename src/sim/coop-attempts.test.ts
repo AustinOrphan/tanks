@@ -85,6 +85,44 @@ describe('World.coopAttempts: defaults to true', () => {
   });
 });
 
+describe('resolveStatusCoop: ATTEMPTS mode -- review insurance cases', () => {
+  it('mutual annihilation: the last enemy dies the same call both players do -- WIN, not a wipe', () => {
+    // The win check is a STATE check that returns before either coop branch runs, so
+    // a same-tick trade cannot spend an attempt. Breaks if the wipe branch is ever
+    // hoisted above the win check.
+    const w = coopWorld(2, true, true);
+    tankById(w, A_ID).alive = false;
+    tankById(w, B_ID).alive = false;
+    tankById(w, 3).alive = false; // the only enemy, dead in the same tick
+    resolveStatus(w, [destroyed(A_ID), destroyed(B_ID)]);
+    expect(w.status).toBe('win');
+    expect(w.lives).toBe(2); // no attempt spent
+  });
+
+  it('N=4: three dead, one survivor carries -- no decrement, no reset, corpses persist', () => {
+    const w = createWorld({
+      walls: [],
+      tanks: [
+        makeTank('player', 1, 5, 5), makeTank('player', 2, 8, 5),
+        makeTank('player', 4, 11, 5), makeTank('player', 5, 14, 5),
+        makeTank('brown', 3, 10, 10),
+      ],
+      spawns: [
+        { kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }, { kind: 'player', pos: { x: 8, y: 5 }, angle: 0 },
+        { kind: 'player', pos: { x: 11, y: 5 }, angle: 0 }, { kind: 'player', pos: { x: 14, y: 5 }, angle: 0 },
+        { kind: 'brown', pos: { x: 10, y: 10 }, angle: 0 },
+      ],
+      lives: 3,
+    });
+    for (const id of [1, 2, 4]) tankById(w, id).alive = false;
+    resolveStatus(w, [destroyed(1), destroyed(2), destroyed(4)]);
+    expect(w.status).toBe('playing');
+    expect(w.lives).toBe(3); // untouched -- one player still stands
+    for (const id of [1, 2, 4]) expect(tankById(w, id).alive).toBe(false); // corpses stay
+    expect(tankById(w, 5).alive).toBe(true);
+  });
+});
+
 describe('resolveStatusCoop: ATTEMPTS mode (world.coopAttempts, the default)', () => {
   it('a single player death alone costs nothing: no lives decrement, no respawnAtTick, the corpse stays down', () => {
     const w = coopWorld(3);
