@@ -3863,14 +3863,48 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
     h.handle.dispose();
   });
 
-  it('autoplay takes precedence over a bot claiming slot 0: slot 0 samples through decidePlayerInput once either way, and disabling the bot branch at i===0 changes nothing observable here', () => {
-    // Both flags claim slot 0. The real input controller must not be sampled by
-    // EITHER path (both substitute), and dispose must not throw walking realSources.
+  it('autoplay takes precedence over a bot claiming slot 0: neither substitute ever samples the real input controller', () => {
+    // Both flags claim slot 0. Whichever wins, the real input controller must not be
+    // sampled (both substitute), and dispose must not throw walking realSources.
     const h = boot(makeDeps({ devFlags: { players: 2, bots: 2, autoplay: true } }));
     h.setState('playing');
     h.fireFrame(500);
     expect(h.rec.samples).toBe(0);
     h.handle.dispose();
+  });
+
+  it('autoplay actually DRIVES slot 0 when both claim it, not the bot: proven through the same wallMs-vs-seed signal the reproducibility test below uses', () => {
+    // autoplay's stream is wallMs()-seeded; a bot's is world.seed-seeded. With `seed`
+    // pinned identically across two sessions but wallMs DIFFERENT, slot 0's trajectory
+    // must DIVERGE if autoplay is really the one driving it -- and must NOT diverge if
+    // the bot branch (checked second) were somehow winning instead. `samples===0`
+    // alone (the test above) cannot tell the two branches apart, since neither ever
+    // calls the real controller; this one can, because only one of the two candidate
+    // drivers is sensitive to wallMs at all.
+    function slot0Trajectory(wallMs: number): Array<{ pos: Vec2; turretAngle: number }> {
+      const h = boot(makeDeps({ devFlags: { seed: 42, bots: 1, autoplay: true }, wallMs }));
+      h.setState('playing');
+      const out: Array<{ pos: Vec2; turretAngle: number }> = [];
+      // MANY SMALL steps, not a few big jumps: a single fireFrame call is clamped to
+      // MAX_FRAME_DT (0.25s = 15 ticks, frame.ts), so a big `now` jump does NOT
+      // simulate the elapsed wall time -- see the autoplay-wiring describe block's own
+      // "actually moves the player tank" test, which this mirrors. The default
+      // single-player fixture also does NOT back-date roundStartTick the way the
+      // multiplayer path does, so COUNTDOWN_TICKS (180 ticks = 3s) blocks movement
+      // first -- 80 steps of 100ms clears both.
+      for (let i = 1; i <= 80; i++) {
+        h.fireFrame(i * 100);
+        if (i % 10 === 0) {
+          const p0 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.kind === 'player')!;
+          out.push({ pos: { ...p0.pos }, turretAngle: p0.turretAngle });
+        }
+      }
+      h.handle.dispose();
+      return out;
+    }
+    const a = slot0Trajectory(111);
+    const b = slot0Trajectory(987654321);
+    expect(a).not.toEqual(b);
   });
 
   describe('reproducibility (mutation 3, red-first): the resolved WORLD SEED, never wallMs', () => {
@@ -3906,6 +3940,62 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
       const lastTick = a[a.length - 1];
       const anyMoved = firstTick.some((t0) => {
         const t1 = lastTick.find((t) => t.id === t0.id)!;
+        return Math.abs(t1.pos.x - t0.pos.x) > 1e-6 || Math.abs(t1.pos.y - t0.pos.y) > 1e-6;
+      });
+      expect(anyMoved).toBe(true);
+    });
+  });
+
+  describe('switchTo reseeds botSources from the NEW world, not the old stream carried forward', () => {
+    // botSources is reassigned inside switchTo (see loop.ts), from that call's OWN
+    // `world.seed` -- not merely built once at boot. Proof: drive one session through
+    // real level-0 play (many ticks, real RNG draws consumed) before advancing, and a
+    // second STRAIGHT to level 1 with nothing consumed first; if switchTo's reseed is
+    // real, both land on an IDENTICAL fresh bot state once play resumes at level 1,
+    // since createBotSources is a pure function of (seed, slots) and `seed` is pinned
+    // identically across the whole session either way. `setState('win')` +
+    // `hud.startRestart()` mirrors the existing "level progression" describe block's
+    // own shortcut through the transition, without needing a real winnable fixture.
+    function postSwitchTrajectory(prewarmAtLevel0: boolean): Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> {
+      const h = boot(makeDeps({ devFlags: { seed: 42, players: 3, bots: 3 }, levelCount: 2 }));
+      h.setState('playing');
+      let elapsed = 0;
+      if (prewarmAtLevel0) {
+        // Many small steps, not one big jump -- fireFrame clamps to MAX_FRAME_DT (15
+        // ticks) per call (see the autoplay-precedence test above for the same fix).
+        for (let i = 1; i <= 80; i++) {
+          elapsed = i * 100;
+          h.fireFrame(elapsed);
+        }
+      }
+      h.setState('win');
+      h.hud.startRestart(); // switchTo(next level) + sm.restart() -> 'playing' again
+      const snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> = [];
+      for (let i = 1; i <= 40; i++) {
+        elapsed += 100;
+        h.fireFrame(elapsed);
+        if (i % 5 === 0) {
+          snapshots.push(
+            h.rec.renders.at(-1)!.curr.tanks.map((t: Tank) => ({
+              id: t.id, pos: { ...t.pos }, turretAngle: t.turretAngle, bodyAngle: t.bodyAngle,
+            })),
+          );
+        }
+      }
+      h.handle.dispose();
+      return snapshots;
+    }
+
+    it('post-switch bot trajectory at level 1 is IDENTICAL whether or not level 0 consumed real RNG draws first', () => {
+      const warmed = postSwitchTrajectory(true);
+      const cold = postSwitchTrajectory(false);
+      expect(warmed).toEqual(cold);
+      // Sanity: the compared window is not vacuously frozen (both scenarios reach the
+      // same non-spawn state, not just the same spawn state).
+      const first = warmed[0];
+      const last = warmed[warmed.length - 1];
+      const anyMoved = first.some((t0) => {
+        const t1 = last.find((t) => t.id === t0.id)!;
         return Math.abs(t1.pos.x - t0.pos.x) > 1e-6 || Math.abs(t1.pos.y - t0.pos.y) > 1e-6;
       });
       expect(anyMoved).toBe(true);
