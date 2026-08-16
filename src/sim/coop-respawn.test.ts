@@ -324,7 +324,7 @@ describe('stepRespawns', () => {
     expect(tankById(w, B_ID)).toEqual(before);
   });
 
-  it('does nothing at all when countPlayerTanks(world) < 2 -- 1P never reaches this stage in the real pipeline (gate lives in stepInputs, pinned in step-pipeline.test.ts)', () => {
+  it('does nothing at all when countPlayerTanks(world) < 2 -- 1P never reaches this stage in the real pipeline (the gate lives in stepInputs, pinned in the describe block directly below)', () => {
     // stepRespawns itself has no internal player-count gate -- calling it directly on a
     // 1-player world with a stamped respawnAtTick WOULD revive it. That is fine: the
     // gate is stepInputs' job (`if (countPlayerTanks(draft) >= 2) stepRespawns(...)`),
@@ -340,6 +340,45 @@ describe('stepRespawns', () => {
     w.tick = 0;
     stepRespawns(w, []);
     expect(a.alive).toBe(true); // reachable directly; the real game never calls it here
+  });
+});
+
+/**
+ * COMPOSITION, not a unit test of stepRespawns' own body (that is the describe block
+ * above, which calls it directly). This is the CLAUDE.md distinction step-pipeline.test.ts
+ * draws for the rest of the pipeline: a unit file that calls a stage directly cannot see
+ * whether stepInputs actually wires that stage in. Every test above this point calls
+ * stepRespawns or resolveStatus directly and would keep passing if stepInputs' own
+ * `if (countPlayerTanks(draft) >= 2) stepRespawns(draft, events);` line were deleted --
+ * this is the one that would not.
+ */
+describe('stepInputs composition: stepRespawns is actually wired in, not merely correct in isolation', () => {
+  it('a corpse whose respawnAtTick lands on the very next tick revives THROUGH stepInputs -- not just when stepRespawns is called directly', () => {
+    const w = twoPlayerWorld(3);
+    const a = tankById(w, A_ID);
+    a.pos = { x: 12, y: 9 }; // off its own spawn, so revival is provably a MOVE
+    a.alive = false;
+    // stepInputs increments tick BEFORE running this stage, so +1 lands exactly on it.
+    a.respawnAtTick = w.tick + 1;
+    w.roundStartTick = -100000; // irrelevant to stepRespawns itself, kept realistic anyway
+
+    const r = stepInputs(w, []);
+
+    const revived = tankById(r.world, A_ID);
+    expect(revived.alive).toBe(true);
+    expect(revived.pos).toEqual(PLAYER_SPAWNS[0].pos);
+    expect(revived.respawnAtTick).toBeUndefined();
+    expect(revived.shieldUntilTick).toBe(r.world.tick + RESPAWN_SHIELD_TICKS);
+  });
+
+  it('does NOT revive one tick early -- the composed pipeline respects the same tick check stepRespawns enforces on its own', () => {
+    const w = twoPlayerWorld(3);
+    const a = tankById(w, A_ID);
+    a.pos = { x: 12, y: 9 };
+    a.alive = false;
+    a.respawnAtTick = w.tick + 2; // one tick LATER than stepInputs is about to reach
+    const r = stepInputs(w, []);
+    expect(tankById(r.world, A_ID).alive).toBe(false);
   });
 });
 
