@@ -32,6 +32,9 @@ import {
   startGameWith,
   deriveSeed,
   createIdleInputSource,
+  botSlotsFor,
+  createBotSources,
+  BOT_SEED_SPACING,
   isMuteHotkey,
   musicIntensity,
   isPauseHotkey,
@@ -3710,6 +3713,203 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     expect(h.rec.playerCounts).toEqual([undefined]);
     expect(h.rec.gamepadSourceBuilds).toBe(0);
     h.handle.dispose();
+  });
+});
+
+describe('botSlotsFor: bots=K fills the LAST K of N slots', () => {
+  // Mutation 1 (bots plan, red-first): fill first-K instead of last-K. A first-K rule
+  // would return {0,1} here, not {2,3} -- the assertion below is the exact one that
+  // catches it.
+  it('claims the highest-numbered slots, not the lowest', () => {
+    expect(botSlotsFor(4, 2)).toEqual(new Set([2, 3]));
+    expect(botSlotsFor(4, 1)).toEqual(new Set([3]));
+    expect(botSlotsFor(4, 3)).toEqual(new Set([1, 2, 3]));
+  });
+
+  it('K=0 claims nothing', () => {
+    expect(botSlotsFor(4, 0)).toEqual(new Set());
+    expect(botSlotsFor(1, 0)).toEqual(new Set());
+  });
+
+  it('K=N claims every slot, including slot 0 -- the fully autonomous match owner directive 1 asks for', () => {
+    expect(botSlotsFor(4, 4)).toEqual(new Set([0, 1, 2, 3]));
+    expect(botSlotsFor(1, 1)).toEqual(new Set([0]));
+  });
+});
+
+describe('createBotSources / BOT_SEED_SPACING: independence from every enemy-AI stream', () => {
+  // Every per-tank enemy stream in targeting.ts (wanderMove, seekMove's retreat draw,
+  // mineInclination, aimJitter) hashes `world.seed + tank.id * PRIME + bucket` with
+  // PRIME one of {1000, 4243, 6101, 7919}, tank.id >= 1 (arena.ts's grid-scan counter
+  // starts at 1) and bucket >= 0. The smallest value ANY of those keys can ever take is
+  // therefore exactly `world.seed + 1000` (id=1, bucket=0, the smallest prime) -- so any
+  // bot key strictly BELOW `world.seed` can never equal one, for any prime, not only
+  // today's four.
+  it('every bot key (world.seed - BOT_SEED_SPACING + slot, slot 0-3) is strictly less than world.seed, and every enemy key (world.seed + PRIME + 0, id=1 bucket=0, the smallest reachable case per prime) is strictly greater -- so they cannot coincide', () => {
+    const seed = 7919; // arbitrary -- one of the enemy primes itself, deliberately, to
+    // make sure a naive "seed happens to be small" argument isn't doing the work.
+    const primes = [1000, 4243, 6101, 7919];
+    for (let slot = 0; slot <= 3; slot++) {
+      const botKey = seed - BOT_SEED_SPACING + slot;
+      expect(botKey).toBeLessThan(seed);
+      for (const prime of primes) {
+        const enemyKey = seed + 1 * prime + 0; // id=1, bucket=0: the smallest this prime reaches
+        expect(enemyKey).toBeGreaterThan(seed);
+        expect(botKey).not.toBe(enemyKey);
+      }
+    }
+  });
+
+  // Mutation 2 (bots plan, red-first): the n-player arc design's own draft used
+  // `mulberry32(seed + 1000 + slot)` -- an ADDITIVE offset of 1000, not a subtracted
+  // spacing. This test states the exact collision that draft had, so the test above is
+  // provably not vacuous: it is the one case (slot 0, id 1, bucket 0) where an additive
+  // offset of 1000 hits the wander stream's own key exactly.
+  it("the plan draft's offset (seed + 1000 + slot) DOES collide with wanderMove's key at slot 0 -- the reason BOT_SEED_SPACING subtracts instead", () => {
+    const seed = 7919;
+    const draftBotKey = seed + 1000 + 0; // the rejected draft, slot 0
+    const wanderKey = seed + 1 * 1000 + 0; // wanderMove, tank.id=1, bucket=0
+    expect(draftBotKey).toBe(wanderKey);
+  });
+
+  it('seeds every claimed slot independently, with its own PlayerAiState object', () => {
+    const sources = createBotSources(100, new Set([0, 2]));
+    expect(sources.size).toBe(2);
+    expect(sources.has(1)).toBe(false);
+    const s0 = sources.get(0)!;
+    const s2 = sources.get(2)!;
+    expect(s0.state).not.toBe(s2.state);
+    expect(s0.rnd()).not.toBe(s2.rnd());
+  });
+
+  it('is a pure function of seed and slot set -- same inputs, same first draw', () => {
+    const a = createBotSources(555, new Set([0])).get(0)!;
+    const b = createBotSources(555, new Set([0])).get(0)!;
+    expect(a.rnd()).toBe(b.rnd());
+  });
+});
+
+describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
+  it('bots unset behaves identically to today: gamepadSourceBuilds and idle-hold are unaffected (regression signal)', () => {
+    const h = boot(makeDeps({ devFlags: { players: 4 } }));
+    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    h.handle.dispose();
+  });
+
+  it('bots=2 at players=4 fills the LAST 2 slots: slot 1\'s real gamepad source is still built (mutation-1 discriminator -- a first-K rule would leave this at 0)', () => {
+    const h = boot(makeDeps({ devFlags: { players: 4, bots: 2 } }));
+    expect(h.rec.playerCounts).toEqual([4]);
+    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    h.setState('playing');
+    h.fireFrame(100);
+    // Slot 1's real gamepad fake is sampled (it was built and is not bot-claimed).
+    expect(h.rec.slot1Samples).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it('bots=playerCount claims every slot, including slot 0: no gamepad source is built and the real keyboard controller never samples', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3, bots: 3 } }));
+    expect(h.rec.gamepadSourceBuilds).toBe(0);
+    h.setState('playing');
+    h.fireFrame(500);
+    expect(h.rec.samples).toBe(0); // input.sample() (slot 0's real fake) never called
+    expect(h.rec.slot1Samples).toBe(0); // no gamepad source was even built
+    h.handle.dispose();
+  });
+
+  it('bots=1 with players unset claims the sole slot -- the fully autonomous single-tank match owner directive 1 asks for', () => {
+    const h = boot(makeDeps({ devFlags: { bots: 1 } }));
+    h.setState('playing');
+    h.fireFrame(500);
+    expect(h.rec.samples).toBe(0); // the bot drives instead of the real input controller
+    h.handle.dispose();
+  });
+
+  it('a bot-claimed idle slot (2 or 3) is bot-DRIVEN, not idle-held: it moves off spawn in a real multiplayer world with live enemies', () => {
+    // Contrast with the players=4 test above (no bots), which pins the OPPOSITE
+    // claim for a real idle slot: turretAngle frozen, position exactly at spawn.
+    // decidePlayerInput's move is `avoid ?? seekLikeMove(...)`, and seekLikeMove
+    // never returns the zero vector (it falls back to a wander heading), so a
+    // bot-driven tank always has a nonzero move each tick -- unlike idle's
+    // literal `{x:0,y:0}`.
+    const h = boot(makeDeps({ devFlags: { players: 4, bots: 2, seed: 42 } }));
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawnPos3 = { ...spawned.find((t: Tank) => t.controlledBy === 3)!.pos };
+    h.setState('playing');
+    h.fireFrame(2000); // many ticks -- plenty of chances to move
+    const live3 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 3)!;
+    expect(live3).toBeDefined();
+    const moved =
+      Math.abs(live3.pos.x - spawnPos3.x) > 1e-6 || Math.abs(live3.pos.y - spawnPos3.y) > 1e-6;
+    expect(moved).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('bots=4 + gamepad=1 together: slot 0 stays gamepad:false (mutual exclusion with `players` unaffected by bots)', () => {
+    const h = boot(makeDeps({ devFlags: { players: 4, bots: 4, gamepad: true } }));
+    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    h.handle.dispose();
+  });
+
+  it('bots=4 with players=2 clamps to the resolved playerCount: BOTH slots are claimed, not an error on the unreachable 4th', () => {
+    // Both values are individually valid (bots' own range is 0-4, players' is 1-4);
+    // the clamp is loop.ts's own Math.min(devFlags.bots, playerCount), since the two
+    // flags parse independently and neither parser can see the other's value.
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 4 } }));
+    expect(h.rec.gamepadSourceBuilds).toBe(0); // slot 1 IS bot-claimed once clamped to 2
+    h.setState('playing');
+    h.fireFrame(500);
+    expect(h.rec.samples).toBe(0); // slot 0 too
+    h.handle.dispose();
+  });
+
+  it('autoplay takes precedence over a bot claiming slot 0: slot 0 samples through decidePlayerInput once either way, and disabling the bot branch at i===0 changes nothing observable here', () => {
+    // Both flags claim slot 0. The real input controller must not be sampled by
+    // EITHER path (both substitute), and dispose must not throw walking realSources.
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 2, autoplay: true } }));
+    h.setState('playing');
+    h.fireFrame(500);
+    expect(h.rec.samples).toBe(0);
+    h.handle.dispose();
+  });
+
+  describe('reproducibility (mutation 3, red-first): the resolved WORLD SEED, never wallMs', () => {
+    // A bot's whole reason to exist (owner directive 1: "simulate multiplayer using
+    // computer players") is a REPRODUCIBLE session: `?dev=1&seed=42&bots=K` must
+    // replay identically. wallMs is real-clock and MUST NOT leak into a bot's stream,
+    // unlike autoplay's own (deliberately session-scoped, non-reproducible) RNG.
+    const NOW_SEQUENCE = [17, 100, 260, 500, 900, 1500, 2200, 3000, 4000];
+
+    function runSession(wallMs: number): Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> {
+      const h = boot(makeDeps({ devFlags: { seed: 42, players: 3, bots: 3 }, wallMs }));
+      h.setState('playing');
+      const snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> = [];
+      for (const now of NOW_SEQUENCE) {
+        h.fireFrame(now);
+        const curr = h.rec.renders.at(-1)!.curr as World;
+        snapshots.push(
+          curr.tanks.map((t) => ({ id: t.id, pos: { ...t.pos }, turretAngle: t.turretAngle, bodyAngle: t.bodyAngle })),
+        );
+      }
+      h.handle.dispose();
+      return snapshots;
+    }
+
+    it('two sessions, same ?seed, DIFFERENT wallMs: every tank\'s position and angles agree at every one of the 9 sampled ticks', () => {
+      const a = runSession(111);
+      const b = runSession(987654321);
+      expect(a.length).toBe(NOW_SEQUENCE.length);
+      expect(a).toEqual(b);
+      // Sanity: the knob under test is actually wired -- prove the bots moved at all,
+      // so a vacuous "nothing moved either way" cannot masquerade as reproducibility.
+      const firstTick = a[0];
+      const lastTick = a[a.length - 1];
+      const anyMoved = firstTick.some((t0) => {
+        const t1 = lastTick.find((t) => t.id === t0.id)!;
+        return Math.abs(t1.pos.x - t0.pos.x) > 1e-6 || Math.abs(t1.pos.y - t0.pos.y) > 1e-6;
+      });
+      expect(anyMoved).toBe(true);
+    });
   });
 });
 

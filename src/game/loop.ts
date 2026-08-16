@@ -2,7 +2,12 @@ import type { World } from '../sim/world';
 import { countPlayerTanks } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Vec2, InputState, Tank } from '../sim/types';
-import { decidePlayerInput, createPlayerAiState, mulberry32 } from '../sim/ai/player-profile';
+import {
+  decidePlayerInput,
+  createPlayerAiState,
+  mulberry32,
+  type PlayerAiState,
+} from '../sim/ai/player-profile';
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, type LevelSystem } from './levels';
 import type { ProgressStore } from './progress';
@@ -223,6 +228,74 @@ export type DevConsoleTarget = Record<string, unknown>;
  */
 export function deriveSeed(wallMs: number): number {
   return (wallMs ^ (wallMs >>> 9)) >>> 0 || 1;
+}
+
+/**
+ * The spacing a bot's per-slot RNG stream is DEDUCTED from the resolved world seed by
+ * (see `createBotSources` below) -- chosen, not copied, from the n-player arc design's
+ * own draft (`mulberry32(seed + 1000 + slot)`), which collided with `targeting.ts`'s
+ * wander stream: `wanderMove` seeds `nextRng(world.seed + tank.id * 1000 + bucket)`, so
+ * a slot-0 bot at that offset drew the IDENTICAL number `nextRng` computes for an id-1
+ * enemy's very first wander decision (id 1, bucket 0) -- `world.seed + 1000 + 0`
+ * literally equals `world.seed + 1*1000 + 0`.
+ *
+ * Every per-tank enemy stream in `targeting.ts` (wander 1000, retreat 4243, mine
+ * inclination 6101, aim jitter 7919, all four multiplying `tank.id`) has the shape
+ * `world.seed + tank.id * PRIME + bucket` with PRIME > 0, `tank.id >= 1` (arena.ts's
+ * grid-scan numbering starts its counter at 1, `let id = 1`, and never assigns 0 to any
+ * tank, player or enemy), and `bucket >= 0` (`Math.floor(tick / WINDOW)`, tick never
+ * negative) -- so EVERY enemy key is strictly GREATER than `world.seed` itself, for any
+ * positive multiplier, not only today's four. Subtracting a fixed spacing (larger than
+ * the largest slot index, 3, so every bot key stays below `world.seed`) makes every bot
+ * key strictly LESS than `world.seed` -- disjoint from the whole family by construction,
+ * not merely from the four multipliers that happen to exist today. A future per-tank
+ * stream that keeps the same additive-from-world.seed shape (as PR2c's planned fifth
+ * prime would) cannot collide with this either, whatever prime it picks -- only a
+ * stream that itself went negative relative to world.seed could, and none does.
+ *
+ * `1009` is arbitrary beyond needing magnitude > 3: a prime, for the same
+ * spot-the-typo-if-reused reason `targeting.ts` picks primes for its own multipliers,
+ * not because primality does any work in the collision argument above.
+ */
+export const BOT_SEED_SPACING = 1009;
+
+/**
+ * Per-slot RNG stream and hold-state for a bot-claimed slot, mirroring what `autoplay`
+ * builds for slot 0 (`autoplayRnd`/`autoplayState` below) -- except reseeded from the
+ * CURRENT world's own resolved seed rather than session-scoped from `wallMs()`. Bots
+ * exist to simulate a REPRODUCIBLE multiplayer session (owner directive 1's actual use
+ * case: `?dev=1&seed=42&bots=K` must replay identically), which is exactly the
+ * guarantee `wallMs()` cannot give and `world.seed` can -- see BOT_SEED_SPACING's own
+ * doc comment for why `world.seed - BOT_SEED_SPACING + slot` never collides with an
+ * enemy AI stream.
+ *
+ * `slots` is the exact set of slot indices bots claim (the LAST `botCount` of
+ * `playerCount`, computed once by the caller) -- keyed by slot number, not built as an
+ * array, so a non-claimed slot has no entry at all rather than a hole.
+ */
+export function createBotSources(
+  seed: number,
+  slots: ReadonlySet<number>,
+): Map<number, { rnd: () => number; state: PlayerAiState }> {
+  const sources = new Map<number, { rnd: () => number; state: PlayerAiState }>();
+  for (const slot of slots) {
+    const rnd = mulberry32(seed - BOT_SEED_SPACING + slot);
+    sources.set(slot, { rnd, state: createPlayerAiState(rnd) });
+  }
+  return sources;
+}
+
+/**
+ * The LAST `botCount` of `playerCount` slots, per the n-player arc's PR2 design: the
+ * simplest possible fill rule, chosen because at this PR no per-slot controller routing
+ * exists yet to arbitrate a per-slot declaration against (that is a later PR's job).
+ * `botCount` may equal `playerCount` -- including at playerCount 1, where it claims the
+ * only slot, the fully autonomous match owner directive 1 asks for.
+ */
+export function botSlotsFor(playerCount: number, botCount: number): Set<number> {
+  const slots = new Set<number>();
+  for (let i = playerCount - botCount; i < playerCount; i++) slots.add(i);
+  return slots;
 }
 
 /**
@@ -502,6 +575,19 @@ export function startGameWith(
    */
   const playerCount = deps.devFlags.level === 'sandbox' ? 1 : (deps.devFlags.players ?? 1);
 
+  /**
+   * `bots` clamped against the resolved `playerCount`, not rejected: the two flags
+   * parse independently (devflags.ts has no view of the other's value), so `bots=4`
+   * with `players` unset (playerCount 1) claims the one slot that exists rather than
+   * erroring on a combination nobody asked to be invalid. Unlike `playerCount`, NOT
+   * excluded from the sandbox -- see devflags.ts's `bots` doc comment for why: the
+   * sandbox already resolves to a single slot, and `bots=1` there is exactly what
+   * `autoplay=1` already does unguarded.
+   */
+  const botCount = Math.min(deps.devFlags.bots ?? 0, playerCount);
+  /** The LAST `botCount` of `playerCount` slots -- see botSlotsFor's own doc comment. */
+  const botSlots = botSlotsFor(playerCount, botCount);
+
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
   // for a before/after comparison.
@@ -570,6 +656,17 @@ export function startGameWith(
     ? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
+  /**
+   * Reseeded from the CURRENT world's own resolved seed on every world switch (see
+   * `switchTo`'s matching reassignment below) -- unlike `autoplayRnd`/`autoplayState`
+   * further down, which are session-scoped. Bots exist specifically to simulate a
+   * REPRODUCIBLE session (`?dev=1&seed=42&bots=K` must replay identically), which is
+   * a per-world guarantee, not a per-session one: a pinned dev seed resolves to the
+   * SAME value on every level (`nextSeed` returns the constant unconditionally), so
+   * reseeding here keeps every level's bot behaviour a pure function of that level's
+   * own seed rather than of how much a previous level's stream had already consumed.
+   */
+  let botSources = createBotSources(world.seed, botSlots);
   // Whether the CURRENT session is practice (Level Select), as opposed to the
   // campaign run. Practice must not consume, restore, replace, advance or complete
   // the active run (the spec's hard rule) -- this is the flag every run-mutation
@@ -642,21 +739,27 @@ export function startGameWith(
   // the aim side already reads under the right gesture.
   input.setFireMode(deps.touchSettings.fireMode());
   /**
+   * The real, constructed `PlayerInputSource` for every NON-bot-claimed slot, keyed by
+   * slot number -- always has slot 0 (`input`). A bot-claimed slot (see `botSlots`
+   * above) has NO entry here at all: `decidePlayerInput` needs no injected controller
+   * to drive from, so building one for a slot that will never call `.sample()` on it
+   * would be dead construction. This is the generalisation `botSlots.has(i)` adds to
+   * every site that used to build unconditionally on `playerCount` alone.
+   *
    * Slot 1: a standalone gamepad-only source, owning gamepad[0] exclusively (see the
-   * `gamepad: false` above). `null` when `playerCount` is 1 or the session is excluded
-   * by the sandbox.
-   */
-  const slot1: PlayerInputSource | null = playerCount >= 2 ? deps.createGamepadSource() : null;
-  /**
+   * `gamepad: false` above). Skipped when `playerCount` is 1, the session is excluded
+   * by the sandbox, or slot 1 itself is bot-claimed.
+   *
    * Slots 2..playerCount-1: no real per-index controller routing exists yet (that is
-   * PR3's job -- see the N-player arc), so every co-player beyond slot 1 is filled with
-   * `createIdleInputSource()`, which holds its tank's spawn heading instead of slewing
-   * toward world-origin (see that function's own doc comment). Empty at playerCount <= 2,
-   * so this changes nothing about today's shipped two-player shape.
+   * PR3's job -- see the N-player arc), so every non-bot co-player beyond slot 1 is
+   * filled with `createIdleInputSource()`, which holds its tank's spawn heading instead
+   * of slewing toward world-origin (see that function's own doc comment).
    */
-  const idleSlots: PlayerInputSource[] = [];
-  for (let i = 2; i < playerCount; i++) idleSlots.push(createIdleInputSource());
-  const slots: PlayerInputSource[] = slot1 !== null ? [input, slot1, ...idleSlots] : [input];
+  const realSources = new Map<number, PlayerInputSource>([[0, input]]);
+  if (playerCount >= 2 && !botSlots.has(1)) realSources.set(1, deps.createGamepadSource());
+  for (let i = 2; i < playerCount; i++) {
+    if (!botSlots.has(i)) realSources.set(i, createIdleInputSource());
+  }
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
   // per arena (16 in ARENA_01, 15 in ARENA_02). Every world rebuild recomputes it and
@@ -683,13 +786,49 @@ export function startGameWith(
    */
   const autoplayRnd = mulberry32(deriveSeed(deps.wallMs()) + 1);
   const autoplayState = createPlayerAiState(autoplayRnd);
+  /**
+   * The tank a slot drives, resolved the SAME way for every purpose this file needs it
+   * for (bot substitution here, the aim-stick position feed in onSimulated below):
+   * `controlledBy ?? 0` mirrors the render seam's own convention. At playerCount 1 this
+   * is identical to a bare `kind === 'player'` find, since no `controlledBy` is stamped
+   * and the one player-kind tank defaults to slot 0.
+   */
+  function tankForSlot(w: World, slot: number): Tank | undefined {
+    return w.tanks.find((t) => t.kind === 'player' && (t.controlledBy ?? 0) === slot);
+  }
+  /**
+   * Bots ride the SAME per-slot substitution autoplay already established at slot 0,
+   * generalized to every bot-claimed slot -- `createBotInputSource` per the n-player
+   * arc's PR2 design doc is this branch, not a separate `PlayerInputSource`
+   * implementation: `decidePlayerInput` already takes a `World` and returns an
+   * `InputState` exactly like a real source's `sample()`, so no adapter object is
+   * needed, only another arm of this same map.
+   *
+   * Precedence when BOTH `autoplay` and `bots` claim slot 0 (`bots` can reach slot 0 --
+   * see `botSlotsFor`): autoplay wins, checked first, unchanged from today's sole
+   * branch. This is a deliberate, narrow exception to bots' own reproducibility
+   * guarantee -- autoplay's stream is `wallMs()`-seeded, so a session with BOTH flags
+   * set is not reproducible at slot 0 even under a pinned `?dev=1&seed=`. Every other
+   * bot-claimed slot is unaffected: autoplay only ever substitutes slot 0.
+   */
   const effectiveInput = {
-    sample: (): InputState[] =>
-      slots.map((src, i) =>
-        i === 0 && deps.devFlags.autoplay && playerId !== undefined
-          ? decidePlayerInput(driver.world, playerId, autoplayRnd, autoplayState)
-          : src.sample(),
-      ),
+    sample: (): InputState[] => {
+      const out: InputState[] = [];
+      for (let i = 0; i < playerCount; i++) {
+        if (i === 0 && deps.devFlags.autoplay && playerId !== undefined) {
+          out.push(decidePlayerInput(driver.world, playerId, autoplayRnd, autoplayState));
+          continue;
+        }
+        const bot = botSources.get(i);
+        if (bot !== undefined) {
+          const tank = tankForSlot(driver.world, i);
+          out.push(decidePlayerInput(driver.world, tank?.id ?? -1, bot.rnd, bot.state));
+          continue;
+        }
+        out.push(realSources.get(i)!.sample());
+      }
+      return out;
+    },
   };
   /**
    * `?dev=1&replay=1`: remember what was sampled, tick by tick.
@@ -811,18 +950,16 @@ export function startGameWith(
     onSimulated(w): void {
       refreshStats(w);
       // The aim STICK needs EACH SLOT's own WORLD position to project a point from --
-      // see setPlayerPosition's doc comment. `controlledBy ?? 0` mirrors the render
-      // seam's own adopted convention (the foundation plan's render/entities.ts style
-      // map): at playerCount 1 this is identical to today's lookup, since no
-      // controlledBy is stamped and `?? 0` defaults the one player-kind tank found to
-      // slot 0. `null` when there is no tank for that slot, in which case the source
-      // simply holds its last aim.
-      const tankForSlot = (slot: number): Tank | undefined =>
-        w.tanks.find((t) => t.kind === 'player' && (t.controlledBy ?? 0) === slot);
-      const p1 = tankForSlot(0);
+      // see setPlayerPosition's doc comment (`tankForSlot`, hoisted above, is the same
+      // resolution the bot substitution uses). `null` when there is no tank for that
+      // slot, in which case the source simply holds its last aim. Only REAL sources
+      // need this -- a bot-claimed slot has no entry in `realSources` and needs none:
+      // `decidePlayerInput` reads the tank's position straight off `world` every tick,
+      // it does not need it echoed back through an injected setter.
+      const p1 = tankForSlot(w, 0);
       const p1Pos = p1 ? { x: p1.pos.x, y: p1.pos.y } : null;
-      slots.forEach((src, i) => {
-        const tank = i === 0 ? p1 : tankForSlot(i);
+      realSources.forEach((src, i) => {
+        const tank = i === 0 ? p1 : tankForSlot(w, i);
         src.setPlayerPosition(tank ? { x: tank.pos.x, y: tank.pos.y } : null);
       });
       // Same position, to the haptics director -- P1-ONLY, explicitly deferred (see
@@ -930,6 +1067,9 @@ export function startGameWith(
   function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
+    // Reseeded here too -- see the initial assignment's own doc comment for why bots
+    // are per-world, not per-session.
+    botSources = createBotSources(world.seed, botSlots);
     // A new world means a new trace: the recorded inputs only mean anything
     // applied to the world they were sampled against, so carrying them across a
     // level switch would produce a trace that replays into a different game.
@@ -1410,12 +1550,15 @@ export function startGameWith(
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
-      // Every co-player slot beyond slot 0 (slot 1's standalone gamepad source, when
-      // one was built, plus any idle-filled slots) -- none hold listeners of their own
-      // today (see GamepadReader.dispose's and createIdleInputSource's own doc
-      // comments), but disposed alongside slot 0 for symmetry and so a future stateful
-      // slot has somewhere to release.
-      slots.slice(1).forEach((s) => s.dispose());
+      // Every co-player slot beyond slot 0 that built a REAL source (slot 1's
+      // standalone gamepad source, when one was built, plus any idle-filled slots) --
+      // none hold listeners of their own today (see GamepadReader.dispose's and
+      // createIdleInputSource's own doc comments), but disposed alongside slot 0 for
+      // symmetry and so a future stateful slot has somewhere to release. A bot-claimed
+      // slot has nothing here to dispose -- see `realSources`' own doc comment.
+      realSources.forEach((s, i) => {
+        if (i !== 0) s.dispose();
+      });
       renderer.dispose();
       // The panel can still be open at teardown (main.ts's pagehide path can fire
       // any time) -- dispose whatever live preview context is holding, same as the
