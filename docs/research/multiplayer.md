@@ -554,6 +554,26 @@ behaviour under the `/tanks/` deploy are all unverified.
    as "every non-player tank dead" and the HUD shows "Enemies remaining" — neither has
    meaning with no AI enemies. **Write the rule down before touching `resolveStatus`**,
    because the current implementation encodes exactly one answer.
+
+   > **ANSWERED for co-op, 2026-08-15** (docs/superpowers/plans/2026-08-15-coop-semantics.md).
+   > `world.lives` is a single SHARED pool, drained per player death rather than
+   > per-death-event-reset. `resetArena`'s whole-board reset (repositioning every tank,
+   > restoring every wall, clearing world-level bullets/mines/blasts) is deliberately NOT
+   > reused for a mid-round coop death — it would erase a live partner's fight. A new
+   > per-tank `stepRespawns` revives only the corpse, at its own `spawns[idx]` cell,
+   > `RESPAWN_DELAY_TICKS` later, leaving everything else — enemies, wall damage, the
+   > partner's live ordnance — untouched; a `RESPAWN_SHIELD_TICKS` damage-immune span
+   > stands in for what `resetArena` used to guarantee safe. `resolveStatus` is a
+   > guard-first split on `countPlayerTanks(world) >= 2`: the single-player body is
+   > untouched below the guard, and the coop branch (`resolveStatusCoop`) is a
+   > self-contained shared-pool rule, refined one step further than "a run must not end
+   > while the partner is alive" — a run ends only once nobody is standing AND no
+   > already-scheduled respawn is still owed (`pendingRespawn`, not the pool alone: a
+   > respawn paid for on an earlier tick must be honored even if a later, different death
+   > drains the pool to 0 first). Versus remains UNANSWERED — this plan's shared-pool
+   > design assumes AI enemies stay the only opposing side; what `world.lives` means, or
+   > what a win is, with zero AI on the board is a separate decision this plan does not
+   > make.
 4. **How do the arena `claims` and `structuralFailures` rules generalise past one player
    spawn?** With two spawns, "no enemy sees the player spawn" becomes a cross product; on a
    versus board with zero AI it becomes vacuous, which is the failure mode CLAUDE.md warns
