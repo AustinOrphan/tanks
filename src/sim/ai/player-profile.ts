@@ -116,15 +116,35 @@ const PLAYER_RETREAT_CHANCE = 0.4;
  */
 const PLAYER_MINE_CHANCE = 0.05;
 
-/** Nearest ALIVE enemy to `from`, by straight-line distance, visibility not required --
- *  mirrors seekMove's own positional awareness (targeting.ts), which is not LOS-gated
- *  either: knowing roughly where the pressure is is positional sense, not aimbotting. */
-function nearestEnemy(world: World, from: Vec2): Tank | null {
+/**
+ * True if `other` should be treated as an opponent of `subject` -- the single predicate
+ * both `nearestEnemy`'s positional scan and the LOS target-acquisition loop hardcoded
+ * separately (`t.kind === 'player'` / `!== 'player'`, both gated on `t.alive`). Today's
+ * body is exactly what those two checks already did: every non-player-kind, alive tank
+ * is an opponent, because multiplayer teammates (any OTHER player-kind tank) never
+ * fight each other and are filtered the same way `subject` already is. `_world`/
+ * `_subject` are unused by TODAY's rule (underscored to satisfy noUnusedParameters) --
+ * kept in the signature because this is the seam a later mode-aware targeting pass
+ * swaps in one place, rather than hunting down every `kind` check this file grows in
+ * the meantime. Named `subject`, not `self`: purity.test.ts's guard flags any bare
+ * `self.`/`self[` as the DOM/worker global by regex, not by scope, so a LOCAL `self`
+ * parameter that is ever dotted (`self.pos`) is a real false positive there, not a
+ * hypothetical one -- confirmed by running into it while writing this function.
+ */
+function isOpponent(_world: World, _subject: Tank, other: Tank): boolean {
+  return other.kind !== 'player' && other.alive;
+}
+
+/** Nearest ALIVE enemy to `subject`, by straight-line distance, visibility not required
+ *  -- mirrors seekMove's own positional awareness (targeting.ts), which is not
+ *  LOS-gated either: knowing roughly where the pressure is is positional sense, not
+ *  aimbotting. */
+function nearestEnemy(world: World, subject: Tank): Tank | null {
   let best: Tank | null = null;
   let bestDist = Infinity;
   for (const t of world.tanks) {
-    if (t.kind === 'player' || !t.alive) continue;
-    const d = vdist(from, t.pos);
+    if (!isOpponent(world, subject, t)) continue;
+    const d = vdist(subject.pos, t.pos);
     if (d < bestDist) { bestDist = d; best = t; }
   }
   return best;
@@ -169,7 +189,7 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
   state.wanderTicksLeft -= 1;
   const wander = fromAngle(state.wanderHeading);
 
-  const nearest = nearestEnemy(world, player.pos);
+  const nearest = nearestEnemy(world, player);
   if (!nearest) return wander;
 
   const d = vdist(player.pos, nearest.pos);
@@ -225,7 +245,7 @@ export function decidePlayerInput(
   let target: Tank | null = null;
   let bestDist = Infinity;
   for (const t of world.tanks) {
-    if (t.kind === 'player' || !t.alive) continue;
+    if (!isOpponent(world, player, t)) continue;
     if (!lineOfSight(player.pos, t.pos, world.walls)) continue;
     const d = vdist(player.pos, t.pos);
     if (d < bestDist) { bestDist = d; target = t; }
@@ -266,7 +286,7 @@ export function decidePlayerInput(
   // mine while already standing within AI_MINE_FLEE_RADIUS of a live mine (own or not)
   // -- the safety margin dangerAvoidMove flees to, so a mine is never dropped somewhere
   // the player would immediately have to dodge again.
-  const nearest = nearestEnemy(world, player.pos);
+  const nearest = nearestEnemy(world, player);
   const nearLiveMine = world.mines.some(
     (m) => !m.detonated && vdist(player.pos, m.pos) <= AI_MINE_FLEE_RADIUS,
   );
