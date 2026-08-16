@@ -2624,6 +2624,31 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
   });
+
+  describe('coop kill attribution, end to end (coop semantics plan)', () => {
+    // tallyCoopKills and hud.setCoopKills are each unit-tested directly (their own
+    // describe blocks), which is exactly the CLAUDE.md-named blindness: a unit test
+    // calling either directly cannot see whether onFrameEvents still calls them at
+    // all. This drives a REAL kill through a driven frame and checks the tally
+    // reaches the HUD -- the composition, not the arithmetic.
+    it('a kill credited to P2 flows through tallyCoopKills into hud.setCoopKills, in a real driven frame', () => {
+      const h = boot(makeDeps({ devFlags: { coop: true } }));
+      const world = h.rec.builtWorlds[0];
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      const enemy = world.tanks.find((t: Tank) => t.kind !== 'player')!;
+      world.bullets.push({
+        id: 901, ownerId: p2.id, type: 'normal', pos: { x: enemy.pos.x, y: enemy.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const last = h.rec.coopKillPushes.at(-1);
+      expect(last).not.toBeNull();
+      expect(last![1]).toBe(1); // P2's slot, attributed by tallyCoopKills
+      expect(last![0] ?? 0).toBe(0); // not misfiled onto P1's slot
+      h.handle.dispose();
+    });
+  });
 });
 
 describe('playerShellsInFlight', () => {
