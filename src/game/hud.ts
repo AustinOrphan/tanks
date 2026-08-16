@@ -128,6 +128,15 @@ export interface Hud {
    * "This run: ..." copy is a separate, user-facing decision and stays as-is).
    */
   setStats(data: { lifetime: StatCounts; attempt: StatCounts }): void;
+  /**
+   * Coop's per-player kill tally, indexed by slot (coop semantics plan,
+   * docs/superpowers/plans/2026-08-15-coop-semantics.md). `null` means "never show" --
+   * a 1P session, or coop that has not started -- not merely "hide right now"; the
+   * caller (loop.ts) derives this off the world's real player count, mirroring
+   * `setStats`' own attempt/lifetime split. Twin of `renderAttemptSummary`, toggled
+   * by the same win/lose visibility rule.
+   */
+  setCoopKills(counts: number[] | null): void;
   /** Two-click-confirmed on the stats page. */
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
@@ -449,6 +458,7 @@ export function createHud(root: HTMLElement): Hud {
       <h1 class="hud-title" id="hud-panel-title"></h1>
       <p class="hud-subtitle"></p>
       <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
+      <p class="hud-coop-kills hud-coop-kills--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
@@ -541,6 +551,7 @@ export function createHud(root: HTMLElement): Hud {
   const achBackBtn = el.querySelector('.hud-achievements-back') as HTMLButtonElement;
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
   const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
+  const coopKillsEl = el.querySelector('.hud-coop-kills') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
@@ -754,6 +765,8 @@ export function createHud(root: HTMLElement): Hud {
   }
 
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
+  /** `null` means "never show" (1P, or coop that has not started) -- see setCoopKills. */
+  let coopKillsData: number[] | null = null;
 
   const pct = (num: number, den: number): string =>
     den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
@@ -792,6 +805,22 @@ export function createHud(root: HTMLElement): Hud {
     attemptSummaryEl.textContent =
       `This run: ${kills} kills · ${r.deaths} deaths · ${pct(r.shellKills, r.shotsFired)} accuracy`;
     attemptSummaryEl.classList.remove('hud-attempt-summary--hidden');
+  }
+
+  /**
+   * Twin of renderAttemptSummary, one line below it. `coopKillsData === null` means
+   * "never show" -- covers both a 1P session and coop before its first setCoopKills
+   * call -- so the line stays hidden even at win/lose, unlike the attempt summary
+   * which only depends on statsData ever having been set once at boot.
+   */
+  function renderCoopKillLine(): void {
+    if (!coopKillsData) {
+      coopKillsEl.classList.add('hud-coop-kills--hidden');
+      return;
+    }
+    const [p1, p2] = coopKillsData;
+    coopKillsEl.textContent = `P1: ${p1 ?? 0} · P2: ${p2 ?? 0}`;
+    coopKillsEl.classList.remove('hud-coop-kills--hidden');
   }
 
   /**
@@ -1309,6 +1338,10 @@ export function createHud(root: HTMLElement): Hud {
     // The attempt summary belongs to the END screens alone.
     attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', s !== 'win' && s !== 'lose');
     if (s === 'win' || s === 'lose') renderAttemptSummary();
+    // Twin toggle for coop's kill line -- renderCoopKillLine re-hides it if
+    // coopKillsData is null (1P, or coop that has not started), even at win/lose.
+    coopKillsEl.classList.toggle('hud-coop-kills--hidden', s !== 'win' && s !== 'lose');
+    if (s === 'win' || s === 'lose') renderCoopKillLine();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
@@ -1529,6 +1562,10 @@ export function createHud(root: HTMLElement): Hud {
       statsData = data;
       if (!statsView.classList.contains('hud-stats--hidden')) renderStatsTable();
       if (!attemptSummaryEl.classList.contains('hud-attempt-summary--hidden')) renderAttemptSummary();
+    },
+    setCoopKills(counts: number[] | null): void {
+      coopKillsData = counts;
+      if (!coopKillsEl.classList.contains('hud-coop-kills--hidden')) renderCoopKillLine();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);

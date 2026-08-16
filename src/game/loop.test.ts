@@ -27,6 +27,7 @@ import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
 import {
   isPlayerDeath,
+  tallyCoopKills,
   playerShellsInFlight,
   startGameWith,
   deriveSeed,
@@ -101,6 +102,8 @@ interface Recorder {
   statAttemptStarts: number;
   statResets: number;
   statPushes: number;
+  /** Every value passed to hud.setCoopKills, in order. */
+  coopKillPushes: Array<number[] | null>;
   levelSelects: Array<[number, number]>;
   /** Every value pushed to hud.setContinueAvailable, in order. */
   continueAvailable: boolean[];
@@ -252,6 +255,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statAttemptStarts: 0,
     statResets: 0,
     statPushes: 0,
+    coopKillPushes: [],
     levelSelects: [],
     continueAvailable: [],
     runNewRuns: [],
@@ -664,6 +668,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setStats: () => {
           rec.statPushes += 1;
+        },
+        setCoopKills: (counts: number[] | null) => {
+          rec.coopKillPushes.push(counts === null ? null : [...counts]);
         },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
@@ -1968,6 +1975,64 @@ describe('isPlayerDeath', () => {
   });
 });
 
+describe('tallyCoopKills', () => {
+  const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
+    ({ id, kind, controlledBy }) as Tank;
+
+  const destroyedEnemy = (tankId: number, killedByOwnerId: number): SimEvent =>
+    ({ type: 'tank-destroyed', tankId, kind: 'brown', by: { source: 'shell', ownerId: killedByOwnerId }, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  const twoPlayerWorld = () =>
+    ({ tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] }) as World;
+
+  it('an enemy killed by P2\'s shell increments coopKills[1], not coopKills[0]', () => {
+    const into: number[] = [];
+    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into); // by tankId 2 = P2 (controlledBy 1)
+    expect(into[0]).toBeUndefined();
+    expect(into[1]).toBe(1);
+  });
+
+  it('an enemy killed by P1\'s shell increments coopKills[0], not coopKills[1]', () => {
+    const into: number[] = [];
+    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into); // by tankId 1 = P1 (controlledBy 0)
+    expect(into[0]).toBe(1);
+    expect(into[1]).toBeUndefined();
+  });
+
+  it('AI-on-AI friendly fire (an enemy killing another enemy) increments neither slot', () => {
+    const into: number[] = [];
+    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into); // killer tankId 4 = teal, not a player
+    expect(into[0]).toBeUndefined();
+    expect(into[1]).toBeUndefined();
+  });
+
+  it('a player-kind death (e.kind === player) is excluded entirely, even if by.ownerId resolves to a player', () => {
+    const playerDied: SimEvent = { type: 'tank-destroyed', tankId: 1, kind: 'player', by: { source: 'shell', ownerId: 2 }, pos: { x: 0, y: 0 } };
+    const into: number[] = [];
+    tallyCoopKills([playerDied], twoPlayerWorld(), into);
+    expect(into[0]).toBeUndefined();
+    expect(into[1]).toBeUndefined();
+  });
+
+  it('accumulates across multiple events in one batch, mixing attributed and excluded kills', () => {
+    const into: number[] = [];
+    tallyCoopKills(
+      [destroyedEnemy(3, 1), destroyedEnemy(4, 2), destroyedEnemy(3, 4) /* friendly fire, excluded */],
+      { tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] } as World,
+      into,
+    );
+    expect(into[0]).toBe(1);
+    expect(into[1]).toBe(1);
+  });
+
+  it('a single-player world (no controlledBy) falls back to slot 0', () => {
+    const into: number[] = [];
+    const world = { tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
+    tallyCoopKills([destroyedEnemy(3, 1)], world, into);
+    expect(into[0]).toBe(1);
+  });
+});
+
 describe('startGameWith: a real player death reaches the HUD', () => {
   it('flashes the HUD when the player is actually killed in a driven frame', () => {
     // The predicate and the flash are tested separately; this is the seam
@@ -2526,6 +2591,36 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(h.rec.hudLevels.at(-1)).toEqual([1, CAMPAIGN_LEVELS.length]);
       h.fireFrame(100);
       expect(h.rec.renders.at(-1)!.curr.lives).toBe(LIVES);
+      h.handle.dispose();
+    });
+  });
+
+  describe('coop exclusion (coop semantics plan, docs/superpowers/plans/2026-08-15-coop-semantics.md)', () => {
+    // isPlayerDeath already keys on tankId, not kind, so P2 dying was ALREADY
+    // invisible to setLivesRemaining before this exclusion existed -- the meaningful
+    // case is the TRACKED player (P1/playerId) dying in a coop session, where
+    // campaignActive() would otherwise still read true.
+    it('the TRACKED player dying in coop never reaches the run store, even though tracksProgress/isDevJump/inPractice all say it could', () => {
+      const h = boot(makeDeps({ devFlags: { coop: true }, savedRun: { level: 0, lives: LIVES } }));
+      const world = h.rec.builtWorlds[0];
+      const p0 = world.tanks.find((t: Tank) => t.kind === 'player')!; // the tracked player
+      const enemy = world.tanks.find((t: Tank) => t.kind !== 'player')!;
+      world.bullets.push({
+        id: 900, ownerId: enemy.id, type: 'normal', pos: { x: p0.pos.x, y: p0.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      expect(h.rec.deathSignals).toBe(1); // the death really happened
+      expect(h.rec.runLivesSets).toEqual([]); // and never reached the run store
+      h.handle.dispose();
+    });
+
+    it('a coop boot with an existing real run in progress gets fresh LIVES, not the run\'s stale count', () => {
+      // 1 life, deliberately not LIVES: both the buggy and fixed paths would boot at
+      // a value indistinguishable from LIVES if the saved run already held LIVES.
+      const h = boot(makeDeps({ devFlags: { coop: true }, savedRun: { level: 0, lives: 1 } }));
+      expect(h.rec.levelBuilds[0].lives).toBeUndefined();
       h.handle.dispose();
     });
   });

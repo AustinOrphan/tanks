@@ -729,6 +729,17 @@
   display: none;
 }
 
+/* Coop's per-player kill tally -- one line below the attempt summary. */
+.hud-coop-kills {
+  margin-top: -6px;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-coop-kills--hidden {
+  display: none;
+}
+
 /* ---- Customize (the paint shop) --------------------------------------------------- */
 
 .hud-customize {
