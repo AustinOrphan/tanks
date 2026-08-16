@@ -243,10 +243,16 @@ export function deriveSeed(wallMs: number): number {
  * is `{0,0}` by construction, so the guard fails and the turret holds whatever heading it
  * already has -- the actual "idle" behaviour, not a slew toward a coordinate that happens
  * to be `{0,0}`. `lastPos` starts at the same `{0,0}` literal every other input source in
- * this tree defaults `aim` to (see `input/input.ts`'s own `let aim: Vec2 = {0, 0}`) --
- * `setPlayerPosition` is called once per simulated tick from `onSimulated` below, so this
- * default is live only for whatever handful of ticks (typically off-screen, during
- * splash/title) precede the first call.
+ * this tree defaults `aim` to (see `input/input.ts`'s own `let aim: Vec2 = {0, 0}`).
+ * `setPlayerPosition` fires from `onSimulated` below (driver.ts) once per RENDERED
+ * frame, after that frame's whole batch of simulated ticks -- not once per tick, and
+ * only while `stateMachine.state === 'playing'` (driver.ts's tick loop and its
+ * `onSimulated` call both sit inside that branch, so nothing steps and nothing samples
+ * during splash/title at all). The `{0,0}` default is therefore live only for the
+ * ticks inside the FIRST playing frame, before that frame's own `onSimulated` runs for
+ * the first time -- a sub-tick-batch transient right at round start, not an
+ * off-screen one. loop.test.ts's N=3/4 integration tests take one small warm-up frame
+ * to let it settle before asserting the turret holds steady afterward.
  *
  * Deliberately NOT run through `quantizeAim` (`input/touch.ts`), unlike every real
  * controller's sample(): quantizing rounds `aim` to the nearest `AIM_GRID` step, and for
