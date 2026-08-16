@@ -101,7 +101,7 @@ const EXAMPLES: readonly [string, string][] = [
     '?dev=1&level=sandbox&tanks=brown,teal,teal&walls=8&disarmed=0',
     'a scripted, armed sandbox arena -- repeats in `tanks` are kept, not deduplicated',
   ],
-  ['?dev=1&coop=1', 'couch co-op, second player on gamepad[0]'],
+  ['?dev=1&players=3', '3-player couch co-op, ring-spawned around P1'],
   ['?dev=1&quality=low', 'force the low render quality preset'],
 ];
 

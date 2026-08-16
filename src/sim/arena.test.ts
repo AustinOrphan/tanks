@@ -172,6 +172,60 @@ describe('loadArena', () => {
     }
   });
 
+  // Measured directly (ring 1, cellsNeeded=2, all 8 RING_DIRECTIONS in priority order),
+  // per the N-player plan's red-first step: `loadArena(arena, 3)` and `loadArena(arena,
+  // 4)` on all 5 shipped arenas, asserting the CONCRETE resolved cell rather than merely
+  // "found one". On every one of the 5, P3's ring-1-S candidate (dist 2, direction
+  // [0,1]) and P4's ring-1-W candidate (dist 2, direction [-1,0]) are BOTH open -- no
+  // arena falls through to ring 2 or the co-locate fallback, so those paths stay
+  // reachable only through the synthetic fixtures below.
+  it('resolves P3 to the measured ring-1-S cell and P4 to ring-1-W, on every shipped arena', () => {
+    const cases: [string, number, number][] = [
+      ['arena-01', 22, 16],
+      ['arena-02', 22, 16],
+      ['arena-03', 22, 16],
+      ['arena-04', 28, 22],
+      ['arena-05', 28, 22],
+    ];
+    for (const [id, p1Row, p1Col] of cases) {
+      const arena = arenaById(id);
+      const { tanks } = loadArena(arena, 4);
+      const players = tanks.filter((t) => t.kind === 'player');
+      expect(players, id).toHaveLength(4);
+
+      const p3 = players.find((t) => t.controlledBy === 2)!;
+      const p4 = players.find((t) => t.controlledBy === 3)!;
+      expect(p3, id).toBeDefined();
+      expect(p4, id).toBeDefined();
+
+      // Ring-1-S: (p1Row + 2, p1Col).
+      const p3Expected = {
+        x: (p1Col + 0.5) * arena.cellSize, y: (p1Row + 2 + 0.5) * arena.cellSize,
+      };
+      // Ring-1-W: (p1Row, p1Col - 2).
+      const p4Expected = {
+        x: (p1Col - 2 + 0.5) * arena.cellSize, y: (p1Row + 0.5) * arena.cellSize,
+      };
+      expect(p3.pos, id).toEqual(p3Expected);
+      expect(p3.alive, id).toBe(true);
+      expect(p4.pos, id).toEqual(p4Expected);
+      expect(p4.alive, id).toBe(true);
+    }
+  });
+
+  it('resolves N=3 identically to N=4\'s own first three slots (P3 does not move when a 4th player joins)', () => {
+    for (const id of ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05']) {
+      const arena = arenaById(id);
+      const three = loadArena(arena, 3).tanks.filter((t) => t.kind === 'player');
+      const four = loadArena(arena, 4).tanks.filter((t) => t.kind === 'player');
+      expect(three, id).toHaveLength(3);
+      for (const t of three) {
+        const match = four.find((f) => f.controlledBy === t.controlledBy)!;
+        expect(match.pos, `${id} slot ${t.controlledBy}`).toEqual(t.pos);
+      }
+    }
+  });
+
   it('appends P2 strictly after every enemy, so every enemy id is unchanged from playerCount 1', () => {
     for (const arena of ARENAS) {
       const single = loadArena(arena, 1);
@@ -247,6 +301,64 @@ describe('loadArena', () => {
       const p1 = tanks.find((t) => t.controlledBy === 0)!;
       const p2 = tanks.find((t) => t.controlledBy === 1)!;
       expect(p2.pos).toEqual(p1.pos);
+    });
+
+    it('N=4: P2 fills ring-1-E; P3, with every OTHER ring-1 direction blocked, escalates ' +
+      'to ring-2-E; P4, finding ring-2-E already claimed by P3, escalates further to ' +
+      'ring-2-S -- ring expansion and the `claimed` set both exercised past N=2', () => {
+      // P at (4,4) in a 9x9 grid (room for ring-2, dist 4, to land in-bounds on every
+      // axis). Every ring-1 cell EXCEPT E is walled, so P2's own ring-1-E search still
+      // succeeds immediately (unchanged from N=2), but P3 -- finding E already in
+      // `claimed` -- has nowhere left in ring 1 and must escalate.
+      const cols = 9, rows = 9;
+      const grid: string[] = [];
+      for (let r = 0; r < rows; r++) {
+        let row = '';
+        for (let c = 0; c < cols; c++) row += (r === 4 && c === 4) ? 'P' : '.';
+        grid.push(row);
+      }
+      // Ring 1 (dist 2) cells, every direction except E (4,6).
+      const blocked: [number, number][] = [
+        [6, 4], [4, 2], [2, 4], [6, 6], [6, 2], [2, 6], [2, 2], // S, W, N, SE, SW, NE, NW
+      ];
+      for (const [r, c] of blocked) {
+        grid[r] = grid[r].slice(0, c) + '#' + grid[r].slice(c + 1);
+      }
+      const arena = { cols, rows, cellSize: CELL_SIZE, legend: { '#': 'solid' as const }, grid } as never;
+      const { tanks } = loadArena(arena, 4);
+      const players = new Map(
+        tanks.filter((t) => t.kind === 'player').map((t) => [t.controlledBy, t]),
+      );
+      expect(players.size).toBe(4);
+
+      // P2: ring-1-E, unchanged from the N=2 fixture above.
+      expect(players.get(1)!.pos).toEqual({ x: (6 + 0.5) * CELL_SIZE, y: (4 + 0.5) * CELL_SIZE });
+      // P3: every ring-1 direction is blocked or (for E) claimed -- ring-2-E, (row 4, col 8).
+      expect(players.get(2)!.pos).toEqual({ x: (8 + 0.5) * CELL_SIZE, y: (4 + 0.5) * CELL_SIZE });
+      // P4: ring-1 exhausted the same way, and ring-2-E is now claimed by P3 -- the next
+      // direction in ring-2 priority order, S, (row 8, col 4), is open.
+      expect(players.get(3)!.pos).toEqual({ x: (4 + 0.5) * CELL_SIZE, y: (8 + 0.5) * CELL_SIZE });
+    });
+
+    it('N=4, fully boxed: P2, P3 AND P4 all co-locate with P1 at the SAME cell -- the ' +
+      'fallback does not check `claimed`, unlike every ring search above it', () => {
+      const cols = 11, rows = 11;
+      const grid: string[] = [];
+      for (let r = 0; r < rows; r++) {
+        let row = '';
+        for (let c = 0; c < cols; c++) row += (r === 5 && c === 5) ? 'P' : '#';
+        grid.push(row);
+      }
+      const arena = { cols, rows, cellSize: CELL_SIZE, legend: { '#': 'solid' as const }, grid } as never;
+      const { tanks } = loadArena(arena, 4);
+      const players = new Map(
+        tanks.filter((t) => t.kind === 'player').map((t) => [t.controlledBy, t]),
+      );
+      expect(players.size).toBe(4);
+      const p1Pos = players.get(0)!.pos;
+      expect(players.get(1)!.pos).toEqual(p1Pos);
+      expect(players.get(2)!.pos).toEqual(p1Pos);
+      expect(players.get(3)!.pos).toEqual(p1Pos);
     });
   });
 

@@ -10,6 +10,8 @@ import {
   type GetGamepads,
 } from './gamepad';
 import { AIM_PROJECTION_UNITS, AIM_GRID } from './touch';
+import { createWorld, applyPlayerInput } from '../sim/world';
+import type { Tank } from '../sim/types';
 
 describe('deadzoneVector', () => {
   it('reads exactly zero, and any noise no larger than the dead zone, as no input', () => {
@@ -283,5 +285,60 @@ describe('createGamepadInputSource: standalone per-slot source', () => {
   it('dispose() forwards to the wrapped reader without throwing', () => {
     const src = createGamepadInputSource(() => []);
     expect(() => src.dispose()).not.toThrow();
+  });
+
+  /**
+   * The N-player design's traced-but-unrun claim, now actually run: with no pad ever
+   * connected, `aim` used to never leave its `{0, 0}` construction default, which
+   * `world.ts`'s `driveTank` reads as a real aim point at the world's origin -- not as
+   * "no info." `driveTank: a literal {0,0} aim is not a neutral` (world.test.ts) pins the
+   * mechanism once, permanently; these pin THIS source avoiding it.
+   */
+  describe('the no-pad-ever-connected case (distinct from a connected pad with a centred stick)', () => {
+    function makePlayerTank(id: number, x: number, y: number): Tank {
+      return {
+        id, kind: 'player', pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
+        desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+        aiState: 'idle', aiTimer: 0,
+      };
+    }
+
+    it('echoes the RAW (unquantized) position once known, not the literal {0,0} default', () => {
+      const src = createGamepadInputSource(() => []); // no pad, ever
+      src.setPlayerPosition({ x: 11, y: 16.333 }); // an off-grid, non-origin spawn
+      expect(src.sample().aim).toEqual({ x: 11, y: 16.333 });
+    });
+
+    it('RED-FIRST: driven through the REAL sim, the turret holds its spawn heading instead ' +
+      'of slewing toward world-origin', () => {
+      const tank = makePlayerTank(1, 11, 16.333);
+      const world = createWorld({
+        walls: [], tanks: [tank],
+        spawns: [{ kind: 'player', pos: { x: tank.pos.x, y: tank.pos.y }, angle: 0 }],
+        lives: 3,
+      });
+      const src = createGamepadInputSource(() => []); // no pad, ever
+      src.setPlayerPosition({ x: tank.pos.x, y: tank.pos.y });
+      applyPlayerInput(world, src.sample(), []);
+      expect(tank.turretAngle).toBe(0); // held, not slewed toward (0,0)
+    });
+
+    it('with NO player position either, falls back to the quantized {0,0} default -- ' +
+      'same as the connected-pad case with no position (existing test above)', () => {
+      const src = createGamepadInputSource(() => []);
+      expect(src.sample().aim).toEqual({ x: 0, y: 0 });
+    });
+
+    it('distinguishes "no pad" from "pad connected, stick centred": a CONNECTED pad with ' +
+      'a centred stick still holds its last REAL aim, never the raw position echo', () => {
+      let axes = [0, 0, 1, 0]; // deflected right on the aim stick
+      const src = createGamepadInputSource(() => [fakePad({ axes })]);
+      src.setPlayerPosition({ x: 11, y: 16.333 });
+      const deflected = src.sample().aim;
+      axes = [0, 0, 0, 0]; // stick recentres; pad stays connected throughout
+      const recentred = src.sample().aim;
+      expect(recentred).toEqual(deflected); // NOT echoed to the raw position
+      expect(recentred).not.toEqual({ x: 11, y: 16.333 });
+    });
   });
 });
