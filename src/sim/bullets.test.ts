@@ -618,7 +618,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
       roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, tanks: [], mines: [], blasts: [],
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -635,7 +635,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
       roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, tanks: [], mines: [], blasts: [],
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -746,7 +746,7 @@ describe('shells versus wall kinds', () => {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
       roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, tanks: [], mines: [], blasts: [],
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: 2, minY: -2, maxX: 3, maxY: 2 }, kind, destroyed }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,

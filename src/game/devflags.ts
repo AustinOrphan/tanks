@@ -170,6 +170,21 @@ export interface DevFlags {
    */
   players: number | null;
   /**
+   * Restores the shipped shared-life-POOL coop model (docs/superpowers/plans/2026-08-15-
+   * coop-semantics.md): every player death drains the shared pool by one and schedules
+   * that one tank's own per-tank respawn, leaving the rest of the board untouched.
+   *
+   * Default (this flag off) is the shared-ATTEMPTS ruling (owner, 2026-08-16, see
+   * docs/superpowers/plans/2026-08-16-coop-attempts.md): a lone death costs nothing and
+   * the survivor fights on; only a full wipe -- every player down at once -- spends a
+   * life and restarts the whole arena. See `World.coopAttempts`, which this sets to
+   * `false` -- the sim never reads this flag itself, only the world switch it decided.
+   *
+   * Only meaningful once `players` >= 2: with a single player, `resolveStatusCoop` is
+   * never entered (the 1P body handles death/lose on its own), so this flag is inert.
+   */
+  coopPool: boolean;
+  /**
    * A render quality preset -- `low` | `medium` | `high` -- see `render/quality.ts` for
    * what each one sets (antialias, pixel ratio cap, shadow map size, shadow filter).
    *
@@ -209,6 +224,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   replay: false,
   gamepad: false,
   players: null,
+  coopPool: false,
   quality: null,
 };
 
@@ -322,6 +338,7 @@ export function parseDevFlags(search: string): DevFlags {
     replay: isOn(params, 'replay'),
     gamepad: isOn(params, 'gamepad'),
     players: asPlayers(params),
+    coopPool: isOn(params, 'coopPool'),
     quality: asQuality(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
@@ -543,6 +560,15 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Excluded from writing to the active run: the shared life pool has no decided meaning ' +
         'against the single-player-shaped run record yet.',
     ],
+  },
+  coopPool: {
+    kind: 'boolean',
+    description:
+      'Restores the shipped shared-life-pool coop model: every player death drains the ' +
+      'pool by one and schedules that tank\'s own per-tank respawn. The default (this ' +
+      'flag off) is the shared-attempts ruling: a lone death costs nothing and the ' +
+      'survivor fights on; only a full wipe spends a life and restarts the arena.',
+    notes: ['Only meaningful once `players` >= 2.'],
   },
   quality: {
     kind: 'valued',

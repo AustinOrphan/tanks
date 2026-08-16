@@ -42,7 +42,7 @@ function world(over: Partial<World>): World {
   return {
     tick: 0, nextId: 100, seed: 5, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: -100000,
-    unarmedTrigger: 'none' as const, corpseBlocksShells: false, muzzleClearsTanks: true, ...over,
+    unarmedTrigger: 'none' as const, corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, ...over,
   };
 }
 /** A cfg whose ai block is the shipped one with the given fields overridden. */

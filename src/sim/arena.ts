@@ -326,10 +326,15 @@ export function createWorldFor(
   // untouched. Threaded straight to loadArena; no call site in the tree passes a
   // non-default value yet -- that is the second-input-routing PR's job.
   playerCount: number = 1,
+  // Trailing and optional, same precedent again: undefined here means createWorld's
+  // own default (true, the shared-attempts ruling) applies. Only levels.ts's campaign
+  // branch ever passes a non-default value, closed over from `?dev=1&coopPool=1` --
+  // see World.coopAttempts.
+  coopAttempts?: boolean,
 ): World {
   return createWorld({
     ...loadArena(arena, playerCount),
-    lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks,
+    lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
   });
 }
 

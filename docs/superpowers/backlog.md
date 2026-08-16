@@ -544,9 +544,10 @@ player can drive but a round with no enemies does not yet know how to end.
   `src/sim/math/` (PR #165) — so a diverging device would indicate a bug in the vendored
   port or the harness, not a fork in the road. Sole remaining gap: a physical iOS device,
   one URL away (`npm run trace:browser -- --beacon`, open the printed URL on the phone).
-- **Decide win/lose semantics for VERSUS.** Co-op is answered (see above): `world.lives` is
-  one shared pool, and a death does not reset the arena — a per-tank respawn revives only
-  the corpse. Versus remains open: "every non-player tank dead" and a HUD reading "Enemies
+- **Decide win/lose semantics for VERSUS.** Co-op is answered (see above), twice: the
+  default is shared ATTEMPTS (2026-08-16 ruling — a lone death costs nothing, a full wipe
+  spends a life and resets the arena), with the original shared-pool respawn-in-place
+  model behind `?dev=1&coopPool=1`. Versus remains open: "every non-player tank dead" and a HUD reading "Enemies
   remaining" mean nothing with no AI, and nobody has decided what a win is with zero enemies
   on the board.
 - **`TankKind` vs a `controlledBy` field on `Tank`: ANSWERED, route B (the field).** A

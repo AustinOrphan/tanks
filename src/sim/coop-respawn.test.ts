@@ -35,13 +35,21 @@ const PLAYER_SPAWNS: Spawn[] = [
 ];
 
 /** Two player-kind tanks, no enemies -- isolates resolveStatusCoop's death/respawn path
- * from its win check (allEnemiesDead needs enemies.length > 0). */
+ * from its win check (allEnemiesDead needs enemies.length > 0).
+ *
+ * `coopAttempts: false` -- explicit, not incidental. World.coopAttempts defaulted to
+ * `true` (the shared-attempts ruling, 2026-08-16) after this file was written, the same
+ * kind of default flip muzzleClearsTanks went through earlier: a fixture built to test
+ * the OLD default has to opt back into it explicitly once the field's own default
+ * changes underneath it. This file pins the POOL branch of resolveStatusCoop
+ * specifically -- attempts mode's own pins live in coop-attempts.test.ts. */
 function twoPlayerWorld(lives: number): World {
   return createWorld({
     walls: [],
     tanks: [makeTank('player', A_ID, 5, 5), makeTank('player', B_ID, 20, 5)],
     spawns: PLAYER_SPAWNS,
     lives,
+    coopAttempts: false,
   });
 }
 

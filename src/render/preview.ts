@@ -191,6 +191,7 @@ export function previewWorld(): World {
     unarmedTrigger: 'none',
     corpseBlocksShells: false,
     muzzleClearsTanks: true,
+    coopAttempts: true,
     tanks: [tank],
     bullets: [],
     mines: [],
