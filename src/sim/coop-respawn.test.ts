@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createWorld, resolveStatus, stepRespawns, countPlayerTanks } from './world';
+import { createWorld, resolveStatus, stepRespawns, stepInputs, countPlayerTanks } from './world';
 import type { World } from './world';
 import type { Tank, Spawn } from './types';
 import type { SimEvent } from './events';
@@ -340,5 +340,85 @@ describe('stepRespawns', () => {
     w.tick = 0;
     stepRespawns(w, []);
     expect(a.alive).toBe(true); // reachable directly; the real game never calls it here
+  });
+});
+
+/**
+ * The plan's flagged residual: does an AI hold a STALE reference to a dead target, or
+ * reacquire cleanly, at the exact tick a tracked-dead tank revives?
+ *
+ * FINDING (static, from reading brown.ts/grey.ts/teal.ts/index.ts): no Tank object
+ * reference is ever cached across ticks anywhere in ai/. Every decision function does
+ * a fresh `world.tanks.find((t) => t.kind === 'player' && t.alive)` against the
+ * CURRENT (per-tick cloned) world -- there is no reference TO hold stale. Reacquisition
+ * is clean by construction the instant a player-kind tank's `alive` flips back to true.
+ *
+ * What the static read does NOT rule out: two SCALAR fields on the enemy tank persist
+ * across a change in which player `.find` returns -- `aimTicks` (the reaction-time
+ * counter, index.ts) and `aiState` (brown/grey/teal's own FSM). Neither resets when the
+ * tracked player's IDENTITY changes, only when `hasSolution` goes false. The probe
+ * below is the red-first check the plan asked for, run through the real pipeline
+ * (stepInputs), not asserted from reading the code alone.
+ */
+describe('AI retargeting at the exact revival tick (plan residual, probed here)', () => {
+  const A_TICK = 999;
+
+  function fixture(shielded: boolean): World {
+    const reactionTicks = 48; // STATIC_BASIC (brown): reactionTime 0.8s * TICK_HZ 60
+    const enemy: Tank = {
+      id: 10, kind: 'brown', pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      // Pre-set as if this enemy had already held a solution against P2 (P1 was dead)
+      // for one tick short of its reaction threshold.
+      aiState: 'aim', aiTimer: 0, aimTicks: reactionTicks - 1,
+    };
+    const p1: Tank = {
+      id: 1, kind: 'player', pos: { x: 5, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0, controlledBy: 0,
+      // As if stepRespawns revived this tank on the tick about to run (A_TICK + 1).
+      shieldUntilTick: shielded ? A_TICK + 1 + RESPAWN_SHIELD_TICKS : undefined,
+    };
+    const p2: Tank = {
+      id: 2, kind: 'player', pos: { x: 100, y: 100 }, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0, controlledBy: 1,
+    };
+    const w = createWorld({ walls: [], tanks: [p1, p2, enemy], spawns: PLAYER_SPAWNS, lives: 3 });
+    w.tick = A_TICK;
+    w.roundStartTick = -100000; // past countdown+grace, input/AI both live
+    return w;
+  }
+
+  it('the carried-over aimTicks/aiState let the enemy fire at the revived tank on the very FIRST tick -- confirming retargeting is not gated by a fresh observation span', () => {
+    const w = fixture(true);
+    const r = stepInputs(w, []);
+    expect(r.events.some((e) => e.type === 'fire' && e.ownerId === 10)).toBe(true);
+  });
+
+  it('the shield protects the revived tank for its whole span regardless -- and the fixture is genuinely lethal once the shield lapses', () => {
+    let w = fixture(true);
+    let diedAtTick: number | null = null;
+    for (let i = 0; i < 200 && diedAtTick === null; i++) {
+      const r = stepInputs(w, []);
+      w = r.world;
+      const p1 = w.tanks.find((t) => t.id === 1)!;
+      if (!p1.alive) diedAtTick = w.tick;
+    }
+    expect(diedAtTick).not.toBeNull(); // the fixture really is lethal -- not a fluke miss
+    expect(diedAtTick!).toBeGreaterThan(A_TICK + RESPAWN_SHIELD_TICKS); // only after the shield lapsed
+  });
+
+  it('an otherwise-identical UNSHIELDED tank dies well within the same span -- the shield, not luck, is what protects it', () => {
+    let w = fixture(false);
+    let diedAtTick: number | null = null;
+    for (let i = 0; i < RESPAWN_SHIELD_TICKS && diedAtTick === null; i++) {
+      const r = stepInputs(w, []);
+      w = r.world;
+      const p1 = w.tanks.find((t) => t.id === 1)!;
+      if (!p1.alive) diedAtTick = w.tick;
+    }
+    expect(diedAtTick).not.toBeNull();
+    expect(diedAtTick!).toBeLessThan(A_TICK + RESPAWN_SHIELD_TICKS);
   });
 });
