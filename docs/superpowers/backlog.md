@@ -520,9 +520,13 @@ controller," is now stale: couch co-op's input-routing PR
 (`docs/superpowers/plans/2026-08-15-coop-input-routing.md`, branch `coop-input`) gives
 `?dev=1&coop=1` a real second controller — a standalone gamepad-only `PlayerInputSource`
 driving the `controlledBy === 1` tank end to end through `stepInputs`. That still is not
-"local versus": `resolveStatus`'s win/lose stays P1-only and `world.lives` stays one shared
-pool (this line's own open question, immediately below, unchanged), so a second player can
-drive but the round does not yet know how to end around two humans.
+"local versus": the couch co-op semantics PR
+(`docs/superpowers/plans/2026-08-15-coop-semantics.md`, branch `coop-semantics`) answered
+win/lose for CO-OP — `world.lives` is one shared pool, `resolveStatus` guard-splits on
+`countPlayerTanks(world) >= 2` — but that answer assumes AI enemies remain the only
+opposing side. VERSUS (two humans, no AI opponent) is unaddressed: "every non-player tank
+dead" and a HUD reading "Enemies remaining" still mean nothing with zero AI, so a second
+player can drive but a round with no enemies does not yet know how to end.
 
 **What would answer it:**
 
@@ -540,10 +544,11 @@ drive but the round does not yet know how to end around two humans.
   `src/sim/math/` (PR #165) — so a diverging device would indicate a bug in the vendored
   port or the harness, not a fork in the road. Sole remaining gap: a physical iOS device,
   one URL away (`npm run trace:browser -- --beacon`, open the printed URL on the phone).
-- **Decide win/lose semantics before touching `resolveStatus`**, which currently encodes
-  exactly one answer. Co-op: is `world.lives` shared or per-player, and does one death reset
-  the arena? Versus: "every non-player tank dead" and a HUD reading "Enemies remaining" mean
-  nothing with no AI.
+- **Decide win/lose semantics for VERSUS.** Co-op is answered (see above): `world.lives` is
+  one shared pool, and a death does not reset the arena — a per-tank respawn revives only
+  the corpse. Versus remains open: "every non-player tank dead" and a HUD reading "Enemies
+  remaining" mean nothing with no AI, and nobody has decided what a win is with zero enemies
+  on the board.
 - **`TankKind` vs a `controlledBy` field on `Tank`: ANSWERED, route B (the field).** A
   scratch prototype (branch `p2-prototype`, commit `297bdaf`, off `be1bda8`) touched only
   `types.ts` and `arena.ts`, stayed `tsc --noEmit` clean, and needed no edit to any

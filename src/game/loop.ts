@@ -1,4 +1,5 @@
 import type { World } from '../sim/world';
+import { countPlayerTanks } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Vec2, InputState, Tank } from '../sim/types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from '../sim/ai/player-profile';
@@ -280,6 +281,35 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
 }
 
 /**
+ * Per-player kill attribution for coop's results-screen tally (coop semantics plan,
+ * docs/superpowers/plans/2026-08-15-coop-semantics.md). Mutates `into` in place,
+ * indexed by slot (`controlledBy`), the same array-as-accumulator shape
+ * `checkAchievements`'s callers already use elsewhere in this file.
+ *
+ * `e.kind === 'player'` is excluded -- only ENEMY kills count as a "kill" for this
+ * tally, matching the results screen's existing lifetime/attempt stat semantics
+ * (stats.ts's shellKills/mineKills never count a teammate). AI-on-AI friendly fire
+ * (brown.ts's bank shots, teal's alternation -- CLAUDE.md's "A green tank changed
+ * what structuralFailures has to check") is excluded too: `killer?.kind !== 'player'`
+ * skips any credit whose `by.ownerId` resolves to a non-player-kind tank, so an
+ * enemy killing another enemy increments nothing.
+ *
+ * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
+ * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
+ * default 4 keeps lifetime stats P1-scoped. This stays a small loop.ts-local array
+ * instead.
+ */
+export function tallyCoopKills(events: SimEvent[], world: World, into: number[]): void {
+  for (const e of events) {
+    if (e.type !== 'tank-destroyed' || e.kind === 'player') continue; // enemy kills only
+    const killer = world.tanks.find((t) => t.id === e.by.ownerId);
+    if (killer?.kind !== 'player') continue; // AI friendly fire doesn't count as a "kill"
+    const slot = killer.controlledBy ?? 0;
+    into[slot] = (into[slot] ?? 0) + 1;
+  }
+}
+
+/**
  * The music's arrangement density, from how much of the arena is left.
  *
  * Rises as enemies are destroyed, so the round BUILDS: the opening is bass and
@@ -470,7 +500,12 @@ export function startGameWith(
     return i >= 0 && i + 1 < deps.levels.levels.length ? deps.levels.levels[i + 1] : null;
   }
 
-  const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump
+  // `&& !coopActive`: a coop boot gets fresh LIVES from balance.json, the same as a
+  // dev jump -- see campaignActive's doc comment for why coop must not adopt (or
+  // later write) the real run's life count. Without this, a coop session opened
+  // mid-campaign would silently inherit whatever life count the solo run happened
+  // to be sitting on, which has no decided meaning for a shared pool.
+  const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump && !coopActive
     ? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
@@ -500,9 +535,19 @@ export function startGameWith(
    * (`deps.progress.recordCleared`) is NOT part of this exclusion and keeps its
    * pre-existing behaviour -- it is monotonic and was always writable from a dev
    * jump; only the position/life-pool bookkeeping this function gates is new here.
+   *
+   * `!coopActive` (coop semantics plan, docs/superpowers/plans/2026-08-15-coop-semantics.md):
+   * the simpler, safer call the plan itself flags. Coop's shared life pool has no
+   * decided meaning against the single-player-shaped `RunState.livesRemaining` field
+   * (does P2's death count against the solo player's progress if coop is later
+   * abandoned mid-run?) -- writing to it now would be writing data whose meaning
+   * nobody has decided. Excluded identically to practice/dev-jump/sandbox, at zero
+   * cost today since coop is dev-flag-only with no menu path; a future "ship coop for
+   * real" PR can revisit deliberately. See bootLives below for the matching boot-time
+   * half of this exclusion.
    */
   function campaignActive(): boolean {
-    return deps.levels.tracksProgress && !deps.levels.isDevJump && !inPractice;
+    return deps.levels.tracksProgress && !deps.levels.isDevJump && !inPractice && !coopActive;
   }
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
@@ -616,6 +661,15 @@ export function startGameWith(
    * Flawless granted for a mutual kill the player did not survive.
    */
   let pendingClear: number | null = null;
+
+  /**
+   * Coop's results-screen kill tally (coop semantics plan,
+   * docs/superpowers/plans/2026-08-15-coop-semantics.md), indexed by slot. Per-attempt
+   * scope, mirroring `attempt`'s own lifecycle: reset at both `startAttempt()` call
+   * sites below, since it feeds the same win/lose panel. Fed to the HUD unconditionally
+   * -- whether the line actually shows is the HUD's own gate on `countPlayerTanks`.
+   */
+  let coopKills: number[] = [];
 
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
@@ -742,6 +796,9 @@ export function startGameWith(
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
+      // Coop's own per-slot tally, alongside stats.record -- see coopKills' own
+      // comment above for why this stays out of stats.ts.
+      tallyCoopKills(events, driver.world, coopKills);
       // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
@@ -749,6 +806,11 @@ export function startGameWith(
       // the win/lose run-summary line updates a beat after the state flips -- the
       // winning kill is in THIS batch, not the one before the panel opened.
       hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
+      // Gated on the WORLD's real player count, not the coopActive flag -- the same
+      // convention replayMetaFor uses, and the two never diverge in practice (the
+      // sandbox exclusion keeps coopActive and countPlayerTanks(world) in lockstep by
+      // construction). null means "never show", not merely "hide right now".
+      hud.setCoopKills(countPlayerTanks(driver.world) >= 2 ? coopKills : null);
     },
   });
 
@@ -826,6 +888,9 @@ export function startGameWith(
     // builds a world; every caller above decides for itself whether this world is
     // campaign or practice, and mutates (or does not mutate) the run accordingly.
     deps.stats.startAttempt();
+    // Same lifecycle as `attempt` above: coopKills resets on every new attempt, not
+    // just at boot -- see coopKills' own comment for why.
+    coopKills = [];
     hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   }
 
@@ -1184,6 +1249,7 @@ export function startGameWith(
   // refresh above, which covers every LATER arrival.
   hud.setContinueAvailable(deps.run.active() !== null);
   deps.stats.startAttempt();
+  coopKills = [];
   hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());

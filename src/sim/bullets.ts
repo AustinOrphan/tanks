@@ -1,5 +1,5 @@
 import type { Tank, Bullet, BulletType, Vec2 } from './types'
-import { fromAngle, vscale, vadd, vlen, vsub, vdot } from './types'
+import { fromAngle, vscale, vadd, vlen, vsub, vdot, isDamageImmune } from './types'
 import { circleVsAABB, reflectSweep, circleVsCircle } from './collision'
 import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
@@ -228,12 +228,13 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
         if (vdot(b.vel, toOwner) <= 0) continue
       }
       if (circleVsCircle(b.pos, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
-        // An invincible tank (dev playtest mode) is a wall to ordnance, not a ghost:
-        // the shell still detonates on it -- letting it pass through would shield
-        // nothing and read as a collision bug -- but no one dies. Event order matches
-        // mines.ts for a mortal kill: tank-destroyed, then explosion.
+        // A damage-immune tank (dev invincible, or coop's post-respawn shield -- see
+        // isDamageImmune, types.ts) is a wall to ordnance, not a ghost: the shell
+        // still detonates on it -- letting it pass through would shield nothing and
+        // read as a collision bug -- but no one dies. Event order matches mines.ts
+        // for a mortal kill: tank-destroyed, then explosion.
         b.alive = false
-        if (!t.invincible) {
+        if (!isDamageImmune(t, world.tick)) {
           t.alive = false
           events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { source: 'shell', ownerId: b.ownerId }, pos: { x: t.pos.x, y: t.pos.y } })
         }

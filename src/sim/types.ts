@@ -96,6 +96,46 @@ export interface Tank {
    * this field's existence, not merely tolerant of it. See arena.ts's `loadArena`.
    */
   controlledBy?: number;
+  /**
+   * Coop's per-tank respawn: the absolute tick (world.tick, not a countdown) this
+   * corpse revives on. Set only by resolveStatus's coop branch (resolveStatusCoop,
+   * world.ts) the tick a tracked player dies with lives still in the shared pool,
+   * and cleared by the stage that resolves it (stepRespawns, world.ts). An absolute
+   * tick, deliberately mirroring world.roundStartTick's own convention rather than
+   * fireCooldown's decrementing-counter one -- see the coop semantics plan
+   * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for why. OPTIONAL like
+   * `controlledBy`: absent on every enemy always, and absent on every player-kind
+   * tank at playerCount 1, so no existing fixture is affected by this field's mere
+   * existence.
+   */
+  respawnAtTick?: number;
+  /**
+   * Coop's post-respawn damage immunity: the absolute tick (world.tick) until which
+   * this tank cannot be killed -- see isDamageImmune below. Set only at the moment
+   * of revival (stepRespawns, world.ts); no explicit clear, self-expires by
+   * comparison, the same idiom round.ts's roundPhase already uses for elapsed-based
+   * checks. OPTIONAL for the same reason as `respawnAtTick`.
+   */
+  shieldUntilTick?: number;
+}
+
+/**
+ * Is this tank immune to damage on the current tick?
+ *
+ * Two ways in: `invincible` (dev playtest mode, permanent for the tank's life) or a
+ * live `shieldUntilTick` (coop's post-respawn grace -- see world.ts's stepRespawns).
+ * Lives here, not in world.ts, for the same reason round.ts's own placement gives:
+ * world.ts already imports bullets.ts/mines.ts, so a helper there importing back
+ * would be circular.
+ *
+ * Replaces bullets.ts's and mines.ts's separate `t.invincible` checks -- both
+ * already have `world` in scope at their call sites, so `world.tick` is available.
+ * Value-identical at N=1: `shieldUntilTick` is only ever set by the coop respawn
+ * stage, so it is always undefined in single-player, and the OR collapses to
+ * today's `t.invincible` check exactly.
+ */
+export function isDamageImmune(t: Tank, tick: number): boolean {
+  return t.invincible === true || (t.shieldUntilTick !== undefined && tick < t.shieldUntilTick);
 }
 
 export interface Bullet {

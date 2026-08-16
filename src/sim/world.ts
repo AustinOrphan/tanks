@@ -5,7 +5,7 @@ import { moveTank, separateTanks, resolveWalls } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepBlasts, stepMines } from './mines';
 import { stepAi } from './ai';
-import { DT, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE } from './constants';
+import { DT, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE, RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS } from './constants';
 import { configFor, hasAbility, TankAbility } from './config';
 import { roundPhase } from './round';
 
@@ -257,6 +257,65 @@ export function applyPlayerInput(world: World, input: InputState, events: SimEve
   driveTank(world, player, input, events);
 }
 
+/**
+ * How many `kind === 'player'` tanks the world holds -- the coop discriminator, used
+ * exactly two places: resolveStatus's guard and stepInputs' gate for stepRespawns. A
+ * pure derivation off world.tanks, not a stored field, matching the established
+ * convention (replayMetaFor derives playerCount the same way) -- it cannot desync
+ * from the tank array because there is nothing to desync from.
+ */
+export function countPlayerTanks(world: World): number {
+  return world.tanks.filter((t) => t.kind === 'player').length;
+}
+
+/**
+ * Revives any player tank whose respawnAtTick has arrived. Per-tank, deliberately a
+ * SHORTER field list than resetArena's -- see the coop semantics plan
+ * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for the "hard problem" this
+ * exists to solve: resetArena is whole-board (repositions every tank, restores every
+ * wall, clears world-level bullets/mines/blasts) and would erase a live partner's
+ * fight. This touches only the reviving tank.
+ *
+ * Deliberately does NOT touch activeMineIds, and does NOT clear world.mines/
+ * world.bullets/world.blasts -- resetArena clears mines board-wide and zeroes every
+ * tank's activeMineIds together, as one atomic reset; doing that here while the
+ * tank's own mines are still live in world.mines would desync the count dropMine's
+ * cap check reads, letting the revived tank exceed its mine cap.
+ *
+ * Uses world.spawns[i] at the tank's own array index -- the same world.tanks[i] <->
+ * world.spawns[i] invariant resetArena's own comment documents, preserved for an
+ * appended P2 by loadArena's append-at-end insertion (see the coop foundation plan).
+ *
+ * Called from stepInputs, gated on countPlayerTanks(draft) >= 2 -- see that gate's own
+ * comment for why it runs BEFORE applyPlayerInputs. No internal player-count gate of
+ * its own: that is stepInputs' job, matching resolveStatus's guard-first split one
+ * level up (pinned directly in coop-respawn.test.ts).
+ */
+export function stepRespawns(world: World, events: SimEvent[]): void {
+  for (let i = 0; i < world.tanks.length; i++) {
+    const t = world.tanks[i];
+    if (t.kind !== 'player' || t.alive) continue;
+    if (t.respawnAtTick === undefined || world.tick < t.respawnAtTick) continue;
+    const s = world.spawns[i];
+    t.pos = { ...s.pos };
+    t.bodyAngle = s.angle;
+    t.turretAngle = s.angle;
+    t.alive = true;
+    t.desiredMove = { x: 0, y: 0 };
+    t.fireCooldown = 0;
+    t.mineCooldown = 0;
+    t.aiState = 'idle';
+    t.aiTimer = 0;
+    t.aimTicks = 0;
+    t.respawnAtTick = undefined;
+    // Set only at the moment of revival, no explicit clear -- self-expires by
+    // comparison in isDamageImmune (types.ts), the same idiom roundPhase's own
+    // elapsed-based checks already use.
+    t.shieldUntilTick = world.tick + RESPAWN_SHIELD_TICKS;
+    events.push({ type: 'respawn', tankId: t.id, controlledBy: t.controlledBy ?? 0, pos: { x: t.pos.x, y: t.pos.y } });
+  }
+}
+
 // A life loss restarts the WHOLE arena (spec §4: "restart arena on death"): every
 // tank returns to its spawn alive, destroyed walls come back, and all bullets/mines
 // clear. Relies on the loadArena invariant that world.tanks[i] was built from
@@ -293,11 +352,73 @@ function resetArena(world: World): void {
   world.blasts = [];
 }
 
+/**
+ * Coop's win/lose rule: a SHARED life pool, drained per player death (not per-round
+ * like 1P's resetArena call -- see the coop semantics plan
+ * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for why resetArena itself is
+ * wrong here). Entirely separate from the 1P body below, by construction --
+ * duplicating the ~4-line win check here (rather than sharing it) is what keeps that
+ * body a literal byte-for-byte no-diff.
+ *
+ * Adopted default 3's refinement, walked through against simultaneous deaths: two
+ * players dying the SAME tick are processed in event order, so at pool 2 the first
+ * decrement (2 -> 1) schedules a respawn and the second (1 -> 0) does not -- one
+ * partner revives in RESPAWN_DELAY_TICKS, the other stays down for the rest of the
+ * round. At pool 1 both decrements land on 0 and neither schedules: a shared pool of
+ * 1 genuinely cannot survive two simultaneous deaths.
+ *
+ * `pendingRespawn` (not just `world.lives > 0`) is the second half of the lose guard
+ * because a tank can carry a respawn scheduled on an EARLIER tick while the pool
+ * drops to 0 from a DIFFERENT, LATER death -- that scheduled respawn was already
+ * paid for and must be honored; checking the pool alone would call `lose` mid-window.
+ */
+function resolveStatusCoop(world: World, events: SimEvent[]): void {
+  const enemies = world.tanks.filter((t) => t.kind !== 'player');
+  const allEnemiesDead = enemies.length > 0 && enemies.every((e) => !e.alive);
+  // A mutual kill is a win, decided ahead of any death handling below, exactly like
+  // the 1P body -- it holds whether or not lives remain.
+  if (allEnemiesDead) {
+    world.status = 'win';
+    events.push({ type: 'win' });
+    return;
+  }
+
+  for (const e of events) {
+    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
+    const tank = world.tanks.find((t) => t.id === e.tankId);
+    // respawnAtTick !== undefined: this tank's death was already tallied (a corpse
+    // waiting on its scheduled tick cannot be tallied a second time).
+    if (!tank || tank.respawnAtTick !== undefined) continue;
+    world.lives = Math.max(0, world.lives - 1);
+    if (world.lives > 0) tank.respawnAtTick = world.tick + RESPAWN_DELAY_TICKS;
+  }
+  const players = world.tanks.filter((t) => t.kind === 'player');
+  const noneStanding = players.every((t) => !t.alive);
+  const pendingRespawn = players.some((t) => t.respawnAtTick !== undefined);
+  if (noneStanding && !pendingRespawn) {
+    world.status = 'lose';
+    events.push({ type: 'lose' });
+  }
+}
+
 export function resolveStatus(world: World, events: SimEvent[]): void {
   // step() latches on status, but the export is called directly by tests and by
   // anything embedding the sim. Without this guard a second call on a won world
   // pushes a second `win` -- and a second victory stinger.
   if (world.status !== 'playing') return;
+
+  // Two or more player-kind tanks: shared-pool coop semantics, entirely separate
+  // machinery (resolveStatusCoop above) -- see the coop semantics plan
+  // (docs/superpowers/plans/2026-08-15-coop-semantics.md), which answers
+  // docs/research/multiplayer.md's open question 3. Returns unconditionally, so
+  // nothing below this line ever runs at playerCount >= 2 -- everything below is
+  // today's 1P body, byte-for-byte, unmodified (pinned in coop-respawn.test.ts and by
+  // tools/baseline/trace.test.ts's BASELINE_HASH, which drives exactly one player and
+  // cannot see this branch at all).
+  if (countPlayerTanks(world) >= 2) {
+    resolveStatusCoop(world, events);
+    return;
+  }
 
   // `.find` takes the FIRST player-kind tank -- correct-as-P1, deliberately not
   // generalised here. At playerCount > 1 a second player-kind tank exists and its
@@ -349,6 +470,14 @@ export function stepInputs(world: World, inputs: InputState[]): StepResult {
   const events: SimEvent[] = [];
 
   if (draft.status === 'playing') {
+    // Coop only, and BEFORE applyPlayerInputs: a tank that crosses its revival tick
+    // gets that same tick's input rather than sitting inert one extra frame -- a
+    // deliberate improvement on resetArena's incidental one-tick lag. At N < 2 this
+    // line always executes but the guard is always false -- a value-identical no-op
+    // (cheap boolean, touches nothing when false), not a "never even called"
+    // structural no-op; see tools/baseline/trace.test.ts's comment on why the golden
+    // trace cannot distinguish the two.
+    if (countPlayerTanks(draft) >= 2) stepRespawns(draft, events);
     applyPlayerInputs(draft, inputs, events);
     stepAi(draft, events);
     stepBlasts(draft, events);

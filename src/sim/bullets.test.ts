@@ -34,6 +34,7 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     // default -- an "invincible" tank built here was mortal until this line existed.
     disarmed: p.disarmed,
     invincible: p.invincible,
+    shieldUntilTick: p.shieldUntilTick,
   }
 }
 
@@ -879,6 +880,32 @@ describe('resolveBulletHits: invincible tanks (dev playtest mode)', () => {
     world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
     resolveBulletHits(world, [])
     expect(world.tanks[0].alive).toBe(false)
+  })
+})
+
+describe('resolveBulletHits: shielded tanks (coop post-respawn immunity)', () => {
+  it('a tank with a shieldUntilTick in the future survives a direct hit, exactly like invincible', () => {
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, shieldUntilTick: 50 })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    world.tick = 40 // 40 < 50: shield still live
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(world.tanks[0].alive).toBe(true)
+    expect(world.bullets).toHaveLength(0) // the shell still detonates -- a shield is a wall, not a ghost
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(false)
+    expect(events.some((e) => e.type === 'explosion')).toBe(true)
+  })
+
+  it('an EXPIRED shieldUntilTick (in the past) does not protect', () => {
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, shieldUntilTick: 50 })
+    const world = createWorld({ walls: [], tanks: [target], spawns: [], lives: 3 })
+    world.tick = 50 // world.tick < shieldUntilTick is the live condition; 50 < 50 is false
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(world.tanks[0].alive).toBe(false)
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(true)
   })
 })
 

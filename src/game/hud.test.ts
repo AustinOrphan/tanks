@@ -1360,6 +1360,40 @@ describe('hud: the stats page', () => {
     h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 4, shotsFired: 6, deaths: 1 } });
     expect((root.querySelector('.hud-attempt-summary') as HTMLElement).textContent).toContain('4 kills');
   });
+
+  it('win panel carries the coop kill line, twin of the attempt summary', () => {
+    const { hud: h, root } = mount();
+    h.setCoopKills([3, 5]);
+    h.setState('win');
+    const line = (root.querySelector('.hud-coop-kills') as HTMLElement).textContent ?? '';
+    expect(line).toBe('P1: 3 · P2: 5');
+    expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(false);
+  });
+
+  it('setCoopKills(null) keeps the line hidden even at win/lose -- a 1P session', () => {
+    const { hud: h, root } = mount();
+    h.setCoopKills(null);
+    h.setState('win');
+    expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
+    h.setState('lose');
+    expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
+  });
+
+  it('the coop kill line is hidden outside win/lose, even with live counts set', () => {
+    const { hud: h, root } = mount();
+    h.setCoopKills([1, 2]);
+    h.setState('playing');
+    expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
+  });
+
+  it('updates live while the win panel is already open, same as the attempt summary', () => {
+    const { hud: h, root } = mount();
+    h.setCoopKills([1, 0]);
+    h.setState('win');
+    expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 0');
+    h.setCoopKills([1, 1]);
+    expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 1');
+  });
 });
 
 describe('hud: achievements', () => {
