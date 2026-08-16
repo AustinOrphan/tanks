@@ -574,6 +574,19 @@ behaviour under the `/tanks/` deploy are all unverified.
    > design assumes AI enemies stay the only opposing side; what `world.lives` means, or
    > what a win is, with zero AI on the board is a separate decision this plan does not
    > make.
+   >
+   > **SUPERSEDED AS DEFAULT, 2026-08-16** (owner ruling; docs/superpowers/plans/
+   > 2026-08-16-coop-attempts.md). The shared-pool model above is no longer what a coop
+   > world builds with by default — it is preserved byte-for-byte behind
+   > `?dev=1&coopPool=1` (`World.coopAttempts: false`), for anyone who wants the old
+   > per-tank-respawn feel back. The new default (`World.coopAttempts: true`) is a
+   > shared-ATTEMPTS model: a lone player death costs nothing and the survivor plays on
+   > with no per-tank respawn at all; only a full wipe (every player down at once)
+   > spends one life and calls `resetArena` — the single-player death experience,
+   > generalized to "nobody is left standing." `RESPAWN_DELAY_TICKS`/
+   > `RESPAWN_SHIELD_TICKS` and `stepRespawns` still exist and still work exactly as
+   > described above, but only reachably under `coopPool=1` — attempts mode never
+   > stamps a `respawnAtTick`, so `stepRespawns` is a structural no-op there.
 4. **How do the arena `claims` and `structuralFailures` rules generalise past one player
    spawn?** With two spawns, "no enemy sees the player spawn" becomes a cross product; on a
    versus board with zero AI it becomes vacuous, which is the failure mode CLAUDE.md warns

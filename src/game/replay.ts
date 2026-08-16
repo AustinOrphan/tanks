@@ -74,6 +74,8 @@ export interface ReplayMeta {
   corpseBlocksShells: boolean;
   /** See World.muzzleClearsTanks. Read off the world, same as unarmedTrigger. */
   muzzleClearsTanks: boolean;
+  /** See World.coopAttempts. Read off the world, same as unarmedTrigger. */
+  coopAttempts: boolean;
 }
 
 /** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. Still the per-SLOT shape:
@@ -291,6 +293,7 @@ export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
     invincible: world.tanks.find((t) => t.kind === 'player')?.invincible ?? false,
     corpseBlocksShells: world.corpseBlocksShells,
     muzzleClearsTanks: world.muzzleClearsTanks,
+    coopAttempts: world.coopAttempts,
   };
 }
 

@@ -931,6 +931,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         if (playerCount !== undefined && playerCount > 1) {
           const real = createWorldFor(
             arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount,
+            // Mirrors levels.ts's own closure: `!flags.coopPool` -- absent/false leaves
+            // the shared-attempts default (true), coopPool=1 restores the shipped pool
+            // model (false). Read straight off opts.devFlags, the same source the real
+            // devFlags merge below is built from, so this cannot drift from what the
+            // game itself would have wired.
+            !opts.devFlags?.coopPool,
           );
           // Back-dated past COUNTDOWN_TICKS, same convention every live-play fixture
           // in this file uses (see winningWorld below): a fresh world cannot act on
@@ -2721,6 +2727,57 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
   });
+
+  describe('shared-attempts ruling (docs/superpowers/plans/2026-08-16-coop-attempts.md): level clear revives everyone', () => {
+    // resolveStatusCoop's own unit tests (coop-attempts.test.ts) prove a full wipe's
+    // resetArena revives every tank; they cannot see whether the GAME LAYER's own
+    // level-advance path (switchTo -> buildWorld -> deps.levels.world(...)) produces a
+    // fresh, fully-alive board on its own, independent of resetArena, for the ordinary
+    // "one player died mid-level, the survivor cleared it" case the ruling names by
+    // name ("if they clear the level, all players spawn in on the next level"). The
+    // fake levels object's own `world()` function (see makeDeps above) already builds
+    // coop worlds through the REAL createWorldFor/loadArena for playerCount > 1 --
+    // exactly the composition this test needs, not a fixture that could paper over a
+    // dropped revival.
+    it('a cleared level with a dead P2 (attempts mode, the default) spawns BOTH players alive on the next board', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2 }, levelCount: 2 }));
+      const world = h.rec.builtWorlds[0]; // level 1's real coop world
+      expect(world.coopAttempts).toBe(true); // the default -- nothing opted into coopPool
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      p2.alive = false; // P2 died mid-level; the survivor (P1) carried the level per the ruling
+      h.setState('win'); // level 1 cleared, not final (levelCount 2)
+      h.hud.startRestart(); // Next Level click -- the real switchTo/buildWorld path
+
+      const next = h.rec.builtWorlds.at(-1)!; // level 2's real coop world
+      expect(next).not.toBe(world); // a genuinely NEW build, not the same object relived
+      const nextPlayers = next.tanks.filter((t: Tank) => t.kind === 'player');
+      expect(nextPlayers).toHaveLength(2);
+      expect(nextPlayers.every((t: Tank) => t.alive)).toBe(true);
+      h.handle.dispose();
+    });
+
+    it('the same holds under the shipped pool model (coopPool=1) -- a full wipe there also revives everyone via a fresh level build', () => {
+      // Not a claim about pool mode's mid-level per-tank respawn (that stays
+      // per-tank, unchanged); this only pins that a LEVEL CLEAR -- which always
+      // rebuilds the world from scratch regardless of which coop mode was active --
+      // still starts both players alive either way.
+      const h = boot(makeDeps({ devFlags: { players: 2, coopPool: true }, levelCount: 2 }));
+      const world = h.rec.builtWorlds[0];
+      expect(world.coopAttempts).toBe(false);
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      p2.alive = false;
+      p2.respawnAtTick = 99999; // a pool-mode corpse mid-respawn-wait when the level cleared
+      h.setState('win');
+      h.hud.startRestart();
+
+      const next = h.rec.builtWorlds.at(-1)!;
+      const nextPlayers = next.tanks.filter((t: Tank) => t.kind === 'player');
+      expect(nextPlayers).toHaveLength(2);
+      expect(nextPlayers.every((t: Tank) => t.alive)).toBe(true);
+      expect(nextPlayers.every((t: Tank) => t.respawnAtTick === undefined)).toBe(true);
+      h.handle.dispose();
+    });
+  });
 });
 
 describe('playerShellsInFlight', () => {
@@ -4174,6 +4231,8 @@ describe('startGameWith: the input recorder', () => {
       t.meta.lives,
       t.meta.corpseBlocksShells,
       t.meta.muzzleClearsTanks,
+      undefined,
+      t.meta.coopAttempts,
     );
     const replayed = replayTrace(t, rebuilt);
     expect(replayed.world.tick).toBe(live.tick);

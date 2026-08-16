@@ -230,6 +230,22 @@ describe('parseDevFlags: corpseBlock and muzzleInside', () => {
   });
 });
 
+describe('parseDevFlags: coopPool (restores the shipped shared-pool coop model)', () => {
+  it('needs dev, like every other flag', () => {
+    expect(parseDevFlags('?coopPool=1').coopPool).toBe(false);
+    expect(parseDevFlags('?dev=1&coopPool=1').coopPool).toBe(true);
+  });
+
+  it('is off by default, leaving the shared-attempts ruling as the default', () => {
+    expect(parseDevFlags('?dev=1').coopPool).toBe(false);
+    expect(parseDevFlags('?dev=1&players=2').coopPool).toBe(false);
+  });
+
+  it('is NOT part of the playtest bundle', () => {
+    expect(parseDevFlags('?dev=1&playtest=1').coopPool).toBe(false);
+  });
+});
+
 describe('parseDevFlags: playtest is additive, never a veto', () => {
   it('an explicit =0 on a bundled flag loses to the bundle, by documented OR semantics', () => {
     // The one surprising interaction: playtest=1&mineTimer=0 keeps mineTimer ON.

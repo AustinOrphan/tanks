@@ -47,6 +47,22 @@ export interface World {
    * separation. See bullets.ts's muzzlePoint.
    */
   muzzleClearsTanks: boolean;
+  /**
+   * Coop's win/lose model when two or more `kind === 'player'` tanks share the world.
+   * See resolveStatusCoop below for the full split; in one line: TRUE (the default) is
+   * the "shared attempts" ruling (owner, 2026-08-16) -- one player dying alone costs
+   * nothing and the survivor fights on, and only a full wipe (every player dead at
+   * once) spends a life and restarts the WHOLE arena via resetArena, exactly the 1P
+   * death experience generalized to "nobody is left standing." FALSE restores the
+   * shipped POOL model (docs/superpowers/plans/2026-08-15-coop-semantics.md): every
+   * player death drains the shared pool by one and schedules that one tank's own
+   * per-tank respawn, leaving the rest of the board untouched.
+   *
+   * Same pattern as corpseBlocksShells/muzzleClearsTanks: a World construction switch,
+   * never a runtime flag read inside src/sim/ -- see game/devflags.ts's `coopPool`,
+   * which is the ONLY thing that ever passes `false` here.
+   */
+  coopAttempts: boolean;
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
@@ -79,6 +95,8 @@ export function createWorld(init: {
   corpseBlocksShells?: boolean;
   /** Defaults to true, the adopted lean. See World.muzzleClearsTanks. */
   muzzleClearsTanks?: boolean;
+  /** Defaults to true, the shared-attempts ruling. See World.coopAttempts. */
+  coopAttempts?: boolean;
 }): World {
   const maxId = Math.max(
     0,
@@ -92,6 +110,7 @@ export function createWorld(init: {
     unarmedTrigger: init.unarmedTrigger ?? 'none',
     corpseBlocksShells: init.corpseBlocksShells ?? false,
     muzzleClearsTanks: init.muzzleClearsTanks ?? true,
+    coopAttempts: init.coopAttempts ?? true,
     tanks: init.tanks,
     bullets: [],
     mines: [],
@@ -123,6 +142,7 @@ export function cloneWorld(world: World): World {
     unarmedTrigger: world.unarmedTrigger,
     corpseBlocksShells: world.corpseBlocksShells,
     muzzleClearsTanks: world.muzzleClearsTanks,
+    coopAttempts: world.coopAttempts,
     status: world.status,
     lives: world.lives,
     roundStartTick: world.roundStartTick,
@@ -353,24 +373,21 @@ function resetArena(world: World): void {
 }
 
 /**
- * Coop's win/lose rule: a SHARED life pool, drained per player death (not per-round
- * like 1P's resetArena call -- see the coop semantics plan
- * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for why resetArena itself is
- * wrong here). Entirely separate from the 1P body below, by construction --
- * duplicating the ~4-line win check here (rather than sharing it) is what keeps that
- * body a literal byte-for-byte no-diff.
+ * Coop's win/lose rule, split on `world.coopAttempts` into two entirely separate
+ * bodies. Both share the same ~4-line win check up front (duplicated from the 1P body
+ * below rather than shared, which is what keeps THAT body a literal byte-for-byte
+ * no-diff) -- win is decided ahead of either branch's death handling, and holds
+ * whether or not lives remain, exactly like 1P.
  *
- * Adopted default 3's refinement, walked through against simultaneous deaths: two
- * players dying the SAME tick are processed in event order, so at pool 2 the first
- * decrement (2 -> 1) schedules a respawn and the second (1 -> 0) does not -- one
- * partner revives in RESPAWN_DELAY_TICKS, the other stays down for the rest of the
- * round. At pool 1 both decrements land on 0 and neither schedules: a shared pool of
- * 1 genuinely cannot survive two simultaneous deaths.
+ * `world.coopAttempts` TRUE (the default): the shared-attempts ruling (owner,
+ * 2026-08-16 -- "lives are more like shared attempts. If all players in co op die,
+ * then a life/attempt is lost. If one player dies, the remaining can continue on and
+ * if they clear the level, all players spawn in on the next level.") See the
+ * ATTEMPTS MODE block below.
  *
- * `pendingRespawn` (not just `world.lives > 0`) is the second half of the lose guard
- * because a tank can carry a respawn scheduled on an EARLIER tick while the pool
- * drops to 0 from a DIFFERENT, LATER death -- that scheduled respawn was already
- * paid for and must be honored; checking the pool alone would call `lose` mid-window.
+ * `world.coopAttempts` FALSE (`?dev=1&coopPool=1`): the shipped POOL model this
+ * replaces as default -- see docs/superpowers/plans/2026-08-15-coop-semantics.md.
+ * The POOL MODE block below is that plan's `resolveStatusCoop` body, byte-untouched.
  */
 function resolveStatusCoop(world: World, events: SimEvent[]): void {
   const enemies = world.tanks.filter((t) => t.kind !== 'player');
@@ -383,19 +400,69 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
     return;
   }
 
-  for (const e of events) {
-    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
-    const tank = world.tanks.find((t) => t.id === e.tankId);
-    // respawnAtTick !== undefined: this tank's death was already tallied (a corpse
-    // waiting on its scheduled tick cannot be tallied a second time).
-    if (!tank || tank.respawnAtTick !== undefined) continue;
-    world.lives = Math.max(0, world.lives - 1);
-    if (world.lives > 0) tank.respawnAtTick = world.tick + RESPAWN_DELAY_TICKS;
+  if (!world.coopAttempts) {
+    // POOL MODE -- docs/superpowers/plans/2026-08-15-coop-semantics.md, shipped
+    // default before the shared-attempts ruling, now behind `?dev=1&coopPool=1`.
+    // Byte-untouched from that plan's implementation: a SHARED life pool, drained per
+    // player death (not per-round like 1P's resetArena call -- resetArena itself is
+    // wrong here, since it would erase a live partner's fight).
+    //
+    // Adopted default 3's refinement, walked through against simultaneous deaths: two
+    // players dying the SAME tick are processed in event order, so at pool 2 the first
+    // decrement (2 -> 1) schedules a respawn and the second (1 -> 0) does not -- one
+    // partner revives in RESPAWN_DELAY_TICKS, the other stays down for the rest of the
+    // round. At pool 1 both decrements land on 0 and neither schedules: a shared pool of
+    // 1 genuinely cannot survive two simultaneous deaths.
+    //
+    // `pendingRespawn` (not just `world.lives > 0`) is the second half of the lose guard
+    // because a tank can carry a respawn scheduled on an EARLIER tick while the pool
+    // drops to 0 from a DIFFERENT, LATER death -- that scheduled respawn was already
+    // paid for and must be honored; checking the pool alone would call `lose` mid-window.
+    for (const e of events) {
+      if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
+      const tank = world.tanks.find((t) => t.id === e.tankId);
+      // respawnAtTick !== undefined: this tank's death was already tallied (a corpse
+      // waiting on its scheduled tick cannot be tallied a second time).
+      if (!tank || tank.respawnAtTick !== undefined) continue;
+      world.lives = Math.max(0, world.lives - 1);
+      if (world.lives > 0) tank.respawnAtTick = world.tick + RESPAWN_DELAY_TICKS;
+    }
+    const players = world.tanks.filter((t) => t.kind === 'player');
+    const noneStanding = players.every((t) => !t.alive);
+    const pendingRespawn = players.some((t) => t.respawnAtTick !== undefined);
+    if (noneStanding && !pendingRespawn) {
+      world.status = 'lose';
+      events.push({ type: 'lose' });
+    }
+    return;
   }
+
+  // ATTEMPTS MODE (default) -- the shared-attempts ruling. State-based, not
+  // event-based, deliberately mirroring the 1P body's own `if (player && !player.alive)`
+  // shape one level up rather than pool mode's per-event tally immediately above: a
+  // single player's death costs nothing on its own (no lives decrement, no
+  // respawnAtTick -- the corpse simply stays down and the survivor fights on), so
+  // there is nothing here for an individual death EVENT to drive. Only the STATE "is
+  // anyone still standing" matters, and it is checked fresh on every call.
+  //
+  // No idempotency guard is needed the way pool mode's `respawnAtTick !== undefined`
+  // is: the moment `noneStanding` goes true, this function resolves it SYNCHRONOUSLY,
+  // in the same call -- either resetArena revives every tank before returning (so
+  // `noneStanding` is false again by the very next call), or `world.status` leaves
+  // 'playing' entirely (so resolveStatus's own top-of-function guard skips this
+  // function on every later call). Neither leaves a window where the same wipe could
+  // be counted twice.
   const players = world.tanks.filter((t) => t.kind === 'player');
-  const noneStanding = players.every((t) => !t.alive);
-  const pendingRespawn = players.some((t) => t.respawnAtTick !== undefined);
-  if (noneStanding && !pendingRespawn) {
+  const noneStanding = players.length > 0 && players.every((t) => !t.alive);
+  if (!noneStanding) return; // a survivor is still up -- no decrement, no respawn
+  world.lives = Math.max(0, world.lives - 1);
+  if (world.lives > 0) {
+    // Nobody is left standing: there is no partner's board left to protect, so this
+    // is exactly the single-player death experience, generalized -- resetArena
+    // revives every tank (players AND enemies), restores every wall, clears
+    // bullets/mines/blasts, and re-arms the round's countdown/grace for everyone.
+    resetArena(world);
+  } else {
     world.status = 'lose';
     events.push({ type: 'lose' });
   }

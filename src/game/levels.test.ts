@@ -88,6 +88,37 @@ describe('createLevelSystem: corpseBlock/muzzleInside reach the built world (com
   });
 });
 
+describe('createLevelSystem: coopPool reaches the built world (composition, not unit)', () => {
+  // Unit tests on world.ts (coop-attempts.test.ts) prove World.coopAttempts branches
+  // resolveStatusCoop between the shared-attempts default and the shipped pool model.
+  // They cannot see whether the DEV FLAG that is supposed to set that field actually
+  // does, through createLevelSystem's closure -- the same composition question
+  // corpseBlock/muzzleInside get above.
+  it('coopPool off leaves the shared-attempts default ON', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).coopAttempts).toBe(true);
+  });
+
+  it('coopPool on reaches world.coopAttempts, turning it off (restores the shipped pool model)', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, coopPool: true }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).coopAttempts).toBe(false);
+  });
+
+  it('reaches a real two-player world the same way', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, players: 2, coopPool: true }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 2);
+    expect(w.coopAttempts).toBe(false);
+    expect(w.tanks.filter((t) => t.kind === 'player')).toHaveLength(2);
+  });
+
+  it('is independent of corpseBlock/muzzleInside', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, coopPool: true, corpseBlock: true }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42);
+    expect(w.coopAttempts).toBe(false);
+    expect(w.corpseBlocksShells).toBe(true);
+  });
+});
+
 describe('createLevelSystem: the sandbox', () => {
   const sandboxFlags = { ...DEV_FLAGS_OFF, level: 'sandbox' as const };
 
@@ -124,6 +155,11 @@ describe('createLevelSystem: the sandbox', () => {
     const w = sys.world(sys.start, 7);
     expect(w.corpseBlocksShells).toBe(true);
     expect(w.muzzleClearsTanks).toBe(false);
+  });
+
+  it('the sandbox branch does NOT wire coopPool -- always single-player, so createSandboxWorld never sees it and the world keeps the default', () => {
+    const sys = createLevelSystem({ ...sandboxFlags, coopPool: true }, noRun());
+    expect(sys.world(sys.start, 7).coopAttempts).toBe(true);
   });
 
   it('the sandbox start ignores the active run entirely -- it is a test rig, not a level', () => {

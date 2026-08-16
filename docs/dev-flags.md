@@ -13,12 +13,13 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (12)
+## Boolean flags (13)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
 | `aimRay` | `aimRay` | `false` | Draws the player's computed aim: a ray along the turret and a marker where the cursor maps to on the ground. |
 | `autoplay` | `autoplay` | `false` | Drives the player with the scripted "competent player" AI instead of reading the input controller -- the game demos itself. |
+| `coopPool` | `coopPool` | `false` | Restores the shipped shared-life-pool coop model: every player death drains the pool by one and schedules that tank's own per-tank respawn. The default (this flag off) is the shared-attempts ruling: a lone death costs nothing and the survivor fights on; only a full wipe spends a life and restarts the arena. |
 | `corpseBlock` | `corpseBlock` | `false` | Lets a tank killed earlier in the same tick still block a bullet aimed at it, instead of the shipped ghost rule where the bullet passes through. |
 | `gamepad` | `gamepad` | `false` | Merges gamepad[0] into the input stream alongside keyboard/mouse/touch. |
 | `invincible` | `invincible` | `false` | Makes the player unkillable: shells detonate harmlessly, blasts wash over. |
@@ -32,6 +33,7 @@ accident.
 
 Notes:
 
+- **coopPool**: Only meaningful once `players` >= 2.
 - **corpseBlock**: Applies in both the campaign and the sandbox.
 - **gamepad**: Single player only: gamepad[1] onward is ignored.
 - **gamepad**: Mutually exclusive with `players` >= 2 by construction: once a second player is active, slot 0 is always built without the gamepad merge, regardless of this flag.

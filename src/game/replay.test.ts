@@ -29,6 +29,7 @@ const META: ReplayMeta = {
   invincible: false,
   corpseBlocksShells: false,
   muzzleClearsTanks: true,
+  coopAttempts: true,
 };
 
 /**
@@ -78,6 +79,7 @@ function worldFor(meta: ReplayMeta, playerCount = 1): World {
     meta.corpseBlocksShells,
     meta.muzzleClearsTanks,
     playerCount,
+    meta.coopAttempts,
   );
 }
 
@@ -263,6 +265,7 @@ describe('replayMetaFor', () => {
       invincible: false,
       corpseBlocksShells: false,
       muzzleClearsTanks: true,
+      coopAttempts: true,
     });
   });
 
@@ -279,6 +282,24 @@ describe('replayMetaFor', () => {
       invincible: false,
       corpseBlocksShells: true,
       muzzleClearsTanks: false,
+      coopAttempts: true,
+    });
+  });
+
+  it('reads coopAttempts off the world too, when the shipped pool model was requested', () => {
+    // Same claim again, for the shared-attempts switch: a replay must reproduce
+    // whatever coopAttempts the recorded world was actually built with (pool mode,
+    // false), not the shared-attempts default.
+    const world = createWorldFor(ARENAS[0], 8, 'none', 3, undefined, undefined, 2, false);
+    expect(replayMetaFor(world, 'arena-01')).toEqual({
+      arenaId: 'arena-01',
+      seed: 8,
+      lives: 3,
+      unarmedTrigger: 'none',
+      invincible: false,
+      corpseBlocksShells: false,
+      muzzleClearsTanks: true,
+      coopAttempts: false,
     });
   });
 
