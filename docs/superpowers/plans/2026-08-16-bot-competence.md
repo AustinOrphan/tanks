@@ -93,6 +93,22 @@ judgment call in this PR that only Austin can make: keep it as a plausible-but-c
 inert tactic, or treat "shells don't break destructible walls" as a gap worth closing in
 `bullets.ts` separately.
 
+**A second, independent reason the gate rarely opens in shipped arenas.**
+`arena.ts`'s own comment names it directly: "PASS 2b -- destructible walls, one per
+cell, never merged" (CLAUDE.md: "Destructible walls are never merged... a destructible
+cell is a destruction UNIT... arena-02's centre barrier is authored as adjacent blocks").
+Solid walls get merged into maximal rectangles (`mergeSolidRuns`); destructible walls do
+not, by design, so a real destructible barrier more than one cell thick along the ray's
+crossing direction is represented as MULTIPLE separate `Wall` entries. `wallShotPoint`'s
+"exactly one wall on the line" gate returns null the moment it meets a second wall —
+which is correct given its own contract, but means it only ever fires against a
+single-cell-thick destructible obstruction, not a real multi-cell barrier like
+arena-02's. This is not a bug in the implementation (the red-first fixture is
+deliberately a single cell and correctly passes; the gate does exactly what its doc
+comment says), but it is the second half of the picture for the keep-or-cut call above:
+the decision is not just currently inert when it fires, it is also structurally unlikely
+to fire against the kind of destructible geometry this game actually ships.
+
 **On cost: the evidence is weaker than a clean before/after and should be read that
 way.** The re-measured win rate (51/125, 40.8%) sits comfortably above the file's own
 `> 0.2` regression guard, but the number it would need to be compared against — the
