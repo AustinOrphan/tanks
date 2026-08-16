@@ -55,7 +55,7 @@ Notes:
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
 | `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter) instead of the shipped `high` default. |
-| `sandboxTanks` | `tanks` | `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
+| `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
 | `sandboxWalls` | `walls` | a positive integer, bare or as `random:N` | `null` | Sets how many interior walls the sandbox scatters. |
 | `seed` | `seed` | a positive integer | `null` | Fixes the world's PRNG seed instead of deriving one from the clock, for a reproducible playthrough. |
 
@@ -85,6 +85,6 @@ Notes:
 
 - `?dev=1&aimRay=1` -- draw the aim ray.
 - `?dev=1&playtest=1` -- the whole playtest kit in one flag.
-- `?dev=1&level=sandbox&tanks=brown,teal&walls=8&disarmed=0` -- a scripted, armed sandbox arena.
+- `?dev=1&level=sandbox&tanks=brown,teal,teal&walls=8&disarmed=0` -- a scripted, armed sandbox arena -- repeats in `tanks` are kept, not deduplicated.
 - `?dev=1&coop=1` -- couch co-op, second player on gamepad[0].
 - `?dev=1&quality=low` -- force the low render quality preset.

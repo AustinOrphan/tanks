@@ -26,9 +26,15 @@ function fmtDefault(v: DevFlags[keyof DevFlags]): string {
 }
 
 function fmtValues(spec: FlagSpec): string {
-  if (spec.values && spec.values.length > 0) return spec.values.map((v) => `\`${v}\``).join(', ');
-  if (spec.type) return spec.type;
-  return '';
+  const values = spec.values && spec.values.length > 0
+    ? spec.values.map((v) => `\`${v}\``).join(', ')
+    : '';
+  // Both set (only sandboxTanks today) means `type` frames the SHAPE (e.g. a multiset
+  // that keeps repeats) and `values` is the per-element vocabulary -- render both, or a
+  // multiset's "repeats kept" would never appear anywhere in the doc.
+  if (spec.type && values) return `${spec.type}: ${values}`;
+  if (values) return values;
+  return spec.type ?? '';
 }
 
 /** DevFlags keys, sorted -- the canonical identity to sort by, not the query param (three
@@ -91,7 +97,10 @@ function knownParams(): Set<string> {
 const EXAMPLES: readonly [string, string][] = [
   ['?dev=1&aimRay=1', 'draw the aim ray'],
   ['?dev=1&playtest=1', 'the whole playtest kit in one flag'],
-  ['?dev=1&level=sandbox&tanks=brown,teal&walls=8&disarmed=0', 'a scripted, armed sandbox arena'],
+  [
+    '?dev=1&level=sandbox&tanks=brown,teal,teal&walls=8&disarmed=0',
+    'a scripted, armed sandbox arena -- repeats in `tanks` are kept, not deduplicated',
+  ],
   ['?dev=1&coop=1', 'couch co-op, second player on gamepad[0]'],
   ['?dev=1&quality=low', 'force the low render quality preset'],
 ];
