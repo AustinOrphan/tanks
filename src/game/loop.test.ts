@@ -3586,45 +3586,64 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
   // are exercised through the SAME production `slots.map` sample() path as slot 0/1,
   // not called directly -- the composition-blindness class CLAUDE.md's testing
   // conventions section warns about.
-  it('players=3: builds a REAL 3-player world, exactly one gamepad source (slot 1), and slot 2 tracks its own tank\'s position via setPlayerPosition', () => {
+  it('players=3: builds a REAL 3-player world, exactly one gamepad source (slot 1), and slot 2 holds its turret steady once it knows its own position', () => {
     const h = boot(makeDeps({ devFlags: { players: 3 } }));
     expect(h.rec.playerCounts).toEqual([3]);
     expect(h.rec.gamepadSourceBuilds).toBe(1); // slot 1 only -- slots 2+ are idle-filled
 
-    const world = h.rec.builtWorlds[0];
-    const players = world.tanks.filter((t: Tank) => t.kind === 'player');
-    expect(players).toHaveLength(3);
-    const p2 = players.find((t: Tank) => t.controlledBy === 2)!;
-    expect(p2).toBeDefined();
-    const spawnPos = { x: p2.pos.x, y: p2.pos.y };
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    expect(spawned).toHaveLength(3);
+    const spawnPos = { ...spawned.find((t: Tank) => t.controlledBy === 2)!.pos };
+    expect(spawnPos).not.toEqual({ x: 0, y: 0 }); // off-origin, or a slew could read as a hold
 
     h.setState('playing');
-    h.fireFrame(100);
-    // Slot 2's idle source has no fake recorder of its own (it is real production code,
-    // not an injected GameDeps collaborator -- see createIdleInputSource's own doc
-    // comment for why it needs none), so its effect is observed on the TANK: an idle
-    // source never moves (unlike slot 1's fake, which always drives +x) and holds its
-    // spawn heading -- the actual defect this PR fixes, proven negatively at the
-    // production wiring layer, not just at createIdleInputSource's own unit tests.
-    expect(p2.pos).toEqual(spawnPos);
-    expect(p2.turretAngle).toBe(0); // held at spawn, never slewed toward world-origin
+    // `builtWorlds[0]` is the object `deps.levels.world` returned at BOOT -- the driver
+    // never mutates it in place (`step` clones every tick and the driver reassigns its
+    // OWN internal `curr`), so reading it again here would see the frozen spawn state
+    // regardless of what slot 2's source actually did. `renders.at(-1)!.curr` is the
+    // live world the LAST completed frame actually simulated -- the same live-vs-frozen
+    // distinction the lives assertion above (`h.rec.renders.at(-1)!.curr.lives`) relies on.
+    const liveSlot2 = (): Tank => h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 2)!;
+
+    // driver.ts calls onSimulated -- and so the FIRST setPlayerPosition -- only after
+    // the batch of ticks a single fireFrame call simulates, not before it. So the
+    // ticks inside THIS first call unavoidably sample the idle source before it has
+    // ever been told where its tank is, which is the documented boot-time transient
+    // (createIdleInputSource's own doc comment): its {0,0} construction default is
+    // live for that handful of ticks. One small fireFrame settles it.
+    h.fireFrame(17); // ~1 tick
+    const settled = liveSlot2().turretAngle;
+
+    // The actual claim under test: once the idle source knows its own position, many
+    // MORE ticks must not move the turret further. A naive always-{0,0} source would
+    // keep slewing toward world-origin here; the real echo holds.
+    h.fireFrame(500);
+    const after = liveSlot2();
+    expect(after).toBeDefined();
+    expect(after.pos).toEqual(spawnPos);
+    expect(after.turretAngle).toBe(settled); // holds steady, does not keep slewing
     h.handle.dispose();
   });
 
-  it('players=4: fills two idle slots (2 and 3), still exactly one real gamepad source', () => {
+  it('players=4: fills two idle slots (2 and 3), still exactly one real gamepad source, both hold steady', () => {
     const h = boot(makeDeps({ devFlags: { players: 4 } }));
     expect(h.rec.playerCounts).toEqual([4]);
     expect(h.rec.gamepadSourceBuilds).toBe(1);
 
-    const world = h.rec.builtWorlds[0];
-    const players = world.tanks.filter((t: Tank) => t.kind === 'player');
-    expect(players).toHaveLength(4);
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    expect(spawned).toHaveLength(4);
     h.setState('playing');
-    h.fireFrame(100);
+    // See the players=3 test above for why this reads the LIVE world, not
+    // builtWorlds[0], and why a small warm-up frame precedes the real assertion.
+    const liveTanks = (): Tank[] => h.rec.renders.at(-1)!.curr.tanks;
+    h.fireFrame(17);
+    const settled = new Map([2, 3].map((slot) => [slot, liveTanks().find((t) => t.controlledBy === slot)!.turretAngle]));
+
+    h.fireFrame(500);
     for (const slot of [2, 3]) {
-      const p = players.find((t: Tank) => t.controlledBy === slot)!;
+      const p = liveTanks().find((t: Tank) => t.controlledBy === slot)!;
       expect(p, `slot ${slot}`).toBeDefined();
-      expect(p.turretAngle, `slot ${slot} turretAngle`).toBe(0); // idle-held, not slewed
+      expect(p.turretAngle, `slot ${slot} turretAngle`).toBe(settled.get(slot)); // idle-held, not slewed
     }
     h.handle.dispose();
   });
