@@ -1,8 +1,8 @@
 import type { World } from '../world';
-import type { InputState, Tank, Vec2, Wall } from '../types';
-import { vsub, vdist, vnorm, vlen, fromAngle, angleOf } from '../types';
+import type { InputState, Tank, Vec2 } from '../types';
+import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
 import { lineOfSight, aimLead, dangerAvoidMove, profileAimSpread } from './targeting';
-import { driveVelocity, circleVsAABB, raySegmentVsAABB } from '../collision';
+import { driveVelocity, circleVsAABB } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
 import {
   TANK_RADIUS, DT, TICK_HZ, WANDER_TICKS, SEEK_APPROACH_BIAS, VEC_EPS,
@@ -108,14 +108,21 @@ const PLAYER_RETREAT_CHANCE = 0.4;
  * AI_MINE_FLEE_RADIUS before it goes off) rather than raw frequency -- though with only
  * three chance values tried, "consistent with" is as far as this evidence goes.
  *
- * Shipped at 0.05: rare enough to read as occasional rather than compulsive
- * (minesPerGame 1.73-7.15 across the 5 arenas, re-measured after directive A parts 1
- * and 2 landed -- this range moved from an earlier 1.6-7.7-across-4-arenas figure
- * measured before arena-05 shipped, which is a population change more than a behavior
- * one; full numbers in the measurement block's console output), with the residual
- * self-mine risk left in on purpose -- see player-profile.test.ts's pinned
- * self-mine-share assertion, which is the honest way to hold this open rather than
- * papering over it.
+ * Shipped at 0.05: rare enough to read as occasional rather than compulsive. The last
+ * figure taken from the 60-seed measurement harness was minesPerGame 1.73-7.15 across
+ * the 5 arenas, with directive A part 1 (destructible-wall shots, since stripped -- see
+ * decidePlayerInput's doc comment) and part 2 (centroid retreat) both active; that
+ * range itself had moved from an earlier 1.6-7.7-across-4-arenas figure measured before
+ * arena-05 shipped, a population change more than a behavior one. NOT re-measured again
+ * at that 60-seed population after part 1 was stripped -- the sim is deterministic but
+ * chaotic (see the NOTE ON METHOD above), so a behavior change anywhere can move a
+ * downstream number like this one even when it is not the gate that changed; the pinned
+ * 25-seed population WAS re-measured post-strip (player-profile.test.ts's own comment
+ * block) and its mines/game range moved too (1.52-8.00 -> 1.44-7.80), which is the
+ * concrete evidence that "unrelated behavior changed, so re-check before trusting an
+ * old number" is not just a caveat here. With the residual self-mine risk left in on
+ * purpose -- see player-profile.test.ts's pinned self-mine-share assertion, which is
+ * the honest way to hold this open rather than papering over it.
  */
 const PLAYER_MINE_CHANCE = 0.05;
 
@@ -146,13 +153,13 @@ function isOpponent(_world: World, _subject: Tank, other: Tank): boolean {
  * one O(tanks) loop, no pairwise term, so folding it into `decidePlayerInput` keeps the
  * whole function O(tanks+mines+walls) per tick, the order it already was.
  *
- * Carries only what has a real consumer today: `nearest` (the wall-shot fallback and
- * the mine gate both still reason about ONE specific opponent) and `centroid` (the
- * retreat branch's whole-map answer to "which way is actually away"). Second-nearest
- * and a bare opponent count were part of an earlier draft and were cut before landing
- * -- nothing in this file ever read them, and a computed value with no consumer is
- * untestable dead weight, not scaffolding for later; add them back only alongside the
- * consumer that needs them.
+ * Carries only what has a real consumer today: `nearest` (the movement band and the
+ * mine gate both still reason about ONE specific opponent) and `centroid` (the retreat
+ * branch's whole-map answer to "which way is actually away"). Second-nearest and a bare
+ * opponent count were part of an earlier draft and were cut before landing -- nothing
+ * in this file ever read them, and a computed value with no consumer is untestable dead
+ * weight, not scaffolding for later; add them back only alongside the consumer that
+ * needs them.
  */
 interface ThreatSummary {
   /** Same tank the old nearestEnemy(world, subject) returned. */
@@ -188,43 +195,6 @@ function assessThreats(world: World, subject: Tank): ThreatSummary {
     nearest,
     centroid: count > 0 ? { x: sumX / count, y: sumY / count } : null,
   };
-}
-
-/**
- * The wall's own surface point if the straight line from `from` to `opponent` crosses
- * EXACTLY one intact wall and that wall is an intact DESTRUCTIBLE -- directive A's
- * "shooting it is a path". A second wall on the same line (of either kind), or a lone
- * SOLID wall, returns null: this is a narrow "one clean pane of glass in the way" case,
- * not "shoot any wall that happens to be in the way".
- *
- * Player-local, and deliberately not a call to targeting.ts's `lineOfSight`: that
- * helper answers "is anything at all in the way" and does not discriminate wall KIND,
- * which is exactly the distinction this decision needs (see the module comment for why
- * this file writes its own raycast rather than touching targeting.ts). Built on
- * `raySegmentVsAABB` directly -- the same primitive `lineOfSight`/`bankShot` call --
- * since `collision.ts` is shared infrastructure already imported by this file, not
- * enemy-AI-owned code.
- *
- * Note on this sim's actual mechanics, read by probe rather than assumed: a shell never
- * destroys a destructible wall -- only a mine blast does (mines.ts's `applyBlast`).
- * This function still names the DECISION correctly ("is this a clean, plausible shot at
- * an obstacle that looks breakable"); whether that shot ever pays off is a question
- * about `bullets.ts`, out of this file's scope, not about whether the decision is a
- * sound one to make.
- */
-function wallShotPoint(from: Vec2, opponent: Tank | null, walls: Wall[]): Vec2 | null {
-  if (!opponent) return null;
-  let point: Vec2 | null = null;
-  let kind: Wall['kind'] | null = null;
-  for (const w of walls) {
-    if (w.destroyed) continue;
-    const hit = raySegmentVsAABB(from, opponent.pos, w.aabb);
-    if (!hit) continue;
-    if (point !== null) return null; // a second wall on the line: not a clean shot
-    point = hit.point;
-    kind = w.kind;
-  }
-  return kind === 'destructible' ? point : null;
 }
 
 /** True if stepping one tick along `dir` at `speed` would put the tank's hull inside a
@@ -309,12 +279,23 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
  * closest, once a second opponent is in play (see ThreatSummary); aim at the nearest
  * enemy actually in sight, jittered by the player's own resolved profile's aimAccuracy
  * (STATIC_BASIC, 0.55 -- worse than Grey's 0.6, better than Brown's... same 0.55, since
- * Brown IS StaticBasic); with no tank in sight, aim at and fire on an intact
- * destructible wall if it is the ONLY thing blocking the nearest known opponent (see
- * wallShotPoint); fire only once a solution has been HELD for the profile's own
- * reactionTime (0.8s) -- so the player does not snap to a frame-perfect shot the
+ * Brown IS StaticBasic); fire only once that solution has been HELD for the profile's
+ * own reactionTime (0.8s) -- so the player does not snap to a frame-perfect shot the
  * instant an enemy peeks a corner; occasionally lay a mine when an enemy is close
  * enough for one to matter.
+ *
+ * With no tank in sight, this file does NOT aim at or fire on a destructible wall in
+ * the way. An earlier version did (directive A part 1, as first written); it was
+ * stripped on adjudicated review after a probe found the decision doubly inert against
+ * this sim's actual mechanics -- a shell never destroys a destructible wall (only a
+ * mine blast does, mines.ts's `applyBlast`), and destructible walls are never merged
+ * (arena.ts: one `Wall` per cell), so a real multi-cell barrier would not even have
+ * passed the removed code's own "exactly one wall in the way" gate. Spending a shell on
+ * a wall it cannot open is strictly worse than holding fire (it burns a
+ * `weapon.maxActiveProjectiles` slot for nothing). See the PR 2b plan doc
+ * (docs/superpowers/plans/2026-08-16-bot-competence.md) for the full finding; mine-
+ * breaching -- using the mechanic that actually opens a destructible wall -- is queued
+ * there as the follow-up that replaces this.
  */
 export function decidePlayerInput(
   world: World,
@@ -330,8 +311,8 @@ export function decidePlayerInput(
   const cfg = configFor(player.kind);
 
   // The one bounded per-tick pass (directive A, part 2) -- computed once and reused by
-  // movement, targeting's wall-shot fallback and the mine gate below, instead of each
-  // running its own separate nearest-opponent scan.
+  // movement and the mine gate below, instead of each running its own separate
+  // nearest-opponent scan.
   const threats = assessThreats(world, player);
 
   // ---- Movement: dodge overrides the band/wander baseline, never the reverse. ----
@@ -348,15 +329,12 @@ export function decidePlayerInput(
     if (d < bestDist) { bestDist = d; target = t; }
   }
 
-  // No tank in sight: directive A, part 1 -- if the straight line to the nearest KNOWN
-  // opponent (positional, not LOS-gated, same sense nearestEnemy always used) crosses
-  // exactly one intact wall and that wall is destructible, treat aiming at and firing
-  // on its surface as a valid decision instead of just holding heading. See
-  // wallShotPoint's own doc comment for what "valid" means here and what it does not.
-  const wallAimPoint = target ? null : wallShotPoint(player.pos, threats.nearest, world.walls);
-
+  // No tank in sight: hold the current turret heading rather than snapping to some
+  // default or firing on a wall. An earlier version aimed at and fired on an intact
+  // destructible wall here (directive A part 1) -- stripped on adjudicated review; see
+  // this function's own doc comment and the PR 2b plan doc for why.
   let aimPoint: Vec2;
-  const hasSolution = target !== null || wallAimPoint !== null;
+  const hasSolution = target !== null;
   if (target) {
     const targetVel = driveVelocity(target);
     const lead = aimLead(player.pos, target.pos, targetVel, cfg.weapon.speed);
@@ -365,16 +343,7 @@ export function decidePlayerInput(
     const jitter = (rnd() * 2 - 1) * profileAimSpread(cfg);
     const dir = fromAngle(lead + jitter);
     aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
-  } else if (wallAimPoint) {
-    // A fixed point needs no lead term (aimLead solves for a MOVING target) -- jittered
-    // the same way a live solution is, so a held wall-shot scatters like any other.
-    const angle = angleOf(vsub(wallAimPoint, player.pos));
-    const jitter = (rnd() * 2 - 1) * profileAimSpread(cfg);
-    const dir = fromAngle(angle + jitter);
-    aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
   } else {
-    // No target and no clean wall shot: hold the current turret heading rather than
-    // snapping to some default.
     const dir = fromAngle(player.turretAngle);
     aimPoint = { x: player.pos.x + dir.x, y: player.pos.y + dir.y };
   }

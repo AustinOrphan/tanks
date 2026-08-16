@@ -1,11 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { ARENAS, createWorldFor } from '../arena';
 import { step, createWorld } from '../world';
-import type { Tank, Wall, Vec2 } from '../types';
-import { angleDelta, fromAngle, vnorm, vsub, vdist } from '../types';
-import { configFor } from '../config';
-import { TICK_HZ } from '../constants';
-import { profileAimSpread } from './targeting';
+import type { Tank, Vec2 } from '../types';
+import { fromAngle, vnorm, vsub, vdist } from '../types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from './player-profile';
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
@@ -117,16 +114,23 @@ describe.skip('competent-player measurement (flip skip off to run locally)', () 
 // once, in the describe body (mirrors pacifist.test.ts's `rows`), so every `it` below
 // reads the same 125 games instead of re-simulating per assertion.
 //
-// Re-measured at this population after directive A parts 1 and 2 (destructible-wall
-// shots, centroid-aware retreat) landed -- the prior comment here quoted a 4-arena,
-// 100-game population from before arena-05 shipped, which this correction also fixes
-// while it's being touched for the same reason (both are population changes, not
-// values this file otherwise had reason to revisit together):
-//   arena1: 22/25 wins  arena2: 15/25  arena3: 6/25  arena4: 5/25  arena5: 3/25
+// Re-measured at this population after directive A part 2 (centroid-aware retreat)
+// landed AND directive A part 1 (destructible-wall shots) was implemented, then
+// stripped on adjudicated review -- see decidePlayerInput's doc comment and the PR 2b
+// plan doc. This is the population's THIRD measurement in this branch's history: an
+// earlier comment here quoted a 4-arena, 100-game population from before arena-05
+// shipped; a later one quoted 5 arenas with wall-shooting active; this one is 5 arenas
+// with wall-shooting removed again:
+//   arena1: 21/25 wins  arena2: 13/25  arena3: 7/25  arena4: 7/25  arena5: 3/25
 //   total: 51/125 wins (40.8%), 74/125 losses, 0/125 timeouts
-//   self-mine deaths: 6/74 losses (5 in arena2, 1 in arena3)
-//   fires/game: arena1 21.8 arena2 17.4 arena3 48.8 arena4 36.5 arena5 40.9
-//   mines/game: arena1 1.52 arena2 8.00 arena3 4.64 arena4 2.68 arena5 6.68
+//   self-mine deaths: 10/74 losses (9 in arena2, 1 in arena3)
+//   fires/game: arena1 20.4 arena2 13.4 arena3 55.8 arena4 37.3 arena5 40.5
+//   mines/game: arena1 1.44 arena2 7.80 arena3 5.12 arena4 2.60 arena5 6.48
+// The overall win/loss split (51/125) happens to match the wall-shooting-active
+// measurement exactly; the per-arena breakdown and self-mine share did not (this sim is
+// deterministic but chaotic -- removing one behavior changes the game from that tick on,
+// not just the removed behavior's own footprint -- see PLAYER_MINE_CHANCE's comment in
+// player-profile.ts for the same caveat applied to a different gate).
 // ---------------------------------------------------------------------------
 describe('a competent scripted player against the shipped arenas', () => {
   const SEEDS = 25;
@@ -165,15 +169,15 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('reads arena-01 as easier than arena-03 and arena-04', () => {
-    // Measured win rates: arena-01 22/25 (88%), arena-03 6/25 (24%), arena-04 5/25 (20%)
-    // -- a >60-point gap either way, wide enough to stay a stable ordinal claim under
+    // Measured win rates: arena-01 21/25 (84%), arena-03 7/25 (28%), arena-04 7/25 (28%)
+    // -- a >55-point gap either way, wide enough to stay a stable ordinal claim under
     // ordinary tuning rather than sitting on a fragile boundary. This is the
     // "level 4 is harder than level 1" kind of claim the issue asks this harness to make
-    // measurable; it does not by itself distinguish arena-03 from arena-04 (24% vs 20%
-    // is within the noise a small tuning change could flip). Arena-05 is not part of
-    // this specific ordinal claim (it predates arena-05's addition and nothing in
-    // directive A/B required extending it); for reference it is currently the hardest
-    // of the five at 3/25 (12%).
+    // measurable; it does not by itself distinguish arena-03 from arena-04 (both 28% at
+    // this population -- within the noise a small tuning change could flip either way).
+    // Arena-05 is not part of this specific ordinal claim (it predates arena-05's
+    // addition and nothing in directive A/B required extending it); for reference it is
+    // currently the hardest of the five at 3/25 (12%).
     //
     // Mutation note (from before arena-05/directive A/B; not rerun at the current tree):
     // every production mutation tried against this assertion (disabling dodging,
@@ -188,7 +192,7 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('still shoots: reaction-gated fire is not the same as passive', () => {
-    // Population: same 125 games. Measured per-arena averages 17.4-48.8 fires/game; the
+    // Population: same 125 games. Measured per-arena averages 13.4-55.8 fires/game; the
     // bar sits far below the lowest observed so it only catches an accidental
     // "never/rarely fires" regression, not ordinary aim/reaction retuning.
     const fires = all.reduce((n, r) => n + r.fires, 0);
@@ -196,7 +200,7 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('lays mines occasionally rather than never or constantly', () => {
-    // Population: same 125 games. Measured per-arena averages 1.52-8.00 mines/game.
+    // Population: same 125 games. Measured per-arena averages 1.44-7.80 mines/game.
     const mines = all.reduce((n, r) => n + r.mines, 0);
     const perGame = mines / all.length;
     expect(perGame, `${mines} mines over ${all.length} games`).toBeGreaterThan(0.3);
@@ -205,10 +209,10 @@ describe('a competent scripted player against the shipped arenas', () => {
 
   it('does not routinely kill itself with its own mine', () => {
     // Population: all LOSSES across the 125 games (a self-mine death can only happen in
-    // a loss), measured at 74. Self-mine share measured 6/74 (8.1%), 5 in arena-02 and 1
-    // in arena-03. The residual is real and documented (PLAYER_MINE_CHANCE's comment in
-    // player-profile.ts) -- this is a regression guard against it becoming the DOMINANT
-    // cause of death, not a claim that it is eliminated.
+    // a loss), measured at 74. Self-mine share measured 10/74 (13.5%), 9 in arena-02 and
+    // 1 in arena-03. The residual is real and documented (PLAYER_MINE_CHANCE's comment
+    // in player-profile.ts) -- this is a regression guard against it becoming the
+    // DOMINANT cause of death, not a claim that it is eliminated.
     const losses = all.filter((r) => r.outcome === 'lose');
     const selfMine = losses.filter((r) => r.selfMineDeath).length;
     expect(losses.length, 'population: losses only, out of 100 games').toBeGreaterThan(0);
@@ -217,79 +221,23 @@ describe('a competent scripted player against the shipped arenas', () => {
 });
 
 /**
- * Directive A, part 1: when the direct line to the nearest KNOWN opponent (positional,
- * not LOS-gated) crosses exactly one intact wall and that wall is destructible, aiming
- * at and firing on the wall's own surface point is a valid decision -- "shooting it is
- * a path". A solid wall in identical geometry must never trigger it: the two fixtures
- * below are byte-identical except for `kind`.
- *
- * Reads on this sim's actual mechanics (verified by a throwaway probe, not assumed):
- * a shell never destroys a destructible wall -- only a mine blast does
- * (mines.ts's applyBlast). So this directive is a DECISION the player-brain makes (aim
- * and fire at a plausible-looking obstacle), not a claim that the shot opens the path;
- * see this file's own measured win-rate numbers above for whether spending a shot this
- * way costs anything.
+ * Directive A part 1 (destructible-wall shots) was implemented here and then STRIPPED
+ * on adjudicated review: a throwaway probe found a shell never destroys a destructible
+ * wall in this sim (only a mine blast does, mines.ts's applyBlast), so aiming at and
+ * firing on one spent a `weapon.maxActiveProjectiles` slot for a shot that could never
+ * pay off -- worse than holding fire, not merely inert. See decidePlayerInput's own doc
+ * comment and the PR 2b plan doc (docs/superpowers/plans/2026-08-16-bot-competence.md)
+ * for the full finding; mine-breaching (using the mechanic that actually opens a
+ * destructible wall) is queued there as the follow-up. The two fixtures this section
+ * used to carry (a destructible-wall positive case and a solid-wall negative control)
+ * are gone with the feature they tested.
  */
-describe('directive A part 1: an intact destructible wall in the only path to the nearest opponent', () => {
-  const PLAYER_ID = 1;
-  const ENEMY_ID = 2;
-  const REACTION_TICKS = Math.round(configFor('player').ai.reactionTime * TICK_HZ);
-
-  function fixture(wallKind: Wall['kind']) {
-    const player = makeTank('player', PLAYER_ID, 5, 5);
-    const enemy = makeTank('brown', ENEMY_ID, 15, 5);
-    // Spans x in [9,10], y in [4,6] -- the segment (5,5)->(15,5) enters its left face
-    // at exactly (9,5), the wall's own nearest surface point on that line.
-    const wall: Wall = { id: 99, kind: wallKind, destroyed: false, aabb: { minX: 9, minY: 4, maxX: 10, maxY: 6 } };
-    return createWorld({ walls: [wall], tanks: [player, enemy], spawns: [], lives: 3 });
-  }
-
-  it('fires on the destructible wall\'s surface once a solution has been held for reactionTime (RED before the wall-shot path exists)', () => {
-    const world = fixture('destructible');
-    const rnd = mulberry32(1);
-    const state = createPlayerAiState(rnd);
-    let callsWhenFired = -1; // ticks the solution has been HELD, i.e. state.aimTicks at fire time
-    let firedAim: Vec2 | null = null;
-    // Never stepped -- the fixture holds the same geometry every call, which is exactly
-    // what "a solution held for N ticks" means to test without needing the tank to
-    // actually move.
-    for (let calls = 1; calls <= REACTION_TICKS + 5 && callsWhenFired === -1; calls++) {
-      const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
-      if (input.fire) { callsWhenFired = calls; firedAim = input.aim; }
-    }
-    expect(callsWhenFired, 'never fired on the destructible wall blocking the only path to the nearest opponent')
-      .toBeGreaterThan(0);
-    expect(callsWhenFired, `population: the profile's own reactionTime is ${REACTION_TICKS} ticks; must not fire before the solution has been held that long`)
-      .toBeGreaterThanOrEqual(REACTION_TICKS);
-
-    // The aim actually targets the wall's surface (9,5) from the player at (5,5) --
-    // straight +x, angle 0 -- not the enemy behind it at (15,5) (same angle here, so
-    // the real discriminator is that it fires AT ALL before ever seeing the enemy;
-    // the angle check below guards against a wrong-point regression separately).
-    const player = world.tanks[0];
-    const actualAngle = Math.atan2(firedAim!.y - player.pos.y, firedAim!.x - player.pos.x);
-    const wallAngle = Math.atan2(5 - player.pos.y, 9 - player.pos.x);
-    const bound = profileAimSpread(configFor('player')) + 1e-6;
-    expect(Math.abs(angleDelta(actualAngle, wallAngle)), 'aim did not target the wall surface within the jitter bound')
-      .toBeLessThanOrEqual(bound);
-  });
-
-  it('does NOT fire on a solid wall in identical geometry (negative control)', () => {
-    const world = fixture('solid');
-    const rnd = mulberry32(1);
-    const state = createPlayerAiState(rnd);
-    for (let i = 0; i < REACTION_TICKS + 30; i++) {
-      const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
-      expect(input.fire, `fired at tick ${i} on a solid wall blocking the only path`).toBe(false);
-    }
-  });
-});
 
 /**
  * Directive A, part 2: whole-map awareness. A bounded per-tick pass builds a threat
- * summary (nearest, second-nearest, count, centroid) that the movement band's retreat
- * branch reads instead of nearest-only distance -- retreating away from the opponent
- * MASS, not just whichever one happens to be closest, once several are in play.
+ * summary (nearest, centroid) that the movement band's retreat branch reads instead of
+ * nearest-only distance -- retreating away from the opponent MASS, not just whichever
+ * one happens to be closest, once several are in play.
  *
  * Fixture: player at the origin, one opponent close enough to trigger retreat (within
  * PLAYER_MINIMUM_DISTANCE) directly south, a second opponent further north. Retreating
