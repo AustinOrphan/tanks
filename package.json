@@ -22,7 +22,8 @@
     "trace:beacon:check": "node tools/baseline/beacon-check.mjs",
     "gallery": "node tools/gallery/run.mjs",
     "audio": "node tools/audio/render.mjs",
-    "mutate": "node tools/mutate/run.mjs"
+    "mutate": "node tools/mutate/run.mjs",
+    "devflags:doc": "vite-node tools/devflags/generate.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
