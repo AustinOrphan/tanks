@@ -135,19 +135,61 @@ function isOpponent(_world: World, _subject: Tank, other: Tank): boolean {
   return other.kind !== 'player' && other.alive;
 }
 
-/** Nearest ALIVE enemy to `subject`, by straight-line distance, visibility not required
- *  -- mirrors seekMove's own positional awareness (targeting.ts), which is not
- *  LOS-gated either: knowing roughly where the pressure is is positional sense, not
- *  aimbotting. */
-function nearestEnemy(world: World, subject: Tank): Tank | null {
-  let best: Tank | null = null;
-  let bestDist = Infinity;
+/**
+ * Directive A, part 2: whole-map awareness. `world.walls`/`world.tanks`/`world.mines`
+ * were already handed to this file in full -- the gap was never what it's GIVEN, only
+ * what it COMPUTES from that, which used to be nearest-only. `assessThreats` is the
+ * single bounded per-tick pass that replaces the old standalone `nearestEnemy` scan:
+ * one O(tanks) loop, no pairwise term, so folding it into `decidePlayerInput` keeps the
+ * whole function O(tanks+mines+walls) per tick, the order it already was.
+ */
+interface ThreatSummary {
+  /** Same tank the old nearestEnemy(world, subject) returned. */
+  nearest: Tank | null;
+  /** Second-nearest opponent, or null with fewer than two in play. */
+  second: Tank | null;
+  /** How many opponents this pass counted. */
+  opponentCount: number;
+  /**
+   * Centroid of every opponent's position, or null when there are none. Equal to
+   * `nearest.pos` when `opponentCount` is 1 -- every consumer that reads this in place
+   * of `nearest.pos` is UNCHANGED in the single-opponent case, and only diverges once a
+   * second opponent presses at the same time, which is exactly the case directive A
+   * asks the movement band to handle differently.
+   */
+  centroid: Vec2 | null;
+}
+
+function assessThreats(world: World, subject: Tank): ThreatSummary {
+  let nearest: Tank | null = null;
+  let nearestDist = Infinity;
+  let second: Tank | null = null;
+  let secondDist = Infinity;
+  let count = 0;
+  let sumX = 0;
+  let sumY = 0;
   for (const t of world.tanks) {
     if (!isOpponent(world, subject, t)) continue;
+    count += 1;
+    sumX += t.pos.x;
+    sumY += t.pos.y;
     const d = vdist(subject.pos, t.pos);
-    if (d < bestDist) { bestDist = d; best = t; }
+    if (d < nearestDist) {
+      second = nearest;
+      secondDist = nearestDist;
+      nearest = t;
+      nearestDist = d;
+    } else if (d < secondDist) {
+      second = t;
+      secondDist = d;
+    }
   }
-  return best;
+  return {
+    nearest,
+    second,
+    opponentCount: count,
+    centroid: count > 0 ? { x: sumX / count, y: sumY / count } : null,
+  };
 }
 
 /**
@@ -216,8 +258,18 @@ function blend(toward: Vec2, wander: Vec2): Vec2 {
  *
  * Also redraws the wander heading and the window's mine inclination together, once every
  * WANDER_TICKS ticks -- one cadence for both, rather than a separate clock for each.
+ *
+ * Directive A, part 2: the RETREAT branch pulls away from `threats.centroid`, not
+ * `threats.nearest.pos` -- retreating from only the closest opponent can walk the
+ * player straight at a second one, and the centroid is the whole-map-aware answer to
+ * "which way is actually away from the pressure". `centroid` equals `nearest.pos`
+ * exactly when there is only one opponent (see ThreatSummary's doc comment), so this is
+ * behaviour-identical to the old nearest-only retreat in the single-opponent case and
+ * only diverges once a second opponent is in play -- the same reduction the mine/aim
+ * gates below still use `threats.nearest` for directly, since a live shot or a mine
+ * drop is about ONE specific opponent, not the mass.
  */
-function seekLikeMove(world: World, player: Tank, rnd: () => number, state: PlayerAiState): Vec2 {
+function seekLikeMove(world: World, player: Tank, rnd: () => number, state: PlayerAiState, threats: ThreatSummary): Vec2 {
   if (state.wanderTicksLeft <= 0) {
     state.wanderHeading = rnd() * Math.PI * 2;
     state.mineInclined = rnd() < PLAYER_MINE_CHANCE;
@@ -226,7 +278,7 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
   state.wanderTicksLeft -= 1;
   const wander = fromAngle(state.wanderHeading);
 
-  const nearest = nearestEnemy(world, player);
+  const nearest = threats.nearest;
   if (!nearest) return wander;
 
   const d = vdist(player.pos, nearest.pos);
@@ -236,7 +288,8 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
     dir = blend(vnorm(vsub(nearest.pos, player.pos)), wander);
   } else if (d < PLAYER_MINIMUM_DISTANCE) {
     if (rnd() < PLAYER_RETREAT_CHANCE) {
-      dir = blend(vnorm(vsub(player.pos, nearest.pos)), wander);
+      const away = threats.centroid ?? nearest.pos;
+      dir = blend(vnorm(vsub(player.pos, away)), wander);
     }
   }
 
@@ -274,9 +327,14 @@ export function decidePlayerInput(
 
   const cfg = configFor(player.kind);
 
+  // The one bounded per-tick pass (directive A, part 2) -- computed once and reused by
+  // movement, targeting's wall-shot fallback and the mine gate below, instead of each
+  // running its own separate nearest-opponent scan.
+  const threats = assessThreats(world, player);
+
   // ---- Movement: dodge overrides the band/wander baseline, never the reverse. ----
   const avoid = dangerAvoidMove(world, player);
-  const move = avoid ?? seekLikeMove(world, player, rnd, state);
+  const move = avoid ?? seekLikeMove(world, player, rnd, state, threats);
 
   // ---- Targeting: the nearest enemy the player can actually SEE. ----
   let target: Tank | null = null;
@@ -293,7 +351,7 @@ export function decidePlayerInput(
   // exactly one intact wall and that wall is destructible, treat aiming at and firing
   // on its surface as a valid decision instead of just holding heading. See
   // wallShotPoint's own doc comment for what "valid" means here and what it does not.
-  const wallAimPoint = target ? null : wallShotPoint(player.pos, nearestEnemy(world, player), world.walls);
+  const wallAimPoint = target ? null : wallShotPoint(player.pos, threats.nearest, world.walls);
 
   let aimPoint: Vec2;
   const hasSolution = target !== null || wallAimPoint !== null;
@@ -338,7 +396,7 @@ export function decidePlayerInput(
   // mine while already standing within AI_MINE_FLEE_RADIUS of a live mine (own or not)
   // -- the safety margin dangerAvoidMove flees to, so a mine is never dropped somewhere
   // the player would immediately have to dodge again.
-  const nearest = nearestEnemy(world, player);
+  const nearest = threats.nearest;
   const nearLiveMine = world.mines.some(
     (m) => !m.detonated && vdist(player.pos, m.pos) <= AI_MINE_FLEE_RADIUS,
   );
