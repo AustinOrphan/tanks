@@ -57,18 +57,26 @@ function tankColor(kind: TankKind): number {
  * owner's own first suggestion ("P1 blue-white, P2 orange"). Neither value equals any
  * roster kind's own `color` (config/data/tank-defs.json)
  * or the co-op placeholder hull swatch (`UNSTYLED_SLOT_HEX` below) -- pinned by
- * entities.test.ts's identity-ring distinctness sweep, which diffs BOTH ring hexes
- * against every roster colour and the placeholder.
- * Values are brighter/more saturated than the customization palette's own blue
- * (#3d7bd6) and orange (#e08a2e) swatches on purpose: the ring is drawn unlit
- * (`MeshBasicMaterial`) with additive blending, so it needs to read as a glow against
- * its own hull paint, not just be a different hue from it.
+ * entities.test.ts's identity-ring distinctness sweep, which diffs all 4 ring hexes,
+ * pairwise, against each other AND against every roster colour and the placeholder.
+ *
+ * Slot 2: a bright vermillion. Slot 3: a reddish-purple pushed toward violet. Both are
+ * the remaining Okabe-Ito-adjacent hues past blue/orange (its own vermillion #D55E00
+ * and reddish-purple #CC79A7), re-brightened the same way slots 0/1 were. Neither is a
+ * clean win: RGB-distance-and-hue-angle checked by hand (not asserted -- the sweep below
+ * is inequality-only) against the existing two rings, the roster and the placeholder,
+ * slot 2 sits only ~20 degrees of hue from slot 1's own orange (both are inherently
+ * warm/red hues in this part of the palette -- Okabe-Ito's own orange and vermillion are
+ * just as close, ~18 degrees apart), and slot 3's hue was moved OFF the literal
+ * reddish-purple hue and toward violet specifically because the true reddish-purple
+ * territory (~320-330 degrees) already sits close to `UNSTYLED_SLOT_HEX`'s own hue
+ * (~323 degrees). Every other pairing (roster, placeholder) measured with a wide margin.
  */
-export const IDENTITY_RING_COLORS: readonly number[] = [0x3fd0ff, 0xff8a1e];
+export const IDENTITY_RING_COLORS: readonly number[] = [0x3fd0ff, 0xff8a1e, 0xff4d2e, 0x9d3bff];
 /**
- * Ring/tint colour for any slot beyond the identity palette. Unreached today -- co-op
- * caps at two players (devflags.ts's `coop`) -- defined so a hypothetical third slot
- * degrades to a colour rather than `undefined` reaching a THREE material constructor.
+ * Ring/tint colour for any slot beyond the identity palette. Unreached today -- N-player
+ * caps at 4 (devflags.ts's `players`) -- defined so a hypothetical 5th slot degrades to a
+ * colour rather than `undefined` reaching a THREE material constructor.
  */
 const IDENTITY_COLOR_FALLBACK = 0xffffff;
 function identityColor(slot: number): number {

@@ -1665,6 +1665,22 @@ describe('player identity: ring and shell tint', () => {
     return createWorld({ walls: [], tanks: [p1, p2], spawns, lives: 3 });
   }
 
+  // Four DISTINCT x coordinates, deliberately: ringColorAt (below) matches on x alone,
+  // so any repeat would make its lookup ambiguous between two slots.
+  function fourPlayerWorld(): World {
+    const p0: Tank = { ...makeTank(1, 'player', 3, 3), controlledBy: 0 };
+    const p1: Tank = { ...makeTank(2, 'player', 9, 9), controlledBy: 1 };
+    const p2: Tank = { ...makeTank(3, 'player', 15, 3), controlledBy: 2 };
+    const p3: Tank = { ...makeTank(4, 'player', 21, 9), controlledBy: 3 };
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 3, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 9, y: 9 }, angle: 0 },
+      { kind: 'player', pos: { x: 15, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 21, y: 9 }, angle: 0 },
+    ];
+    return createWorld({ walls: [], tanks: [p0, p1, p2, p3], spawns, lives: 3 });
+  }
+
   function threePlayerWorldWithOneEnemy(): World {
     const p1: Tank = { ...makeTank(1, 'player', 3, 3), controlledBy: 0 };
     const p2: Tank = { ...makeTank(2, 'player', 9, 9), controlledBy: 1 };
@@ -1742,13 +1758,36 @@ describe('player identity: ring and shell tint', () => {
     views.dispose();
   });
 
+  it('colours all 4 slots\' rings from IDENTITY_RING_COLORS at N=4, all pairwise distinct', () => {
+    // Extends the pair above past two players -- IDENTITY_RING_COLORS now carries 4
+    // entries (the N-player ring extension), and this is the only place that renders
+    // slot 2/3's own ring rather than trusting array-length extrapolation.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = fourPlayerWorld();
+    views.sync(w, w, 0);
+    expect(IDENTITY_RING_COLORS).toHaveLength(4); // population: all 4 configured slots
+    const rendered = [
+      ringColorAt(scene, 3), ringColorAt(scene, 9), ringColorAt(scene, 15), ringColorAt(scene, 21),
+    ];
+    expect(rendered).toEqual([...IDENTITY_RING_COLORS]);
+    for (let i = 0; i < rendered.length; i++) {
+      for (let j = i + 1; j < rendered.length; j++) {
+        expect(rendered[i], `slot ${i} vs slot ${j}`).not.toBe(rendered[j]);
+      }
+    }
+    views.dispose();
+  });
+
   it('both identity ring colours are distinct from every roster colour and the placeholder', () => {
     // Makes entities.ts's own distinctness claim TRUE rather than asserted: the ring
     // says WHO, the hull says WHAT STYLE, so an identity hex colliding with a hull a
     // player could be wearing (or the unstyled-slot placeholder) would blur exactly
     // the channel the ring exists to carry. Reads the REAL rendered placeholder off
-    // the scene, same as the placeholder-distinctness sweep above. Breaks if either
-    // IDENTITY_RING_COLORS entry is changed onto a roster/placeholder hue.
+    // the scene, same as the placeholder-distinctness sweep above. Breaks if any
+    // IDENTITY_RING_COLORS entry is changed onto a roster/placeholder hue. Iterates
+    // `IDENTITY_RING_COLORS` directly (not a hardcoded count), so this already covers
+    // all 4 entries now that the array carries 4, with no edit needed to this test.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
     const w = twoPlayerWorld();
