@@ -9,9 +9,9 @@ import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
  * `createGamepadReader` alone backs `input.ts`'s single-player MERGE (`?dev=1&gamepad=1`,
  * OR'd into keyboard/mouse/touch). `createGamepadInputSource`, further down this file,
  * wraps it into a standalone `PlayerInputSource` for couch co-op's slot 1
- * (`?dev=1&coop=1`) -- see CLAUDE.md's input-routing entry and `loop.ts`'s `slots`
- * array. The two are mutually exclusive BY CONSTRUCTION, not merely by convention: when
- * `coop` is on, slot 0 is built with `{gamepad: false}` so the merge's own reader is
+ * (`?dev=1&players=2`) -- see CLAUDE.md's input-routing entry and `loop.ts`'s `slots`
+ * array. The two are mutually exclusive BY CONSTRUCTION, not merely by convention: once
+ * `players >= 2`, slot 0 is built with `{gamepad: false}` so the merge's own reader is
  * never constructed, and slot 1 owns gamepad[0] exclusively.
  *
  * Split in two on purpose. `deadzoneVector` is the pure mapping core: raw axis pair in,
@@ -197,7 +197,7 @@ export interface PlayerInputSource {
 
 /**
  * A standalone, per-slot input source over one `GamepadReader` -- couch co-op's slot 1
- * (`?dev=1&coop=1`), never merged into slot 0's keyboard/mouse/touch stream (see this
+ * (`?dev=1&players=2`), never merged into slot 0's keyboard/mouse/touch stream (see this
  * file's module doc comment for the mutual-exclusion argument).
  *
  * Holds its own `aim`, defaulting to `{0, 0}` and updated only when the right stick is
@@ -210,6 +210,22 @@ export interface PlayerInputSource {
  * Quantized through `quantizeAim` (`touch.ts`) -- the SAME boundary function
  * `input.ts`'s `sample()` applies, not a second, differently-rounded copy. See
  * `touch.ts`'s `AIM_GRID` doc comment for why the function lives there.
+ *
+ * NO PAD EVER CONNECTED is a distinct case from "pad connected, stick centred", and this
+ * is where the two used to be indistinguishable: `reader.poll()` returns `aim: null` for
+ * BOTH (see `createGamepadReader` above), so the `if (gp.aim !== null)` line alone can
+ * only ever see "no real deflection this poll," not "no pad has ever been seen." With no
+ * pad, `aim` then never leaves its `{0, 0}` construction default -- world.ts's `driveTank`
+ * reads that as a real aim point at the world's origin, not as "no info," and slews the
+ * turret to face it (see `game/loop.ts`'s `createIdleInputSource` for the full mechanism
+ * this shares). `reader.connected()` is what tells the two cases apart: false only means
+ * "no pad," so the fallback below fires only there, leaving the CONNECTED-but-centred
+ * case (a real pad, stick at rest) to keep holding its last REAL aim exactly as before.
+ *
+ * The fallback echoes `playerPos` RAW, bypassing `quantizeAim`: a spawn is rarely
+ * exactly on the AIM_GRID, and driveTank's turret-hold guard requires `aimDir` to be
+ * EXACTLY `{0, 0}` -- a quantized echo would round to a slightly different point and
+ * reproduce a smaller version of the same slew.
  */
 export function createGamepadInputSource(getGamepads: GetGamepads): PlayerInputSource {
   const reader = createGamepadReader(getGamepads);
@@ -219,10 +235,18 @@ export function createGamepadInputSource(getGamepads: GetGamepads): PlayerInputS
   return {
     sample(): InputState {
       const gp = reader.poll(playerPos);
-      if (gp.aim !== null) aim = gp.aim;
+      let outAim: Vec2;
+      if (gp.aim !== null) {
+        aim = gp.aim;
+        outAim = quantizeAim(aim);
+      } else if (!reader.connected() && playerPos !== null) {
+        outAim = { x: playerPos.x, y: playerPos.y }; // raw echo -- see doc comment above
+      } else {
+        outAim = quantizeAim(aim);
+      }
       return {
         move: gp.move,
-        aim: quantizeAim(aim),
+        aim: outAim,
         fire: gp.fire,
         mine: gp.mine,
       };

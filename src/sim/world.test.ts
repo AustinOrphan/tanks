@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { createWorld, cloneWorld, step } from './world';
 import type { World } from './world';
 import type { Tank, Wall, Spawn, InputState } from './types';
+import { angleOf, vsub, slewAngle } from './types';
+import { PLAYER_TURRET_TURN_RATE, DT } from './constants';
 
 function makeTank(id: number, x: number, y: number): Tank {
   return {
@@ -116,5 +118,35 @@ describe('step (skeleton)', () => {
     for (let i = 0; i < 5; i++) w = step(w, noInput).world;
     expect(w.corpseBlocksShells).toBe(true);
     expect(w.muzzleClearsTanks).toBe(false);
+  });
+});
+
+describe('driveTank: a literal {0,0} aim is not a neutral', () => {
+  // Empirical confirmation of the N-player design's trace claim (docs/superpowers/
+  // plans/2026-08-16-players-n.md), not merely reasoned from source: `aimDir =
+  // vsub(input.aim, player.pos)` in driveTank (world.ts) is the literal difference
+  // between the input's aim and the tank's OWN position, and the turret-slew guard
+  // only skips when that difference is EXACTLY {0,0}. `noInput.aim` is the literal
+  // {0,0} many input sources default to before they have real info (see
+  // input/input.ts's own `let aim: Vec2 = {0, 0}`, and gamepad.ts's identical
+  // default) -- for a tank spawned anywhere but the world origin, that default is
+  // NOT the neutral it looks like: it is a real, nonzero aimDir pointing at (0,0).
+  //
+  // This is the mechanism, independent of which SOURCE produces the literal {0,0} --
+  // pinned here once, permanently, since driveTank itself is not changing. Each
+  // source that must AVOID reproducing it (createIdleInputSource, and the no-pad
+  // branch of createGamepadInputSource) is pinned separately, close to its own code:
+  // loop.test.ts and gamepad.test.ts respectively.
+  it('slews the turret toward world-origin when input.aim is {0,0} and the tank is not spawned there', () => {
+    const w = makeWorld(); // tank at (2, 3), turretAngle 0 -- see makeTank/makeWorld above
+    const result = step(w, noInput);
+    const tank = result.world.tanks[0];
+
+    expect(tank.turretAngle).not.toBe(0);
+    // The EXACT expected value, not just "changed": one tick's worth of slew from 0
+    // toward the origin-facing angle, at the same rate/dt driveTank itself uses.
+    const targetAngle = angleOf(vsub({ x: 0, y: 0 }, { x: 2, y: 3 }));
+    const expectedAngle = slewAngle(0, targetAngle, PLAYER_TURRET_TURN_RATE * DT);
+    expect(tank.turretAngle).toBeCloseTo(expectedAngle, 12);
   });
 });
