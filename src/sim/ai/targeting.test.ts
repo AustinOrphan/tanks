@@ -53,7 +53,7 @@ function wanderWorld(seed: number, tick: number): World {
   return {
     tick, nextId: 100, seed, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
     spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
+    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
   };
 }
 
@@ -461,7 +461,7 @@ describe('shotHitsOwnSide', () => {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls,
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
     };
   }
 
@@ -573,7 +573,7 @@ describe('friendlyInMineBlast', () => {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
     };
   }
 
@@ -640,7 +640,7 @@ describe('mineThreatensPlayer', () => {
     return {
       tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
     };
   }
 
@@ -683,7 +683,7 @@ describe('incomingThreats: dangerCorridor is an optional, defaulted parameter (e
     return {
       tick: 0, nextId: 100, seed: 1, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, ...over,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
     };
   }
 
@@ -711,7 +711,7 @@ describe('dangerAvoidMove: fleeRadius/dangerCorridor are optional, defaulted par
     return {
       tick: 0, nextId: 100, seed: 1, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
       spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, ...over,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false, ...over,
     };
   }
 

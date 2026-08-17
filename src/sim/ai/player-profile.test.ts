@@ -5,11 +5,12 @@ import type { Tank, Vec2 } from '../types';
 import { fromAngle, vnorm, vsub, vdist } from '../types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from './player-profile';
 
-function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
+function makeTank(kind: Tank['kind'], id: number, x: number, y: number, team?: number): Tank {
   return {
     id, kind, pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
     desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
     aiState: 'idle', aiTimer: 0,
+    ...(team !== undefined ? { team } : {}),
   };
 }
 
@@ -343,6 +344,71 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
 
     expect(input.move.x).toBeCloseTo(livingAway.x, 5);
     expect(input.move.y).toBeCloseTo(livingAway.y, 5);
+  });
+});
+
+describe('n-player arc PR 4: isOpponent is mode-aware', () => {
+  const PLAYER_ID = 1;
+
+  it('campaign-coop (the default): a nearby player-kind tank is never an opponent, even at close range -- pure wander, no retreat', () => {
+    // No enemy-kind tank anywhere in this world: if isOpponent regressed to count
+    // player-kind tanks, `nearby` (well inside PLAYER_MINIMUM_DISTANCE) would trigger
+    // the seeded retreat draw below and move.x/y would diverge from pure wander.
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const nearby = makeTank('player', 2, 0, -2);
+    const world = createWorld({ walls: [], tanks: [player, nearby], spawns: [], lives: 3 });
+    expect(world.mode).toBe('campaign-coop'); // the fixture's own precondition
+    const rnd = mulberry32(4); // same seed the retreat-draw fixtures above use
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+    const wander = fromAngle(state.wanderHeading);
+    expect(input.move.x).toBeCloseTo(wander.x, 5);
+    expect(input.move.y).toBeCloseTo(wander.y, 5);
+    expect(input.fire).toBe(false); // nothing to aim at
+  });
+
+  it('ffa: any other player-kind tank IS an opponent -- reproduces the directive-A-part-2 centroid-retreat fixture with player-kind stand-ins', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const near = makeTank('player', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
+    const far = makeTank('player', 3, 0, 6);   // pulls the centroid to (0, 2)
+    const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3, mode: 'ffa' });
+    const rnd = mulberry32(4); // the seed the retreat draw is known to fire on
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    const wander = fromAngle(state.wanderHeading);
+    const blend = (toward: Vec2): Vec2 => vnorm({
+      x: toward.x * 0.5 + wander.x * 0.5,
+      y: toward.y * 0.5 + wander.y * 0.5,
+    });
+    const centroid = { x: (near.pos.x + far.pos.x) / 2, y: (near.pos.y + far.pos.y) / 2 };
+    const centroidAway = blend(vnorm(vsub(player.pos, centroid)));
+
+    expect(vdist(input.move, wander), 'the retreat draw never fired on this seed -- fixture is vacuous')
+      .toBeGreaterThan(0.05);
+    expect(input.move.x).toBeCloseTo(centroidAway.x, 5);
+    expect(input.move.y).toBeCloseTo(centroidAway.y, 5);
+  });
+
+  it('teams: a same-team player tank is excluded, a different-team one is the sole opponent', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0, 0); // team 0
+    const teammate = makeTank('player', 2, 0, -2, 0);       // team 0, close -- must be ignored
+    const opponent = makeTank('player', 3, 0, 20, 1);       // team 1, the only real opponent
+    const world = createWorld({ walls: [], tanks: [player, teammate, opponent], spawns: [], lives: 3, mode: 'teams' });
+    const rnd = mulberry32(1);
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    // Beyond PLAYER_PREFERRED_DISTANCE (7.5): approach. If the close SAME-team tank were
+    // still counted as the nearest opponent, the approach/retreat band decision (and the
+    // direction blended toward it) would come out differently -- the teammate is at
+    // distance 2 (inside PLAYER_MINIMUM_DISTANCE), the real opponent at distance 20.
+    // Same SEEK_APPROACH_BIAS (0.5) blend the existing directive-A-part-2 fixtures use.
+    const wander = fromAngle(state.wanderHeading);
+    const towardOpponent = vnorm(vsub(opponent.pos, player.pos));
+    const approach = vnorm({ x: towardOpponent.x * 0.5 + wander.x * 0.5, y: towardOpponent.y * 0.5 + wander.y * 0.5 });
+    expect(input.move.x).toBeCloseTo(approach.x, 5);
+    expect(input.move.y).toBeCloseTo(approach.y, 5);
   });
 });
 

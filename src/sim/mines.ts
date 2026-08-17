@@ -118,6 +118,13 @@ export const BLAST_LIFETIME_TICKS = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TI
  */
 function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
   const radius = blastRadiusAt(blast.age)
+  // Friendly fire (n-player arc PR 4, teams mode -- team is a three-place concept, this
+  // is place 2 of 3, the sibling site isDamageImmune already touched once). Resolved via
+  // the blast's CREDIT owner, not the mine's raw ownerId -- the same tank whose credit
+  // already decides who gets the KILL (a shell detonating an enemy's mine credits the
+  // shooter), so friendly fire is judged against whoever is actually responsible.
+  // Loop-invariant per blast, computed once rather than per tank.
+  const ownerTeam = world.tanks.find((o) => o.id === blast.credit.ownerId)?.team
   for (const t of world.tanks) {
     if (!t.alive) continue
     // Match resolveBulletHits: a tank is a circle of TANK_RADIUS, not a point.
@@ -126,8 +133,12 @@ function applyBlast(world: World, blast: Blast, events: SimEvent[]): void {
     // where a tank actually is.
     // A damage-immune tank (dev invincible, or coop's post-respawn shield -- see
     // isDamageImmune, types.ts) stands in the blast unharmed. Checked here rather
-    // than at the loop top so the wall/radius reasoning stays identical.
+    // than at the loop top so the wall/radius reasoning stays identical. A teammate
+    // (`t.team === ownerTeam`, both defined) with friendly fire off stands unharmed the
+    // same way -- `!== undefined` on both sides makes this self-disabling outside
+    // 'teams' by construction, the same idiom isDamageImmune already uses.
     if (isDamageImmune(t, world.tick)) continue
+    if (t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.friendlyFire) continue
     if (
       vdist(t.pos, blast.pos) <= radius + TANK_RADIUS &&
       blastReaches(world.walls, blast.pos, t.pos)

@@ -1,4 +1,4 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode } from './types';
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
@@ -80,6 +80,17 @@ export function makeTank(
   };
   if (controlledBy !== undefined) tank.controlledBy = controlledBy;
   return tank;
+}
+
+/**
+ * Which of the 2 alternating teams a player slot belongs to (n-player arc PR 4).
+ * `teamOf(0) = 0` (P1), `teamOf(1) = 1`, `teamOf(2) = 0`, `teamOf(3) = 1` -- 2 teams,
+ * alternating by slot. Uneven splits (3v1) are out of scope, a deferred richer mode, not
+ * built speculatively. Pure so a future netcode peer can recompute it locally, same
+ * reasoning as findCoPlayerSpawnCell's own doc comment.
+ */
+export function teamOf(slot: number): number {
+  return slot % 2;
 }
 
 // The 8 ring-search directions, cardinal before diagonal, E first: P2 conventionally
@@ -177,6 +188,10 @@ function mergeSolidRuns(mask: boolean[][], cols: number, rows: number): [number,
 export function loadArena(
   arena: Arena,
   playerCount: number = 1,
+  // Trailing and defaulted, same precedent as playerCount itself: every existing
+  // 1-2-arg call site (dozens across the tree) is untouched. Default 'campaign-coop' is
+  // the shipped rule and the trace argument -- see World.mode's own doc comment.
+  mode: GameMode = 'campaign-coop',
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[] } {
   const { cols, rows, cellSize, grid, legend } = arena;
 
@@ -224,9 +239,20 @@ export function loadArena(
     for (let c = 0; c < cols; c++) {
       const kind = SPAWN_LETTERS[grid[r][c]];
       if (!kind) continue;
+      // n-player arc PR 4: versus modes strip every non-player spawn letter rather than
+      // repurposing it -- enemy letters are TYPED (brown/grey/teal/... each with its own
+      // weapon/behavior via resolveTankConfig), so reusing one as a bonus player slot
+      // would silently couple a versus session's player count to whatever roster each
+      // level's CAMPAIGN design happened to author. Player placement in versus modes
+      // uses the same P1-plus-ring machinery below, unmodified.
+      if (kind !== 'player' && mode !== 'campaign-coop') continue;
       const pos = { x: (c + 0.5) * cellSize, y: (r + 0.5) * cellSize };
       spawns.push({ kind, pos: { ...pos }, angle: 0 });
-      tanks.push(makeTank(id++, kind, pos, 0));
+      const tank = makeTank(id++, kind, pos, 0);
+      // Team is a PLAYER-only concept, stamped only in 'teams' mode -- see Tank.team's
+      // own doc comment. P1 is always slot 0.
+      if (kind === 'player' && mode === 'teams') tank.team = teamOf(0);
+      tanks.push(tank);
       if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; }
     }
   }
@@ -245,7 +271,9 @@ export function loadArena(
       claimed.add(`${cell.row},${cell.col}`);
       const pos = { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
       spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
-      tanks.push(makeTank(id++, 'player', pos, 0, i));
+      const tank = makeTank(id++, 'player', pos, 0, i);
+      if (mode === 'teams') tank.team = teamOf(i);
+      tanks.push(tank);
     }
   }
 
@@ -331,10 +359,22 @@ export function createWorldFor(
   // branch ever passes a non-default value, closed over from `?dev=1&coopPool=1` --
   // see World.coopAttempts.
   coopAttempts?: boolean,
+  // Trailing and optional, same precedent again (n-player arc PR 4): undefined here
+  // means loadArena's/createWorld's own default ('campaign-coop') applies, which is
+  // the whole trace argument -- every existing call site (trace.ts's 2-arg call, the gl
+  // harness, createArenaWorld) stays on that default. Threaded to BOTH loadArena (so
+  // versus modes strip enemies and stamp team) and createWorld (so World.mode matches
+  // what was actually built).
+  mode?: GameMode,
+  // Trailing and optional, same precedent: undefined here means createWorld's own
+  // default (false) applies. Only levels.ts's campaign branch ever passes a non-default
+  // value, closed over from `?dev=1&friendlyFire=1` -- see World.friendlyFire.
+  friendlyFire?: boolean,
 ): World {
   return createWorld({
-    ...loadArena(arena, playerCount),
+    ...loadArena(arena, playerCount, mode),
     lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
+    mode, friendlyFire,
   });
 }
 

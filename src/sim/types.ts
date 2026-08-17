@@ -42,6 +42,16 @@ export type UnarmedTrigger = 'none' | 'proximity' | 'bullet' | 'both';
 export type TankKind = 'player' | 'brown' | 'grey' | 'teal' | 'olive' | 'green' | 'yellow';
 export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
 
+/**
+ * Which win/lose rule and which spawn set a world builds with -- the n-player arc's PR 4
+ * (FFA + teams). `'campaign-coop'` is the shipped rule (default): enemies spawn, win is
+ * "every non-player tank dead", `resolveStatusCoop` (world.ts) governs multi-player
+ * life-sharing. `'ffa'` and `'teams'` strip enemies entirely (arena.ts's `loadArena`) and
+ * replace win/lose with player-vs-player rules (world.ts's `resolveStatusFfa`/
+ * `resolveStatusTeams`) -- see World.mode's own doc comment for the dispatch.
+ */
+export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
+
 export interface Spawn {
   kind: TankKind;
   pos: Vec2;
@@ -117,6 +127,22 @@ export interface Tank {
    * checks. OPTIONAL for the same reason as `respawnAtTick`.
    */
   shieldUntilTick?: number;
+  /**
+   * Which of the 2 alternating teams this player-kind tank belongs to, `teamOf(slot) =
+   * slot % 2` (arena.ts). OPTIONAL like `controlledBy`/`respawnAtTick`: stamped ONLY when
+   * `loadArena` is called with `mode === 'teams'` (arena.ts's PASS 1a/1b), so every
+   * existing fixture -- including a full-object `toEqual` at the shipped default
+   * `'campaign-coop'` -- is unaffected by this field's mere existence. Never set on an
+   * enemy-kind tank: enemies do not spawn at all in a versus mode (see loadArena), and
+   * campaign-coop's enemies have no team concept.
+   *
+   * Read in three places, all gated on `!== undefined` so the field is self-disabling
+   * outside `'teams'` by construction, the same idiom `isDamageImmune` already uses for
+   * `shieldUntilTick`: bullets.ts's and mines.ts's friendly-fire gate (`World.friendlyFire`
+   * only matters once two tanks both carry a team), and `ai/player-profile.ts`'s
+   * `isOpponent`.
+   */
+  team?: number;
 }
 
 /**
