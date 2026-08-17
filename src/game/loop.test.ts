@@ -21,7 +21,7 @@ import {
 } from '../input/touch';
 import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
 import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
-import { createWorld, applyPlayerInput, type World } from '../sim/world';
+import type { World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
@@ -31,7 +31,6 @@ import {
   playerShellsInFlight,
   startGameWith,
   deriveSeed,
-  createIdleInputSource,
   botSlotsFor,
   createBotSources,
   BOT_SEED_SPACING,
@@ -161,13 +160,28 @@ interface Recorder {
   samples: number;
   hudRoots: HTMLElement[];
   inputOptions: Array<{ gamepad?: boolean } | null>;
-  /** How many times deps.createGamepadSource() was called -- co-op's slot 1. */
+  /** How many times deps.createGamepadSource(padIndex) was called, any slot. */
   gamepadSourceBuilds: number;
-  /** Every value passed to slot 1's setPlayerPosition, in order. */
+  /**
+   * The padIndex argument received on each deps.createGamepadSource call, in order --
+   * this is what pins `pad[i] -> slot[i]`: loop.ts must call this with the SLOT number
+   * it is filling, not always 1 or always 0.
+   */
+  gamepadSourceBuildIndices: number[];
+  /** Every value passed to setPlayerPosition, per slot (keyed by padIndex). */
+  slotPositions: Record<number, Array<{ x: number; y: number } | null>>;
+  /** How many times sample() was called, per slot (keyed by padIndex). */
+  slotSamples: Record<number, number>;
+  /** True once dispose() was called, per slot (keyed by padIndex). */
+  slotDisposed: Record<number, boolean>;
+  /** What each slot's fake gamepadConnected() returns next -- see setSlotGamepadConnected. */
+  slotConnectedNext: Record<number, boolean>;
+  /** Every value passed to slot 1's setPlayerPosition, in order -- alias of slotPositions[1],
+   *  kept so every pre-PR3 test reads unchanged. */
   slot1Positions: Array<{ x: number; y: number } | null>;
-  /** How many times slot 1's sample() was called. */
+  /** How many times slot 1's sample() was called -- alias of slotSamples[1]. */
   slot1Samples: number;
-  /** True once slot 1's dispose() was called. */
+  /** True once slot 1's dispose() was called -- alias of slotDisposed[1]. */
   slot1Disposed: boolean;
   /** Every playerCount passed to deps.levels.world(...), in order. */
   playerCounts: Array<number | undefined>;
@@ -207,6 +221,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   setTouch(t: TouchIndicator): void;
   firePlayerShot(): void;
   setGamepadConnected(v: boolean): void;
+  /** Sets slot `padIndex`'s (>= 1) fake gamepad source's next gamepadConnected() value. */
+  setSlotGamepadConnected(padIndex: number, v: boolean): void;
   getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
@@ -300,6 +316,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     hudRoots: [],
     inputOptions: [],
     gamepadSourceBuilds: 0,
+    gamepadSourceBuildIndices: [],
+    slotPositions: {},
+    slotSamples: {},
+    slotDisposed: {},
+    slotConnectedNext: {},
     slot1Positions: [],
     slot1Samples: 0,
     slot1Disposed: false,
@@ -475,27 +496,37 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       },
       };
     },
-    // Co-op's slot 1 -- see GameDeps's own doc comment for why this is a factory
-    // rather than an inline default: going through it is what makes "constructed
-    // exactly once" and "constructed with the right value" both assertable.
-    // Distinct move/aim from slot 0's fake (which never moves: move is always
-    // {x:0,y:0}) so a test can tell the two tanks apart by whether they moved at all,
-    // not just by which one moved which way.
-    createGamepadSource: () => {
+    // Every co-player slot's own gamepad source (`pad[i] -> slot[i]`, PR3) -- see
+    // GameDeps's own doc comment for why this is a factory rather than an inline
+    // default: going through it is what makes "constructed exactly once per slot" and
+    // "constructed with the right padIndex" both assertable. Distinct move/aim from
+    // slot 0's fake (which never moves: move is always {x:0,y:0}) so a test can tell
+    // a co-player tank apart from slot 0's by whether it moved at all, not just by
+    // which way. Every slot's fake shares the same move/aim shape -- tests that need
+    // to tell TWO co-player slots apart already discriminate by `controlledBy`, the
+    // real production key, not by giving each slot's fake a different velocity.
+    createGamepadSource: (padIndex: number) => {
       rec.gamepadSourceBuilds += 1;
+      rec.gamepadSourceBuildIndices.push(padIndex);
+      rec.slotSamples[padIndex] = 0;
+      rec.slotPositions[padIndex] = [];
+      rec.slotDisposed[padIndex] = false;
       return {
         sample() {
-          rec.slot1Samples += 1;
+          rec.slotSamples[padIndex] = (rec.slotSamples[padIndex] ?? 0) + 1;
+          if (padIndex === 1) rec.slot1Samples += 1;
           return { move: { x: 1, y: 0 }, aim: { x: 2, y: 0 }, fire: false, mine: false };
         },
         setPlayerPosition(pos: { x: number; y: number } | null): void {
-          rec.slot1Positions.push(pos);
+          rec.slotPositions[padIndex]!.push(pos);
+          if (padIndex === 1) rec.slot1Positions.push(pos);
         },
         gamepadConnected(): boolean {
-          return false;
+          return rec.slotConnectedNext[padIndex] ?? false;
         },
         dispose(): void {
-          rec.slot1Disposed = true;
+          rec.slotDisposed[padIndex] = true;
+          if (padIndex === 1) rec.slot1Disposed = true;
         },
       };
     },
@@ -1043,6 +1074,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     setGamepadConnected: (v: boolean) => {
       gamepadConnectedNext = v;
     },
+    setSlotGamepadConnected: (padIndex: number, v: boolean) => {
+      rec.slotConnectedNext[padIndex] = v;
+    },
     getState: () => state,
     blur(): void {
       const entry = rec.listeners.find(([t]) => t === 'blur');
@@ -1102,65 +1136,12 @@ describe('deriveSeed', () => {
   });
 });
 
-describe('createIdleInputSource', () => {
-  it('never moves, fires, or lays a mine', () => {
-    const src = createIdleInputSource();
-    const state = src.sample();
-    expect(state.move).toEqual({ x: 0, y: 0 });
-    expect(state.fire).toBe(false);
-    expect(state.mine).toBe(false);
-  });
-
-  it('defaults aim to {0,0} before any setPlayerPosition call, matching every other input source\'s own boot-time default', () => {
-    const src = createIdleInputSource();
-    expect(src.sample().aim).toEqual({ x: 0, y: 0 });
-  });
-
-  it('echoes the position handed to setPlayerPosition back as its own aim, exactly (not quantized)', () => {
-    const src = createIdleInputSource();
-    src.setPlayerPosition({ x: 11, y: 16.333 });
-    expect(src.sample().aim).toEqual({ x: 11, y: 16.333 });
-  });
-
-  it('tracks a moving position across repeated calls, always echoing the LATEST one', () => {
-    const src = createIdleInputSource();
-    src.setPlayerPosition({ x: 1, y: 1 });
-    expect(src.sample().aim).toEqual({ x: 1, y: 1 });
-    src.setPlayerPosition({ x: 2, y: 5 });
-    expect(src.sample().aim).toEqual({ x: 2, y: 5 });
-  });
-
-  it('a null setPlayerPosition call does not clear the last known one', () => {
-    const src = createIdleInputSource();
-    src.setPlayerPosition({ x: 3, y: 4 });
-    src.setPlayerPosition(null);
-    expect(src.sample().aim).toEqual({ x: 3, y: 4 });
-  });
-
-  it('gamepadConnected() is always false: an idle slot has no controller', () => {
-    expect(createIdleInputSource().gamepadConnected()).toBe(false);
-  });
-
-  it('dispose() does not throw', () => {
-    expect(() => createIdleInputSource().dispose()).not.toThrow();
-  });
-
-  it('RED-FIRST: driven through the REAL sim (driveTank via applyPlayerInput), a non-origin ' +
-    'tank\'s turret holds its spawn heading instead of slewing toward world-origin -- the ' +
-    'bug this source exists to avoid, pinned at the mechanism level in world.test.ts', () => {
-    const tank: Tank = {
-      id: 1, kind: 'player', pos: { x: 11, y: 16.333 }, bodyAngle: 0, turretAngle: 0,
-      alive: true, desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0,
-      mineCooldown: 0, aiState: 'idle', aiTimer: 0,
-    };
-    const spawns = [{ kind: 'player' as const, pos: { x: tank.pos.x, y: tank.pos.y }, angle: 0 }];
-    const world = createWorld({ walls: [], tanks: [tank], spawns, lives: 3 });
-    const src = createIdleInputSource();
-    src.setPlayerPosition({ x: tank.pos.x, y: tank.pos.y });
-    applyPlayerInput(world, src.sample(), []);
-    expect(tank.turretAngle).toBe(0); // held, not slewed toward (0,0)
-  });
-});
+// createIdleInputSource is RETIRED (n-player arc PR3, `pad[i] -> slot[i]`): every
+// co-player slot now gets its own createGamepadInputSource(padIndex), whose own
+// "no pad ever connected" branch already produces the identical echo-hold behaviour
+// this used to hand-build -- see loop.ts's retirement comment at its old definition
+// site, and gamepad.ts's module doc comment. That mechanism's tests live in
+// gamepad.test.ts ("the no-pad-ever-connected case") and are unchanged by this PR.
 
 describe('isPauseHotkey', () => {
   it('accepts Escape and both cases of P', () => {
@@ -3550,6 +3531,87 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
   });
 });
 
+describe('startGameWith: per-slot gamepad connect toast (pad[i] -> slot[i], n-player arc PR3)', () => {
+  // Every test in the describe block above already pins this at `players` unset --
+  // this one restates it explicitly as the regression signal for THIS PR's surface:
+  // slot 0's toast copy and rising-edge rule must not move when this file's per-slot
+  // array replaces the old single boolean.
+  it("slot 0's existing single-player toast behaviour is UNCHANGED when only it has a pad (players unset)", () => {
+    const h = boot(makeDeps());
+    h.setState('playing');
+    h.setGamepadConnected(true);
+    h.fireFrame(100);
+    expect(h.rec.plainToasts).toEqual(['Gamepad connected']);
+    h.handle.dispose();
+  });
+
+  it('players=3: slot 2 toasts its OWN rising edge, copy named to the slot ("Player 3")', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } }));
+    h.setState('playing');
+    h.setSlotGamepadConnected(2, true);
+    h.fireFrame(100);
+    expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
+    h.handle.dispose();
+  });
+
+  it('players=4: slots 1, 2 and 3 each toast independently, named to THEIR OWN slot, in the order their edges actually rise (not slot order)', () => {
+    const h = boot(makeDeps({ devFlags: { players: 4 } }));
+    h.setState('playing');
+    h.setSlotGamepadConnected(1, true);
+    h.fireFrame(100);
+    h.setSlotGamepadConnected(3, true);
+    h.fireFrame(200);
+    h.setSlotGamepadConnected(2, true);
+    h.fireFrame(300);
+    expect(h.rec.plainToasts).toEqual([
+      "Player 2's controller connected",
+      "Player 4's controller connected",
+      "Player 3's controller connected",
+    ]);
+    h.handle.dispose();
+  });
+
+  it('players=2: slot 0 and slot 1 toast INDEPENDENTLY -- connecting one does not toast the other, and both can toast in the same session', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    h.setState('playing');
+    h.setSlotGamepadConnected(1, true);
+    h.fireFrame(100);
+    expect(h.rec.plainToasts).toEqual(["Player 2's controller connected"]);
+    h.setGamepadConnected(true); // slot 0's own merge connects too, later
+    h.fireFrame(200);
+    expect(h.rec.plainToasts).toEqual(["Player 2's controller connected", 'Gamepad connected']);
+    h.handle.dispose();
+  });
+
+  it('a bot-claimed slot never toasts: there is no PlayerInputSource there to report connected', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 1 } })); // slot 1 is the bot
+    h.setState('playing');
+    h.fireFrame(500);
+    expect(h.rec.plainToasts).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('HOTPLUG at a non-zero slot (index 2): connecting mid-session toasts once, and a later ' +
+    'disconnect/reconnect toasts again -- one toast per rising edge, the same rule slot 0 already had', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } }));
+    h.setState('playing');
+    h.fireFrame(100); // no pad yet at slot 2
+    expect(h.rec.plainToasts).toEqual([]);
+    h.setSlotGamepadConnected(2, true); // hotplug: connect mid-session
+    h.fireFrame(200);
+    expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
+    h.setSlotGamepadConnected(2, false); // hotplug: disconnect mid-session
+    h.fireFrame(300);
+    h.setSlotGamepadConnected(2, true); // hotplug: reconnect
+    h.fireFrame(400);
+    expect(h.rec.plainToasts).toEqual([
+      "Player 3's controller connected",
+      "Player 3's controller connected",
+    ]);
+    h.handle.dispose();
+  });
+});
+
 describe('startGameWith: couch co-op input routing (players devflag)', () => {
   // (a) The regression signal: `players` unset (playerCount 1) must leave every
   // pre-existing fake and assertion in this file unchanged. The other 201 tests in this
@@ -3582,8 +3644,10 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     const h = boot(makeDeps({ devFlags: { players: 2 } }));
     expect(h.rec.playerCounts).toEqual([2]);
     expect(h.rec.gamepadSourceBuilds).toBe(1);
-    // Mutual exclusion by construction: slot 0 must never claim gamepad[0] once a
-    // second player owns it, whatever `devFlags.gamepad` says (default off here).
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1]); // pad[1] -> slot[1]
+    // Slot 0's own gamepad option is governed by `deps.devFlags.gamepad` alone (default
+    // off here) -- see the "players=2 + gamepad=1" test below for the reversed rule
+    // that lets it be on too, composing with slot 1's own dedicated reader.
     expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
 
     const world = h.rec.builtWorlds[0];
@@ -3612,13 +3676,24 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     expect(h.rec.slot1Disposed).toBe(true);
   });
 
-  // (c) Mutual exclusion, the other half: with BOTH flags on, slot 0 must still never
-  // build its own gamepad reader, and slot 1 must be built EXACTLY once -- not zero
-  // (co-op silently not wired) and not two (a duplicate reader racing the same pad).
-  it('players=2 + gamepad=1 together: slot 0 stays gamepad:false, and exactly ONE gamepad source is built', () => {
+  // (c) THE NAMED TRADEOFF, pinned here at the wiring level (gamepad.test.ts pins the
+  // same tradeoff at the pure-function level). Under `pad[i] -> slot[i]`, slot 0's own
+  // `?dev=1&gamepad=1` merge is NO LONGER forced off once a second player exists -- it
+  // composes freely with any co-player slot's dedicated reader, because the two read
+  // DIFFERENT pad indices. This is a deliberate reversal of the pre-PR3 rule (slot 0
+  // always gamepad:false once players >= 2), which existed only to keep slot 0 off the
+  // SAME index slot 1 used to own. The cost: a session's only physical pad (almost
+  // always browser index 0) now feeds slot 0 here, not slot 1 -- "P1 keyboard, hand the
+  // one pad to P2" has no zero-flag path anymore. Accepted, not fixed -- see
+  // docs/superpowers/plans/2026-08-17-controllers-4.md.
+  it('players=2 + gamepad=1 together: slot 0 now HONOURS its own gamepad flag (the reversed rule), and slot 1 still gets its own dedicated source at padIndex 1', () => {
     const h = boot(makeDeps({ devFlags: { players: 2, gamepad: true } }));
-    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: true }]);
+    // Slot 0's merge goes through createInput's own `gamepad` option, not through
+    // deps.createGamepadSource -- so this factory is still called exactly once, for
+    // slot 1 alone, whether or not slot 0's flag is on.
     expect(h.rec.gamepadSourceBuilds).toBe(1);
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1]);
     h.handle.dispose();
   });
 
@@ -3640,72 +3715,62 @@ describe('startGameWith: couch co-op input routing (players devflag)', () => {
     h.handle.dispose();
   });
 
-  // (e)-(g): N=3/4, the idle-fill for slots 2..playerCount-1 this PR adds. Slot 1 keeps
-  // its real gamepad source (unaffected by N); slots 2 and 3 get createIdleInputSource()
-  // instead -- no gamepad source built for them (gamepadSourceBuilds stays 1), and they
-  // are exercised through the SAME production `slots.map` sample() path as slot 0/1,
-  // not called directly -- the composition-blindness class CLAUDE.md's testing
-  // conventions section warns about.
-  it('players=3: builds a REAL 3-player world, exactly one gamepad source (slot 1), and slot 2 holds its turret steady once it knows its own position', () => {
+  // (e)-(g): N=3/4, `pad[i] -> slot[i]` for EVERY co-player slot (n-player arc PR3) --
+  // slot 1 no longer gets special treatment: slots 2 and 3 get their OWN dedicated
+  // createGamepadSource(padIndex) call too, not a separate idle-fill function. The
+  // build COUNT and the padIndex SEQUENCE are the load-bearing wiring assertions here;
+  // the "no pad connected -> idle hold" behaviour itself is pinned once, at the pure-
+  // function level, in gamepad.test.ts's "no-pad-ever-connected" describe block through
+  // the REAL `createGamepadInputSource` -- re-deriving it here through this file's
+  // always-driving fake would test the fake, not the production code.
+  it('players=3: builds ONE gamepad source per co-player slot (padIndex 1 and 2, not just slot 1), each driving its OWN controlledBy tank', () => {
     const h = boot(makeDeps({ devFlags: { players: 3 } }));
     expect(h.rec.playerCounts).toEqual([3]);
-    expect(h.rec.gamepadSourceBuilds).toBe(1); // slot 1 only -- slots 2+ are idle-filled
+    expect(h.rec.gamepadSourceBuilds).toBe(2); // slots 1 and 2
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // pad[i] -> slot[i], in slot order
 
     const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
     expect(spawned).toHaveLength(3);
-    const spawnPos = { ...spawned.find((t: Tank) => t.controlledBy === 2)!.pos };
-    expect(spawnPos).not.toEqual({ x: 0, y: 0 }); // off-origin, or a slew could read as a hold
+    const spawnPos2 = { ...spawned.find((t: Tank) => t.controlledBy === 2)!.pos };
 
     h.setState('playing');
     // `builtWorlds[0]` is the object `deps.levels.world` returned at BOOT -- the driver
     // never mutates it in place (`step` clones every tick and the driver reassigns its
     // OWN internal `curr`), so reading it again here would see the frozen spawn state
     // regardless of what slot 2's source actually did. `renders.at(-1)!.curr` is the
-    // live world the LAST completed frame actually simulated -- the same live-vs-frozen
-    // distinction the lives assertion above (`h.rec.renders.at(-1)!.curr.lives`) relies on.
-    const liveSlot2 = (): Tank => h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 2)!;
-
-    // driver.ts calls onSimulated -- and so the FIRST setPlayerPosition -- only after
-    // the batch of ticks a single fireFrame call simulates, not before it. So the
-    // ticks inside THIS first call unavoidably sample the idle source before it has
-    // ever been told where its tank is, which is the documented boot-time transient
-    // (createIdleInputSource's own doc comment): its {0,0} construction default is
-    // live for that handful of ticks. One small fireFrame settles it.
-    h.fireFrame(17); // ~1 tick
-    const settled = liveSlot2().turretAngle;
-
-    // The actual claim under test: once the idle source knows its own position, many
-    // MORE ticks must not move the turret further. A naive always-{0,0} source would
-    // keep slewing toward world-origin here; the real echo holds.
+    // live world the LAST completed frame actually simulated.
     h.fireFrame(500);
-    const after = liveSlot2();
-    expect(after).toBeDefined();
-    expect(after.pos).toEqual(spawnPos);
-    expect(after.turretAngle).toBe(settled); // holds steady, does not keep slewing
+    const live2 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 2)!;
+    expect(live2).toBeDefined();
+    // The fake at padIndex 2 always drives +x -- proving slot 2's OWN source was
+    // sampled and applied to slot 2's OWN tank, not slot 0's or slot 1's.
+    expect(live2.pos.x).toBeGreaterThan(spawnPos2.x);
     h.handle.dispose();
+    expect(h.rec.slotDisposed[2]).toBe(true);
   });
 
-  it('players=4: fills two idle slots (2 and 3), still exactly one real gamepad source, both hold steady', () => {
+  it('players=4: builds one gamepad source for EACH of slots 1, 2 and 3 (padIndex sequence [1,2,3]), each driving its own tank', () => {
     const h = boot(makeDeps({ devFlags: { players: 4 } }));
     expect(h.rec.playerCounts).toEqual([4]);
-    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    expect(h.rec.gamepadSourceBuilds).toBe(3);
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2, 3]);
 
     const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
     expect(spawned).toHaveLength(4);
-    h.setState('playing');
-    // See the players=3 test above for why this reads the LIVE world, not
-    // builtWorlds[0], and why a small warm-up frame precedes the real assertion.
-    const liveTanks = (): Tank[] => h.rec.renders.at(-1)!.curr.tanks;
-    h.fireFrame(17);
-    const settled = new Map([2, 3].map((slot) => [slot, liveTanks().find((t) => t.controlledBy === slot)!.turretAngle]));
+    const spawnPositions = new Map(
+      [1, 2, 3].map((slot) => [slot, { ...spawned.find((t: Tank) => t.controlledBy === slot)!.pos }]),
+    );
 
+    h.setState('playing');
     h.fireFrame(500);
-    for (const slot of [2, 3]) {
-      const p = liveTanks().find((t: Tank) => t.controlledBy === slot)!;
+    const liveTanks = h.rec.renders.at(-1)!.curr.tanks;
+    for (const slot of [1, 2, 3]) {
+      const p = liveTanks.find((t: Tank) => t.controlledBy === slot)!;
       expect(p, `slot ${slot}`).toBeDefined();
-      expect(p.turretAngle, `slot ${slot} turretAngle`).toBe(settled.get(slot)); // idle-held, not slewed
+      expect(p.pos.x, `slot ${slot} moved`).toBeGreaterThan(spawnPositions.get(slot)!.x);
     }
     h.handle.dispose();
+    for (const slot of [1, 2, 3]) expect(h.rec.slotDisposed[slot]).toBe(true);
   });
 
   it('players=1 (explicit no-op): behaves identically to players unset', () => {
@@ -3790,20 +3855,38 @@ describe('createBotSources / BOT_SEED_SPACING: independence from every enemy-AI 
 });
 
 describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
-  it('bots unset behaves identically to today: gamepadSourceBuilds and idle-hold are unaffected (regression signal)', () => {
+  it('bots unset behaves identically to today: one gamepad source per co-player slot (PR3 baseline), unaffected by bots being off', () => {
     const h = boot(makeDeps({ devFlags: { players: 4 } }));
-    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    expect(h.rec.gamepadSourceBuilds).toBe(3); // slots 1, 2, 3 -- no bots to claim any of them
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2, 3]);
     h.handle.dispose();
   });
 
-  it('bots=2 at players=4 fills the LAST 2 slots: slot 1\'s real gamepad source is still built (mutation-1 discriminator -- a first-K rule would leave this at 0)', () => {
+  it('bots=2 at players=4 fills the LAST 2 slots (2 and 3): slot 1\'s real gamepad source is still built, slots 2/3 build NONE (mutation-1 discriminator -- a first-K rule would instead leave slot 1 at 0 and build slots 0/1)', () => {
     const h = boot(makeDeps({ devFlags: { players: 4, bots: 2 } }));
     expect(h.rec.playerCounts).toEqual([4]);
-    expect(h.rec.gamepadSourceBuilds).toBe(1);
+    expect(h.rec.gamepadSourceBuilds).toBe(1); // slot 1 only -- slots 2 and 3 are bot-claimed
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1]);
     h.setState('playing');
     h.fireFrame(100);
     // Slot 1's real gamepad fake is sampled (it was built and is not bot-claimed).
     expect(h.rec.slot1Samples).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  // The n-player arc's PR3 composition claim, the exact scenario named in its own
+  // doc comment: bots claim their declared slots FIRST (by dev-flag declaration,
+  // known at session start), controllers fill whatever remains in `pad[i] -> slot[i]`
+  // order. Spied via the construction count -- the established pattern this file
+  // already uses for "was a collaborator built" claims (see GameDeps's own doc
+  // comment on createGamepadSource).
+  it('bots=1 & players=2: slot 1 is the bot, slot 0 is keyboard(+optional pad) -- the bot slot must NOT construct a gamepad source', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 1 } }));
+    expect(h.rec.gamepadSourceBuilds).toBe(0); // slot 1, the only non-zero slot, is bot-claimed
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([]);
+    h.setState('playing');
+    h.fireFrame(500);
+    expect(h.rec.samples).toBeGreaterThan(0); // slot 0's real keyboard/mouse/touch controller IS sampled
     h.handle.dispose();
   });
 
@@ -3845,9 +3928,10 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
     h.handle.dispose();
   });
 
-  it('bots=4 + gamepad=1 together: slot 0 stays gamepad:false (mutual exclusion with `players` unaffected by bots)', () => {
+  it('bots=4 + gamepad=1 together: createInput still receives gamepad:true (unconditional on devFlags.gamepad alone, unaffected by bots or playerCount), even though slot 0 is bot-claimed and never samples it', () => {
     const h = boot(makeDeps({ devFlags: { players: 4, bots: 4, gamepad: true } }));
-    expect(h.rec.inputOptions).toEqual([{ gamepad: false }]);
+    expect(h.rec.inputOptions).toEqual([{ gamepad: true }]);
+    expect(h.rec.gamepadSourceBuilds).toBe(0); // every slot is bot-claimed
     h.handle.dispose();
   });
 

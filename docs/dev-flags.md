@@ -21,7 +21,7 @@ accident.
 | `autoplay` | `autoplay` | `false` | Drives the player with the scripted "competent player" AI instead of reading the input controller -- the game demos itself. |
 | `coopPool` | `coopPool` | `false` | Restores the shipped shared-life-pool coop model: every player death drains the pool by one and schedules that tank's own per-tank respawn. The default (this flag off) is the shared-attempts ruling: a lone death costs nothing and the survivor fights on; only a full wipe spends a life and restarts the arena. |
 | `corpseBlock` | `corpseBlock` | `false` | Lets a tank killed earlier in the same tick still block a bullet aimed at it, instead of the shipped ghost rule where the bullet passes through. |
-| `gamepad` | `gamepad` | `false` | Merges gamepad[0] into the input stream alongside keyboard/mouse/touch. |
+| `gamepad` | `gamepad` | `false` | Merges gamepad[0] into slot 0's input stream alongside keyboard/mouse/touch. |
 | `invincible` | `invincible` | `false` | Makes the player unkillable: shells detonate harmlessly, blasts wash over. |
 | `mineReach` | `mineReach` | `false` | Rings a mine's proximity-trigger radius and its kill radius. |
 | `mineTimer` | `mineTimer` | `false` | Shows each mine's remaining fuse, in seconds, beside it. |
@@ -35,8 +35,8 @@ Notes:
 
 - **coopPool**: Only meaningful once `players` >= 2.
 - **corpseBlock**: Applies in both the campaign and the sandbox.
-- **gamepad**: Single player only: gamepad[1] onward is ignored.
-- **gamepad**: Mutually exclusive with `players` >= 2 by construction: once a second player is active, slot 0 is always built without the gamepad merge, regardless of this flag.
+- **gamepad**: Always padIndex 0, whatever `players` is set to -- this is slot 0's own opt-in, unrelated to which OTHER slots exist.
+- **gamepad**: Composes freely with `players` >= 2 (`pad[i] -> slot[i]`): every co-player slot 1..N-1 owns its own dedicated pad index, so this flag's pad[0] merge can never collide with one. A session's only physical pad (usually browser index 0) now feeds slot 0 if this is on, not a co-player slot -- see the players note below.
 - **invincible**: In the playtest bundle.
 - **mineReach**: In the playtest bundle.
 - **mineTimer**: In the playtest bundle.
@@ -62,10 +62,11 @@ Notes:
 
 - **bots**: May equal `players` (including the unflagged default of 1), for a fully autonomous match.
 - **bots**: Clamped against the resolved player count, not rejected: `bots=4` with `players=2` claims both slots rather than erroring.
-- **bots**: A bot-claimed slot never builds its slot's real controller (slot 1's gamepad reader, slots 2+'s idle source).
+- **bots**: A bot-claimed slot never builds its slot's real controller -- its own dedicated gamepad reader (`pad[i] -> slot[i]`).
 - **bots**: Not excluded from the sandbox, unlike `players`: the sandbox always resolves to one slot, and `bots=1` there is the same substitution `autoplay=1` already does.
 - **level**: A jump does not consume, restore, advance, or complete the active run.
-- **players**: Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 is built without the gamepad merge, and SLOT 1 claims gamepad[0] as its own standalone co-player source instead.
+- **players**: Composes freely with `gamepad`: slot 0's optional pad[0] merge and every co-player slot's own dedicated pad index (`pad[i] -> slot[i]`) read different indices of the same pads array, so they never collide.
+- **players**: Named tradeoff: a session's only physical pad (usually browser index 0) now feeds slot 0 (if `gamepad` is on), not slot 1 -- "P1 on keyboard, hand the one pad to P2" has no zero-flag path anymore.
 - **players**: Not part of the playtest bundle.
 - **players**: Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds for one player.
 - **players**: Excluded from writing to the active run: the shared life pool has no decided meaning against the single-player-shaped run record yet.
