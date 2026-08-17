@@ -18,5 +18,6 @@
     "triggerRadius": 0.35
   },
   "ai": { "aimSpread": 0.08, "hazardSpread": 0.4 },
-  "lives": 3
+  "lives": 3,
+  "versusStock": 3
 }
