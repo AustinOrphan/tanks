@@ -366,6 +366,17 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
         // n > 1, since the ring search and the geodesic maximin disagree on every
         // shipped arena (measured: every scenario in the sweep above moved the minimum
         // pairwise distance from 1.3333 to something larger).
+        //
+        // The coopPos[0]/ffaPos[0] equality below is coupled to a design point that is
+        // OPEN with the owner, not settled: today P1 is seeded from the authored `P`
+        // cell and never itself passed through pickVersusSpawnCell (see arena.ts's
+        // versus branch and this file's own "greedy maximin" describe block, which only
+        // ever exercises co-player slots). If that is later decided the other way --
+        // maximin-placing every player including P1 -- this exact assertion breaks,
+        // which is correct: it is PINNING today's P1-fixed behaviour, not asserting a
+        // requirement that behaviour must have. Revisit this line specifically if that
+        // decision changes; the `.not.toEqual(slice(1))` half below carries the
+        // "the guard actually routes" claim on its own and does not depend on it.
         expect(coopPos[0]).toEqual(ffaPos[0]);
         expect(coopPos.slice(1)).not.toEqual(ffaPos.slice(1));
       }
