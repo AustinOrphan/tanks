@@ -135,19 +135,24 @@ export function createLevelSystem(
     },
     tracksProgress: true,
     isDevJump: jump !== null,
-    // corpseBlock/muzzleInside/coopPool are closed over rather than added to the
-    // `world()` signature, the same treatment sandboxTanks/sandboxDisarmed/sandboxWalls
-    // already get: they are devFlags-driven playtest switches with one value for the
-    // whole session, not a per-call construction parameter the way unarmedTrigger and
-    // lives are (both vary call to call -- unarmedTrigger per dev-flag override, lives
-    // across a level transition). `!flags.coopPool` -- absent/false means the
-    // shared-attempts default (true); `coopPool=1` restores the shipped pool model.
-    // Only meaningful once a second player exists; harmless (never read by
-    // resolveStatusCoop) at playerCount 1.
+    // corpseBlock/muzzleInside/coopPool/mode/friendlyFire are closed over rather than
+    // added to the `world()` signature, the same treatment sandboxTanks/
+    // sandboxDisarmed/sandboxWalls already get: they are devFlags-driven playtest
+    // switches with one value for the whole session, not a per-call construction
+    // parameter the way unarmedTrigger and lives are (both vary call to call --
+    // unarmedTrigger per dev-flag override, lives across a level transition).
+    // `!flags.coopPool` -- absent/false means the shared-attempts default (true);
+    // `coopPool=1` restores the shipped pool model. Only meaningful once a second
+    // player exists; harmless (never read by resolveStatusCoop) at playerCount 1.
+    // `flags.mode ?? 'campaign-coop'` (n-player arc PR 4): absent/unrecognised leaves
+    // the shipped rule; `friendlyFire` defaults to createWorld's own false and is
+    // self-disabling outside 'teams' by construction (World.friendlyFire's own doc
+    // comment) -- so passing it here whatever `mode` is set to is harmless.
     world: (level, seed, unarmedTrigger, lives, playerCount) =>
       createWorldFor(
         arenaById(level.arenaId), seed, unarmedTrigger, lives,
         flags.corpseBlock, !flags.muzzleInside, playerCount, !flags.coopPool,
+        flags.mode ?? 'campaign-coop', flags.friendlyFire,
       ),
     bounds: (level) => ({
       ...arenaBounds(arenaById(level.arenaId)),

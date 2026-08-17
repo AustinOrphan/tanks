@@ -186,6 +186,9 @@ describe('hud.css is syntactically whole', () => {
       // coop's kill tally: without the hidden rule it shows on every panel, not just
       // win/lose (mirrors .hud-attempt-summary exactly)
       '.hud-coop-kills', '.hud-coop-kills--hidden',
+      // versus's kill/death tally (n-player arc PR 4): same rationale as coop's line
+      // just above -- without the hidden rule it shows on every panel, not just win/lose
+      '.hud-versus-results', '.hud-versus-results--hidden',
       // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
       '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
       '.hud-swatch', '.hud-swatch--selected',

@@ -13,7 +13,7 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (13)
+## Boolean flags (14)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
@@ -21,6 +21,7 @@ accident.
 | `autoplay` | `autoplay` | `false` | Drives the player with the scripted "competent player" AI instead of reading the input controller -- the game demos itself. |
 | `coopPool` | `coopPool` | `false` | Restores the shipped shared-life-pool coop model: every player death drains the pool by one and schedules that tank's own per-tank respawn. The default (this flag off) is the shared-attempts ruling: a lone death costs nothing and the survivor fights on; only a full wipe spends a life and restarts the arena. |
 | `corpseBlock` | `corpseBlock` | `false` | Lets a tank killed earlier in the same tick still block a bullet aimed at it, instead of the shipped ghost rule where the bullet passes through. |
+| `friendlyFire` | `friendlyFire` | `false` | Lets a shell or mine blast harm a teammate -- meaningful only once `mode=teams`; the default protects teammates. |
 | `gamepad` | `gamepad` | `false` | Merges gamepad[0] into slot 0's input stream alongside keyboard/mouse/touch. |
 | `invincible` | `invincible` | `false` | Makes the player unkillable: shells detonate harmlessly, blasts wash over. |
 | `mineReach` | `mineReach` | `false` | Rings a mine's proximity-trigger radius and its kill radius. |
@@ -35,6 +36,7 @@ Notes:
 
 - **coopPool**: Only meaningful once `players` >= 2.
 - **corpseBlock**: Applies in both the campaign and the sandbox.
+- **friendlyFire**: Inert unless `mode=teams`.
 - **gamepad**: Always padIndex 0, whatever `players` is set to -- this is slot 0's own opt-in, unrelated to which OTHER slots exist.
 - **gamepad**: Composes freely with `players` >= 2 (`pad[i] -> slot[i]`): every co-player slot 1..N-1 owns its own dedicated pad index, so this flag's pad[0] merge can never collide with one. A session's only physical pad (usually browser index 0) now feeds slot 0 if this is on, not a co-player slot -- see the players note below.
 - **invincible**: In the playtest bundle.
@@ -45,13 +47,14 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (8)
+## Valued flags (9)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
+| `mode` | `mode` | `ffa`, `teams` | `null` | Sets which versus mode a session builds with -- free-for-all or teams -- instead of the shipped campaign-coop rule (win as every enemy dead, or coop's shared lives). |
 | `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
 | `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter) instead of the shipped `high` default. |
 | `sandboxTanks` | `tanks` | a comma-separated multiset (repeats and order kept), each element one of the values below: `brown`, `grey`, `teal`, `olive`, `green`, `yellow` | `null` | Sets the sandbox enemy roster. |
@@ -65,6 +68,8 @@ Notes:
 - **bots**: A bot-claimed slot never builds its slot's real controller -- its own dedicated gamepad reader (`pad[i] -> slot[i]`).
 - **bots**: Not excluded from the sandbox, unlike `players`: the sandbox always resolves to one slot, and `bots=1` there is the same substitution `autoplay=1` already does.
 - **level**: A jump does not consume, restore, advance, or complete the active run.
+- **mode**: Unrecognised or absent leaves the campaign-coop default.
+- **mode**: Strips every enemy spawn from the built arena: versus modes have no AI opponents.
 - **players**: Composes freely with `gamepad`: slot 0's optional pad[0] merge and every co-player slot's own dedicated pad index (`pad[i] -> slot[i]`) read different indices of the same pads array, so they never collide.
 - **players**: Named tradeoff: a session's only physical pad (usually browser index 0) now feeds slot 0 (if `gamepad` is on), not slot 1 -- "P1 on keyboard, hand the one pad to P2" has no zero-flag path anymore.
 - **players**: Not part of the playtest bundle.

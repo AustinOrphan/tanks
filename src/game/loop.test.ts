@@ -107,6 +107,8 @@ interface Recorder {
   statPushes: number;
   /** Every value passed to hud.setCoopKills, in order. */
   coopKillPushes: Array<number[] | null>;
+  /** Every value passed to hud.setVersusResults, in order. */
+  versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
   levelSelects: Array<[number, number]>;
   /** Every value pushed to hud.setContinueAvailable, in order. */
   continueAvailable: boolean[];
@@ -276,6 +278,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statResets: 0,
     statPushes: 0,
     coopKillPushes: [],
+    versusResultsPushes: [],
     levelSelects: [],
     continueAvailable: [],
     runNewRuns: [],
@@ -706,6 +709,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setCoopKills: (counts: number[] | null) => {
           rec.coopKillPushes.push(counts === null ? null : [...counts]);
+        },
+        setVersusResults: (data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null) => {
+          rec.versusResultsPushes.push(data === null ? null : { mode: data.mode, kills: [...data.kills], deaths: [...data.deaths] });
         },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
@@ -2038,7 +2044,7 @@ describe('tallyCoopKills', () => {
 
   it('an enemy killed by P2\'s shell increments coopKills[1], not coopKills[0]', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into); // by tankId 2 = P2 (controlledBy 1)
+    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into, []); // by tankId 2 = P2 (controlledBy 1)
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBe(1);
   });
@@ -2049,21 +2055,21 @@ describe('tallyCoopKills', () => {
     // source-discriminating refactor cannot silently drop mine kills from the tally.
     const into: number[] = [];
     const mineKill = { type: 'tank-destroyed', tankId: 3, kind: 'brown', by: { source: 'blast', ownerId: 2 }, pos: { x: 0, y: 0 } } as SimEvent;
-    tallyCoopKills([mineKill], twoPlayerWorld(), into);
+    tallyCoopKills([mineKill], twoPlayerWorld(), into, []);
     expect(into[1]).toBe(1); // P2's mine, P2's kill
     expect(into[0]).toBeUndefined();
   });
 
   it('an enemy killed by P1\'s shell increments coopKills[0], not coopKills[1]', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into); // by tankId 1 = P1 (controlledBy 0)
+    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into, []); // by tankId 1 = P1 (controlledBy 0)
     expect(into[0]).toBe(1);
     expect(into[1]).toBeUndefined();
   });
 
   it('AI-on-AI friendly fire (an enemy killing another enemy) increments neither slot', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into); // killer tankId 4 = teal, not a player
+    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into, []); // killer tankId 4 = teal, not a player
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBeUndefined();
   });
@@ -2071,7 +2077,7 @@ describe('tallyCoopKills', () => {
   it('a player-kind death (e.kind === player) is excluded entirely, even if by.ownerId resolves to a player', () => {
     const playerDied: SimEvent = { type: 'tank-destroyed', tankId: 1, kind: 'player', by: { source: 'shell', ownerId: 2 }, pos: { x: 0, y: 0 } };
     const into: number[] = [];
-    tallyCoopKills([playerDied], twoPlayerWorld(), into);
+    tallyCoopKills([playerDied], twoPlayerWorld(), into, []);
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBeUndefined();
   });
@@ -2082,6 +2088,7 @@ describe('tallyCoopKills', () => {
       [destroyedEnemy(3, 1), destroyedEnemy(4, 2), destroyedEnemy(3, 4) /* friendly fire, excluded */],
       { tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] } as World,
       into,
+      [],
     );
     expect(into[0]).toBe(1);
     expect(into[1]).toBe(1);
@@ -2090,8 +2097,66 @@ describe('tallyCoopKills', () => {
   it('a single-player world (no controlledBy) falls back to slot 0', () => {
     const into: number[] = [];
     const world = { tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
-    tallyCoopKills([destroyedEnemy(3, 1)], world, into);
+    tallyCoopKills([destroyedEnemy(3, 1)], world, into, []);
     expect(into[0]).toBe(1);
+  });
+});
+
+describe('tallyCoopKills: ffa/teams player-vs-player attribution (n-player arc PR 4)', () => {
+  const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
+    ({ id, kind, controlledBy }) as Tank;
+
+  const versusWorld = (mode: 'ffa' | 'teams') =>
+    ({
+      mode,
+      tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'player', 2)],
+    }) as World;
+
+  const playerDestroyed = (victimTankId: number, killerOwnerId: number): SimEvent =>
+    ({ type: 'tank-destroyed', tankId: victimTankId, kind: 'player', by: { source: 'shell', ownerId: killerOwnerId }, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  for (const mode of ['ffa', 'teams'] as const) {
+    it(`${mode}: P2's shell killing P1 credits kills[1] and deaths[0]`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills([playerDestroyed(1, 2)], versusWorld(mode), kills, deaths); // victim tankId 1 (P1), killer tankId 2 (P2)
+      expect(kills[1]).toBe(1);
+      expect(kills[0]).toBeUndefined();
+      expect(deaths[0]).toBe(1);
+      expect(deaths[1]).toBeUndefined();
+    });
+
+    it(`${mode}: self-elimination (killer id === victim id) credits a death to the victim's slot and a kill to NOBODY`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills([playerDestroyed(1, 1)], versusWorld(mode), kills, deaths); // P1's own shell/mine kills P1
+      expect(kills).toEqual([]); // no slot credited a kill
+      expect(deaths[0]).toBe(1);
+    });
+
+    it(`${mode}: accumulates across multiple events, mixing a normal kill and a self-elimination`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills(
+        [playerDestroyed(1, 2) /* P2 kills P1 */, playerDestroyed(3, 3) /* P3 self-eliminates */],
+        versusWorld(mode),
+        kills,
+        deaths,
+      );
+      expect(kills[1]).toBe(1);
+      expect(kills[2]).toBeUndefined();
+      expect(deaths[0]).toBe(1);
+      expect(deaths[2]).toBe(1);
+    });
+  }
+
+  it('campaign-coop ignores player-vs-player deaths entirely -- the dispatch does not leak the new rule into the old mode', () => {
+    const kills: number[] = [];
+    const deaths: number[] = [];
+    const coopWorld = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)] } as World;
+    tallyCoopKills([playerDestroyed(1, 2)], coopWorld, kills, deaths);
+    expect(kills).toEqual([]);
+    expect(deaths).toEqual([]);
   });
 });
 

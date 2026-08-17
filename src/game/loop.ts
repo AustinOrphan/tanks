@@ -372,31 +372,63 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
 }
 
 /**
- * Per-player kill attribution for coop's results-screen tally (coop semantics plan,
- * docs/superpowers/plans/2026-08-15-coop-semantics.md). Mutates `into` in place,
- * indexed by slot (`controlledBy`), the same array-as-accumulator shape
- * `checkAchievements`'s callers already use elsewhere in this file.
+ * Per-player kill/death attribution for the results-screen tally (coop semantics plan,
+ * docs/superpowers/plans/2026-08-15-coop-semantics.md; generalized to versus modes by
+ * the n-player arc's PR 4). Mutates `kills`/`deaths` in place, indexed by slot
+ * (`controlledBy`), the same array-as-accumulator shape `checkAchievements`'s callers
+ * already use elsewhere in this file.
  *
- * `e.kind === 'player'` is excluded -- only ENEMY kills count as a "kill" for this
- * tally, matching the results screen's existing lifetime/attempt stat semantics
- * (stats.ts's shellKills/mineKills never count a teammate). AI-on-AI friendly fire
- * (brown.ts's bank shots, teal's alternation -- CLAUDE.md's "A green tank changed
- * what structuralFailures has to check") is excluded too: `killer?.kind !== 'player'`
- * skips any credit whose `by.ownerId` resolves to a non-player-kind tank, so an
- * enemy killing another enemy increments nothing.
+ * `world.mode` dispatches two entirely separate rules:
+ *
+ *  - `'campaign-coop'`: TODAY'S rule, byte-for-byte. `e.kind === 'player'` is excluded
+ *    -- only ENEMY kills count as a "kill" here, matching the results screen's existing
+ *    lifetime/attempt stat semantics (stats.ts's shellKills/mineKills never count a
+ *    teammate). AI-on-AI friendly fire (brown.ts's bank shots, teal's alternation --
+ *    CLAUDE.md's "A green tank changed what structuralFailures has to check") is
+ *    excluded too: `killer?.kind !== 'player'` skips any credit whose `by.ownerId`
+ *    resolves to a non-player-kind tank, so an enemy killing another enemy increments
+ *    nothing. `deaths` is untouched in this branch -- campaign-coop has no per-slot
+ *    death tally, only the shared win/lose machinery in world.ts.
+ *  - `'ffa'`/`'teams'`: the OPPOSITE selection -- a `tank-destroyed` event where BOTH
+ *    victim and killer are player-kind. The killer's slot gets a kill, the victim's
+ *    slot gets a death. Self-elimination (`killer.id === victim.id`, an own shell or
+ *    own mine) credits a death to the victim and a kill to NOBODY -- the no-suicide-
+ *    credit convention common to arena shooters. There are no enemy-kind tanks to
+ *    exclude in these modes (loadArena strips them), so this is not merely the
+ *    campaign-coop rule with the polarity flipped -- it is genuinely victim-first
+ *    where campaign-coop is killer-only.
+ *
+ * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
+ * at render/HUD time (Tank.team, no new storage here) -- this function stays unaware of
+ * teams beyond dispatching on `world.mode`.
  *
  * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
  * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
  * default 4 keeps lifetime stats P1-scoped. This stays a small loop.ts-local array
- * instead.
+ * pair instead.
  */
-export function tallyCoopKills(events: SimEvent[], world: World, into: number[]): void {
+export function tallyCoopKills(events: SimEvent[], world: World, kills: number[], deaths: number[]): void {
+  if (world.mode === 'ffa' || world.mode === 'teams') {
+    for (const e of events) {
+      if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue; // player-vs-player only
+      const victim = world.tanks.find((t) => t.id === e.tankId);
+      if (!victim) continue;
+      const victimSlot = victim.controlledBy ?? 0;
+      deaths[victimSlot] = (deaths[victimSlot] ?? 0) + 1;
+      if (e.by.ownerId === e.tankId) continue; // self-elimination: a death, credited to nobody's kill total
+      const killer = world.tanks.find((t) => t.id === e.by.ownerId);
+      if (killer?.kind !== 'player') continue;
+      const killerSlot = killer.controlledBy ?? 0;
+      kills[killerSlot] = (kills[killerSlot] ?? 0) + 1;
+    }
+    return;
+  }
   for (const e of events) {
     if (e.type !== 'tank-destroyed' || e.kind === 'player') continue; // enemy kills only
     const killer = world.tanks.find((t) => t.id === e.by.ownerId);
     if (killer?.kind !== 'player') continue; // AI friendly fire doesn't count as a "kill"
     const slot = killer.controlledBy ?? 0;
-    into[slot] = (into[slot] ?? 0) + 1;
+    kills[slot] = (kills[slot] ?? 0) + 1;
   }
 }
 
@@ -842,13 +874,19 @@ export function startGameWith(
   let pendingClear: number | null = null;
 
   /**
-   * Coop's results-screen kill tally (coop semantics plan,
-   * docs/superpowers/plans/2026-08-15-coop-semantics.md), indexed by slot. Per-attempt
-   * scope, mirroring `attempt`'s own lifecycle: reset at both `startAttempt()` call
-   * sites below, since it feeds the same win/lose panel. Fed to the HUD unconditionally
-   * -- whether the line actually shows is the HUD's own gate on `countPlayerTanks`.
+   * The results-screen kill tally, indexed by slot -- coop's own (coop semantics plan,
+   * docs/superpowers/plans/2026-08-15-coop-semantics.md) generalized by n-player arc PR
+   * 4's `tallyCoopKills` to also hold ffa/teams' player-vs-player kills: the two never
+   * coexist in one session (`world.mode` is fixed for its whole life), so one array
+   * safely serves both. `versusDeaths` is the PR 4 addition `tallyCoopKills` needs only
+   * for its ffa/teams branch -- unused, always empty, in campaign-coop. Per-attempt
+   * scope, mirroring `attempt`'s own lifecycle: both reset at every `startAttempt()`
+   * call site below, since they feed the same win/lose panel. Fed to the HUD
+   * unconditionally -- whether either line actually shows is the HUD's own gate
+   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.mode`).
    */
   let coopKills: number[] = [];
+  let versusDeaths: number[] = [];
 
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
@@ -990,9 +1028,9 @@ export function startGameWith(
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
-      // Coop's own per-slot tally, alongside stats.record -- see coopKills' own
+      // The results-screen per-slot tally, alongside stats.record -- see coopKills' own
       // comment above for why this stays out of stats.ts.
-      tallyCoopKills(events, driver.world, coopKills);
+      tallyCoopKills(events, driver.world, coopKills, versusDeaths);
       // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
@@ -1004,7 +1042,14 @@ export function startGameWith(
       // convention replayMetaFor uses, and the two never diverge in practice (the
       // sandbox exclusion keeps playerCount and countPlayerTanks(world) in lockstep by
       // construction). null means "never show", not merely "hide right now".
-      hud.setCoopKills(countPlayerTanks(driver.world) >= 2 ? coopKills : null);
+      //
+      // n-player arc PR 4: dispatched on the world's own mode, mirroring resolveStatus's
+      // dispatch one layer up -- campaign-coop feeds ONLY the coop line (today's rule,
+      // unchanged), ffa/teams feed ONLY the versus line, so a session's two results
+      // lines are never both live at once.
+      const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
+      hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
+      hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
     },
   });
 
@@ -1085,9 +1130,10 @@ export function startGameWith(
     // builds a world; every caller above decides for itself whether this world is
     // campaign or practice, and mutates (or does not mutate) the run accordingly.
     deps.stats.startAttempt();
-    // Same lifecycle as `attempt` above: coopKills resets on every new attempt, not
-    // just at boot -- see coopKills' own comment for why.
+    // Same lifecycle as `attempt` above: coopKills/versusDeaths reset on every new
+    // attempt, not just at boot -- see coopKills' own comment for why.
     coopKills = [];
+    versusDeaths = [];
     hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   }
 
@@ -1447,6 +1493,7 @@ export function startGameWith(
   hud.setContinueAvailable(deps.run.active() !== null);
   deps.stats.startAttempt();
   coopKills = [];
+  versusDeaths = [];
   hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());

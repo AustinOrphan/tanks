@@ -363,6 +363,32 @@ describe('parseDevFlags: quality', () => {
   });
 });
 
+describe('parseDevFlags: mode (n-player arc PR 4 -- FFA + teams)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?mode=ffa').mode).toBeNull();
+  });
+
+  it('is null when absent -- resolves to campaign-coop downstream', () => {
+    expect(parseDevFlags('?dev=1').mode).toBeNull();
+  });
+
+  it('accepts ffa and teams -- population: both values', () => {
+    for (const v of ['ffa', 'teams']) {
+      expect(parseDevFlags(`?dev=1&mode=${v}`).mode).toBe(v);
+    }
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 4 forms below', () => {
+    for (const v of ['', 'campaign-coop', 'FFA', 'coop']) {
+      expect(parseDevFlags(`?dev=1&mode=${v}`).mode).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&mode=ffa')).toEqual({ ...DEV_FLAGS_OFF, mode: 'ffa' });
+  });
+});
+
 describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
   // The point of factoring this out: a check written directly against FLAG_REGISTRY can
   // never fail while `Record<keyof DevFlags, FlagSpec>` stands (a missing or extra key is
