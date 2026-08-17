@@ -247,9 +247,17 @@ export interface PlayerInputSource {
  * This same "echo the tank's own position back as aim" idea is what `loop.ts`'s retired
  * `createIdleInputSource` used to build by hand for a slot with no controller wiring at
  * all (pre-PR3) -- this fallback makes that redundant for every REAL controller slot: a
- * `createGamepadInputSource` bound to an index with nothing ever plugged in already
- * produces byte-identical output, so PR3 fills every co-player slot with one of these
- * instead, unconditionally, rather than choosing between two functions per slot.
+ * `createGamepadInputSource` bound to an index with nothing ever plugged in produces
+ * EQUIVALENT OUTPUT ON EVERY REACHABLE INPUT, so PR3 fills every co-player slot with
+ * one of these instead, unconditionally, rather than choosing between two functions
+ * per slot. Not byte-identical CODE, and review named the difference precisely: the
+ * retired function ignored a null `setPlayerPosition` (holding its last real
+ * position), while this one accepts null and would fall back through
+ * `quantizeAim({0,0})`. Unreachable, for two independent reasons -- tanks are never
+ * removed or reordered (`resetArena`: a dead tank stays in place with alive=false),
+ * so `tankForSlot` never returns undefined for a slot that ever held a tank; and
+ * `applyPlayerInputs` never drives a nonexistent tank, so the divergent value could
+ * not be consumed even if it were produced.
  *
  * The fallback echoes `playerPos` RAW, bypassing `quantizeAim`: a spawn is rarely
  * exactly on the AIM_GRID, and driveTank's turret-hold guard requires `aimDir` to be
