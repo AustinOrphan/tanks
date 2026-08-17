@@ -910,6 +910,64 @@ successors.
 
 ---
 
+## Spike: the rest of versus mode -- stock/lives, respawn, spawn protection, setup UI, maps
+
+**Raised 2026-08-17**, alongside the versus-spawns PR
+(`docs/superpowers/plans/2026-08-17-versus-spawns.md`), which derives well-separated
+FFA/teams spawn cells from arena geometry but deliberately stops at initial placement.
+
+**The question, six separate but related decisions, none answerable from the tree alone:**
+
+1. **Stock/lives.** `docs/superpowers/plans/2026-08-17-versus-modes.md` already named
+   and rejected a Smash-style stock counter as out of scope for that PR ("real added
+   design surface... no owner directive asked for"). Still true here: FFA/teams stay
+   single-life-per-round. Does versus want stock, and if so how many, and does it share
+   `RESPAWN_DELAY_TICKS`/`RESPAWN_SHIELD_TICKS` with campaign-coop or need its own?
+2. **Respawn cell selection.** `pickVersusSpawnCell` (`src/sim/versus-spawns.ts`) takes
+   an `avoid: Vec2[]` parameter specifically so a later respawn increment can pass LIVE
+   OPPONENT positions instead of the already-chosen initial spawns -- the signature is
+   ready, the call site is not. Wiring it needs stock/lives decided first (question 1),
+   since there is nothing to respawn INTO without a stock model.
+3. **Spawn protection.** A brief invincibility window after a versus (re)spawn is
+   standard in the genre this game is modelled on (CLAUDE.md's own `TANK_TURN_RATE`
+   comment cites Wii Play: Tanks! "from recollection, not measured against it") but no
+   duration, damage-immunity shape, or visual cue has been decided.
+4. **Spawn animation.** Named as deferred for the base game already (`## Unbuilt by
+   design`: "Spawn and victory animations. #61"); versus respawns would want the same
+   treatment, decided together rather than twice.
+5. **A versus setup menu.** Mode, player count and (once maps exist as a choice, see
+   below) map selection are all dev-flag-only today (`?dev=1&mode=ffa&players=4`).
+   Shipping versus to a real player needs UI, which is real product surface no directive
+   has scoped yet.
+6. **Map selection / procedural generation.** Already named as unbuilt in this file's
+   Ledger ("Procedural generation of shipped levels; the four arenas are authored
+   grids... #43") -- and directly relevant here, since `pickVersusSpawnCell` was
+   deliberately written against the arena's OWN geometry (BFS + line-of-sight over
+   `grid`/`legend`/`cellSize`) rather than authored spawn points specifically so it would
+   work on a board with no author. That is now proven on the 5 shipped, hand-authored
+   arenas; it has not been exercised against a generated one, because none exists yet.
+
+**Why these six belong together rather than as six separate spikes:** they gate each
+other. Respawn (2) cannot be built before stock/lives (1) is decided. Spawn protection
+(3) and spawn animation (4) are only meaningful once something respawns. A setup menu
+(5) that only offers 2 shipped arenas is premature before map selection (6) has an
+answer. None of the six is "can a PR close it" on its own -- each needs a decision this
+file's own "Issues or backlog?" test names as the spike criterion.
+
+**What would answer it:** an owner ruling on stock/lives (the shape #1's rejection left
+open, not a re-litigation of it), which unblocks 2-4 in sequence; a product decision on
+whether versus ships with dev-flag-only access or a real menu (5); and either a decision
+to keep versus scoped to the existing 5 arenas indefinitely, or the procedural-generation
+spike above (`## Spike: pathfinding and risk-aversion weights in the movement AI`'s
+neighbour sections) reaching its own answer first (6).
+
+**Not scheduled.** Recorded so the half of versus mode this PR did not build is not
+mistaken for finished, and is not rediscovered from scratch by the next person who reads
+`pickVersusSpawnCell`'s doc comment and wonders why `avoid` takes live positions when
+nothing calls it that way yet.
+
+---
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
