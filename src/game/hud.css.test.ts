@@ -86,6 +86,12 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   hud.setLevelSelect(2, 4);
   hud.setAchievements(new Set());
   hud.showAchievementToasts(ACHIEVEMENTS.slice(0, 1));
+  // The controller assignment panel's row buttons (renderControllerRows, hud.ts): one
+  // row per slot, one candidate button per slot for Keyboard/Bot/None plus one per
+  // DETECTED pad -- so both setters are driven, mirroring setLevelSelect(2, 4) just
+  // above, to exercise the gamepad-candidate branch too, not only the three fixed ones.
+  hud.setDetectedPads([{ padIndex: 1, id: 'Test Pad' }]);
+  hud.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 }]);
   return {
     root,
     dispose: () => {
@@ -207,6 +213,13 @@ describe('hud.css is syntactically whole', () => {
       // achievements: hidden rules, the earned/locked contrast, and the toast rail
       '.hud-achievements', '.hud-achievements--hidden', '.hud-achievements-open--hidden',
       '.hud-achievement', '.hud-achievement--earned', '.hud-toasts', '.hud-toast',
+      // controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
+      // assignment.md): hidden rules, the row layout, the disconnected dimming, and the
+      // per-candidate selection ring, the row's only current-source signal
+      '.hud-controllers', '.hud-controllers--hidden', '.hud-controllers-open--hidden',
+      '.hud-controller-rows', '.hud-controller-row', '.hud-controller-row-label',
+      '.hud-controller-row-current', '.hud-controller-row-current--disconnected',
+      '.hud-controller-source-btn', '.hud-controller-source-btn--selected',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
@@ -264,7 +277,14 @@ describe('hud.css is syntactically whole', () => {
     // seventh button.
     // 48 since the haptics toggle (issue #112's deferred HUD control) landed: 47 + the
     // toggle beside the fire-mode toggle in the settings row.
-    expect(buttons.length).toBe(48);
+    // 58 since the controller assignment panel landed (docs/superpowers/plans/
+    // 2026-08-17-controller-assignment.md): 48 + 2 static (.hud-controllers-open,
+    // .hud-controllers-back) + 8 row buttons from THIS fixture's setDetectedPads/
+    // setControllers calls above -- 2 slots x (Keyboard/Bot/None + 1 detected pad at
+    // padIndex 1) = 2 x 4 = 8. A different fixture (slot/pad count) would pin a
+    // different number; this one is the sweep's actual denominator, not a general claim
+    // about every possible assignment.
+    expect(buttons.length).toBe(58);
     expect(unstyled).toEqual([]);
 
     dispose();

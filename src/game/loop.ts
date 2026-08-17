@@ -25,7 +25,13 @@ import {
   type ReplayTrace,
 } from './replay';
 import { createInputController, type InputController } from '../input/input';
-import { createGamepadInputSource, readNavigatorGamepads, type PlayerInputSource } from '../input/gamepad';
+import {
+  createGamepadInputSource,
+  readNavigatorGamepads,
+  readDetectedPads,
+  type PlayerInputSource,
+  type DetectedPad,
+} from '../input/gamepad';
 import {
   deriveInitialAssignment,
   reassign,
@@ -71,10 +77,17 @@ export interface HostWindow {
   addEventListener(type: 'resize', fn: (e: Event) => void): void;
   addEventListener(type: 'blur', fn: (e: Event) => void): void;
   addEventListener(type: 'pointerdown', fn: (e: Event) => void): void;
+  // The controller assignment panel's live pad list (docs/superpowers/plans/
+  // 2026-08-17-controller-assignment.md): added/removed ONLY while `.hud-controllers`
+  // is open (hud.onControllersOpen/Close), never at boot -- see that wiring below.
+  addEventListener(type: 'gamepadconnected', fn: (e: Event) => void): void;
+  addEventListener(type: 'gamepaddisconnected', fn: (e: Event) => void): void;
   removeEventListener(type: 'keydown', fn: (e: KeyboardEvent) => void): void;
   removeEventListener(type: 'resize', fn: (e: Event) => void): void;
   removeEventListener(type: 'blur', fn: (e: Event) => void): void;
   removeEventListener(type: 'pointerdown', fn: (e: Event) => void): void;
+  removeEventListener(type: 'gamepadconnected', fn: (e: Event) => void): void;
+  removeEventListener(type: 'gamepaddisconnected', fn: (e: Event) => void): void;
 }
 
 /**
@@ -129,6 +142,17 @@ export interface GameDeps {
    * different indices of the same pads array, not a shared one arbitrated at runtime.
    */
   readonly createGamepadSource: (padIndex: number) => PlayerInputSource;
+  /**
+   * Every currently-connected pad, for the controller assignment panel's live list
+   * (docs/superpowers/plans/2026-08-17-controller-assignment.md) -- `gamepad.ts`'s
+   * `readDetectedPads` bound to the one production `GetGamepads`. Injected for the same
+   * reason `createGamepadSource` is: going through GameDeps keeps the read testable
+   * without a real `navigator.getGamepads`. Called once immediately on
+   * `hud.onControllersOpen` (the browser's `gamepadconnected`/`gamepaddisconnected`
+   * events fire only on CHANGE) and once per hotplug event after that, both scoped to
+   * while the panel is open.
+   */
+  readonly readDetectedPads: () => DetectedPad[];
   readonly createAudio: () => AudioEngine;
   /**
    * playerId is required here even though createAudioDirector defaults it. The
@@ -522,6 +546,7 @@ export function createBrowserDeps(): GameDeps {
     createPreview: createTankPreview,
     createInput: createInputController,
     createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
+    readDetectedPads: () => readDetectedPads(readNavigatorGamepads),
     createAudio: () => createAudioEngine(AUDIO_MANIFEST),
     createDirector: createAudioDirector,
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
@@ -1160,6 +1185,9 @@ export function startGameWith(
       }
     }
     assignment = next;
+    // Refresh the panel's own display -- a no-op if it is not currently open (hud.ts's
+    // own setControllers gates the re-render on that).
+    hud.setControllers(assignment);
   }
 
   hud.onMuteToggle(() => {
@@ -1494,6 +1522,25 @@ export function startGameWith(
   // The controller assignment UI's one write path -- see reassignSlot's own doc comment.
   hud.onReassignSlot(reassignSlot);
 
+  // The panel's live pad list -- read once immediately on open (the browser's
+  // gamepadconnected/disconnected events fire only on CHANGE, so opening over
+  // already-connected pads would otherwise show nothing until the next hotplug), then
+  // kept live by the two window listeners for as long as the panel stays open. Added and
+  // removed at exactly this chokepoint -- the driver does not tick during title/paused,
+  // so nothing else would refresh the panel while it is up.
+  const onGamepadHotplug = (): void => {
+    hud.setDetectedPads(deps.readDetectedPads());
+  };
+  hud.onControllersOpen(() => {
+    onGamepadHotplug();
+    deps.host.addEventListener('gamepadconnected', onGamepadHotplug);
+    deps.host.addEventListener('gamepaddisconnected', onGamepadHotplug);
+  });
+  hud.onControllersClose(() => {
+    deps.host.removeEventListener('gamepadconnected', onGamepadHotplug);
+    deps.host.removeEventListener('gamepaddisconnected', onGamepadHotplug);
+  });
+
   hud.onResetStats(() => {
     deps.stats.resetLifetime();
     hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
@@ -1616,6 +1663,7 @@ export function startGameWith(
   hud.setFireMode(deps.touchSettings.fireMode());
   hud.setHaptics(deps.touchSettings.haptics());
   hud.setAchievements(deps.achievements.earned());
+  hud.setControllers(assignment);
   refreshStats(world);
 
   // The title screen leaves on ANY gesture. Both listeners are unconditional and the

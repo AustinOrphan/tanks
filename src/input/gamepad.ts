@@ -87,6 +87,13 @@ export function deadzoneVector(x: number, y: number, deadzone: number = GAMEPAD_
 export interface GamepadLike {
   readonly axes: ArrayLike<number>;
   readonly buttons: ArrayLike<{ readonly pressed: boolean }>;
+  /**
+   * The browser's own name for the pad. OPTIONAL: `poll()`/`connected()` never read it
+   * (hence its absence from every pre-existing `fakePad` in this file's tests), so
+   * making it required would break every one of those fakes for no reason. Only
+   * `readDetectedPads` below reads it, for the controller assignment UI's live list.
+   */
+  readonly id?: string;
 }
 
 /** Matches `navigator.getGamepads`'s own signature: a possibly-sparse array of pads or nulls. */
@@ -313,4 +320,40 @@ export function createGamepadInputSource(getGamepads: GetGamepads, padIndex: num
 export function readNavigatorGamepads(): ArrayLike<GamepadLike | null | undefined> {
   if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return [];
   return navigator.getGamepads();
+}
+
+/**
+ * One live pad, as the controller assignment panel wants to show it (docs/superpowers/
+ * plans/2026-08-17-controller-assignment.md): which `getGamepads()` index, and the
+ * browser's own name for it (`''` if the browser reports none -- `hud.ts` falls back to
+ * `Controller ${padIndex}` for that case, the same fallback rule the plan states for
+ * display generally).
+ */
+export interface DetectedPad {
+  readonly padIndex: number;
+  readonly id: string;
+}
+
+/**
+ * EVERY currently-connected pad, for the panel's live list -- distinct from
+ * `createGamepadReader`'s per-index polling, which only ever looks at ONE index. The
+ * panel needs to see every index at once, including ones no slot has claimed yet, so a
+ * player can assign a fresh pad to any slot. `getGamepads` injected for the same
+ * testability reason every other function here takes it; `readNavigatorGamepads` above
+ * is the one production caller.
+ */
+export function readDetectedPads(getGamepads: GetGamepads): DetectedPad[] {
+  let pads: ArrayLike<GamepadLike | null | undefined>;
+  try {
+    pads = getGamepads() ?? [];
+  } catch {
+    // Tolerate a throwing implementation exactly like createGamepadReader does.
+    pads = [];
+  }
+  const out: DetectedPad[] = [];
+  for (let i = 0; i < pads.length; i++) {
+    const p = pads[i];
+    if (p != null) out.push({ padIndex: i, id: p.id ?? '' });
+  }
+  return out;
 }

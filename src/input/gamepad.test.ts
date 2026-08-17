@@ -3,6 +3,7 @@ import {
   deadzoneVector,
   createGamepadReader,
   createGamepadInputSource,
+  readDetectedPads,
   GAMEPAD_DEADZONE,
   GAMEPAD_FIRE_BUTTON,
   GAMEPAD_MINE_BUTTON,
@@ -430,5 +431,27 @@ describe('createGamepadInputSource: padIndex (controllers 1-4, PR3)', () => {
     present = false;
     expect(src.sample().move).toEqual({ x: 0, y: 0 });
     expect(src.gamepadConnected()).toBe(false);
+  });
+});
+
+describe('readDetectedPads: the controller assignment panel\'s live list', () => {
+  it('lists every connected pad with its OWN index, skipping sparse nulls', () => {
+    const pads = [fakePad(), null, { ...fakePad(), id: 'Xbox Wireless Controller' }];
+    expect(readDetectedPads(() => pads)).toEqual([
+      { padIndex: 0, id: '' }, // fakePad() carries no id -- falls back to ''
+      { padIndex: 2, id: 'Xbox Wireless Controller' },
+    ]);
+  });
+
+  it('is empty when nothing is connected', () => {
+    expect(readDetectedPads(() => [])).toEqual([]);
+    expect(readDetectedPads(() => [null, undefined])).toEqual([]);
+  });
+
+  it('tolerates a throwing getGamepads exactly like createGamepadReader does', () => {
+    const throwing: GetGamepads = () => {
+      throw new Error('no gamepad API');
+    };
+    expect(readDetectedPads(throwing)).toEqual([]);
   });
 });

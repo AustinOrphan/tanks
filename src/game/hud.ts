@@ -1,6 +1,7 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
-import type { SlotSource } from '../input/assignment';
+import type { Assignment, SlotSource } from '../input/assignment';
+import type { DetectedPad } from '../input/gamepad';
 import { teamOf } from '../sim/arena';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -259,10 +260,35 @@ export interface Hud {
    * candidate `SlotSource` when a row's source button is clicked. `loop.ts`'s
    * `reassignSlot` is the one production subscriber -- see its own doc comment for what
    * happens on the other side (rebuild-don't-re-point, immediate position seeding, the
-   * incremental `botSources` update). The panel itself (docs/superpowers/plans/
-   * 2026-08-17-controller-assignment.md) lands the buttons that fire this.
+   * incremental `botSources` update).
    */
   onReassignSlot(cb: (slot: number, source: SlotSource) => void): void;
+  /**
+   * The session-held `Assignment` to render, pushed by `loop.ts` at boot and after every
+   * accepted `reassignSlot`. Only re-renders if the panel is open (same convention
+   * `setAchievements` uses) -- rebuilding a hidden panel's rows on every tick's worth of
+   * reassignments would be wasted work.
+   */
+  setControllers(assignment: Assignment): void;
+  /**
+   * The panel's live candidate-pad list, pushed by `loop.ts` while `.hud-controllers` is
+   * open (see `onControllersOpen`/`onControllersClose`) -- one call on open (`getGamepads`
+   * read once immediately, since the browser's `gamepadconnected`/`gamepaddisconnected`
+   * events fire only on CHANGE) and one per hotplug event after that. A `'gamepad'`-kind
+   * row's connected/disconnected display is DERIVED from this list, not a separate flag:
+   * the panel's live pad list IS what "connected" means here.
+   */
+  setDetectedPads(pads: readonly DetectedPad[]): void;
+  /**
+   * The Controllers panel just became visible/hidden -- the ONE chokepoint for both
+   * transitions (the Back button and `setState`'s unconditional close), same shape as
+   * `onCustomizeOpen`/`onCustomizeClose`. `loop.ts` adds/removes its
+   * `gamepadconnected`/`gamepaddisconnected` window listeners here, scoped to exactly
+   * while the panel that reads them is on screen -- the driver does not tick during
+   * title/paused, so nothing else would refresh the panel's live pad list.
+   */
+  onControllersOpen(cb: () => void): void;
+  onControllersClose(cb: () => void): void;
   dispose(): void;
 }
 
@@ -391,6 +417,20 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-levels"></div>
       <button class="hud-levelselect-back" type="button">Back</button>
     </div>
+    <!-- The controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
+         assignment.md): ONE panel, TWO entry points -- the title screen's own open
+         button below, and .hud-panel-settings' presence at 'paused' too (in case a
+         controller disconnects mid-round). Unlike its four siblings above/below, this
+         one is NOT title-only, so its Back button cannot hardcode setState('title') --
+         see handleControllersBack, which routes to shownState instead. The heading
+         text itself branches on shownState too, in showControllers. -->
+    <div class="hud-controllers hud-controllers--hidden" tabindex="-1" aria-labelledby="hud-controllers-title">
+      <h1 class="hud-controllers-title" id="hud-controllers-title"></h1>
+      <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
+           convention setLevelSelect already uses for .hud-levels. -->
+      <div class="hud-controller-rows"></div>
+      <button class="hud-controllers-back" type="button">Back</button>
+    </div>
     <div class="hud-customize hud-customize--hidden" tabindex="-1" aria-labelledby="hud-customize-title">
       <h1 id="hud-customize-title">Customize</h1>
       <!-- The live preview: render/preview.ts builds a SECOND small WebGL scene against
@@ -495,6 +535,10 @@ export function createHud(root: HTMLElement): Hud {
       <button class="hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
       <button class="hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
       <button class="hud-levelselect-open hud-levelselect-open--hidden" type="button">Levels</button>
+      <!-- Visible at title AND paused -- the one new variant of this file's per-button
+           visibility pattern, precedented by .hud-panel-settings itself already showing
+           at both those states (see setState). -->
+      <button class="hud-controllers-open hud-controllers-open--hidden" type="button">Controllers</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
@@ -583,6 +627,11 @@ export function createHud(root: HTMLElement): Hud {
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
   const levelSelectBackBtn = el.querySelector('.hud-levelselect-back') as HTMLButtonElement;
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
+  const controllersOpenBtn = el.querySelector('.hud-controllers-open') as HTMLButtonElement;
+  const controllersView = el.querySelector('.hud-controllers') as HTMLElement;
+  const controllersTitleEl = el.querySelector('.hud-controllers-title') as HTMLElement;
+  const controllerRowsEl = el.querySelector('.hud-controller-rows') as HTMLElement;
+  const controllersBackBtn = el.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
   const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
@@ -768,6 +817,10 @@ export function createHud(root: HTMLElement): Hud {
   let currentAccent: AccentId = ACCENTS[0].id;
   const customizeOpenCbs: Array<() => void> = [];
   const customizeCloseCbs: Array<() => void> = [];
+  const controllersOpenCbs: Array<() => void> = [];
+  const controllersCloseCbs: Array<() => void> = [];
+  let currentAssignment: Assignment = [];
+  let currentDetectedPads: readonly DetectedPad[] = [];
 
   // One button per accent entry, built once, exactly like the hull swatches above --
   // reusing `.hud-swatch` rather than a new class, since it IS the same control: a
@@ -991,6 +1044,123 @@ export function createHud(root: HTMLElement): Hud {
   }
 
   /**
+   * A candidate/current source's label. `'gamepad'` looks its `id` up in
+   * `currentDetectedPads` -- the panel's own live list, not a cached name -- falling
+   * back to `Controller ${padIndex}` when the browser reports an empty id (or, for a
+   * currently-assigned-but-disconnected pad, when the index is not in the list at all:
+   * a pad's id is unknowable once unplugged, so this is the honest fallback for both
+   * cases, not two different ones).
+   */
+  function slotSourceLabel(source: SlotSource): string {
+    switch (source.kind) {
+      case 'keyboard':
+        return 'Keyboard / Mouse / Touch';
+      case 'bot':
+        return 'Bot';
+      case 'none':
+        return 'Unassigned';
+      case 'gamepad': {
+        const live = currentDetectedPads.find((p) => p.padIndex === source.padIndex);
+        const name = live && live.id.length > 0 ? live.id : `Controller ${source.padIndex}`;
+        return `${name} (index ${source.padIndex})`;
+      }
+    }
+  }
+
+  /** The short label a CANDIDATE button carries -- `slotSourceLabel` minus the "Keyboard
+   *  / Mouse / Touch" and "Unassigned" prose, which read fine as a current-state summary
+   *  but not as a button someone is about to click. */
+  function candidateLabel(source: SlotSource): string {
+    switch (source.kind) {
+      case 'keyboard':
+        return 'Keyboard';
+      case 'bot':
+        return 'Bot';
+      case 'none':
+        return 'None';
+      case 'gamepad':
+        return slotSourceLabel(source);
+    }
+  }
+
+  function sameSource(a: SlotSource, b: SlotSource): boolean {
+    if (a.kind !== b.kind) return false;
+    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
+  }
+
+  /**
+   * REPLACE, never append -- the same "REPLACE, never append" convention `setLevelSelect`
+   * already uses, rebuilt on open and on every detection refresh (`setControllers`/
+   * `setDetectedPads`, each gated on the panel being open). One row per slot; one button
+   * per candidate source (Keyboard / Bot / None / one per currently detected pad index).
+   */
+  function renderControllerRows(): void {
+    controllerRowsEl.replaceChildren();
+    for (let slot = 0; slot < currentAssignment.length; slot++) {
+      const source = currentAssignment[slot];
+      const row = document.createElement('div');
+      row.className = 'hud-controller-row';
+
+      const label = document.createElement('span');
+      label.className = 'hud-controller-row-label';
+      label.textContent = `Player ${slot + 1}`;
+
+      const current = document.createElement('span');
+      current.className = 'hud-controller-row-current';
+      current.textContent = slotSourceLabel(source);
+      const disconnected =
+        source.kind === 'gamepad' && !currentDetectedPads.some((p) => p.padIndex === source.padIndex);
+      current.classList.toggle('hud-controller-row-current--disconnected', disconnected);
+      if (disconnected) current.textContent += ' — disconnected';
+
+      row.append(label, current);
+
+      const candidates: SlotSource[] = [
+        { kind: 'keyboard' },
+        { kind: 'bot' },
+        { kind: 'none' },
+        ...currentDetectedPads.map((p): SlotSource => ({ kind: 'gamepad', padIndex: p.padIndex })),
+      ];
+      for (const candidate of candidates) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hud-controller-source-btn';
+        btn.textContent = candidateLabel(candidate);
+        btn.classList.toggle('hud-controller-source-btn--selected', sameSource(candidate, source));
+        const forSlot = slot; // captured per-iteration, not the loop's shared binding
+        btn.addEventListener('click', () => {
+          for (const cb of reassignSlotCbs) cb(forSlot, candidate);
+        });
+        row.appendChild(btn);
+      }
+      controllerRowsEl.appendChild(row);
+    }
+  }
+
+  /**
+   * The single chokepoint for both the panel's own Back button AND setState's
+   * unconditional close -- see onControllersOpen/onControllersClose's doc comment.
+   * Guarded on the ACTUAL transition, same as showCustomize, so loop.ts's window
+   * listener add/remove never sees a redundant open or close.
+   */
+  function showControllers(show: boolean): void {
+    const wasOpen = !controllersView.classList.contains('hud-controllers--hidden');
+    controllersView.classList.toggle('hud-controllers--hidden', !show);
+    panel.classList.toggle('hud-panel--hidden', show);
+    if (show) {
+      // The only copy that differs between the two entry points -- see this panel's own
+      // markup comment.
+      controllersTitleEl.textContent =
+        shownState === 'paused' ? 'Controllers' : "Choose who's playing";
+      renderControllerRows();
+      controllersView.focus();
+      if (!wasOpen) for (const cb of controllersOpenCbs) cb();
+    } else if (wasOpen) {
+      for (const cb of controllersCloseCbs) cb();
+    }
+  }
+
+  /**
    * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
    *
    * Only ONE of `panel`/`customizeView`/`statsView`/`achView`/`levelSelectView` is ever
@@ -1013,11 +1183,11 @@ export function createHud(root: HTMLElement): Hud {
    * reachable by Tab, exactly as it was before this file existed.
    *
    * EVERY panel-open transition focuses the CONTAINER, never a control inside it --
-   * `showStats`/`showCustomize`/`showAchievements`/`showLevelSelect` above and setState's
-   * paused/win/lose/title branches below all call `.focus()` on the pane itself, which is
-   * exactly what `.hud-panel`'s own pre-existing `tabindex="-1"` did for the one
-   * transition this file used to handle (splash -> title) -- the other four panes now
-   * carry the same attribute for the same reason. An EARLIER version of this focused each
+   * `showStats`/`showCustomize`/`showAchievements`/`showLevelSelect`/`showControllers`
+   * above and setState's paused/win/lose/title branches below all call `.focus()` on the
+   * pane itself, which is exactly what `.hud-panel`'s own pre-existing `tabindex="-1"`
+   * did for the one transition this file used to handle (splash -> title) -- the other
+   * five panes now carry the same attribute for the same reason. An EARLIER version of this focused each
    * pane's first CONTROL instead, on the reasoning that arriving already positioned saves
    * a keypress. That reasoning was wrong: `isMuteHotkey`/`isPauseHotkey`
    * (`game/loop.ts`) both ignore any key whose `target.closest('input,button,select,
@@ -1029,7 +1199,7 @@ export function createHud(root: HTMLElement): Hud {
    * container lands on control[0] exactly as it would have if this landed there directly.
    */
   function activePanelContainer(): HTMLElement | null {
-    for (const c of [panel, customizeView, statsView, achView, levelSelectView]) {
+    for (const c of [panel, customizeView, statsView, achView, levelSelectView, controllersView]) {
       if (getComputedStyle(c).display !== 'none') return c;
     }
     return null;
@@ -1345,6 +1515,23 @@ export function createHud(root: HTMLElement): Hud {
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
   levelSelectBackBtn.addEventListener('click', blurIfPointer);
 
+  const handleControllersOpen = (): void => showControllers(true);
+  // Back must route to `shownState`, NOT a hardcoded 'title' -- unlike every sibling
+  // panel above, this one is reachable from 'paused' too (owner ruling: "in case
+  // controllers disconnect"). Hardcoding 'title' would abandon a paused round on Back
+  // and desync the HUD's panel from the state machine -- CLAUDE.md names this exact
+  // class of defect as one this repo has shipped green before. `shownState` is already
+  // 'paused' or 'title' at open time -- it is what gated the open button's own
+  // visibility in the first place.
+  const handleControllersBack = (): void => {
+    showControllers(false);
+    setState(shownState);
+  };
+  controllersOpenBtn.addEventListener('click', handleControllersOpen);
+  controllersOpenBtn.addEventListener('click', blurIfPointer);
+  controllersBackBtn.addEventListener('click', handleControllersBack);
+  controllersBackBtn.addEventListener('click', blurIfPointer);
+
   // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
   // that action, under a label that says what it does at the title screen specifically.
   continueBtn.addEventListener('click', handleAction);
@@ -1368,6 +1555,12 @@ export function createHud(root: HTMLElement): Hud {
     showCustomize(false);
     achView.classList.add('hud-achievements--hidden');
     levelSelectView.classList.add('hud-levelselect--hidden');
+    // Routed through showControllers for the same reason as showCustomize above -- it
+    // must fire onControllersClose (loop.ts's window listener teardown) on EVERY exit,
+    // not only the panel's own Back button. Omitted, the panel -- and its live
+    // gamepadconnected/disconnected listeners -- would leak onto the live game on
+    // Resume, since 'paused' -> 'playing' is one of this function's own early returns.
+    showControllers(false);
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
@@ -1397,6 +1590,9 @@ export function createHud(root: HTMLElement): Hud {
     levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', s !== 'title' || !levelChoice);
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
+    // Visible at title AND paused -- the one new variant of this per-button visibility
+    // pattern, precedented by panelSettings itself just above.
+    controllersOpenBtn.classList.toggle('hud-controllers-open--hidden', s !== 'paused' && s !== 'title');
     // Continue/New Game replace the single action button AT TITLE ONLY -- Resume, Next
     // Level, Play Again and Retry all still route through actionBtn below, which is why
     // this toggles on `s === 'title'` alone rather than joining the group above.
@@ -1704,6 +1900,25 @@ export function createHud(root: HTMLElement): Hud {
     onReassignSlot(cb: (slot: number, source: SlotSource) => void): void {
       reassignSlotCbs.push(cb);
     },
+    // Unconditional, like setLevelSelect -- NOT gated on the panel being open (unlike
+    // setAchievements/setCoopKills' convention): "REPLACE, never append" means .hud-
+    // controller-rows stays current regardless of visibility, so a boot-time push (before
+    // the panel has ever opened) and a mid-session hotplug both land correctly whenever
+    // the panel is next shown, with no separate "refresh on open" path to keep in sync.
+    setControllers(assignment: Assignment): void {
+      currentAssignment = assignment;
+      renderControllerRows();
+    },
+    setDetectedPads(pads: readonly DetectedPad[]): void {
+      currentDetectedPads = pads;
+      renderControllerRows();
+    },
+    onControllersOpen(cb: () => void): void {
+      controllersOpenCbs.push(cb);
+    },
+    onControllersClose(cb: () => void): void {
+      controllersCloseCbs.push(cb);
+    },
     setTouchScheme(scheme: TouchScheme): void {
       currentScheme = scheme;
       renderSchemeToggle();
@@ -1778,6 +1993,10 @@ export function createHud(root: HTMLElement): Hud {
       levelSelectOpenBtn.removeEventListener('click', blurIfPointer);
       levelSelectBackBtn.removeEventListener('click', handleLevelSelectBack);
       levelSelectBackBtn.removeEventListener('click', blurIfPointer);
+      controllersOpenBtn.removeEventListener('click', handleControllersOpen);
+      controllersOpenBtn.removeEventListener('click', blurIfPointer);
+      controllersBackBtn.removeEventListener('click', handleControllersBack);
+      controllersBackBtn.removeEventListener('click', blurIfPointer);
       continueBtn.removeEventListener('click', handleAction);
       continueBtn.removeEventListener('click', blurIfPointer);
       newGameBtn.removeEventListener('click', handleNewGame);

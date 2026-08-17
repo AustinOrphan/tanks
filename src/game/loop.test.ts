@@ -50,6 +50,7 @@ import { decodeTick, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
+import type { DetectedPad } from '../input/gamepad';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -188,6 +189,10 @@ interface Recorder {
   slot1Disposed: boolean;
   /** Every playerCount passed to deps.levels.world(...), in order. */
   playerCounts: Array<number | undefined>;
+  /** Every value passed to hud.setControllers, in order (each a snapshot copy). */
+  controllersPushes: SlotSource[][];
+  /** Every value passed to hud.setDetectedPads, in order (each a snapshot copy). */
+  detectedPadsPushes: DetectedPad[][];
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
@@ -220,6 +225,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     openCustomize(): void;
     closeCustomize(): void;
     reassignSlot(slot: number, source: SlotSource): void;
+    openControllers(): void;
+    closeControllers(): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -227,6 +234,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   setGamepadConnected(v: boolean): void;
   /** Sets slot `padIndex`'s (>= 1) fake gamepad source's next gamepadConnected() value. */
   setSlotGamepadConnected(padIndex: number, v: boolean): void;
+  /** What `deps.readDetectedPads()` returns next -- the controller assignment panel's
+   *  live candidate-pad list. */
+  setDetectedPadsFixture(pads: DetectedPad[]): void;
   getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
@@ -330,6 +340,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     slot1Samples: 0,
     slot1Disposed: false,
     playerCounts: [],
+    controllersPushes: [],
+    detectedPadsPushes: [],
   };
 
   let pending: ((now: number) => void) | null = null;
@@ -342,6 +354,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let touchState: TouchIndicator = { stick: null, aim: null, scheme: 'stick', used: false };
   let fireNext = false;
   let gamepadConnectedNext = false;
+  let detectedPadsFixture: DetectedPad[] = [];
   let onQuit = (): void => {};
   let onPauseTap = (): void => {};
   let onMineTap = (): void => {};
@@ -359,6 +372,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onCustomizeOpen = (): void => {};
   let onCustomizeClose = (): void => {};
   let onReassignSlot = (_slot: number, _source: SlotSource): void => {};
+  let onControllersOpen = (): void => {};
+  let onControllersClose = (): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
   // fake createPreview below can assert it received the SAME element the HUD exposed --
   // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
@@ -536,6 +551,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
+    // The controller assignment panel's live pad list -- a plain mutable array a test
+    // can push into via `setDetectedPadsFixture` below, mirroring `gamepadConnectedNext`'s
+    // own closed-over-mutable convention.
+    readDetectedPads: () => detectedPadsFixture,
     createAudio: () => ({
       play: () => {},
       startMusic: () => {
@@ -769,6 +788,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onReassignSlot: (cb: (slot: number, source: SlotSource) => void) => {
           onReassignSlot = cb;
+        },
+        setControllers: (a: SlotSource[]) => {
+          rec.controllersPushes.push([...a]);
+        },
+        setDetectedPads: (pads: readonly DetectedPad[]) => {
+          rec.detectedPadsPushes.push([...pads]);
+        },
+        onControllersOpen: (cb: () => void) => {
+          onControllersOpen = cb;
+        },
+        onControllersClose: (cb: () => void) => {
+          onControllersClose = cb;
         },
         dispose: () => rec.disposed.push('hud'),
       };
@@ -1091,6 +1122,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       openCustomize: () => onCustomizeOpen(),
       closeCustomize: () => onCustomizeClose(),
       reassignSlot: (slot: number, source: SlotSource) => onReassignSlot(slot, source),
+      openControllers: () => onControllersOpen(),
+      closeControllers: () => onControllersClose(),
     },
     setState: (s) => {
       state = s;
@@ -1107,6 +1140,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     },
     setSlotGamepadConnected: (padIndex: number, v: boolean) => {
       rec.slotConnectedNext[padIndex] = v;
+    },
+    setDetectedPadsFixture: (pads: DetectedPad[]) => {
+      detectedPadsFixture = pads;
     },
     getState: () => state,
     blur(): void {
@@ -4355,6 +4391,67 @@ describe('startGameWith: reassignSlot (controller assignment UI, docs/superpower
       expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // unchanged: no new build
       h.handle.dispose();
     });
+  });
+});
+
+describe('startGameWith: the controller assignment panel\'s wiring (docs/superpowers/plans/' +
+  '2026-08-17-controller-assignment.md)', () => {
+  it('pushes hud.setControllers with the boot-derived assignment', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3, bots: 1 } })); // slot 2 is the bot
+    expect(h.rec.controllersPushes[0]).toEqual([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 1 },
+      { kind: 'bot' },
+    ]);
+    h.handle.dispose();
+  });
+
+  it('reassignSlot pushes a FRESH hud.setControllers reflecting the new assignment', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const before = h.rec.controllersPushes.length;
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.length).toBe(before + 1);
+    expect(h.rec.controllersPushes.at(-1)).toEqual([{ kind: 'keyboard' }, { kind: 'bot' }]);
+    h.handle.dispose();
+  });
+
+  it('onControllersOpen reads deps.readDetectedPads ONCE immediately, then adds the two ' +
+    'window listeners -- the events fire only on CHANGE, so opening over already-connected ' +
+    'pads would otherwise show nothing until the next hotplug', () => {
+    const h = boot(makeDeps());
+    h.setDetectedPadsFixture([{ padIndex: 0, id: 'Pad' }]);
+    expect(h.rec.detectedPadsPushes).toEqual([]);
+    h.hud.openControllers();
+    expect(h.rec.detectedPadsPushes).toEqual([[{ padIndex: 0, id: 'Pad' }]]);
+    const types = h.rec.listeners.map(([t]) => t);
+    expect(types).toContain('gamepadconnected');
+    expect(types).toContain('gamepaddisconnected');
+    h.handle.dispose();
+  });
+
+  it('a gamepadconnected/gamepaddisconnected event while open pushes a fresh read', () => {
+    const h = boot(makeDeps());
+    h.hud.openControllers();
+    const connectedFn = h.rec.listeners.find(([t]) => t === 'gamepadconnected')![1] as () => void;
+    h.setDetectedPadsFixture([{ padIndex: 5, id: 'Hotplugged Pad' }]);
+    connectedFn();
+    expect(h.rec.detectedPadsPushes.at(-1)).toEqual([{ padIndex: 5, id: 'Hotplugged Pad' }]);
+    const disconnectedFn = h.rec.listeners.find(([t]) => t === 'gamepaddisconnected')![1] as () => void;
+    h.setDetectedPadsFixture([]);
+    disconnectedFn();
+    expect(h.rec.detectedPadsPushes.at(-1)).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('onControllersClose removes both window listeners -- scoped to exactly while the ' +
+    'panel that reads them is on screen', () => {
+    const h = boot(makeDeps());
+    h.hud.openControllers();
+    h.hud.closeControllers();
+    const removedTypes = h.rec.removed.map(([t]) => t);
+    expect(removedTypes).toContain('gamepadconnected');
+    expect(removedTypes).toContain('gamepaddisconnected');
+    h.handle.dispose();
   });
 });
 
