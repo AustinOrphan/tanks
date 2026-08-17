@@ -968,9 +968,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // that slot i drives the tank with REAL `controlledBy === i`, which only a
         // REAL `loadArena`-produced world can carry (the foundation plan's own spawn
         // alignment, not something this harness can fake convincingly).
-        if (playerCount !== undefined && playerCount > 1) {
+        // The REAL-world branch is taken whenever the test needs a world the synthetic
+        // fixtures cannot fake: more than one player slot, OR a versus mode (which
+        // strips enemies and stamps Tank.team inside loadArena). Review found the
+        // playerCount-only condition left `mode` silently dropped at playerCount <= 1
+        // -- the same silent-drop shape the versus composition fix closed one layer up,
+        // dormant only because no test set mode without players. Including mode here
+        // means a `mode: 'ffa'` fixture can never quietly get a campaign-coop world.
+        const wantsVersus = (opts.devFlags?.mode ?? 'campaign-coop') !== 'campaign-coop';
+        if ((playerCount !== undefined && playerCount > 1) || wantsVersus) {
           const real = createWorldFor(
-            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount,
+            // playerCount defaults to 1 when the branch was entered for versus alone.
+            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount ?? 1,
             // Mirrors levels.ts's own closure: `!flags.coopPool` -- absent/false leaves
             // the shared-attempts default (true), coopPool=1 restores the shipped pool
             // model (false). Read straight off opts.devFlags, the same source the real
@@ -2818,6 +2827,18 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(h.rec.coopKillPushes.at(-1)).toBeNull();
       h.handle.dispose();
     });
+  });
+
+  it('a versus fixture with NO players flag still gets a REAL versus world -- the fake cannot silently hand back campaign-coop', () => {
+    // Review found this gap dormant: the fake took its real-world branch on playerCount
+    // alone, so `mode: 'ffa'` without `players` fell through to a synthetic coop world
+    // and any versus assertion would have been measuring the wrong dispatch branch.
+    // Breaks if the fake's branch condition drops its mode term.
+    const h = boot(makeDeps({ devFlags: { mode: 'ffa' } }));
+    const world = h.rec.builtWorlds.at(-1)!;
+    expect(world.mode).toBe('ffa');
+    expect(world.tanks.every((t: Tank) => t.kind === 'player')).toBe(true); // enemies stripped
+    h.handle.dispose();
   });
 
   describe('shared-attempts ruling (docs/superpowers/plans/2026-08-16-coop-attempts.md): level clear revives everyone', () => {
