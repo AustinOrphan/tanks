@@ -297,14 +297,23 @@ this PR does not touch. The engagement-distance numbers are not asserted anywher
 file is `describe.skip`, its own convention), so no threshold changed; the figures are
 recorded here as the population this PR's own instructions asked to be re-measured.
 
-**Not re-measured**: `player-profile.test.ts`'s own separate 125-game (5 arenas × 25 seeds)
-pinned population (`describe('a competent scripted player against the shipped
-arenas', ...)`) — its four threshold assertions all still passed at full `npm test` (win
-rate, fire count, mine count, self-mine share), so nothing broke, but the exact quoted
-figures in that block's comment (e.g. "51/125 wins (40.8%)") were not re-derived against
-the post-directive-B tree. Out of this task's explicitly-named scope
-(`pacifist.test.ts`/`engagement.measure.test.ts`); flagged here rather than silently
-assumed unchanged.
+**Also re-measured on review, though out of this task's explicitly-named scope**:
+`player-profile.test.ts`'s own separate 125-game (5 arenas × 25 seeds) pinned population
+(`describe('a competent scripted player against the shipped arenas', ...)`). Its four
+threshold assertions all passed at full `npm test` before this re-measurement too, so
+nothing was broken — but `decidePlayerInput` now draws one extra `rnd()` call per tick
+(the hazard offset), which renumbers every later draw in the stream, so every one of the
+125 games is a genuinely different run, not a behaviour delta layered on the old one; the
+comment's exact quoted figures (e.g. "51/125 wins (40.8%)") would otherwise have gone
+stale the same way `pacifist.test.ts`'s did. Re-measured: **50/125 wins (40.0%)**, 74
+losses, 0 timeouts; self-mine deaths **5/74 (6.8%)**, down from 10/74 (13.5%) — consistent
+with, not proof of, estimation error occasionally trading one failure mode for another
+(the sim is chaotic, so an exact attribution is not warranted); fires/game 13.5–44.2 (was
+13.4–55.8); mines/game 1.60–9.28 (was 1.44–7.80); per-arena win rates 16/25, 15/25, 12/25,
+6/25, 1/25 (was 21/25, 13/25, 7/25, 7/25, 3/25) — the "arena-01 easier than arena-03 and
+arena-04" ordinal claim still holds with real margin (64% vs 48% vs 24%). All figures
+updated in `player-profile.test.ts`'s own comments, not left to silently imply the old
+tree.
 
 ---
 
@@ -422,3 +431,25 @@ assumed unchanged.
    re-measurement of the shipped bias at 0.50 under a new, unrelated mechanism, not a new
    sweep row. Recorded instead in this document and in `pacifist.test.ts`'s own comment,
    the two places this task named explicitly.
+4. **The implementation commit (`e7e2769`) is transiently red on `tools/baseline/
+   trace.test.ts` if checked out on its own.** Forced by the instruction to give the
+   trace-hash pin its own commit: behaviour changed in that commit, but `BASELINE_HASH`
+   still names the OLD value until the next commit (`daacede`) updates it. No commit's
+   PRODUCTION code was ever wrong at the point it landed on the branch tip — only a
+   bisect that stops exactly at `e7e2769` would see a red `trace.test.ts` — and the fix
+   (squashing the two commits, or reordering so the hash lands first) would defeat the
+   instruction's own point (the hash-carry procedure treats the pin as a distinct,
+   separately-reviewable act from the behaviour change it records). Left as two commits,
+   per the instruction, with this note so a bisecting reviewer is not surprised. The same
+   precedent exists in `2026-08-16-bot-competence.md`'s own Deviations item 4, for an
+   unrelated reason (a not-yet-implemented later directive's test landing early).
+5. **The parameterization/wiring mutation experiments (see "Red-first" above) used `cp`
+   backups to `/tmp`, not `git stash`/`git checkout --`, and were run BEFORE the two
+   commits above landed but AFTER the implementation was otherwise complete and staged in
+   the working tree.** This repo's standing rule is "commit before mutation experiments"
+   because `git checkout --` has eaten uncommitted work three times in this project's
+   history; using an out-of-tree backup and restoring by `cp` (verified by `git diff
+   --stat` matching the intended change afterward, not by exit code alone) sidesteps that
+   specific failure mode, but is named here as a process deviation from the letter of the
+   instruction rather than silently presented as compliant. No work was lost; `git status`
+   was clean before both commits.

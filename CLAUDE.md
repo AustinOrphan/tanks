@@ -338,14 +338,19 @@ parameter defaulted to today's exact constant); STATIONARY (brown, green/RICOCHE
 never imports `dangerAvoidMove` and never reaches `friendlyInMineBlast` (gated on
 `TankAbility.MINE_LAYER`, which neither carries), so the field sits on their profile
 unread by the SHARED path, same as `preferredDistance`/`minimumDistance`/`retreatChance`
-already do for STATIONARY. It is NOT unread everywhere, though: the PLAYER also resolves
-to STATIC_BASIC and DOES consume its `estimationAccuracy`, through an independently
-written mirror of the same gates in `player-profile.ts` (oracle-knowledge site #5, drawn
-from the player's own injected `rnd`, never `world.seed`) — so the field the shared AI
-path ignores for brown is exactly the field the player's own code reads for the identical
-profile. `AI_HAZARD_SPREAD` (`constants.ts`, sourced from `balance.json` per the
-`AI_AIM_SPREAD` precedent) is the anchor a perfect-estimationAccuracy profile would still
-misjudge by; every shipped profile sits below accuracy 1.
+already do for STATIONARY. The PLAYER rescues STATIC_BASIC's copy from being unread
+everywhere: it also resolves to STATIC_BASIC and DOES consume its `estimationAccuracy`,
+through an independently written mirror of the same gates in `player-profile.ts`
+(oracle-knowledge site #5, drawn from the player's own injected `rnd`, never
+`world.seed`) — so the field the shared AI path ignores for brown is exactly the field
+the player's own code reads for the identical profile. Nothing rescues RICOCHET_SNIPER's
+copy the same way: green is STATIONARY too, is never the player, and nothing else in the
+tree reads `estimationAccuracy` off it — its 0.90 sits on the profile as inert as its own
+`preferredDistance`/`minimumDistance`/`retreatChance` already are, not exempted by the
+player-side path the way STATIC_BASIC's is. `AI_HAZARD_SPREAD` (`constants.ts`, sourced
+from `balance.json` per the `AI_AIM_SPREAD` precedent) is the anchor a
+perfect-estimationAccuracy profile would still misjudge by; every shipped profile that
+reaches a consuming site sits below accuracy 1.
 
 **A green tank changed what `structuralFailures` has to check.** "No enemy sees
 the player spawn" tested `lineOfSight` only, which was the same as "no enemy can
