@@ -1,6 +1,6 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, Vec2 } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, Vec2, ArenaGeometry } from './types';
 import { createWorld, type World } from './world';
-import { LIVES, TANK_RADIUS } from './constants';
+import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
 import { SPAWN_LETTERS } from './config/arena-types';
 import {
@@ -194,7 +194,7 @@ export function loadArena(
   // 1-2-arg call site (dozens across the tree) is untouched. Default 'campaign-coop' is
   // the shipped rule and the trace argument -- see World.mode's own doc comment.
   mode: GameMode = 'campaign-coop',
-): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[] } {
+): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
   const { cols, rows, cellSize, grid, legend } = arena;
 
   // Validate grid dimensions
@@ -254,6 +254,10 @@ export function loadArena(
       // Team is a PLAYER-only concept, stamped only in 'teams' mode -- see Tank.team's
       // own doc comment. P1 is always slot 0.
       if (kind === 'player' && mode === 'teams') tank.team = teamOf(0);
+      // Stock is a PLAYER-only, versus-only concept -- see Tank.stockRemaining's own
+      // doc comment. P1 is stamped here; PASS 1b's ffa/teams branch stamps every
+      // co-player the same way.
+      if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) tank.stockRemaining = VERSUS_STOCK;
       tanks.push(tank);
       if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; }
     }
@@ -284,6 +288,7 @@ export function loadArena(
         spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
         const tank = makeTank(id++, 'player', pos, 0, i);
         if (mode === 'teams') tank.team = teamOf(i);
+        tank.stockRemaining = VERSUS_STOCK;
         tanks.push(tank);
       }
     } else {
@@ -341,7 +346,10 @@ export function loadArena(
     walls.push({ id: id++, aabb, kind: 'solid', destroyed: false });
   }
 
-  return { walls, tanks, spawns };
+  // Not `arena` itself: `Arena`'s shape happens to match `ArenaGeometry` field-for-field
+  // today, but building the World-facing copy explicitly here means a future field added
+  // to `Arena` for some OTHER reason does not silently leak onto every World.
+  return { walls, tanks, spawns, arenaGeometry: { cols, rows, cellSize, grid, legend } };
 }
 
 /**

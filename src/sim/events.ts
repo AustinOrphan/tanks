@@ -22,10 +22,13 @@ export type SimEvent =
   | { type: 'mine-detonate'; mineId: number; ownerId: number; pos: Vec2 }
   | { type: 'tank-destroyed'; tankId: number; kind: TankKind; by: DestroyedBy; pos: Vec2 }
   /**
-   * Coop's per-tank revival (stepRespawns, world.ts). `controlledBy` carries the
-   * slot directly, matching why `tank-destroyed` carries `kind` inline -- consumers
-   * do not need a tank lookup. Unreachable at playerCount 1: stepRespawns is only
-   * ever called when countPlayerTanks(world) >= 2 (stepInputs' gate).
+   * Per-tank revival (stepRespawns, world.ts) -- coop's shared-pool respawns and,
+   * since the versus stock PR, ffa/teams' own stock respawns. `controlledBy` carries
+   * the slot directly, matching why `tank-destroyed` carries `kind` inline --
+   * consumers do not need a tank lookup. Unreachable at campaign-coop playerCount 1
+   * (stepRespawns' campaign-coop arm is only ever called when
+   * countPlayerTanks(world) >= 2, stepInputs' gate) -- but reachable in ffa/teams at
+   * ANY player count, since that arm carries no such guard.
    */
   | { type: 'respawn'; tankId: number; controlledBy: number; pos: Vec2 }
   | { type: 'wall-destroyed'; wallId: number; ownerId: number; pos: Vec2 }
