@@ -238,7 +238,7 @@ async function run(browser) {
   async function capture(prefix) {
     if (args.scene === 'game') return captureGame(prefix);
     await page.goto(q(), { waitUntil: 'load' });
-    await page.waitForFunction(() => window.GALLERY_READY === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.GALLERY_READY === true, undefined, { timeout: 20000 });
     const frames = await page.evaluate(() => window.GALLERY_FRAMES);
     const canvas = page.locator('canvas');
     if (!args.anim || frames <= 1) {

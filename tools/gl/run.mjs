@@ -99,7 +99,7 @@ try {
   // an overrun surfaces as a bare TimeoutError with no check output, which reads as a
   // broken harness rather than a slow one. Not a claim that the branch is fast: it added
   // three WebGL contexts and ~1.8s of deliberate idle() waits, and that cost is real.
-  await page.waitForFunction(() => !!window.__glResults, { timeout: 90000 });
+  await page.waitForFunction(() => !!window.__glResults, undefined, { timeout: 90000 });
   const results = await page.evaluate(() => window.__glResults);
 
   let failed = 0;

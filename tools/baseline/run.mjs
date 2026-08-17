@@ -203,6 +203,7 @@ async function runPlaywrightMode(opts) {
         // (see page.html), so waiting on the trio never reads a half-filled object of any.
         await page.waitForFunction(
           () => !!window.__traceResult && !!window.__angleResult && !!window.__vendoredAngleResult,
+          undefined,
           { timeout: 180_000 },
         );
         const r = await page.evaluate(() => window.__traceResult);
