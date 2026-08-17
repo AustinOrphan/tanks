@@ -1,5 +1,6 @@
 import type { Vec2, Wall, WallKind } from './types';
 import { lineOfSight } from './ai/targeting';
+import { mergeSolidRuns } from './wall-merge';
 
 /**
  * Well-separated versus spawn cells, derived from the arena's OWN geometry rather than
@@ -52,61 +53,21 @@ function cellOfPos(pos: Vec2, cellSize: number): Cell {
 }
 
 /**
- * Maximal-rectangle decomposition of a solid-cell mask -- the SAME algorithm as
- * `arena.ts`'s private `mergeSolidRuns` (horizontal runs per row, then runs with
- * identical extent stacked vertically), duplicated rather than imported for the cycle
- * reason above ("Do NOT grow `arena.ts`'s existing helpers" -- the brief for this module
- * -- reads as "do not import back into it either", and empirically it also cannot:
- * `arena.ts` is this module's one caller). Unmerged per-cell boxes would still catch
- * every real line-of-sight block; merging matters only for the retroreflecting-seam
- * class CLAUDE.md documents for BOUNCE geometry, but this module never reflects a shot,
- * only tests straight-line visibility -- reusing the canonical decomposition costs
- * nothing and keeps this module's notion of "the walls" answerable to the same geometry
- * the rest of the sim uses, rather than a second, looser one.
- */
-function mergeSolidRuns(mask: boolean[][], cols: number, rows: number): [number, number, number, number][] {
-  const runs: { r: number; c0: number; c1: number }[] = [];
-  for (let r = 0; r < rows; r++) {
-    let c = 0;
-    while (c < cols) {
-      if (!mask[r][c]) { c++; continue; }
-      let c1 = c;
-      while (c1 + 1 < cols && mask[r][c1 + 1]) c1++;
-      runs.push({ r, c0: c, c1 });
-      c = c1 + 1;
-    }
-  }
-  const used = new Set<number>();
-  const rects: [number, number, number, number][] = [];
-  for (let i = 0; i < runs.length; i++) {
-    if (used.has(i)) continue;
-    used.add(i);
-    const a = runs[i];
-    let rEnd = a.r;
-    for (;;) {
-      const j = runs.findIndex((b, k) => !used.has(k) && b.r === rEnd + 1 && b.c0 === a.c0 && b.c1 === a.c1);
-      if (j < 0) break;
-      used.add(j);
-      rEnd++;
-    }
-    rects.push([a.c0, a.r, a.c1 + 1, rEnd + 1]);
-  }
-  return rects;
-}
-
-/**
- * Wall geometry for a visibility query -- solid cells merged (see `mergeSolidRuns`
- * above), destructible cells one box per cell, never merged, matching PASS 2a/2b of
- * `loadArena` exactly (a destructible cell is a destruction unit, and at spawn time none
- * is destroyed yet, so both kinds block a fresh line of sight the same way they block
- * one mid-round). Deliberately NOT the boundary ring `loadArena` also builds: a query
+ * Wall geometry for a visibility query -- solid cells merged (`mergeSolidRuns`,
+ * `wall-merge.ts`; originally duplicated here, extracted to a shared leaf module once
+ * two byte-identical copies of collision-relevant geometry became a maintenance hazard
+ * rather than a cycle-avoidance necessity -- see wall-merge.ts's own doc comment),
+ * destructible cells one box per cell, never merged, matching PASS 2a/2b of `loadArena`
+ * exactly (a destructible cell is a destruction unit, and at spawn time none is
+ * destroyed yet, so both kinds block a fresh line of sight the same way they block one
+ * mid-round). Deliberately NOT the boundary ring `loadArena` also builds: a query
  * between two interior cell centres can never reach it. These ids are throwaway --
  * `lineOfSight` never inspects `id` -- and this array is never written into a `World`.
  *
  * Exported (only) so `versus-spawns.test.ts` can check its solid-wall rectangles against
- * `loadArena`'s real ones on every shipped arena -- the convergence check the duplicated
- * `mergeSolidRuns` above owes the original, the same obligation this file's own module
- * doc comment places on the `lineOfSight` reuse decision.
+ * `loadArena`'s real ones on every shipped arena -- now a proof that both call sites of
+ * the SAME shared `mergeSolidRuns` agree with the wall array `loadArena` actually builds
+ * from it, rather than a cross-check between two independent copies.
  */
 export function wallsForQuery(
   grid: string[],
