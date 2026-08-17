@@ -544,12 +544,17 @@ player can drive but a round with no enemies does not yet know how to end.
   `src/sim/math/` (PR #165) — so a diverging device would indicate a bug in the vendored
   port or the harness, not a fork in the road. Sole remaining gap: a physical iOS device,
   one URL away (`npm run trace:browser -- --beacon`, open the printed URL on the phone).
-- **Decide win/lose semantics for VERSUS.** Co-op is answered (see above), twice: the
-  default is shared ATTEMPTS (2026-08-16 ruling — a lone death costs nothing, a full wipe
-  spends a life and resets the arena), with the original shared-pool respawn-in-place
-  model behind `?dev=1&coopPool=1`. Versus remains open: "every non-player tank dead" and a HUD reading "Enemies
-  remaining" mean nothing with no AI, and nobody has decided what a win is with zero enemies
-  on the board.
+- **Decide win/lose semantics for VERSUS: ANSWERED 2026-08-17** (n-player arc PR 4;
+  docs/superpowers/plans/2026-08-17-versus-modes.md; docs/research/multiplayer.md's own
+  open question 3 carries the full write-up). Co-op is answered separately (see above),
+  twice: the default is shared ATTEMPTS (2026-08-16 ruling — a lone death costs nothing,
+  a full wipe spends a life and resets the arena), with the original shared-pool
+  respawn-in-place model behind `?dev=1&coopPool=1`. Versus (FFA + teams) is a THIRD and
+  FOURTH `World.mode`, dispatched at the same guard-first split: `loadArena` strips every
+  enemy spawn rather than repurposing one as a bonus player slot, single life per round
+  with no stock/lives system, FFA wins on exactly one player tank left alive, teams wins
+  when one team is wiped and the other has a survivor, and a simultaneous final wipeout
+  resolves to `'lose'` rather than a new `'draw'` status (named residual, not built).
 - **`TankKind` vs a `controlledBy` field on `Tank`: ANSWERED, route B (the field).** A
   scratch prototype (branch `p2-prototype`, commit `297bdaf`, off `be1bda8`) touched only
   `types.ts` and `arena.ts`, stayed `tsc --noEmit` clean, and needed no edit to any

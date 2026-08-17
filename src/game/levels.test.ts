@@ -119,6 +119,50 @@ describe('createLevelSystem: coopPool reaches the built world (composition, not 
   });
 });
 
+describe('createLevelSystem: mode/friendlyFire reach the built world (n-player arc PR 4, composition not unit)', () => {
+  // Unit tests on world.ts (versus-modes.test.ts) and arena.ts (arena.test.ts) prove
+  // World.mode/friendlyFire drive resolveStatus's dispatch and enemy stripping. They
+  // cannot see whether the DEV FLAGS that are supposed to set those fields actually do,
+  // through createLevelSystem's closure -- same composition question coopPool gets above.
+  it('mode absent leaves the campaign-coop default, enemies present', () => {
+    const sys = createLevelSystem(DEV_FLAGS_OFF, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42);
+    expect(w.mode).toBe('campaign-coop');
+    expect(w.tanks.some((t) => t.kind !== 'player')).toBe(true);
+  });
+
+  it('mode=ffa reaches world.mode and strips enemies from the built world', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'ffa', players: 4 }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 4);
+    expect(w.mode).toBe('ffa');
+    expect(w.tanks.every((t) => t.kind === 'player')).toBe(true);
+    expect(w.tanks).toHaveLength(4);
+  });
+
+  it('mode=teams stamps team on every player tank', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'teams', players: 4 }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42, undefined, undefined, 4);
+    expect(w.tanks.map((t) => t.team)).toEqual([0, 1, 0, 1]);
+  });
+
+  it('friendlyFire off leaves world.friendlyFire false (the default)', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'teams' }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).friendlyFire).toBe(false);
+  });
+
+  it('friendlyFire on reaches world.friendlyFire', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'teams', friendlyFire: true }, noRun());
+    expect(sys.world(CAMPAIGN_LEVELS[0], 42).friendlyFire).toBe(true);
+  });
+
+  it('is independent of corpseBlock/muzzleInside/coopPool', () => {
+    const sys = createLevelSystem({ ...DEV_FLAGS_OFF, mode: 'ffa', corpseBlock: true }, noRun());
+    const w = sys.world(CAMPAIGN_LEVELS[0], 42);
+    expect(w.mode).toBe('ffa');
+    expect(w.corpseBlocksShells).toBe(true);
+  });
+});
+
 describe('createLevelSystem: the sandbox', () => {
   const sandboxFlags = { ...DEV_FLAGS_OFF, level: 'sandbox' as const };
 
@@ -160,6 +204,14 @@ describe('createLevelSystem: the sandbox', () => {
   it('the sandbox branch does NOT wire coopPool -- always single-player, so createSandboxWorld never sees it and the world keeps the default', () => {
     const sys = createLevelSystem({ ...sandboxFlags, coopPool: true }, noRun());
     expect(sys.world(sys.start, 7).coopAttempts).toBe(true);
+  });
+
+  it('the sandbox branch does NOT wire mode/friendlyFire either (n-player arc PR 4): always single-player campaign-coop, enemies present', () => {
+    const sys = createLevelSystem({ ...sandboxFlags, mode: 'ffa', friendlyFire: true }, noRun());
+    const w = sys.world(sys.start, 7);
+    expect(w.mode).toBe('campaign-coop');
+    expect(w.friendlyFire).toBe(false);
+    expect(w.tanks.some((t) => t.kind !== 'player')).toBe(true);
   });
 
   it('the sandbox start ignores the active run entirely -- it is a test rig, not a level', () => {

@@ -1,5 +1,6 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
+import { teamOf } from '../sim/arena';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
@@ -137,6 +138,19 @@ export interface Hud {
    * by the same win/lose visibility rule.
    */
   setCoopKills(counts: number[] | null): void;
+  /**
+   * Versus's per-player kill/death tally (n-player arc PR 4), the FFA/teams twin of
+   * `setCoopKills` -- same `null`-means-never-show convention, same toggle-on-win/lose
+   * lifecycle, but a genuinely different selector/line: `setCoopKills` is enemy-kill-
+   * only and campaign-coop-scoped; this is player-vs-player and ffa/teams-scoped. The
+   * two are mutually exclusive per session (a world has exactly one `mode`), but kept
+   * as separate calls/selectors rather than one payload with a mode field, so neither
+   * line's rendering has to branch on data it was never given for its own mode.
+   * `kills`/`deaths` are per-slot (`Tank.controlledBy`); `mode === 'teams'` renders a
+   * PER-TEAM sum (`teamOf(slot)`, sim/arena.ts) instead of per-slot, since teams mode
+   * cares which SIDE won, not which teammate scored -- see arena.ts's `teamOf`.
+   */
+  setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void;
   /** Two-click-confirmed on the stats page. */
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
@@ -459,6 +473,7 @@ export function createHud(root: HTMLElement): Hud {
       <p class="hud-subtitle"></p>
       <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
       <p class="hud-coop-kills hud-coop-kills--hidden"></p>
+      <p class="hud-versus-results hud-versus-results--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
@@ -552,6 +567,7 @@ export function createHud(root: HTMLElement): Hud {
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
   const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
   const coopKillsEl = el.querySelector('.hud-coop-kills') as HTMLElement;
+  const versusResultsEl = el.querySelector('.hud-versus-results') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
@@ -767,6 +783,9 @@ export function createHud(root: HTMLElement): Hud {
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
   /** `null` means "never show" (1P, or coop that has not started) -- see setCoopKills. */
   let coopKillsData: number[] | null = null;
+  /** `null` means "never show" (not a versus session, or one that has not started) --
+   *  see setVersusResults. */
+  let versusResultsData: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null = null;
 
   const pct = (num: number, den: number): string =>
     den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
@@ -821,6 +840,41 @@ export function createHud(root: HTMLElement): Hud {
     const [p1, p2] = coopKillsData;
     coopKillsEl.textContent = `P1: ${p1 ?? 0} · P2: ${p2 ?? 0}`;
     coopKillsEl.classList.remove('hud-coop-kills--hidden');
+  }
+
+  /**
+   * Twin of renderCoopKillLine, one line below it -- see setVersusResults' own doc
+   * comment for why this is a separate line rather than a mode branch inside that one.
+   * `mode === 'teams'` sums kills/deaths PER TEAM (`teamOf(slot)`) rather than showing
+   * one entry per slot: teams mode cares which SIDE won. ffa shows one entry per slot,
+   * kills/deaths as `k/d`.
+   */
+  function renderVersusResultsLine(): void {
+    if (!versusResultsData) {
+      versusResultsEl.classList.add('hud-versus-results--hidden');
+      return;
+    }
+    const { mode, kills, deaths } = versusResultsData;
+    const slots = Math.max(kills.length, deaths.length);
+    let text: string;
+    if (mode === 'teams') {
+      const teamKills = [0, 0];
+      const teamDeaths = [0, 0];
+      for (let slot = 0; slot < slots; slot++) {
+        const team = teamOf(slot);
+        teamKills[team] += kills[slot] ?? 0;
+        teamDeaths[team] += deaths[slot] ?? 0;
+      }
+      text = `Team 1: ${teamKills[0]}/${teamDeaths[0]} · Team 2: ${teamKills[1]}/${teamDeaths[1]}`;
+    } else {
+      const parts: string[] = [];
+      for (let slot = 0; slot < slots; slot++) {
+        parts.push(`P${slot + 1}: ${kills[slot] ?? 0}/${deaths[slot] ?? 0}`);
+      }
+      text = parts.join(' · ');
+    }
+    versusResultsEl.textContent = text;
+    versusResultsEl.classList.remove('hud-versus-results--hidden');
   }
 
   /**
@@ -1341,7 +1395,9 @@ export function createHud(root: HTMLElement): Hud {
     // Twin toggle for coop's kill line -- renderCoopKillLine re-hides it if
     // coopKillsData is null (1P, or coop that has not started), even at win/lose.
     coopKillsEl.classList.toggle('hud-coop-kills--hidden', s !== 'win' && s !== 'lose');
+    versusResultsEl.classList.toggle('hud-versus-results--hidden', s !== 'win' && s !== 'lose');
     if (s === 'win' || s === 'lose') renderCoopKillLine();
+    if (s === 'win' || s === 'lose') renderVersusResultsLine();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       subtitleEl.textContent = 'The arena waits.';
@@ -1566,6 +1622,10 @@ export function createHud(root: HTMLElement): Hud {
     setCoopKills(counts: number[] | null): void {
       coopKillsData = counts;
       if (!coopKillsEl.classList.contains('hud-coop-kills--hidden')) renderCoopKillLine();
+    },
+    setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void {
+      versusResultsData = data;
+      if (!versusResultsEl.classList.contains('hud-versus-results--hidden')) renderVersusResultsLine();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);

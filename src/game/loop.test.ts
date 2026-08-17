@@ -107,6 +107,8 @@ interface Recorder {
   statPushes: number;
   /** Every value passed to hud.setCoopKills, in order. */
   coopKillPushes: Array<number[] | null>;
+  /** Every value passed to hud.setVersusResults, in order. */
+  versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
   levelSelects: Array<[number, number]>;
   /** Every value pushed to hud.setContinueAvailable, in order. */
   continueAvailable: boolean[];
@@ -276,6 +278,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statResets: 0,
     statPushes: 0,
     coopKillPushes: [],
+    versusResultsPushes: [],
     levelSelects: [],
     continueAvailable: [],
     runNewRuns: [],
@@ -707,6 +710,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setCoopKills: (counts: number[] | null) => {
           rec.coopKillPushes.push(counts === null ? null : [...counts]);
         },
+        setVersusResults: (data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null) => {
+          rec.versusResultsPushes.push(data === null ? null : { mode: data.mode, kills: [...data.kills], deaths: [...data.deaths] });
+        },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
         },
@@ -962,15 +968,33 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // that slot i drives the tank with REAL `controlledBy === i`, which only a
         // REAL `loadArena`-produced world can carry (the foundation plan's own spawn
         // alignment, not something this harness can fake convincingly).
-        if (playerCount !== undefined && playerCount > 1) {
+        // The REAL-world branch is taken whenever the test needs a world the synthetic
+        // fixtures cannot fake: more than one player slot, OR a versus mode (which
+        // strips enemies and stamps Tank.team inside loadArena). Review found the
+        // playerCount-only condition left `mode` silently dropped at playerCount <= 1
+        // -- the same silent-drop shape the versus composition fix closed one layer up,
+        // dormant only because no test set mode without players. Including mode here
+        // means a `mode: 'ffa'` fixture can never quietly get a campaign-coop world.
+        const wantsVersus = (opts.devFlags?.mode ?? 'campaign-coop') !== 'campaign-coop';
+        if ((playerCount !== undefined && playerCount > 1) || wantsVersus) {
           const real = createWorldFor(
-            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount,
+            // playerCount defaults to 1 when the branch was entered for versus alone.
+            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount ?? 1,
             // Mirrors levels.ts's own closure: `!flags.coopPool` -- absent/false leaves
             // the shared-attempts default (true), coopPool=1 restores the shipped pool
             // model (false). Read straight off opts.devFlags, the same source the real
             // devFlags merge below is built from, so this cannot drift from what the
             // game itself would have wired.
             !opts.devFlags?.coopPool,
+            // n-player arc PR 4 (FFA + teams): mirrors levels.ts's campaign branch
+            // (`flags.mode ?? 'campaign-coop'`, `flags.friendlyFire`) so a versus test
+            // that sets opts.devFlags.mode gets a REAL FFA/teams world -- enemies
+            // actually stripped, Tank.team actually stamped -- rather than a coop world
+            // that happens to have the right playerCount. Before this, the fake ignored
+            // devFlags.mode entirely: any test passing mode: 'ffa' here would silently
+            // get a coop world back.
+            opts.devFlags?.mode ?? 'campaign-coop',
+            opts.devFlags?.friendlyFire,
           );
           // Back-dated past COUNTDOWN_TICKS, same convention every live-play fixture
           // in this file uses (see winningWorld below): a fresh world cannot act on
@@ -2038,7 +2062,7 @@ describe('tallyCoopKills', () => {
 
   it('an enemy killed by P2\'s shell increments coopKills[1], not coopKills[0]', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into); // by tankId 2 = P2 (controlledBy 1)
+    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into, []); // by tankId 2 = P2 (controlledBy 1)
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBe(1);
   });
@@ -2049,21 +2073,21 @@ describe('tallyCoopKills', () => {
     // source-discriminating refactor cannot silently drop mine kills from the tally.
     const into: number[] = [];
     const mineKill = { type: 'tank-destroyed', tankId: 3, kind: 'brown', by: { source: 'blast', ownerId: 2 }, pos: { x: 0, y: 0 } } as SimEvent;
-    tallyCoopKills([mineKill], twoPlayerWorld(), into);
+    tallyCoopKills([mineKill], twoPlayerWorld(), into, []);
     expect(into[1]).toBe(1); // P2's mine, P2's kill
     expect(into[0]).toBeUndefined();
   });
 
   it('an enemy killed by P1\'s shell increments coopKills[0], not coopKills[1]', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into); // by tankId 1 = P1 (controlledBy 0)
+    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into, []); // by tankId 1 = P1 (controlledBy 0)
     expect(into[0]).toBe(1);
     expect(into[1]).toBeUndefined();
   });
 
   it('AI-on-AI friendly fire (an enemy killing another enemy) increments neither slot', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into); // killer tankId 4 = teal, not a player
+    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into, []); // killer tankId 4 = teal, not a player
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBeUndefined();
   });
@@ -2071,7 +2095,7 @@ describe('tallyCoopKills', () => {
   it('a player-kind death (e.kind === player) is excluded entirely, even if by.ownerId resolves to a player', () => {
     const playerDied: SimEvent = { type: 'tank-destroyed', tankId: 1, kind: 'player', by: { source: 'shell', ownerId: 2 }, pos: { x: 0, y: 0 } };
     const into: number[] = [];
-    tallyCoopKills([playerDied], twoPlayerWorld(), into);
+    tallyCoopKills([playerDied], twoPlayerWorld(), into, []);
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBeUndefined();
   });
@@ -2082,6 +2106,7 @@ describe('tallyCoopKills', () => {
       [destroyedEnemy(3, 1), destroyedEnemy(4, 2), destroyedEnemy(3, 4) /* friendly fire, excluded */],
       { tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] } as World,
       into,
+      [],
     );
     expect(into[0]).toBe(1);
     expect(into[1]).toBe(1);
@@ -2090,8 +2115,66 @@ describe('tallyCoopKills', () => {
   it('a single-player world (no controlledBy) falls back to slot 0', () => {
     const into: number[] = [];
     const world = { tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
-    tallyCoopKills([destroyedEnemy(3, 1)], world, into);
+    tallyCoopKills([destroyedEnemy(3, 1)], world, into, []);
     expect(into[0]).toBe(1);
+  });
+});
+
+describe('tallyCoopKills: ffa/teams player-vs-player attribution (n-player arc PR 4)', () => {
+  const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
+    ({ id, kind, controlledBy }) as Tank;
+
+  const versusWorld = (mode: 'ffa' | 'teams') =>
+    ({
+      mode,
+      tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'player', 2)],
+    }) as World;
+
+  const playerDestroyed = (victimTankId: number, killerOwnerId: number): SimEvent =>
+    ({ type: 'tank-destroyed', tankId: victimTankId, kind: 'player', by: { source: 'shell', ownerId: killerOwnerId }, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  for (const mode of ['ffa', 'teams'] as const) {
+    it(`${mode}: P2's shell killing P1 credits kills[1] and deaths[0]`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills([playerDestroyed(1, 2)], versusWorld(mode), kills, deaths); // victim tankId 1 (P1), killer tankId 2 (P2)
+      expect(kills[1]).toBe(1);
+      expect(kills[0]).toBeUndefined();
+      expect(deaths[0]).toBe(1);
+      expect(deaths[1]).toBeUndefined();
+    });
+
+    it(`${mode}: self-elimination (killer id === victim id) credits a death to the victim's slot and a kill to NOBODY`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills([playerDestroyed(1, 1)], versusWorld(mode), kills, deaths); // P1's own shell/mine kills P1
+      expect(kills).toEqual([]); // no slot credited a kill
+      expect(deaths[0]).toBe(1);
+    });
+
+    it(`${mode}: accumulates across multiple events, mixing a normal kill and a self-elimination`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills(
+        [playerDestroyed(1, 2) /* P2 kills P1 */, playerDestroyed(3, 3) /* P3 self-eliminates */],
+        versusWorld(mode),
+        kills,
+        deaths,
+      );
+      expect(kills[1]).toBe(1);
+      expect(kills[2]).toBeUndefined();
+      expect(deaths[0]).toBe(1);
+      expect(deaths[2]).toBe(1);
+    });
+  }
+
+  it('campaign-coop ignores player-vs-player deaths entirely -- the dispatch does not leak the new rule into the old mode', () => {
+    const kills: number[] = [];
+    const deaths: number[] = [];
+    const coopWorld = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)] } as World;
+    tallyCoopKills([playerDestroyed(1, 2)], coopWorld, kills, deaths);
+    expect(kills).toEqual([]);
+    expect(deaths).toEqual([]);
   });
 });
 
@@ -2710,6 +2793,52 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(last![0] ?? 0).toBe(0); // not misfiled onto P1's slot
       h.handle.dispose();
     });
+
+    // n-player arc PR 4 (FFA + teams): the versus twin of the test above. tallyCoopKills
+    // (loop.test.ts's own describe block) and hud.setVersusResults (hud.test.ts) are each
+    // unit-tested directly -- neither can see whether onFrameEvents' mode dispatch
+    // (`isVersus` above) still routes a real frame's kill into setVersusResults instead of
+    // setCoopKills. Before this test, versusResultsPushes was recorded but nothing read
+    // it -- a dangling hook: the dispatch branch that fires when isVersus is true was
+    // exercised by no test in this file, only by the isVersus===false branch above.
+    it('a versus (ffa) kill flows through tallyCoopKills into hud.setVersusResults, and setCoopKills gets null, in a real driven frame', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      const world = h.rec.builtWorlds[0];
+      // Confirms the fake levels.world() above actually threaded devFlags.mode into the
+      // REAL createWorldFor call -- if it silently built a campaign-coop world instead
+      // (as it did before this test motivated extending the fake), every assertion below
+      // would either fail confusingly or pass vacuously against the wrong dispatch branch.
+      expect(world.mode).toBe('ffa');
+      const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      world.bullets.push({
+        id: 901, ownerId: p2.id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const lastVersus = h.rec.versusResultsPushes.at(-1);
+      expect(lastVersus).not.toBeNull();
+      expect(lastVersus!.mode).toBe('ffa');
+      expect(lastVersus!.kills[1]).toBe(1); // P2's slot, attributed by tallyCoopKills
+      expect(lastVersus!.deaths[0]).toBe(1); // P1's slot died
+      // The coop line is suppressed while in a versus mode -- the two results lines are
+      // never both live at once (loop.ts's isVersus dispatch).
+      expect(h.rec.coopKillPushes.at(-1)).toBeNull();
+      h.handle.dispose();
+    });
+  });
+
+  it('a versus fixture with NO players flag still gets a REAL versus world -- the fake cannot silently hand back campaign-coop', () => {
+    // Review found this gap dormant: the fake took its real-world branch on playerCount
+    // alone, so `mode: 'ffa'` without `players` fell through to a synthetic coop world
+    // and any versus assertion would have been measuring the wrong dispatch branch.
+    // Breaks if the fake's branch condition drops its mode term.
+    const h = boot(makeDeps({ devFlags: { mode: 'ffa' } }));
+    const world = h.rec.builtWorlds.at(-1)!;
+    expect(world.mode).toBe('ffa');
+    expect(world.tanks.every((t: Tank) => t.kind === 'player')).toBe(true); // enemies stripped
+    h.handle.dispose();
   });
 
   describe('shared-attempts ruling (docs/superpowers/plans/2026-08-16-coop-attempts.md): level clear revives everyone', () => {

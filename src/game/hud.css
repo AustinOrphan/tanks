@@ -740,6 +740,18 @@
   display: none;
 }
 
+/* Versus's per-player kill/death tally (n-player arc PR 4, FFA + teams) -- the
+   .hud-coop-kills precedent, one line below it. */
+.hud-versus-results {
+  margin-top: -6px;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-versus-results--hidden {
+  display: none;
+}
+
 /* ---- Customize (the paint shop) --------------------------------------------------- */
 
 .hud-customize {

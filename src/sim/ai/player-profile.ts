@@ -133,20 +133,39 @@ const PLAYER_MINE_CHANCE = 0.05;
 /**
  * True if `other` should be treated as an opponent of `subject` -- the single predicate
  * both `nearestEnemy`'s positional scan and the LOS target-acquisition loop hardcoded
- * separately (`t.kind === 'player'` / `!== 'player'`, both gated on `t.alive`). Today's
- * body is exactly what those two checks already did: every non-player-kind, alive tank
- * is an opponent, because multiplayer teammates (any OTHER player-kind tank) never
- * fight each other and are filtered the same way `subject` already is. `_world`/
- * `_subject` are unused by TODAY's rule (underscored to satisfy noUnusedParameters) --
- * kept in the signature because this is the seam a later mode-aware targeting pass
- * swaps in one place, rather than hunting down every `kind` check this file grows in
- * the meantime. Named `subject`, not `self`: purity.test.ts's guard flags any bare
- * `self.`/`self[` as the DOM/worker global by regex, not by scope, so a LOCAL `self`
- * parameter that is ever dotted (`self.pos`) is a real false positive there, not a
- * hypothetical one -- confirmed by running into it while writing this function.
+ * separately (`t.kind === 'player'` / `!== 'player'`, both gated on `t.alive`).
+ *
+ * Mode-aware (n-player arc PR 4 -- the seam PR 2b built for exactly this). This is the
+ * fix that lets a BOT actually fight in FFA/teams -- without it, a bot dropped into a
+ * versus match finds zero targets under the old kind-only rule and just wanders (caught
+ * before PR 4 was written, named in its design doc, not discovered after shipping).
+ *
+ *  - `'campaign-coop'`: today's rule, byte-for-byte -- every non-player-kind, alive tank
+ *    is an opponent. Multiplayer teammates (any OTHER player-kind tank) never fight each
+ *    other here.
+ *  - `'ffa'`: any OTHER alive player-kind tank (`other.id !== subject.id`) -- there are
+ *    no enemy-kind tanks in this mode at all (loadArena strips them), so the predicate's
+ *    whole job shifts from "not a teammate" to "not myself".
+ *  - `'teams'`: any OTHER alive player-kind tank on a DIFFERENT team
+ *    (`other.team !== subject.team`). `Tank.team` is only ever stamped when
+ *    `mode === 'teams'` (arena.ts), so both sides are always defined here in real play.
+ *
+ * Named `subject`, not `self`: purity.test.ts's guard flags any bare `self.`/`self[` as
+ * the DOM/worker global by regex, not by scope, so a LOCAL `self` parameter that is ever
+ * dotted (`self.pos`) is a real false positive there, not a hypothetical one --
+ * confirmed by running into it while writing this function's first draft.
  */
-function isOpponent(_world: World, _subject: Tank, other: Tank): boolean {
-  return other.kind !== 'player' && other.alive;
+function isOpponent(world: World, subject: Tank, other: Tank): boolean {
+  if (!other.alive) return false;
+  switch (world.mode) {
+    case 'ffa':
+      return other.kind === 'player' && other.id !== subject.id;
+    case 'teams':
+      return other.kind === 'player' && other.team !== subject.team;
+    case 'campaign-coop':
+    default:
+      return other.kind !== 'player';
+  }
 }
 
 /**

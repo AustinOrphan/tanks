@@ -1396,6 +1396,51 @@ describe('hud: the stats page', () => {
   });
 });
 
+describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent)', () => {
+  it('win panel carries the ffa results line, per-slot kills/deaths', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults({ mode: 'ffa', kills: [2, 0, 1], deaths: [1, 3, 0] });
+    h.setState('win');
+    const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
+    expect(line).toBe('P1: 2/1 · P2: 0/3 · P3: 1/0');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(false);
+  });
+
+  it('win panel carries the teams results line as PER-TEAM sums, not per-slot', () => {
+    const { hud: h, root } = mount();
+    // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
+    h.setVersusResults({ mode: 'teams', kills: [2, 1, 3], deaths: [1, 4, 0] });
+    h.setState('win');
+    const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
+    expect(line).toBe('Team 1: 5/1 · Team 2: 1/4');
+  });
+
+  it('setVersusResults(null) keeps the line hidden even at win/lose', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults(null);
+    h.setState('win');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+    h.setState('lose');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+  });
+
+  it('the versus results line is hidden outside win/lose, even with live data set', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults({ mode: 'ffa', kills: [1], deaths: [0] });
+    h.setState('playing');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+  });
+
+  it('updates live while the win panel is already open, same as the coop kill line', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults({ mode: 'ffa', kills: [1, 0], deaths: [0, 1] });
+    h.setState('win');
+    expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/0 · P2: 0/1');
+    h.setVersusResults({ mode: 'ffa', kills: [1, 1], deaths: [1, 1] });
+    expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/1 · P2: 1/1');
+  });
+});
+
 describe('hud: achievements', () => {
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-achievements-open') as HTMLButtonElement;

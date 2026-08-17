@@ -1,5 +1,5 @@
 import { stepInputs, type World } from '../sim/world';
-import type { InputState, UnarmedTrigger } from '../sim/types';
+import type { InputState, UnarmedTrigger, GameMode } from '../sim/types';
 import type { SimEvent } from '../sim/events';
 import balanceJson from '../sim/config/data/balance.json';
 import tankDefsJson from '../sim/config/data/tank-defs.json';
@@ -33,7 +33,7 @@ export const REPLAY_FORMAT = 'tanks.replay';
  * Bump it when the encoding changes; it says nothing about whether the sim would
  * produce the same run, which is what the fingerprint is for.
  */
-export const REPLAY_SCHEMA = 2;
+export const REPLAY_SCHEMA = 3;
 
 /**
  * Ten minutes at 60 Hz. A trace that grows forever is a memory leak in a flag
@@ -76,6 +76,17 @@ export interface ReplayMeta {
   muzzleClearsTanks: boolean;
   /** See World.coopAttempts. Read off the world, same as unarmedTrigger. */
   coopAttempts: boolean;
+  /**
+   * See World.mode. NOT derivable from the tank array the way playerCount is (a
+   * campaign-coop, ffa and teams world can all hold the same tank count) -- a recorded
+   * FFA session replayed without this would reconstruct at createWorld's default
+   * ('campaign-coop') and resolveStatus would dispatch differently on playback than it
+   * did live, silently producing a different win/lose outcome from the one recorded.
+   * Read off the world, same as unarmedTrigger. n-player arc PR 4; REPLAY_SCHEMA 2 -> 3.
+   */
+  mode: GameMode;
+  /** See World.friendlyFire. Read off the world, same as unarmedTrigger. n-player arc PR 4. */
+  friendlyFire: boolean;
 }
 
 /** `[moveX, moveY, aimX, aimY, bits]`, bits = fire | mine<<1. Still the per-SLOT shape:
@@ -134,9 +145,13 @@ export function fingerprint(value: unknown): string {
 }
 
 /**
- * `REPLAY_SCHEMA`'s history: 1 was the single-slot flat `EncodedInput[]` shape. 2 (this
- * PR) is the per-tick `EncodedTick[]` = `EncodedInput[][]` shape below, one entry per
- * active input slot -- couch co-op's input routing. There is no migration layer for
+ * `REPLAY_SCHEMA`'s history: 1 was the single-slot flat `EncodedInput[]` shape. 2 was
+ * the per-tick `EncodedTick[]` = `EncodedInput[][]` shape below, one entry per active
+ * input slot -- couch co-op's input routing. 3 (n-player arc PR 4) adds no new tick
+ * shape at all -- `ticks` is unchanged -- but adds `ReplayMeta.mode`/`friendlyFire`:
+ * `mode` is not derivable from the tank array the way `playerCount` is, so a trace
+ * recorded from a versus session needs it to reconstruct the same win/lose dispatch on
+ * playback. There is no migration layer for
  * replays anywhere in this codebase; a schema mismatch is already outright rejection
  * (`checkTrace`), never reinterpreted, and `?dev=1&replay=1` traces are a dev-console
  * debug capture, not user save data, so rejecting an old trace rather than reading it
@@ -294,6 +309,8 @@ export function replayMetaFor(world: World, arenaId: string): ReplayMeta {
     corpseBlocksShells: world.corpseBlocksShells,
     muzzleClearsTanks: world.muzzleClearsTanks,
     coopAttempts: world.coopAttempts,
+    mode: world.mode,
+    friendlyFire: world.friendlyFire,
   };
 }
 

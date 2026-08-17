@@ -30,6 +30,8 @@ const META: ReplayMeta = {
   corpseBlocksShells: false,
   muzzleClearsTanks: true,
   coopAttempts: true,
+  mode: 'campaign-coop',
+  friendlyFire: false,
 };
 
 /**
@@ -80,6 +82,8 @@ function worldFor(meta: ReplayMeta, playerCount = 1): World {
     meta.muzzleClearsTanks,
     playerCount,
     meta.coopAttempts,
+    meta.mode,
+    meta.friendlyFire,
   );
 }
 
@@ -266,6 +270,8 @@ describe('replayMetaFor', () => {
       corpseBlocksShells: false,
       muzzleClearsTanks: true,
       coopAttempts: true,
+      mode: 'campaign-coop',
+      friendlyFire: false,
     });
   });
 
@@ -283,6 +289,8 @@ describe('replayMetaFor', () => {
       corpseBlocksShells: true,
       muzzleClearsTanks: false,
       coopAttempts: true,
+      mode: 'campaign-coop',
+      friendlyFire: false,
     });
   });
 
@@ -300,7 +308,35 @@ describe('replayMetaFor', () => {
       corpseBlocksShells: false,
       muzzleClearsTanks: true,
       coopAttempts: false,
+      mode: 'campaign-coop',
+      friendlyFire: false,
     });
+  });
+
+  it('reads mode and friendlyFire off the world too, when a versus mode was requested (n-player arc PR 4)', () => {
+    const world = createWorldFor(ARENAS[0], 11, 'none', 3, undefined, undefined, 4, undefined, 'teams', true);
+    expect(replayMetaFor(world, 'arena-01')).toEqual({
+      arenaId: 'arena-01',
+      seed: 11,
+      lives: 3,
+      unarmedTrigger: 'none',
+      invincible: false,
+      corpseBlocksShells: false,
+      muzzleClearsTanks: true,
+      coopAttempts: true,
+      mode: 'teams',
+      friendlyFire: true,
+    });
+  });
+
+  it('round-trips mode and friendlyFire through createWorldFor, at schema 3 -- enemies stay stripped on the rebuilt world too', () => {
+    const recorded = createWorldFor(ARENAS[0], 12, 'none', 3, undefined, undefined, 4, undefined, 'ffa', undefined);
+    const meta = replayMetaFor(recorded, 'arena-01');
+    expect(meta.mode).toBe('ffa');
+    const rebuilt = worldFor(meta, 4);
+    expect(rebuilt.mode).toBe('ffa');
+    expect(rebuilt.friendlyFire).toBe(false);
+    expect(rebuilt.tanks.every((t) => t.kind === 'player')).toBe(true);
   });
 
   it('round-trips through createWorldFor: a rebuilt world still carries the recorded switches', () => {

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
   STRIPE_TURRET_MODE, IDENTITY_RING_COLORS, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R,
+  TEAM_COLORS,
 } from './entities';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
@@ -1809,6 +1810,83 @@ describe('player identity: ring and shell tint', () => {
       }
       expect(ring, 'ring vs unstyled placeholder').not.toBe(placeholder);
     }
+    views.dispose();
+  });
+
+  // n-player arc PR 4: teams mode colours rings/shell tints by TEAM (2 hues) rather
+  // than per-slot identity -- dispatched at the same lookup site the per-slot palette
+  // already lives at (identityColor). The per-slot palette stays for
+  // campaign-coop/ffa, which is why the tests above (built at the default
+  // 'campaign-coop' mode) are untouched.
+  function fourPlayerTeamsWorld(): World {
+    const p0: Tank = { ...makeTank(1, 'player', 3, 3), controlledBy: 0, team: 0 };
+    const p1: Tank = { ...makeTank(2, 'player', 9, 9), controlledBy: 1, team: 1 };
+    const p2: Tank = { ...makeTank(3, 'player', 15, 3), controlledBy: 2, team: 0 };
+    const p3: Tank = { ...makeTank(4, 'player', 21, 9), controlledBy: 3, team: 1 };
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 3, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 9, y: 9 }, angle: 0 },
+      { kind: 'player', pos: { x: 15, y: 3 }, angle: 0 },
+      { kind: 'player', pos: { x: 21, y: 9 }, angle: 0 },
+    ];
+    return createWorld({ walls: [], tanks: [p0, p1, p2, p3], spawns, lives: 3, mode: 'teams' });
+  }
+
+  it('TEAM_COLORS: exactly 2 hues, pairwise distinct from each other, every roster colour and the placeholder', () => {
+    expect(TEAM_COLORS).toHaveLength(2);
+    expect(TEAM_COLORS[0]).not.toBe(TEAM_COLORS[1]);
+    // Real rendered placeholder, same method as the identity-ring sweep above.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    views.sync(twoPlayerWorld(), twoPlayerWorld(), 0);
+    let placeholder = -1;
+    scene.traverse((o) => {
+      if (o.name !== 'hull') return;
+      let g: THREE.Object3D | null = o;
+      while (g.parent && g.parent.type !== 'Scene') g = g.parent;
+      if (g && (g as THREE.Group).position.x === 9) {
+        placeholder = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
+      }
+    });
+    expect(placeholder).not.toBe(-1);
+    for (const team of TEAM_COLORS) {
+      for (const kind of TANK_KINDS) {
+        expect(team, `team vs ${kind}`).not.toBe(parseInt(configFor(kind).color.slice(1), 16));
+      }
+      for (const ring of IDENTITY_RING_COLORS) {
+        expect(team, 'team vs an identity-ring hue').not.toBe(ring);
+      }
+      expect(team, 'team vs unstyled placeholder').not.toBe(placeholder);
+    }
+    views.dispose();
+  });
+
+  it('teams mode colours every ring by TEAM, not by slot -- slots 0/2 (team 0) match, slots 1/3 (team 1) match, and the two teams differ', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = fourPlayerTeamsWorld();
+    views.sync(w, w, 0);
+    const [c0, c1, c2, c3] = [
+      ringColorAt(scene, 3), ringColorAt(scene, 9), ringColorAt(scene, 15), ringColorAt(scene, 21),
+    ];
+    expect(c0).toBe(TEAM_COLORS[0]);
+    expect(c1).toBe(TEAM_COLORS[1]);
+    expect(c2).toBe(TEAM_COLORS[0]); // team 0, same colour as slot 0
+    expect(c3).toBe(TEAM_COLORS[1]); // team 1, same colour as slot 1
+    expect(c0).not.toBe(c1);
+    // Negative control: this is NOT just the per-slot palette read differently -- slot
+    // 2's colour must not be IDENTITY_RING_COLORS[2] (its per-slot entry).
+    expect(c2).not.toBe(IDENTITY_RING_COLORS[2]);
+    views.dispose();
+  });
+
+  it('teams mode colours shell tint by TEAM too, mirroring the ring dispatch', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = fourPlayerTeamsWorld();
+    w.bullets.push(playerBullet(60, 3, 15)); // slot 2 (team 0)'s shell, at x=15
+    views.sync(w, w, 0);
+    expect(shellEmissiveAt(scene, 15)).toBe(TEAM_COLORS[0]);
     views.dispose();
   });
 

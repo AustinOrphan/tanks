@@ -1,4 +1,4 @@
-import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger } from './types';
+import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger, GameMode } from './types';
 import { angleOf, slewAngle, vsub } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks, resolveWalls } from './collision';
@@ -63,6 +63,27 @@ export interface World {
    * which is the ONLY thing that ever passes `false` here.
    */
   coopAttempts: boolean;
+  /**
+   * Which win/lose rule this world's `resolveStatus` dispatches to, and which spawn set
+   * `loadArena` built it from -- the n-player arc's PR 4 (FFA + teams). See GameMode
+   * (types.ts). Non-optional here (every World has one), optional on createWorld's own
+   * init -- the exact same shape as `corpseBlocksShells`/`muzzleClearsTanks` above.
+   * Default `'campaign-coop'`, the shipped rule: `resolveStatus`'s dispatch (below)
+   * routes this value into the ORIGINAL guard-first body, byte-untouched, which is the
+   * whole trace argument -- every existing call site that never passes `mode` keeps
+   * producing exactly today's world.
+   */
+  mode: GameMode;
+  /**
+   * Whether a shell or mine blast harms a teammate -- meaningful only in `'teams'` mode.
+   * Default false (protect teammates by default; see the arc design's "Owner forks"
+   * section for the rationale and the named absence of a settled genre convention).
+   * Self-disabling outside `'teams'` by construction: the friendly-fire gate in
+   * bullets.ts/mines.ts also requires both tanks to carry a `team`, which `loadArena`
+   * only ever stamps when `mode === 'teams'` -- so this field is inert in
+   * `'campaign-coop'`/`'ffa'` whatever its value, not merely unread.
+   */
+  friendlyFire: boolean;
   tanks: Tank[];
   bullets: Bullet[];
   mines: Mine[];
@@ -97,6 +118,10 @@ export function createWorld(init: {
   muzzleClearsTanks?: boolean;
   /** Defaults to true, the shared-attempts ruling. See World.coopAttempts. */
   coopAttempts?: boolean;
+  /** Defaults to 'campaign-coop', the shipped rule. See World.mode. */
+  mode?: GameMode;
+  /** Defaults to false. See World.friendlyFire. */
+  friendlyFire?: boolean;
 }): World {
   const maxId = Math.max(
     0,
@@ -111,6 +136,8 @@ export function createWorld(init: {
     corpseBlocksShells: init.corpseBlocksShells ?? false,
     muzzleClearsTanks: init.muzzleClearsTanks ?? true,
     coopAttempts: init.coopAttempts ?? true,
+    mode: init.mode ?? 'campaign-coop',
+    friendlyFire: init.friendlyFire ?? false,
     tanks: init.tanks,
     bullets: [],
     mines: [],
@@ -143,6 +170,8 @@ export function cloneWorld(world: World): World {
     corpseBlocksShells: world.corpseBlocksShells,
     muzzleClearsTanks: world.muzzleClearsTanks,
     coopAttempts: world.coopAttempts,
+    mode: world.mode,
+    friendlyFire: world.friendlyFire,
     status: world.status,
     lives: world.lives,
     roundStartTick: world.roundStartTick,
@@ -468,11 +497,74 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
   }
 }
 
+/**
+ * FFA's win rule (n-player arc PR 4): exactly one player tank alive, every other player
+ * tank dead. Single life per round -- no stock/lives system (see the arc design's "Owner
+ * forks" section) -- so there is no death handling to speak of, unlike resolveStatusCoop:
+ * a dead player simply stays dead (stepRespawns is gated off outside campaign-coop, see
+ * stepInputs below), and this function only ever has to notice when the LAST one falls.
+ *
+ * A simultaneous final wipeout (the last two players trade a kill the same tick) leaves
+ * ZERO alive, which fails "exactly one alive" -- resolves to 'lose', not a third status.
+ * Deliberately no `'draw'`: growing `World.status`'s 3-value union touches game/state.ts,
+ * HUD copy and achievements gating, real separately-scoped surface no owner directive
+ * asked for -- named residual, not a silent gap.
+ */
+function resolveStatusFfa(world: World, events: SimEvent[]): void {
+  const players = world.tanks.filter((t) => t.kind === 'player');
+  const alive = players.filter((t) => t.alive);
+  if (alive.length === 1) {
+    world.status = 'win';
+    events.push({ type: 'win' });
+  } else if (alive.length === 0) {
+    world.status = 'lose';
+    events.push({ type: 'lose' });
+  }
+}
+
+/**
+ * Teams' win rule (n-player arc PR 4): one team's players are all dead, the other team
+ * has a survivor. `Tank.team` is `teamOf(slot) = slot % 2` (arena.ts), stamped only when
+ * `mode === 'teams'`, so every player tank here carries one. Same single-life,
+ * no-stock, no-draw shape as resolveStatusFfa -- see its own doc comment.
+ *
+ * A simultaneous wipeout of BOTH teams the same tick leaves neither with a survivor,
+ * which is neither team's win -- resolves to 'lose', matching FFA's own simultaneous
+ * case rather than inventing a second rule for it.
+ */
+function resolveStatusTeams(world: World, events: SimEvent[]): void {
+  const players = world.tanks.filter((t) => t.kind === 'player');
+  const teamsAlive = new Set(players.filter((t) => t.alive).map((t) => t.team));
+  if (teamsAlive.size === 1) {
+    world.status = 'win';
+    events.push({ type: 'win' });
+  } else if (teamsAlive.size === 0) {
+    world.status = 'lose';
+    events.push({ type: 'lose' });
+  }
+}
+
 export function resolveStatus(world: World, events: SimEvent[]): void {
   // step() latches on status, but the export is called directly by tests and by
   // anything embedding the sim. Without this guard a second call on a won world
   // pushes a second `win` -- and a second victory stinger.
   if (world.status !== 'playing') return;
+
+  // n-player arc PR 4: a mode dispatch, generalizing the coop guard-first split above
+  // (see resolveStatusCoop's own doc comment) a fourth way. 'campaign-coop' falls
+  // through to the ORIGINAL body below, byte-untouched -- this switch's whole job is to
+  // route around it, never to alter it -- which is the entire trace argument: `mode`
+  // defaults to 'campaign-coop' at every call site that does not pass one (including
+  // tools/baseline/trace.ts's), so BASELINE_HASH is unmoved by this PR (confirmed
+  // empirically, not merely argued -- see tools/baseline/trace.test.ts).
+  if (world.mode === 'ffa') {
+    resolveStatusFfa(world, events);
+    return;
+  }
+  if (world.mode === 'teams') {
+    resolveStatusTeams(world, events);
+    return;
+  }
 
   // Two or more player-kind tanks: coop semantics, entirely separate machinery
   // (resolveStatusCoop above) -- shared ATTEMPTS by default since the 2026-08-16
@@ -545,7 +637,13 @@ export function stepInputs(world: World, inputs: InputState[]): StepResult {
     // (cheap boolean, touches nothing when false), not a "never even called"
     // structural no-op; see tools/baseline/trace.test.ts's comment on why the golden
     // trace cannot distinguish the two.
-    if (countPlayerTanks(draft) >= 2) stepRespawns(draft, events);
+    //
+    // `mode === 'campaign-coop' &&` (n-player arc PR 4) is functionally a no-op on top
+    // of the player-count check: only resolveStatusCoop ever sets respawnAtTick, so the
+    // old gate already never revived anyone in 'ffa'/'teams' (versus modes never call
+    // stepRespawns' setter). Added anyway to make the mode boundary legible at every
+    // place it is checked, not only inside resolveStatus -- see the arc design.
+    if (draft.mode === 'campaign-coop' && countPlayerTanks(draft) >= 2) stepRespawns(draft, events);
     applyPlayerInputs(draft, inputs, events);
     stepAi(draft, events);
     stepBlasts(draft, events);

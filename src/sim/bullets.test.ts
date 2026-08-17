@@ -35,6 +35,7 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     disarmed: p.disarmed,
     invincible: p.invincible,
     shieldUntilTick: p.shieldUntilTick,
+    team: p.team,
   }
 }
 
@@ -618,7 +619,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
       roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, tanks: [], mines: [], blasts: [],
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop' as const, friendlyFire: false, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -635,7 +636,7 @@ describe('stepBullets retires a shell that is inside a wall', () => {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
       roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, tanks: [], mines: [], blasts: [],
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop' as const, friendlyFire: false, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: -2, minY: 0, maxX: 0, maxY: 18 }, kind: 'solid' as const, destroyed: false }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -746,7 +747,7 @@ describe('shells versus wall kinds', () => {
     const world = {
       tick: 0, nextId: 100, seed: 1, spawns: [], status: 'playing' as const, lives: 3,
       roundStartTick: 0, unarmedTrigger: 'none' as const,
-      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, tanks: [], mines: [], blasts: [],
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop' as const, friendlyFire: false, tanks: [], mines: [], blasts: [],
       walls: [{ id: 1, aabb: { minX: 2, minY: -2, maxX: 3, maxY: 2 }, kind, destroyed }],
       bullets: [{
         id: 50, ownerId: 1, type: 'normal' as const,
@@ -905,6 +906,49 @@ describe('resolveBulletHits: shielded tanks (coop post-respawn immunity)', () =>
     const events: SimEvent[] = []
     resolveBulletHits(world, events)
     expect(world.tanks[0].alive).toBe(false)
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(true)
+  })
+})
+
+describe('resolveBulletHits: friendly fire (n-player arc PR 4, teams mode)', () => {
+  // Team is a three-place concept (arc design); this is place 1 of 3. Gate:
+  // `t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam &&
+  // !world.friendlyFire`, ownerTeam resolved via world.tanks.find on the shell's
+  // ownerId -- no new Bullet field, mirroring how shell tint already resolves owner
+  // identity at hit time (render/entities.ts) rather than widening the struct.
+  function fixture(friendlyFire: boolean, shooterTeam: number | undefined, targetTeam: number | undefined) {
+    const shooter = mkTank({ id: 7, kind: 'player', pos: { x: -5, y: 0 }, team: shooterTeam })
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, team: targetTeam })
+    const world = createWorld({ walls: [], tanks: [shooter, target], spawns: [], lives: 3, mode: 'teams', friendlyFire })
+    world.bullets.push({ id: 9, ownerId: 7, type: 'normal', pos: { x: 0.7, y: 0 }, vel: { x: NORMAL_SPEED, y: 0 }, bouncesLeft: 1, alive: true })
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    return { world, events, target: world.tanks.find((t) => t.id === 2)! }
+  }
+
+  it('friendlyFire OFF: a teammate shell detonates harmlessly -- the shell is consumed, the tank survives, no tank-destroyed event', () => {
+    const { world, events, target } = fixture(false, 0, 0)
+    expect(target.alive).toBe(true)
+    expect(world.bullets).toHaveLength(0) // shell still consumed -- a wall to ordnance, not a ghost
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(false)
+    expect(events.some((e) => e.type === 'explosion')).toBe(true) // the impact still reads
+  })
+
+  it('friendlyFire OFF: an enemy-team shell still kills normally -- the gate is team-specific, not a blanket immunity', () => {
+    const { target, events } = fixture(false, 0, 1)
+    expect(target.alive).toBe(false)
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(true)
+  })
+
+  it('friendlyFire ON: a teammate shell kills too -- the escape hatch actually opens', () => {
+    const { target, events } = fixture(true, 0, 0)
+    expect(target.alive).toBe(false)
+    expect(events.some((e) => e.type === 'tank-destroyed')).toBe(true)
+  })
+
+  it('the gate is self-disabling when team is undefined (campaign-coop/ffa never stamp it): a same-owner-team-undefined pair still dies to friendly fire OFF', () => {
+    const { target, events } = fixture(false, undefined, undefined)
+    expect(target.alive).toBe(false)
     expect(events.some((e) => e.type === 'tank-destroyed')).toBe(true)
   })
 })

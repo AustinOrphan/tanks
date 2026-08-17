@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld } from './arena';
+import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld, createWorldFor } from './arena';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
 import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
@@ -542,6 +542,78 @@ describe('loadArena', () => {
     } as never);
     const dest = a.walls.filter((w) => w.kind === 'destructible');
     expect(dest).toHaveLength(3);
+  });
+});
+
+describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
+  // Denominator for every "all N arenas" claim below: ARENAS.length is 5 at this tree
+  // (arena-01..05) -- asserted once so a sixth arena silently narrows nothing.
+  it('ARENAS holds exactly 5 shipped arenas -- the population every sweep below claims', () => {
+    expect(ARENAS.length).toBe(5);
+  });
+
+  it('strips every non-player spawn letter in ffa/teams, on all 5 shipped arenas: only player tanks are ever instantiated', () => {
+    for (const arena of ARENAS) {
+      for (const mode of ['ffa', 'teams'] as const) {
+        const { tanks, spawns } = loadArena(arena, 4, mode);
+        expect(tanks.every((t) => t.kind === 'player'), `${mode}: a non-player tank was spawned`).toBe(true);
+        expect(spawns.every((s) => s.kind === 'player'), `${mode}: a non-player spawn was recorded`).toBe(true);
+        expect(tanks).toHaveLength(4); // P1 + 3 co-players, none of them enemies
+      }
+    }
+  });
+
+  it('campaign-coop (default and explicit) keeps every enemy letter, unchanged from before this param existed', () => {
+    for (const arena of ARENAS) {
+      const implicitDefault = loadArena(arena, 1);
+      const explicitCoop = loadArena(arena, 1, 'campaign-coop');
+      expect(explicitCoop).toEqual(implicitDefault);
+      expect(implicitDefault.tanks.some((t) => t.kind !== 'player')).toBe(true); // every shipped arena ships enemies
+    }
+  });
+
+  it('teams stamps team = slot % 2 on every player tank, N=4, on all 5 shipped arenas', () => {
+    for (const arena of ARENAS) {
+      const { tanks } = loadArena(arena, 4, 'teams');
+      const players = tanks.filter((t) => t.kind === 'player');
+      expect(players).toHaveLength(4);
+      // Slot order follows controlledBy (0 for P1, undefined coerced to 0, 1/2/3 for
+      // co-players) -- PASS 1a places P1 first, PASS 1b appends co-players in order.
+      expect(players[0].team).toBe(0); // P1, slot 0
+      expect(players[1].team).toBe(1); // slot 1
+      expect(players[2].team).toBe(0); // slot 2
+      expect(players[3].team).toBe(1); // slot 3
+    }
+  });
+
+  it('team is undefined on every player tank outside teams mode -- campaign-coop and ffa, N=1..4, all 5 arenas (population: 5 arenas x 2 modes x 4 playerCounts = 40 loadArena calls)', () => {
+    for (const arena of ARENAS) {
+      for (const mode of ['campaign-coop', 'ffa'] as const) {
+        for (let n = 1; n <= 4; n++) {
+          const { tanks } = loadArena(arena, n, mode);
+          for (const t of tanks.filter((tk) => tk.kind === 'player')) {
+            expect(t.team, `${arena.grid[0]}/${mode}/n=${n}`).toBeUndefined();
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('createWorldFor: mode/friendlyFire threading (n-player arc PR 4)', () => {
+  it('defaults to campaign-coop / friendlyFire false when neither trailing arg is passed -- structurally unreachable by any existing call site', () => {
+    const w = createWorldFor(ARENAS[0], 1);
+    expect(w.mode).toBe('campaign-coop');
+    expect(w.friendlyFire).toBe(false);
+    expect(w.tanks.some((t) => t.kind !== 'player')).toBe(true);
+  });
+
+  it('threads an explicit mode and friendlyFire onto the built world, and strips enemies to match', () => {
+    const w = createWorldFor(ARENAS[0], 1, undefined, undefined, undefined, undefined, 4, undefined, 'teams', true);
+    expect(w.mode).toBe('teams');
+    expect(w.friendlyFire).toBe(true);
+    expect(w.tanks.every((t) => t.kind === 'player')).toBe(true);
+    expect(w.tanks).toHaveLength(4);
   });
 });
 
