@@ -4392,6 +4392,24 @@ describe('startGameWith: reassignSlot (controller assignment UI, docs/superpower
       h.handle.dispose();
     });
   });
+
+  it("reassigning a slot AWAY from a genuinely-connected pad does not fire a spurious " +
+    "'disconnected' toast -- reassignSlot must re-sync gamepadConnectedPrev to the new " +
+    "source's truth, or the falling edge fires for a deliberate UI move, not an unplug", () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } })); // slot1->pad1, slot2->pad2
+    h.setState('playing');
+    h.setSlotGamepadConnected(2, true);
+    h.fireFrame(100);
+    expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
+
+    h.hud.reassignSlot(2, { kind: 'bot' }); // move slot 2 away from its still-connected pad
+    h.fireFrame(200); // many ticks past the reassignment, not just one
+
+    // No new toast: the pad never physically disconnected, so nothing should read as a
+    // falling edge. Without the re-sync this appends "Player 3's controller disconnected".
+    expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
+    h.handle.dispose();
+  });
 });
 
 describe('startGameWith: reserved-idle hold END TO END -- a REAL mid-session disconnect ' +

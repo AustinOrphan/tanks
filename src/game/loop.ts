@@ -1012,6 +1012,21 @@ export function startGameWith(
    * one moment that confirms the press was seen.
    */
   const gamepadConnectedPrev: boolean[] = new Array(playerCount).fill(false);
+  /**
+   * Single source of truth for "is slot i's physical pad connected right now",
+   * shared by the toast edge-detector below and by `reassignSlot`. Reassignment
+   * needs its own read of this: moving a slot away from a connected gamepad (to
+   * bot/none, or bouncing it via a keyboard/gamepad exclusivity swap) removes its
+   * `realSources` entry, so `connected` would read false on the very next tick even
+   * though nothing physically disconnected. Without re-syncing `gamepadConnectedPrev`
+   * at the moment of reassignment, that reads as a falling edge and fires a spurious
+   * "Player N's controller disconnected" toast for a deliberate UI action.
+   */
+  function slotGamepadConnected(i: number): boolean {
+    return assignment[i].kind === 'keyboard'
+      ? input.gamepadConnected()
+      : (realSources.get(i)?.gamepadConnected() ?? false);
+  }
   function refreshRoundPhase(w: World): void {
     if (w.roundStartTick !== lastRoundStartTick) {
       lastRoundStartTick = w.roundStartTick;
@@ -1076,7 +1091,7 @@ export function startGameWith(
       // holding either way, this is purely the notification).
       for (let i = 0; i < playerCount; i++) {
         const isKeyboardSlot = assignment[i].kind === 'keyboard';
-        const connected = isKeyboardSlot ? input.gamepadConnected() : (realSources.get(i)?.gamepadConnected() ?? false);
+        const connected = slotGamepadConnected(i);
         if (connected && !gamepadConnectedPrev[i]) {
           hud.showToast(isKeyboardSlot ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
         } else if (!connected && gamepadConnectedPrev[i]) {
@@ -1164,9 +1179,11 @@ export function startGameWith(
    */
   function reassignSlot(slot: number, source: SlotSource): void {
     const next = reassign(assignment, slot, source);
+    const changed: number[] = [];
     for (let i = 0; i < next.length; i++) {
       const prev = assignment[i];
       if (sameSlotSource(next[i], prev)) continue;
+      changed.push(i);
       const old = realSources.get(i);
       if (old && old !== input) old.dispose();
       realSources.delete(i);
@@ -1185,8 +1202,22 @@ export function startGameWith(
       }
     }
     assignment = next;
-    // Refresh the panel's own display -- a no-op if it is not currently open (hud.ts's
-    // own setControllers gates the re-render on that).
+    // Re-sync the toast edge-detector for every slot whose source just changed.
+    // Without this, a slot that HAD a connected pad and gets reassigned away from it
+    // (to bot/none directly, or bounced to 'none' by another slot claiming its
+    // padIndex/keyboard) loses its `realSources` entry, so `slotGamepadConnected`
+    // reads false on the very next tick with `gamepadConnectedPrev[i]` still true --
+    // a spurious falling edge that would toast "Player N's controller disconnected"
+    // for a deliberate reassignment, not a physical unplug. Reading truth here at the
+    // moment of change is what keeps the falling-edge toast meaning "the hardware
+    // disconnected" rather than "the UI moved this slot".
+    for (const i of changed) {
+      gamepadConnectedPrev[i] = slotGamepadConnected(i);
+    }
+    // Refresh the panel's own display. setControllers rebuilds unconditionally
+    // (see hud.ts) so this always re-renders, open or not -- cheap, and it is what
+    // lets hud.css.test.ts's mountEveryButton fixture drive rows without opening
+    // the panel first.
     hud.setControllers(assignment);
   }
 

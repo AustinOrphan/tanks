@@ -194,10 +194,16 @@ at `a5458ede003c173ccc099b708f4b7d43b7537ca8a7846a87274b6376ccc311a9` throughout
   `tools/gl/run.mjs`, never committed -- `git diff --stat` confirmed empty after
   reverting) let the harness run to completion once: all 61 checks passed, proving this
   is a slowness ceiling on a contended box, not a hang or a real regression. The
-  underlying `run.mjs` timeout question (why the file's own `{timeout: 90000}` argument
-  did not appear to take effect) is unresolved and out of this PR's scope -- named here
-  rather than fixed, since `tools/gl/run.mjs` is untouched by every commit on this
-  branch and a fix deserves its own review.
+  underlying `run.mjs` timeout question has a likely cause, found by reading the call
+  rather than by further measurement: `page.waitForFunction(() => !!window.__glResults,
+  { timeout: 90000 })` (line 102) is Playwright's `(pageFunction, arg, options)` form --
+  the object literal lands in the `arg` position (passed INTO the page function, which
+  takes none), not `options`, so the call runs under Playwright's default 30000ms rather
+  than the 90000ms the file's own comment claims. That is consistent with every observed
+  failure landing at a flat 30s rather than drifting near 90s. Not fixed here: this is a
+  plausible reading of the API, not something re-run to confirm against a passing 90s
+  wait, `tools/gl/run.mjs` is untouched by every commit on this branch, and a fix
+  deserves its own review rather than riding in as an aside on this one.
 
 ## Deviations from the adjudicated plan
 
