@@ -23,7 +23,8 @@
     "gallery": "node tools/gallery/run.mjs",
     "audio": "node tools/audio/render.mjs",
     "mutate": "node tools/mutate/run.mjs",
-    "devflags:doc": "vite-node tools/devflags/generate.mjs"
+    "devflags:doc": "vite-node tools/devflags/generate.mjs",
+    "tanks:doc": "vite-node tools/tanks/generate.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",

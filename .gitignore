@@ -3,6 +3,9 @@ dist
 *.log
 .DS_Store
 
+# local scratch output
+/tmp/
+
 # generated renders -- visual gate output and gallery stills
 visual-out/
 gallery-out/
