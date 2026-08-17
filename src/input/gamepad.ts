@@ -5,14 +5,29 @@ import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
  * Gamepad API reader: `navigator.getGamepads()`, mapped to the same `InputState` shape
  * keyboard and touch already produce.
  *
- * Gamepad[0] only, in both consumers below -- gamepad[1] onward stays unplumbed.
- * `createGamepadReader` alone backs `input.ts`'s single-player MERGE (`?dev=1&gamepad=1`,
- * OR'd into keyboard/mouse/touch). `createGamepadInputSource`, further down this file,
- * wraps it into a standalone `PlayerInputSource` for couch co-op's slot 1
- * (`?dev=1&players=2`) -- see CLAUDE.md's input-routing entry and `loop.ts`'s `slots`
- * array. The two are mutually exclusive BY CONSTRUCTION, not merely by convention: once
- * `players >= 2`, slot 0 is built with `{gamepad: false}` so the merge's own reader is
- * never constructed, and slot 1 owns gamepad[0] exclusively.
+ * `pad[i] -> slot[i]` (n-player arc PR3): both `createGamepadReader` and
+ * `createGamepadInputSource` take a trailing `padIndex`, defaulted to 0 so every
+ * pre-PR3 call site is unchanged. `createGamepadReader` alone backs `input.ts`'s
+ * single-player MERGE (`?dev=1&gamepad=1`, OR'd into keyboard/mouse/touch, always
+ * padIndex 0 -- slot 0's baseline never moves). `createGamepadInputSource`, further
+ * down this file, wraps it into a standalone `PlayerInputSource` for every co-player
+ * slot 1..N-1 (`?dev=1&players=N`), one instance per slot, each bound to ITS OWN
+ * `padIndex` equal to its slot number -- see CLAUDE.md's input-routing entry and
+ * `loop.ts`'s `realSources` construction. Slot 0's optional merge (padIndex 0) and a
+ * co-player slot's dedicated reader (padIndex >= 1) can never collide: they read
+ * different indices of the same `getGamepads()` array by construction, not merely by
+ * convention -- there is no longer a "mutual exclusion" to maintain, because there is
+ * no shared index left to contend over.
+ *
+ * THE NAMED TRADEOFF: shipped coop mapped a LONE connected pad to slot 1 unconditionally
+ * (no flag needed), because slot 0 held keyboard exclusively and slot 1 was the only
+ * place for the one pad to go. Under `pad[i] -> slot[i]`, that lone pad (almost always
+ * browser index 0) now feeds slot 0 -- if the player opts in via `?dev=1&gamepad=1` --
+ * and slot 1 (bound to padIndex 1) sees nothing from it. "P1 on keyboard, hand the one
+ * pad to P2" regresses: there is no longer a zero-flag way to hand a single physical pad
+ * to a co-player slot. Accepted, not fixed -- see
+ * docs/superpowers/plans/2026-08-17-controllers-4.md for the full reasoning and
+ * `gamepad.test.ts`'s "THE NAMED TRADEOFF" test, which pins it as deliberate.
  *
  * Split in two on purpose. `deadzoneVector` is the pure mapping core: raw axis pair in,
  * a analog vector out, no DOM. `createGamepadReader` is the stateful edge at `poll()` --
@@ -121,8 +136,12 @@ export interface GamepadReader {
  * testable without a browser and so a platform with no Gamepad API at all (the function
  * itself absent from `navigator`) is the caller's problem to guard, not this module's --
  * see `createReaderFromNavigator` below for the one production call site.
+ * @param padIndex Which `getGamepads()` slot this reader owns. Defaults to 0, unchanged
+ * from every pre-PR3 call site (input.ts's single-player merge). `loop.ts` passes the
+ * co-player's own slot number for every source at slot 1 and beyond -- see this file's
+ * module doc comment for the `pad[i] -> slot[i]` mapping and its named tradeoff.
  */
-export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
+export function createGamepadReader(getGamepads: GetGamepads, padIndex: number = 0): GamepadReader {
   let cachedConnected = false;
   let prevFire = false;
   let prevMine = false;
@@ -137,7 +156,7 @@ export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
         // the reader must never be the reason the game errors out.
         pads = [];
       }
-      const pad = pads.length > 0 ? pads[0] ?? null : null;
+      const pad = pads.length > padIndex ? pads[padIndex] ?? null : null;
       cachedConnected = pad != null;
 
       if (pad == null) {
@@ -184,8 +203,9 @@ export function createGamepadReader(getGamepads: GetGamepads): GamepadReader {
  * The slice of an input collaborator co-op's per-slot array needs. `InputController`
  * (`input.ts`) satisfies this structurally -- it has every member here plus more (touch
  * indicator, latched presses, scheme/fire-mode setters) -- so slot 0 (the multi-device
- * controller) and slot 1 (`createGamepadInputSource` below) can sit in the same
- * `PlayerInputSource[]` in `loop.ts` with no shared base class or adapter.
+ * controller) and every co-player slot (`createGamepadInputSource` below, one instance
+ * per slot) can sit in the same `PlayerInputSource[]` in `loop.ts` with no shared base
+ * class or adapter.
  */
 export interface PlayerInputSource {
   sample(): InputState;
@@ -196,16 +216,17 @@ export interface PlayerInputSource {
 }
 
 /**
- * A standalone, per-slot input source over one `GamepadReader` -- couch co-op's slot 1
- * (`?dev=1&players=2`), never merged into slot 0's keyboard/mouse/touch stream (see this
- * file's module doc comment for the mutual-exclusion argument).
+ * A standalone, per-slot input source over one `GamepadReader` -- every co-player slot
+ * 1..N-1 (`?dev=1&players=N`) gets its own instance, bound to `padIndex === slot number`
+ * (see this file's module doc comment for the `pad[i] -> slot[i]` mapping). Never merged
+ * into slot 0's keyboard/mouse/touch stream.
  *
  * Holds its own `aim`, defaulting to `{0, 0}` and updated only when the right stick is
  * outside the dead zone (`poll().aim !== null`). This is NOT redundant with the
  * reader's own dead-zone handling: `input.ts`'s merged controller survives a centred
  * stick because mouse/touch keep its `aim` variable alive between gamepad polls, but a
- * standalone slot 1 has no such fallback producer, so it has to persist its own last
- * aim the same way the merged controller's closure does.
+ * standalone co-player slot has no such fallback producer, so it has to persist its own
+ * last aim the same way the merged controller's closure does.
  *
  * Quantized through `quantizeAim` (`touch.ts`) -- the SAME boundary function
  * `input.ts`'s `sample()` applies, not a second, differently-rounded copy. See
@@ -217,21 +238,37 @@ export interface PlayerInputSource {
  * only ever see "no real deflection this poll," not "no pad has ever been seen." With no
  * pad, `aim` then never leaves its `{0, 0}` construction default -- world.ts's `driveTank`
  * reads that as a real aim point at the world's origin, not as "no info," and slews the
- * turret to face it (see `game/loop.ts`'s `createIdleInputSource` for the full mechanism
- * this shares). `reader.connected()` is what tells the two cases apart: false only means
- * "no pad," so the fallback below fires only there, leaving the CONNECTED-but-centred
+ * turret to face it. `reader.connected()` is what tells the two cases apart: false only
+ * means "no pad," so the fallback below fires only there, leaving the CONNECTED-but-centred
  * case (a real pad, stick at rest) to keep holding its last REAL aim exactly as before.
  * "No pad" includes a MID-GAME UNPLUG, not only never-connected: the instant a pad
  * disconnects, the stale deflected aim gives way to the position echo and the turret
  * holds -- verified by a live disconnect probe in review, benign by the same argument.
+ * This same "echo the tank's own position back as aim" idea is what `loop.ts`'s retired
+ * `createIdleInputSource` used to build by hand for a slot with no controller wiring at
+ * all (pre-PR3) -- this fallback makes that redundant for every REAL controller slot: a
+ * `createGamepadInputSource` bound to an index with nothing ever plugged in produces
+ * EQUIVALENT OUTPUT ON EVERY REACHABLE INPUT, so PR3 fills every co-player slot with
+ * one of these instead, unconditionally, rather than choosing between two functions
+ * per slot. Not byte-identical CODE, and review named the difference precisely: the
+ * retired function ignored a null `setPlayerPosition` (holding its last real
+ * position), while this one accepts null and would fall back through
+ * `quantizeAim({0,0})`. Unreachable, for two independent reasons -- tanks are never
+ * removed or reordered (`resetArena`: a dead tank stays in place with alive=false),
+ * so `tankForSlot` never returns undefined for a slot that ever held a tank; and
+ * `applyPlayerInputs` never drives a nonexistent tank, so the divergent value could
+ * not be consumed even if it were produced.
  *
  * The fallback echoes `playerPos` RAW, bypassing `quantizeAim`: a spawn is rarely
  * exactly on the AIM_GRID, and driveTank's turret-hold guard requires `aimDir` to be
  * EXACTLY `{0, 0}` -- a quantized echo would round to a slightly different point and
  * reproduce a smaller version of the same slew.
+ *
+ * @param padIndex Defaults to 0 -- see `createGamepadReader`'s own `padIndex` doc
+ * comment; `loop.ts` always passes the slot number explicitly for slot 1 and beyond.
  */
-export function createGamepadInputSource(getGamepads: GetGamepads): PlayerInputSource {
-  const reader = createGamepadReader(getGamepads);
+export function createGamepadInputSource(getGamepads: GetGamepads, padIndex: number = 0): PlayerInputSource {
+  const reader = createGamepadReader(getGamepads, padIndex);
   let aim: Vec2 = { x: 0, y: 0 };
   let playerPos: Vec2 | null = null;
 
@@ -268,9 +305,10 @@ export function createGamepadInputSource(getGamepads: GetGamepads): PlayerInputS
 
 /**
  * The one production `GetGamepads`: reads `navigator.getGamepads` if the platform has
- * it, an empty list forever if not. Two production call sites: `input.ts`'s merge and
- * `loop.ts`'s `createBrowserDeps` (co-op slot 1) -- both read the SAME live pads,
- * mutually exclusive by construction rather than by which one happens to call this.
+ * it, an empty list forever if not. Production call sites: `input.ts`'s merge (always
+ * padIndex 0) and `loop.ts`'s `createBrowserDeps` (one call per co-player slot 1..N-1,
+ * padIndex === slot number) -- all read the SAME live pads array, each at its own index,
+ * never colliding by construction (see this file's module doc comment).
  */
 export function readNavigatorGamepads(): ArrayLike<GamepadLike | null | undefined> {
   if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return [];

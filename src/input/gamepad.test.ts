@@ -125,6 +125,57 @@ describe('createGamepadReader: connection edge', () => {
   });
 });
 
+describe('createGamepadReader: padIndex (controllers 1-4, PR3)', () => {
+  it('defaults to index 0, unchanged from every existing call site (input.ts\'s merge, loop.test.ts\'s pre-PR3 fixtures)', () => {
+    const reader = createGamepadReader(() => [fakePad({ axes: [1, 0, 0, 0] })]);
+    expect(reader.poll(null).move.x).toBeCloseTo(1, 5);
+  });
+
+  it('reads its OWN padIndex, not index 0: a pad only at index 1 is invisible to a reader bound to index 0, and vice versa', () => {
+    const pads = [fakePad({ axes: [1, 0, 0, 0] }), null];
+    const readerAt0 = createGamepadReader(() => pads, 0);
+    const readerAt1 = createGamepadReader(() => pads, 1);
+    readerAt0.poll(null);
+    readerAt1.poll(null);
+    expect(readerAt0.connected()).toBe(true);
+    expect(readerAt1.connected()).toBe(false);
+  });
+
+  it('THE NAMED TRADEOFF: a LONE connected pad (browser index 0) serves a reader bound to index 0, ' +
+    'not one bound to index 1 -- so "P1 on keyboard, hand the one pad to P2" (slot 1, padIndex 1) sees ' +
+    'nothing from it. Accepted regression, see docs/superpowers/plans/2026-08-17-controllers-4.md.', () => {
+    const lonePad = [fakePad({ axes: [1, 0, 0, 0] })]; // length 1: only index 0 exists
+    const slot0Reader = createGamepadReader(() => lonePad, 0);
+    const slot1Reader = createGamepadReader(() => lonePad, 1);
+    const p0 = slot0Reader.poll(null);
+    const p1 = slot1Reader.poll(null);
+    expect(p0.move.x).toBeCloseTo(1, 5);
+    expect(p1).toEqual({ move: { x: 0, y: 0 }, aim: null, fire: false, mine: false }); // neutral: no pad at 1
+    expect(slot0Reader.connected()).toBe(true);
+    expect(slot1Reader.connected()).toBe(false);
+  });
+
+  it('tolerates a padIndex beyond the array length exactly like index 0 does for an empty array', () => {
+    const reader = createGamepadReader(() => [fakePad()], 3);
+    expect(reader.poll(null)).toEqual({ move: { x: 0, y: 0 }, aim: null, fire: false, mine: false });
+    expect(reader.connected()).toBe(false);
+  });
+
+  it('hotplug at a non-zero index: connecting and disconnecting index 2 mid-session flips connected() ' +
+    'on the very next poll -- no cached "was it connected last frame" state beyond the fire/mine edge', () => {
+    let present = false;
+    const reader = createGamepadReader(() => (present ? [null, null, fakePad()] : []), 2);
+    expect(reader.poll(null)).toEqual({ move: { x: 0, y: 0 }, aim: null, fire: false, mine: false });
+    expect(reader.connected()).toBe(false);
+    present = true;
+    reader.poll(null);
+    expect(reader.connected()).toBe(true);
+    present = false;
+    reader.poll(null);
+    expect(reader.connected()).toBe(false);
+  });
+});
+
 describe('createGamepadReader: move (left stick)', () => {
   it('is zero while the stick sits inside the dead zone', () => {
     const reader = createGamepadReader(() => [fakePad({ axes: [0.1, 0.1, 0, 0] })]);
@@ -340,5 +391,44 @@ describe('createGamepadInputSource: standalone per-slot source', () => {
       expect(recentred).toEqual(deflected); // NOT echoed to the raw position
       expect(recentred).not.toEqual({ x: 11, y: 16.333 });
     });
+  });
+});
+
+describe('createGamepadInputSource: padIndex (controllers 1-4, PR3)', () => {
+  it('defaults to index 0, unchanged from every existing call site (input.ts\'s merge)', () => {
+    const src = createGamepadInputSource(() => [fakePad({ axes: [1, 0, 0, 0] })]);
+    expect(src.sample().move.x).toBeCloseTo(1, 5);
+  });
+
+  it('a source built at padIndex 1 reads pad[1]\'s state, not pad[0]\'s', () => {
+    const pads = [fakePad({ axes: [0, 0, 0, 0] }), fakePad({ axes: [1, 0, 0, 0] })];
+    const src0 = createGamepadInputSource(() => pads, 0);
+    const src1 = createGamepadInputSource(() => pads, 1);
+    expect(src0.sample().move).toEqual({ x: 0, y: 0 });
+    expect(src1.sample().move.x).toBeCloseTo(1, 5);
+  });
+
+  it('gamepadConnected() reports its OWN index\'s presence, independent of any other index', () => {
+    const pads = [null, fakePad()];
+    const src0 = createGamepadInputSource(() => pads, 0);
+    const src1 = createGamepadInputSource(() => pads, 1);
+    src0.sample();
+    src1.sample();
+    expect(src0.gamepadConnected()).toBe(false);
+    expect(src1.gamepadConnected()).toBe(true);
+  });
+
+  it('hotplug: connecting a pad at index 2 mid-session is visible to a source bound to index 2 on the very next sample()', () => {
+    let present = false;
+    const src = createGamepadInputSource(() => (present ? [null, null, fakePad({ axes: [1, 0, 0, 0] })] : []), 2);
+    src.setPlayerPosition({ x: 5, y: 5 });
+    expect(src.gamepadConnected()).toBe(false);
+    expect(src.sample().move).toEqual({ x: 0, y: 0 });
+    present = true;
+    expect(src.sample().move.x).toBeCloseTo(1, 5);
+    expect(src.gamepadConnected()).toBe(true);
+    present = false;
+    expect(src.sample().move).toEqual({ x: 0, y: 0 });
+    expect(src.gamepadConnected()).toBe(false);
   });
 });

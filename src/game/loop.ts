@@ -110,16 +110,18 @@ export interface GameDeps {
     options?: { gamepad?: boolean },
   ) => InputController;
   /**
-   * Slot 1's standalone gamepad-only `PlayerInputSource`, built only when `playerCount`
-   * is 2 or more (see `startGameWith`'s `playerCount`). Injected for the same reason
-   * every other collaborator here is -- `createGamepadInputSource` itself is a plain
-   * module function with no lifecycle to fake, but going through GameDeps keeps its
-   * CONSTRUCTION SITE (and how many times it is called) inside the tested function,
-   * which is what proves slot 0 and slot 1 can never both claim gamepad[0] -- see
-   * `input.ts`'s `gamepad` option and `gamepad.ts`'s module doc comment for the
-   * mutual-exclusion argument this seam lets loop.test.ts check.
+   * A standalone gamepad-only `PlayerInputSource`, one call per co-player slot 1..N-1
+   * (see `startGameWith`'s `realSources` construction) -- `pad[i] -> slot[i]`, so
+   * `padIndex` is always the SLOT being filled, not a fixed offset. Injected for the
+   * same reason every other collaborator here is -- `createGamepadInputSource` itself
+   * is a plain module function with no lifecycle to fake, but going through GameDeps
+   * keeps its CONSTRUCTION SITE (how many times it is called, and with which
+   * `padIndex`) inside the tested function -- see `gamepad.ts`'s module doc comment
+   * for why slot 0's own optional pad merge (`input.ts`'s `gamepad` option, always
+   * padIndex 0) and every co-player slot's dedicated reader never collide: they read
+   * different indices of the same pads array, not a shared one arbitrated at runtime.
    */
-  readonly createGamepadSource: () => PlayerInputSource;
+  readonly createGamepadSource: (padIndex: number) => PlayerInputSource;
   readonly createAudio: () => AudioEngine;
   /**
    * playerId is required here even though createAudioDirector defaults it. The
@@ -291,6 +293,13 @@ export function createBotSources(
  * exists yet to arbitrate a per-slot declaration against (that is a later PR's job).
  * `botCount` may equal `playerCount` -- including at playerCount 1, where it claims the
  * only slot, the fully autonomous match owner directive 1 asks for.
+ *
+ * PR3 (`pad[i] -> slot[i]`) is that later PR, and the precedence is fixed here rather
+ * than arbitrated at the controller layer: `botSlots` is computed once, above, and
+ * `realSources`' construction loop only calls `deps.createGamepadSource(i)` for a slot
+ * NOT in this set -- bots claim their declared slots first, controllers fill whatever
+ * remains, in `pad[i] -> slot[i]` order for the slots that are left. A bot-claimed slot
+ * never constructs a gamepad reader at all.
  */
 export function botSlotsFor(playerCount: number, botCount: number): Set<number> {
   const slots = new Set<number>();
@@ -298,60 +307,14 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
   return slots;
 }
 
-/**
- * A `PlayerInputSource` for a co-player slot with no real controller behind it yet
- * (slots 2..playerCount-1 -- see `startGameWith`'s `slots` construction). Never moves,
- * never fires, never lays a mine -- but its AIM matters, and a naive `{move: {0,0},
- * aim: {0,0}, fire: false, mine: false}` constant is NOT neutral there.
- *
- * `world.ts`'s `driveTank` computes `aimDir = vsub(input.aim, player.pos)` and only
- * skips the turret slew when `aimDir` is EXACTLY `{0,0}`. A literal `aim: {0,0}` is
- * only that zero for a tank spawned at the world origin -- for every other spawn it is
- * a real, nonzero direction, so the turret slews to face world-origin and sticks there.
- * This is the same shape `createGamepadInputSource` (`input/gamepad.ts`) has when no pad
- * is ever connected: its `aim` never leaves its own `{0,0}` default either, which is why
- * shipped co-op's slot 1 already had this defect with no pad plugged in.
- *
- * The fix here is to echo the tank's OWN current position back as `aim`: `vsub(pos, pos)`
- * is `{0,0}` by construction, so the guard fails and the turret holds whatever heading it
- * already has -- the actual "idle" behaviour, not a slew toward a coordinate that happens
- * to be `{0,0}`. `lastPos` starts at the same `{0,0}` literal every other input source in
- * this tree defaults `aim` to (see `input/input.ts`'s own `let aim: Vec2 = {0, 0}`).
- * `setPlayerPosition` fires from `onSimulated` below (driver.ts) once per RENDERED
- * frame, after that frame's whole batch of simulated ticks -- not once per tick, and
- * only while `stateMachine.state === 'playing'` (driver.ts's tick loop and its
- * `onSimulated` call both sit inside that branch, so nothing steps and nothing samples
- * during splash/title at all). The `{0,0}` default is therefore live only for the
- * ticks inside the FIRST playing frame, before that frame's own `onSimulated` runs for
- * the first time -- a sub-tick-batch transient right at round start, not an
- * off-screen one. Bounded: at PLAYER_TURRET_TURN_RATE (8 rad/s) a single 1/60 tick
- * slews at most ~0.133 rad before the position echo lands -- an eighth of a radian,
- * once, at spawn. loop.test.ts's N=3/4 integration tests take one small warm-up frame
- * to let it settle before asserting the turret holds steady afterward.
- *
- * Deliberately NOT run through `quantizeAim` (`input/touch.ts`), unlike every real
- * controller's sample(): quantizing rounds `aim` to the nearest `AIM_GRID` step, and for
- * an off-grid spawn (e.g. (11, 16.333)) that rounding makes `aimDir` a small but NONZERO
- * vector -- the guard would fire on a rounding artifact and the turret would creep
- * instead of holding. The echo has to be exact, not merely close.
- */
-export function createIdleInputSource(): PlayerInputSource {
-  let lastPos: Vec2 = { x: 0, y: 0 };
-  return {
-    sample(): InputState {
-      return { move: { x: 0, y: 0 }, aim: { ...lastPos }, fire: false, mine: false };
-    },
-    setPlayerPosition(pos: Vec2 | null): void {
-      if (pos !== null) lastPos = { x: pos.x, y: pos.y };
-    },
-    gamepadConnected(): boolean {
-      return false;
-    },
-    dispose(): void {
-      // No resources: no listeners, no timers, no wrapped reader.
-    },
-  };
-}
+// createIdleInputSource() is RETIRED (n-player arc PR3, `pad[i] -> slot[i]`): it used to
+// fill every co-player slot beyond 1 with a hand-built `PlayerInputSource` that echoed
+// the tank's own position back as `aim`, avoiding `driveTank`'s literal-{0,0}-slews-
+// toward-world-origin defect. Every co-player slot now gets its own
+// `createGamepadInputSource(padIndex)` instead (see `realSources`' construction below),
+// and that function's own "no pad ever connected" branch (`input/gamepad.ts`, see its
+// module doc comment) already produces the byte-identical echo -- so deleted rather than
+// kept unused, per CLAUDE.md's "a generator nothing calls rots."
 
 /**
  * Holding M fires ~30 keydowns a second, so an unguarded toggle lands on
@@ -519,7 +482,7 @@ export function createBrowserDeps(): GameDeps {
     createRenderer,
     createPreview: createTankPreview,
     createInput: createInputController,
-    createGamepadSource: () => createGamepadInputSource(readNavigatorGamepads),
+    createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
     createAudio: () => createAudioEngine(AUDIO_MANIFEST),
     createDirector: createAudioDirector,
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
@@ -725,12 +688,21 @@ export function startGameWith(
     quality: qualityFor(deps.devFlags.quality),
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
-    // Mutually exclusive with a second player BY CONSTRUCTION: once `playerCount >= 2`,
-    // slot 0 is ALWAYS built with gamepad:false, whatever `devFlags.gamepad` says -- the
-    // merge's own reader is then never even constructed (input.ts's own "off means the
-    // reader is never constructed" idiom), so slot 1 below can own gamepad[0]
-    // exclusively with no runtime arbitration needed between the two.
-    gamepad: playerCount >= 2 ? false : deps.devFlags.gamepad,
+    // `pad[i] -> slot[i]` (n-player arc PR3): NOT forced off at `playerCount >= 2`
+    // anymore. Slot 0 keeps keyboard/mouse/touch as its baseline and can additionally
+    // merge gamepad[0] -- the same `?dev=1&gamepad=1` flag, same semantics, as
+    // single-player -- because every co-player slot below now owns its OWN dedicated
+    // pad index (slot i reads padIndex i), so slot 0's optional pad[0] merge and slot
+    // 1's dedicated pad[1] reader can never contend over the same index. This is a
+    // deliberate reversal of the pre-PR3 rule (slot 0 always gamepad:false once a
+    // second player existed): that rule existed only because the OLD mapping put slot
+    // 1 on pad[0] too, so keeping slot 0 off it was the only way to avoid two readers
+    // racing one physical pad. THE NAMED TRADEOFF this reversal buys: a session's
+    // ONLY physical pad (almost always browser index 0) now feeds slot 0 if this flag
+    // is set, not slot 1 -- "P1 keyboard, hand the one pad to P2" has no zero-flag path
+    // anymore. Accepted, not fixed -- see gamepad.ts's module doc comment and
+    // docs/superpowers/plans/2026-08-17-controllers-4.md.
+    gamepad: deps.devFlags.gamepad,
   });
   // The saved scheme, pushed at boot so the very first touch already uses it -- see the
   // echo-back wiring below for what happens when the player changes it in the HUD.
@@ -746,19 +718,18 @@ export function startGameWith(
    * would be dead construction. This is the generalisation `botSlots.has(i)` adds to
    * every site that used to build unconditionally on `playerCount` alone.
    *
-   * Slot 1: a standalone gamepad-only source, owning gamepad[0] exclusively (see the
-   * `gamepad: false` above). Skipped when `playerCount` is 1, the session is excluded
-   * by the sandbox, or slot 1 itself is bot-claimed.
-   *
-   * Slots 2..playerCount-1: no real per-index controller routing exists yet (that is
-   * PR3's job -- see the N-player arc), so every non-bot co-player beyond slot 1 is
-   * filled with `createIdleInputSource()`, which holds its tank's spawn heading instead
-   * of slewing toward world-origin (see that function's own doc comment).
+   * Slots 1..playerCount-1: EVERY one gets its own standalone gamepad-only source,
+   * bound to `padIndex === i` (`pad[i] -> slot[i]`, n-player arc PR3) -- no fallback,
+   * no idle-fill function distinct from this one. Hotplug and "no pad ever connected"
+   * both fall out of `createGamepadInputSource` itself (see its own doc comment): it
+   * polls `getGamepads()[padIndex]` fresh every tick, so a slot with nothing plugged in
+   * echoes its tank's own position back as `aim` (the turret holds instead of slewing
+   * toward world-origin) with no separate mechanism needed, and a pad connecting or
+   * disconnecting mid-session at that index is visible on the very next tick.
    */
   const realSources = new Map<number, PlayerInputSource>([[0, input]]);
-  if (playerCount >= 2 && !botSlots.has(1)) realSources.set(1, deps.createGamepadSource());
-  for (let i = 2; i < playerCount; i++) {
-    if (!botSlots.has(i)) realSources.set(i, createIdleInputSource());
+  for (let i = 1; i < playerCount; i++) {
+    if (!botSlots.has(i)) realSources.set(i, deps.createGamepadSource(i));
   }
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
@@ -913,14 +884,21 @@ export function startGameWith(
   let enemiesAtRoundStart = countEnemies(world);
   let roundsSeen = 0;
   /**
-   * `?dev=1&gamepad=1` only: `input.gamepadConnected()` is always false when the flag is
-   * off (the reader is never constructed -- see input.ts), so this needs no separate flag
-   * check. Toasts on each RISING edge -- a reconnect toasts again, pinned by its own
-   * test -- because Firefox does not expose a
-   * pad to `navigator.getGamepads()` until the player presses a button on it, so this is
-   * the one moment that confirms the press was seen.
+   * Per-slot rising-edge state for the connect toast, index = slot number
+   * (n-player arc PR3). Generalizes the pre-PR3 single `wasGamepadConnected` boolean,
+   * which read only slot 0's `input.gamepadConnected()` -- under shipped coop's
+   * mapping that left the toast permanently false during co-op, a load-bearing gap
+   * the input-routing plan named and deferred. `pad[i] -> slot[i]` means every slot
+   * can connect independently now, so every slot gets its own edge and its own toast,
+   * named to the slot ("Player 2's controller connected"). Slot 0's own check is
+   * unaffected: `input.gamepadConnected()` is always false when `?dev=1&gamepad=1` is
+   * off (the reader is never constructed -- see input.ts), so this needs no separate
+   * flag check there either. Toasts on each RISING edge -- a reconnect toasts again,
+   * pinned by its own test -- because Firefox does not expose a pad to
+   * `navigator.getGamepads()` until the player presses a button on it, so this is the
+   * one moment that confirms the press was seen.
    */
-  let wasGamepadConnected = false;
+  const gamepadConnectedPrev: boolean[] = new Array(playerCount).fill(false);
   function refreshRoundPhase(w: World): void {
     if (w.roundStartTick !== lastRoundStartTick) {
       lastRoundStartTick = w.roundStartTick;
@@ -967,13 +945,23 @@ export function startGameWith(
       // the only cue that needs a distance from the player, and there is no
       // per-player attribution anywhere in haptics.ts/stats.ts/director.ts yet.
       haptics.setPlayerPosition(p1Pos);
-      // Touch indicator, gamepad-connected toast: slot 0 (the multi-device
-      // controller) only, unaffected by co-op -- see the co-op plan's audit for why a
-      // P2-specific connect affordance is out of this PR's scope.
+      // Touch indicator: slot 0 (the multi-device controller) only, unaffected by
+      // co-op or controllers -- see the co-op plan's audit for why a per-player touch
+      // affordance is out of scope; touch is inherently a single-device input.
       hud.setTouchIndicator(input.touchIndicator());
-      const gamepadConnected = input.gamepadConnected();
-      if (gamepadConnected && !wasGamepadConnected) hud.showToast('Gamepad connected');
-      wasGamepadConnected = gamepadConnected;
+      // Gamepad connect toast, PER SLOT -- see gamepadConnectedPrev's own doc comment.
+      // Slot 0 reads `input.gamepadConnected()` (the optional `?dev=1&gamepad=1`
+      // merge); every other NON-BOT slot reads its own dedicated
+      // `PlayerInputSource.gamepadConnected()`. A bot-claimed slot has no entry in
+      // `realSources` and never toasts -- there is no physical pad to have connected
+      // there.
+      for (let i = 0; i < playerCount; i++) {
+        const connected = i === 0 ? input.gamepadConnected() : (realSources.get(i)?.gamepadConnected() ?? false);
+        if (connected && !gamepadConnectedPrev[i]) {
+          hud.showToast(i === 0 ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
+        }
+        gamepadConnectedPrev[i] = connected;
+      }
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
     },
@@ -1550,12 +1538,12 @@ export function startGameWith(
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
-      // Every co-player slot beyond slot 0 that built a REAL source (slot 1's
-      // standalone gamepad source, when one was built, plus any idle-filled slots) --
-      // none hold listeners of their own today (see GamepadReader.dispose's and
-      // createIdleInputSource's own doc comments), but disposed alongside slot 0 for
-      // symmetry and so a future stateful slot has somewhere to release. A bot-claimed
-      // slot has nothing here to dispose -- see `realSources`' own doc comment.
+      // Every co-player slot beyond slot 0 that built a REAL source -- its own
+      // dedicated gamepad reader at padIndex === slot -- none hold listeners of their
+      // own today (see GamepadReader.dispose's own doc comment), but disposed
+      // alongside slot 0 for symmetry and so a future stateful slot has somewhere to
+      // release. A bot-claimed slot has nothing here to dispose -- see `realSources`'
+      // own doc comment.
       realSources.forEach((s, i) => {
         if (i !== 0) s.dispose();
       });

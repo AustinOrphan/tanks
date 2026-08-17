@@ -133,10 +133,10 @@ describe('driveTank: a literal {0,0} aim is not a neutral', () => {
   // NOT the neutral it looks like: it is a real, nonzero aimDir pointing at (0,0).
   //
   // This is the mechanism, independent of which SOURCE produces the literal {0,0} --
-  // pinned here once, permanently, since driveTank itself is not changing. Each
-  // source that must AVOID reproducing it (createIdleInputSource, and the no-pad
-  // branch of createGamepadInputSource) is pinned separately, close to its own code:
-  // loop.test.ts and gamepad.test.ts respectively.
+  // pinned here once, permanently, since driveTank itself is not changing. The
+  // source that must AVOID reproducing it (the no-pad branch of
+  // createGamepadInputSource, which every co-player slot now uses -- n-player arc
+  // PR3) is pinned separately, close to its own code: gamepad.test.ts.
   it('slews the turret toward world-origin when input.aim is {0,0} and the tank is not spawned there', () => {
     const w = makeWorld(); // tank at (2, 3), turretAngle 0 -- see makeTank/makeWorld above
     const result = step(w, noInput);

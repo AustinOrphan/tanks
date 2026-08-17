@@ -140,15 +140,20 @@ export interface DevFlags {
    */
   replay: boolean;
   /**
-   * Read `navigator.getGamepads()` and merge gamepad[0] into the input stream alongside
-   * keyboard/mouse/touch -- see `src/input/gamepad.ts`. Single player only: gamepad[1]
-   * onward is ignored, matching every other input path (nothing about multiplayer exists
-   * beyond `stepInputs` taking a list -- see CLAUDE.md).
+   * Read `navigator.getGamepads()` and merge gamepad[0] into slot 0's input stream
+   * alongside keyboard/mouse/touch -- see `src/input/gamepad.ts`. Always padIndex 0,
+   * whatever `players` is set to: this flag is slot 0's own opt-in, unrelated to which
+   * OTHER slots exist.
    *
-   * Mutually exclusive with `players >= 2` BY CONSTRUCTION, not merely by convention:
-   * once a second player is active, slot 0 is always built with `{gamepad: false}`
-   * regardless of this flag's value, so the two features can never both claim
-   * gamepad[0] -- see loop.ts.
+   * Composes freely with `players >= 2` (n-player arc PR3, `pad[i] -> slot[i]`): every
+   * co-player slot 1..N-1 owns its own dedicated pad index, so slot 0's optional
+   * pad[0] merge can never collide with one -- see loop.ts and gamepad.ts's module doc
+   * comment. Before PR3, slot 0 was forced to `{gamepad: false}` whenever a second
+   * player existed, because the OLD mapping put slot 1 on pad[0] too; that forcing is
+   * gone. THE NAMED TRADEOFF this composability buys: a session's only physical pad
+   * (almost always browser index 0) now feeds slot 0 if this flag is set, not slot 1 --
+   * "P1 keyboard, hand the one pad to P2" has no zero-flag path anymore. See
+   * docs/superpowers/plans/2026-08-17-controllers-4.md.
    */
   gamepad: boolean;
   /**
@@ -217,8 +222,9 @@ export interface DevFlags {
    * matching `players`' own reject-to-null idiom rather than clamping into a different
    * meaning.
    *
-   * A bot-claimed slot never constructs its slot's real controller (slot 1's gamepad
-   * reader, slots 2+'s idle source) -- there is nothing for it to drive.
+   * A bot-claimed slot never constructs its slot's real controller -- its own dedicated
+   * gamepad reader, `pad[i] -> slot[i]` (n-player arc PR3) -- there is nothing for it
+   * to drive.
    *
    * Clamped against the resolved `playerCount`, not rejected: `bots=4` at `players=2`
    * silently claims both slots rather than erroring, since the two flags are read
@@ -580,11 +586,14 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
   },
   gamepad: {
     kind: 'boolean',
-    description: 'Merges gamepad[0] into the input stream alongside keyboard/mouse/touch.',
+    description: 'Merges gamepad[0] into slot 0\'s input stream alongside keyboard/mouse/touch.',
     notes: [
-      'Single player only: gamepad[1] onward is ignored.',
-      'Mutually exclusive with `players` >= 2 by construction: once a second player is ' +
-        'active, slot 0 is always built without the gamepad merge, regardless of this flag.',
+      'Always padIndex 0, whatever `players` is set to -- this is slot 0\'s own opt-in, ' +
+        'unrelated to which OTHER slots exist.',
+      'Composes freely with `players` >= 2 (`pad[i] -> slot[i]`): every co-player slot ' +
+        '1..N-1 owns its own dedicated pad index, so this flag\'s pad[0] merge can never ' +
+        'collide with one. A session\'s only physical pad (usually browser index 0) now ' +
+        'feeds slot 0 if this is on, not a co-player slot -- see the players note below.',
     ],
   },
   players: {
@@ -594,9 +603,12 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Sets how many player-controlled tanks share the world -- couch co-op, generalized ' +
       'past two.',
     notes: [
-      'Mutually exclusive with `gamepad` by construction: once players >= 2, slot 0 is ' +
-        'built without the gamepad merge, and SLOT 1 claims gamepad[0] as its own ' +
-        'standalone co-player source instead.',
+      'Composes freely with `gamepad`: slot 0\'s optional pad[0] merge and every co-player ' +
+        'slot\'s own dedicated pad index (`pad[i] -> slot[i]`) read different indices of ' +
+        'the same pads array, so they never collide.',
+      'Named tradeoff: a session\'s only physical pad (usually browser index 0) now feeds ' +
+        'slot 0 (if `gamepad` is on), not slot 1 -- "P1 on keyboard, hand the one pad to ' +
+        'P2" has no zero-flag path anymore.',
       'Not part of the playtest bundle.',
       'Ignored under `level=sandbox`: the sandbox has no co-op spawn rule and always builds ' +
         'for one player.',
@@ -631,8 +643,8 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
         'autonomous match.',
       'Clamped against the resolved player count, not rejected: `bots=4` with ' +
         '`players=2` claims both slots rather than erroring.',
-      'A bot-claimed slot never builds its slot\'s real controller (slot 1\'s gamepad ' +
-        'reader, slots 2+\'s idle source).',
+      'A bot-claimed slot never builds its slot\'s real controller -- its own dedicated ' +
+        'gamepad reader (`pad[i] -> slot[i]`).',
       'Not excluded from the sandbox, unlike `players`: the sandbox always resolves to ' +
         'one slot, and `bots=1` there is the same substitution `autoplay=1` already does.',
     ],
