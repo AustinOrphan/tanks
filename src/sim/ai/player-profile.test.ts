@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { ARENAS, createWorldFor } from '../arena';
-import { step } from '../world';
+import { step, createWorld } from '../world';
+import type { Tank, Vec2 } from '../types';
+import { fromAngle, vnorm, vsub, vdist } from '../types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from './player-profile';
+
+function makeTank(kind: Tank['kind'], id: number, x: number, y: number): Tank {
+  return {
+    id, kind, pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
+    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+    aiState: 'idle', aiTimer: 0,
+  };
+}
 
 /**
  * The competent-player headline metric: the same shape as pacifist.test.ts (a
@@ -95,21 +105,32 @@ describe.skip('competent-player measurement (flip skip off to run locally)', () 
 });
 
 // ---------------------------------------------------------------------------
-// PINNED assertions, run on every `npm test`. Population: the 4 shipped arenas x 25
-// seeds each = 100 games -- a smaller sample than the measurement block above (60 seeds)
-// purely to keep this file's runtime down (a 5-simulated-minute cap x 100 games still
-// takes real wall-clock seconds); re-measured directly AT this population rather than
-// assumed from the 60-seed numbers, since a smaller sample is not guaranteed to land on
-// the same rate. Computed once, in the describe body (mirrors pacifist.test.ts's `rows`),
-// so every `it` below reads the same 100 games instead of re-simulating per assertion.
+// PINNED assertions, run on every `npm test`. Population: ALL shipped arenas
+// (ARENAS.length, 5 as of arena-05) x 25 seeds each = 125 games -- a smaller sample
+// than the measurement block above (60 seeds/arena) purely to keep this file's runtime
+// down (a 5-simulated-minute cap x 125 games still takes real wall-clock seconds);
+// re-measured directly AT this population rather than assumed from the 60-seed
+// numbers, since a smaller sample is not guaranteed to land on the same rate. Computed
+// once, in the describe body (mirrors pacifist.test.ts's `rows`), so every `it` below
+// reads the same 125 games instead of re-simulating per assertion.
 //
-// Measured at this population (headless run of this exact file, current
-// decidePlayerInput):
-//   arena1: 21/25 wins  arena2: 16/25  arena3: 7/25  arena4: 6/25
-//   total: 50/100 wins, 50/100 losses, 0/100 timeouts
-//   self-mine deaths: 5/50 losses (all 5 in arena2)
-//   fires/game: arena1 21.7 arena2 14.4 arena3 49.6 arena4 34.7
-//   mines/game: arena1 1.48 arena2 6.52 arena3 4.40 arena4 3.12
+// Re-measured at this population after directive A part 2 (centroid-aware retreat)
+// landed AND directive A part 1 (destructible-wall shots) was implemented, then
+// stripped on adjudicated review -- see decidePlayerInput's doc comment and the PR 2b
+// plan doc. This is the population's THIRD measurement in this branch's history: an
+// earlier comment here quoted a 4-arena, 100-game population from before arena-05
+// shipped; a later one quoted 5 arenas with wall-shooting active; this one is 5 arenas
+// with wall-shooting removed again:
+//   arena1: 21/25 wins  arena2: 13/25  arena3: 7/25  arena4: 7/25  arena5: 3/25
+//   total: 51/125 wins (40.8%), 74/125 losses, 0/125 timeouts
+//   self-mine deaths: 10/74 losses (9 in arena2, 1 in arena3)
+//   fires/game: arena1 20.4 arena2 13.4 arena3 55.8 arena4 37.3 arena5 40.5
+//   mines/game: arena1 1.44 arena2 7.80 arena3 5.12 arena4 2.60 arena5 6.48
+// The overall win/loss split (51/125) happens to match the wall-shooting-active
+// measurement exactly; the per-arena breakdown and self-mine share did not (this sim is
+// deterministic but chaotic -- removing one behavior changes the game from that tick on,
+// not just the removed behavior's own footprint -- see PLAYER_MINE_CHANCE's comment in
+// player-profile.ts for the same caveat applied to a different gate).
 // ---------------------------------------------------------------------------
 describe('a competent scripted player against the shipped arenas', () => {
   const SEEDS = 25;
@@ -118,51 +139,60 @@ describe('a competent scripted player against the shipped arenas', () => {
   const winRate = (a: number) => perArena[a].filter((r) => r.outcome === 'win').length / SEEDS;
 
   it('wins a meaningful share of games against the shipped roster', () => {
-    // Population: 100 games (4 shipped arenas x 25 seeds). Measured 50/100 (50%).
+    // Population: 125 games (5 shipped arenas x 25 seeds). Measured 51/125 (40.8%).
     // Bounded well below that so ordinary AI/arena tuning does not fail the build; a
     // regression that makes the scripted player hapless (rate collapses toward 0) trips
-    // it -- confirmed: `fire = false` drops this to 5/100 and dies here.
+    // it -- confirmed: `fire = false` drops this to 5/100 and dies here (that specific
+    // check predates arena-05 and directive A/B and was not rerun at the current
+    // population/behavior; the mechanism it guards -- fire wired to false -- is
+    // unaffected by either change).
     //
     // NO upper bound: an "aimbot ceiling" was tried and dropped. Three escalating
     // buffs -- perfect aim + instant fire (zero jitter, reactionTicks 0), the same plus
     // ignoring lineOfSight for targeting, and the same plus permanent full-speed
-    // kiting -- were each applied in isolation and measured on this exact 100-game
-    // population: 48/100, 15/100 and 15/100 respectively. None exceeded the unmodified
-    // 50/100, and two were WORSE (a wall-blind target wastes fire on an enemy it cannot
-    // hit; permanent kiting forfeits position). So win rate here is bounded by
-    // survival/positioning, not by offense, and no buff to THIS file's own levers was
-    // found that pushes it toward 1 -- an upper bound would have been unfalsifiable by
-    // any mutation actually tried, which is exactly the decorative-assertion trap
-    // CLAUDE.md warns against. If a real "shoots through everything, never misses,
-    // never dies" bug ever needs catching, it will need a mutation this file's movement
-    // model cannot express (e.g. bypassing dangerAvoidMove's own geometry), which is
-    // out of this issue's scope.
+    // kiting -- were each applied in isolation and measured on the THEN-current 100-game,
+    // 4-arena population: 48/100, 15/100 and 15/100 respectively, none exceeding the
+    // unmodified 50/100 and two WORSE (a wall-blind target wastes fire on an enemy it
+    // cannot hit; permanent kiting forfeits position). That experiment has not been
+    // rerun at the current 125-game, 5-arena population or against directive A/B's
+    // added behavior -- named here as a historical argument for why no upper bound is
+    // asserted, not as a current measurement. So win rate here is bounded by
+    // survival/positioning, not by offense; an upper bound would have been unfalsifiable
+    // by any mutation actually tried at the time, which is exactly the decorative-
+    // assertion trap CLAUDE.md warns against. If a real "shoots through everything,
+    // never misses, never dies" bug ever needs catching, it will need a mutation this
+    // file's movement model cannot express (e.g. bypassing dangerAvoidMove's own
+    // geometry), which is out of this issue's scope.
     const wins = all.filter((r) => r.outcome === 'win').length;
     const rate = wins / all.length;
     expect(rate, `${wins}/${all.length} games won`).toBeGreaterThan(0.2);
   });
 
   it('reads arena-01 as easier than arena-03 and arena-04', () => {
-    // Measured win rates: arena-01 21/25 (84%), arena-03 7/25 (28%), arena-04 6/25 (24%)
-    // -- a >50-point gap either way, wide enough to stay a stable ordinal claim under
+    // Measured win rates: arena-01 21/25 (84%), arena-03 7/25 (28%), arena-04 7/25 (28%)
+    // -- a >55-point gap either way, wide enough to stay a stable ordinal claim under
     // ordinary tuning rather than sitting on a fragile boundary. This is the
     // "level 4 is harder than level 1" kind of claim the issue asks this harness to make
-    // measurable; it does not by itself distinguish arena-03 from arena-04 (28% vs 24%
-    // is within the noise a small tuning change could flip).
+    // measurable; it does not by itself distinguish arena-03 from arena-04 (both 28% at
+    // this population -- within the noise a small tuning change could flip either way).
+    // Arena-05 is not part of this specific ordinal claim (it predates arena-05's
+    // addition and nothing in directive A/B required extending it); for reference it is
+    // currently the hardest of the five at 3/25 (12%).
     //
-    // Mutation note: every production mutation tried against this assertion (disabling
-    // dodging, forcing point-blank ramming, both together) collapsed EVERY arena's win
-    // rate toward 0 rather than closing the gap non-degenerately, so the cleanest kill
-    // found was arena-01 and arena-03 both landing at 0/25 (`0 > 0` correctly fails).
-    // The real, unmutated 56-84-point gaps above are the actual evidence this assertion
-    // is not a tautology; no mutation was found that flips the order while both sides
-    // stay above zero.
+    // Mutation note (from before arena-05/directive A/B; not rerun at the current tree):
+    // every production mutation tried against this assertion (disabling dodging,
+    // forcing point-blank ramming, both together) collapsed EVERY arena's win rate
+    // toward 0 rather than closing the gap non-degenerately, so the cleanest kill found
+    // was arena-01 and arena-03 both landing at 0/25 (`0 > 0` correctly fails). The
+    // real, unmutated gaps above are the actual evidence this assertion is not a
+    // tautology; no mutation was found that flips the order while both sides stay above
+    // zero.
     expect(winRate(0), 'arena-01 vs arena-03').toBeGreaterThan(winRate(2));
     expect(winRate(0), 'arena-01 vs arena-04').toBeGreaterThan(winRate(3));
   });
 
   it('still shoots: reaction-gated fire is not the same as passive', () => {
-    // Population: same 100 games. Measured per-arena averages 14.4-49.6 fires/game; the
+    // Population: same 125 games. Measured per-arena averages 13.4-55.8 fires/game; the
     // bar sits far below the lowest observed so it only catches an accidental
     // "never/rarely fires" regression, not ordinary aim/reaction retuning.
     const fires = all.reduce((n, r) => n + r.fires, 0);
@@ -170,7 +200,7 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('lays mines occasionally rather than never or constantly', () => {
-    // Population: same 100 games. Measured per-arena averages 1.48-6.52 mines/game.
+    // Population: same 125 games. Measured per-arena averages 1.44-7.80 mines/game.
     const mines = all.reduce((n, r) => n + r.mines, 0);
     const perGame = mines / all.length;
     expect(perGame, `${mines} mines over ${all.length} games`).toBeGreaterThan(0.3);
@@ -178,15 +208,118 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('does not routinely kill itself with its own mine', () => {
-    // Population: all LOSSES across the 100 games (a self-mine death can only happen in
-    // a loss), measured at 50. Self-mine share measured 5/50 (10%), all in arena-02. The
-    // residual is real and documented (PLAYER_MINE_CHANCE's comment in
-    // player-profile.ts) -- this is a regression guard against it becoming the DOMINANT
-    // cause of death, not a claim that it is eliminated.
+    // Population: all LOSSES across the 125 games (a self-mine death can only happen in
+    // a loss), measured at 74. Self-mine share measured 10/74 (13.5%), 9 in arena-02 and
+    // 1 in arena-03. The residual is real and documented (PLAYER_MINE_CHANCE's comment
+    // in player-profile.ts) -- this is a regression guard against it becoming the
+    // DOMINANT cause of death, not a claim that it is eliminated.
     const losses = all.filter((r) => r.outcome === 'lose');
     const selfMine = losses.filter((r) => r.selfMineDeath).length;
     expect(losses.length, 'population: losses only, out of 100 games').toBeGreaterThan(0);
     expect(selfMine / losses.length, `${selfMine}/${losses.length} losses were self-mine`).toBeLessThan(0.5);
+  });
+});
+
+/**
+ * Directive A part 1 (destructible-wall shots) was implemented here and then STRIPPED
+ * on adjudicated review: a throwaway probe found a shell never destroys a destructible
+ * wall in this sim (only a mine blast does, mines.ts's applyBlast), so aiming at and
+ * firing on one spent a `weapon.maxActiveProjectiles` slot for a shot that could never
+ * pay off -- worse than holding fire, not merely inert. See decidePlayerInput's own doc
+ * comment and the PR 2b plan doc (docs/superpowers/plans/2026-08-16-bot-competence.md)
+ * for the full finding; mine-breaching (using the mechanic that actually opens a
+ * destructible wall) is queued there as the follow-up. The two fixtures this section
+ * used to carry (a destructible-wall positive case and a solid-wall negative control)
+ * are gone with the feature they tested.
+ */
+
+/**
+ * Directive A, part 2: whole-map awareness. A bounded per-tick pass builds a threat
+ * summary (nearest, centroid) that the movement band's retreat branch reads instead of
+ * nearest-only distance -- retreating away from the opponent MASS, not just whichever
+ * one happens to be closest, once several are in play.
+ *
+ * Fixture: player at the origin, one opponent close enough to trigger retreat (within
+ * PLAYER_MINIMUM_DISTANCE) directly south, a second opponent further north. Retreating
+ * from the NEAREST alone points north (away from the close one); retreating from the
+ * CENTROID of both points south (the centroid sits north of the player, since the far
+ * opponent pulls it past the midpoint) -- the two disagree by construction, which is
+ * what makes this fixture able to actually distinguish the two rules.
+ *
+ * Seed 3 was found by scanning seeds 1..300 against the CURRENT (pre-threat-summary)
+ * code and keeping one where the retreat draw actually fires -- see the self-check
+ * assertion below, which fails loudly (not vacuously) if a future change stops
+ * reaching the retreat branch on this seed.
+ */
+describe('directive A part 2: whole-map threat summary informs retreat', () => {
+  const PLAYER_ID = 1;
+
+  it('retreats from the opponent centroid, not just the nearest, when a second opponent is in play (RED before assessThreats exists)', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const near = makeTank('brown', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
+    const far = makeTank('grey', 3, 0, 6);    // pulls the centroid to (0, 2)
+    const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3 });
+    const rnd = mulberry32(3); // found by scanning seeds 1..300 for one where the retreat draw fires
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    // Reconstruct both candidate directions using the SAME wander heading this exact
+    // call drew (read back from state, mutated in place) -- blend/normalize are shared
+    // infrastructure pinned elsewhere; only WHICH point feeds them is in question here.
+    const wander = fromAngle(state.wanderHeading);
+    const blend = (toward: Vec2): Vec2 => vnorm({
+      x: toward.x * 0.5 + wander.x * 0.5,
+      y: toward.y * 0.5 + wander.y * 0.5,
+    });
+    const oldNearestAway = blend(vnorm(vsub(player.pos, near.pos)));
+    const centroid = { x: (near.pos.x + far.pos.x) / 2, y: (near.pos.y + far.pos.y) / 2 };
+    const newCentroidAway = blend(vnorm(vsub(player.pos, centroid)));
+
+    // Self-check: the fixture must actually discriminate the two rules (retreat fired,
+    // and the two candidate directions are genuinely far apart) or the assertion below
+    // would pass vacuously.
+    expect(vdist(input.move, wander), 'the retreat draw never fired on this seed -- fixture is vacuous')
+      .toBeGreaterThan(0.05);
+    expect(vdist(oldNearestAway, newCentroidAway), 'fixture does not actually discriminate the two rules')
+      .toBeGreaterThan(0.5);
+
+    expect(input.move.x, `move.x: old nearest-away=${oldNearestAway.x.toFixed(4)} new centroid-away=${newCentroidAway.x.toFixed(4)}`)
+      .toBeCloseTo(newCentroidAway.x, 5);
+    expect(input.move.y, `move.y: old nearest-away=${oldNearestAway.y.toFixed(4)} new centroid-away=${newCentroidAway.y.toFixed(4)}`)
+      .toBeCloseTo(newCentroidAway.y, 5);
+  });
+
+  it('a CORPSE is not an opponent: a dead tank pulls neither the nearest slot nor the centroid', () => {
+    // Review measured this gap: dropping isOpponent's alive check survived every test
+    // in this file (0 of 9 red). Same fixture as above plus a dead third enemy placed
+    // where, if counted, it would visibly drag the centroid east -- the retreat
+    // direction below discriminates. Breaks if isOpponent stops requiring alive.
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const near = makeTank('brown', 2, 0, -2);
+    const far = makeTank('grey', 3, 0, 6);
+    const corpse = { ...makeTank('teal', 4, 40, 0), alive: false };
+    const world = createWorld({ walls: [], tanks: [player, near, far, corpse], spawns: [], lives: 3 });
+    const rnd = mulberry32(3); // same seed as above: the retreat draw fires identically
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    const wander = fromAngle(state.wanderHeading);
+    const blend = (toward: Vec2): Vec2 => vnorm({
+      x: toward.x * 0.5 + wander.x * 0.5,
+      y: toward.y * 0.5 + wander.y * 0.5,
+    });
+    const livingCentroid = { x: (near.pos.x + far.pos.x) / 2, y: (near.pos.y + far.pos.y) / 2 };
+    const livingAway = blend(vnorm(vsub(player.pos, livingCentroid)));
+    const corpseCentroid = {
+      x: (near.pos.x + far.pos.x + corpse.pos.x) / 3,
+      y: (near.pos.y + far.pos.y + corpse.pos.y) / 3,
+    };
+    const corpseAway = blend(vnorm(vsub(player.pos, corpseCentroid)));
+    expect(vdist(livingAway, corpseAway), 'fixture does not discriminate corpse inclusion')
+      .toBeGreaterThan(0.3);
+
+    expect(input.move.x).toBeCloseTo(livingAway.x, 5);
+    expect(input.move.y).toBeCloseTo(livingAway.y, 5);
   });
 });
 
