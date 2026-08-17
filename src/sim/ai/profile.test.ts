@@ -284,7 +284,7 @@ describe('estimationAccuracy scales the perceived hazard radius from the AI_HAZA
   // now produce below.
   // ---------------------------------------------------------------------------
 
-  it('UNDER-estimation: the tank does not dodge a mine sitting inside its own actual kill radius (the literal sometimes-fatal case)', () => {
+  it('UNDER-estimation: the tank does not dodge a mine sitting inside its own actual kill radius -- the DECISION half of "sometimes fatal" (death itself is not simulated here)', () => {
     const grey = tank(6, 'grey', { x: 0, y: 0 });
     const cfg = withAi(configFor('grey'), { estimationAccuracy: 0.3 });
     const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 3, armed: true, detonated: false };

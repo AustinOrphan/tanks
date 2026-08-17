@@ -365,7 +365,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
 describe('directive B: estimation error (the player half, injected rnd, never world.seed)', () => {
   const PLAYER_ID = 1;
 
-  it('UNDER-estimation: the player does not dodge a mine sitting inside its own actual kill radius (the literal sometimes-fatal case)', () => {
+  it('UNDER-estimation: the player does not dodge a mine sitting inside its own actual kill radius -- the DECISION half of "sometimes fatal" (death itself is not simulated here)', () => {
     const player = makeTank('player', PLAYER_ID, 0, 0);
     // 2.48: inside the TRUE kill radius (MINE_BLAST_RADIUS + TANK_RADIUS = 2.5) and the
     // true flee radius (3.25), but past the perceived one (~2.45) with real margin either

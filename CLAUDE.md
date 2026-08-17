@@ -318,7 +318,12 @@ the perceived mine-flee radius, danger corridor and mine-tactical radius `danger
 the per-bucket mine-proposal probability (`mineInclination`) — and
 `reactionTime`: the dispatcher holds every AI shot until the solution has been
 HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
-span; cover resets the clock. **Every profile field is now consumed**, including
+span; cover resets the clock. **Every profile field is consumed by the
+implementations it applies to** — a scoped claim since 2026-08-16, not a universal
+one: `estimationAccuracy` is read only where hazard estimation happens, so
+STATIONARY's two profiles (STATIC_BASIC, RICOCHET_SNIPER) carry a value nothing
+reads, the same shape as their `preferredDistance`/`minimumDistance`/`retreatChance`
+(see the estimation-error paragraph below). That includes
 both shot weights in BOTH mobile and stationary implementations — `brown.ts`
 gained bank shots gated on `bankShotWeight > 0`, which is what makes
 RICOCHET_SNIPER (the **green** tank, level 4) a real enemy rather than authored
