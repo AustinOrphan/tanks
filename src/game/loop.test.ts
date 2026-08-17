@@ -977,6 +977,15 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
             // devFlags merge below is built from, so this cannot drift from what the
             // game itself would have wired.
             !opts.devFlags?.coopPool,
+            // n-player arc PR 4 (FFA + teams): mirrors levels.ts's campaign branch
+            // (`flags.mode ?? 'campaign-coop'`, `flags.friendlyFire`) so a versus test
+            // that sets opts.devFlags.mode gets a REAL FFA/teams world -- enemies
+            // actually stripped, Tank.team actually stamped -- rather than a coop world
+            // that happens to have the right playerCount. Before this, the fake ignored
+            // devFlags.mode entirely: any test passing mode: 'ffa' here would silently
+            // get a coop world back.
+            opts.devFlags?.mode ?? 'campaign-coop',
+            opts.devFlags?.friendlyFire,
           );
           // Back-dated past COUNTDOWN_TICKS, same convention every live-play fixture
           // in this file uses (see winningWorld below): a fresh world cannot act on
@@ -2773,6 +2782,40 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(last).not.toBeNull();
       expect(last![1]).toBe(1); // P2's slot, attributed by tallyCoopKills
       expect(last![0] ?? 0).toBe(0); // not misfiled onto P1's slot
+      h.handle.dispose();
+    });
+
+    // n-player arc PR 4 (FFA + teams): the versus twin of the test above. tallyCoopKills
+    // (loop.test.ts's own describe block) and hud.setVersusResults (hud.test.ts) are each
+    // unit-tested directly -- neither can see whether onFrameEvents' mode dispatch
+    // (`isVersus` above) still routes a real frame's kill into setVersusResults instead of
+    // setCoopKills. Before this test, versusResultsPushes was recorded but nothing read
+    // it -- a dangling hook: the dispatch branch that fires when isVersus is true was
+    // exercised by no test in this file, only by the isVersus===false branch above.
+    it('a versus (ffa) kill flows through tallyCoopKills into hud.setVersusResults, and setCoopKills gets null, in a real driven frame', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      const world = h.rec.builtWorlds[0];
+      // Confirms the fake levels.world() above actually threaded devFlags.mode into the
+      // REAL createWorldFor call -- if it silently built a campaign-coop world instead
+      // (as it did before this test motivated extending the fake), every assertion below
+      // would either fail confusingly or pass vacuously against the wrong dispatch branch.
+      expect(world.mode).toBe('ffa');
+      const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      world.bullets.push({
+        id: 901, ownerId: p2.id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const lastVersus = h.rec.versusResultsPushes.at(-1);
+      expect(lastVersus).not.toBeNull();
+      expect(lastVersus!.mode).toBe('ffa');
+      expect(lastVersus!.kills[1]).toBe(1); // P2's slot, attributed by tallyCoopKills
+      expect(lastVersus!.deaths[0]).toBe(1); // P1's slot died
+      // The coop line is suppressed while in a versus mode -- the two results lines are
+      // never both live at once (loop.ts's isVersus dispatch).
+      expect(h.rec.coopKillPushes.at(-1)).toBeNull();
       h.handle.dispose();
     });
   });
