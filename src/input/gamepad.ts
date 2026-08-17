@@ -24,10 +24,20 @@ import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
  * place for the one pad to go. Under `pad[i] -> slot[i]`, that lone pad (almost always
  * browser index 0) now feeds slot 0 -- if the player opts in via `?dev=1&gamepad=1` --
  * and slot 1 (bound to padIndex 1) sees nothing from it. "P1 on keyboard, hand the one
- * pad to P2" regresses: there is no longer a zero-flag way to hand a single physical pad
- * to a co-player slot. Accepted, not fixed -- see
+ * pad to P2" regresses AT THIS LAYER: there is no zero-flag, zero-click way to hand a
+ * single physical pad to a co-player slot, and that stays true here -- see
  * docs/superpowers/plans/2026-08-17-controllers-4.md for the full reasoning and
- * `gamepad.test.ts`'s "THE NAMED TRADEOFF" test, which pins it as deliberate.
+ * `gamepad.test.ts`'s "THE NAMED TRADEOFF" test, which still pins the DEFAULT mapping
+ * as deliberate.
+ *
+ * NO LONGER THE WHOLE STORY, though: the controller assignment UI (docs/superpowers/
+ * plans/2026-08-17-controller-assignment.md, `src/input/assignment.ts`) is the "real UI
+ * work" this comment used to name as deferred. `reassign`'s exclusivity-bounce makes
+ * assigning padIndex 0 to slot 1 one click -- closing the gap this file cannot close by
+ * itself, since a fixed-offset default mapping was never going to serve both "P1
+ * optionally on a controller" and "every later slot has its own dedicated pad" at once.
+ * The default this file computes is still what a session boots with; the panel is what
+ * lets a player move away from it.
  *
  * Split in two on purpose. `deadzoneVector` is the pure mapping core: raw axis pair in,
  * a analog vector out, no DOM. `createGamepadReader` is the stateful edge at `poll()` --
