@@ -207,6 +207,21 @@ made while writing the code.
   old body already produced empty `kills`/`deaths` for a player-kind victim.
 - `hud.ts` `setVersusResults` (`hud.test.ts`, 5 new tests mirroring the 5
   `setCoopKills` cases): **5 of 5 red** (the method did not exist).
+- `loop.ts` versus HUD dispatch, end to end (`loop.test.ts`, 1 new test, added in
+  review after the rest of this table was first drafted): `tallyCoopKills` and
+  `setVersusResults` above are each unit-tested directly, which cannot see whether
+  `onFrameEvents` still routes a real frame's kill into `setVersusResults` at all — the
+  composition blindness CLAUDE.md names for the coop precedent, on its versus twin.
+  Writing it also surfaced that `loop.test.ts`'s fake `levels.world()` dropped
+  `devFlags.mode`/`friendlyFire` silently (never threaded into its `createWorldFor`
+  call), so any versus test against it would have built a `campaign-coop` world with no
+  signal anything was wrong; the fake was extended to thread both, mirroring its
+  existing `coopPool` precedent, and the new test asserts `world.mode === 'ffa'` first
+  to rule out that vacuous pass. **1 of 1 red** against pre-PR4 `loop.ts` (verified by a
+  `git show 1a9f303:src/game/loop.ts` swap-in, restored via `git diff --stat` showing
+  zero drift): failed with `TypeError: Cannot read properties of undefined (reading
+  'mode')`, since `versusResultsPushes` never received a non-null push under the old
+  unconditional `setCoopKills`-only dispatch.
 - `entities.ts` `TEAM_COLORS`/`teamColor` (`entities.test.ts`, 3 new tests: a
   distinctness sweep plus a ring-dispatch and a shell-tint-dispatch test): the
   distinctness sweep does not depend on the dispatch and would pass either way; the two
@@ -224,14 +239,17 @@ covers more than one of the three.
 
 **Full gate, all exit code 0:**
 - `npx tsc --noEmit` — clean.
-- `npm test` (`tsc --noEmit && vitest run`) — 113 files passed, 1 skipped; 2627 tests
-  passed, 2 skipped; 0 failed.
+- `npm test` (`tsc --noEmit && vitest run`) — 113 files passed, 1 skipped; 2628 tests
+  passed, 2 skipped; 0 failed (2627 before the review-driven `loop.test.ts` addition
+  above).
 - `npm run mutate` — 13/13 mutation(s) ran: 11 killed, 2 survives (both pre-existing
   declared `equivalent mutant`/expected survivors, unrelated to this PR), 0 mismatches
   vs. declared outcome. `replay-recorder-wraps-the-raw-controller`'s declared
-  `expectFailures: 4` still reads "4 of 252 test(s) failed" — the population moved from
-  245 (PR3) to 252 across this PR's `loop.test.ts` additions, the same
-  population-vs-count distinction CLAUDE.md's testing conventions section asks for.
+  `expectFailures: 4` reads "4 of 253 test(s) failed" as of the final re-run (after the
+  review-driven `loop.test.ts` addition above) — the scoped population moved 245 (PR3)
+  -> 252 (this PR's first `loop.test.ts` additions) -> 253 (the composition test added
+  in review), the numerator holding at 4 throughout, the same population-vs-count
+  distinction CLAUDE.md's testing conventions section asks for.
 - `npm run build` (`tsc --noEmit && vite build`) — clean.
 - `npm run portability` — clean, against the built `dist/`.
 - `npm audit --omit=dev --audit-level=high` — 0 vulnerabilities.
