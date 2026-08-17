@@ -309,11 +309,21 @@ preferred, seeded retreat draw inside minimum, wander in the band; tuned by
 sweep, see `SEEK_APPROACH_BIAS`) — and `aimAccuracy`: per-profile jitter is
 `AI_AIM_SPREAD / aimAccuracy` (`profileAimSpread`), the anchor being a
 perfect-accuracy profile's spread; curve chosen by sweep, see the anchor's
-comment in constants.ts — and `minePlacementChance` in full: its magnitude is
+comment in constants.ts — and `estimationAccuracy` (directive B): per-profile hazard
+misjudgement is `AI_HAZARD_SPREAD / estimationAccuracy` (`profileHazardSpread`), the same
+anchor/derate shape, feeding a per-tank-per-window `estimationError` draw that perturbs
+the perceived mine-flee radius, danger corridor and mine-tactical radius `dangerAvoidMove`/
+`incomingThreats`/`mineThreatensPlayer`/`friendlyInMineBlast` gate on — and
+`minePlacementChance` in full: its magnitude is
 the per-bucket mine-proposal probability (`mineInclination`) — and
 `reactionTime`: the dispatcher holds every AI shot until the solution has been
 HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
-span; cover resets the clock. **Every profile field is now consumed**, including
+span; cover resets the clock. **Every profile field is consumed by the
+implementations it applies to** — a scoped claim since 2026-08-16, not a universal
+one: `estimationAccuracy` is read only where hazard estimation happens, so
+STATIONARY's two profiles (STATIC_BASIC, RICOCHET_SNIPER) carry a value nothing
+reads, the same shape as their `preferredDistance`/`minimumDistance`/`retreatChance`
+(see the estimation-error paragraph below). That includes
 both shot weights in BOTH mobile and stationary implementations — `brown.ts`
 gained bank shots gated on `bankShotWeight > 0`, which is what makes
 RICOCHET_SNIPER (the **green** tank, level 4) a real enemy rather than authored
@@ -322,6 +332,30 @@ alternates: a turret that can already see you has no reason to take the longer
 path. Brown is unaffected because STATIC_BASIC carries `bankShotWeight` 0 — proven
 by an identical trace hash over 4 arenas × 6 seeds × 2500 ticks, with a control
 showing the probe moves when banking is switched on.
+
+**`estimationAccuracy` (directive B, the 2026-08-16 owner ruling: AIs must not have
+oracle knowledge of exact mine blast radii or perfect dodge positions) is the same
+asymmetric-consumption shape `bankShotWeight` set the precedent for.** It is a REQUIRED
+field on all 8 profiles, but only DEFENSIVE/TACTICAL/OFFENSIVE/BERSERKER behaviours ever
+reach a site that reads it (`targeting.ts`'s `dangerAvoidMove`/`incomingThreats`/
+`mineThreatensPlayer`/`friendlyInMineBlast`, all now taking an optional perceived-radius
+parameter defaulted to today's exact constant); STATIONARY (brown, green/RICOCHET_SNIPER)
+never imports `dangerAvoidMove` and never reaches `friendlyInMineBlast` (gated on
+`TankAbility.MINE_LAYER`, which neither carries), so the field sits on their profile
+unread by the SHARED path, same as `preferredDistance`/`minimumDistance`/`retreatChance`
+already do for STATIONARY. The PLAYER rescues STATIC_BASIC's copy from being unread
+everywhere: it also resolves to STATIC_BASIC and DOES consume its `estimationAccuracy`,
+through an independently written mirror of the same gates in `player-profile.ts`
+(oracle-knowledge site #5, drawn from the player's own injected `rnd`, never
+`world.seed`) — so the field the shared AI path ignores for brown is exactly the field
+the player's own code reads for the identical profile. Nothing rescues RICOCHET_SNIPER's
+copy the same way: green is STATIONARY too, is never the player, and nothing else in the
+tree reads `estimationAccuracy` off it — its 0.90 sits on the profile as inert as its own
+`preferredDistance`/`minimumDistance`/`retreatChance` already are, not exempted by the
+player-side path the way STATIC_BASIC's is. `AI_HAZARD_SPREAD` (`constants.ts`, sourced
+from `balance.json` per the `AI_AIM_SPREAD` precedent) is the anchor a
+perfect-estimationAccuracy profile would still misjudge by; every shipped profile that
+reaches a consuming site sits below accuracy 1.
 
 **A green tank changed what `structuralFailures` has to check.** "No enemy sees
 the player spawn" tested `lineOfSight` only, which was the same as "no enemy can
@@ -341,7 +375,13 @@ all 7 of its tests passing while a trace probe moves. When that mutation was fir
 run it passed the WHOLE suite (1155 tests); it now fails 5 tests in 2 files,
 because green's arrival added tests that watch the bank path — so the hole is
 narrower than it was, and the general point stands. Any claim that an AI edit is
-behaviour-preserving needs a golden trace comparison, not a green suite.
+behaviour-preserving needs a golden trace comparison, not a green suite. The same blind
+spot applies to `estimationAccuracy` (directive B): a broken wiring of the perceived-
+radius sites would leave every unit test in `profile.test.ts`/`targeting.test.ts` green
+by itself, since they inject the field directly rather than exercising the seeded
+call-site draw. The hash move this PR records (`324aa9b5…` → `a5458ede…`) IS the proof
+obligation, not a decorative side effect of the change — `determinism.test.ts` passed
+before and after and could not have told the difference either way.
 
 STATIONARY still ignores `preferredDistance`/`minimumDistance`/`retreatChance`,
 and always will: they are a distance band for a tank that moves. "Every profile
@@ -511,7 +551,9 @@ moves `BASELINE_HASH` by construction) and is now ASSERTED, not merely printed:
 `determinism.test.ts` only proves
 self-consistency, which is invariant under behaviour changes. **Know what it does not
 cover, RE-MEASURED at the 4-arena tree (arena-05 has not re-measured these probes;
-the hash values below predate it).** Mutating `bankShot` to return the first
+the hash values below predate it, and so does the "estimation error" PR that moved
+`BASELINE_HASH` again — see below — so both figures are now unmeasured at TWO trees
+past their own, not one).** Mutating `bankShot` to return the first
 valid candidate instead of the shortest changed the then-current hash (to
 `0cf1f76a14060992eb8763c9cd20e95b8c17cde2d1dbe3e8de6c87ff47137e9a`) and fails the test —
 a later change to `resolveWalls` altered trajectories enough that bank shots now DO
@@ -529,13 +571,18 @@ imports `src/sim` only and hashes through `crypto.subtle` + `TextEncoder` rather
 `node:crypto`, which is the whole reason it can: the same code under vitest and under
 Playwright. `npm run trace:browser -- --all` serves `tools/baseline/page.html` on
 localhost (secure context — `crypto.subtle` is undefined without one) and prints one hash
-per engine. Measured on this box at the 5-ARENA trace (2026-08-11, the day arena-05
-landed): **chromium 151, firefox 153 and Playwright's webkit (JavaScriptCore, UA-spoofed
-as macOS Safari but a Linux build) all produce `324aa9b5…`, matching the pinned
+per engine. Measured on this box at the 5-ARENA trace (2026-08-16, the day directive B's
+estimation error landed — see "AIs must not have oracle knowledge" below, the trace
+arc's FIRST deliberate hash move; every prior entry in this history left the hash exactly
+where it started): **chromium 151, firefox 153 and Playwright's webkit (JavaScriptCore,
+UA-spoofed as macOS Safari but a Linux build) all produce `a5458ede…`, matching the pinned
 baseline** — so V8, SpiderMonkey and JSC agree on this trace, on Linux x86-64, headless.
-(The 4-arena trace's three-engine agreement on `015a5d17…` was the same result at the
-previous baseline; a new arena moves the hash by construction, so this re-run is owed
-again after every arena. CI's `Baseline trace (chromium)` step keeps V8 current on every
+(The previous baseline, `324aa9b5…` (2026-08-11, the day arena-05 landed), and the one
+before it, `015a5d17…` (the 4-arena trace), each had the identical three-engine agreement
+measured in their own turn; a new arena moves the hash by construction, and this PR is
+the first case of a BEHAVIOUR change doing the same — see the dedicated paragraph below.
+This re-run is owed again after every arena or deliberate behaviour change. CI's
+`Baseline trace (chromium)` step keeps V8 current on every
 push; firefox and webkit re-verify on push to `main`, weekly, and on demand, via
 `.github/workflows/engines.yml` ("Engines matrix") — a SEPARATE workflow from `CI`,
 deliberately: see "The deploy waits for CI" above for why a checking job that can fail for
@@ -547,7 +594,9 @@ the same run rather than a future one. **#133 is closed**: `src/sim/math/` ports
 netlib.org/fdlibm's sin/cos/atan2 and V8's own Torque hypot formula, wired at all 17 of
 the sim's former `Math.sin`/`cos`/`atan2`/`hypot` call sites (the 4 `Math.sqrt` sites
 stay native — ES2025 correctly-rounded). `BASELINE_HASH` did **not** move — measured, not
-assumed: `324aa9b5…` is unchanged pre- and post-migration, on Node and on all three
+assumed: `324aa9b5…` (the value pinned at the time, superseded by directive B's move to
+`a5458ede…` above — this migration's own claim is about that specific pre-/post- pair and
+stays true on its own terms) is unchanged pre- and post-migration, on Node and on all three
 browser engines alike, which the plan's own Node/V8-13.6-provenance argument predicted as
 plausible but not certain. `ANGLE_HASH` is unaffected by construction (it sweeps native
 `Math.*`, never touched by this work) and the three engines still disagree on it, same
@@ -567,7 +616,10 @@ question**: one matching hash is agreement on the sampled trajectory, not a proo
 `Math.hypot`. The shipped-Safari/iOS half is now MEASURED, not open: the engines
 workflow's macOS legs (PR #168, first run at `15989dd`, 2026-08-15) drove real shipped
 Safari 26.5.2 via safaridriver and real iOS WebKit (Mobile Safari, iOS 18.7 Simulator,
-arm64) via the beacon, and both matched `BASELINE_HASH` and `VENDORED_ANGLE_HASH`. The
+arm64) via the beacon, and both matched `BASELINE_HASH` and `VENDORED_ANGLE_HASH` **as
+they stood that day** — against the pre-directive-B `324aa9b5…`, not the current
+`a5458ede…`; that leg has not re-run since the hash moved, so shipped Safari/iOS agreement
+on THIS baseline is unmeasured, not disproven. The
 sole remaining gap is a physical iOS device — one URL away:
 `npm run trace:browser -- --beacon`, open the printed URL on the phone.
 

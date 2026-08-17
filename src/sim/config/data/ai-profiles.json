@@ -2,6 +2,7 @@
   "STATIC_BASIC": {
     "behavior": "STATIONARY",
     "aimAccuracy": 0.55,
+    "estimationAccuracy": 0.5,
     "reactionTime": 0.8,
     "aggression": 0.35,
     "preferredDistance": 10,
@@ -13,6 +14,7 @@
   "DEFENSIVE_BASIC": {
     "behavior": "DEFENSIVE",
     "aimAccuracy": 0.6,
+    "estimationAccuracy": 0.65,
     "reactionTime": 0.7,
     "aggression": 0.25,
     "preferredDistance": 9,
@@ -25,6 +27,7 @@
   "DEFENSIVE_ROCKET": {
     "behavior": "DEFENSIVE",
     "aimAccuracy": 0.65,
+    "estimationAccuracy": 0.7,
     "reactionTime": 0.65,
     "aggression": 0.3,
     "preferredDistance": 10,
@@ -36,6 +39,7 @@
   "MOBILE_MINE_LAYER": {
     "behavior": "TACTICAL",
     "aimAccuracy": 0.65,
+    "estimationAccuracy": 0.6,
     "reactionTime": 0.6,
     "aggression": 0.5,
     "preferredDistance": 7.5,
@@ -48,6 +52,7 @@
   "OFFENSIVE_ASSAULT": {
     "behavior": "OFFENSIVE",
     "aimAccuracy": 0.7,
+    "estimationAccuracy": 0.45,
     "reactionTime": 0.5,
     "aggression": 0.8,
     "preferredDistance": 5.5,
@@ -59,6 +64,7 @@
   "RICOCHET_SNIPER": {
     "behavior": "STATIONARY",
     "aimAccuracy": 0.95,
+    "estimationAccuracy": 0.9,
     "reactionTime": 0.35,
     "aggression": 0.75,
     "preferredDistance": 12,
@@ -70,6 +76,7 @@
   "OFFENSIVE_ELITE": {
     "behavior": "OFFENSIVE",
     "aimAccuracy": 0.78,
+    "estimationAccuracy": 0.55,
     "reactionTime": 0.35,
     "aggression": 0.9,
     "preferredDistance": 5,
@@ -82,6 +89,7 @@
   "BERSERKER_ROCKET": {
     "behavior": "BERSERKER",
     "aimAccuracy": 0.82,
+    "estimationAccuracy": 0.3,
     "reactionTime": 0.25,
     "aggression": 1,
     "preferredDistance": 2.5,

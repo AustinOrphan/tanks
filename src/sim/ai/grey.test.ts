@@ -186,10 +186,23 @@ describe('greyDecision', () => {
   });
 
   it('H1c: the tactical radius is measured from the drop point, inclusive', () => {
+    // Directive B (estimation error): the shipped grey profile (estimationAccuracy 0.65)
+    // no longer gates on the bare AI_MINE_TACTICAL_RADIUS constant -- it gates on its own
+    // PERCEIVED radius, offset by a seeded draw (targeting.ts's estimationError). For this
+    // file's world() default (seed=7), tank.id=1, tick bucket 0, hand-derived from the real
+    // nextRng path:
+    //   rngSeed = world.seed + tank.id*5303 + bucket = 7 + 1*5303 + 0 = 5310
+    //   nextRng(5310).value = 0.7019057071302086
+    //   spread = AI_HAZARD_SPREAD / estimationAccuracy = 0.4 / 0.65 = 0.6153846153846154
+    //   offset = (0.7019057071302086 * 2 - 1) * spread = 0.24849933185256445
+    // so this fixture's EFFECTIVE boundary is AI_MINE_TACTICAL_RADIUS + that offset, not
+    // the bare constant. The inclusive-boundary claim against the BARE constant is pinned
+    // directly on mineThreatensPlayer in targeting.test.ts, unaffected by estimation noise.
+    const PERCEIVED = AI_MINE_TACTICAL_RADIUS + 0.24849933185256445;
     const inside = tank(1, 'grey', { x: 0, y: 0 });
     const outside = tank(1, 'grey', { x: 0, y: 0 });
-    const near = tank(9, 'player', { x: AI_MINE_TACTICAL_RADIUS - 1e-6, y: 0 });
-    const far = tank(9, 'player', { x: AI_MINE_TACTICAL_RADIUS + 1e-6, y: 0 });
+    const near = tank(9, 'player', { x: PERCEIVED - 1e-6, y: 0 });
+    const far = tank(9, 'player', { x: PERCEIVED + 1e-6, y: 0 });
     expect(greyDecision(world({ tanks: [inside, near] }), inside).mine).toBe(true);
     expect(greyDecision(world({ tanks: [outside, far] }), outside).mine).toBe(false);
   });

@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { brownDecision } from './brown';
 import { greyDecision } from './grey';
 import { tealDecision } from './teal';
-import { aimLead, profileAimSpread } from './targeting';
-import { AI_AIM_SPREAD } from '../constants';
+import { aimLead, profileAimSpread, profileHazardSpread, dangerAvoidMove, mineThreatensPlayer } from './targeting';
+import { AI_AIM_SPREAD, AI_HAZARD_SPREAD } from '../constants';
 import { configFor } from '../config';
 import type { ResolvedTankConfig } from '../config';
 import type { Tank, Vec2, Bullet, Wall } from '../types';
+import { vdist } from '../types';
 import type { World } from '../world';
 
 // ---------------------------------------------------------------------------
@@ -248,5 +249,99 @@ describe("minePlacementChance's MAGNITUDE is the proposal rate per draw bucket",
     }
     expect(always).toBe(50);
     expect(never).toBe(0);
+  });
+});
+
+describe('estimationAccuracy scales the perceived hazard radius from the AI_HAZARD_SPREAD anchor (directive B)', () => {
+  it('profileHazardSpread: accuracy 1.0 IS the anchor; lower accuracy widens by 1/accuracy', () => {
+    expect(profileHazardSpread(withAi(configFor('grey'), { estimationAccuracy: 1 }))).toBe(AI_HAZARD_SPREAD);
+    expect(profileHazardSpread(withAi(configFor('grey'), { estimationAccuracy: 0.5 })))
+      .toBeCloseTo(AI_HAZARD_SPREAD * 2, 12);
+  });
+
+  // ---------------------------------------------------------------------------
+  // RED-FIRST (directive B, "sometimes fatal"): a specific seeded draw perturbs the
+  // PERCEIVED radius past the trigger threshold, in both directions. Both fixtures use
+  // AI_HAZARD_PRIME=5303 draws hand-derived the same way targeting.test.ts's
+  // estimationError pin is: nextRng(world.seed + tank.id*5303 + floor(tick/WANDER_TICKS)).
+  //
+  // UNDER-estimation (id=6, seed=1, tick=0 -> bucket 0): nextRng(1 + 6*5303 + 0).value =
+  // nextRng(31819).value = 0.013678029412403703, a near-minimal draw. At the injected
+  // estimationAccuracy 0.3 (spread = AI_HAZARD_SPREAD/0.3 = 1.333...), offset =
+  // (0.013678029412403703*2-1) * 1.333... = -1.2968585882253238 -- perceived
+  // AI_MINE_FLEE_RADIUS shrinks from 3.25 to 1.9531414117746762.
+  //
+  // OVER-estimation (id=5, seed=1, tick=150 -> bucket 5): nextRng(1 + 5*5303 + 5).value =
+  // nextRng(26521).value = 0.9985110608395189, a near-maximal draw. Same spread, offset =
+  // (0.9985110608395189*2-1) * 1.333... = 1.3296281477860251 -- perceived flee radius
+  // widens from 3.25 to 4.579628147786025.
+  //
+  // Both were verified to actually kill the OLD (unperturbed) code before being written:
+  // against `dangerAvoidMove(w, t)` called with no radius arguments (today's exact
+  // constant, the behaviour before this wiring existed), the fatal fixture's mine at 2.4
+  // IS fled (dangerAvoidMove returns non-null) and the over-reaction fixture's mine at 4.0
+  // is NOT fled (returns null) -- the opposite of what the wired greyDecision/tealDecision
+  // now produce below.
+  // ---------------------------------------------------------------------------
+
+  it('UNDER-estimation: the tank does not dodge a mine sitting inside its own actual kill radius -- the DECISION half of "sometimes fatal" (death itself is not simulated here)', () => {
+    const grey = tank(6, 'grey', { x: 0, y: 0 });
+    const cfg = withAi(configFor('grey'), { estimationAccuracy: 0.3 });
+    const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 3, armed: true, detonated: false };
+    const w = world({ seed: 1, tick: 0, tanks: [grey], mines: [m] });
+
+    // Ground the "fatal" claim: this mine is inside the tank's TRUE lethal blast radius
+    // (MINE_BLAST_RADIUS + TANK_RADIUS = 2.5) right now, not merely inside the flee margin.
+    expect(vdist(grey.pos, m.pos)).toBeLessThanOrEqual(2.5);
+    // And the TRUE (unperturbed) radius would flee it -- proves the old code caught this.
+    expect(dangerAvoidMove(w, grey)).not.toBeNull();
+
+    const d = greyDecision(w, grey, cfg);
+    // desiredMove is the undodging seek/wander baseline (grey has no player in this
+    // fixture, so seekMove reduces to wanderMove), not the escape vector (-1, 0) that
+    // fleeing this mine would produce.
+    expect(d.desiredMove.x).not.toBeCloseTo(-1, 3);
+  });
+
+  it("UNDER-estimation is the same consumption through tealDecision, not a copy that could rot separately", () => {
+    const teal = tank(6, 'teal', { x: 0, y: 0 });
+    const cfg = withAi(configFor('teal'), { estimationAccuracy: 0.3 });
+    const m = { id: 70, ownerId: 6, pos: { x: 2.4, y: 0 }, timer: 3, armed: true, detonated: false };
+    const w = world({ seed: 1, tick: 0, tanks: [teal], mines: [m] });
+    expect(dangerAvoidMove(w, teal)).not.toBeNull(); // control: true radius flees
+    const d = tealDecision(w, teal, cfg);
+    expect(d.desiredMove.x).not.toBeCloseTo(-1, 3);
+  });
+
+  it('OVER-estimation: the tank dodges a mine the TRUE radius says is safe (wasted caution, not merely cosmetic scatter)', () => {
+    const grey = tank(5, 'grey', { x: 0, y: 0 });
+    const cfg = withAi(configFor('grey'), { estimationAccuracy: 0.3 });
+    const m = { id: 71, ownerId: 5, pos: { x: 4, y: 0 }, timer: 3, armed: true, detonated: false };
+    const w = world({ seed: 1, tick: 150, tanks: [grey], mines: [m] });
+
+    // The TRUE radius (3.25) does not reach this mine -- proves the old code ignored it.
+    expect(dangerAvoidMove(w, grey)).toBeNull();
+
+    const d = greyDecision(w, grey, cfg);
+    // desiredMove IS the escape vector away from (4, 0): straight along -x.
+    expect(d.desiredMove.x).toBeCloseTo(-1, 3);
+    expect(d.desiredMove.y).toBeCloseTo(0, 3);
+  });
+});
+
+describe('mineThreatensPlayer/friendlyInMineBlast wiring: the OFFENSE side of estimation error', () => {
+  it("grey's mine-threat gate uses the SAME perceived tacticalRadius the dodge gate drew this tick", () => {
+    // Same UNDER-estimation draw as above (id=6, seed=1, tick=0): perceived
+    // AI_MINE_TACTICAL_RADIUS shrinks from 8.5 to 8.5 - 1.2968585882253238 =
+    // 7.203141411774676. A player just inside the TRUE tactical radius but outside the
+    // perceived one is missed -- the tank proposes no mine, even though the true radius
+    // (and every other gate) would say yes.
+    const grey = tank(6, 'grey', { x: 0, y: 0 });
+    const cfg = withAi(configFor('grey'), { estimationAccuracy: 0.3, minePlacementChance: 1 });
+    const player = tank(2, 'player', { x: 8, y: 0 }); // inside true 8.5, outside perceived 7.2
+    const wTrue = world({ seed: 1, tick: 0, tanks: [grey, player] });
+    expect(mineThreatensPlayer(wTrue, grey)).toBe(true); // control: true radius says yes
+    const d = greyDecision(wTrue, grey, cfg);
+    expect(d.mine).toBe(false); // perceived radius says no
   });
 });

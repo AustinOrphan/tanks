@@ -1,12 +1,12 @@
 import type { World } from '../world';
 import type { InputState, Tank, Vec2 } from '../types';
 import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
-import { lineOfSight, aimLead, dangerAvoidMove, profileAimSpread } from './targeting';
+import { lineOfSight, aimLead, dangerAvoidMove, profileAimSpread, profileHazardSpread } from './targeting';
 import { driveVelocity, circleVsAABB } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
 import {
   TANK_RADIUS, DT, TICK_HZ, WANDER_TICKS, SEEK_APPROACH_BIAS, VEC_EPS,
-  AI_MINE_TACTICAL_RADIUS, AI_MINE_FLEE_RADIUS,
+  AI_MINE_TACTICAL_RADIUS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR,
 } from '../constants';
 
 /**
@@ -15,20 +15,24 @@ import {
  * (the `autoplay` dev flag in game/loop.ts).
  *
  * Deliberately reuses the geometry/threat-assessment helpers `src/sim/ai/*.ts` already
- * proved out for the enemy AI -- lineOfSight, aimLead, dangerAvoidMove, profileAimSpread
- * -- rather than reimplementing them (see brown.ts/grey.ts/teal.ts, which this mirrors in
- * spirit). What it does NOT reuse is any of targeting.ts's PROBABILISTIC helpers
- * (wanderMove, aimJitter, mineInclination, seekMove's own draws): those are pure hashes
- * of `world.seed`, and driving the player through them would mean the player's behaviour
- * is a function of the exact same seed the enemy AI draws from -- change one enemy's
- * profile in a way that shifts how many `nextRng` calls happen before tick T (it never
- * does today, since the hashes are keyed by tick bucket, not call count -- but relying on
- * that is exactly the kind of coupling the pacifist harness's comment warns against) and
- * you would be at risk of silently perturbing the very thing engagement.measure.test.ts
- * and pacifist.test.ts measure. `decidePlayerInput` instead takes its own injected `rnd`
- * stream, precisely mirroring pacifist.test.ts's local `mulberry` PRNG -- see `mulberry32`
- * below, exported so the test file and the game's `autoplay` dev-flag wiring share one
- * implementation instead of three copies of the same 6 lines.
+ * proved out for the enemy AI -- lineOfSight, aimLead, dangerAvoidMove, profileAimSpread,
+ * profileHazardSpread -- rather than reimplementing them (see brown.ts/grey.ts/teal.ts,
+ * which this mirrors in spirit). What it does NOT reuse is any of targeting.ts's
+ * PROBABILISTIC helpers (wanderMove, aimJitter, mineInclination, seekMove's own draws,
+ * estimationError): those are pure hashes of `world.seed`, and driving the player through
+ * them would mean the player's behaviour is a function of the exact same seed the enemy AI
+ * draws from -- change one enemy's profile in a way that shifts how many `nextRng` calls
+ * happen before tick T (it never does today, since the hashes are keyed by tick bucket,
+ * not call count -- but relying on that is exactly the kind of coupling the pacifist
+ * harness's comment warns against) and you would be at risk of silently perturbing the
+ * very thing engagement.measure.test.ts and pacifist.test.ts measure. `decidePlayerInput`
+ * instead takes its own injected `rnd` stream, precisely mirroring pacifist.test.ts's
+ * local `mulberry` PRNG -- see `mulberry32` below, exported so the test file and the
+ * game's `autoplay` dev-flag wiring share one implementation instead of three copies of
+ * the same 6 lines. Directive B's estimation error rides that same injected stream (a
+ * fresh `rnd()` draw per tick, mirroring `profileHazardSpread`'s enemy-side shape but
+ * with no `world.seed`-keyed bucket to re-derive from -- see decidePlayerInput's own
+ * comment for why per-tick, not per-window, is this file's equivalent).
  */
 
 /**
@@ -273,8 +277,11 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
  * `step()` itself follows for `world`.
  *
  * Behaviour, in priority order (see the issue): dodge incoming shells / flee armed mines
- * (dangerAvoidMove, unchanged from the enemy AI -- fully deterministic, no RNG at all);
- * otherwise keep a sensible distance from the nearest enemy rather than ramming --
+ * (dangerAvoidMove, the same shared geometry the enemy AI uses and just as deterministic
+ * given its arguments -- but directive B now feeds it a PERCEIVED radius/corridor drawn
+ * fresh from `rnd` each tick, never `world.seed`, so the player can misjudge a hazard
+ * exactly as an enemy can, through its own stream rather than the shared one); otherwise
+ * keep a sensible distance from the nearest enemy rather than ramming --
  * retreating from the whole-map opponent CENTROID rather than just whichever one is
  * closest, once a second opponent is in play (see ThreatSummary); aim at the nearest
  * enemy actually in sight, jittered by the player's own resolved profile's aimAccuracy
@@ -315,8 +322,19 @@ export function decidePlayerInput(
   // nearest-opponent scan.
   const threats = assessThreats(world, player);
 
+  // Directive B: the player's own perceived hazard radii, drawn ONCE per tick from the
+  // injected `rnd` stream (never `world.seed` -- see the module comment). A linear PRNG
+  // stream has no bucket to re-derive a value from later, unlike the enemy AI's
+  // world.seed-keyed hash, so a per-TICK draw is this file's equivalent of "hold a
+  // misjudgement for a while": every mine/dodge gate below reads the SAME offset this
+  // tick, exactly as grey.ts/teal.ts reuse one `estimationError` draw across their sites.
+  const hazardOffset = (rnd() * 2 - 1) * profileHazardSpread(cfg);
+  const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
+  const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
+  const tacticalRadius = AI_MINE_TACTICAL_RADIUS + hazardOffset;
+
   // ---- Movement: dodge overrides the band/wander baseline, never the reverse. ----
-  const avoid = dangerAvoidMove(world, player);
+  const avoid = dangerAvoidMove(world, player, fleeRadius, dangerCorridor);
   const move = avoid ?? seekLikeMove(world, player, rnd, state, threats);
 
   // ---- Targeting: the nearest enemy the player can actually SEE. ----
@@ -358,18 +376,21 @@ export function decidePlayerInput(
   // ---- Mines: only while not dodging, on cooldown, and actually near an enemy --
   // mirrors grey.ts/teal.ts's mineThreatensPlayer gate with the roles swapped (there is
   // no "mineThreatensNearestEnemy" in targeting.ts to reuse: that helper is hardcoded to
-  // the player as the threatened party).
+  // the player as the threatened party). This is oracle-knowledge site #5 (directive B):
+  // an independently written parallel to targeting.ts's mine gates, not shared code, so
+  // it draws its own perceived radii above (`fleeRadius`, `tacticalRadius`) rather than
+  // calling estimationError (world.seed-keyed, enemy-only).
   //
   // Capped at ONE of the player's own active mines, not cfg.mineCapacity (2): at the
   // initial 0.3 chance, capping at one dropped arena-02's self-mine losses from 25 of 52
   // to 9 of 31 (see PLAYER_MINE_CHANCE's comment for the method caveat on attributing an
   // exact delta to one gate in a chaotic-deterministic sim). Also refuses to lay ANY
-  // mine while already standing within AI_MINE_FLEE_RADIUS of a live mine (own or not)
-  // -- the safety margin dangerAvoidMove flees to, so a mine is never dropped somewhere
-  // the player would immediately have to dodge again.
+  // mine while already standing within the PERCEIVED flee radius of a live mine (own or
+  // not) -- the same margin dangerAvoidMove now flees to, so a mine is never dropped
+  // somewhere the player's own (possibly mistaken) read says it would have to dodge again.
   const nearest = threats.nearest;
   const nearLiveMine = world.mines.some(
-    (m) => !m.detonated && vdist(player.pos, m.pos) <= AI_MINE_FLEE_RADIUS,
+    (m) => !m.detonated && vdist(player.pos, m.pos) <= fleeRadius,
   );
   // Also requires the enemy to be at a comfortable range, not point-blank -- a plausible
   // objection (don't mine while being pressed at close quarters) rather than a measured
@@ -385,7 +406,7 @@ export function decidePlayerInput(
     !nearLiveMine &&
     nearest !== null &&
     vdist(player.pos, nearest.pos) >= PLAYER_MINIMUM_DISTANCE &&
-    vdist(player.pos, nearest.pos) <= AI_MINE_TACTICAL_RADIUS;
+    vdist(player.pos, nearest.pos) <= tacticalRadius;
 
   return { move, aim: aimPoint, fire, mine };
 }

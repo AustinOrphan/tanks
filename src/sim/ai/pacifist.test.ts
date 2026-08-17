@@ -22,7 +22,10 @@ const SEEDS = 60;
 // Measured 0/60 once mine-laying became tactical, against 19/60 (31.7%) before any of the
 // fixes. The bar allows a couple of rounds' worth of slack so ordinary AI tuning does not
 // fail the build, while staying far below the old number. Every seed is fixed, so this
-// number moves only when behaviour actually changes.
+// number moves only when behaviour actually changes -- and it did, once: directive B's
+// estimation error (2026-08-16 owner ruling) makes dodging occasionally wrong on purpose,
+// re-measured at 1/60 (shotsPerRound 36.6, minesPerRound 2.67, medianKillTicks 1693 across
+// the same 60 seeds), still comfortably inside the bar.
 const MAX_FREE_WIN_RATE = 0.05;
 
 // A wander independent of the sim's own PRNG, so driving the player cannot perturb the

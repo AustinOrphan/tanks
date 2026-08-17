@@ -64,6 +64,17 @@ export interface ProjectileBalance {
 export interface AIProfileBalance {
   behavior: AIBehavior;
   aimAccuracy: number;
+  /**
+   * How well this profile judges a hazard's true radius (mine blast, bullet danger
+   * corridor) -- directive B (2026-08-16 owner ruling): AIs must not have oracle knowledge
+   * of exact mine blast radii or perfect dodge positions. Required, not optional, and
+   * strictly positive like aimAccuracy (targeting.ts's profileHazardSpread divides by it).
+   * Consumption is ASYMMETRIC by behavior, the same precedent already set for
+   * preferredDistance/minimumDistance/retreatChance under STATIONARY -- see
+   * targeting.ts's dangerAvoidMove/mineThreatensPlayer/friendlyInMineBlast call sites and
+   * player-profile.ts's own mirrored gates.
+   */
+  estimationAccuracy: number;
   reactionTime: number;
   aggression: number;
   preferredDistance: number;

@@ -158,6 +158,16 @@ describe('validateAiProfiles', () => {
     expect(() => validateAiProfiles(bad)).toThrow(/STATIC_BASIC\.aimAccuracy.*strictly positive/);
   });
 
+  it('rejects estimationAccuracy 0 (profileHazardSpread divides by it)', () => {
+    const bad = corrupt(aiProfilesJson, (c) => { (c.STATIC_BASIC as Mutable).estimationAccuracy = 0; });
+    expect(() => validateAiProfiles(bad)).toThrow(/STATIC_BASIC\.estimationAccuracy.*strictly positive/);
+  });
+
+  it('rejects a profile missing estimationAccuracy -- it is required, not optional like minePlacementChance', () => {
+    const bad = corrupt(aiProfilesJson, (c) => { delete (c.RICOCHET_SNIPER as Mutable).estimationAccuracy; });
+    expect(() => validateAiProfiles(bad)).toThrow(/RICOCHET_SNIPER.*missing required entry "estimationAccuracy"/);
+  });
+
   it('keeps minePlacementChance optional: profiles without it validate', () => {
     // STATIC_BASIC ships without the field; reaching here on the shipped file
     // (first test) already proves it, but pin the field's absence explicitly so

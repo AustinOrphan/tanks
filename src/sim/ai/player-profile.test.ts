@@ -117,20 +117,28 @@ describe.skip('competent-player measurement (flip skip off to run locally)', () 
 // Re-measured at this population after directive A part 2 (centroid-aware retreat)
 // landed AND directive A part 1 (destructible-wall shots) was implemented, then
 // stripped on adjudicated review -- see decidePlayerInput's doc comment and the PR 2b
-// plan doc. This is the population's THIRD measurement in this branch's history: an
+// plan doc. This is the population's FOURTH measurement in this branch's history: an
 // earlier comment here quoted a 4-arena, 100-game population from before arena-05
-// shipped; a later one quoted 5 arenas with wall-shooting active; this one is 5 arenas
-// with wall-shooting removed again:
-//   arena1: 21/25 wins  arena2: 13/25  arena3: 7/25  arena4: 7/25  arena5: 3/25
-//   total: 51/125 wins (40.8%), 74/125 losses, 0/125 timeouts
-//   self-mine deaths: 10/74 losses (9 in arena2, 1 in arena3)
-//   fires/game: arena1 20.4 arena2 13.4 arena3 55.8 arena4 37.3 arena5 40.5
-//   mines/game: arena1 1.44 arena2 7.80 arena3 5.12 arena4 2.60 arena5 6.48
-// The overall win/loss split (51/125) happens to match the wall-shooting-active
-// measurement exactly; the per-arena breakdown and self-mine share did not (this sim is
-// deterministic but chaotic -- removing one behavior changes the game from that tick on,
-// not just the removed behavior's own footprint -- see PLAYER_MINE_CHANCE's comment in
-// player-profile.ts for the same caveat applied to a different gate).
+// shipped; a later one quoted 5 arenas with wall-shooting active; a later one still 5
+// arenas with wall-shooting removed again; this one is post directive B (estimation
+// error, 2026-08-16 owner ruling) -- decidePlayerInput now draws one extra rnd() call
+// per tick for its own hazard-offset (see the module comment), which renumbers every
+// later draw in this file's stream, so EVERY game in this population is a genuinely
+// different run from the prior measurement, not merely a behaviour delta on top of it:
+//   arena1: 16/25 wins  arena2: 15/25  arena3: 12/25  arena4: 6/25  arena5: 1/25
+//   total: 50/125 wins (40.0%), 74/125 losses, 0/125 timeouts
+//   self-mine deaths: 5/74 losses (6.8%, down from 10/74 -- consistent with, not proof
+//     of, estimation error occasionally trading a self-mine death for a different one:
+//     the sim is chaotic, so attributing the exact delta to one gate is not warranted)
+//   fires/game: arena1 15.3 arena2 13.5 arena3 44.2 arena4 32.7 arena5 29.5
+//   mines/game: arena1 1.60 arena2 9.28 arena3 4.12 arena4 3.40 arena5 4.40
+// The overall win/loss split (50/125, 40.0%) stays close to the prior measurement
+// (51/125, 40.8%); the per-arena breakdown, self-mine share and fires/mines per game all
+// moved (this sim is deterministic but chaotic -- a behavior change anywhere changes the
+// game from that tick on, not just its own footprint -- see PLAYER_MINE_CHANCE's comment
+// in player-profile.ts for the same caveat applied to a different gate). The "arena-01
+// easier than arena-03/arena-04" ordinal claim below still holds with real margin (64%
+// vs 48% vs 24%), not merely by the assertion's own generous slack.
 // ---------------------------------------------------------------------------
 describe('a competent scripted player against the shipped arenas', () => {
   const SEEDS = 25;
@@ -139,8 +147,9 @@ describe('a competent scripted player against the shipped arenas', () => {
   const winRate = (a: number) => perArena[a].filter((r) => r.outcome === 'win').length / SEEDS;
 
   it('wins a meaningful share of games against the shipped roster', () => {
-    // Population: 125 games (5 shipped arenas x 25 seeds). Measured 51/125 (40.8%).
-    // Bounded well below that so ordinary AI/arena tuning does not fail the build; a
+    // Population: 125 games (5 shipped arenas x 25 seeds). Measured 50/125 (40.0%) post
+    // directive B (estimation error); 51/125 (40.8%) pre. Bounded well below that so
+    // ordinary AI/arena tuning does not fail the build; a
     // regression that makes the scripted player hapless (rate collapses toward 0) trips
     // it -- confirmed: `fire = false` drops this to 5/100 and dies here (that specific
     // check predates arena-05 and directive A/B and was not rerun at the current
@@ -169,15 +178,19 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('reads arena-01 as easier than arena-03 and arena-04', () => {
-    // Measured win rates: arena-01 21/25 (84%), arena-03 7/25 (28%), arena-04 7/25 (28%)
-    // -- a >55-point gap either way, wide enough to stay a stable ordinal claim under
+    // Measured win rates post directive B (estimation error): arena-01 16/25 (64%),
+    // arena-03 12/25 (48%), arena-04 6/25 (24%) -- a 16-40 point gap, narrower than the
+    // pre-directive-B measurement below but still a real, non-boundary margin. Pre
+    // directive B: arena-01 21/25 (84%), arena-03 7/25 (28%), arena-04 7/25 (28%) -- a
+    // >55-point gap either way. Both measurements keep this a stable ordinal claim under
     // ordinary tuning rather than sitting on a fragile boundary. This is the
     // "level 4 is harder than level 1" kind of claim the issue asks this harness to make
-    // measurable; it does not by itself distinguish arena-03 from arena-04 (both 28% at
-    // this population -- within the noise a small tuning change could flip either way).
+    // measurable; it does not by itself distinguish arena-03 from arena-04 (they swapped
+    // which is closer to arena-01 between the two measurements -- 28%/28% pre, 48%/24%
+    // post -- within the noise a small tuning or behaviour change can move either).
     // Arena-05 is not part of this specific ordinal claim (it predates arena-05's
-    // addition and nothing in directive A/B required extending it); for reference it is
-    // currently the hardest of the five at 3/25 (12%).
+    // addition and nothing in directive A/B/estimation-error required extending it); for
+    // reference it is currently the hardest of the five at 1/25 (4%, was 3/25/12%).
     //
     // Mutation note (from before arena-05/directive A/B; not rerun at the current tree):
     // every production mutation tried against this assertion (disabling dodging,
@@ -192,15 +205,17 @@ describe('a competent scripted player against the shipped arenas', () => {
   });
 
   it('still shoots: reaction-gated fire is not the same as passive', () => {
-    // Population: same 125 games. Measured per-arena averages 13.4-55.8 fires/game; the
-    // bar sits far below the lowest observed so it only catches an accidental
-    // "never/rarely fires" regression, not ordinary aim/reaction retuning.
+    // Population: same 125 games. Measured per-arena averages 13.5-44.2 fires/game post
+    // directive B (13.4-55.8 pre); the bar sits far below the lowest observed either way,
+    // so it only catches an accidental "never/rarely fires" regression, not ordinary
+    // aim/reaction retuning.
     const fires = all.reduce((n, r) => n + r.fires, 0);
     expect(fires / all.length).toBeGreaterThan(5);
   });
 
   it('lays mines occasionally rather than never or constantly', () => {
-    // Population: same 125 games. Measured per-arena averages 1.44-7.80 mines/game.
+    // Population: same 125 games. Measured per-arena averages 1.60-9.28 mines/game post
+    // directive B (1.44-7.80 pre).
     const mines = all.reduce((n, r) => n + r.mines, 0);
     const perGame = mines / all.length;
     expect(perGame, `${mines} mines over ${all.length} games`).toBeGreaterThan(0.3);
@@ -209,10 +224,12 @@ describe('a competent scripted player against the shipped arenas', () => {
 
   it('does not routinely kill itself with its own mine', () => {
     // Population: all LOSSES across the 125 games (a self-mine death can only happen in
-    // a loss), measured at 74. Self-mine share measured 10/74 (13.5%), 9 in arena-02 and
-    // 1 in arena-03. The residual is real and documented (PLAYER_MINE_CHANCE's comment
-    // in player-profile.ts) -- this is a regression guard against it becoming the
-    // DOMINANT cause of death, not a claim that it is eliminated.
+    // a loss), measured at 74 both pre- and post-directive-B. Self-mine share measured
+    // 5/74 (6.8%) post directive B (estimation error); 10/74 (13.5%, 9 in arena-02 and 1
+    // in arena-03 -- per-arena split not re-measured post-directive-B) pre. The residual
+    // is real and documented (PLAYER_MINE_CHANCE's comment in player-profile.ts) -- this
+    // is a regression guard against it becoming the DOMINANT cause of death, not a claim
+    // that it is eliminated.
     const losses = all.filter((r) => r.outcome === 'lose');
     const selfMine = losses.filter((r) => r.selfMineDeath).length;
     expect(losses.length, 'population: losses only, out of 100 games').toBeGreaterThan(0);
@@ -246,10 +263,16 @@ describe('a competent scripted player against the shipped arenas', () => {
  * opponent pulls it past the midpoint) -- the two disagree by construction, which is
  * what makes this fixture able to actually distinguish the two rules.
  *
- * Seed 3 was found by scanning seeds 1..300 against the CURRENT (pre-threat-summary)
- * code and keeping one where the retreat draw actually fires -- see the self-check
- * assertion below, which fails loudly (not vacuously) if a future change stops
- * reaching the retreat branch on this seed.
+ * Seed 4 was found by scanning seeds 1..2000 against the CURRENT code and keeping one
+ * where the retreat draw actually fires -- see the self-check assertion below, which
+ * fails loudly (not vacuously) if a future change stops reaching the retreat branch on
+ * this seed. Re-scanned (was seed 3) when directive B's estimation-error draw landed:
+ * decidePlayerInput now consumes one more `rnd()` call before the wander/retreat draws
+ * (the per-tick hazard offset), which shifts every later draw in the stream -- a linear
+ * PRNG has no bucket to insulate later draws from an earlier one added upstream, unlike
+ * the enemy AI's world.seed-keyed hash. Any fixture pinned against a specific seed's
+ * draw sequence is fragile to this in the same way; this is the one place in the tree
+ * that fixture actually lived.
  */
 describe('directive A part 2: whole-map threat summary informs retreat', () => {
   const PLAYER_ID = 1;
@@ -259,7 +282,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     const near = makeTank('brown', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
     const far = makeTank('grey', 3, 0, 6);    // pulls the centroid to (0, 2)
     const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3 });
-    const rnd = mulberry32(3); // found by scanning seeds 1..300 for one where the retreat draw fires
+    const rnd = mulberry32(4); // found by scanning seeds 1..2000 for one where the retreat draw fires
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -299,7 +322,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     const far = makeTank('grey', 3, 0, 6);
     const corpse = { ...makeTank('teal', 4, 40, 0), alive: false };
     const world = createWorld({ walls: [], tanks: [player, near, far, corpse], spawns: [], lives: 3 });
-    const rnd = mulberry32(3); // same seed as above: the retreat draw fires identically
+    const rnd = mulberry32(4); // same seed as above: the retreat draw fires identically
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -320,6 +343,58 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
 
     expect(input.move.x).toBeCloseTo(livingAway.x, 5);
     expect(input.move.y).toBeCloseTo(livingAway.y, 5);
+  });
+});
+
+/**
+ * Directive B (2026-08-16 owner ruling): the player's own hazard estimation error, drawn
+ * from its INJECTED `rnd` stream (never `world.seed` -- see decidePlayerInput's own
+ * comment). One draw per tick: `createPlayerAiState(rnd)` consumes the stream's FIRST
+ * value (the initial wander heading), so the hazard-offset draw inside decidePlayerInput
+ * is the stream's SECOND value -- both fixtures below account for that by consuming one
+ * throwaway draw before reading the one that matters, exactly as `createPlayerAiState`
+ * does for real.
+ *
+ * Seeds found by scanning seeds 1..5000 against `mulberry32(seed)`'s SECOND draw (the
+ * first is spent on `wanderHeading`): seed 4771 -> 0.000002468237653374672 (near-minimal,
+ * for the UNDER case), seed 3434 -> 0.9998051796574146 (near-maximal, for the OVER case).
+ * The shipped player profile is STATIC_BASIC, estimationAccuracy 0.5, so spread =
+ * AI_HAZARD_SPREAD / 0.5 = 0.8, and the offsets are (draw*2-1)*0.8 -- essentially -0.8 and
+ * +0.8 -- perturbing the true AI_MINE_FLEE_RADIUS (3.25) to roughly 2.45 and 4.05.
+ */
+describe('directive B: estimation error (the player half, injected rnd, never world.seed)', () => {
+  const PLAYER_ID = 1;
+
+  it('UNDER-estimation: the player does not dodge a mine sitting inside its own actual kill radius -- the DECISION half of "sometimes fatal" (death itself is not simulated here)', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    // 2.48: inside the TRUE kill radius (MINE_BLAST_RADIUS + TANK_RADIUS = 2.5) and the
+    // true flee radius (3.25), but past the perceived one (~2.45) with real margin either
+    // side (~0.02-0.03), not a boundary-exact fixture.
+    const mineFixture = { id: 70, ownerId: 99, pos: { x: 2.48, y: 0 }, timer: 3, armed: true, detonated: false };
+    const world = { ...createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 }), mines: [mineFixture] };
+    const rnd = mulberry32(4771);
+    const state = createPlayerAiState(rnd); // draw #1: wanderHeading
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state); // draw #2: hazard offset
+
+    // Ground the "fatal" claim: the mine is inside the player's TRUE lethal blast radius.
+    expect(vdist(player.pos, mineFixture.pos)).toBeLessThanOrEqual(2.5);
+    // move is NOT the escape vector (-1, 0) that fleeing this mine would produce.
+    expect(input.move.x).not.toBeCloseTo(-1, 2);
+  });
+
+  it('OVER-estimation: the player dodges a mine the TRUE flee radius says is safe (wasted caution, not merely cosmetic scatter)', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    // 3.8: past the TRUE flee radius (3.25, with a 0.55 margin) but inside the perceived
+    // one (~4.05, with a 0.25 margin) -- real margins both sides, not boundary-exact.
+    const mineFixture = { id: 71, ownerId: 99, pos: { x: 3.8, y: 0 }, timer: 3, armed: true, detonated: false };
+    const world = { ...createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 }), mines: [mineFixture] };
+    const rnd = mulberry32(3434);
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    // move IS the escape vector away from (3.8, 0): straight along -x.
+    expect(input.move.x).toBeCloseTo(-1, 2);
+    expect(input.move.y).toBeCloseTo(0, 2);
   });
 });
 

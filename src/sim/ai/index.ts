@@ -8,8 +8,8 @@ import { greyDecision } from './grey';
 import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
-import { shotHitsOwnSide, friendlyInMineBlast } from './targeting';
-import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, TICK_HZ } from '../constants';
+import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread } from './targeting';
+import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, TICK_HZ, AI_MINE_FLEE_RADIUS } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
@@ -132,7 +132,15 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // ability lay mines. Brown lacks it (and its decision never sets mine anyway), grey
     // and teal have it -- so this is behaviour-identical and removes the last implicit
     // "which kinds lay mines" knowledge from the dispatcher. See config/roster.ts.
-    if (canAct && !tank.disarmed && hasAbility(tank.kind, TankAbility.MINE_LAYER) && decision.mine && tank.mineCooldown <= 0 && !friendlyInMineBlast(world, tank)) {
+    //
+    // Directive B: this is the OFFENSE side of estimation error (targeting.ts's
+    // friendlyInMineBlast doc comment) -- a PERCEIVED flee radius, drawn fresh here via
+    // the same estimationError/profileHazardSpread house recipe grey.ts/teal.ts use for
+    // their own dodge gates. Independently recomputed (a pure hash of world.seed/tank.id/
+    // tick bucket, not threaded state), so it lands on the identical offset those decision
+    // functions already drew this tick without anything being passed between them.
+    if (canAct && !tank.disarmed && hasAbility(tank.kind, TankAbility.MINE_LAYER) && decision.mine && tank.mineCooldown <= 0
+      && !friendlyInMineBlast(world, tank, AI_MINE_FLEE_RADIUS + estimationError(world, tank, profileHazardSpread(configFor(tank.kind))))) {
       if (dropMine(world, tank.id, events)) {
         tank.mineCooldown = MINE_COOLDOWN_TICKS;
       }

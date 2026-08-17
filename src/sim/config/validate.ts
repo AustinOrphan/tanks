@@ -150,7 +150,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
 }
 
 const PROFILE_FIELDS = [
-  'behavior', 'aimAccuracy', 'reactionTime', 'aggression', 'preferredDistance',
+  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'aggression', 'preferredDistance',
   'minimumDistance', 'retreatChance', 'directShotWeight', 'bankShotWeight',
 ] as const;
 const PROFILE_OPTIONAL_FIELDS = ['minePlacementChance'] as const;
@@ -182,6 +182,9 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // downstream (slewAngle's non-finite sink freezes the turret) but a
       // degenerate config should die at load, not limp (review, PR #57).
       aimAccuracy: positiveUnitInterval(file, `${profile}.aimAccuracy`, p.aimAccuracy),
+      // Strictly positive for the same reason as aimAccuracy: profileHazardSpread divides
+      // by it (targeting.ts), and 0 would make the spread Infinity.
+      estimationAccuracy: positiveUnitInterval(file, `${profile}.estimationAccuracy`, p.estimationAccuracy),
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),

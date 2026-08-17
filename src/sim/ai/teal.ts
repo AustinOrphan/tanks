@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, mineInclination, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { BANK_PREFER_TICKS } from '../constants';
+import { BANK_PREFER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -13,7 +13,13 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // Weapon (ricochet bullet, its muzzle speed, and its bounce budget) comes from
   // the resolved config -- Teal fires the RICOCHET_ROCKET its definition names.
   const weapon = cfg.weapon;
-  const avoid = dangerAvoidMove(world, tank);
+  // Directive B: perceived, not exact, hazard radii -- same per-tick, per-window draw
+  // grey.ts uses (targeting.ts's estimationError/profileHazardSpread), reused below at
+  // both dangerAvoidMove and the mine-threat gate.
+  const hazardOffset = estimationError(world, tank, profileHazardSpread(cfg));
+  const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
+  const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
+  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);
   // Mobile (spec §7): wander is the baseline move whenever there's nothing more specific
   // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
   // (and reposition itself into new bank opportunities) instead of standing still as a
@@ -101,7 +107,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // per-window probability of proposing.
   const mine = mineInclination(world, tank, cfg)
     && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
-    && mineThreatensPlayer(world, tank);
+    && mineThreatensPlayer(world, tank, AI_MINE_TACTICAL_RADIUS + hazardOffset);
 
   if (turretAngle !== null) {
     return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0 };
