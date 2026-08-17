@@ -42,6 +42,18 @@ against the tree:
 
 ## Design
 
+**P1 stays exactly where the campaign-authored `P` cell puts it; only co-players are
+maximin-placed.** `loadArena`'s versus branch seeds `chosen` with P1's own position and
+runs `pickVersusSpawnCell` only for slots 1..playerCount-1 — P1 is never itself a
+candidate, never moved, never scored. This keeps P1 (slot 0) IDENTICAL between
+campaign-coop and ffa/teams for the same arena, which is what lets
+`versus-spawns.test.ts`'s cross-mode contrast assert `coopPos[0] === ffaPos[0]` while every
+co-player differs, and is a deliberate choice rather than an oversight: the alternative —
+maximin-placing all N players jointly, P1 included — would have made P1's own position
+mode-dependent, for no stated benefit (the arena's authored `P` cell is still a reasonable
+place for A player to start; there was no reason to treat it as unusable specifically for
+P1).
+
 `src/sim/versus-spawns.ts`, a new pure module. `pickVersusSpawnCell(grid, cols, rows,
 cellSize, legend, avoid)` picks ONE well-separated cell, scored in priority order:
 
@@ -162,6 +174,36 @@ worse overlaps than a single-lane crowd. A second, more pathological fixture (ev
 either the P1 letter or solid) exercises the true zero-candidate fallback: co-locate at
 `avoid[0]`'s own cell. Not reachable on any shipped arena — every shipped arena ships far
 more open floor than 4 players need — so this is a pure robustness guard, named as such.
+
+## Mutation testing: two killed, two equivalent-and-disclosed
+
+`tools/mutate/manifest.json` carries two entries for this change: dropping the LOS hard
+filter inside `pickVersusSpawnCell` (`versus-spawns-drop-los-hard-filter`, killed, 3 of 14
+in `versus-spawns.test.ts`) and dropping the `chosen.push(pos)` accumulation in
+`loadArena`'s own versus branch (`versus-spawns-wiring-drops-accumulation`, killed, 3 of
+14) — the second exists specifically because the first only proves `versus-spawns.ts`'s
+internals are covered, not the call site that feeds each pick back in as the next pick's
+`avoid` set. Both were run against a clean scoped file first (`npx vitest run
+src/sim/versus-spawns.test.ts`), watched fail, then confirmed via `npm run mutate -- --only
+<id>`.
+
+Two further mutations were tried by hand during development and found EQUIVALENT — not
+added to the manifest, disclosed here so a reviewer does not have to rediscover them:
+
+- Dropping the explicit `(row, col)`-ascending tie-break clause in `isEarlier`'s call site
+  (leaving only `score > bestScore`) does not change any test's outcome, because
+  `candidates` is built by a row-major scan and `Array.prototype.filter` preserves that
+  order into `pool` — the FIRST candidate reaching the max score in scan order already IS
+  the `(row, col)`-ascending one. Flipping `isEarlier`'s own comparison direction (`<` to
+  `>`), by contrast, IS caught (4 of 14) — the tie-break logic is real, just redundant with
+  today's enumeration order under the specific "drop the clause" mutation.
+- Dropping the `avoidCells.some(...)` exclusion that keeps a candidate from coinciding with
+  an already-chosen cell is also equivalent, provably: a coincident candidate's geodesic
+  distance to the avoid entry it coincides with is always exactly 0 (BFS distance to the
+  start cell), so it can only WIN the maximin comparison if every other candidate is also
+  claimed — the same degenerate all-cells-claimed state the zero-candidate fallback exists
+  for. Kept in the source anyway, for the same reason `avoidCells[0] ?? {row:0,col:0}` is:
+  a reader should not have to re-derive this argument to trust the invariant holds.
 
 ## Gate
 
