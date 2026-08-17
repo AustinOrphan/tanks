@@ -288,6 +288,39 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     expect(input.move.y, `move.y: old nearest-away=${oldNearestAway.y.toFixed(4)} new centroid-away=${newCentroidAway.y.toFixed(4)}`)
       .toBeCloseTo(newCentroidAway.y, 5);
   });
+
+  it('a CORPSE is not an opponent: a dead tank pulls neither the nearest slot nor the centroid', () => {
+    // Review measured this gap: dropping isOpponent's alive check survived every test
+    // in this file (0 of 9 red). Same fixture as above plus a dead third enemy placed
+    // where, if counted, it would visibly drag the centroid east -- the retreat
+    // direction below discriminates. Breaks if isOpponent stops requiring alive.
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const near = makeTank('brown', 2, 0, -2);
+    const far = makeTank('grey', 3, 0, 6);
+    const corpse = { ...makeTank('teal', 4, 40, 0), alive: false };
+    const world = createWorld({ walls: [], tanks: [player, near, far, corpse], spawns: [], lives: 3 });
+    const rnd = mulberry32(3); // same seed as above: the retreat draw fires identically
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    const wander = fromAngle(state.wanderHeading);
+    const blend = (toward: Vec2): Vec2 => vnorm({
+      x: toward.x * 0.5 + wander.x * 0.5,
+      y: toward.y * 0.5 + wander.y * 0.5,
+    });
+    const livingCentroid = { x: (near.pos.x + far.pos.x) / 2, y: (near.pos.y + far.pos.y) / 2 };
+    const livingAway = blend(vnorm(vsub(player.pos, livingCentroid)));
+    const corpseCentroid = {
+      x: (near.pos.x + far.pos.x + corpse.pos.x) / 3,
+      y: (near.pos.y + far.pos.y + corpse.pos.y) / 3,
+    };
+    const corpseAway = blend(vnorm(vsub(player.pos, corpseCentroid)));
+    expect(vdist(livingAway, corpseAway), 'fixture does not discriminate corpse inclusion')
+      .toBeGreaterThan(0.3);
+
+    expect(input.move.x).toBeCloseTo(livingAway.x, 5);
+    expect(input.move.y).toBeCloseTo(livingAway.y, 5);
+  });
 });
 
 /**
