@@ -26,6 +26,13 @@ import {
 } from './replay';
 import { createInputController, type InputController } from '../input/input';
 import { createGamepadInputSource, readNavigatorGamepads, type PlayerInputSource } from '../input/gamepad';
+import {
+  deriveInitialAssignment,
+  reassign,
+  createHeldInputSource,
+  type Assignment,
+  type SlotSource,
+} from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -307,14 +314,14 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
   return slots;
 }
 
-// createIdleInputSource() is RETIRED (n-player arc PR3, `pad[i] -> slot[i]`): it used to
-// fill every co-player slot beyond 1 with a hand-built `PlayerInputSource` that echoed
-// the tank's own position back as `aim`, avoiding `driveTank`'s literal-{0,0}-slews-
-// toward-world-origin defect. Every co-player slot now gets its own
-// `createGamepadInputSource(padIndex)` instead (see `realSources`' construction below),
-// and that function's own "no pad ever connected" branch (`input/gamepad.ts`, see its
-// module doc comment) already produces the byte-identical echo -- so deleted rather than
-// kept unused, per CLAUDE.md's "a generator nothing calls rots."
+// createIdleInputSource() was RETIRED at n-player arc PR3 (`pad[i] -> slot[i]`), when
+// every co-player slot got its own dedicated `createGamepadInputSource(padIndex)` whose
+// own "no pad ever connected" branch (`input/gamepad.ts`) already produced the identical
+// echo -- so it was deleted rather than kept unused, per CLAUDE.md's "a generator nothing
+// calls rots." The controller assignment UI UN-retires that exact shape as
+// `createHeldInputSource` (`input/assignment.ts`): a `'none'` slot is a real,
+// UI-selectable call site again, and CLAUDE.md's retirement note only applies while
+// nothing calls a generator.
 
 /**
  * Holding M fires ~30 keydowns a second, so an unguarded toggle lands on
@@ -583,6 +590,30 @@ export function startGameWith(
   /** The LAST `botCount` of `playerCount` slots -- see botSlotsFor's own doc comment. */
   const botSlots = botSlotsFor(playerCount, botCount);
 
+  /**
+   * The controller assignment UI's SESSION-HELD model (input/assignment.ts, owner
+   * ruling: no persistence, no seventh store). Seeded ONCE from `botSlots` -- today's
+   * rule, made explicit -- and mutated only by `reassignSlot` below, via the panel.
+   * `botSlots` itself is not read again after this: every later site that needs "which
+   * slots are bots right now" reads it off `assignment` (`botSlotsFromAssignment`),
+   * since a session-long reassignment can move a slot to or from `'bot'`.
+   */
+  let assignment: Assignment = deriveInitialAssignment(playerCount, botSlots);
+
+  /** Which slots `assignment` currently marks `'bot'` -- recomputed, never cached, so a
+   *  mid-session reassignment is always reflected. */
+  function botSlotsFromAssignment(a: Assignment): Set<number> {
+    const s = new Set<number>();
+    for (let i = 0; i < a.length; i++) if (a[i].kind === 'bot') s.add(i);
+    return s;
+  }
+
+  /** Structural equality for the small `SlotSource` union -- `reassign`'s own diff. */
+  function sameSlotSource(a: SlotSource, b: SlotSource): boolean {
+    if (a.kind !== b.kind) return false;
+    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
+  }
+
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
   // for a before/after comparison.
@@ -661,7 +692,7 @@ export function startGameWith(
    * reseeding here keeps every level's bot behaviour a pure function of that level's
    * own seed rather than of how much a previous level's stream had already consumed.
    */
-  let botSources = createBotSources(world.seed, botSlots);
+  let botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
   // Whether the CURRENT session is practice (Level Select), as opposed to the
   // campaign run. Practice must not consume, restore, replace, advance or complete
   // the active run (the spec's hard rule) -- this is the flag every run-mutation
@@ -743,25 +774,44 @@ export function startGameWith(
   // the aim side already reads under the right gesture.
   input.setFireMode(deps.touchSettings.fireMode());
   /**
-   * The real, constructed `PlayerInputSource` for every NON-bot-claimed slot, keyed by
-   * slot number -- always has slot 0 (`input`). A bot-claimed slot (see `botSlots`
-   * above) has NO entry here at all: `decidePlayerInput` needs no injected controller
-   * to drive from, so building one for a slot that will never call `.sample()` on it
-   * would be dead construction. This is the generalisation `botSlots.has(i)` adds to
-   * every site that used to build unconditionally on `playerCount` alone.
-   *
-   * Slots 1..playerCount-1: EVERY one gets its own standalone gamepad-only source,
-   * bound to `padIndex === i` (`pad[i] -> slot[i]`, n-player arc PR3) -- no fallback,
-   * no idle-fill function distinct from this one. Hotplug and "no pad ever connected"
-   * both fall out of `createGamepadInputSource` itself (see its own doc comment): it
-   * polls `getGamepads()[padIndex]` fresh every tick, so a slot with nothing plugged in
-   * echoes its tank's own position back as `aim` (the turret holds instead of slewing
-   * toward world-origin) with no separate mechanism needed, and a pad connecting or
-   * disconnecting mid-session at that index is visible on the very next tick.
+   * Build the `PlayerInputSource` a `SlotSource` DESCRIBES -- `null` for `'bot'`, which
+   * has none: `decidePlayerInput` reads straight off `botSources`/`world`, so building a
+   * source for a slot that will never call `.sample()` on it would be dead construction.
+   * `'keyboard'` is always the ONE `input` singleton, whichever slot currently holds it
+   * -- never a fresh instance, and never disposed here (see `reassignSlot`'s doc comment
+   * for why). `'gamepad'`/`'none'` are each a fresh construction, per the controller
+   * assignment UI's "rebuild, don't re-point" rule -- `createGamepadInputSource` closes
+   * over `padIndex` at construction, so a slot that changes which pad it reads gets a
+   * new instance, not a mutated one.
    */
-  const realSources = new Map<number, PlayerInputSource>([[0, input]]);
-  for (let i = 1; i < playerCount; i++) {
-    if (!botSlots.has(i)) realSources.set(i, deps.createGamepadSource(i));
+  function buildRealSource(source: SlotSource): PlayerInputSource | null {
+    switch (source.kind) {
+      case 'keyboard':
+        return input;
+      case 'gamepad':
+        return deps.createGamepadSource(source.padIndex);
+      case 'none':
+        return createHeldInputSource();
+      case 'bot':
+        return null;
+    }
+  }
+  /**
+   * The real, constructed `PlayerInputSource` for every NON-bot slot, keyed by slot
+   * number -- driven entirely by `assignment`, not by a hardcoded slot-0/1..N-1 split
+   * (the controller assignment UI's whole point: which slot holds keyboard vs. which
+   * gamepad index is now an explicit, sticky field, not `i === 0` / `i`). Hotplug and
+   * "no pad ever connected" both still fall out of `createGamepadInputSource` itself
+   * (see its own doc comment): it polls `getGamepads()[padIndex]` fresh every tick, so a
+   * slot with nothing plugged in echoes its tank's own position back as `aim` (the
+   * turret holds instead of slewing toward world-origin), and a pad connecting or
+   * disconnecting mid-session at that index is visible on the very next tick. A `'none'`
+   * slot gets the same hold, from `createHeldInputSource` (`input/assignment.ts`).
+   */
+  const realSources = new Map<number, PlayerInputSource>();
+  for (let i = 0; i < playerCount; i++) {
+    const src = buildRealSource(assignment[i]);
+    if (src) realSources.set(i, src);
   }
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
@@ -987,16 +1037,25 @@ export function startGameWith(
       // co-op or controllers -- see the co-op plan's audit for why a per-player touch
       // affordance is out of scope; touch is inherently a single-device input.
       hud.setTouchIndicator(input.touchIndicator());
-      // Gamepad connect toast, PER SLOT -- see gamepadConnectedPrev's own doc comment.
-      // Slot 0 reads `input.gamepadConnected()` (the optional `?dev=1&gamepad=1`
-      // merge); every other NON-BOT slot reads its own dedicated
-      // `PlayerInputSource.gamepadConnected()`. A bot-claimed slot has no entry in
-      // `realSources` and never toasts -- there is no physical pad to have connected
-      // there.
+      // Gamepad connect/disconnect toast, PER SLOT -- see gamepadConnectedPrev's own doc
+      // comment. Gated on `assignment[i].kind === 'keyboard'`, NOT `i === 0`: the
+      // controller assignment UI can move keyboard to any slot, and that slot -- whichever
+      // one it is -- is the one whose `input.gamepadConnected()` (the optional
+      // `?dev=1&gamepad=1` merge) is the right read; every other REAL slot reads its own
+      // dedicated `PlayerInputSource.gamepadConnected()`. A bot-claimed slot has no entry
+      // in `realSources` and never toasts -- there is no physical pad to have
+      // connected there. Toasts on BOTH edges: the rising edge is the pre-existing rule
+      // (issue #114); the falling edge closes the loop during play, so a mid-round
+      // disconnect is visible immediately rather than only through the panel's dimmed row
+      // (see input/assignment.ts's Reserved-idle semantics -- the slot's tank keeps
+      // holding either way, this is purely the notification).
       for (let i = 0; i < playerCount; i++) {
-        const connected = i === 0 ? input.gamepadConnected() : (realSources.get(i)?.gamepadConnected() ?? false);
+        const isKeyboardSlot = assignment[i].kind === 'keyboard';
+        const connected = isKeyboardSlot ? input.gamepadConnected() : (realSources.get(i)?.gamepadConnected() ?? false);
         if (connected && !gamepadConnectedPrev[i]) {
-          hud.showToast(i === 0 ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
+          hud.showToast(isKeyboardSlot ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
+        } else if (!connected && gamepadConnectedPrev[i]) {
+          hud.showToast(isKeyboardSlot ? 'Gamepad disconnected' : `Player ${i + 1}'s controller disconnected`);
         }
         gamepadConnectedPrev[i] = connected;
       }
@@ -1053,6 +1112,56 @@ export function startGameWith(
     },
   });
 
+  /**
+   * The controller assignment UI's one write path: apply `reassign`'s pure exclusivity-
+   * bounce, then bring every slot whose DESCRIPTOR actually changed (the target, and any
+   * bounced slot) into line -- both are real changes and both need rebuilding, or the
+   * bounced slot would keep sampling its old source while `assignment` says `'none'`,
+   * which is the exact exclusivity bug the bounce exists to prevent.
+   *
+   * Rebuild, don't re-point (see input/assignment.ts's module doc comment and this
+   * plan's own reasoning): `createGamepadInputSource` closes over `padIndex` at
+   * construction, so a slot changing kind or pad index gets a FRESH source, never a
+   * mutated one. `input` (the `'keyboard'` singleton) is the one exception -- it is
+   * never disposed here, whichever slot loses it; only `dispose()` at final teardown
+   * frees it.
+   *
+   * A slot gaining a REAL source (gamepad/none) is seeded from `driver.world`
+   * IMMEDIATELY, not left for the next `onSimulated` tick: `setPlayerPosition` is what
+   * keeps a `'none'` slot's turret held rather than slewing toward world-origin for one
+   * tick (see createHeldInputSource's own doc comment), and a freshly-built gamepad
+   * source starts with `playerPos === null` otherwise.
+   *
+   * A slot gaining `'bot'` gets exactly one new `botSources` entry, seeded from the
+   * CURRENT world -- `createBotSources` with a single-element slot set, so an unrelated
+   * bot's own RNG stream (keyed by its own slot number) is untouched. A slot LOSING
+   * `'bot'` has its entry deleted the same way, incrementally.
+   */
+  function reassignSlot(slot: number, source: SlotSource): void {
+    const next = reassign(assignment, slot, source);
+    for (let i = 0; i < next.length; i++) {
+      const prev = assignment[i];
+      if (sameSlotSource(next[i], prev)) continue;
+      const old = realSources.get(i);
+      if (old && old !== input) old.dispose();
+      realSources.delete(i);
+      if (prev.kind === 'bot') botSources.delete(i);
+      const nextSource = next[i];
+      if (nextSource.kind === 'bot') {
+        const seeded = createBotSources(driver.world.seed, new Set([i]));
+        botSources.set(i, seeded.get(i)!);
+      } else {
+        const built = buildRealSource(nextSource);
+        if (built) {
+          realSources.set(i, built);
+          const tank = tankForSlot(driver.world, i);
+          built.setPlayerPosition(tank ? { x: tank.pos.x, y: tank.pos.y } : null);
+        }
+      }
+    }
+    assignment = next;
+  }
+
   hud.onMuteToggle(() => {
     hud.setMuted(audio.toggleMute());
   });
@@ -1100,9 +1209,11 @@ export function startGameWith(
   function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
-    // Reseeded here too -- see the initial assignment's own doc comment for why bots
-    // are per-world, not per-session.
-    botSources = createBotSources(world.seed, botSlots);
+    // Reseeded here too -- see botSources' own doc comment above for why bots are
+    // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
+    // `botSlots` set: a mid-session reassignment can have moved a slot to or from
+    // `'bot'` since boot, and switchTo must not resurrect a stale bot roster.
+    botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
     // A new world means a new trace: the recorded inputs only mean anything
     // applied to the world they were sampled against, so carrying them across a
     // level switch would produce a trace that replays into a different game.
@@ -1380,6 +1491,9 @@ export function startGameWith(
     restyle();
   });
 
+  // The controller assignment UI's one write path -- see reassignSlot's own doc comment.
+  hud.onReassignSlot(reassignSlot);
+
   hud.onResetStats(() => {
     deps.stats.resetLifetime();
     hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
@@ -1585,14 +1699,16 @@ export function startGameWith(
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
-      // Every co-player slot beyond slot 0 that built a REAL source -- its own
-      // dedicated gamepad reader at padIndex === slot -- none hold listeners of their
-      // own today (see GamepadReader.dispose's own doc comment), but disposed
-      // alongside slot 0 for symmetry and so a future stateful slot has somewhere to
-      // release. A bot-claimed slot has nothing here to dispose -- see `realSources`'
-      // own doc comment.
-      realSources.forEach((s, i) => {
-        if (i !== 0) s.dispose();
+      // Every REAL source except `input` itself, whichever slot currently holds it --
+      // `input` is the boot-to-teardown singleton, disposed exactly once above,
+      // regardless of which slot the controller assignment UI has it in right now.
+      // Gamepad readers hold no listeners of their own today (see
+      // GamepadReader.dispose's own doc comment) and `createHeldInputSource` holds none
+      // either, but both are disposed for symmetry and so a future stateful slot has
+      // somewhere to release. A bot-claimed slot has nothing here to dispose -- see
+      // `realSources`' own doc comment.
+      realSources.forEach((s) => {
+        if (s !== input) s.dispose();
       });
       renderer.dispose();
       // The panel can still be open at teardown (main.ts's pagehide path can fire

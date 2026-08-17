@@ -49,6 +49,7 @@ import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeTick, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
+import type { SlotSource } from '../input/assignment';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -218,6 +219,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     pickAccent(id: AccentId): void;
     openCustomize(): void;
     closeCustomize(): void;
+    reassignSlot(slot: number, source: SlotSource): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -356,6 +358,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onNewGame = (): void => {};
   let onCustomizeOpen = (): void => {};
   let onCustomizeClose = (): void => {};
+  let onReassignSlot = (_slot: number, _source: SlotSource): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
   // fake createPreview below can assert it received the SAME element the HUD exposed --
   // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
@@ -764,6 +767,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onNewGame: (cb: () => void) => {
           onNewGame = cb;
         },
+        onReassignSlot: (cb: (slot: number, source: SlotSource) => void) => {
+          onReassignSlot = cb;
+        },
         dispose: () => rec.disposed.push('hud'),
       };
     },
@@ -1084,6 +1090,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       resetProgress: () => onResetProgress(),
       openCustomize: () => onCustomizeOpen(),
       closeCustomize: () => onCustomizeClose(),
+      reassignSlot: (slot: number, source: SlotSource) => onReassignSlot(slot, source),
     },
     setState: (s) => {
       state = s;
@@ -3646,7 +3653,8 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
     h.handle.dispose();
   });
 
-  it('toasts again after a disconnect/reconnect cycle, one toast per rising edge', () => {
+  it('toasts on both edges across a disconnect/reconnect cycle (controller assignment UI: ' +
+    'falling-edge disconnect toast)', () => {
     const h = boot(makeDeps());
     h.setState('playing');
     h.setGamepadConnected(true);
@@ -3655,7 +3663,11 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
     h.fireFrame(200);
     h.setGamepadConnected(true);
     h.fireFrame(300);
-    expect(h.rec.plainToasts).toEqual(['Gamepad connected', 'Gamepad connected']);
+    expect(h.rec.plainToasts).toEqual([
+      'Gamepad connected',
+      'Gamepad disconnected',
+      'Gamepad connected',
+    ]);
     h.handle.dispose();
   });
 });
@@ -3720,8 +3732,9 @@ describe('startGameWith: per-slot gamepad connect toast (pad[i] -> slot[i], n-pl
     h.handle.dispose();
   });
 
-  it('HOTPLUG at a non-zero slot (index 2): connecting mid-session toasts once, and a later ' +
-    'disconnect/reconnect toasts again -- one toast per rising edge, the same rule slot 0 already had', () => {
+  it('HOTPLUG at a non-zero slot (index 2): connecting mid-session toasts once, a later ' +
+    'disconnect toasts too (controller assignment UI: falling-edge disconnect toast), and a ' +
+    'reconnect toasts again -- both edges, the same rule slot 0 already had', () => {
     const h = boot(makeDeps({ devFlags: { players: 3 } }));
     h.setState('playing');
     h.fireFrame(100); // no pad yet at slot 2
@@ -3735,6 +3748,7 @@ describe('startGameWith: per-slot gamepad connect toast (pad[i] -> slot[i], n-pl
     h.fireFrame(400);
     expect(h.rec.plainToasts).toEqual([
       "Player 3's controller connected",
+      "Player 3's controller disconnected",
       "Player 3's controller connected",
     ]);
     h.handle.dispose();
@@ -4212,6 +4226,134 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
         return Math.abs(t1.pos.x - t0.pos.x) > 1e-6 || Math.abs(t1.pos.y - t0.pos.y) > 1e-6;
       });
       expect(anyMoved).toBe(true);
+    });
+  });
+});
+
+describe('startGameWith: reassignSlot (controller assignment UI, docs/superpowers/plans/2026-08-17-controller-assignment.md)', () => {
+  it('reassigning a slot to a NEW gamepad padIndex disposes the OLD dedicated source and builds a fresh one at the new index', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } })); // slot1->pad1, slot2->pad2
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]);
+
+    h.hud.reassignSlot(2, { kind: 'gamepad', padIndex: 5 });
+    expect(h.rec.slotDisposed[2]).toBe(true); // the OLD padIndex-2 source was torn down
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2, 5]); // a FRESH source, not a re-point
+    expect(h.rec.gamepadSourceBuilds).toBe(3);
+    // The UNRELATED slot 1's own dedicated source is untouched: reassigning slot 2 must
+    // not dispose or rebuild anything at padIndex 1.
+    expect(h.rec.slotDisposed[1]).toBeFalsy();
+
+    h.setState('playing');
+    h.fireFrame(100);
+    // Slot 2 now samples the NEW padIndex-5 source, not the disposed padIndex-2 one.
+    expect(h.rec.slotSamples[5]).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it("keyboard reassignment bounces the old holder to 'none' -- BOTH slots' sources are " +
+    'rebuilt, not just the target: the bounced slot must not keep sampling its old source ' +
+    'while assignment says none (the exact exclusivity bug the bounce exists to prevent)', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, seed: 42 } })); // slot0=keyboard, slot1=gamepad(1)
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1]);
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawn0 = spawned.find((t: Tank) => t.controlledBy === 0)!;
+
+    h.hud.reassignSlot(1, { kind: 'keyboard' }); // bounces slot 0 to 'none'
+    // Slot 1 (the TARGET) disposes its old dedicated padIndex-1 source.
+    expect(h.rec.slotDisposed[1]).toBe(true);
+    // `input` (the keyboard singleton) is never disposed by a reassignment -- only slot
+    // 0's dedicated realSources ENTRY is dropped, not the collaborator itself.
+    expect(h.rec.disposed).not.toContain('input');
+
+    h.setState('playing');
+    h.fireFrame(500); // many ticks
+
+    const live0 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 0)!;
+    const live1 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+
+    // Slot 0 (bounced to 'none'): HELD, not slewed -- createHeldInputSource echoes the
+    // tank's own position, so aimDir is exactly {0,0} on every tick. If reassignSlot had
+    // rebuilt only the TARGET and left slot 0 still pointing at its old `input` source,
+    // this would instead show slot 0's turret slewing toward the fake keyboard's FIXED
+    // aim point (1, 0) -- two slots sampling the same source, the exact bug the bounce
+    // exists to prevent.
+    expect(live0.pos).toEqual(spawn0.pos);
+    expect(live0.turretAngle).toBe(spawn0.turretAngle);
+
+    // Slot 1 (now keyboard): genuinely samples the fake `input` controller -- its FIXED
+    // aim point (1, 0) slews the turret away from spawn, proving slot 1 is driven by
+    // `input` now, not by the disposed gamepad(1) source (whose fake never touches
+    // turretAngle via aim in a way distinguishable from spawn... it does move +x, so use
+    // turretAngle specifically, which only `input`'s fixed-aim fake perturbs this way).
+    expect(live1.turretAngle).not.toBe(0);
+    h.handle.dispose();
+  });
+
+  it('reassigning a slot to \'none\' seeds setPlayerPosition IMMEDIATELY, before the first tick -- ' +
+    'without it, the first sample() would run with playerPos===null and the turret would slew ' +
+    'toward world-origin for one tick, undercutting the reserved-idle-hold guarantee', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, seed: 42 } }));
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawn1 = spawned.find((t: Tank) => t.controlledBy === 1)!;
+    // A non-origin spawn is load-bearing here -- see createHeldInputSource's own doc
+    // comment: a literal {0,0} aim is only neutral for a tank spawned AT the origin.
+    expect(spawn1.pos.x !== 0 || spawn1.pos.y !== 0).toBe(true);
+
+    h.hud.reassignSlot(1, { kind: 'none' });
+    h.setState('playing');
+    h.fireFrame(500); // many ticks -- held is held at every one, not just the first
+
+    const live1 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+    expect(live1.turretAngle).toBe(spawn1.turretAngle);
+    h.handle.dispose();
+  });
+
+  describe("bot conversion touches exactly one botSources entry -- an UNRELATED bot's own RNG " +
+    "draw is unchanged by a reassignment elsewhere", () => {
+    // A FULL PHYSICAL-TRAJECTORY comparison (boot two sessions, reassign an unrelated
+    // slot to bot in one, drive both for many ticks, compare) was tried FIRST and
+    // rejected on evidence, not preference: it diverges by tick ~30 even with a
+    // correct single-entry `reassignSlot`. The cause is real, not a test bug --
+    // CLAUDE.md's "the bot brain reads the whole board" -- `assessThreats` only
+    // treats non-player-kind tanks as opponents in campaign-coop (isOpponent,
+    // player-profile.ts), so the newly-bot-claimed slot is never a TARGET, but its
+    // shells and mines still land in `world.bullets`/`world.mines`, which every
+    // bot's hazard-avoidance reads regardless of owner. So "an unrelated bot's
+    // trajectory is identical" is FALSE by design the instant the reassigned slot
+    // fires -- asserting it would be exactly the overclaim CLAUDE.md's "claims must
+    // match evidence" warns against. What IS true, and what `reassignSlot` actually
+    // promises, is narrower: the OTHER bot's `botSources` Map entry -- its `rnd`
+    // stream and its `PlayerAiState` object -- is never rebuilt. That is provable at
+    // two levels without the board-interaction confound: `createBotSources` itself
+    // is a pure, per-slot-independent function (pinned already, see "createBotSources
+    // / BOT_SEED_SPACING: independence from every enemy-AI stream" above -- the same
+    // seed+slot always draws the same first value, regardless of what else is in the
+    // passed slot Set, because the per-slot loop never reads another slot's entry);
+    // and `reassignSlot`'s own bot-claim branch calls it with a Set containing ONLY
+    // the slot being reassigned (`new Set([i])`, loop.ts), never the full bot roster
+    // -- so it cannot rebuild an existing bot's Map entry at all. The two tests below
+    // pin those two halves directly.
+    it('createBotSources draws the SAME first value for a slot whether or not another slot ' +
+      'shares the passed Set -- the mathematical half of "touches exactly one entry"', () => {
+      const alone = createBotSources(100, new Set([3])).get(3)!;
+      const withCompany = createBotSources(100, new Set([1, 3])).get(3)!;
+      expect(withCompany.rnd()).toBe(alone.rnd());
+    });
+
+    it("reassigning slot 1 to bot never disposes or rebuilds slot 3's REAL-source entry -- " +
+      'the wiring half, checkable without the AI board-reading confound above', () => {
+      // players=4, bots=1: slot 3 is bot-claimed from boot (no realSources entry --
+      // see botSlots' own doc comment). Slot 1 starts as a dedicated gamepad(1) source.
+      const h = boot(makeDeps({ devFlags: { players: 4, bots: 1 } }));
+      expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // slots 1, 2 -- slot 3 is the bot
+      h.hud.reassignSlot(1, { kind: 'bot' }); // slot 1: gamepad -> bot
+      // Slot 1's OWN old source is disposed (it is the target)...
+      expect(h.rec.slotDisposed[1]).toBe(true);
+      // ...but slot 2's UNRELATED dedicated source is not, and no NEW gamepad source is
+      // built for slot 3 (it never had one, and gaining a bot must not build one now).
+      expect(h.rec.slotDisposed[2]).toBeFalsy();
+      expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // unchanged: no new build
+      h.handle.dispose();
     });
   });
 });

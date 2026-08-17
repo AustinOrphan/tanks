@@ -1,5 +1,6 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
+import type { SlotSource } from '../input/assignment';
 import { teamOf } from '../sim/arena';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -253,6 +254,15 @@ export interface Hud {
   signalPlayerFire(): void;
   /** Fired with the skin id when the player clicks one. */
   onPickSkin(cb: (id: SkinId) => void): void;
+  /**
+   * The controller assignment UI's one write path: fired with the slot index and the
+   * candidate `SlotSource` when a row's source button is clicked. `loop.ts`'s
+   * `reassignSlot` is the one production subscriber -- see its own doc comment for what
+   * happens on the other side (rebuild-don't-re-point, immediate position seeding, the
+   * incremental `botSources` update). The panel itself (docs/superpowers/plans/
+   * 2026-08-17-controller-assignment.md) lands the buttons that fire this.
+   */
+  onReassignSlot(cb: (slot: number, source: SlotSource) => void): void;
   dispose(): void;
 }
 
@@ -726,6 +736,10 @@ export function createHud(root: HTMLElement): Hud {
 
   const skinsRow = el.querySelector('.hud-skins') as HTMLElement;
   const pickSkinCbs: Array<(id: SkinId) => void> = [];
+  // The controller assignment UI's one write path -- see onReassignSlot's own doc
+  // comment. The panel that fires this lands separately; the subscription exists now so
+  // loop.ts's reassignSlot has somewhere real to register.
+  const reassignSlotCbs: Array<(slot: number, source: SlotSource) => void> = [];
   let earnedIds: ReadonlySet<AchievementId> = new Set();
   let currentSkin: SkinId = SKINS[0].id;
 
@@ -1686,6 +1700,9 @@ export function createHud(root: HTMLElement): Hud {
     },
     onPickSkin(cb: (id: SkinId) => void): void {
       pickSkinCbs.push(cb);
+    },
+    onReassignSlot(cb: (slot: number, source: SlotSource) => void): void {
+      reassignSlotCbs.push(cb);
     },
     setTouchScheme(scheme: TouchScheme): void {
       currentScheme = scheme;
