@@ -138,6 +138,25 @@ post-reassignment push, `onControllersOpen` reading pads once immediately before
 listeners, a hotplug event while open pushing a fresh read, and `onControllersClose`
 removing both listeners.
 
+## Reserved-idle hold, proven end to end, not just relayed
+
+Every gamepad-slot test elsewhere in `loop.test.ts` drives the FAKE
+`createGamepadSource` (always `move: {x:1,y:0}`, no real hold mechanism) -- right for
+pinning loop.ts's OWN wiring, but incapable of exercising the reserved-idle guarantee
+itself, which lives inside gamepad.ts's REAL `createGamepadInputSource`. One dedicated
+test substitutes the real production function for one slot (wrapped only to COUNT
+builds) and drives an actual connect -> deflect -> disconnect -> reconnect cycle through
+`startGameWith`: the tank holds (position unchanged, turret frozen at whatever heading
+it had at the moment of disconnect -- not reset, not slewed toward world-origin) across
+the disconnect; both the falling-edge and rising-edge toasts fire; and the underlying
+`PlayerInputSource` is rebuilt ZERO times across the whole cycle -- proof the descriptor
+stayed `{kind: 'gamepad', padIndex: 1}` throughout, since `reassignSlot` was never
+called and no other mechanism could be driving that slot. Verified non-tautological by
+the same mutation-proof discipline as every other guarantee in this doc: reverting
+gamepad.ts's raw-position echo to the literal `{0,0}` bug it exists to prevent fails
+this exact test (turretAngle moves from `-1.9999999999999998` to `-2.258941291940779`
+instead of holding), reverted after confirming (`git diff --stat` empty).
+
 ## Trace argument
 
 Categorical: `src/input/assignment.ts`, `loop.ts`, `hud.ts`, `hud.css`, and
@@ -149,8 +168,8 @@ at `a5458ede003c173ccc099b708f4b7d43b7537ca8a7846a87274b6376ccc311a9` throughout
 
 ## Full gate
 
-- `npm test` (`tsc --noEmit && vitest run`) -- 114 files, 2672 tests, 2 skipped
-  (pre-existing), clean.
+- `npm test` (`tsc --noEmit && vitest run`) -- 114 files, 2673 tests, 2 skipped
+  (pre-existing), clean. (2672 before the reserved-idle end-to-end test above landed.)
 - `npm run build` -- clean (`tsc --noEmit && vite build`).
 - `npm run portability` -- clean, against the built `dist/`.
 - `npm audit --omit=dev --audit-level=high` -- 0 vulnerabilities.
