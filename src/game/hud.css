@@ -110,17 +110,18 @@
   display: none;
 }
 
-/* Every panel CONTAINER -- .hud-panel and its four siblings (.hud-stats, .hud-customize,
- * .hud-achievements, .hud-levelselect) -- is focused programmatically on every panel-open
- * transition, never by tabbing (hud.ts's roving focus lands on the container so
- * isMuteHotkey/isPauseHotkey's focused-widget guard stays clear; see the doc comment
- * above `activePanelContainer`), so a ring around the entire pane would be noise with
- * nothing to explain it. */
+/* Every panel CONTAINER -- .hud-panel and its five siblings (.hud-stats, .hud-customize,
+ * .hud-achievements, .hud-levelselect, .hud-controllers) -- is focused programmatically
+ * on every panel-open transition, never by tabbing (hud.ts's roving focus lands on the
+ * container so isMuteHotkey/isPauseHotkey's focused-widget guard stays clear; see the
+ * doc comment above `activePanelContainer`), so a ring around the entire pane would be
+ * noise with nothing to explain it. */
 .hud-panel:focus,
 .hud-stats:focus,
 .hud-customize:focus,
 .hud-achievements:focus,
-.hud-levelselect:focus {
+.hud-levelselect:focus,
+.hud-controllers:focus {
   outline: none;
 }
 
@@ -229,6 +230,7 @@
 .hud-customize,
 .hud-achievements,
 .hud-levelselect,
+.hud-controllers,
 .hud-splash {
   touch-action: pan-y;
 }
@@ -593,10 +595,12 @@
 .hud-achievements-open,
 .hud-customize-open,
 .hud-levelselect-open,
+.hud-controllers-open,
 .hud-stats-back,
 .hud-customize-back,
 .hud-achievements-back,
-.hud-levelselect-back {
+.hud-levelselect-back,
+.hud-controllers-back {
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -613,7 +617,8 @@
 .hud-stats-open,
 .hud-achievements-open,
 .hud-customize-open,
-.hud-levelselect-open {
+.hud-levelselect-open,
+.hud-controllers-open {
   margin-top: 2px;
   font-size: 15px;
 }
@@ -1346,4 +1351,92 @@
     0%, 100% { color: #d8dde6; transform: none; }
     50% { color: #ff6a6a; transform: none; }
   }
+}
+
+/* ---- Controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
+   assignment.md) -- ONE panel, TWO entry points (title and paused) ------------------ */
+
+.hud-controllers-open--hidden {
+  display: none;
+}
+
+/* Same overlay shape as .hud-levelselect/.hud-achievements: without the hidden rule it
+ * covers the game from load. Reachable from 'paused' too, unlike its four siblings --
+ * see handleControllersBack (hud.ts) for why its Back button cannot hardcode 'title'
+ * the way theirs do. */
+.hud-controllers {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0; /* under the topbar, like every other subpanel */
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(11, 14, 20, 0.86);
+  color: #d8dde6;
+  text-align: center;
+}
+
+.hud-controllers--hidden {
+  display: none;
+}
+
+/* REPLACE, never append (renderControllerRows, hud.ts) -- rebuilt on open and on every
+ * detection refresh, same convention .hud-levels already uses. No hidden class of its
+ * own: the panel wrapper above is the one chokepoint. */
+.hud-controller-rows {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 58vh;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+.hud-controller-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-left: 3px solid rgba(216, 221, 230, 0.25);
+  padding: 6px 12px;
+}
+
+.hud-controller-row-label {
+  font-weight: 700;
+}
+
+.hud-controller-row-current {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+/* Dimmed, not hidden -- a disconnected pad's slot stays reserved and idle (owner
+ * ruling), and reassigning away from it is still one click away in the same row. */
+.hud-controller-row-current--disconnected {
+  opacity: 0.45;
+}
+
+/* One button per candidate source (Keyboard / Bot / None / one per detected pad
+ * index), same "one button per option" convention .hud-level-btn already uses. */
+.hud-controller-source-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 4px 10px;
+  margin: 2px;
+  font-weight: 700;
+  font-size: 0.85em;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
+
+/* Same contract as the paint shop's swatch/skin rings: the border is the only
+ * current-source signal. */
+.hud-controller-source-btn--selected {
+  border-color: #ffffff;
 }

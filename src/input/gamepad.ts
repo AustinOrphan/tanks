@@ -24,10 +24,20 @@ import { AIM_PROJECTION_UNITS, quantizeAim } from './touch';
  * place for the one pad to go. Under `pad[i] -> slot[i]`, that lone pad (almost always
  * browser index 0) now feeds slot 0 -- if the player opts in via `?dev=1&gamepad=1` --
  * and slot 1 (bound to padIndex 1) sees nothing from it. "P1 on keyboard, hand the one
- * pad to P2" regresses: there is no longer a zero-flag way to hand a single physical pad
- * to a co-player slot. Accepted, not fixed -- see
+ * pad to P2" regresses AT THIS LAYER: there is no zero-flag, zero-click way to hand a
+ * single physical pad to a co-player slot, and that stays true here -- see
  * docs/superpowers/plans/2026-08-17-controllers-4.md for the full reasoning and
- * `gamepad.test.ts`'s "THE NAMED TRADEOFF" test, which pins it as deliberate.
+ * `gamepad.test.ts`'s "THE NAMED TRADEOFF" test, which still pins the DEFAULT mapping
+ * as deliberate.
+ *
+ * NO LONGER THE WHOLE STORY, though: the controller assignment UI (docs/superpowers/
+ * plans/2026-08-17-controller-assignment.md, `src/input/assignment.ts`) is the "real UI
+ * work" this comment used to name as deferred. `reassign`'s exclusivity-bounce makes
+ * assigning padIndex 0 to slot 1 one click -- closing the gap this file cannot close by
+ * itself, since a fixed-offset default mapping was never going to serve both "P1
+ * optionally on a controller" and "every later slot has its own dedicated pad" at once.
+ * The default this file computes is still what a session boots with; the panel is what
+ * lets a player move away from it.
  *
  * Split in two on purpose. `deadzoneVector` is the pure mapping core: raw axis pair in,
  * a analog vector out, no DOM. `createGamepadReader` is the stateful edge at `poll()` --
@@ -87,6 +97,13 @@ export function deadzoneVector(x: number, y: number, deadzone: number = GAMEPAD_
 export interface GamepadLike {
   readonly axes: ArrayLike<number>;
   readonly buttons: ArrayLike<{ readonly pressed: boolean }>;
+  /**
+   * The browser's own name for the pad. OPTIONAL: `poll()`/`connected()` never read it
+   * (hence its absence from every pre-existing `fakePad` in this file's tests), so
+   * making it required would break every one of those fakes for no reason. Only
+   * `readDetectedPads` below reads it, for the controller assignment UI's live list.
+   */
+  readonly id?: string;
 }
 
 /** Matches `navigator.getGamepads`'s own signature: a possibly-sparse array of pads or nulls. */
@@ -313,4 +330,40 @@ export function createGamepadInputSource(getGamepads: GetGamepads, padIndex: num
 export function readNavigatorGamepads(): ArrayLike<GamepadLike | null | undefined> {
   if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return [];
   return navigator.getGamepads();
+}
+
+/**
+ * One live pad, as the controller assignment panel wants to show it (docs/superpowers/
+ * plans/2026-08-17-controller-assignment.md): which `getGamepads()` index, and the
+ * browser's own name for it (`''` if the browser reports none -- `hud.ts` falls back to
+ * `Controller ${padIndex}` for that case, the same fallback rule the plan states for
+ * display generally).
+ */
+export interface DetectedPad {
+  readonly padIndex: number;
+  readonly id: string;
+}
+
+/**
+ * EVERY currently-connected pad, for the panel's live list -- distinct from
+ * `createGamepadReader`'s per-index polling, which only ever looks at ONE index. The
+ * panel needs to see every index at once, including ones no slot has claimed yet, so a
+ * player can assign a fresh pad to any slot. `getGamepads` injected for the same
+ * testability reason every other function here takes it; `readNavigatorGamepads` above
+ * is the one production caller.
+ */
+export function readDetectedPads(getGamepads: GetGamepads): DetectedPad[] {
+  let pads: ArrayLike<GamepadLike | null | undefined>;
+  try {
+    pads = getGamepads() ?? [];
+  } catch {
+    // Tolerate a throwing implementation exactly like createGamepadReader does.
+    pads = [];
+  }
+  const out: DetectedPad[] = [];
+  for (let i = 0; i < pads.length; i++) {
+    const p = pads[i];
+    if (p != null) out.push({ padIndex: i, id: p.id ?? '' });
+  }
+  return out;
 }
