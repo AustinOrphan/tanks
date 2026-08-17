@@ -50,7 +50,7 @@ import { decodeTick, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
-import type { DetectedPad } from '../input/gamepad';
+import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -4391,6 +4391,80 @@ describe('startGameWith: reassignSlot (controller assignment UI, docs/superpower
       expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // unchanged: no new build
       h.handle.dispose();
     });
+  });
+});
+
+describe('startGameWith: reserved-idle hold END TO END -- a REAL mid-session disconnect ' +
+  'leaves the tank holding, not stolen (docs/superpowers/plans/2026-08-17-controller-assignment.md ' +
+  'section 4: "Reserved-idle semantics")', () => {
+  // Every other test in this file drives slot >= 1 through the FAKE createGamepadSource
+  // (always move +x, never touches turretAngle via a real hold/echo mechanism), which is
+  // right for pinning loop.ts's OWN wiring but cannot show the reserved-idle guarantee
+  // itself -- that lives inside gamepad.ts's REAL createGamepadInputSource. This test
+  // substitutes the REAL production function for slot 1's source, wrapped only to COUNT
+  // how many times it is built, so "the same source persists across a live disconnect/
+  // reconnect, with no reassignment" is provable by that count staying at 1 -- there is
+  // no other mechanism in loop.ts that could be driving slot 1's tank if this count never
+  // moves.
+  it('disconnecting a REAL pad mid-session holds the tank -- no move, turret frozen -- ' +
+    'and reconnecting at the SAME index resumes it, with the underlying source rebuilt ZERO times', () => {
+    let padPresent = true;
+    let axes = [0, 0, 1, 0]; // aim stick deflected hard right while connected
+    const getGamepads = () =>
+      padPresent
+        ? [null, { axes, buttons: [{ pressed: false }, { pressed: false }] }]
+        : [];
+    let builds = 0;
+    const h = makeDeps({ devFlags: { players: 2, seed: 42 } });
+    h.deps = {
+      ...h.deps,
+      createGamepadSource: (padIndex: number) => {
+        builds += 1;
+        return createGamepadInputSource(getGamepads, padIndex);
+      },
+    };
+    const booted = boot(h);
+
+    booted.setState('playing');
+    booted.fireFrame(500); // past countdown; the deflected stick has time to slew the turret
+    const spawned = booted.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawn1 = spawned.find((t: Tank) => t.controlledBy === 1)!;
+    const live1AtConnect = booted.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+    // Sanity: the deflected stick actually did something -- a vacuous "nothing ever
+    // moves" comparison later would not prove the hold, it would just prove nothing runs.
+    expect(live1AtConnect.turretAngle, 'the deflected stick never turned the turret').not.toBe(
+      spawn1.turretAngle,
+    );
+
+    // DISCONNECT. No reassignSlot call anywhere in this test -- the descriptor never
+    // changes; only the hardware does.
+    padPresent = false;
+    booted.fireFrame(1500); // many more ticks
+    const held = booted.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+    // Held: position unchanged (move is {0,0} while disconnected) and turret FROZEN at
+    // whatever heading it had at the moment of disconnect -- not reset to spawn, not
+    // slewed toward world-origin, not slewed anywhere further at all, since the real
+    // gamepad source's no-pad fallback echoes the tank's OWN position as `aim`, making
+    // `aimDir` exactly {0,0} on every subsequent tick.
+    expect(held.pos).toEqual(live1AtConnect.pos);
+    expect(held.turretAngle).toBe(live1AtConnect.turretAngle);
+    expect(booted.rec.plainToasts).toContain("Player 2's controller disconnected");
+
+    // RECLAIM: reconnect at the SAME index. No reassignSlot call here either --
+    // reconnecting at the same index auto-resumes (the plan's own §2 rule), which this
+    // proves by the source having never been rebuilt at all.
+    axes = [0, 0, 0, 0]; // stick recentred on reconnect
+    padPresent = true;
+    booted.fireFrame(2500);
+    expect(booted.rec.plainToasts).toContain("Player 2's controller connected");
+    // Population: every call to the (wrapped) production factory across the WHOLE test,
+    // boot included -- built exactly once, at boot, for padIndex 1. Neither the
+    // disconnect nor the reconnect rebuilt it: reassignSlot was never called, so there
+    // was nothing TO rebuild -- the descriptor stayed `{kind: 'gamepad', padIndex: 1}`
+    // throughout, which is what "reserved-idle, not stolen" actually means.
+    expect(builds).toBe(1);
+
+    booted.handle.dispose();
   });
 });
 
