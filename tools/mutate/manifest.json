@@ -140,5 +140,15 @@
     "expectFailures": 3,
     "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
     "tests": ["src/sim/versus-spawns.test.ts"]
+  },
+  {
+    "id": "versus-spawns-wiring-drops-accumulation",
+    "file": "src/sim/arena.ts",
+    "find": "        chosen.push(pos);\n",
+    "replace": "",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "loadArena's versus branch (PASS 1b) must feed each co-player's OWN chosen cell back into `chosen` before picking the next one, or every co-player after P1 scores against `[P1]` alone and pickVersusSpawnCell picks the same single best cell for all of them, collapsing N-1 co-players onto one point. This line is the wiring, not versus-spawns.ts's own internal logic -- every other entry in this manifest for that module mutates inside pickVersusSpawnCell itself, so this one exists specifically to prove the CALL SITE is covered too. Caught by 3 of the 14 cases in versus-spawns.test.ts's real-shipped-arena describe block: the distinct-cells sweep (arena-01/ffa collapses from 4 unique positions to 2), the 0-mutual-LOS sweep (rises to 40 of 100 visible pairs, since collapsed spawns are coincident and therefore always mutually visible), and the >5-world-unit minimum-distance sweep (falls to 0, since coincident spawns are 0 apart). versus-spawns.test.ts's synthetic fixtures do not catch this -- they exercise pickVersusSpawnCell directly and never go through loadArena's own loop -- which is why the real-arena integration block is what kills it.",
+    "tests": ["src/sim/versus-spawns.test.ts"]
   }
 ]
