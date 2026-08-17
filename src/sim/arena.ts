@@ -1,4 +1,4 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, Vec2 } from './types';
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
@@ -10,6 +10,7 @@ import {
   FIRST_CAMPAIGN_LEVEL,
 } from './config/campaign';
 import type { CampaignDefinition, CampaignLevel } from './config/campaign-types';
+import { pickVersusSpawnCell } from './versus-spawns';
 
 // Re-exported so `src/game/` keeps importing campaign identity from the same place
 // it already imports arena identity (`ARENAS`/`arenaById`) -- see config/campaign.ts.
@@ -142,6 +143,45 @@ function findCoPlayerSpawnCell(
 }
 
 /**
+ * PASS 1b's original co-player loop (n-player arc PR 4), unchanged since before versus
+ * modes existed -- extracted into its own function so campaign-coop's execution stays
+ * byte-for-byte identical to before PR 5 while still type-checking. Without this split,
+ * a shared body reached only after `mode !== 'ffa' && mode !== 'teams'` narrows `mode`'s
+ * type to the single remaining literal `'campaign-coop'`, and this function's own
+ * `if (mode === 'teams')` line -- correct and live before the split, since this loop
+ * used to run for every mode including 'teams' -- becomes a compile error (TS2367, "no
+ * overlap") under that narrowing even though nothing about its BEHAVIOR changed. A fresh
+ * function parameter is not narrowed by the caller's control flow, which is the same
+ * reason `resolveStatusFfa`/`resolveStatusTeams`/`resolveStatusCoop` (world.ts) are
+ * separate functions rather than one shared body with a conditional inside it.
+ */
+function placeCampaignCoPlayers(
+  grid: string[],
+  cols: number,
+  rows: number,
+  cellSize: number,
+  p1Row: number,
+  p1Col: number,
+  playerCount: number,
+  mode: GameMode,
+  tanks: Tank[],
+  spawns: Spawn[],
+  id: number,
+): number {
+  const claimed = new Set<string>([`${p1Row},${p1Col}`]);
+  for (let i = 1; i < playerCount; i++) {
+    const cell = findCoPlayerSpawnCell(grid, cols, rows, cellSize, p1Row, p1Col, claimed);
+    claimed.add(`${cell.row},${cell.col}`);
+    const pos = { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
+    spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
+    const tank = makeTank(id++, 'player', pos, 0, i);
+    if (mode === 'teams') tank.team = teamOf(i);
+    tanks.push(tank);
+  }
+  return id;
+}
+
+/**
  * Maximal-rectangle decomposition of a solid-cell mask: horizontal runs per row, then
  * runs with identical extent stacked vertically.
  *
@@ -265,15 +305,27 @@ export function loadArena(
   if (playerCount > 1 && p1Row >= 0) {
     const p1Tank = tanks.find((t) => t.kind === 'player')!;
     p1Tank.controlledBy = 0;
-    const claimed = new Set<string>([`${p1Row},${p1Col}`]);
-    for (let i = 1; i < playerCount; i++) {
-      const cell = findCoPlayerSpawnCell(grid, cols, rows, cellSize, p1Row, p1Col, claimed);
-      claimed.add(`${cell.row},${cell.col}`);
-      const pos = { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
-      spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
-      const tank = makeTank(id++, 'player', pos, 0, i);
-      if (mode === 'teams') tank.team = teamOf(i);
-      tanks.push(tank);
+
+    // n-player arc PR 5: versus modes (ffa/teams) branch off BEFORE the ring search --
+    // a guard-first split, the same shape resolveStatus already uses for its own
+    // four-way mode dispatch (world.ts). campaign-coop falls through to the ELSE below,
+    // which is the ORIGINAL body, byte-for-byte -- this `if` exists only to route
+    // around it, never to alter it. See versus-spawns.ts's module doc comment for why a
+    // bounded ring around P1 is exactly wrong for FFA/teams: every player lands in one
+    // small ring, in mutual point-blank line of sight.
+    if (mode === 'ffa' || mode === 'teams') {
+      const chosen: Vec2[] = [{ x: (p1Col + 0.5) * cellSize, y: (p1Row + 0.5) * cellSize }];
+      for (let i = 1; i < playerCount; i++) {
+        const cell = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, chosen);
+        const pos = { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
+        chosen.push(pos);
+        spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
+        const tank = makeTank(id++, 'player', pos, 0, i);
+        if (mode === 'teams') tank.team = teamOf(i);
+        tanks.push(tank);
+      }
+    } else {
+      id = placeCampaignCoPlayers(grid, cols, rows, cellSize, p1Row, p1Col, playerCount, mode, tanks, spawns, id);
     }
   }
 
