@@ -31,17 +31,35 @@ import { step } from '../../src/sim/world';
  * that actually moves when AI or collision behaviour moves. Changing it is a deliberate
  * act: re-record the value and say in the commit WHY it moved.
  *
+ * MOVED (2026-08-16, PR "estimation error, both populations"): directive B's hazard
+ * estimation error (the owner's 08:17 ruling -- AIs must not have oracle knowledge of
+ * exact mine blast radii or perfect dodge positions) perturbs the PERCEIVED radius
+ * `dangerAvoidMove`/`incomingThreats`/`mineThreatensPlayer` gate on for grey.ts/teal.ts,
+ * which sit in the trace's reachable path (`step` -> `stepAi` -> `decideAi`). Old hash
+ * `324aa9b5d369ec6abc61f73e8e454de67b5fbf365f4b0df2eedf2c01add33bb5`, new hash below --
+ * confirmed moved by actually running trace.test.ts (not assumed), and confirmed it is
+ * NOT a coincidence of some other change: this PR's only `src/sim/` edits are the five
+ * `targeting.ts` parameterizations (all defaulted to today's exact constants),
+ * grey.ts/teal.ts's perturbed-radius wiring, and the `estimationAccuracy` profile field.
+ * The player-side half of the same mechanism (player-profile.ts, drawn from the injected
+ * `rnd` stream, never `world.seed`) contributes NOTHING to this move -- the trace drives
+ * its one player through `stepInputs` directly, never through `decidePlayerInput` -- which
+ * is exactly the split this PR's plan predicted rather than treating "AI changed -> hash
+ * moves" as one undifferentiated fact.
+ *
  * What it does and does not cover. Every line below was RE-MEASURED on this branch by
  * applying the mutation and running trace.test.ts, not carried forward:
  *
  *   - bankShot returning the first valid candidate instead of the shortest
- *     (`bestAngle === null || length < bestLength || ...` -> `bestAngle === null`) moves
+ *     (`bestAngle === null || length < bestLength || ...` -> `bestAngle === null`) moved
  *     the hash to 0cf1f76a14060992eb8763c9cd20e95b8c17cde2d1dbe3e8de6c87ff47137e9a and
- *     fails. Bank shots DO influence the trace, which was not true when the bank-shot
- *     rewrite first landed -- a later change to resolveWalls altered trajectories enough.
+ *     failed, AGAINST THE PRE-ESTIMATION-ERROR TREE -- not re-measured against the current
+ *     hash below, so treat it as unmeasured at this tree rather than still-true.
  *   - The inside-wall escape is still NOT covered: disabling resolveWalls' union-mass
  *     branch outright (`if (false && walls.some(...))`, collision.ts) leaves all 7 tests
- *     green. The seeded replay never drives a hull inside a wall.
+ *     green -- also measured against the pre-estimation-error tree, also unmeasured here.
+ *     The seeded replay never drives a hull inside a wall, which the estimation-error
+ *     change does not touch, so this is likely still true but is not re-confirmed.
  *   - Neither are the multi-input pairing rules in world.ts. This drives ONE player, so
  *     all 8 mutations swept in src/sim/step-inputs.test.ts leave the hash untouched --
  *     which is why that file exists.
@@ -49,7 +67,7 @@ import { step } from '../../src/sim/world';
  * Lesson: a coverage claim recorded at one commit can go stale as later changes alter
  * trajectories -- re-measure rather than carrying it forward.
  */
-export const BASELINE_HASH = '324aa9b5d369ec6abc61f73e8e454de67b5fbf365f4b0df2eedf2c01add33bb5';
+export const BASELINE_HASH = 'a5458ede003c173ccc099b708f4b7d43b7537ca8a7846a87274b6376ccc311a9';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
