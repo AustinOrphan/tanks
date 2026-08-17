@@ -7,7 +7,7 @@ import {
   NORMAL_SPEED, FAST_SPEED, RICOCHET_SPEED,
   FIRE_COOLDOWN, MINE_COOLDOWN,
   MINE_TIMER, MINE_PROXIMITY_RADIUS, MINE_BLAST_RADIUS,
-  AI_AIM_SPREAD,
+  AI_AIM_SPREAD, AI_HAZARD_SPREAD,
 } from './constants';
 import type { BulletType } from './types';
 
@@ -111,6 +111,14 @@ describe('constants', () => {
     // to miss sometimes -- so widening it to, say, 0.5 rad (~29 degrees) makes
     // every enemy harmless with the whole suite still green. Pin the literal.
     expect(AI_AIM_SPREAD).toBe(0.08);
+  });
+
+  it('AI hazard-estimation spread stays at the tuned difficulty value', () => {
+    // src/sim/constants.ts: the estimation-error anchor (directive B, 2026-08-16 owner
+    // ruling) -- 0.4 world units of possible misjudgement on a hypothetical perfect-
+    // estimationAccuracy profile. No behavioural test can pin it either (the AI is meant
+    // to misjudge sometimes), so widening or zeroing it would pass the whole suite green.
+    expect(AI_HAZARD_SPREAD).toBe(0.4);
   });
 
   it('bulletConfig covers every BulletType exhaustively', () => {

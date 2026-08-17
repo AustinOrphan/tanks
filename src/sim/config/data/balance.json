@@ -17,6 +17,6 @@
     "blastRadius": 2.0,
     "triggerRadius": 0.35
   },
-  "ai": { "aimSpread": 0.08 },
+  "ai": { "aimSpread": 0.08, "hazardSpread": 0.4 },
   "lives": 3
 }

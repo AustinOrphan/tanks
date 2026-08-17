@@ -273,6 +273,20 @@ export const AI_AIM_SPREAD = data.ai.aimSpread;
 // often makes shots scatter around the target instead of consistently missing to one side.
 export const AI_JITTER_TICKS = 20;
 
+// ---- AI hazard estimation (targeting.ts profileHazardSpread/estimationError) ----
+// Directive B (2026-08-16 owner ruling): AIs must not have oracle knowledge of exact mine
+// blast radii or perfect dodge positions -- educated guessing with seeded error, sometimes
+// fatal, guess quality scaling by tank type. Same anchor/derate shape as AI_AIM_SPREAD:
+// this is the estimation error of a hypothetical PERFECT-estimationAccuracy profile, world
+// units, added to (not multiplying) a true hazard radius -- AI_MINE_FLEE_RADIUS (3.25),
+// DANGER_CORRIDOR (0.8) or AI_MINE_TACTICAL_RADIUS (8.5). Chosen so it can cross a real
+// decision boundary at DANGER_CORRIDOR's scale (the smallest of the three) without every
+// profile's perceived corridor going negative: at the shipped profiles' estimationAccuracy
+// (0.3-0.9), spread/accuracy ranges roughly 0.44-1.33, comfortably inside DANGER_CORRIDOR
+// without swallowing it whole at every profile. Feel value, like AI_AIM_SPREAD -- tune with
+// `npm run gallery --sweep` or the pacifist/engagement harnesses, not by guessing.
+export const AI_HAZARD_SPREAD = data.ai.hazardSpread;
+
 // ---- Grey AI (greyDecision) ----
 // How many consecutive dodging ticks Grey will hold fire before shooting back regardless.
 // 45 ticks = 0.75s at 60Hz, deliberately longer than the player's FIRE_COOLDOWN (0.4s) so

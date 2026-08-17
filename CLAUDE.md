@@ -309,7 +309,12 @@ preferred, seeded retreat draw inside minimum, wander in the band; tuned by
 sweep, see `SEEK_APPROACH_BIAS`) — and `aimAccuracy`: per-profile jitter is
 `AI_AIM_SPREAD / aimAccuracy` (`profileAimSpread`), the anchor being a
 perfect-accuracy profile's spread; curve chosen by sweep, see the anchor's
-comment in constants.ts — and `minePlacementChance` in full: its magnitude is
+comment in constants.ts — and `estimationAccuracy` (directive B): per-profile hazard
+misjudgement is `AI_HAZARD_SPREAD / estimationAccuracy` (`profileHazardSpread`), the same
+anchor/derate shape, feeding a per-tank-per-window `estimationError` draw that perturbs
+the perceived mine-flee radius, danger corridor and mine-tactical radius `dangerAvoidMove`/
+`incomingThreats`/`mineThreatensPlayer`/`friendlyInMineBlast` gate on — and
+`minePlacementChance` in full: its magnitude is
 the per-bucket mine-proposal probability (`mineInclination`) — and
 `reactionTime`: the dispatcher holds every AI shot until the solution has been
 HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
@@ -322,6 +327,25 @@ alternates: a turret that can already see you has no reason to take the longer
 path. Brown is unaffected because STATIC_BASIC carries `bankShotWeight` 0 — proven
 by an identical trace hash over 4 arenas × 6 seeds × 2500 ticks, with a control
 showing the probe moves when banking is switched on.
+
+**`estimationAccuracy` (directive B, the 2026-08-16 owner ruling: AIs must not have
+oracle knowledge of exact mine blast radii or perfect dodge positions) is the same
+asymmetric-consumption shape `bankShotWeight` set the precedent for.** It is a REQUIRED
+field on all 8 profiles, but only DEFENSIVE/TACTICAL/OFFENSIVE/BERSERKER behaviours ever
+reach a site that reads it (`targeting.ts`'s `dangerAvoidMove`/`incomingThreats`/
+`mineThreatensPlayer`/`friendlyInMineBlast`, all now taking an optional perceived-radius
+parameter defaulted to today's exact constant); STATIONARY (brown, green/RICOCHET_SNIPER)
+never imports `dangerAvoidMove` and never reaches `friendlyInMineBlast` (gated on
+`TankAbility.MINE_LAYER`, which neither carries), so the field sits on their profile
+unread by the SHARED path, same as `preferredDistance`/`minimumDistance`/`retreatChance`
+already do for STATIONARY. It is NOT unread everywhere, though: the PLAYER also resolves
+to STATIC_BASIC and DOES consume its `estimationAccuracy`, through an independently
+written mirror of the same gates in `player-profile.ts` (oracle-knowledge site #5, drawn
+from the player's own injected `rnd`, never `world.seed`) — so the field the shared AI
+path ignores for brown is exactly the field the player's own code reads for the identical
+profile. `AI_HAZARD_SPREAD` (`constants.ts`, sourced from `balance.json` per the
+`AI_AIM_SPREAD` precedent) is the anchor a perfect-estimationAccuracy profile would still
+misjudge by; every shipped profile sits below accuracy 1.
 
 **A green tank changed what `structuralFailures` has to check.** "No enemy sees
 the player spawn" tested `lineOfSight` only, which was the same as "no enemy can

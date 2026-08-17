@@ -246,10 +246,16 @@ describe('a competent scripted player against the shipped arenas', () => {
  * opponent pulls it past the midpoint) -- the two disagree by construction, which is
  * what makes this fixture able to actually distinguish the two rules.
  *
- * Seed 3 was found by scanning seeds 1..300 against the CURRENT (pre-threat-summary)
- * code and keeping one where the retreat draw actually fires -- see the self-check
- * assertion below, which fails loudly (not vacuously) if a future change stops
- * reaching the retreat branch on this seed.
+ * Seed 4 was found by scanning seeds 1..2000 against the CURRENT code and keeping one
+ * where the retreat draw actually fires -- see the self-check assertion below, which
+ * fails loudly (not vacuously) if a future change stops reaching the retreat branch on
+ * this seed. Re-scanned (was seed 3) when directive B's estimation-error draw landed:
+ * decidePlayerInput now consumes one more `rnd()` call before the wander/retreat draws
+ * (the per-tick hazard offset), which shifts every later draw in the stream -- a linear
+ * PRNG has no bucket to insulate later draws from an earlier one added upstream, unlike
+ * the enemy AI's world.seed-keyed hash. Any fixture pinned against a specific seed's
+ * draw sequence is fragile to this in the same way; this is the one place in the tree
+ * that fixture actually lived.
  */
 describe('directive A part 2: whole-map threat summary informs retreat', () => {
   const PLAYER_ID = 1;
@@ -259,7 +265,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     const near = makeTank('brown', 2, 0, -2); // within PLAYER_MINIMUM_DISTANCE (4)
     const far = makeTank('grey', 3, 0, 6);    // pulls the centroid to (0, 2)
     const world = createWorld({ walls: [], tanks: [player, near, far], spawns: [], lives: 3 });
-    const rnd = mulberry32(3); // found by scanning seeds 1..300 for one where the retreat draw fires
+    const rnd = mulberry32(4); // found by scanning seeds 1..2000 for one where the retreat draw fires
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -299,7 +305,7 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
     const far = makeTank('grey', 3, 0, 6);
     const corpse = { ...makeTank('teal', 4, 40, 0), alive: false };
     const world = createWorld({ walls: [], tanks: [player, near, far, corpse], spawns: [], lives: 3 });
-    const rnd = mulberry32(3); // same seed as above: the retreat draw fires identically
+    const rnd = mulberry32(4); // same seed as above: the retreat draw fires identically
     const state = createPlayerAiState(rnd);
     const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
 
@@ -320,6 +326,58 @@ describe('directive A part 2: whole-map threat summary informs retreat', () => {
 
     expect(input.move.x).toBeCloseTo(livingAway.x, 5);
     expect(input.move.y).toBeCloseTo(livingAway.y, 5);
+  });
+});
+
+/**
+ * Directive B (2026-08-16 owner ruling): the player's own hazard estimation error, drawn
+ * from its INJECTED `rnd` stream (never `world.seed` -- see decidePlayerInput's own
+ * comment). One draw per tick: `createPlayerAiState(rnd)` consumes the stream's FIRST
+ * value (the initial wander heading), so the hazard-offset draw inside decidePlayerInput
+ * is the stream's SECOND value -- both fixtures below account for that by consuming one
+ * throwaway draw before reading the one that matters, exactly as `createPlayerAiState`
+ * does for real.
+ *
+ * Seeds found by scanning seeds 1..5000 against `mulberry32(seed)`'s SECOND draw (the
+ * first is spent on `wanderHeading`): seed 4771 -> 0.000002468237653374672 (near-minimal,
+ * for the UNDER case), seed 3434 -> 0.9998051796574146 (near-maximal, for the OVER case).
+ * The shipped player profile is STATIC_BASIC, estimationAccuracy 0.5, so spread =
+ * AI_HAZARD_SPREAD / 0.5 = 0.8, and the offsets are (draw*2-1)*0.8 -- essentially -0.8 and
+ * +0.8 -- perturbing the true AI_MINE_FLEE_RADIUS (3.25) to roughly 2.45 and 4.05.
+ */
+describe('directive B: estimation error (the player half, injected rnd, never world.seed)', () => {
+  const PLAYER_ID = 1;
+
+  it('UNDER-estimation: the player does not dodge a mine sitting inside its own actual kill radius (the literal sometimes-fatal case)', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    // 2.48: inside the TRUE kill radius (MINE_BLAST_RADIUS + TANK_RADIUS = 2.5) and the
+    // true flee radius (3.25), but past the perceived one (~2.45) with real margin either
+    // side (~0.02-0.03), not a boundary-exact fixture.
+    const mineFixture = { id: 70, ownerId: 99, pos: { x: 2.48, y: 0 }, timer: 3, armed: true, detonated: false };
+    const world = { ...createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 }), mines: [mineFixture] };
+    const rnd = mulberry32(4771);
+    const state = createPlayerAiState(rnd); // draw #1: wanderHeading
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state); // draw #2: hazard offset
+
+    // Ground the "fatal" claim: the mine is inside the player's TRUE lethal blast radius.
+    expect(vdist(player.pos, mineFixture.pos)).toBeLessThanOrEqual(2.5);
+    // move is NOT the escape vector (-1, 0) that fleeing this mine would produce.
+    expect(input.move.x).not.toBeCloseTo(-1, 2);
+  });
+
+  it('OVER-estimation: the player dodges a mine the TRUE flee radius says is safe (wasted caution, not merely cosmetic scatter)', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    // 3.8: past the TRUE flee radius (3.25, with a 0.55 margin) but inside the perceived
+    // one (~4.05, with a 0.25 margin) -- real margins both sides, not boundary-exact.
+    const mineFixture = { id: 71, ownerId: 99, pos: { x: 3.8, y: 0 }, timer: 3, armed: true, detonated: false };
+    const world = { ...createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 }), mines: [mineFixture] };
+    const rnd = mulberry32(3434);
+    const state = createPlayerAiState(rnd);
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+
+    // move IS the escape vector away from (3.8, 0): straight along -x.
+    expect(input.move.x).toBeCloseTo(-1, 2);
+    expect(input.move.y).toBeCloseTo(0, 2);
   });
 });
 

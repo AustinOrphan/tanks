@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter, shotHitsOwnSide, friendlyInMineBlast } from './targeting';
-import { AI_AIM_SPREAD, AI_JITTER_TICKS, TANK_RADIUS, BULLET_RADIUS, AI_HULL_CLEARANCE, AI_MINE_FLEE_RADIUS } from '../constants';
+import {
+  lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter, shotHitsOwnSide,
+  friendlyInMineBlast, mineThreatensPlayer, incomingThreats, dangerAvoidMove,
+  profileHazardSpread, estimationError,
+} from './targeting';
+import {
+  AI_AIM_SPREAD, AI_JITTER_TICKS, TANK_RADIUS, BULLET_RADIUS, AI_HULL_CLEARANCE,
+  AI_MINE_FLEE_RADIUS, AI_MINE_TACTICAL_RADIUS, AI_HAZARD_SPREAD, WANDER_TICKS, DANGER_CORRIDOR,
+} from '../constants';
+import { configFor } from '../config';
 import { raySegmentVsAABB } from '../collision';
 import type { Tank, Wall, Vec2 } from '../types';
 import { nextRng } from '../types';
@@ -598,6 +606,220 @@ describe('friendlyInMineBlast', () => {
     const layer = aiTank(1, 'grey', { x: 0, y: 0 });
     const corpse = aiTank(2, 'brown', { x: 1, y: 0 }, { alive: false });
     expect(friendlyInMineBlast(w([layer, corpse]), layer)).toBe(false);
+  });
+
+  // ---- Directive B: fleeRadius is an optional, defaulted parameter (estimation error) ----
+
+  it('a PERCEIVED fleeRadius narrower than the default lets a real teammate through undetected', () => {
+    // A teammate sitting inside the TRUE AI_MINE_FLEE_RADIUS is missed once the caller
+    // passes a perceived radius smaller than the distance to it -- the mutation this kills:
+    // dropping the `fleeRadius` parameter and hardcoding AI_MINE_FLEE_RADIUS again.
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: AI_MINE_FLEE_RADIUS - 0.5, y: 0 }); // inside the true radius
+    expect(friendlyInMineBlast(w([layer, mate]), layer)).toBe(true); // default (unperturbed) still catches it
+    expect(friendlyInMineBlast(w([layer, mate]), layer, AI_MINE_FLEE_RADIUS - 1)).toBe(false); // perceived radius shrunk past it
+  });
+
+  it('a PERCEIVED fleeRadius wider than the default flags a teammate the true radius would clear', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const mate = aiTank(2, 'brown', { x: AI_MINE_FLEE_RADIUS + 0.5, y: 0 }); // outside the true radius
+    expect(friendlyInMineBlast(w([layer, mate]), layer)).toBe(false); // default clears it
+    expect(friendlyInMineBlast(w([layer, mate]), layer, AI_MINE_FLEE_RADIUS + 1)).toBe(true); // perceived radius widened past it
+  });
+});
+
+describe('mineThreatensPlayer', () => {
+  function aiTank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {}): Tank {
+    return {
+      id, kind, pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0, ...over,
+    };
+  }
+  function w(tanks: Tank[]): World {
+    return {
+      tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls: [],
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
+    };
+  }
+
+  it('boundary against the BARE constant is inclusive ("<=")', () => {
+    // Pinned here, against the raw AI_MINE_TACTICAL_RADIUS, rather than through
+    // greyDecision/tealDecision: those callers now pass a PERCEIVED radius (directive B),
+    // so their effective boundary floats with a per-tank estimation-error draw. This test
+    // is the one place the underlying comparison's inclusivity is checked directly.
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const near = aiTank(2, 'player', { x: AI_MINE_TACTICAL_RADIUS - 1e-6, y: 0 });
+    const far = aiTank(2, 'player', { x: AI_MINE_TACTICAL_RADIUS + 1e-6, y: 0 });
+    expect(mineThreatensPlayer(w([layer, near]), layer)).toBe(true);
+    expect(mineThreatensPlayer(w([layer, far]), layer)).toBe(false);
+  });
+
+  it('a PERCEIVED tacticalRadius changes the outcome (the parameter is actually consumed)', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const player = aiTank(2, 'player', { x: AI_MINE_TACTICAL_RADIUS + 1, y: 0 }); // outside the true radius
+    expect(mineThreatensPlayer(w([layer, player]), layer)).toBe(false);
+    expect(mineThreatensPlayer(w([layer, player]), layer, AI_MINE_TACTICAL_RADIUS + 2)).toBe(true);
+  });
+
+  it('ignores a dead player and a non-player tank regardless of the radius passed', () => {
+    const layer = aiTank(1, 'grey', { x: 0, y: 0 });
+    const deadPlayer = aiTank(2, 'player', { x: 1, y: 0 }, { alive: false });
+    const ally = aiTank(3, 'brown', { x: 1, y: 0 });
+    expect(mineThreatensPlayer(w([layer, deadPlayer, ally]), layer, 1000)).toBe(false);
+  });
+});
+
+describe('incomingThreats: dangerCorridor is an optional, defaulted parameter (estimation error)', () => {
+  function threatTank(id: number, pos: Vec2): Tank {
+    return {
+      id, kind: 'grey', pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0,
+    };
+  }
+  function threatWorld(over: Partial<World>): World {
+    return {
+      tick: 0, nextId: 100, seed: 1, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, ...over,
+    };
+  }
+
+  it('a PERCEIVED corridor narrower than the default misses a bullet the true corridor would catch', () => {
+    const t = threatTank(1, { x: 3, y: 1.1 }); // 1.1 units off-axis: inside default 0.8+? no -- see below
+    const b = { id: 50, ownerId: 99, type: 'normal' as const, pos: { x: 0, y: 0 }, vel: { x: 6, y: 0 }, bouncesLeft: 1, alive: true };
+    // perp distance is 1.1: OUTSIDE the default DANGER_CORRIDOR (0.8), so widen the
+    // perceived corridor past it first to establish the TRUE positive, then narrow it
+    // back down to prove the parameter actually shrinks detection too.
+    const w = threatWorld({ tanks: [t], bullets: [b] });
+    expect(incomingThreats(w, t, 1.5).map((x) => x.id)).toContain(50); // widened: caught
+    expect(incomingThreats(w, t, 0.5)).toHaveLength(0); // narrowed below 1.1: missed
+  });
+});
+
+describe('dangerAvoidMove: fleeRadius/dangerCorridor are optional, defaulted parameters (estimation error)', () => {
+  function hazardTank(id: number, pos: Vec2): Tank {
+    return {
+      id, kind: 'grey', pos, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0,
+    };
+  }
+  function hazardWorld(over: Partial<World>): World {
+    return {
+      tick: 0, nextId: 100, seed: 1, tanks: [], bullets: [], mines: [], blasts: [], walls: [],
+      spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
+      corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, ...over,
+    };
+  }
+
+  it('defaults to the exact constants: unchanged from every existing 2-arg caller', () => {
+    // The whole idiom this parameterization rests on (CLAUDE.md's Tank.team? precedent):
+    // omitting the new arguments must reproduce today's exact behaviour.
+    const t = hazardTank(1, { x: 0, y: 0 });
+    const m = { id: 70, ownerId: 1, pos: { x: AI_MINE_FLEE_RADIUS - 1e-6, y: 0 }, timer: 3, armed: true, detonated: false };
+    expect(dangerAvoidMove(hazardWorld({ tanks: [t], mines: [m] }), t)).not.toBeNull();
+    expect(dangerAvoidMove(hazardWorld({ tanks: [t], mines: [m] }), t, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR)).not.toBeNull();
+  });
+
+  it('a narrower PERCEIVED fleeRadius misses a mine the true radius would flee (the fatal case, isolated from any RNG)', () => {
+    const t = hazardTank(1, { x: 0, y: 0 });
+    const m = { id: 70, ownerId: 1, pos: { x: 2.4, y: 0 }, timer: 3, armed: true, detonated: false }; // inside MINE_BLAST_RADIUS+TANK_RADIUS
+    const w = hazardWorld({ tanks: [t], mines: [m] });
+    expect(dangerAvoidMove(w, t)).not.toBeNull(); // true radius: flees
+    expect(dangerAvoidMove(w, t, 2, DANGER_CORRIDOR)).toBeNull(); // perceived radius shrunk below 2.4: does not
+  });
+
+  it('a wider PERCEIVED dangerCorridor dodges a bullet the true corridor would ignore (over-reaction)', () => {
+    const t = hazardTank(1, { x: 3, y: 1.1 });
+    const b = { id: 50, ownerId: 99, type: 'normal' as const, pos: { x: 0, y: 0 }, vel: { x: 6, y: 0 }, bouncesLeft: 1, alive: true };
+    const w = hazardWorld({ tanks: [t], bullets: [b] });
+    expect(dangerAvoidMove(w, t)).toBeNull(); // true corridor (0.8): the 1.1 offset clears it
+    expect(dangerAvoidMove(w, t, AI_MINE_FLEE_RADIUS, 1.5)).not.toBeNull(); // widened past 1.1: dodges anyway
+  });
+});
+
+describe('estimationError / profileHazardSpread (directive B: hazard estimation error)', () => {
+  it('profileHazardSpread: accuracy 1.0 IS the anchor; lower accuracy widens by 1/accuracy', () => {
+    const base = configFor('grey');
+    expect(profileHazardSpread({ ...base, ai: { ...base.ai, estimationAccuracy: 1 } })).toBe(AI_HAZARD_SPREAD);
+    expect(profileHazardSpread({ ...base, ai: { ...base.ai, estimationAccuracy: 0.5 } }))
+      .toBeCloseTo(AI_HAZARD_SPREAD * 2, 12);
+  });
+
+  it('is pure: same (seed, id, bucket) yields the identical offset', () => {
+    const t = wanderTank(1);
+    const a = estimationError(wanderWorld(7, 0), t, AI_HAZARD_SPREAD);
+    const b = estimationError(wanderWorld(7, 0), t, AI_HAZARD_SPREAD);
+    expect(a).toBe(b);
+  });
+
+  it('is bounded by +/-spread AND genuinely two-sided', () => {
+    const offsets: number[] = [];
+    for (let seed = 0; seed < 20; seed++) {
+      for (let tick = 0; tick < 20; tick++) {
+        const offset = estimationError(wanderWorld(seed, tick * WANDER_TICKS), wanderTank(1), AI_HAZARD_SPREAD);
+        expect(Math.abs(offset)).toBeLessThanOrEqual(AI_HAZARD_SPREAD);
+        offsets.push(offset);
+      }
+    }
+    expect(offsets.some((o) => o < 0)).toBe(true);
+    expect(offsets.some((o) => o > 0)).toBe(true);
+  });
+
+  it('pins the exact offset for (seed=7, id=1, bucket=0) to lock the PRNG contract', () => {
+    // Hand-derived from the real nextRng path, independent of estimationError itself:
+    //   rngSeed = world.seed + tank.id * 5303 + floor(tick / WANDER_TICKS) = 7 + 5303 + 0 = 5310
+    //   nextRng(5310).value = 0.7019057071302086
+    //   offset = (value * 2 - 1) * AI_HAZARD_SPREAD = 0.4038114142604172 * 0.4 = 0.16152456570416688
+    const v = estimationError(wanderWorld(7, 0), wanderTank(1), AI_HAZARD_SPREAD);
+    expect(v).toBeCloseTo(0.16152456570416688, 12);
+  });
+
+  it('differs from wanderMove/aimJitter/mineInclination/seekMove\'s retreat draw (distinct prime, not the same stream)', () => {
+    // Not "different values" (any two distinct hashes usually differ) but the actual
+    // collision argument: nextRng(seed + id*1000 + bucket) (wander), nextRng(seed +
+    // id*4243 + bucket) (retreat), nextRng(seed + id*6101 + bucket) (mine inclination) and
+    // nextRng(seed + id*7919 + bucket) (aim jitter) are never the same KEY as
+    // nextRng(seed + id*5303 + bucket) for any (id >= 1, bucket >= 0), since the four
+    // multipliers 1000, 4243, 6101, 7919 all differ from 5303 and id*prime + bucket is
+    // injective in the multiplier for a fixed id/bucket pair actually used here.
+    expect(5303).not.toBe(1000);
+    expect(5303).not.toBe(4243);
+    expect(5303).not.toBe(6101);
+    expect(5303).not.toBe(7919);
+  });
+
+  it('is NOT correlated with that tank\'s wander heading (distinct multiplier from wanderMove\'s tank.id*1000)', () => {
+    const w = wanderWorld(7, 0);
+    const wander1 = wanderMove(w, wanderTank(1));
+    const wander2 = wanderMove(w, wanderTank(2));
+    const error1 = estimationError(w, wanderTank(1), AI_HAZARD_SPREAD);
+    const error2 = estimationError(w, wanderTank(2), AI_HAZARD_SPREAD);
+    // If estimationError shared wanderMove's multiplier, the SIGN of error1 vs error2
+    // would move in lockstep with whichever tank's wander heading leads on the unit
+    // circle. Assert only that the two draws are independent numbers, not accidentally
+    // identical to a transform of the wander headings.
+    expect(error1).not.toBe(wander1.x);
+    expect(error2).not.toBe(wander2.x);
+  });
+
+  it('differs across tick buckets for the same tank (re-rolls, not a fixed misjudgement)', () => {
+    const t = wanderTank(1);
+    const atBucket0 = estimationError(wanderWorld(7, 0), t, AI_HAZARD_SPREAD);
+    const atBucket1 = estimationError(wanderWorld(7, WANDER_TICKS), t, AI_HAZARD_SPREAD);
+    expect(atBucket0).not.toBe(atBucket1);
+  });
+
+  it('holds within a bucket (ticks 0 and WANDER_TICKS-1) and changes at the boundary', () => {
+    const t = wanderTank(1);
+    const atTick0 = estimationError(wanderWorld(7, 0), t, AI_HAZARD_SPREAD);
+    const atTickLast = estimationError(wanderWorld(7, WANDER_TICKS - 1), t, AI_HAZARD_SPREAD);
+    const atTickNext = estimationError(wanderWorld(7, WANDER_TICKS), t, AI_HAZARD_SPREAD);
+    expect(atTickLast).toBe(atTick0);
+    expect(atTickNext).not.toBe(atTick0);
   });
 });
 

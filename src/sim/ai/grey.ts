@@ -1,8 +1,8 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { TICK_HZ } from '../constants';
+import { TICK_HZ, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -13,7 +13,15 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // Weapon (bullet type + muzzle speed) comes from the resolved config, not a
   // hardcoded 'normal' -- Grey fires the STANDARD_SHELL its definition names.
   const weapon = cfg.weapon;
-  const avoid = dangerAvoidMove(world, tank);
+  // Directive B: perceived, not exact, hazard radii. ONE draw per tank per WANDER_TICKS
+  // window (targeting.ts's estimationError/profileHazardSpread -- world.seed-keyed, the
+  // enemy-only house recipe), reused at every site below -- dangerAvoidMove, the underFire
+  // corridor check and the mine-threat gate -- so a misjudgement this window is coherent
+  // across every hazard type rather than an independent roll per site.
+  const hazardOffset = estimationError(world, tank, profileHazardSpread(cfg));
+  const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
+  const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
+  const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);
   // dangerAvoidMove now vets its own direction against walls and armed mines (see
   // targeting.ts), so this can be trusted directly: a dodge into a wall used to net zero
   // displacement and pin Grey inside the danger corridor while it held fire.
@@ -43,7 +51,7 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // for much of its life: it drops a mine only when the player is close enough to be
   // threatened, then stands inside its own flee radius with a clear shot and holds fire.
   // The patience mechanism is about bullets and nothing else.
-  const underFire = incomingThreats(world, tank).length > 0;
+  const underFire = incomingThreats(world, tank, dangerCorridor).length > 0;
   const dodgeTicks = underFire ? tank.aiTimer + 1 : 0;
   // `sees` is computed BEFORE the patience early-return: a dodging grey still
   // SEES the player, and the reaction clock (dispatcher, aimTicks) must keep
@@ -91,7 +99,7 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // gate below already says yes.
   const mine = mineInclination(world, tank, cfg)
     && !avoid && tank.mineCooldown <= 0 && tank.activeMineIds.length < cfg.mineCapacity
-    && mineThreatensPlayer(world, tank);
+    && mineThreatensPlayer(world, tank, AI_MINE_TACTICAL_RADIUS + hazardOffset);
 
   // nextState is still vestigial for Grey: unlike Brown, greyDecision never branches on
   // tank.aiState (nextState here is just a passthrough/label, not a driver of behaviour).

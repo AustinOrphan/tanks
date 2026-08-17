@@ -3,7 +3,7 @@ import { vsub, angleOf, vdot, vdist, vlen, vnorm, fromAngle, nextRng } from '../
 import { raySegmentVsAABB, circleVsAABB, reflectSweep, driveVelocity } from '../collision';
 import { configFor, type ResolvedTankConfig } from '../config';
 import {
-  AIM_EPS, AI_AIM_SPREAD, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
+  AIM_EPS, AI_AIM_SPREAD, AI_HAZARD_SPREAD, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig, SWEEP_EPS,
 } from '../constants';
@@ -137,11 +137,16 @@ function minApproach(a: Vec2, b: Vec2, legTime: number, legStart: number, p: Vec
  * way to leave. Measured against AI_MINE_FLEE_RADIUS rather than the bare kill radius so
  * the teammate is not merely outside the blast but outside the zone it would have to run
  * from at all.
+ *
+ * `fleeRadius` defaults to the exact constant -- unperturbed, today's behaviour -- so every
+ * existing caller is unaffected. `index.ts`'s `stepAi` (the only caller) passes a PERCEIVED
+ * radius instead (directive B: no oracle knowledge of the blast's true reach), the same
+ * `estimationError` house recipe grey.ts/teal.ts use for their own dodge/flee gates.
  */
-export function friendlyInMineBlast(world: World, tank: Tank): boolean {
+export function friendlyInMineBlast(world: World, tank: Tank, fleeRadius = AI_MINE_FLEE_RADIUS): boolean {
   for (const t of world.tanks) {
     if (!t.alive || t.id === tank.id || t.kind === 'player') continue;
-    if (vdist(t.pos, tank.pos) <= AI_MINE_FLEE_RADIUS) return true;
+    if (vdist(t.pos, tank.pos) <= fleeRadius) return true;
   }
   return false;
 }
@@ -157,11 +162,16 @@ export function friendlyInMineBlast(world: World, tank: Tank): boolean {
  * Being a plain radius around the drop point, this still permits a burst: while the player
  * stays close a tank may lay up to MINE_CAP mines back to back, which is the chokepoint
  * denial worth keeping. It only refuses the drops that could never have mattered.
+ *
+ * `tacticalRadius` defaults to the exact constant -- today's behaviour, unperturbed -- so
+ * every existing caller is unaffected. grey.ts/teal.ts pass a PERCEIVED radius instead
+ * (directive B): this is the OFFENSE side of the same estimation error that gates their
+ * own dodge/flee decisions, computed once per tick via `estimationError` and reused here.
  */
-export function mineThreatensPlayer(world: World, tank: Tank): boolean {
+export function mineThreatensPlayer(world: World, tank: Tank, tacticalRadius = AI_MINE_TACTICAL_RADIUS): boolean {
   for (const t of world.tanks) {
     if (t.kind !== 'player' || !t.alive) continue;
-    if (vdist(t.pos, tank.pos) <= AI_MINE_TACTICAL_RADIUS) return true;
+    if (vdist(t.pos, tank.pos) <= tacticalRadius) return true;
   }
   return false;
 }
@@ -390,8 +400,13 @@ export function bankShot(muzzle: Vec2, target: Vec2, walls: Wall[], maxBounces: 
  * LIMITATION: models bullets as straight lines and ignores walls. A shell that will BANK
  * off a wall into the tank is not flagged (same limitation as the bank-shot targeting
  * itself). Conversely, a bullet that a wall will stop is still flagged.
+ *
+ * `dangerCorridor` defaults to the exact constant -- today's behaviour, unperturbed. Every
+ * enemy caller (grey.ts/teal.ts, and dangerAvoidMove below) passes a PERCEIVED corridor
+ * instead (directive B): a narrower perceived corridor than the true one is what makes a
+ * real threat go unflagged -- the "sometimes fatal" case, not merely cosmetic scatter.
  */
-export function incomingThreats(world: World, tank: Tank): Bullet[] {
+export function incomingThreats(world: World, tank: Tank, dangerCorridor = DANGER_CORRIDOR): Bullet[] {
   const out: Bullet[] = [];
   for (const b of world.bullets) {
     if (!b.alive) continue;
@@ -405,7 +420,7 @@ export function incomingThreats(world: World, tank: Tank): Bullet[] {
     if (along < 0) continue;                     // bullet already past / moving away
     if (along > speed * THREAT_HORIZON) continue; // too far ahead in time
     const perp = { x: rel.x - dir.x * along, y: rel.y - dir.y * along };
-    if (detHypot(perp.x, perp.y) <= DANGER_CORRIDOR) out.push(b);
+    if (detHypot(perp.x, perp.y) <= dangerCorridor) out.push(b);
   }
   return out;
 }
@@ -465,6 +480,50 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
  */
 export function profileAimSpread(cfg: ResolvedTankConfig): number {
   return AI_AIM_SPREAD / cfg.ai.aimAccuracy;
+}
+
+/**
+ * Per-profile hazard-estimation spread, same anchor/derate shape as profileAimSpread:
+ * AI_HAZARD_SPREAD is the estimation error of a hypothetical PERFECT-estimationAccuracy
+ * profile, and lower accuracy widens it. Every shipped profile that reaches the sites below
+ * sits under accuracy 1, so every one of them sometimes misjudges a hazard radius by more
+ * than the anchor -- the mechanism directive B asks for ("AIs must not have oracle
+ * knowledge... educated guessing with seeded error, sometimes fatal").
+ */
+export function profileHazardSpread(cfg: ResolvedTankConfig): number {
+  return AI_HAZARD_SPREAD / cfg.ai.estimationAccuracy;
+}
+
+/**
+ * Returns a signed hazard-estimation offset, bounded to ±`spread`, for `tank` to add to a
+ * TRUE hazard radius (AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS) to get
+ * its PERCEIVED one. Same house recipe as wanderMove/aimJitter/mineInclination -- a pure
+ * hash of (world.seed, tank.id, tick bucket), no threaded state, re-rolled every
+ * WANDER_TICKS (the cadence the AI's other per-window intentions already use, so a
+ * misjudgement is held for the span of one dodge/flee encounter rather than flickering tick
+ * to tick and averaging itself away).
+ *
+ * ONE draw per tank per window, reused by every call site that needs a perceived radius
+ * THIS tick: because this is a pure function of its inputs rather than threaded state, a
+ * caller at any of grey.ts's three sites (dangerAvoidMove, the underFire corridor check,
+ * mineThreatensPlayer) or index.ts's friendlyInMineBlast gets the IDENTICAL offset without
+ * anything being passed between them -- "having a bad read this window" is coherent across
+ * every hazard type at once, not an independent coin flip per site.
+ *
+ * `* 5303` is a fresh prime distinct from every other per-tank stream this file draws --
+ * wander (1000, not itself prime but the collision argument only needs the MULTIPLIERS to
+ * differ), retreat (4243), mine inclination (6101), aim jitter (7919) -- so for the same
+ * (tank.id, bucket) this draw is never the identical key as any of them. It also cannot
+ * collide with a bot's per-slot stream (game/loop.ts's BOT_SEED_SPACING): every bot key is
+ * `world.seed - BOT_SEED_SPACING + slot`, strictly LESS than world.seed, while this key is
+ * `world.seed + tank.id * 5303 + bucket` with tank.id >= 1, strictly GREATER -- the same
+ * argument BOT_SEED_SPACING's own doc comment gives for the other four multipliers applies
+ * to any positive one, this included.
+ */
+export function estimationError(world: World, tank: Tank, spread: number): number {
+  const bucket = Math.floor(world.tick / WANDER_TICKS);
+  const rng = nextRng(world.seed + tank.id * 5303 + bucket);
+  return (rng.value * 2 - 1) * spread;
 }
 
 /**
@@ -583,14 +642,23 @@ function wallBlocksStep(world: World, tank: Tank, dir: Vec2, speed = configFor(t
  * MINE_TIMER expiry regardless, and that path "spares nobody, including an owner still
  * standing on it". A tank that dropped a mine and then loitered inside MINE_PROXIMITY_
  * RADIUS never armed it and never fled it, and the 3-second fuse killed it where it stood.
+ *
+ * `fleeRadius` defaults to the exact constant -- today's behaviour, unperturbed. Callers
+ * that pass a PERCEIVED radius (directive B: no oracle knowledge of the true blast reach)
+ * change which mines even make it into this list -- a mine just outside the perceived
+ * radius is invisible to `bestEscapeDirection` below even though it is real and armed,
+ * which is where the "sometimes fatal" outcome actually lives. `bestEscapeDirection`
+ * itself stays untouched: it is handed whatever list this function returns and searches it
+ * perfectly, same as always -- the imperfection is in which mines reach it, not in how well
+ * it escapes the ones it is told about.
  */
-function dangerousMines(world: World, tank: Tank): Mine[] {
+function dangerousMines(world: World, tank: Tank, fleeRadius = AI_MINE_FLEE_RADIUS): Mine[] {
   const near: Mine[] = [];
   for (const m of world.mines) {
     if (m.detonated) continue;
     // `<=`, and measured against the radius detonateMine actually KILLS at plus an escape
     // margin -- see AI_MINE_FLEE_RADIUS in constants.ts.
-    if (vdist(m.pos, tank.pos) <= AI_MINE_FLEE_RADIUS) near.push(m);
+    if (vdist(m.pos, tank.pos) <= fleeRadius) near.push(m);
   }
   return near;
 }
@@ -611,6 +679,15 @@ function dangerousMines(world: World, tank: Tank): Mine[] {
  * Directions are sampled on a fixed wheel rather than solved analytically: the wheel is
  * deterministic, cannot divide by a near-zero resultant when repulsions cancel, and
  * includes the exact axis directions, so the single-mine case still yields straight away.
+ *
+ * Deliberately UNCHANGED by directive B (estimation error): this is the literal "perfect
+ * mine-dodge position" solve the ruling names, and it stays perfect FOR THE MINES IT IS
+ * HANDED. It takes no radius of its own to perturb. The imperfection lives one level up, in
+ * `dangerousMines`'s perceived `fleeRadius`: a mine just outside the tank's PERCEIVED
+ * radius never reaches this function's `mines` argument at all, even though it is real,
+ * armed, and inside the TRUE radius -- so the oracle knowledge this function would
+ * otherwise represent is neutralized upstream, not by adding noise to a search that is
+ * supposed to be exact once it knows what to search for.
  */
 function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | null {
   const away: Vec2[] = [];
@@ -660,10 +737,20 @@ function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | nu
  *      and this never rejects both on mine grounds.
  * If both sides fail every constraint the tank still dodges (some movement beats none),
  * preferring a side that is at least not wall-pinned.
+ *
+ * `fleeRadius`/`dangerCorridor` default to the exact constants -- today's behaviour,
+ * unperturbed -- and are forwarded to `dangerousMines`/`incomingThreats` unchanged. This is
+ * the ONE place a caller needs to thread a perceived radius through to reach both: grey.ts
+ * and teal.ts compute a single per-tick `estimationError` offset and pass it here (and
+ * again, independently, at their own direct `incomingThreats`/`mineThreatensPlayer` call
+ * sites) rather than this function drawing anything itself -- dangerAvoidMove stays exactly
+ * as deterministic as it always was; the noise lives at the caller, never in the shared
+ * geometry (see the module's callers for why: `decidePlayerInput` reuses this same function
+ * and must never touch `world.seed`).
  */
-export function dangerAvoidMove(world: World, tank: Tank): Vec2 | null {
-  const mines = dangerousMines(world, tank);
-  const threats = incomingThreats(world, tank);
+export function dangerAvoidMove(world: World, tank: Tank, fleeRadius = AI_MINE_FLEE_RADIUS, dangerCorridor = DANGER_CORRIDOR): Vec2 | null {
+  const mines = dangerousMines(world, tank, fleeRadius);
+  const threats = incomingThreats(world, tank, dangerCorridor);
 
   if (threats.length > 0) {
     let nearest = threats[0];

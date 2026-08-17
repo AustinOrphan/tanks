@@ -25,6 +25,7 @@ function aiProfile(over: Partial<AIProfileBalance> = {}): AIProfileBalance {
   return {
     behavior: AIBehavior.OFFENSIVE,
     aimAccuracy: 0.5,
+    estimationAccuracy: 0.5,
     reactionTime: 0.5,
     aggression: 0.5,
     preferredDistance: 5,
