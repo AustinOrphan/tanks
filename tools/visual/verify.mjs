@@ -377,6 +377,7 @@ async function dismissSplash(page) {
   try {
     await page.waitForFunction(
       () => document.querySelector('.hud-splash')?.classList.contains('hud-splash--hidden'),
+      undefined,
       { timeout: 5000 },
     );
   } catch {
@@ -408,6 +409,7 @@ async function settle(page) {
         const ctx = c.getContext('webgl2') ?? c.getContext('webgl');
         return !!ctx && !ctx.isContextLost();
       },
+      undefined,
       { timeout: 20000 },
     );
     await page.evaluate(

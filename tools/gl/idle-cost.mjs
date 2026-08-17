@@ -67,7 +67,7 @@ try {
   const page = await context.newPage();
   page.on('pageerror', (e) => console.error('page error:', String(e)));
   await page.goto(`${BASE}tools/gl/idle-cost.html`, { waitUntil: 'load' });
-  await page.waitForFunction(() => !!window.__idleCost, { timeout: 120000 });
+  await page.waitForFunction(() => !!window.__idleCost, undefined, { timeout: 120000 });
   const { samples, notes } = await page.evaluate(() => window.__idleCost);
 
   const pad = (s, n) => String(s).padStart(n);
@@ -117,7 +117,7 @@ try {
     await p.goto(`${BASE}tools/gl/idle-cost.html?mode=probe&${query}`, {
       waitUntil: 'load',
     });
-    await p.waitForFunction(() => !!window.__vis, { timeout: 60000 });
+    await p.waitForFunction(() => !!window.__vis, undefined, { timeout: 60000 });
     const cdp = await context.newCDPSession(p);
     await cdp.send('Performance.enable');
     const read = async () => {

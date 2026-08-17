@@ -91,9 +91,11 @@ async function main() {
       await page.goto(url, { waitUntil: 'load' });
       // Wait for the page's own beacon script to report success, so the browser is not
       // closed while its keepalive POST might still be in flight.
-      await page.waitForFunction(() => document.body.textContent?.includes('beacon: reported to'), {
-        timeout: 60_000,
-      });
+      await page.waitForFunction(
+        () => document.body.textContent?.includes('beacon: reported to'),
+        undefined,
+        { timeout: 60_000 },
+      );
     } finally {
       await browser.close();
     }
