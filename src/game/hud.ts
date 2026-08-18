@@ -1601,16 +1601,28 @@ export function createHud(root: HTMLElement): Hud {
       return;
     }
     panel.classList.remove('hud-panel--hidden');
-    // Quit belongs to the pause panel ALONE: a quit button on the win panel would be
-    // a second, untested path out of a finished game. The settings row serves the
-    // title (the main menu) and pause; win/lose stay verdict-only. Level select is a
-    // menu affair -- and only when there is a choice to make (see setLevelSelect).
+    // Quit belongs to the pause panel AND the level-cleared panel. It used to be pause
+    // alone, on the reasoning that "a quit button on the win panel would be a second,
+    // untested path out of a finished game" -- a directive overrides that: clearing a
+    // level must offer the main menu, not only Next Level. The objection was about
+    // TESTING, not about the path being wrong, so it is answered rather than ignored --
+    // hud.test.ts pins the visibility and label per state and loop.test.ts pins that the
+    // run survives the trip, which is the half a CSS class could never have guaranteed.
+    //
+    // Only the INTERMEDIATE win: a final win or a loss has already called endRun, so
+    // there is no run to return to and the panel is genuinely verdict-only there. Lose
+    // stays verdict-only for the same reason. Level select is a menu affair -- and only
+    // when there is a choice to make (see setLevelSelect).
+    const clearedIntermediate = s === 'win' && !!levelPos && levelPos.current < levelPos.total;
     shownState = s;
     statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
     customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
     achOpenBtn.classList.toggle('hud-achievements-open--hidden', s !== 'title');
     levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', s !== 'title' || !levelChoice);
-    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
+    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !clearedIntermediate);
+    // "Quit" is the wrong word for leaving a level you just WON -- the run is preserved
+    // either way, but the copy should not imply abandoning it.
+    quitBtn.textContent = clearedIntermediate ? 'Main Menu' : 'Quit to Title';
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
     // Visible at title AND paused -- the one new variant of this per-button visibility
     // pattern, precedented by panelSettings itself just above.
