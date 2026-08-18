@@ -23,9 +23,13 @@ is on branch `spawn-anim-core` and merged as PR #203. Branch this on top of #199
   `TankView.group`), because `entities.ts` disposes a dead tank's whole group the same tick
   death is detected (`entities.ts:1360-1365`, the `!seen.has(id)` teardown) — anything under
   the group is gone before a multi-second pulse could play.
-- **Reuse, don't duplicate, colour logic.** `identityColor(slot)` and `teamColor(team)` are
-  exported from `src/render/entities.ts` (`:83`, `:99`); import them. Do not re-hardcode
-  `IDENTITY_RING_COLORS`.
+- **Reuse, don't duplicate, colour logic.** `identityColor(slot)`/`teamColor(team)` are
+  PRIVATE in `src/render/entities.ts` (`:83`, `:99`) — only the arrays `IDENTITY_RING_COLORS`
+  /`TEAM_COLORS` are exported. Task 3 EXPORTS a shared `resolveOwnerColor(world, tank)` from
+  `entities.ts` (the `mode === 'teams' ? teamColor(team ?? 0) : identityColor(controlledBy ?? 0)`
+  dispatch entities.ts already runs at `:1284/:1320/:1385`, fallback white `0xffffff`) and uses
+  it in `death-pulse.ts` AND refactors `loop.ts::deathVignetteColor` (Task 2) to delegate to it
+  — retiring that duplicate and unifying its fallback. Do not re-hardcode `IDENTITY_RING_COLORS`.
 - **Single-player default colour is a named constant, asserted against the constant** — never
   a hardcoded literal in a test (the spec's §11 residual: the choice is red today, but must
   be a one-line change).
@@ -119,7 +123,8 @@ testable in jsdom (three works headless for non-GL), like `particles.test.ts`.
   - `spawn(prev, curr, { enemyEnabled })`: build a set of currently-alive ids from
     `curr.tanks`; for each `p` in `prev.tanks` with `p.alive` and (`p.id` absent from that set
     OR its curr entry `!alive`): if `p.kind === 'player'` OR (`enemyEnabled` and enemy),
-    acquire a pooled ring at `p.pos` in `curr.mode === 'teams' ? teamColor(p.team ?? 0) : identityColor(p.controlledBy ?? 0)`. Reuse #199's `makeSpawnRing(color)` from
+    acquire a pooled ring at `p.pos` in `resolveOwnerColor(curr, p)` (the shared resolver you
+    export from `entities.ts` this task — see Global Constraints). Reuse #199's `makeSpawnRing(color)` from
     `./spawn-anim` for the mesh recipe (the issue's "shared ring-mesh helper"), then set
     `mesh.name = 'death-ring'` so a same-frame spawn ring stays separable. (`makeSpawnRing`
     mints a fresh geometry per call — fine for a small pool of own meshes.) One
@@ -128,8 +133,13 @@ testable in jsdom (three works headless for non-GL), like `particles.test.ts`.
     radius outward (`scale.setScalar(baseR + growth * k)`) and opacity down as it expands
     (the mirror of the spawn ring: out + fade). Pool + `MAX` cap like particles.
   - `dispose()`: dispose all meshes/materials, remove from scene, clear arrays.
-  - Import `identityColor`, `teamColor` from `./entities`.
-- [ ] **Step 4 — run `death-pulse.test.ts` + full `src/render/`, green. Commit.**
+  - **First, in `entities.ts`:** add `export function resolveOwnerColor(world: World, tank: Tank): number`
+    that runs the existing `world.mode === 'teams' ? teamColor(tank.team ?? 0) : identityColor(tank.controlledBy ?? 0)`
+    dispatch (reuse the private `identityColor`/`teamColor`; fallback white). Import it into
+    `death-pulse.ts`. Then refactor `loop.ts::deathVignetteColor` to call it for the
+    multiplayer branch (keeping the `playerCount === 1 → SINGLE_PLAYER_DEATH_VIGNETTE` guard),
+    deleting its array-indexing duplicate. Update/keep the loop tests green.
+- [ ] **Step 4 — run `death-pulse.test.ts`, `loop.test.ts`, + full `src/render/`, green. Commit.**
 
 Prove-the-gap: each mutation in Step 1 must redden its test (verified before commit).
 
