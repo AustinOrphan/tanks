@@ -11,6 +11,7 @@ import {
 } from './config/campaign';
 import type { CampaignDefinition, CampaignLevel } from './config/campaign-types';
 import { pickVersusSpawnCell } from './versus-spawns';
+import { pickVersusVariantGrid } from './versus-variants';
 import { mergeSolidRuns } from './wall-merge';
 
 // Re-exported so `src/game/` keeps importing campaign identity from the same place
@@ -194,17 +195,25 @@ export function loadArena(
   // 1-2-arg call site (dozens across the tree) is untouched. Default 'campaign-coop' is
   // the shipped rule and the trace argument -- see World.mode's own doc comment.
   mode: GameMode = 'campaign-coop',
+  // Trailing and optional, same precedent again: absent (every existing call site)
+  // means no variant is ever built, which is what keeps campaign-coop -- and
+  // BASELINE_HASH, which only ever drives campaign-coop -- byte-for-byte identical to
+  // before this parameter existed. Only meaningful in combination with mode 'ffa'/
+  // 'teams' (see below); a versus caller that omits it also gets the authored board
+  // unchanged, the same total-degradation posture pickVersusSpawnCell's own zero-
+  // candidate fallback already takes.
+  seed?: number,
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
-  const { cols, rows, cellSize, grid, legend } = arena;
+  const { cols, rows, cellSize, legend } = arena;
 
   // Validate grid dimensions
-  if (grid.length !== rows) {
-    throw new Error(`Grid has ${grid.length} rows but Arena declares ${rows} rows`);
+  if (arena.grid.length !== rows) {
+    throw new Error(`Grid has ${arena.grid.length} rows but Arena declares ${rows} rows`);
   }
 
   // Validate each row's column count
   for (let r = 0; r < rows; r++) {
-    const row = grid[r];
+    const row = arena.grid[r];
     if (row.length !== cols) {
       throw new Error(`Row ${r} has length ${row.length} but Arena declares ${cols} columns`);
     }
@@ -212,13 +221,28 @@ export function loadArena(
 
   // Validate each character is recognized
   for (let r = 0; r < rows; r++) {
-    const row = grid[r];
+    const row = arena.grid[r];
     for (let c = 0; c < cols; c++) {
       const ch = row[c];
       if (ch !== '.' && !legend[ch] && !SPAWN_LETTERS[ch]) {
         throw new Error(`Unrecognized character '${ch}' at (row ${r}, col ${c})`);
       }
     }
+  }
+
+  // Validation runs against the AUTHORED grid, always -- a variant only ever turns an
+  // already-recognized destructible character into '.', so re-validating it would check
+  // nothing new, and a bad authored grid should fail with a message naming the real
+  // grid, not a derived one.
+  //
+  // VERSUS MAP VARIANTS (guard-first): campaign-coop, and any versus call that omits
+  // `seed`, take the ORIGINAL grid straight through -- byte-for-byte the pre-existing
+  // path. Only mode 'ffa'/'teams' WITH a seed ever calls into versus-variants.ts. See
+  // docs/superpowers/plans/2026-08-17-versus-map-variants.md for the design ruling and
+  // the measured sweep DESTRUCTIBLE_REMOVAL_FRACTION was chosen from.
+  let grid = arena.grid;
+  if ((mode === 'ffa' || mode === 'teams') && seed !== undefined) {
+    grid = pickVersusVariantGrid(grid, cols, rows, cellSize, legend, playerCount, seed);
   }
 
   const walls: Wall[] = [];
@@ -393,8 +417,15 @@ export function createWorldFor(
   // value, closed over from `?dev=1&friendlyFire=1` -- see World.friendlyFire.
   friendlyFire?: boolean,
 ): World {
+  // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
+  // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
+  // campaign-coop call, which is every existing call site that does not pass mode, is
+  // unaffected). Reusing the SAME seed a versus session already carries (rather than a
+  // second variant-only seed) is what makes a recorded replay's own stamped seed
+  // (replayMetaFor, game/replay.ts) enough to reproduce the exact board it was played
+  // on, with no extra field.
   return createWorld({
-    ...loadArena(arena, playerCount, mode),
+    ...loadArena(arena, playerCount, mode, seed),
     lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
     mode, friendlyFire,
   });

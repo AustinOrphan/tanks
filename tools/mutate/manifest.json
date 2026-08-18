@@ -240,5 +240,45 @@
     "expectFailures": 1,
     "why": "spawnCount must count DISTINCT positions, not merely how many players were placed -- using positions.length instead of a Set's size makes every co-located spawn look like a unique one. This mutates the field's own computation, deliberately not its participation in the suitable conjunction: dropping distinctSpawns from suitable is EQUIVALENT (not in this manifest -- see docs/superpowers/plans/2026-08-17-versus-board-rules.md for the analytic argument and the by-hand verification that all 12 cases in versus-board.test.ts stay green under that specific mutation), because MIN_OPEN_FLOOR_PER_PLAYER >= 1 already forces roomOk false on every fixture where distinctSpawns is false. This entry is caught instead by the pathological zero-open-floor fixture's DIRECT assertion on the spawnCount field (expected 1, the co-located fallback cell, at every N): the mutation reports spawnCount = playerCount regardless of the collision, so the field assertion fails 1 of 12 cases before suitable is ever consulted.",
     "tests": ["src/sim/versus-board.test.ts"]
+  },
+  {
+    "id": "versus-variants-guard-drops-mode-check",
+    "file": "src/sim/arena.ts",
+    "find": "  if ((mode === 'ffa' || mode === 'teams') && seed !== undefined) {",
+    "replace": "  if (seed !== undefined) {",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "loadArena must only ever pick a versus variant for mode 'ffa'/'teams' -- dropping the mode half of the guard means ANY call that passes a real seed gets a variant, including every campaign-coop load (which always passes a seed in real play and in the golden trace). Caught by 2 of 32 across the two scoped files: versus-variants.test.ts's own 'campaign-coop is BYTE-IDENTICAL... even when a real seed is passed' test, and tools/baseline/trace.test.ts's BASELINE_HASH, which moved from a5458ede... to 70dd6777... under this mutation -- verified by hand before this entry was written, then restored and re-verified clean.",
+    "tests": ["src/sim/versus-variants.test.ts", "tools/baseline/trace.test.ts"]
+  },
+  {
+    "id": "versus-variants-concealment-check-dropped",
+    "file": "src/sim/versus-variants.ts",
+    "find": "      if (lineOfSight(positions[i], positions[j], walls)) return false;",
+    "replace": "      lineOfSight(positions[i], positions[j], walls); // concealment check dropped",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "isVariantSuitable must reject a candidate where any spawn pair keeps mutual line of sight -- discarding the lineOfSight result instead of gating on it makes every candidate read as concealment-clean regardless of the real geometry, so pickVersusVariantGrid never retries and never falls back. Caught by 2 of 25 in versus-variants.test.ts: the seed-7920/arena-03/fraction-0.7 retry test (the first, unsuitable draw is now accepted immediately, so the picked grid never diverges from it) and the full-exhaustion fallback test (the always-unsuitable synthetic fixture is now accepted on attempt 0, so the result is no longer reference-equal to the authored grid).",
+    "tests": ["src/sim/versus-variants.test.ts"]
+  },
+  {
+    "id": "versus-variants-retry-bound-forced-to-one",
+    "file": "src/sim/versus-variants.ts",
+    "find": "  for (let attempt = 0; attempt < VARIANT_RETRY_BOUND; attempt++) {",
+    "replace": "  for (let attempt = 0; attempt < 1; attempt++) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "pickVersusVariantGrid must actually RETRY, not just fall back on the first unsuitable draw -- forcing a single attempt removes the retry entirely. A first, weaker version of this entry's test (asserting only that the picked grid differs from the failed first draw, and is itself suitable) SURVIVED this mutation: arena-03's own authored board is suitable at N=4, so an immediate fallback to it satisfies both assertions for the wrong reason, which is exactly the kind of accidental pass this file's testing conventions warn about. The test was strengthened to also assert the picked grid is neither reference-equal to the authored grid nor free of removed cells, which is what a genuine second-attempt success looks like and a same-arena fallback does not. Caught by 1 of 25 in versus-variants.test.ts under the strengthened version.",
+    "tests": ["src/sim/versus-variants.test.ts"]
+  },
+  {
+    "id": "versus-variants-includes-solid-cells",
+    "file": "src/sim/versus-variants.ts",
+    "find": "      if (legend[grid[r][c]] === 'destructible') cells.push({ row: r, col: c });",
+    "replace": "      if (legend[grid[r][c]] === 'destructible' || legend[grid[r][c]] === 'solid') cells.push({ row: r, col: c });",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "buildVariantGrid must only ever draw from DESTRUCTIBLE cells -- solid geometry defines the arena's shape and must never vary between playthroughs of the same board. Including solid cells in the draw pool means a variant can turn a load-bearing wall into open floor, changing the board's identity rather than varying it. Caught by 3 of 25 in versus-variants.test.ts: the 'every character that differs... was a destructible cell' invariant (a changed cell's authored legend entry is now 'solid', not 'destructible'), the 'removes exactly round(destructibleCount * fraction)' count (47 removed on arena-01 instead of 7, since the pool nearly quadruples), and the seed-7920/arena-03 retry test's own premise check (the much larger removal pool changes what that specific seed draws). Solid-versus geometry is otherwise unreachable from any test in this file at the ungated buildVariantGrid layer, which is why the wired-through-loadArena describe block exists separately.",
+    "tests": ["src/sim/versus-variants.test.ts"]
   }
 ]
