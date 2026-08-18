@@ -71,8 +71,9 @@ export interface Hud {
   setMuted(muted: boolean): void;
   /**
    * Round-start countdown. `null` hides it; otherwise a bare number, centred and
-   * transient -- it pops in and fades out (`.hud-count-pop` in hud.css) rather than
-   * sitting on screen, so it never obscures the board it counts down over. Design
+   * transient -- it pops in and fades out (the `hud-count-pop` keyframes, applied via
+   * the `.hud-count--pop` class, in hud.css) rather than sitting on screen, so it
+   * never obscures the board it counts down over. Design
    * ruling: no word ("AIM"/"TAKE AIM"), just the number, and it shows on EVERY
    * round -- there is no "first round only" teaching form. `setRoundPhase` is
    * phase-agnostic: any phase other than `'live'` shows the number, unconditionally.

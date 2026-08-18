@@ -1265,13 +1265,15 @@
 
 /*
  * The pop, restarted (remove class, force reflow, re-add -- signalPlayerDeath's
- * trick) every time setRoundPhase sees a new secondsLeft. `forwards` holds the
- * 100% frame (opacity 0) once the animation ends, rather than snapping back to
- * this rule's own opacity: 1 default -- without it the number would flash back
- * into view for whatever remains of the second after each 1s animation completes.
+ * trick) every time setRoundPhase sees a new secondsLeft. Same idiom as
+ * .hud-damage/.hud-damage-flash just below: the animation's own 100% keyframe
+ * (opacity 0) already matches .hud-count's base opacity: 0, so no fill-mode is
+ * needed to hold the end state -- when the animation's iteration count is spent,
+ * the element reverts to a base rule that says the same thing the keyframe just
+ * ended on, and nothing visibly changes.
  */
 .hud-count--pop {
-  animation: hud-count-pop 1s ease-out forwards;
+  animation: hud-count-pop 1s ease-out 1;
 }
 
 @keyframes hud-count-pop {
