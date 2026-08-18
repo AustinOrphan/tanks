@@ -211,9 +211,12 @@ function isVariantSuitable(
 /**
  * The fraction of an arena's destructible cells a versus variant omits. See
  * docs/superpowers/plans/2026-08-17-versus-map-variants.md for the measured sweep this
- * was chosen from: at this fraction, 0 of the sampled (arena, N, seed) draws across all
- * 5 shipped arenas came out unsuitable -- the retry/fallback machinery below exists as a
- * defensive bound, not because shipped data ever exercises it.
+ * was chosen from: at this fraction, 0 of 150 (arena, N, seed) draws -- 5 shipped
+ * arenas x 3 player counts x 10 seeds -- come out unsuitable. A wider sweep (1500 draws
+ * per fraction) shows real, if rare, failures starting around fraction 0.5, which is
+ * why the retry/fallback machinery below still exists as a defensive bound rather than
+ * being dropped as decorative -- it is exercised by `versus-variants.test.ts` at a
+ * higher fraction, just not by shipped data at this one.
  */
 export const DESTRUCTIBLE_REMOVAL_FRACTION = 0.4;
 
