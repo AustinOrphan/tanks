@@ -26,6 +26,14 @@
 //   delete the `conclusion == 'success'` clause -> refuses a CI run that did not succeed
 //   delete checkout's `ref:`                    -> checks out the commit CI ran on
 //   truncate pages.yml to 0 bytes               -> all 6, via the load check
+//   delete the Ubuntu mirror step                -> both mirror-configuration tests
+//   priority mirror archive -> azure             -> prefers the non-Azure Ubuntu archive
+//   delete either direct-source replacement      -> prefers the non-Azure Ubuntu archive
+//   retries 3 -> 0                               -> bounds APT retries and network waits
+//   delete either 20-second timeout              -> bounds APT retries and network waits
+//   gate install-deps on cache-hit               -> installs Linux system dependencies unconditionally
+//   delete the annotated failure                 -> reports an actionable dependency-install failure
+//   timeout 60 -> 30                             -> gives the matrix a final 60-minute safety net
 //
 // The three `push:` spellings are there because review DEFEATED the first version of that
 // assertion, which required `push:` to be followed immediately by a newline. A trailing
@@ -39,6 +47,15 @@ const read = (p: string): string => readFileSync(new URL(`../${p}`, import.meta.
 
 const PAGES = read('.github/workflows/pages.yml');
 const CI = read('.github/workflows/ci.yml');
+const ENGINES = read('.github/workflows/engines.yml');
+
+const namedStep = (workflow: string, name: string): string => {
+  const marker = `      - name: ${name}\n`;
+  const start = workflow.indexOf(marker);
+  if (start < 0) return '';
+  const next = workflow.indexOf('\n      - name: ', start + marker.length);
+  return workflow.slice(start, next < 0 ? workflow.length : next);
+};
 
 describe('the deploy workflow', () => {
   it('loads at all -- every assertion below is vacuous on an empty read', () => {
@@ -104,5 +121,50 @@ describe('the deploy workflow', () => {
     // different commit whenever a second merge lands while the first is still in CI, and
     // deploying it publishes a commit whose CI has not finished.
     expect(PAGES).toMatch(/uses: actions\/checkout@v\d+\n\s*with:\n\s*ref: \$\{\{ github\.event\.workflow_run\.head_sha/);
+  });
+});
+
+describe('the Engines Matrix Ubuntu dependency install', () => {
+  it('loads at all -- the assertions below must not pass on an empty read', () => {
+    expect(ENGINES.length).toBeGreaterThan(1000);
+  });
+
+  it('prefers the non-Azure Ubuntu archive', () => {
+    const step = namedStep(ENGINES, 'Prefer the Ubuntu archive and bound APT network waits');
+    expect(step).not.toBe('');
+    expect(step).toContain("if: runner.os == 'Linux'");
+    expect(step).toContain('/etc/apt/apt-mirrors.txt');
+    expect(step).toContain("printf '%s\\tpriority:1\\n' 'https://archive.ubuntu.com/ubuntu/'");
+    expect(step).toContain(
+      "s|http://azure\\.archive\\.ubuntu\\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g",
+    );
+    expect(step).toContain(
+      "s|https://azure\\.archive\\.ubuntu\\.com/ubuntu/|https://archive.ubuntu.com/ubuntu/|g",
+    );
+    expect(step).toContain('APT mirror configuration failed');
+  });
+
+  it('bounds APT retries and network waits', () => {
+    const step = namedStep(ENGINES, 'Prefer the Ubuntu archive and bound APT network waits');
+    expect(step).toContain('Acquire::Retries "3";');
+    expect(step).toContain('Acquire::http::Timeout "20";');
+    expect(step).toContain('Acquire::https::Timeout "20";');
+  });
+
+  it('installs Linux system dependencies unconditionally and reports a useful failure', () => {
+    const step = namedStep(ENGINES, 'Install system dependencies (Linux)');
+    expect(step).not.toBe('');
+    expect(step).toContain("if: runner.os == 'Linux'");
+    expect(step).not.toContain('cache-hit');
+    expect(step).toContain('npx playwright install-deps chromium firefox webkit');
+    expect(step).toContain('::error title=Playwright system dependency installation failed::');
+  });
+
+  it('gives the matrix a final 60-minute safety net', () => {
+    const start = ENGINES.indexOf('  engines:\n');
+    const end = ENGINES.indexOf('    strategy:\n', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(ENGINES.slice(start, end)).toContain('timeout-minutes: 60');
   });
 });
