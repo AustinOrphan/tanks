@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   vadd, vsub, vscale, vlen, vnorm, vdot, vdist, angleOf, fromAngle, nextRng, slewAngle,
-  isDamageImmune,
+  isDamageImmune, isActionLocked,
 } from './types';
 import type { Vec2, Tank } from './types';
 
@@ -142,6 +142,24 @@ describe('isDamageImmune', () => {
 
   it('invincible: false is not the same as absent -- explicit false grants no immunity', () => {
     expect(isDamageImmune(baseTank({ invincible: false, shieldUntilTick: undefined }), 0)).toBe(false);
+  });
+});
+
+describe('isActionLocked', () => {
+  it('is false for a plain tank (no shieldUntilTick)', () => {
+    expect(isActionLocked(baseTank(), 100)).toBe(false);
+  });
+
+  it('a live shieldUntilTick locks; an expired one does not -- same boundary as isDamageImmune', () => {
+    const t = baseTank({ shieldUntilTick: 100 });
+    expect(isActionLocked(t, 99)).toBe(true); // 99 < 100
+    expect(isActionLocked(t, 100)).toBe(false); // expires ON the tick
+    expect(isActionLocked(t, 101)).toBe(false);
+  });
+
+  it('invincible does NOT lock actions -- the dev playtest cheat has no bearing on fire/mine, only isDamageImmune reads it', () => {
+    expect(isActionLocked(baseTank({ invincible: true }), 0)).toBe(false);
+    expect(isActionLocked(baseTank({ invincible: true, shieldUntilTick: 100 }), 50)).toBe(true); // shield alone still locks
   });
 });
 
