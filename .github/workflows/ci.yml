@@ -50,7 +50,10 @@ jobs:
       # value changed) and one entry's declared outcome flipped from a real change
       # elsewhere. Nothing caught that until it was re-run by hand. This step is what
       # makes staleness a CI failure instead of a fact nobody re-checks.
+      # On pull requests, Node 22 retains full manifest-staleness detection; the
+      # Node 20 floor still exercises the harness after merge on pushes to main.
       - name: Mutation manifest
+        if: matrix.node == '22' || github.event_name == 'push'
         run: npm run mutate
 
       - name: Build
