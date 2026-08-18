@@ -2497,3 +2497,28 @@ describe('hud: the Bot candidate is gated (bots may not drive a player tank in t
   });
 });
 
+describe('hud: the title screen carries no tagline', () => {
+  const subtitle = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-subtitle') as HTMLElement;
+
+  it('leaves the title subtitle empty AND out of layout', () => {
+    // A directive: the menu is crowded and the tagline was the least load-bearing thing
+    // on it. Both halves are asserted because blanking alone is not enough -- .hud-panel
+    // is a gapped flex column, so an emptied element still costs its 14px gap. Fails if
+    // the string comes back, or if setSubtitle stops toggling the hidden class.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    expect(subtitle(root).textContent).toBe('');
+    expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(true);
+  });
+
+  it('still shows a subtitle in states that have one', () => {
+    // The negative control: without it, deleting setSubtitle's write entirely -- or
+    // hiding the element permanently -- would satisfy the test above.
+    const { hud: h, root } = mount();
+    h.setState('lose');
+    expect(subtitle(root).textContent).toBe('Out of lives.');
+    expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(false);
+  });
+});
+
