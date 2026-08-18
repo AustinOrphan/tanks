@@ -137,18 +137,18 @@
     "find": "  const pool = invisible.length > 0 ? invisible : candidates;",
     "replace": "  const pool = candidates;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 5,
     "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
     "tests": ["src/sim/versus-spawns.test.ts"]
   },
   {
-    "id": "versus-spawns-wiring-drops-accumulation",
-    "file": "src/sim/arena.ts",
-    "find": "        chosen.push(pos);",
-    "replace": "        if (false) chosen.push(pos);",
+    "id": "versus-spawns-chain-drops-accumulation",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize))));",
+    "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)]));",
     "expect": "killed",
-    "expectFailures": 3,
-    "why": "loadArena's versus branch (PASS 1b) must feed each co-player's OWN chosen cell back into `chosen` before picking the next one, or every co-player after P1 scores against `[P1]` alone and pickVersusSpawnCell picks the same single best cell for all of them, collapsing N-1 co-players onto one point. This line is the wiring, not versus-spawns.ts's own internal logic -- every other entry in this manifest for that module mutates inside pickVersusSpawnCell itself, so this one exists specifically to prove the CALL SITE is covered too. Caught by 3 of the 14 cases in versus-spawns.test.ts's real-shipped-arena describe block: the distinct-cells sweep (arena-01/ffa collapses from 4 unique positions to 2), the 0-mutual-LOS sweep (rises to 40 of 100 visible pairs, since collapsed spawns are coincident and therefore always mutually visible), and the >5-world-unit minimum-distance sweep (falls to 0, since coincident spawns are 0 apart). versus-spawns.test.ts's synthetic fixtures do not catch this -- they exercise pickVersusSpawnCell directly and never go through loadArena's own loop -- which is why the real-arena integration block is what kills it.",
+    "expectFailures": 5,
+    "why": "Greedy farthest-point sampling must place each spawn against EVERY spawn already chosen, not just the most recent one. Avoiding only the last one lets the chain walk back and forth between two ends of the board, putting spawn 3 on top of spawn 1. This entry replaces `versus-spawns-wiring-drops-accumulation`, which targeted a `chosen.push(pos)` accumulator in arena.ts's versus branch; that variable became dead when pickVersusSpawnSet took over the picking, and the old entry silently degraded to SURVIVES because it was mutating code nothing read -- which is how the dead variable was found at all. The accumulation now lives here. Caught by 5 of 17 in versus-spawns.test.ts.",
     "tests": ["src/sim/versus-spawns.test.ts"]
   },
   {

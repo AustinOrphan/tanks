@@ -1,4 +1,4 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, Vec2, ArenaGeometry } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry } from './types';
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
@@ -320,10 +320,8 @@ export function loadArena(
       // stream keyed on `tank.id` (ai/targeting.ts) is unmoved. Moving P1's creation
       // into this branch would renumber them.
       const cells = pickVersusSpawnSet(grid, cols, rows, cellSize, legend, playerCount);
-      const chosen: Vec2[] = [];
       for (let i = 0; i < playerCount; i++) {
         const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };
-        chosen.push(pos);
         if (i === 0) {
           // Both records move, not just the tank: `spawns` is what world.ts respawns
           // from, so leaving it on the `P` cell would put P1 back on the campaign start

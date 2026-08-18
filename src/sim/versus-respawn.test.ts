@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createWorld, stepInputs, stepRespawns } from './world';
 import { loadArena, ARENA_01 } from './arena';
-import { pickVersusSpawnCell } from './versus-spawns';
+import { pickVersusSpawnCell, pickVersusSpawnSet } from './versus-spawns';
 import type { SimEvent } from './events';
 import type { Vec2 } from './types';
 
@@ -182,11 +182,36 @@ describe('versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometr
     const dead = world.tanks[0];
     dead.alive = false;
     dead.respawnAtTick = 1;
+    // Two repairs to this test, both forced by P1 becoming maximin-placed, and both
+    // needed -- the first alone was not enough, which is worth recording.
+    //
+    // (1) The survivor is MOVED. Left at its own spawn it is exactly the cell P1's spawn
+    // was chosen to be far from, so "the safest cell given one opponent there" is P1's
+    // own spawn and the pick coincides with the fallback. It goes to the third cell of
+    // the 3-player set: real open floor by construction, and distinct from both spawns.
+    //
+    // (2) The assertion is no longer `.not.toEqual(spawns[0].pos)`. That form cannot
+    // survive contact with `stepMovement`, which runs in the same tick and nudges a hull
+    // off a raw cell centre by a fraction of a unit -- so it reads as "not the authored
+    // spawn" while actually only proving "physics touched it". MEASURED: with the
+    // survivor moved but the assertion left alone, dropping `arenaGeometry` from
+    // cloneWorld STILL left all 6 tests in this file green. Comparing against the cell
+    // the picker should have chosen, with a tolerance well above any nudge and well
+    // below the distance to the fallback, is what actually discriminates.
+    const { cols, rows, cellSize, grid, legend } = arenaGeometry;
+    world.tanks[1].pos = cellPos(pickVersusSpawnSet(grid, cols, rows, cellSize, legend, 3)[2], cellSize);
+    const expected = cellPos(
+      pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [{ ...world.tanks[1].pos }]),
+      cellSize,
+    );
+    const gap = Math.hypot(expected.x - spawns[0].pos.x, expected.y - spawns[0].pos.y);
+    expect(gap, 'premise: the pick and the authored-spawn fallback are far apart').toBeGreaterThan(5);
+
     const idle = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
     const r = stepInputs(world, [idle, idle]);
     const revived = r.world.tanks.find((t) => t.id === dead.id)!;
     expect(revived.alive).toBe(true);
-    expect(revived.pos).not.toEqual(spawns[0].pos);
+    expect(Math.hypot(revived.pos.x - expected.x, revived.pos.y - expected.y), 'landed on the picked cell').toBeLessThan(1);
   });
 });
 
