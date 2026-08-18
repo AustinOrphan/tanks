@@ -13,7 +13,7 @@ Nothing below does anything unless `dev` is present in the query string: `?aimRa
 alone is inert, it needs `?dev=1&aimRay=1`. A shared link cannot turn a flag on by
 accident.
 
-## Boolean flags (14)
+## Boolean flags (15)
 
 | Flag | Param | Default | Description |
 | --- | --- | --- | --- |
@@ -21,6 +21,7 @@ accident.
 | `autoplay` | `autoplay` | `false` | Drives the player with the scripted "competent player" AI instead of reading the input controller -- the game demos itself. |
 | `coopPool` | `coopPool` | `false` | Restores the shipped shared-life-pool coop model: every player death drains the pool by one and schedules that tank's own per-tank respawn. The default (this flag off) is the shared-attempts ruling: a lone death costs nothing and the survivor fights on; only a full wipe spends a life and restarts the arena. |
 | `corpseBlock` | `corpseBlock` | `false` | Lets a tank killed earlier in the same tick still block a bullet aimed at it, instead of the shipped ghost rule where the bullet passes through. |
+| `enemyDeathPulse` | `enemyDeathPulse` | `false` | Enemy tanks also fire the identity death pulse (a coloured world ring); off = players only, enemies keep just the explosion burst. |
 | `friendlyFire` | `friendlyFire` | `false` | Lets a shell or mine blast harm a teammate -- meaningful only once `mode=teams`; the default protects teammates. |
 | `gamepad` | `gamepad` | `false` | Merges gamepad[0] into slot 0's input stream alongside keyboard/mouse/touch. |
 | `invincible` | `invincible` | `false` | Makes the player unkillable: shells detonate harmlessly, blasts wash over. |

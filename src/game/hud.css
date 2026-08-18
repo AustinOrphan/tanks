@@ -1308,16 +1308,29 @@
  *
  * pointer-events: none because this covers the board, and the player is aiming
  * through it the instant they respawn.
+ *
+ * --hud-damage-color drives both gradient stops (death-pulse issue #200): hud.ts's
+ * signalPlayerDeath sets it before every trigger, so the vignette can tint to whichever
+ * player died -- classic red in single-player, that player's identity ring colour
+ * otherwise. The default here is only what shows before the first death ever fires (it
+ * never does in practice, since the class that plays this gradient is never present
+ * without signalPlayerDeath having just set the property first) and matches the old
+ * hardcoded rgba(180, 30, 30, ...) exactly (0xb4=180, 0x1e=30 -- SINGLE_PLAYER_DEATH_VIGNETTE
+ * in hud.ts). color-mix against transparent keeps the alpha ramp identical to the old
+ * rgba stops: mixing a fully-opaque colour N% with transparent yields alpha N/100
+ * (checked directly against jsdom's cssstyle, which parses and applies this rule rather
+ * than dropping it -- neighbouring rules' computed styles are unaffected either way).
  */
 .hud-damage {
+  --hud-damage-color: #b41e1e;
   position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0;
   background: radial-gradient(
     ellipse at center,
-    rgba(180, 30, 30, 0) 35%,
-    rgba(180, 30, 30, 0.55) 100%
+    color-mix(in srgb, var(--hud-damage-color) 0%, transparent) 35%,
+    color-mix(in srgb, var(--hud-damage-color) 55%, transparent) 100%
   );
 }
 

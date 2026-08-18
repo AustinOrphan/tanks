@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { createHud, type Hud } from './hud';
+import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
 import { SKINS, ACCENTS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
@@ -656,7 +656,7 @@ describe('hud: losing a life', () => {
 
   it('flashes the screen and pulses the counter', () => {
     const { root, hud } = mount();
-    hud.signalPlayerDeath();
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
     expect(root.querySelector('.hud-damage')?.className).toContain('hud-damage--hit');
     expect(root.querySelector('.hud-lives')?.className).toContain('hud-lives--hit');
     hud.dispose();
@@ -669,11 +669,11 @@ describe('hud: losing a life', () => {
     // needs telling. MutationObserver delivers on a microtask, so drain it
     // synchronously with takeRecords rather than waiting.
     const { root, hud } = mount();
-    hud.signalPlayerDeath();
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
     const damage = root.querySelector('.hud-damage') as HTMLElement;
     const obs = new MutationObserver(() => {});
     obs.observe(damage, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
-    hud.signalPlayerDeath();
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
     const records = obs.takeRecords();
     obs.disconnect();
     const sawRemoval = records.some(
@@ -689,9 +689,37 @@ describe('hud: losing a life', () => {
     // It covers the whole board, and the player is aiming through it the
     // instant they respawn.
     const { root, hud } = mount();
-    hud.signalPlayerDeath();
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
     const damage = root.querySelector('.hud-damage') as HTMLElement;
     expect(damage.getAttribute('aria-hidden')).toBe('true');
+    hud.dispose();
+  });
+
+  /** Same #rrggbb derivation hud.ts's own cssColor uses, kept independent so the test
+   *  does not import the private helper -- it asserts the CONTRACT (a colour string
+   *  derived from the number), not hud.ts's internal implementation. */
+  function expectedCssColor(hex: number): string {
+    return '#' + hex.toString(16).padStart(6, '0');
+  }
+
+  it('tints the vignette to the colour it is given', () => {
+    const { root, hud } = mount();
+    hud.signalPlayerDeath(0x3fd0ff);
+    const damage = root.querySelector('.hud-damage') as HTMLElement;
+    expect(damage.style.getPropertyValue('--hud-damage-color')).toBe(expectedCssColor(0x3fd0ff));
+    hud.dispose();
+  });
+
+  it('single-player keeps the classic red -- derived from the exported constant, not a literal', () => {
+    // Importing SINGLE_PLAYER_DEATH_VIGNETTE (rather than writing '#b41e1e' here) is
+    // the point: this assertion only fails if the constant's VALUE stops matching what
+    // the property is set to, so retuning the constant cannot silently desync the two.
+    const { root, hud } = mount();
+    hud.signalPlayerDeath(SINGLE_PLAYER_DEATH_VIGNETTE);
+    const damage = root.querySelector('.hud-damage') as HTMLElement;
+    expect(damage.style.getPropertyValue('--hud-damage-color')).toBe(
+      expectedCssColor(SINGLE_PLAYER_DEATH_VIGNETTE),
+    );
     hud.dispose();
   });
 });

@@ -27,6 +27,7 @@ import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
 import {
   isPlayerDeath,
+  deathVignetteColor,
   tallyCoopKills,
   playerShellsInFlight,
   startGameWith,
@@ -51,6 +52,8 @@ import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLe
 import { createLevelSystem } from './levels';
 import type { SlotSource } from '../input/assignment';
 import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
+import { SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -78,6 +81,8 @@ interface Recorder {
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
   roundPhases: Array<{ phase: string; secondsLeft: number } | null>;
   deathSignals: number;
+  /** Every colour passed to signalPlayerDeath, in order -- death-pulse issue #200. */
+  deathColors: number[];
   inputClears: number;
   minePresses: number;
   firePresses: number;
@@ -269,6 +274,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     shellCounts: [],
     roundPhases: [],
     deathSignals: 0,
+    deathColors: [],
     inputClears: 0,
     minePresses: 0,
     firePresses: 0,
@@ -687,7 +693,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setShellCount: (i) => rec.shellCounts.push(i),
         setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
         setRoundPhase: (info) => rec.roundPhases.push(info),
-        signalPlayerDeath: () => { rec.deathSignals += 1; },
+        signalPlayerDeath: (color: number) => { rec.deathSignals += 1; rec.deathColors.push(color); },
         signalPlayerFire: () => { rec.fireSignals += 1; },
         onMuteToggle: (cb) => {
           onMute = cb;
@@ -2098,6 +2104,52 @@ describe('isPlayerDeath', () => {
   });
 });
 
+describe('deathVignetteColor', () => {
+  // Same mkTank shape tallyCoopKills' own tests use just below.
+  const mkTank = (id: number, kind: string, controlledBy?: number, team?: number): Tank =>
+    ({ id, kind, controlledBy, team }) as Tank;
+
+  it('is the classic red at playerCount 1, unconditionally -- even if the tank has a slot', () => {
+    // playerCount 1 short-circuits before the tank is even looked up: single-player
+    // behaviour must not move regardless of what controlledBy happens to hold.
+    const world = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0)] } as World;
+    expect(deathVignetteColor(world, 1, 1)).toBe(SINGLE_PLAYER_DEATH_VIGNETTE);
+  });
+
+  it('is the dying tank\'s own identity-ring colour at playerCount >= 2, by controlledBy', () => {
+    const world = {
+      mode: 'campaign-coop',
+      tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)],
+    } as World;
+    // Derived from the exported palette, not a copied-out literal -- so retuning
+    // IDENTITY_RING_COLORS cannot silently desync this assertion from it.
+    expect(deathVignetteColor(world, 1, 2)).toBe(IDENTITY_RING_COLORS[0]);
+    expect(deathVignetteColor(world, 2, 2)).toBe(IDENTITY_RING_COLORS[1]);
+  });
+
+  it('is the dying tank\'s TEAM colour in teams mode, not its identity-ring colour', () => {
+    const world = {
+      mode: 'teams',
+      tanks: [mkTank(1, 'player', 0, 0), mkTank(2, 'player', 1, 1)],
+    } as World;
+    expect(deathVignetteColor(world, 1, 2)).toBe(TEAM_COLORS[0]);
+    expect(deathVignetteColor(world, 2, 2)).toBe(TEAM_COLORS[1]);
+    // Distinct from the identity-ring answer for the same slot -- otherwise this test
+    // could pass even if the mode dispatch were wired backwards.
+    expect(deathVignetteColor(world, 2, 2)).not.toBe(IDENTITY_RING_COLORS[1]);
+  });
+
+  it('falls back to the classic red if the tankId cannot be found in world.tanks', () => {
+    const world = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0)] } as World;
+    expect(deathVignetteColor(world, 99, 2)).toBe(SINGLE_PLAYER_DEATH_VIGNETTE);
+  });
+
+  it('treats a missing controlledBy as slot 0, mirroring the render seam\'s own convention', () => {
+    const world = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', undefined)] } as World;
+    expect(deathVignetteColor(world, 1, 2)).toBe(IDENTITY_RING_COLORS[0]);
+  });
+});
+
 describe('tallyCoopKills', () => {
   const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
     ({ id, kind, controlledBy }) as Tank;
@@ -2258,6 +2310,11 @@ describe('startGameWith: a real player death reaches the HUD', () => {
     expect(h.rec.deathSignals).toBe(0);
     h.fireFrame(20);
     expect(h.rec.deathSignals).toBe(1);
+    // Single-player (the default playerCount here): the classic red, derived from the
+    // exported constant rather than a copied-out literal -- makeDeps passes no `players`
+    // devFlag, so this is the playerCount-1 branch deathVignetteColor's own tests cover
+    // directly below.
+    expect(h.rec.deathColors).toEqual([SINGLE_PLAYER_DEATH_VIGNETTE]);
     h.handle.dispose();
   });
 
@@ -2983,7 +3040,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
     // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     off.handle.dispose();
   });
 
@@ -2991,16 +3048,25 @@ describe('startGameWith: dev flags stay off by default', () => {
     // One at a time, so a wiring that turns them all on together -- or crosses two of
     // them -- fails rather than passing on the aggregate.
     const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
-    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     ray.handle.dispose();
 
     const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
-    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     reach.handle.dispose();
 
     const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
-    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     timer.handle.dispose();
+  });
+
+  it('threads the enemyDeathPulse dev flag through to the renderer', () => {
+    // The wiring this feature adds: devFlags.enemyDeathPulse -> the renderer's
+    // construction options, the same shape as aimRay/mineReach/mineTimer above.
+    const h = boot(makeDeps({ devFlags: { enemyDeathPulse: true } }));
+    const options = h.rec.rendererArgs[0][4] as { enemyDeathPulse?: boolean };
+    expect(options.enemyDeathPulse).toBe(true);
+    h.handle.dispose();
   });
 
   it('threads the quality dev flag through to the renderer', () => {

@@ -162,7 +162,10 @@ describe('hud.css is syntactically whole', () => {
     // the failure mode above. Population: the selectors whose absence disables a
     // shipped feature or a dev overlay.
     for (const sel of [
-      '.hud-damage', '.hud-damage--hit', '.hud-lives--hit', // losing a life
+      // losing a life -- '--hud-damage-color' is the variable hud.ts's signalPlayerDeath
+      // tints (death-pulse issue #200); without it the vignette is stuck on whatever
+      // the default red resolves to no matter what colour is passed in.
+      '.hud-damage', '.hud-damage--hit', '.hud-lives--hit', '--hud-damage-color',
       '.hud-shells', '.hud-shells--hidden', // dev shell count
       '.hud-count', '.hud-count--hidden', '.hud-count--pop', // round-start countdown
       '.hud-level--hidden', // level progression: without it the empty chip always shows

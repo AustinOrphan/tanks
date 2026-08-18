@@ -6,6 +6,7 @@ import { createScene, type SceneContext } from './scene';
 import type { RenderQuality } from './quality';
 import { createEntityViews, type EntityViews } from './entities';
 import { createParticleSystem, type ParticleSystem } from './particles';
+import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createAimRay, type AimRay } from './aimray';
 import type { SkinId } from '../game/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
@@ -49,6 +50,12 @@ export interface RendererOptions {
    * path here must not move a single rendered pixel either.
    */
   readonly quality?: RenderQuality;
+  /**
+   * `?dev=1&enemyDeathPulse=1` (devflags.ts): whether a non-player death also rings.
+   * A player death rings unconditionally either way -- see death-pulse.ts's own doc
+   * comment for why the gate lives inside `spawn`, not here.
+   */
+  readonly enemyDeathPulse?: boolean;
 }
 
 export function createRenderer(
@@ -71,6 +78,7 @@ export function createRenderer(
     );
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
+  const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =
     options.mineReach || options.mineTimer
@@ -94,6 +102,8 @@ export function createRenderer(
     mineDebug?.sync(curr);
     particles.spawn(events);
     particles.update(dt);
+    deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
+    deathPulse.update(dt);
     ctx.renderer.render(ctx.scene, ctx.camera);
   }
 
@@ -122,6 +132,7 @@ export function createRenderer(
     mineDebug?.dispose();
     entities.dispose();
     particles.dispose();
+    deathPulse.dispose();
     ctx.dispose();
   }
 
