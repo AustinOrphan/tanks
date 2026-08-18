@@ -90,6 +90,11 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   // row per slot, one candidate button per slot for Keyboard/Bot/None plus one per
   // DETECTED pad -- so both setters are driven, mirroring setLevelSelect(2, 4) just
   // above, to exercise the gamepad-candidate branch too, not only the three fixed ones.
+  // Bot candidates are OFF by default (`botAssignmentAllowed` -- bots may not drive a
+  // player tank in the campaign without the `bots` dev flag). Turned on here so this
+  // fixture still renders every candidate KIND, which is what a theming sweep wants:
+  // an un-themed `.hud-controller-source-btn` should be caught whichever kind built it.
+  hud.setBotAssignmentAllowed(true);
   hud.setDetectedPads([{ padIndex: 1, id: 'Test Pad' }]);
   hud.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 }]);
   return {
@@ -283,7 +288,9 @@ describe('hud.css is syntactically whole', () => {
     // setControllers calls above -- 2 slots x (Keyboard/Bot/None + 1 detected pad at
     // padIndex 1) = 2 x 4 = 8. A different fixture (slot/pad count) would pin a
     // different number; this one is the sweep's actual denominator, not a general claim
-    // about every possible assignment.
+    // about every possible assignment. The Bot candidate is only present because the
+    // fixture calls setBotAssignmentAllowed(true); without it the campaign default drops
+    // one button per slot and this is 56.
     expect(buttons.length).toBe(58);
     expect(unstyled).toEqual([]);
 

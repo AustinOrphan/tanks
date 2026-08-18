@@ -280,6 +280,13 @@ export interface Hud {
    */
   setDetectedPads(pads: readonly DetectedPad[]): void;
   /**
+   * Whether the panel may OFFER `'bot'` as a candidate source (`assignment.ts`'s
+   * `botAssignmentAllowed`). Defaults to false and must be pushed in, so a wiring
+   * omission fails CLOSED -- no bot option anywhere, which is visible -- rather than
+   * open, which would restore the exact hole this exists to shut.
+   */
+  setBotAssignmentAllowed(allowed: boolean): void;
+  /**
    * The Controllers panel just became visible/hidden -- the ONE chokepoint for both
    * transitions (the Back button and `setState`'s unconditional close), same shape as
    * `onCustomizeOpen`/`onCustomizeClose`. `loop.ts` adds/removes its
@@ -594,6 +601,15 @@ export function createHud(root: HTMLElement): Hud {
   const panel = el.querySelector('.hud-panel') as HTMLElement;
   const titleEl = el.querySelector('.hud-title') as HTMLElement;
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
+  /**
+   * The one write path for the panel subtitle. An empty string HIDES the element rather
+   * than leaving it empty in the flow -- see `.hud-subtitle--hidden` in hud.css for why
+   * blanking alone is not enough under a gapped flex column.
+   */
+  function setSubtitle(text: string): void {
+    subtitleEl.textContent = text;
+    subtitleEl.classList.toggle('hud-subtitle--hidden', text === '');
+  }
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
   const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
   const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
@@ -821,6 +837,8 @@ export function createHud(root: HTMLElement): Hud {
   const controllersCloseCbs: Array<() => void> = [];
   let currentAssignment: Assignment = [];
   let currentDetectedPads: readonly DetectedPad[] = [];
+  /** Fails closed: see setBotAssignmentAllowed's doc comment on the Hud interface. */
+  let botAssignmentAllowedNow = false;
 
   // One button per accent entry, built once, exactly like the hull swatches above --
   // reusing `.hud-swatch` rather than a new class, since it IS the same control: a
@@ -1115,9 +1133,13 @@ export function createHud(root: HTMLElement): Hud {
 
       row.append(label, current);
 
+      // `'bot'` is offered only where a bot may legitimately drive a player tank -- see
+      // `botAssignmentAllowed`. Omitted from the list rather than rendered disabled: a
+      // greyed-out control in the campaign advertises a capability the campaign does not
+      // have, and `loop.ts` refuses the reassignment independently anyway.
       const candidates: SlotSource[] = [
         { kind: 'keyboard' },
-        { kind: 'bot' },
+        ...(botAssignmentAllowedNow ? [{ kind: 'bot' } as SlotSource] : []),
         { kind: 'none' },
         ...currentDetectedPads.map((p): SlotSource => ({ kind: 'gamepad', padIndex: p.padIndex })),
       ];
@@ -1610,7 +1632,7 @@ export function createHud(root: HTMLElement): Hud {
     if (s === 'win' || s === 'lose') renderVersusResultsLine();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
-      subtitleEl.textContent = 'The arena waits.';
+      setSubtitle('The arena waits.');
       actionBtn.textContent = 'Resume';
       // The PANEL, not actionBtn -- see the tabindex note on the element and the
       // roving-focus doc comment above `activePanelContainer`. Focusing Resume directly
@@ -1631,21 +1653,21 @@ export function createHud(root: HTMLElement): Hud {
     panel.focus();
     if (s === 'title') {
       titleEl.textContent = 'TANKS!';
-      subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
+      setSubtitle('');
     } else if (s === 'win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {
         titleEl.textContent = `Level ${levelPos.current} cleared!`;
-        subtitleEl.textContent = 'On to the next.';
+        setSubtitle('On to the next.');
         actionBtn.textContent = 'Next Level';
       } else {
         titleEl.textContent = 'You Win!';
-        subtitleEl.textContent = 'Arena cleared.';
+        setSubtitle('Arena cleared.');
         actionBtn.textContent = 'Play Again';
       }
     } else {
       titleEl.textContent = 'Game Over';
-      subtitleEl.textContent = 'Out of lives.';
+      setSubtitle('Out of lives.');
       actionBtn.textContent = 'Retry';
     }
   }
@@ -1911,6 +1933,10 @@ export function createHud(root: HTMLElement): Hud {
     },
     setDetectedPads(pads: readonly DetectedPad[]): void {
       currentDetectedPads = pads;
+      renderControllerRows();
+    },
+    setBotAssignmentAllowed(allowed: boolean): void {
+      botAssignmentAllowedNow = allowed;
       renderControllerRows();
     },
     onControllersOpen(cb: () => void): void {

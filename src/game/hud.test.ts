@@ -1241,6 +1241,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
 
   it('one candidate button per Keyboard/Bot/None plus one per DETECTED pad, the current one selected', () => {
     const { hud: h, root } = mount();
+    h.setBotAssignmentAllowed(true);
     h.setDetectedPads([{ padIndex: 0, id: 'Pad A' }, { padIndex: 1, id: 'Pad B' }]);
     h.setControllers([{ kind: 'gamepad', padIndex: 1 }]);
     h.setState('title');
@@ -1255,6 +1256,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
 
   it('clicking a candidate button fires onReassignSlot with the SLOT and the candidate SlotSource', () => {
     const { hud: h, root } = mount();
+    h.setBotAssignmentAllowed(true);
     h.setDetectedPads([{ padIndex: 3, id: 'Pad' }]);
     h.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 3 }]);
     h.setState('title');
@@ -2450,3 +2452,73 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     removeSpy.mockRestore();
   });
 });
+
+describe('hud: the Bot candidate is gated (bots may not drive a player tank in the campaign)', () => {
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-controllers-open') as HTMLButtonElement;
+  const rows = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-controller-row'));
+  const candidateLabels = (row: HTMLElement): string[] =>
+    Array.from(row.querySelectorAll('.hud-controller-source-btn')).map(
+      (b) => (b as HTMLButtonElement).textContent ?? '',
+    );
+
+  function openPanel(h: Hud, root: HTMLElement): void {
+    h.setControllers([{ kind: 'keyboard' }]);
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+  }
+
+  it('omits Bot by default -- a shipped campaign cannot hand a player slot to a bot', () => {
+    // Fails if `renderControllerRows` puts `{ kind: 'bot' }` back in the candidate list
+    // unconditionally, or if `botAssignmentAllowedNow` defaults to true.
+    const { hud: h, root } = mount();
+    openPanel(h, root);
+    expect(candidateLabels(rows(root)[0])).not.toContain('Bot');
+  });
+
+  it('offers Bot once it is allowed', () => {
+    // The other half: without this, deleting the candidate entirely would still pass the
+    // test above, so that one alone would not distinguish "gated" from "removed".
+    const { hud: h, root } = mount();
+    h.setBotAssignmentAllowed(true);
+    openPanel(h, root);
+    expect(candidateLabels(rows(root)[0])).toContain('Bot');
+  });
+
+  it('re-renders when the permission changes while the panel is already open', () => {
+    // setBotAssignmentAllowed must call renderControllerRows, not merely set the flag for
+    // the next unrelated re-render. Fails if that call is dropped.
+    const { hud: h, root } = mount();
+    openPanel(h, root);
+    expect(candidateLabels(rows(root)[0])).not.toContain('Bot');
+    h.setBotAssignmentAllowed(true);
+    expect(candidateLabels(rows(root)[0])).toContain('Bot');
+  });
+});
+
+describe('hud: the title screen carries no tagline', () => {
+  const subtitle = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-subtitle') as HTMLElement;
+
+  it('leaves the title subtitle empty AND out of layout', () => {
+    // A directive: the menu is crowded and the tagline was the least load-bearing thing
+    // on it. Both halves are asserted because blanking alone is not enough -- .hud-panel
+    // is a gapped flex column, so an emptied element still costs its 14px gap. Fails if
+    // the string comes back, or if setSubtitle stops toggling the hidden class.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    expect(subtitle(root).textContent).toBe('');
+    expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(true);
+  });
+
+  it('still shows a subtitle in states that have one', () => {
+    // The negative control: without it, deleting setSubtitle's write entirely -- or
+    // hiding the element permanently -- would satisfy the test above.
+    const { hud: h, root } = mount();
+    h.setState('lose');
+    expect(subtitle(root).textContent).toBe('Out of lives.');
+    expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(false);
+  });
+});
+

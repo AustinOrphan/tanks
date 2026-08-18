@@ -541,6 +541,13 @@
   opacity: 0.9;
 }
 
+/* An empty subtitle must be REMOVED from layout, not just blanked: `.hud-panel` is a
+ * flex column with `gap: 14px`, so a zero-height flex item still costs a gap and leaves
+ * a visible hole where the text was. Set by `setSubtitle` whenever the text is empty. */
+.hud-subtitle--hidden {
+  display: none;
+}
+
 /* The title state's primary action, split into Continue and New Game (issue #135):
  * both join this rule rather than getting their own, since either one may be the ONLY
  * button offered (New Game alone with no progress, or both together once there is

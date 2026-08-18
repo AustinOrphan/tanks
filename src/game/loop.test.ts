@@ -191,6 +191,7 @@ interface Recorder {
   playerCounts: Array<number | undefined>;
   /** Every value passed to hud.setControllers, in order (each a snapshot copy). */
   controllersPushes: SlotSource[][];
+  botAllowedPushes: boolean[];
   /** Every value passed to hud.setDetectedPads, in order (each a snapshot copy). */
   detectedPadsPushes: DetectedPad[][];
 }
@@ -341,6 +342,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     slot1Disposed: false,
     playerCounts: [],
     controllersPushes: [],
+    botAllowedPushes: [],
     detectedPadsPushes: [],
   };
 
@@ -791,6 +793,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setControllers: (a: SlotSource[]) => {
           rec.controllersPushes.push([...a]);
+        },
+        setBotAssignmentAllowed: (allowed: boolean) => {
+          rec.botAllowedPushes.push(allowed);
         },
         setDetectedPads: (pads: readonly DetectedPad[]) => {
           rec.detectedPadsPushes.push([...pads]);
@@ -4499,7 +4504,12 @@ describe('startGameWith: the controller assignment panel\'s wiring (docs/superpo
   });
 
   it('reassignSlot pushes a FRESH hud.setControllers reflecting the new assignment', () => {
-    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    // `bots: 0` rather than omitting it: the flag's PRESENCE is what opens the campaign
+    // to bot players (`botAssignmentAllowed`), and 0 keeps the boot assignment free of
+    // them, so this still starts from [keyboard, gamepad] and the reassignment below is
+    // the only thing that introduces a bot. Without the flag the reassignment is refused
+    // and this test would be asserting the boundary instead of the push.
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 0 } }));
     const before = h.rec.controllersPushes.length;
     h.hud.reassignSlot(1, { kind: 'bot' });
     expect(h.rec.controllersPushes.length).toBe(before + 1);
@@ -5085,3 +5095,56 @@ describe('startGameWith: the input recorder', () => {
     h.handle.dispose();
   });
 });
+
+describe('startGameWith: bots may not drive a player tank in the campaign (boundary enforcement)', () => {
+  it('refuses a reassignment to bot in the campaign when the bots flag is absent', () => {
+    // The panel does not offer Bot there, so this is the SECOND enforcement point --
+    // it exists so the rule survives a caller that does not go through the panel.
+    // Fails if `reassignSlot`'s guard is removed: the assignment would change and a
+    // fresh setControllers would be pushed.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const before = h.rec.controllersPushes.length;
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.length).toBe(before);
+    h.handle.dispose();
+  });
+
+  it('leaves the refused slot on its previous source, not on none', () => {
+    // Distinguishes "refused" from "bounced": `reassign` sends a displaced slot to
+    // 'none', so a guard placed AFTER the reassign call would still corrupt the slot.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.at(-1)).toEqual([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 1 },
+    ]);
+    h.handle.dispose();
+  });
+
+  it('permits it once the bots flag is present', () => {
+    // The negative control for both tests above: without this, deleting the whole
+    // reassign-to-bot path would satisfy them.
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 0 } }));
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.at(-1)).toEqual([{ kind: 'keyboard' }, { kind: 'bot' }]);
+    h.handle.dispose();
+  });
+
+  it('tells the hud whether to offer the candidate, matching the same rule', () => {
+    // Fails if the loop stops pushing, or pushes a constant. The hud defaults to false,
+    // so a dropped push would silently look correct in the campaign and wrong in versus
+    // -- which is why both directions are asserted.
+    const campaign = boot(makeDeps({ devFlags: { players: 2 } }));
+    expect(campaign.rec.botAllowedPushes).toEqual([false]);
+    campaign.handle.dispose();
+
+    const withFlag = boot(makeDeps({ devFlags: { players: 2, bots: 0 } }));
+    expect(withFlag.rec.botAllowedPushes).toEqual([true]);
+    withFlag.handle.dispose();
+
+    const versus = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+    expect(versus.rec.botAllowedPushes).toEqual([true]);
+    versus.handle.dispose();
+  });
+});
+

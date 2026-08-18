@@ -35,6 +35,7 @@ import {
 import {
   deriveInitialAssignment,
   reassign,
+  botAssignmentAllowed,
   createHeldInputSource,
   type Assignment,
   type SlotSource,
@@ -612,6 +613,21 @@ export function startGameWith(
    * `autoplay=1` already does unguarded.
    */
   const botCount = Math.min(deps.devFlags.bots ?? 0, playerCount);
+
+  /**
+   * May a bot drive a player tank in THIS session -- see `botAssignmentAllowed`. Fixed
+   * for the session's life: `world.mode` never changes within one (see the versus-results
+   * dispatch below), and a dev flag cannot be set mid-session.
+   *
+   * The BOOT path already honours this without any help, since `botCount` is 0 whenever
+   * the `bots` flag is absent. The panel was the hole: it offered `'bot'` for every slot
+   * unconditionally, so a shipped campaign could hand Player 1 to a bot from the title or
+   * pause screen and watch the game play itself.
+   */
+  const botsMayDrivePlayers = botAssignmentAllowed(
+    deps.devFlags.mode ?? 'campaign-coop',
+    deps.devFlags.bots !== null,
+  );
   /** The LAST `botCount` of `playerCount` slots -- see botSlotsFor's own doc comment. */
   const botSlots = botSlotsFor(playerCount, botCount);
 
@@ -1178,6 +1194,11 @@ export function startGameWith(
    * `'bot'` has its entry deleted the same way, incrementally.
    */
   function reassignSlot(slot: number, source: SlotSource): void {
+    // The boundary's second enforcement point. The panel does not OFFER `'bot'` when it
+    // is disallowed, so this is unreachable through the UI -- which is exactly why it is
+    // here: a rule enforced only by the thing that draws the buttons is one stale DOM
+    // node or one new caller away from not being a rule.
+    if (source.kind === 'bot' && !botsMayDrivePlayers) return;
     const next = reassign(assignment, slot, source);
     const changed: number[] = [];
     for (let i = 0; i < next.length; i++) {
@@ -1694,6 +1715,7 @@ export function startGameWith(
   hud.setFireMode(deps.touchSettings.fireMode());
   hud.setHaptics(deps.touchSettings.haptics());
   hud.setAchievements(deps.achievements.earned());
+  hud.setBotAssignmentAllowed(botsMayDrivePlayers);
   hud.setControllers(assignment);
   refreshStats(world);
 
