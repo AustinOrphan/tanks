@@ -73,3 +73,13 @@ describe('beacon animator', () => {
     expect(end.ring.arc).toBeLessThan(start.ring.arc);
   });
 });
+
+// Anti-rot guard: until the picker UI and the `--spawn-anim` gallery arg (issue #201)
+// land, this is the only thing that exercises rise/beacon by id through the registry
+// rather than through the module-level const above. Fails if a variant is ever aliased
+// to a dead/constant frame.
+it.each(['warp', 'rise', 'beacon'] as const)('%s is a live animator, not a constant', (id) => {
+  const a = SPAWN_ANIMATORS[id]('entrance', 0, 0);
+  const b = SPAWN_ANIMATORS[id]('entrance', 1, 0);
+  expect(a).not.toEqual(b);
+});
