@@ -101,7 +101,7 @@ export interface Hud {
    * cue was the Lives number quietly decrementing in a corner, plus a sound --
    * and with no audio assets committed, that sound is a procedural blip.
    */
-  signalPlayerDeath(): void;
+  signalPlayerDeath(color: number): void;
   onMuteToggle(cb: () => void): void;
   onVolumeChange(cb: (v: number) => void): void;
   /**
@@ -310,6 +310,20 @@ export interface Hud {
 
 /** How long an unlock toast sits on screen. Feel, not measurement. */
 const TOAST_MS = 3200;
+
+/**
+ * The classic red death vignette (matches the pre-tint `rgba(180, 30, 30, ...)` this
+ * replaced -- 0xb4 = 180, 0x1e = 30). Single-player always passes this; `loop.ts` passes
+ * a per-slot identity colour instead once a second player exists. Exported so tests
+ * assert against the constant's own value rather than a copied-out literal red -- see
+ * hud.test.ts's "single-player keeps the classic red" test.
+ */
+export const SINGLE_PLAYER_DEATH_VIGNETTE = 0xb41e1e;
+
+/** `0xRRGGBB` -> `'#rrggbb'`, the CSS custom-property form `--hud-damage-color` wants. */
+function cssColor(hex: number): string {
+  return '#' + hex.toString(16).padStart(6, '0');
+}
 
 /**
  * The four rotate buttons' icons, built from two halves so the pairs cannot drift apart:
@@ -1826,7 +1840,10 @@ export function createHud(root: HTMLElement): Hud {
       shellsEl.classList.toggle('hud-shells--full', info.inFlight >= info.cap);
       shellsEl.classList.remove('hud-shells--hidden');
     },
-    signalPlayerDeath(): void {
+    signalPlayerDeath(color: number): void {
+      // Set before the (re)trigger below, so the very first paint of the replayed
+      // animation already carries the right colour rather than one frame of the old one.
+      damageEl.style.setProperty('--hud-damage-color', cssColor(color));
       // Restart the animation even if one is already running: two deaths in
       // quick succession must read as two, not one. Removing the class and
       // forcing a reflow is what makes the browser replay it.

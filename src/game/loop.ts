@@ -49,7 +49,8 @@ import type { GameState } from './state';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import { createGameStateMachine, type GameStateMachine } from './state';
-import { createHud, type Hud } from './hud';
+import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
@@ -401,6 +402,34 @@ export function playerShellsInFlight(world: World, playerId: number | undefined)
  */
 export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
   return events.some((e) => e.type === 'tank-destroyed' && e.tankId === playerId);
+}
+
+/**
+ * Which colour signalPlayerDeath's screen vignette tints to (death-pulse, issue #200).
+ *
+ * Single-player (`playerCount` 1) always gets the classic red -- `SINGLE_PLAYER_DEATH_
+ * VIGNETTE` -- unconditionally, so existing single-player behaviour cannot move. At
+ * `playerCount >= 2` it is the DYING tank's own identity colour: `TEAM_COLORS[team]` in
+ * 'teams' mode, `IDENTITY_RING_COLORS[controlledBy]` otherwise -- the same dispatch
+ * entities.ts's own ring/tint colouring already uses at its `curr.mode === 'teams' ?
+ * teamColor(...) : identityColor(...)` sites, so the vignette always matches the ring
+ * the dying tank draws on screen. `tank-destroyed` does not carry `controlledBy` itself
+ * (see events.ts), so this looks the tank up in `world`; `resolveWalls`'s sibling
+ * invariant does not apply here, but the same fact this file already relies on for
+ * `driver.world.lives` above does -- a destroyed tank stays in `world.tanks` (`alive:
+ * false`, never spliced, see world.ts/bullets.ts/mines.ts) -- so the lookup finds it.
+ * Falls back to the classic red if the tank cannot be found (should not happen) or its
+ * slot has no assigned colour (unreached today: `players` caps at 4, matching both
+ * palettes' length).
+ */
+export function deathVignetteColor(world: World, playerId: number, playerCount: number): number {
+  if (playerCount === 1) return SINGLE_PLAYER_DEATH_VIGNETTE;
+  const tank = world.tanks.find((t) => t.id === playerId);
+  if (!tank) return SINGLE_PLAYER_DEATH_VIGNETTE;
+  if (world.mode === 'teams') {
+    return TEAM_COLORS[tank.team ?? 0] ?? SINGLE_PLAYER_DEATH_VIGNETTE;
+  }
+  return IDENTITY_RING_COLORS[tank.controlledBy ?? 0] ?? SINGLE_PLAYER_DEATH_VIGNETTE;
 }
 
 /**
@@ -1113,7 +1142,7 @@ export function startGameWith(
     // the moment a second player-kind tank exists (the co-op foundation).
     onFrameEvents(events): void {
       if (isPlayerDeath(events, playerId ?? -1)) {
-        hud.signalPlayerDeath();
+        hud.signalPlayerDeath(deathVignetteColor(driver.world, playerId ?? -1, playerCount));
         // The #152 fix: persist the reduced life count on the RUN before the player
         // can escape it by refreshing or leaving gameplay -- not deferred to any
         // later click. `driver.world.lives` is already the post-step count: the
