@@ -320,5 +320,25 @@
     "expectFailures": 1,
     "why": "The coordinate-ascent pass must be allowed to run to convergence. Greedy farthest-point sampling alone is anchor-sensitive and, measured over all 5 shipped arenas x counts 2/3/4, is WORSE than the pre-ruling placement on 2 of those 15 pairs; the relaxation is what turns that into 15 of 15 improved with no regressions. A cap of 1 stops it after a single sweep. This mutation also SURVIVED when first run, which is why the arena-04 N=3 exact-set pin exists at all. Caught by 1 of 17 in versus-spawns.test.ts: arena-04 at N=3 returns (0,30) (32,44) (23,0) instead of (0,26) (32,44) (24,0). Three further pairs move under the same mutation -- arena-01 and arena-03 at N=3, arena-05 at N=4 -- but only the arena-04 one is pinned, so the numerator is 1, not 4.",
     "tests": ["src/sim/versus-spawns.test.ts"]
+  },
+  {
+    "id": "hud-count-drop-restart",
+    "file": "src/game/hud.ts",
+    "find": "      countEl.classList.remove('hud-count--pop');\n      void countEl.offsetWidth;\n      countEl.classList.add('hud-count--pop');",
+    "replace": "      countEl.classList.add('hud-count--pop');",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by 1 of 149 in hud.test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails.",
+    "tests": ["src/game/hud.test.ts"]
+  },
+  {
+    "id": "hud-count-live-shows",
+    "file": "src/game/hud.ts",
+    "find": "      if (!info || info.phase === 'live') {",
+    "replace": "      if (!info) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by 1 of 149 in hud.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead.",
+    "tests": ["src/game/hud.test.ts"]
   }
 ]
