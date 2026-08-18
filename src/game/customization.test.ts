@@ -8,10 +8,13 @@ import {
   PALETTE,
   SKINS,
   ACCENTS,
+  SPAWN_ANIMATIONS,
   DEFAULT_HULL,
   DEFAULT_SKIN,
   DEFAULT_ACCENT,
+  DEFAULT_SPAWN_ANIM,
   CUSTOM_KEY,
+  type SpawnAnimId,
 } from './customization';
 import { GAME_TANK_DEFS } from '../sim/config/roster';
 
@@ -209,5 +212,18 @@ describe('accents', () => {
     for (const a of ACCENTS.filter((x) => x.id !== 'auto')) {
       expect(s.accentHexFor(a.id), a.id).toMatch(/^#[0-9a-f]{6}$/i);
     }
+  });
+});
+
+describe('SPAWN_ANIMATIONS', () => {
+  it('is a frozen list with unique ids and warp first', () => {
+    expect(Object.isFrozen(SPAWN_ANIMATIONS)).toBe(true);
+    const ids = SPAWN_ANIMATIONS.map((v) => v.id);
+    expect(ids).toEqual(['warp', 'rise', 'beacon']);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it('DEFAULT_SPAWN_ANIM is warp and is present in the list', () => {
+    expect(DEFAULT_SPAWN_ANIM).toBe<SpawnAnimId>('warp');
+    expect(SPAWN_ANIMATIONS.some((v) => v.id === DEFAULT_SPAWN_ANIM)).toBe(true);
   });
 });

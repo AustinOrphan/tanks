@@ -93,6 +93,22 @@ export const SKINS: readonly SkinDef[] = Object.freeze([
 
 export const DEFAULT_SKIN: SkinId = 'solid';
 
+export type SpawnAnimId = 'warp' | 'rise' | 'beacon';
+
+export interface SpawnAnimDef {
+  id: SpawnAnimId;
+  label: string;
+}
+
+/** First entry is the default. Implementations live in render/spawn-anim.ts (they need THREE). */
+export const SPAWN_ANIMATIONS: readonly SpawnAnimDef[] = Object.freeze([
+  { id: 'warp', label: 'Warp' },
+  { id: 'rise', label: 'Rise' },
+  { id: 'beacon', label: 'Beacon' },
+]);
+
+export const DEFAULT_SPAWN_ANIM: SpawnAnimId = 'warp';
+
 /**
  * The scroll a skin carries, or null. THE one place "is this skin animated?" is
  * answered -- `render/entities.ts` needs the vector to advance the texture offset and

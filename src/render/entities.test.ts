@@ -16,6 +16,7 @@ import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
+import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor } from '../sim/config';
 import { TANK_KINDS } from '../sim/config/validate';
 import { createSkinTexture } from './skins';
@@ -798,16 +799,13 @@ describe('the paint shop (player colour override)', () => {
     expect(partColor(7, 'track')).toBe(enemyTrackBefore);
     expect(partMap(7, 'hull')).toBe(enemyMapBefore);
 
-    // And back to the roster default.
+    // And back to the roster default. partColor walks to the top tank group (past the
+    // spawn-anim `visual` group), so it is robust to the scene-graph depth the
+    // visual-group split added; the old inline `o.parent.position.x === 3` check assumed
+    // the hull's DIRECT parent was the tank group, which the split made false.
     views.setPlayerStyle(null, 'solid', null);
     views.sync(w, w, 0);
-    let restored = -1;
-    scene.traverse((o) => {
-      if (o.name === 'hull' && (o.parent as THREE.Group).position.x === 3) {
-        restored = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
-      }
-    });
-    expect(restored).toBe(0x3d7bd6); // the roster's player blue
+    expect(partColor(3, 'hull')).toBe(0x3d7bd6); // the roster's player blue
     views.dispose();
   });
 });
@@ -1991,6 +1989,212 @@ describe('player identity: ring and shell tint', () => {
     views.sync(w, w, 0.5);
     views.sync(w, w, 1);
     expect(shellEmissiveAt(scene, 4)).toBe(IDENTITY_RING_COLORS[0]);
+    views.dispose();
+  });
+});
+
+describe('spawn animation (#199)', () => {
+  // Traverses the WHOLE scene for the first object with this name -- the same shape as
+  // `identityRings`/`shellGroup` above, generalised to a name argument since spawn-ring
+  // is the only name this block needs to find.
+  function findByName(scene: THREE.Scene, name: string): THREE.Object3D | undefined {
+    let found: THREE.Object3D | undefined;
+    scene.traverse((o) => {
+      if (!found && o.name === name) found = o;
+    });
+    return found;
+  }
+
+  // Every test in this block runs a single player tank (id 1), so the sole 'hull' mesh
+  // in the scene IS that tank's body -- `id` is kept in the signature for symmetry with
+  // a future multi-tank case, not because it disambiguates one here.
+  function tankBodyMaterial(scene: THREE.Scene, _id: number): THREE.MeshStandardMaterial {
+    const hull = findByName(scene, 'hull');
+    if (!hull) throw new Error('no hull mesh found');
+    return (hull as THREE.Mesh).material as THREE.MeshStandardMaterial;
+  }
+
+  /** Same lookup as `tankBodyMaterial`, generalised to any of the tank's own mesh names. */
+  function tankMaterial(scene: THREE.Scene, name: string): THREE.MeshStandardMaterial {
+    const obj = findByName(scene, name);
+    if (!obj) throw new Error(`no ${name} mesh found`);
+    return (obj as THREE.Mesh).material as THREE.MeshStandardMaterial;
+  }
+
+  function deadPlayerWorld(): World {
+    const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: false };
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
+    return createWorld({ walls: [], tanks: [p], spawns, lives: 3 });
+  }
+
+  function alivePlayerWorld(shieldUntilTick: number | undefined, tick: number): World {
+    const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: true, shieldUntilTick };
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
+    const w = createWorld({ walls: [], tanks: [p], spawns, lives: 3 });
+    w.tick = tick;
+    return w;
+  }
+
+  it('starts a spawn entrance and adds a spawn ring on the dead->alive edge', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    const curr = alivePlayerWorld(undefined, 0);
+    views.sync(prev, curr, 1, 0.016);
+    // Mutation that breaks this: never creating the ring on the respawn edge.
+    const ring = findByName(scene, 'spawn-ring');
+    expect(ring).toBeTruthy();
+    views.dispose();
+  });
+
+  it("holds the spawn ring at its OWN world-space radius, independent of the tank's scale", () => {
+    // spawn-anim.ts's RING_BASE_R comment: "base radius is 1 world unit so a frame's
+    // `ring.radius` is a direct world-space radius" -- that contract breaks if the ring
+    // is a scaled child of a parent that is ALSO scaled (three composes parent x child
+    // scale). DEFAULT_SPAWN_ANIM is 'warp'; at entrance progress 0.5 its tankScale is
+    // 0.6 + 0.4*0.5 = 0.8 (provably not 1) and its ring.radius is 0.4 + 1.6*0.5 = 1.2.
+    // dt 0.25 against ENTRANCE_SECONDS 0.5 lands exactly on that midpoint.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    const curr = alivePlayerWorld(undefined, 0);
+    views.sync(prev, curr, 1, 0.25);
+    const ring = findByName(scene, 'spawn-ring') as THREE.Mesh;
+    expect(ring).toBeTruthy();
+    // Mutation that breaks this: scaling the ring's own parent by tankScale (or any
+    // ancestor shared with the tank's visible parts) instead of leaving the ring's
+    // ancestor chain at scale 1 -- getWorldScale is the composed, on-screen scale,
+    // not the ring's own local `.scale`, so it catches exactly that composition bug.
+    const worldScale = ring.getWorldScale(new THREE.Vector3());
+    expect(worldScale.x).toBeCloseTo(1.2, 5);
+    expect(worldScale.y).toBeCloseTo(1.2, 5);
+    expect(worldScale.z).toBeCloseTo(1.2, 5);
+    views.dispose();
+  });
+
+  it('starts the entrance on a campaign round restart even though the tank was alive in both frames', () => {
+    // resetArena (world.ts) revives the player AND bumps roundStartTick in the SAME
+    // tick, so campaign's single-player respawn can go straight from alive->alive and
+    // never pass through alive: false -- enteredRespawn alone would miss it entirely.
+    // This is the trigger Step 1's investigation exists to justify: only
+    // roundStartTick moving distinguishes a campaign round restart from ordinary play.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = alivePlayerWorld(undefined, 0); // roundStartTick 1 (createWorld's default)
+    const curr = alivePlayerWorld(undefined, 0);
+    curr.roundStartTick = 5; // what resetArena's own bump looks like from here
+    views.sync(prev, curr, 1, 0.016);
+    // Mutation that breaks this: dropping the `enteredRound` half of the trigger.
+    expect(findByName(scene, 'spawn-ring')).toBeTruthy();
+    views.dispose();
+  });
+
+  it('drives the invincibility overlay from shieldUntilTick, not a latched copy', () => {
+    // An early/late `>` comparison survives two wrong reads that both still move the
+    // right direction over two syncs: reading shieldLeft off `prev.tick` instead of
+    // `curr.tick`, and deriving invincible progress from `spawn.elapsed` instead of
+    // `shieldUntilTick - curr.tick`. Asserting the EXACT opacity against the `warp`
+    // animator's own formula (spawn-anim.ts) discriminates both, in a single sync.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld(); // tick 0
+    // dt 0.6 > ENTRANCE_SECONDS (0.5), so this ONE sync both triggers the entrance edge
+    // AND advances straight past it into the invincibility branch -- prev.tick (0) and
+    // curr.tick (10) are both live inputs to this single call, which is what lets a
+    // wrong-tick read diverge from the right one without needing a second sync.
+    const curr = alivePlayerWorld(90, 10); // shieldUntilTick 90, tick 10 -> 80 ticks left
+    views.sync(prev, curr, 1, 0.6);
+    const opacity = tankBodyMaterial(scene, 1).opacity;
+    // Expected value re-derived from spawn-anim.ts's `warp` invincible formula
+    // (tankOpacity = 0.45 + 0.55*p) rather than hardcoded, so the assertion states its
+    // own derivation: shieldLeft = shieldUntilTick - curr.tick = 90 - 10 = 80,
+    // p = 1 - shieldLeft/RESPAWN_SHIELD_TICKS = 1 - 80/90 = 1/9.
+    const shieldLeft = 90 - 10;
+    const expectedP = 1 - shieldLeft / RESPAWN_SHIELD_TICKS;
+    const expectedOpacity = 0.45 + 0.55 * expectedP;
+    // Mutation A (shieldLeft read off `prev.tick` instead of `curr.tick`): shieldLeft
+    // becomes 90 - 0 = 90, p = 0, opacity = 0.45 -- fails this assertion.
+    // Mutation B (progress derived from `spawn.elapsed` instead of shieldUntilTick -
+    // curr.tick): elapsed is 0.6 on this first sync, a different number entirely --
+    // fails this assertion too.
+    expect(opacity).toBeCloseTo(expectedOpacity, 5);
+    views.dispose();
+  });
+
+  it('restores full opacity, drops the ring and clears state once the shield expires', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    views.sync(prev, alivePlayerWorld(90, 10), 1, 0.6);
+    expect(findByName(scene, 'spawn-ring')).toBeTruthy();
+    // Shield already expired (tick 91 > shieldUntilTick 90): the very next sync should
+    // restore solid opacity and remove the ring rather than leaving it lingering.
+    views.sync(alivePlayerWorld(90, 10), alivePlayerWorld(90, 91), 1, 0.016);
+    expect(tankBodyMaterial(scene, 1).opacity).toBe(1);
+    expect(findByName(scene, 'spawn-ring')).toBeUndefined();
+    // Mutation that breaks this: setTankOpacity(view, 1) restores opacity but never
+    // resets `transparent`, so a tank that has ever animated stays in the transparent
+    // render pass forever after the animation completes. Covers body, track and turret
+    // (the barrel shares the turret's material, so it needs no separate check).
+    for (const name of ['hull', 'track', 'turret']) {
+      expect(tankMaterial(scene, name).transparent).toBe(false);
+    }
+    views.dispose();
+  });
+
+  it('does not retrigger the entrance on every tick a respawned tank stays alive', () => {
+    // A dead->alive edge only exists on the FIRST sync after the respawn; every later
+    // sync between the same two alive worlds must leave the existing spawn state (and
+    // its ring) alone rather than re-adding a second ring.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    const curr = alivePlayerWorld(RESPAWN_SHIELD_TICKS, 0);
+    views.sync(prev, curr, 1, 0.016);
+    views.sync(curr, curr, 1, 0.016);
+    views.sync(curr, curr, 1, 0.016);
+    let ringCount = 0;
+    scene.traverse((o) => {
+      if (o.name === 'spawn-ring') ringCount++;
+    });
+    expect(ringCount).toBe(1);
+    views.dispose();
+  });
+
+  // A second tank, alongside the player, whose own roundStartTick this test drives
+  // through a change -- resetArena revives EVERY tank and bumps roundStartTick once
+  // for the whole world, so an enemy sees the exact same `enteredRound` signal the
+  // player does. Only the `t.kind === 'player'` guard is what keeps it from also
+  // getting an entrance; the death effect for enemies is a separate issue (#199's own
+  // brief says so explicitly), so this pins that enemies get NONE, not some other
+  // treatment.
+  function playerAndEnemyWorld(roundStartTick: number): World {
+    const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: true };
+    const enemy: Tank = makeTank(2, 'brown', 8, 8);
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 5, y: 5 }, angle: 0 },
+      { kind: 'brown', pos: { x: 8, y: 8 }, angle: 0 },
+    ];
+    const w = createWorld({ walls: [], tanks: [p, enemy], spawns, lives: 3 });
+    w.roundStartTick = roundStartTick;
+    return w;
+  }
+
+  it('never starts a spawn entrance for an enemy tank, even on a campaign round restart', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = playerAndEnemyWorld(1);
+    const curr = playerAndEnemyWorld(5); // resetArena-style roundStartTick bump, both tanks alive throughout
+    views.sync(prev, curr, 1, 0.016);
+    let ringCount = 0;
+    scene.traverse((o) => {
+      if (o.name === 'spawn-ring') ringCount++;
+    });
+    // Exactly 1: the player's own entrance ring fires (roundStartTick changed) --
+    // this is not "no rings ever", it is "the enemy specifically gets none".
+    // Mutation that breaks this: dropping the `t.kind === 'player'` guard, which
+    // would also start an entrance for the enemy (ringCount 2, not 1).
+    expect(ringCount).toBe(1);
     views.dispose();
   });
 });
