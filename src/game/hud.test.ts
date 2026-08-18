@@ -852,9 +852,11 @@ describe('hud: pause panel', () => {
   });
 
   it('keeps Quit out of every other panel state, and settings off the END screens', () => {
-    // Population: all four non-paused states. A quit button on the win panel would
-    // be a second untested path out of a finished game. The settings row serves the
-    // TITLE (the main menu) and pause; win/lose panels stay verdict-only.
+    // Population: all four non-paused states. Quit reaches the level-cleared panel too
+    // (a directive), but that needs an INTERMEDIATE level position -- this fixture sets
+    // none, so `win` here is the final-win shape and stays verdict-only. The cleared
+    // case has its own describe block below; without it this loop would keep passing
+    // for the wrong reason, since a null level position hides the button regardless.
     const { hud: h, root } = mount();
     for (const s of ['title', 'win', 'lose'] as const) {
       h.setState(s);
@@ -2519,6 +2521,50 @@ describe('hud: the title screen carries no tagline', () => {
     h.setState('lose');
     expect(subtitle(root).textContent).toBe('Out of lives.');
     expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(false);
+  });
+});
+
+describe('hud: the level-cleared panel offers the main menu', () => {
+  const quitBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-quit') as HTMLButtonElement;
+  const hidden = (root: HTMLElement): boolean =>
+    quitBtn(root).classList.contains('hud-quit--hidden');
+
+  it('shows it after clearing an INTERMEDIATE level, labelled Main Menu', () => {
+    // Fails if the clearedIntermediate condition is dropped, or if the label is left as
+    // "Quit to Title" -- wrong copy for leaving a level you just won.
+    const { hud: h, root } = mount();
+    h.setLevel(2, 5);
+    h.setState('win');
+    expect(hidden(root)).toBe(false);
+    expect(quitBtn(root).textContent).toBe('Main Menu');
+  });
+
+  it('hides it on the FINAL win, where the run has already ended', () => {
+    // The discriminator, and the reason `s === 'win'` alone is not the condition:
+    // endRun has run by then, so there is no run to return to.
+    const { hud: h, root } = mount();
+    h.setLevel(5, 5);
+    h.setState('win');
+    expect(hidden(root)).toBe(true);
+  });
+
+  it('hides it on lose even mid-campaign', () => {
+    // A loss ends the run too, so a cleared-level route out does not apply. Fails if the
+    // condition widens from `s === 'win'` to "any end screen with levels left".
+    const { hud: h, root } = mount();
+    h.setLevel(2, 5);
+    h.setState('lose');
+    expect(hidden(root)).toBe(true);
+  });
+
+  it('still says Quit to Title when paused', () => {
+    // The label is per-state, not a global rename: pause keeps its own wording.
+    const { hud: h, root } = mount();
+    h.setLevel(2, 5);
+    h.setState('paused');
+    expect(hidden(root)).toBe(false);
+    expect(quitBtn(root).textContent).toBe('Quit to Title');
   });
 });
 

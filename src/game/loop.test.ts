@@ -5148,3 +5148,37 @@ describe('startGameWith: bots may not drive a player tank in the campaign (bound
   });
 });
 
+describe('startGameWith: leaving a CLEARED level for the main menu keeps the run', () => {
+  it('routes to title from win and leaves Continue available', () => {
+    // A directive: clearing a level must offer the main menu, and the run persists --
+    // going back is not abandoning it. `advanceLevel` already ran when the level
+    // cleared, so the surviving run points at the NEXT level, not the one just beaten.
+    // Fails if loop.ts's quit guard is narrowed back to `paused` only: the handler
+    // returns early, the state never becomes 'title', and no fresh Continue signal is
+    // pushed.
+    // levelCount 5 / start 2 makes this an INTERMEDIATE win. It matters: loop.ts's own
+    // state-change handler calls endRun() on a win with no next level (campaign
+    // completion), so a default-sized harness would end the run before quit was ever
+    // reached and this would be asserting the wrong thing entirely.
+    const h = boot(
+      makeDeps({ tracksProgress: true, levelCount: 5, levelStart: 2, savedRun: { level: 2, lives: 3 } }),
+    );
+    h.setState('win');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('title');
+    expect(h.rec.continueAvailable.at(-1)).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('still refuses to quit straight out of PLAYING', () => {
+    // The negative control for the widened guard. Without it, replacing the guard with
+    // an unconditional pass would satisfy the test above. Quit rebuilds the world, so
+    // reaching it from a live game is exactly what the guard exists to stop.
+    const h = boot(makeDeps({ tracksProgress: true, savedRun: { level: 2, lives: 3 } }));
+    h.setState('playing');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('playing');
+    h.handle.dispose();
+  });
+});
+
