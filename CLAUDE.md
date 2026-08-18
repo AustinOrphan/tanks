@@ -46,10 +46,9 @@ that the full gate (`tsc --noEmit && vitest run`) doesn't** -- this tool does no
 even when every entry here reports SURVIVES. `--only <id>` runs a single entry.
 
 CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a bundle-portability
-assertion on Node 20.19.0 — the declared floor — and 22. `engines.node` is
-`^20.19.0 || ^22.13.0 || >=24.0.0`, which is the intersection of what the tree
-actually demands: a plain `>=20.19.0` would be wrong too, since it admits 22.0–22.12
-and eight packages reject those.
+assertion on Node 22.13.0 — the declared floor — and the Node 24 LTS line. `engines.node`
+is `^22.13.0 || ^24.0.0`, matching those two tested LTS lines exactly. Node 20 was
+removed from the support claim after reaching EOL.
 
 **The game deploys from `main` to GitHub Pages** (`.github/workflows/pages.yml`), live at
 `https://austinorphan.com/tanks/` — a **custom apex domain inherited from the user page**,
@@ -109,8 +108,8 @@ empty `bypass_actors` list — nobody can bypass it, including the repository ow
 carries five rules: `deletion`, `non_fast_forward`, `required_linear_history`,
 `pull_request` (squash the ONLY allowed merge method, `required_approving_review_count` 0,
 but `required_review_thread_resolution` true) and `required_status_checks` on exactly three
-contexts — **`verify (20.19.0)`, `verify (22)` and `visual`**, the same three jobs `ci.yml`
-defines.
+contexts — **`verify (floor)`, `verify (current)` and `visual`**, the same three jobs
+`ci.yml` defines. The semantic verify names stay stable when their Node versions advance.
 
 Three consequences that invert what this file used to say. Work **is** forced through a PR
 and a direct push to `main` is refused. A red commit **cannot** land on `main` any more —

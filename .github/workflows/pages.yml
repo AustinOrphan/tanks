@@ -132,10 +132,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          # CI proves the 20.19.0 floor and 22; the deploy builds on one of those rather
-          # than a third version. That is all it proves -- this is a separate build, not
-          # CI's artifact, and nothing here shows the two are byte-identical.
-          node-version: '22'
+          # CI proves the Node 22.13.0 floor and the Node 24 LTS line; deploy on the
+          # latter rather than a third version. This is still a separate build, not
+          # CI's artifact, so nothing here proves the two builds byte-identical.
+          node-version: '24'
           cache: npm
 
       - run: npm ci

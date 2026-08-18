@@ -39,7 +39,7 @@ development flags; see the [generated dev-flag reference](docs/dev-flags.md).
 
 ## Development
 
-Requires Node `^20.19.0 || ^22.13.0 || >=24.0.0`.
+Requires Node `^22.13.0 || ^24.0.0`.
 
 ```sh
 npm ci           # install from package-lock.json

@@ -245,10 +245,10 @@ is one file away and `base: './'` cannot survive it: `/tanks/foo/bar` would serv
 `index.html` whose `./assets/…` resolves to `/tanks/foo/assets/…`. This is *the* known
 failure mode of a relative base.
 
-**5. Untested claim, recorded rather than asserted:** the deploy builds only on Node 22
-while `ci.yml` also builds on 20.19.0. Whether the two produce byte-identical bundles is
-unmeasured. Nothing ships from the 20.19.0 build, so there is no path to the live site —
-but "some CI job already built this bundle" is not a thing anyone has shown.
+**5. Untested claim, recorded rather than asserted:** CI and the deploy both build on the
+Node 24 LTS line, but the deploy does not reuse CI's artifact. Whether two separate builds
+produce byte-identical bundles is unmeasured. Nothing ships from the Node 22.13.0 floor
+build, so there is no path from that build to the live site.
 
 **6. No Open Graph or canonical tags** in `dist/index.html` (0 matches for
 `og:|twitter:|rel="canonical"`), so sharing the link gives no preview card.
@@ -403,8 +403,8 @@ gesture path all ship today. What is missing is the store-quality shell — and 
   constants and restores them; it has never been pointed at a phone. Prove the knob is wired
   first: identical p50 across passes means a dead knob.
 - Decide Capacitor vs Tauri v2 by enumerating the native surface actually wanted (my read:
-  haptics, orientation lock, edge-to-edge, splash, nothing else). Note Capacitor 8 requires
-  Node 22+, which sits above this repo's declared floor of 20.19.0.
+  haptics, orientation lock, edge-to-edge, splash, nothing else). Capacitor 8 requires
+  Node 22+, which now matches this repo's declared floor of 22.13.0.
 
 **Two calendar constraints that no engineering shortens**, both re-verified 2026-08-10: a
 personal Play account created after 2023-11-13 must run a closed test with **12 testers

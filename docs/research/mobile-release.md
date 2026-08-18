@@ -372,9 +372,9 @@ The axis that matters is whether the three.js renderer survives untouched.
   ([capacitorjs.com/docs/updating/8-0](https://capacitorjs.com/docs/updating/8-0), checked
   2026-08-09): `minSdkVersion` 24, `compileSdkVersion` 36, `targetSdkVersion` 36, Xcode
   26.0+, iOS deployment target 15.0, and "Capacitor 8 requires NodeJS 22 or greater".**
-  That last one **conflicts with this repo's declared floor** — `package.json` `engines` is
-  `^20.19.0 || ^22.13.0 || >=24.0.0` and CI runs on Node 20.19.0 and 22. The wrapper's build
-  toolchain would need Node 22+, which is a decision to record rather than discover.
+  That last requirement **now aligns with this repo's declared floor** — `package.json`
+  `engines` is `^22.13.0 || ^24.0.0` and CI pins Node 22.13.0 plus the Node 24 LTS
+  line. The earlier Node 20 conflict ended when the EOL runtime left the support matrix.
   (An earlier draft said Android API 23+; the primary doc says 24.)
   > **UNSUPPORTED:** "Capacitor is MIT-licensed" — trivially checkable in the
   > `ionic-team/capacitor` LICENSE file, but not checked for this document.
@@ -458,9 +458,8 @@ The axis that matters is whether the three.js renderer survives untouched.
    the gallery and look at the coverage. If portrait crops the arena, lock landscape in the
    native manifest/plist rather than fighting the camera.
 6. **Capacitor or Tauri v2?** Both preserve the renderer identically, so the deciding
-   factors are plugin ecosystem and toolchain weight — plus Capacitor 8's Node 22+
-   requirement against this repo's Node 20.19.0 floor. Enumerate the native surface actually
-   wanted (my read: haptics, orientation lock, edge-to-edge, splash, nothing else) and check
+   factors are plugin ecosystem and toolchain weight. Capacitor 8's Node 22+ requirement
+   now matches this repo's Node 22.13.0 floor. Enumerate the native surface actually wanted (my read: haptics, orientation lock, edge-to-edge, splash, nothing else) and check
    it against both. If the list stays short, Capacitor's zero-Rust toolchain wins on setup
    cost.
 7. **Is a save export/import worth building?** A product decision. Answer "no" explicitly if
