@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
-import type { Wall, TankKind } from '../sim/types';
+import type { Wall, TankKind, Tank } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
 import { BULLET_RADIUS, SHELL_SPAWN_FORWARD, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
@@ -98,6 +98,23 @@ function identityColor(slot: number): number {
 export const TEAM_COLORS: readonly [number, number] = [0xff3b3b, 0x3b82ff];
 function teamColor(team: number): number {
   return TEAM_COLORS[team] ?? IDENTITY_COLOR_FALLBACK;
+}
+
+/**
+ * The shared team/identity dispatch, factored out (issue #200's death-pulse work) so
+ * `syncTanks`'s ring/spawn-ring sites, `shellTintFor` and `death-pulse.ts`'s own ring
+ * all agree on one function instead of three copies of `curr.mode === 'teams' ?
+ * teamColor(...) : identityColor(...)` -- `loop.ts::deathVignetteColor` used to keep a
+ * FOURTH copy that indexed `TEAM_COLORS`/`IDENTITY_RING_COLORS` directly rather than
+ * calling `teamColor`/`identityColor`, which is why it fell back to
+ * `SINGLE_PLAYER_DEATH_VIGNETTE` (red) instead of `IDENTITY_COLOR_FALLBACK` (white) on
+ * an out-of-range slot -- unreached today (`players` caps at 4, matching both
+ * palettes' length) and not pinned by any test, so folding it into this fallback
+ * changes no observed behaviour. `tank.team ?? 0`/`tank.controlledBy ?? 0` mirror the
+ * defensive fallbacks the three existing call sites already use.
+ */
+export function resolveOwnerColor(world: World, tank: Tank): number {
+  return world.mode === 'teams' ? teamColor(tank.team ?? 0) : identityColor(tank.controlledBy ?? 0);
 }
 
 /**
@@ -1281,7 +1298,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // defensive fallback for a hand-built fixture, not a reachable campaign state.
       if (t.kind === 'player') {
         if (multiPlayer && !view.ring) {
-          const color = curr.mode === 'teams' ? teamColor(t.team ?? 0) : identityColor(slot);
+          const color = resolveOwnerColor(curr, t);
           view.ring = makeIdentityRing(color);
           view.group.add(view.ring);
         } else if (!multiPlayer && view.ring) {
@@ -1317,7 +1334,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         const enteredRound = curr.roundStartTick !== prev.roundStartTick;
         if ((enteredRespawn || enteredRound) && !view.spawn) {
           const variant = DEFAULT_SPAWN_ANIM; // per-slot selection arrives with the picker UI
-          const color = curr.mode === 'teams' ? teamColor(t.team ?? 0) : identityColor(slot);
+          const color = resolveOwnerColor(curr, t);
           const ring = makeSpawnRing(color);
           view.group.add(ring);
           view.spawn = { variant, elapsed: 0, ring };
@@ -1382,7 +1399,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     if (!owner || owner.kind !== 'player') return null;
     // n-player arc PR 4: teams mode tints by TEAM, mirroring the ring dispatch above --
     // see its own comment for why `t.team ?? 0`'s fallback is defensive, not reachable.
-    return curr.mode === 'teams' ? teamColor(owner.team ?? 0) : identityColor(owner.controlledBy ?? 0);
+    return resolveOwnerColor(curr, owner);
   }
 
   function syncBullets(prev: World, curr: World, alpha: number, multiPlayer: boolean): void {

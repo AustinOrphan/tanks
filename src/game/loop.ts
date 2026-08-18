@@ -50,7 +50,7 @@ import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import { createGameStateMachine, type GameStateMachine } from './state';
 import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
@@ -418,18 +418,20 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
  * invariant does not apply here, but the same fact this file already relies on for
  * `driver.world.lives` above does -- a destroyed tank stays in `world.tanks` (`alive:
  * false`, never spliced, see world.ts/bullets.ts/mines.ts) -- so the lookup finds it.
- * Falls back to the classic red if the tank cannot be found (should not happen) or its
- * slot has no assigned colour (unreached today: `players` caps at 4, matching both
- * palettes' length).
+ * Falls back to the classic red if the tank cannot be found (should not happen). The
+ * multiplayer branch delegates to `resolveOwnerColor` (`render/entities.ts`, issue
+ * #200's death-pulse work) -- the same team/identity dispatch `syncTanks`'s own
+ * ring/spawn-ring sites and `shellTintFor` use, rather than a fourth copy that indexed
+ * `TEAM_COLORS`/`IDENTITY_RING_COLORS` directly. That used to mean an out-of-range slot
+ * fell back to this file's red instead of `resolveOwnerColor`'s white; unreached today
+ * (`players` caps at 4, matching both palettes' length) and not pinned by any test, so
+ * folding it in changes no observed behaviour.
  */
 export function deathVignetteColor(world: World, playerId: number, playerCount: number): number {
   if (playerCount === 1) return SINGLE_PLAYER_DEATH_VIGNETTE;
   const tank = world.tanks.find((t) => t.id === playerId);
   if (!tank) return SINGLE_PLAYER_DEATH_VIGNETTE;
-  if (world.mode === 'teams') {
-    return TEAM_COLORS[tank.team ?? 0] ?? SINGLE_PLAYER_DEATH_VIGNETTE;
-  }
-  return IDENTITY_RING_COLORS[tank.controlledBy ?? 0] ?? SINGLE_PLAYER_DEATH_VIGNETTE;
+  return resolveOwnerColor(world, tank);
 }
 
 /**
