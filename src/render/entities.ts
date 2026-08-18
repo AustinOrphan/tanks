@@ -429,6 +429,8 @@ interface SpawnViewState {
 interface TankView {
   group: THREE.Group;
   turret: THREE.Object3D;
+  /** Body/tracks/turret, scaled by the spawn animation -- see makeTank's own comment. */
+  visual: THREE.Group;
   kind: TankKind;
   gen: number;
   ring: THREE.Mesh | null;
@@ -862,8 +864,22 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     uv.needsUpdate = true;
   }
 
-  function makeTank(kind: TankKind, controlledBy?: number): { group: THREE.Group; turret: THREE.Object3D } {
+  function makeTank(
+    kind: TankKind,
+    controlledBy?: number,
+  ): { group: THREE.Group; turret: THREE.Object3D; visual: THREE.Group } {
     const group = new THREE.Group();
+    // Everything that should shrink/grow with the spawn animation's tankScale --
+    // body, tracks, turret -- lives under this SEPARATE group rather than directly
+    // under `group`. Rings (identity, spawn) are added straight to `group` as
+    // siblings of `visual`, so scaling `visual` alone leaves them at their own
+    // authored world-space radius: `group`'s own scale is never touched, which is
+    // what stops three's parent x child scale composition from also shrinking a
+    // ring that happens to share the tank's origin. `visual`'s local origin
+    // coincides with `group`'s (no offset), so scaling it reproduces exactly the
+    // "shrink toward the ground point" look scaling `group` itself used to give.
+    const visual = new THREE.Group();
+    group.add(visual);
     // Resolved per-tank from its OWN slot -- see styleFor -- not off a single global,
     // so two player-kind tanks in the same world can carry different paint.
     const style = kind === 'player' ? styleFor(controlledBy ?? 0) : null;
@@ -940,7 +956,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     body.position.y = HULL_RIDE + bodyH / 2;
     body.castShadow = true;
     body.receiveShadow = true;
-    group.add(body);
+    visual.add(body);
 
     // Tracks: darker and rougher than the painted hull, because they are steel that
     // spends its life in the dirt. Same colour family so the tank still reads as one
@@ -967,7 +983,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       track.position.set(0, TRACK_H / 2, side * (HULL_WIDTH / 2 - TRACK_W / 2));
       track.castShadow = true;
       track.receiveShadow = true;
-      group.add(track);
+      visual.add(track);
     }
 
     const turret = new THREE.Group();
@@ -1012,10 +1028,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     barrel.name = 'barrel';
     barrel.castShadow = true;
     turret.add(barrel);
-    group.add(turret);
+    visual.add(turret);
 
     scene.add(group);
-    return { group, turret };
+    return { group, turret, visual };
   }
 
   /** Visual proportions of a shell. The sim's BULLET_RADIUS (0.1) is its collision size;
@@ -1306,7 +1322,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
           } else {
             // Done: restore solid, drop the ring, clear state.
             setTankOpacity(view, 1);
-            view.group.scale.setScalar(1);
+            view.visual.scale.setScalar(1);
             disposeObject(spawn.ring);
             view.group.remove(spawn.ring);
             view.spawn = null;
@@ -1314,7 +1330,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
           }
           if (frame) {
             setTankOpacity(view, frame.tankOpacity);
-            view.group.scale.setScalar(frame.tankScale);
+            view.visual.scale.setScalar(frame.tankScale);
             spawn.ring.scale.setScalar(frame.ring.radius);
             (spawn.ring.material as THREE.MeshBasicMaterial).opacity = frame.ring.opacity;
             applyRingArc(spawn.ring, frame.ring.arc);

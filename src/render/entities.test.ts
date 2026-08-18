@@ -799,16 +799,13 @@ describe('the paint shop (player colour override)', () => {
     expect(partColor(7, 'track')).toBe(enemyTrackBefore);
     expect(partMap(7, 'hull')).toBe(enemyMapBefore);
 
-    // And back to the roster default.
+    // And back to the roster default. partColor walks to the top tank group (past the
+    // spawn-anim `visual` group), so it is robust to the scene-graph depth the
+    // visual-group split added; the old inline `o.parent.position.x === 3` check assumed
+    // the hull's DIRECT parent was the tank group, which the split made false.
     views.setPlayerStyle(null, 'solid', null);
     views.sync(w, w, 0);
-    let restored = -1;
-    scene.traverse((o) => {
-      if (o.name === 'hull' && (o.parent as THREE.Group).position.x === 3) {
-        restored = ((o as THREE.Mesh).material as THREE.MeshStandardMaterial).color.getHex();
-      }
-    });
-    expect(restored).toBe(0x3d7bd6); // the roster's player blue
+    expect(partColor(3, 'hull')).toBe(0x3d7bd6); // the roster's player blue
     views.dispose();
   });
 });
@@ -2043,6 +2040,31 @@ describe('spawn animation (#199)', () => {
     views.dispose();
   });
 
+  it("holds the spawn ring at its OWN world-space radius, independent of the tank's scale", () => {
+    // spawn-anim.ts's RING_BASE_R comment: "base radius is 1 world unit so a frame's
+    // `ring.radius` is a direct world-space radius" -- that contract breaks if the ring
+    // is a scaled child of a parent that is ALSO scaled (three composes parent x child
+    // scale). DEFAULT_SPAWN_ANIM is 'warp'; at entrance progress 0.5 its tankScale is
+    // 0.6 + 0.4*0.5 = 0.8 (provably not 1) and its ring.radius is 0.4 + 1.6*0.5 = 1.2.
+    // dt 0.25 against ENTRANCE_SECONDS 0.5 lands exactly on that midpoint.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    const curr = alivePlayerWorld(undefined, 0);
+    views.sync(prev, curr, 1, 0.25);
+    const ring = findByName(scene, 'spawn-ring') as THREE.Mesh;
+    expect(ring).toBeTruthy();
+    // Mutation that breaks this: scaling the ring's own parent by tankScale (or any
+    // ancestor shared with the tank's visible parts) instead of leaving the ring's
+    // ancestor chain at scale 1 -- getWorldScale is the composed, on-screen scale,
+    // not the ring's own local `.scale`, so it catches exactly that composition bug.
+    const worldScale = ring.getWorldScale(new THREE.Vector3());
+    expect(worldScale.x).toBeCloseTo(1.2, 5);
+    expect(worldScale.y).toBeCloseTo(1.2, 5);
+    expect(worldScale.z).toBeCloseTo(1.2, 5);
+    views.dispose();
+  });
+
   it('starts the entrance on a campaign round restart even though the tank was alive in both frames', () => {
     // resetArena (world.ts) revives the player AND bumps roundStartTick in the SAME
     // tick, so campaign's single-player respawn can go straight from alive->alive and
@@ -2105,6 +2127,43 @@ describe('spawn animation (#199)', () => {
     scene.traverse((o) => {
       if (o.name === 'spawn-ring') ringCount++;
     });
+    expect(ringCount).toBe(1);
+    views.dispose();
+  });
+
+  // A second tank, alongside the player, whose own roundStartTick this test drives
+  // through a change -- resetArena revives EVERY tank and bumps roundStartTick once
+  // for the whole world, so an enemy sees the exact same `enteredRound` signal the
+  // player does. Only the `t.kind === 'player'` guard is what keeps it from also
+  // getting an entrance; the death effect for enemies is a separate issue (#199's own
+  // brief says so explicitly), so this pins that enemies get NONE, not some other
+  // treatment.
+  function playerAndEnemyWorld(roundStartTick: number): World {
+    const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: true };
+    const enemy: Tank = makeTank(2, 'brown', 8, 8);
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: { x: 5, y: 5 }, angle: 0 },
+      { kind: 'brown', pos: { x: 8, y: 8 }, angle: 0 },
+    ];
+    const w = createWorld({ walls: [], tanks: [p, enemy], spawns, lives: 3 });
+    w.roundStartTick = roundStartTick;
+    return w;
+  }
+
+  it('never starts a spawn entrance for an enemy tank, even on a campaign round restart', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = playerAndEnemyWorld(1);
+    const curr = playerAndEnemyWorld(5); // resetArena-style roundStartTick bump, both tanks alive throughout
+    views.sync(prev, curr, 1, 0.016);
+    let ringCount = 0;
+    scene.traverse((o) => {
+      if (o.name === 'spawn-ring') ringCount++;
+    });
+    // Exactly 1: the player's own entrance ring fires (roundStartTick changed) --
+    // this is not "no rings ever", it is "the enemy specifically gets none".
+    // Mutation that breaks this: dropping the `t.kind === 'player'` guard, which
+    // would also start an entrance for the enemy (ringCount 2, not 1).
     expect(ringCount).toBe(1);
     views.dispose();
   });
