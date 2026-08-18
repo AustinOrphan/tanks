@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { pickVersusSpawnCell, wallsForQuery, type Cell } from './versus-spawns';
+import { pickVersusSpawnCell, pickVersusSpawnSet, wallsForQuery, type Cell } from './versus-spawns';
 import { lineOfSight } from './ai/targeting';
-import { loadArena, ARENAS } from './arena';
+import { loadArena, ARENAS, ARENA_DEFS } from './arena';
 import type { WallKind } from './types';
 
 // ---------------------------------------------------------------------------
@@ -120,6 +120,68 @@ describe('pickVersusSpawnCell: hard LOS filter overrides raw distance', () => {
     // (row2,col6) -- a tie, (row,col)-ascending picks the row0 one.
     const cell = pickVersusSpawnCell(grid, 7, 3, 1, legend, [p1]);
     expect(cell).toEqual<Cell>({ row: 0, col: 6 });
+  });
+});
+
+describe('pickVersusSpawnCell: EUCLIDEAN breaks a geodesic tie', () => {
+  it('among cells that are all geodesically unreachable, picks the physically farthest, not the (row, col)-earliest', () => {
+    // A solid wall runs the full height of the board at col 5, partitioning it. Nothing
+    // on the right is reachable from p1 on the left, so EVERY right-hand candidate scores
+    // Infinity on geodesic distance and they all tie. The LOS filter has already
+    // restricted the pool to the right-hand side (the left half is one open room, so
+    // every cell in it is plainly visible from p1; the wall hides every cell beyond it).
+    //
+    // With the tie unresolved, (row, col) order decides and hands back (0, 6) -- hard
+    // against the far side of the wall, 6.32 world units from p1. MEASURED, by running
+    // this exact fixture with the Euclidean key removed: it returns {row: 0, col: 6}.
+    // With the key in place it returns the farthest of the tied cells instead, 11.18
+    // units away. This is the shape of the real defect it was added for: on arena-02,
+    // whose centre barrier partitions the board, the 2-player spawns came out 2.67 world
+    // units apart through the wall.
+    const legend: Record<string, WallKind> = { x: 'solid' };
+    const grid = ['.....x......', '.....x......', '.....x......', '.....x......', '.....x......'];
+    const p1 = { x: 0.5, y: 2.5 }; // row 2, col 0
+
+    const cell = pickVersusSpawnCell(grid, 12, 5, 1, legend, [p1]);
+    expect(cell).toEqual<Cell>({ row: 0, col: 11 });
+
+    // Pins the PREMISE the conclusion rests on, so this cannot quietly become a test
+    // about something else: the pick really is unreachable, and it really is farther
+    // away in a straight line than the cell positional order would have chosen.
+    const walls = wallsForQuery(grid, 12, 5, 1, legend);
+    expect(lineOfSight(p1, { x: 11.5, y: 0.5 }, walls), 'the winner is hidden from p1').toBe(false);
+    expect(lineOfSight(p1, { x: 6.5, y: 0.5 }, walls), 'so is the cell positional order prefers').toBe(false);
+    const d = (x: number, y: number) => Math.hypot(x - p1.x, y - p1.y);
+    expect(d(11.5, 0.5)).toBeGreaterThan(d(6.5, 0.5));
+  });
+});
+
+describe('pickVersusSpawnSet: the relaxation pass runs to convergence, not one round', () => {
+  it('arena-04 at 3 players lands on the set only multi-round coordinate ascent reaches', () => {
+    // VERSUS_RELAX_ROUNDS caps the coordinate-ascent loop; the loop exits early as soon
+    // as a full round accepts nothing, so on this board it is convergence that decides
+    // the answer, not the cap. This pins that the loop is actually allowed to converge.
+    //
+    // MEASURED with the cap forced to 1: arena-04 at N=3 returns (0,30) (32,44) (23,0)
+    // instead, and 3 other (arena, count) pairs move as well -- arena-01 and arena-03 at
+    // N=3, and arena-05 at N=4. So a cap of 1 is caught here, on the first of those.
+    const arena = ARENA_DEFS.find((a) => a.id === 'arena-04')!;
+    const cells = pickVersusSpawnSet(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 3);
+    expect(cells).toEqual<Cell[]>([
+      { row: 0, col: 26 },
+      { row: 32, col: 44 },
+      { row: 24, col: 0 },
+    ]);
+  });
+
+  it('returns exactly `count` distinct cells for every count 1..4, on all 5 shipped arenas', () => {
+    for (const arena of ARENA_DEFS) {
+      for (const n of [1, 2, 3, 4]) {
+        const cells = pickVersusSpawnSet(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, n);
+        expect(cells.length, `${arena.id}/n=${n}`).toBe(n);
+        expect(new Set(cells.map((c) => `${c.row},${c.col}`)).size, `${arena.id}/n=${n}`).toBe(n);
+      }
+    }
   });
 });
 
