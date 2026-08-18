@@ -26,7 +26,7 @@ function world(tanks: Tank[], walls: Wall[] = []): World {
   return {
     tick: 0, nextId: 100, seed: 1, tanks, bullets: [], mines: [], blasts: [], walls,
     spawns: [], status: 'playing', lives: 3, roundStartTick: 0, unarmedTrigger: 'none' as const,
-    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true,
+    corpseBlocksShells: false, muzzleClearsTanks: true, coopAttempts: true, mode: 'campaign-coop', friendlyFire: false,
   };
 }
 

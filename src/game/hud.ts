@@ -1,5 +1,8 @@
 import type { GameState } from './state';
 import type { StatCounts } from './stats';
+import type { Assignment, SlotSource } from '../input/assignment';
+import type { DetectedPad } from '../input/gamepad';
+import { teamOf } from '../sim/arena';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
@@ -17,8 +20,6 @@ export interface RoundPhaseInfo {
   phase: RoundPhase;
   /** Whole seconds left in this phase. */
   secondsLeft: number;
-  /** Centred banner when true, topbar chip when false. */
-  prominent: boolean;
 }
 
 export interface Hud {
@@ -69,8 +70,19 @@ export interface Hud {
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
   /**
-   * Round-start phase feedback. `null` hides it. `prominent` picks the centred
-   * banner over the topbar chip; the caller decides which, not the HUD.
+   * Round-start countdown. `null` hides it; otherwise a bare number, centred and
+   * transient -- it pops in and fades out (the `hud-count-pop` keyframes, applied via
+   * the `.hud-count--pop` class, in hud.css) rather than sitting on screen, so it
+   * never obscures the board it counts down over. Design
+   * ruling: no word ("AIM"/"TAKE AIM"), just the number, and it shows on EVERY
+   * round -- there is no "first round only" teaching form. `setRoundPhase` is
+   * phase-agnostic: any phase other than `'live'` shows the number, unconditionally.
+   *
+   * `GRACE_TICKS` is 0 today, so the `'grace'` phase never actually occurs in play.
+   * If it is ever switched back on, this will show a second 3-2-1 immediately after
+   * the countdown's, with nothing distinguishing the two -- a known, deliberate gap.
+   * Shipping phase-specific presentation for a phase nothing can currently reach
+   * would be speculative CSS for code no test exercises.
    *
    * Shipped on: the round opens with 3.0s in which nothing moves, and without
    * this the player presses a direction and the game appears broken.
@@ -137,6 +149,19 @@ export interface Hud {
    * by the same win/lose visibility rule.
    */
   setCoopKills(counts: number[] | null): void;
+  /**
+   * Versus's per-player kill/death tally (n-player arc PR 4), the FFA/teams twin of
+   * `setCoopKills` -- same `null`-means-never-show convention, same toggle-on-win/lose
+   * lifecycle, but a genuinely different selector/line: `setCoopKills` is enemy-kill-
+   * only and campaign-coop-scoped; this is player-vs-player and ffa/teams-scoped. The
+   * two are mutually exclusive per session (a world has exactly one `mode`), but kept
+   * as separate calls/selectors rather than one payload with a mode field, so neither
+   * line's rendering has to branch on data it was never given for its own mode.
+   * `kills`/`deaths` are per-slot (`Tank.controlledBy`); `mode === 'teams'` renders a
+   * PER-TEAM sum (`teamOf(slot)`, sim/arena.ts) instead of per-slot, since teams mode
+   * cares which SIDE won, not which teammate scored -- see arena.ts's `teamOf`.
+   */
+  setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void;
   /** Two-click-confirmed on the stats page. */
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
@@ -239,6 +264,47 @@ export interface Hud {
   signalPlayerFire(): void;
   /** Fired with the skin id when the player clicks one. */
   onPickSkin(cb: (id: SkinId) => void): void;
+  /**
+   * The controller assignment UI's one write path: fired with the slot index and the
+   * candidate `SlotSource` when a row's source button is clicked. `loop.ts`'s
+   * `reassignSlot` is the one production subscriber -- see its own doc comment for what
+   * happens on the other side (rebuild-don't-re-point, immediate position seeding, the
+   * incremental `botSources` update).
+   */
+  onReassignSlot(cb: (slot: number, source: SlotSource) => void): void;
+  /**
+   * The session-held `Assignment` to render, pushed by `loop.ts` at boot and after every
+   * accepted `reassignSlot`. Only re-renders if the panel is open (same convention
+   * `setAchievements` uses) -- rebuilding a hidden panel's rows on every tick's worth of
+   * reassignments would be wasted work.
+   */
+  setControllers(assignment: Assignment): void;
+  /**
+   * The panel's live candidate-pad list, pushed by `loop.ts` while `.hud-controllers` is
+   * open (see `onControllersOpen`/`onControllersClose`) -- one call on open (`getGamepads`
+   * read once immediately, since the browser's `gamepadconnected`/`gamepaddisconnected`
+   * events fire only on CHANGE) and one per hotplug event after that. A `'gamepad'`-kind
+   * row's connected/disconnected display is DERIVED from this list, not a separate flag:
+   * the panel's live pad list IS what "connected" means here.
+   */
+  setDetectedPads(pads: readonly DetectedPad[]): void;
+  /**
+   * Whether the panel may OFFER `'bot'` as a candidate source (`assignment.ts`'s
+   * `botAssignmentAllowed`). Defaults to false and must be pushed in, so a wiring
+   * omission fails CLOSED -- no bot option anywhere, which is visible -- rather than
+   * open, which would restore the exact hole this exists to shut.
+   */
+  setBotAssignmentAllowed(allowed: boolean): void;
+  /**
+   * The Controllers panel just became visible/hidden -- the ONE chokepoint for both
+   * transitions (the Back button and `setState`'s unconditional close), same shape as
+   * `onCustomizeOpen`/`onCustomizeClose`. `loop.ts` adds/removes its
+   * `gamepadconnected`/`gamepaddisconnected` window listeners here, scoped to exactly
+   * while the panel that reads them is on screen -- the driver does not tick during
+   * title/paused, so nothing else would refresh the panel's live pad list.
+   */
+  onControllersOpen(cb: () => void): void;
+  onControllersClose(cb: () => void): void;
   dispose(): void;
 }
 
@@ -290,7 +356,6 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
-      <div class="hud-phase hud-phase--hidden"></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
@@ -302,10 +367,7 @@ export function createHud(root: HTMLElement): Hud {
         <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
       </div>
     </div>
-    <div class="hud-banner hud-banner--hidden">
-      <div class="hud-banner-word"></div>
-      <div class="hud-banner-count"></div>
-    </div>
+    <div class="hud-count hud-count--hidden"></div>
     <div class="hud-damage" aria-hidden="true"></div>
     <!-- Where the thumbs are, drawn back on screen. Playtest feedback: with nothing
          rendered, the aiming thumb gave no clue which way the shot was going, and the
@@ -366,6 +428,20 @@ export function createHud(root: HTMLElement): Hud {
       <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
       <button class="hud-levelselect-back" type="button">Back</button>
+    </div>
+    <!-- The controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
+         assignment.md): ONE panel, TWO entry points -- the title screen's own open
+         button below, and .hud-panel-settings' presence at 'paused' too (in case a
+         controller disconnects mid-round). Unlike its four siblings above/below, this
+         one is NOT title-only, so its Back button cannot hardcode setState('title') --
+         see handleControllersBack, which routes to shownState instead. The heading
+         text itself branches on shownState too, in showControllers. -->
+    <div class="hud-controllers hud-controllers--hidden" tabindex="-1" aria-labelledby="hud-controllers-title">
+      <h1 class="hud-controllers-title" id="hud-controllers-title"></h1>
+      <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
+           convention setLevelSelect already uses for .hud-levels. -->
+      <div class="hud-controller-rows"></div>
+      <button class="hud-controllers-back" type="button">Back</button>
     </div>
     <div class="hud-customize hud-customize--hidden" tabindex="-1" aria-labelledby="hud-customize-title">
       <h1 id="hud-customize-title">Customize</h1>
@@ -459,6 +535,7 @@ export function createHud(root: HTMLElement): Hud {
       <p class="hud-subtitle"></p>
       <p class="hud-attempt-summary hud-attempt-summary--hidden"></p>
       <p class="hud-coop-kills hud-coop-kills--hidden"></p>
+      <p class="hud-versus-results hud-versus-results--hidden"></p>
       <!-- The title state's action button, split in two (issue #135): Continue resumes
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
@@ -470,6 +547,10 @@ export function createHud(root: HTMLElement): Hud {
       <button class="hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
       <button class="hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
       <button class="hud-levelselect-open hud-levelselect-open--hidden" type="button">Levels</button>
+      <!-- Visible at title AND paused -- the one new variant of this file's per-button
+           visibility pattern, precedented by .hud-panel-settings itself already showing
+           at both those states (see setState). -->
+      <button class="hud-controllers-open hud-controllers-open--hidden" type="button">Controllers</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
@@ -496,10 +577,7 @@ export function createHud(root: HTMLElement): Hud {
   `;
   root.appendChild(el);
 
-  const phaseEl = el.querySelector('.hud-phase') as HTMLElement;
-  const bannerEl = el.querySelector('.hud-banner') as HTMLElement;
-  const bannerWordEl = el.querySelector('.hud-banner-word') as HTMLElement;
-  const bannerCountEl = el.querySelector('.hud-banner-count') as HTMLElement;
+  const countEl = el.querySelector('.hud-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const splashEl = el.querySelector('.hud-splash') as HTMLElement;
@@ -525,6 +603,15 @@ export function createHud(root: HTMLElement): Hud {
   const panel = el.querySelector('.hud-panel') as HTMLElement;
   const titleEl = el.querySelector('.hud-title') as HTMLElement;
   const subtitleEl = el.querySelector('.hud-subtitle') as HTMLElement;
+  /**
+   * The one write path for the panel subtitle. An empty string HIDES the element rather
+   * than leaving it empty in the flow -- see `.hud-subtitle--hidden` in hud.css for why
+   * blanking alone is not enough under a gapped flex column.
+   */
+  function setSubtitle(text: string): void {
+    subtitleEl.textContent = text;
+    subtitleEl.classList.toggle('hud-subtitle--hidden', text === '');
+  }
   const actionBtn = el.querySelector('.hud-action') as HTMLButtonElement;
   const continueBtn = el.querySelector('.hud-continue') as HTMLButtonElement;
   const newGameBtn = el.querySelector('.hud-new-game') as HTMLButtonElement;
@@ -552,11 +639,17 @@ export function createHud(root: HTMLElement): Hud {
   const toastsEl = el.querySelector('.hud-toasts') as HTMLElement;
   const attemptSummaryEl = el.querySelector('.hud-attempt-summary') as HTMLElement;
   const coopKillsEl = el.querySelector('.hud-coop-kills') as HTMLElement;
+  const versusResultsEl = el.querySelector('.hud-versus-results') as HTMLElement;
   const panelSettings = el.querySelector('.hud-panel-settings') as HTMLElement;
   const levelSelectOpenBtn = el.querySelector('.hud-levelselect-open') as HTMLButtonElement;
   const levelSelectView = el.querySelector('.hud-levelselect') as HTMLElement;
   const levelSelectBackBtn = el.querySelector('.hud-levelselect-back') as HTMLButtonElement;
   const levelsRow = el.querySelector('.hud-levels') as HTMLElement;
+  const controllersOpenBtn = el.querySelector('.hud-controllers-open') as HTMLButtonElement;
+  const controllersView = el.querySelector('.hud-controllers') as HTMLElement;
+  const controllersTitleEl = el.querySelector('.hud-controllers-title') as HTMLElement;
+  const controllerRowsEl = el.querySelector('.hud-controller-rows') as HTMLElement;
+  const controllersBackBtn = el.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
   const panelVolumeEl = el.querySelector('.hud-panel-volume') as HTMLInputElement;
   const schemeToggleBtn = el.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
@@ -710,6 +803,10 @@ export function createHud(root: HTMLElement): Hud {
 
   const skinsRow = el.querySelector('.hud-skins') as HTMLElement;
   const pickSkinCbs: Array<(id: SkinId) => void> = [];
+  // The controller assignment UI's one write path -- see onReassignSlot's own doc
+  // comment. The panel that fires this lands separately; the subscription exists now so
+  // loop.ts's reassignSlot has somewhere real to register.
+  const reassignSlotCbs: Array<(slot: number, source: SlotSource) => void> = [];
   let earnedIds: ReadonlySet<AchievementId> = new Set();
   let currentSkin: SkinId = SKINS[0].id;
 
@@ -738,6 +835,12 @@ export function createHud(root: HTMLElement): Hud {
   let currentAccent: AccentId = ACCENTS[0].id;
   const customizeOpenCbs: Array<() => void> = [];
   const customizeCloseCbs: Array<() => void> = [];
+  const controllersOpenCbs: Array<() => void> = [];
+  const controllersCloseCbs: Array<() => void> = [];
+  let currentAssignment: Assignment = [];
+  let currentDetectedPads: readonly DetectedPad[] = [];
+  /** Fails closed: see setBotAssignmentAllowed's doc comment on the Hud interface. */
+  let botAssignmentAllowedNow = false;
 
   // One button per accent entry, built once, exactly like the hull swatches above --
   // reusing `.hud-swatch` rather than a new class, since it IS the same control: a
@@ -767,6 +870,9 @@ export function createHud(root: HTMLElement): Hud {
   let statsData: { lifetime: StatCounts; attempt: StatCounts } | null = null;
   /** `null` means "never show" (1P, or coop that has not started) -- see setCoopKills. */
   let coopKillsData: number[] | null = null;
+  /** `null` means "never show" (not a versus session, or one that has not started) --
+   *  see setVersusResults. */
+  let versusResultsData: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null = null;
 
   const pct = (num: number, den: number): string =>
     den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
@@ -821,6 +927,41 @@ export function createHud(root: HTMLElement): Hud {
     const [p1, p2] = coopKillsData;
     coopKillsEl.textContent = `P1: ${p1 ?? 0} · P2: ${p2 ?? 0}`;
     coopKillsEl.classList.remove('hud-coop-kills--hidden');
+  }
+
+  /**
+   * Twin of renderCoopKillLine, one line below it -- see setVersusResults' own doc
+   * comment for why this is a separate line rather than a mode branch inside that one.
+   * `mode === 'teams'` sums kills/deaths PER TEAM (`teamOf(slot)`) rather than showing
+   * one entry per slot: teams mode cares which SIDE won. ffa shows one entry per slot,
+   * kills/deaths as `k/d`.
+   */
+  function renderVersusResultsLine(): void {
+    if (!versusResultsData) {
+      versusResultsEl.classList.add('hud-versus-results--hidden');
+      return;
+    }
+    const { mode, kills, deaths } = versusResultsData;
+    const slots = Math.max(kills.length, deaths.length);
+    let text: string;
+    if (mode === 'teams') {
+      const teamKills = [0, 0];
+      const teamDeaths = [0, 0];
+      for (let slot = 0; slot < slots; slot++) {
+        const team = teamOf(slot);
+        teamKills[team] += kills[slot] ?? 0;
+        teamDeaths[team] += deaths[slot] ?? 0;
+      }
+      text = `Team 1: ${teamKills[0]}/${teamDeaths[0]} · Team 2: ${teamKills[1]}/${teamDeaths[1]}`;
+    } else {
+      const parts: string[] = [];
+      for (let slot = 0; slot < slots; slot++) {
+        parts.push(`P${slot + 1}: ${kills[slot] ?? 0}/${deaths[slot] ?? 0}`);
+      }
+      text = parts.join(' · ');
+    }
+    versusResultsEl.textContent = text;
+    versusResultsEl.classList.remove('hud-versus-results--hidden');
   }
 
   /**
@@ -923,6 +1064,127 @@ export function createHud(root: HTMLElement): Hud {
   }
 
   /**
+   * A candidate/current source's label. `'gamepad'` looks its `id` up in
+   * `currentDetectedPads` -- the panel's own live list, not a cached name -- falling
+   * back to `Controller ${padIndex}` when the browser reports an empty id (or, for a
+   * currently-assigned-but-disconnected pad, when the index is not in the list at all:
+   * a pad's id is unknowable once unplugged, so this is the honest fallback for both
+   * cases, not two different ones).
+   */
+  function slotSourceLabel(source: SlotSource): string {
+    switch (source.kind) {
+      case 'keyboard':
+        return 'Keyboard / Mouse / Touch';
+      case 'bot':
+        return 'Bot';
+      case 'none':
+        return 'Unassigned';
+      case 'gamepad': {
+        const live = currentDetectedPads.find((p) => p.padIndex === source.padIndex);
+        const name = live && live.id.length > 0 ? live.id : `Controller ${source.padIndex}`;
+        return `${name} (index ${source.padIndex})`;
+      }
+    }
+  }
+
+  /** The short label a CANDIDATE button carries -- `slotSourceLabel` minus the "Keyboard
+   *  / Mouse / Touch" and "Unassigned" prose, which read fine as a current-state summary
+   *  but not as a button someone is about to click. */
+  function candidateLabel(source: SlotSource): string {
+    switch (source.kind) {
+      case 'keyboard':
+        return 'Keyboard';
+      case 'bot':
+        return 'Bot';
+      case 'none':
+        return 'None';
+      case 'gamepad':
+        return slotSourceLabel(source);
+    }
+  }
+
+  function sameSource(a: SlotSource, b: SlotSource): boolean {
+    if (a.kind !== b.kind) return false;
+    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
+  }
+
+  /**
+   * REPLACE, never append -- the same "REPLACE, never append" convention `setLevelSelect`
+   * already uses, rebuilt on open and on every detection refresh (`setControllers`/
+   * `setDetectedPads`, each gated on the panel being open). One row per slot; one button
+   * per candidate source (Keyboard / Bot / None / one per currently detected pad index).
+   */
+  function renderControllerRows(): void {
+    controllerRowsEl.replaceChildren();
+    for (let slot = 0; slot < currentAssignment.length; slot++) {
+      const source = currentAssignment[slot];
+      const row = document.createElement('div');
+      row.className = 'hud-controller-row';
+
+      const label = document.createElement('span');
+      label.className = 'hud-controller-row-label';
+      label.textContent = `Player ${slot + 1}`;
+
+      const current = document.createElement('span');
+      current.className = 'hud-controller-row-current';
+      current.textContent = slotSourceLabel(source);
+      const disconnected =
+        source.kind === 'gamepad' && !currentDetectedPads.some((p) => p.padIndex === source.padIndex);
+      current.classList.toggle('hud-controller-row-current--disconnected', disconnected);
+      if (disconnected) current.textContent += ' — disconnected';
+
+      row.append(label, current);
+
+      // `'bot'` is offered only where a bot may legitimately drive a player tank -- see
+      // `botAssignmentAllowed`. Omitted from the list rather than rendered disabled: a
+      // greyed-out control in the campaign advertises a capability the campaign does not
+      // have, and `loop.ts` refuses the reassignment independently anyway.
+      const candidates: SlotSource[] = [
+        { kind: 'keyboard' },
+        ...(botAssignmentAllowedNow ? [{ kind: 'bot' } as SlotSource] : []),
+        { kind: 'none' },
+        ...currentDetectedPads.map((p): SlotSource => ({ kind: 'gamepad', padIndex: p.padIndex })),
+      ];
+      for (const candidate of candidates) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hud-controller-source-btn';
+        btn.textContent = candidateLabel(candidate);
+        btn.classList.toggle('hud-controller-source-btn--selected', sameSource(candidate, source));
+        const forSlot = slot; // captured per-iteration, not the loop's shared binding
+        btn.addEventListener('click', () => {
+          for (const cb of reassignSlotCbs) cb(forSlot, candidate);
+        });
+        row.appendChild(btn);
+      }
+      controllerRowsEl.appendChild(row);
+    }
+  }
+
+  /**
+   * The single chokepoint for both the panel's own Back button AND setState's
+   * unconditional close -- see onControllersOpen/onControllersClose's doc comment.
+   * Guarded on the ACTUAL transition, same as showCustomize, so loop.ts's window
+   * listener add/remove never sees a redundant open or close.
+   */
+  function showControllers(show: boolean): void {
+    const wasOpen = !controllersView.classList.contains('hud-controllers--hidden');
+    controllersView.classList.toggle('hud-controllers--hidden', !show);
+    panel.classList.toggle('hud-panel--hidden', show);
+    if (show) {
+      // The only copy that differs between the two entry points -- see this panel's own
+      // markup comment.
+      controllersTitleEl.textContent =
+        shownState === 'paused' ? 'Controllers' : "Choose who's playing";
+      renderControllerRows();
+      controllersView.focus();
+      if (!wasOpen) for (const cb of controllersOpenCbs) cb();
+    } else if (wasOpen) {
+      for (const cb of controllersCloseCbs) cb();
+    }
+  }
+
+  /**
    * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
    *
    * Only ONE of `panel`/`customizeView`/`statsView`/`achView`/`levelSelectView` is ever
@@ -945,11 +1207,11 @@ export function createHud(root: HTMLElement): Hud {
    * reachable by Tab, exactly as it was before this file existed.
    *
    * EVERY panel-open transition focuses the CONTAINER, never a control inside it --
-   * `showStats`/`showCustomize`/`showAchievements`/`showLevelSelect` above and setState's
-   * paused/win/lose/title branches below all call `.focus()` on the pane itself, which is
-   * exactly what `.hud-panel`'s own pre-existing `tabindex="-1"` did for the one
-   * transition this file used to handle (splash -> title) -- the other four panes now
-   * carry the same attribute for the same reason. An EARLIER version of this focused each
+   * `showStats`/`showCustomize`/`showAchievements`/`showLevelSelect`/`showControllers`
+   * above and setState's paused/win/lose/title branches below all call `.focus()` on the
+   * pane itself, which is exactly what `.hud-panel`'s own pre-existing `tabindex="-1"`
+   * did for the one transition this file used to handle (splash -> title) -- the other
+   * five panes now carry the same attribute for the same reason. An EARLIER version of this focused each
    * pane's first CONTROL instead, on the reasoning that arriving already positioned saves
    * a keypress. That reasoning was wrong: `isMuteHotkey`/`isPauseHotkey`
    * (`game/loop.ts`) both ignore any key whose `target.closest('input,button,select,
@@ -961,7 +1223,7 @@ export function createHud(root: HTMLElement): Hud {
    * container lands on control[0] exactly as it would have if this landed there directly.
    */
   function activePanelContainer(): HTMLElement | null {
-    for (const c of [panel, customizeView, statsView, achView, levelSelectView]) {
+    for (const c of [panel, customizeView, statsView, achView, levelSelectView, controllersView]) {
       if (getComputedStyle(c).display !== 'none') return c;
     }
     return null;
@@ -1277,6 +1539,23 @@ export function createHud(root: HTMLElement): Hud {
   levelSelectBackBtn.addEventListener('click', handleLevelSelectBack);
   levelSelectBackBtn.addEventListener('click', blurIfPointer);
 
+  const handleControllersOpen = (): void => showControllers(true);
+  // Back must route to `shownState`, NOT a hardcoded 'title' -- unlike every sibling
+  // panel above, this one is reachable from 'paused' too (owner ruling: "in case
+  // controllers disconnect"). Hardcoding 'title' would abandon a paused round on Back
+  // and desync the HUD's panel from the state machine -- CLAUDE.md names this exact
+  // class of defect as one this repo has shipped green before. `shownState` is already
+  // 'paused' or 'title' at open time -- it is what gated the open button's own
+  // visibility in the first place.
+  const handleControllersBack = (): void => {
+    showControllers(false);
+    setState(shownState);
+  };
+  controllersOpenBtn.addEventListener('click', handleControllersOpen);
+  controllersOpenBtn.addEventListener('click', blurIfPointer);
+  controllersBackBtn.addEventListener('click', handleControllersBack);
+  controllersBackBtn.addEventListener('click', blurIfPointer);
+
   // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
   // that action, under a label that says what it does at the title screen specifically.
   continueBtn.addEventListener('click', handleAction);
@@ -1300,6 +1579,12 @@ export function createHud(root: HTMLElement): Hud {
     showCustomize(false);
     achView.classList.add('hud-achievements--hidden');
     levelSelectView.classList.add('hud-levelselect--hidden');
+    // Routed through showControllers for the same reason as showCustomize above -- it
+    // must fire onControllersClose (loop.ts's window listener teardown) on EVERY exit,
+    // not only the panel's own Back button. Omitted, the panel -- and its live
+    // gamepadconnected/disconnected listeners -- would leak onto the live game on
+    // Resume, since 'paused' -> 'playing' is one of this function's own early returns.
+    showControllers(false);
     disarmReset();
     splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
@@ -1318,17 +1603,32 @@ export function createHud(root: HTMLElement): Hud {
       return;
     }
     panel.classList.remove('hud-panel--hidden');
-    // Quit belongs to the pause panel ALONE: a quit button on the win panel would be
-    // a second, untested path out of a finished game. The settings row serves the
-    // title (the main menu) and pause; win/lose stay verdict-only. Level select is a
-    // menu affair -- and only when there is a choice to make (see setLevelSelect).
+    // Quit belongs to the pause panel AND the level-cleared panel. It used to be pause
+    // alone, on the reasoning that "a quit button on the win panel would be a second,
+    // untested path out of a finished game" -- a directive overrides that: clearing a
+    // level must offer the main menu, not only Next Level. The objection was about
+    // TESTING, not about the path being wrong, so it is answered rather than ignored --
+    // hud.test.ts pins the visibility and label per state and loop.test.ts pins that the
+    // run survives the trip, which is the half a CSS class could never have guaranteed.
+    //
+    // Only the INTERMEDIATE win: a final win or a loss has already called endRun, so
+    // there is no run to return to and the panel is genuinely verdict-only there. Lose
+    // stays verdict-only for the same reason. Level select is a menu affair -- and only
+    // when there is a choice to make (see setLevelSelect).
+    const clearedIntermediate = s === 'win' && !!levelPos && levelPos.current < levelPos.total;
     shownState = s;
     statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
     customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
     achOpenBtn.classList.toggle('hud-achievements-open--hidden', s !== 'title');
     levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', s !== 'title' || !levelChoice);
-    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused');
+    quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !clearedIntermediate);
+    // "Quit" is the wrong word for leaving a level you just WON -- the run is preserved
+    // either way, but the copy should not imply abandoning it.
+    quitBtn.textContent = clearedIntermediate ? 'Main Menu' : 'Quit to Title';
     panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
+    // Visible at title AND paused -- the one new variant of this per-button visibility
+    // pattern, precedented by panelSettings itself just above.
+    controllersOpenBtn.classList.toggle('hud-controllers-open--hidden', s !== 'paused' && s !== 'title');
     // Continue/New Game replace the single action button AT TITLE ONLY -- Resume, Next
     // Level, Play Again and Retry all still route through actionBtn below, which is why
     // this toggles on `s === 'title'` alone rather than joining the group above.
@@ -1341,10 +1641,12 @@ export function createHud(root: HTMLElement): Hud {
     // Twin toggle for coop's kill line -- renderCoopKillLine re-hides it if
     // coopKillsData is null (1P, or coop that has not started), even at win/lose.
     coopKillsEl.classList.toggle('hud-coop-kills--hidden', s !== 'win' && s !== 'lose');
+    versusResultsEl.classList.toggle('hud-versus-results--hidden', s !== 'win' && s !== 'lose');
     if (s === 'win' || s === 'lose') renderCoopKillLine();
+    if (s === 'win' || s === 'lose') renderVersusResultsLine();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
-      subtitleEl.textContent = 'The arena waits.';
+      setSubtitle('The arena waits.');
       actionBtn.textContent = 'Resume';
       // The PANEL, not actionBtn -- see the tabindex note on the element and the
       // roving-focus doc comment above `activePanelContainer`. Focusing Resume directly
@@ -1365,21 +1667,21 @@ export function createHud(root: HTMLElement): Hud {
     panel.focus();
     if (s === 'title') {
       titleEl.textContent = 'TANKS!';
-      subtitleEl.textContent = 'Clear the arena. One shot kills anything.';
+      setSubtitle('');
     } else if (s === 'win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {
         titleEl.textContent = `Level ${levelPos.current} cleared!`;
-        subtitleEl.textContent = 'On to the next.';
+        setSubtitle('On to the next.');
         actionBtn.textContent = 'Next Level';
       } else {
         titleEl.textContent = 'You Win!';
-        subtitleEl.textContent = 'Arena cleared.';
+        setSubtitle('Arena cleared.');
         actionBtn.textContent = 'Play Again';
       }
     } else {
       titleEl.textContent = 'Game Over';
-      subtitleEl.textContent = 'Out of lives.';
+      setSubtitle('Out of lives.');
       actionBtn.textContent = 'Retry';
     }
   }
@@ -1408,6 +1710,12 @@ export function createHud(root: HTMLElement): Hud {
   // a handful of times a round, so skip the write when nothing changed.
   let lastLives: number | null = null;
   let lastEnemies: number | null = null;
+  // Same reasoning as lastLives/lastEnemies, plus a second job: it is the signal
+  // setRoundPhase uses to tell "still the same second" from "a new one arrived",
+  // which is what decides whether the pop animation restarts. Reset to null
+  // whenever the countdown hides, so the next time it shows -- even mid-count,
+  // e.g. resuming from pause -- reads as a fresh number and pops.
+  let lastCountShown: number | null = null;
 
   /**
    * Position a ring+knob pair from a `{originX, originY, x, y}` thumb reading. Shared by
@@ -1492,22 +1800,20 @@ export function createHud(root: HTMLElement): Hud {
     setMuted,
     setRoundPhase(info: RoundPhaseInfo | null): void {
       if (!info || info.phase === 'live') {
-        bannerEl.classList.add('hud-banner--hidden');
-        phaseEl.classList.add('hud-phase--hidden');
+        countEl.classList.add('hud-count--hidden');
+        lastCountShown = null;
         return;
       }
-      const word = info.phase === 'countdown' ? 'TAKE AIM' : 'MOVE';
-      const short = info.phase === 'countdown' ? 'AIM' : 'MOVE';
-      if (info.prominent) {
-        bannerWordEl.textContent = word;
-        bannerCountEl.textContent = String(info.secondsLeft);
-        bannerEl.classList.remove('hud-banner--hidden');
-        phaseEl.classList.add('hud-phase--hidden');
-      } else {
-        phaseEl.textContent = `${short} ${info.secondsLeft}`;
-        phaseEl.classList.remove('hud-phase--hidden');
-        bannerEl.classList.add('hud-banner--hidden');
-      }
+      countEl.classList.remove('hud-count--hidden');
+      if (info.secondsLeft === lastCountShown) return; // same second, still popping
+      lastCountShown = info.secondsLeft;
+      countEl.textContent = String(info.secondsLeft);
+      // Restart the pop animation even if one is already running -- same trick as
+      // signalPlayerDeath: consecutive seconds must each read as a fresh pop, not a
+      // continuation of the last one's fade-out.
+      countEl.classList.remove('hud-count--pop');
+      void countEl.offsetWidth;
+      countEl.classList.add('hud-count--pop');
     },
     setShellCount(info): void {
       if (!info) {
@@ -1566,6 +1872,10 @@ export function createHud(root: HTMLElement): Hud {
     setCoopKills(counts: number[] | null): void {
       coopKillsData = counts;
       if (!coopKillsEl.classList.contains('hud-coop-kills--hidden')) renderCoopKillLine();
+    },
+    setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void {
+      versusResultsData = data;
+      if (!versusResultsEl.classList.contains('hud-versus-results--hidden')) renderVersusResultsLine();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);
@@ -1626,6 +1936,32 @@ export function createHud(root: HTMLElement): Hud {
     },
     onPickSkin(cb: (id: SkinId) => void): void {
       pickSkinCbs.push(cb);
+    },
+    onReassignSlot(cb: (slot: number, source: SlotSource) => void): void {
+      reassignSlotCbs.push(cb);
+    },
+    // Unconditional, like setLevelSelect -- NOT gated on the panel being open (unlike
+    // setAchievements/setCoopKills' convention): "REPLACE, never append" means .hud-
+    // controller-rows stays current regardless of visibility, so a boot-time push (before
+    // the panel has ever opened) and a mid-session hotplug both land correctly whenever
+    // the panel is next shown, with no separate "refresh on open" path to keep in sync.
+    setControllers(assignment: Assignment): void {
+      currentAssignment = assignment;
+      renderControllerRows();
+    },
+    setDetectedPads(pads: readonly DetectedPad[]): void {
+      currentDetectedPads = pads;
+      renderControllerRows();
+    },
+    setBotAssignmentAllowed(allowed: boolean): void {
+      botAssignmentAllowedNow = allowed;
+      renderControllerRows();
+    },
+    onControllersOpen(cb: () => void): void {
+      controllersOpenCbs.push(cb);
+    },
+    onControllersClose(cb: () => void): void {
+      controllersCloseCbs.push(cb);
     },
     setTouchScheme(scheme: TouchScheme): void {
       currentScheme = scheme;
@@ -1701,6 +2037,10 @@ export function createHud(root: HTMLElement): Hud {
       levelSelectOpenBtn.removeEventListener('click', blurIfPointer);
       levelSelectBackBtn.removeEventListener('click', handleLevelSelectBack);
       levelSelectBackBtn.removeEventListener('click', blurIfPointer);
+      controllersOpenBtn.removeEventListener('click', handleControllersOpen);
+      controllersOpenBtn.removeEventListener('click', blurIfPointer);
+      controllersBackBtn.removeEventListener('click', handleControllersBack);
+      controllersBackBtn.removeEventListener('click', blurIfPointer);
       continueBtn.removeEventListener('click', handleAction);
       continueBtn.removeEventListener('click', blurIfPointer);
       newGameBtn.removeEventListener('click', handleNewGame);

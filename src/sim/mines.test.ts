@@ -34,6 +34,7 @@ function mkTank(p: Partial<Tank> & { id: number; kind: TankKind; pos: Vec2 }): T
     disarmed: p.disarmed,
     invincible: p.invincible,
     shieldUntilTick: p.shieldUntilTick,
+    team: p.team,
   }
 }
 
@@ -630,6 +631,54 @@ describe('blasts and shielded tanks (coop post-respawn immunity)', () => {
     expect(world.tanks.find((t) => t.id === 3)!.alive).toBe(false) // expired shield
     expect(world.tanks.find((t) => t.id === 4)!.alive).toBe(false) // mortal control
     expect(events.filter((e) => e.type === 'tank-destroyed').map((e) => (e as { tankId: number }).tankId).sort()).toEqual([3, 4]);
+  })
+})
+
+describe('blasts and friendly fire (n-player arc PR 4, teams mode)', () => {
+  // Team is a three-place concept (arc design); this is place 2 of 3, the sibling site
+  // isDamageImmune already touched once. Gate: `t.team !== undefined && ownerTeam !==
+  // undefined && t.team === ownerTeam && !world.friendlyFire`, ownerTeam resolved via
+  // the blast's CREDIT owner (mirrors how credit already resolves kill attribution
+  // elsewhere -- a shell detonating an enemy's mine credits the shooter, not the mine's
+  // owner). Mirrors isDamageImmune's own shape: stands in the blast unharmed, no event.
+  function fixture(friendlyFire: boolean, ownerTeam: number | undefined, targetTeam: number | undefined) {
+    const owner = mkTank({ id: 9, kind: 'player', pos: { x: 5, y: 5 }, team: ownerTeam })
+    const target = mkTank({ id: 2, kind: 'player', pos: { x: 1, y: 0 }, team: targetTeam })
+    const mortal = mkTank({ id: 3, kind: 'brown', pos: { x: -1, y: 0 } }) // lethality control
+    const world = createWorld({ walls: [], tanks: [owner, target, mortal], spawns: [], lives: 3, mode: 'teams', friendlyFire })
+    const mine: Mine = { id: 50, ownerId: 9, pos: { x: 0, y: 0 }, timer: 0, armed: true, detonated: false }
+    world.mines.push(mine)
+    const events: SimEvent[] = []
+    detonateMine(world, mine, events)
+    for (let i = 0; i < MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS + 2; i++) stepBlasts(world, events)
+    return {
+      target: world.tanks.find((t) => t.id === 2)!,
+      mortal: world.tanks.find((t) => t.id === 3)!,
+      events,
+    }
+  }
+
+  it('friendlyFire OFF: a teammate stands in the blast unharmed -- the lethality control still dies, so the fixture is genuinely lethal', () => {
+    const { target, mortal, events } = fixture(false, 0, 0)
+    expect(target.alive).toBe(true)
+    expect(mortal.alive).toBe(false)
+    expect(events.filter((e) => e.type === 'tank-destroyed').map((e) => (e as { tankId: number }).tankId)).toEqual([3])
+  })
+
+  it('friendlyFire OFF: an enemy-team tank in the same blast still dies -- team-specific, not a blanket immunity', () => {
+    const { target, events } = fixture(false, 0, 1)
+    expect(target.alive).toBe(false)
+    expect(events.some((e) => e.type === 'tank-destroyed' && (e as { tankId: number }).tankId === 2)).toBe(true)
+  })
+
+  it('friendlyFire ON: a teammate dies too', () => {
+    const { target } = fixture(true, 0, 0)
+    expect(target.alive).toBe(false)
+  })
+
+  it('the gate is self-disabling when team is undefined: a same-owner-team-undefined pair still dies to friendlyFire OFF', () => {
+    const { target } = fixture(false, undefined, undefined)
+    expect(target.alive).toBe(false)
   })
 })
 

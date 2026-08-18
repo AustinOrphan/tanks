@@ -49,6 +49,8 @@ import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeTick, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
+import type { SlotSource } from '../input/assignment';
+import { createGamepadInputSource, type DetectedPad } from '../input/gamepad';
 
 interface Recorder {
   rendererArgs: Array<[unknown, number, number, number, unknown]>;
@@ -74,7 +76,7 @@ interface Recorder {
   hudStates: GameState[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
-  roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
+  roundPhases: Array<{ phase: string; secondsLeft: number } | null>;
   deathSignals: number;
   inputClears: number;
   minePresses: number;
@@ -107,6 +109,8 @@ interface Recorder {
   statPushes: number;
   /** Every value passed to hud.setCoopKills, in order. */
   coopKillPushes: Array<number[] | null>;
+  /** Every value passed to hud.setVersusResults, in order. */
+  versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
   levelSelects: Array<[number, number]>;
   /** Every value pushed to hud.setContinueAvailable, in order. */
   continueAvailable: boolean[];
@@ -185,6 +189,11 @@ interface Recorder {
   slot1Disposed: boolean;
   /** Every playerCount passed to deps.levels.world(...), in order. */
   playerCounts: Array<number | undefined>;
+  /** Every value passed to hud.setControllers, in order (each a snapshot copy). */
+  controllersPushes: SlotSource[][];
+  botAllowedPushes: boolean[];
+  /** Every value passed to hud.setDetectedPads, in order (each a snapshot copy). */
+  detectedPadsPushes: DetectedPad[][];
 }
 
 function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
@@ -216,6 +225,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     pickAccent(id: AccentId): void;
     openCustomize(): void;
     closeCustomize(): void;
+    reassignSlot(slot: number, source: SlotSource): void;
+    openControllers(): void;
+    closeControllers(): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -223,6 +235,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   setGamepadConnected(v: boolean): void;
   /** Sets slot `padIndex`'s (>= 1) fake gamepad source's next gamepadConnected() value. */
   setSlotGamepadConnected(padIndex: number, v: boolean): void;
+  /** What `deps.readDetectedPads()` returns next -- the controller assignment panel's
+   *  live candidate-pad list. */
+  setDetectedPadsFixture(pads: DetectedPad[]): void;
   getState(): GameState;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
@@ -276,6 +291,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statResets: 0,
     statPushes: 0,
     coopKillPushes: [],
+    versusResultsPushes: [],
     levelSelects: [],
     continueAvailable: [],
     runNewRuns: [],
@@ -325,6 +341,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     slot1Samples: 0,
     slot1Disposed: false,
     playerCounts: [],
+    controllersPushes: [],
+    botAllowedPushes: [],
+    detectedPadsPushes: [],
   };
 
   let pending: ((now: number) => void) | null = null;
@@ -337,6 +356,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let touchState: TouchIndicator = { stick: null, aim: null, scheme: 'stick', used: false };
   let fireNext = false;
   let gamepadConnectedNext = false;
+  let detectedPadsFixture: DetectedPad[] = [];
   let onQuit = (): void => {};
   let onPauseTap = (): void => {};
   let onMineTap = (): void => {};
@@ -353,6 +373,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onNewGame = (): void => {};
   let onCustomizeOpen = (): void => {};
   let onCustomizeClose = (): void => {};
+  let onReassignSlot = (_slot: number, _source: SlotSource): void => {};
+  let onControllersOpen = (): void => {};
+  let onControllersClose = (): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
   // fake createPreview below can assert it received the SAME element the HUD exposed --
   // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
@@ -530,6 +553,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
+    // The controller assignment panel's live pad list -- a plain mutable array a test
+    // can push into via `setDetectedPadsFixture` below, mirroring `gamepadConnectedNext`'s
+    // own closed-over-mutable convention.
+    readDetectedPads: () => detectedPadsFixture,
     createAudio: () => ({
       play: () => {},
       startMusic: () => {
@@ -707,6 +734,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setCoopKills: (counts: number[] | null) => {
           rec.coopKillPushes.push(counts === null ? null : [...counts]);
         },
+        setVersusResults: (data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null) => {
+          rec.versusResultsPushes.push(data === null ? null : { mode: data.mode, kills: [...data.kills], deaths: [...data.deaths] });
+        },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
         },
@@ -757,6 +787,24 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onNewGame: (cb: () => void) => {
           onNewGame = cb;
+        },
+        onReassignSlot: (cb: (slot: number, source: SlotSource) => void) => {
+          onReassignSlot = cb;
+        },
+        setControllers: (a: SlotSource[]) => {
+          rec.controllersPushes.push([...a]);
+        },
+        setBotAssignmentAllowed: (allowed: boolean) => {
+          rec.botAllowedPushes.push(allowed);
+        },
+        setDetectedPads: (pads: readonly DetectedPad[]) => {
+          rec.detectedPadsPushes.push([...pads]);
+        },
+        onControllersOpen: (cb: () => void) => {
+          onControllersOpen = cb;
+        },
+        onControllersClose: (cb: () => void) => {
+          onControllersClose = cb;
         },
         dispose: () => rec.disposed.push('hud'),
       };
@@ -962,15 +1010,33 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         // that slot i drives the tank with REAL `controlledBy === i`, which only a
         // REAL `loadArena`-produced world can carry (the foundation plan's own spawn
         // alignment, not something this harness can fake convincingly).
-        if (playerCount !== undefined && playerCount > 1) {
+        // The REAL-world branch is taken whenever the test needs a world the synthetic
+        // fixtures cannot fake: more than one player slot, OR a versus mode (which
+        // strips enemies and stamps Tank.team inside loadArena). Review found the
+        // playerCount-only condition left `mode` silently dropped at playerCount <= 1
+        // -- the same silent-drop shape the versus composition fix closed one layer up,
+        // dormant only because no test set mode without players. Including mode here
+        // means a `mode: 'ffa'` fixture can never quietly get a campaign-coop world.
+        const wantsVersus = (opts.devFlags?.mode ?? 'campaign-coop') !== 'campaign-coop';
+        if ((playerCount !== undefined && playerCount > 1) || wantsVersus) {
           const real = createWorldFor(
-            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount,
+            // playerCount defaults to 1 when the branch was entered for versus alone.
+            arenaById(fakeLevels[i].arenaId), seed, policy, lives, undefined, undefined, playerCount ?? 1,
             // Mirrors levels.ts's own closure: `!flags.coopPool` -- absent/false leaves
             // the shared-attempts default (true), coopPool=1 restores the shipped pool
             // model (false). Read straight off opts.devFlags, the same source the real
             // devFlags merge below is built from, so this cannot drift from what the
             // game itself would have wired.
             !opts.devFlags?.coopPool,
+            // n-player arc PR 4 (FFA + teams): mirrors levels.ts's campaign branch
+            // (`flags.mode ?? 'campaign-coop'`, `flags.friendlyFire`) so a versus test
+            // that sets opts.devFlags.mode gets a REAL FFA/teams world -- enemies
+            // actually stripped, Tank.team actually stamped -- rather than a coop world
+            // that happens to have the right playerCount. Before this, the fake ignored
+            // devFlags.mode entirely: any test passing mode: 'ffa' here would silently
+            // get a coop world back.
+            opts.devFlags?.mode ?? 'campaign-coop',
+            opts.devFlags?.friendlyFire,
           );
           // Back-dated past COUNTDOWN_TICKS, same convention every live-play fixture
           // in this file uses (see winningWorld below): a fresh world cannot act on
@@ -1060,6 +1126,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       resetProgress: () => onResetProgress(),
       openCustomize: () => onCustomizeOpen(),
       closeCustomize: () => onCustomizeClose(),
+      reassignSlot: (slot: number, source: SlotSource) => onReassignSlot(slot, source),
+      openControllers: () => onControllersOpen(),
+      closeControllers: () => onControllersClose(),
     },
     setState: (s) => {
       state = s;
@@ -1076,6 +1145,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     },
     setSlotGamepadConnected: (padIndex: number, v: boolean) => {
       rec.slotConnectedNext[padIndex] = v;
+    },
+    setDetectedPadsFixture: (pads: DetectedPad[]) => {
+      detectedPadsFixture = pads;
     },
     getState: () => state,
     blur(): void {
@@ -2038,7 +2110,7 @@ describe('tallyCoopKills', () => {
 
   it('an enemy killed by P2\'s shell increments coopKills[1], not coopKills[0]', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into); // by tankId 2 = P2 (controlledBy 1)
+    tallyCoopKills([destroyedEnemy(3, 2)], twoPlayerWorld(), into, []); // by tankId 2 = P2 (controlledBy 1)
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBe(1);
   });
@@ -2049,21 +2121,21 @@ describe('tallyCoopKills', () => {
     // source-discriminating refactor cannot silently drop mine kills from the tally.
     const into: number[] = [];
     const mineKill = { type: 'tank-destroyed', tankId: 3, kind: 'brown', by: { source: 'blast', ownerId: 2 }, pos: { x: 0, y: 0 } } as SimEvent;
-    tallyCoopKills([mineKill], twoPlayerWorld(), into);
+    tallyCoopKills([mineKill], twoPlayerWorld(), into, []);
     expect(into[1]).toBe(1); // P2's mine, P2's kill
     expect(into[0]).toBeUndefined();
   });
 
   it('an enemy killed by P1\'s shell increments coopKills[0], not coopKills[1]', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into); // by tankId 1 = P1 (controlledBy 0)
+    tallyCoopKills([destroyedEnemy(3, 1)], twoPlayerWorld(), into, []); // by tankId 1 = P1 (controlledBy 0)
     expect(into[0]).toBe(1);
     expect(into[1]).toBeUndefined();
   });
 
   it('AI-on-AI friendly fire (an enemy killing another enemy) increments neither slot', () => {
     const into: number[] = [];
-    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into); // killer tankId 4 = teal, not a player
+    tallyCoopKills([destroyedEnemy(3, 4)], twoPlayerWorld(), into, []); // killer tankId 4 = teal, not a player
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBeUndefined();
   });
@@ -2071,7 +2143,7 @@ describe('tallyCoopKills', () => {
   it('a player-kind death (e.kind === player) is excluded entirely, even if by.ownerId resolves to a player', () => {
     const playerDied: SimEvent = { type: 'tank-destroyed', tankId: 1, kind: 'player', by: { source: 'shell', ownerId: 2 }, pos: { x: 0, y: 0 } };
     const into: number[] = [];
-    tallyCoopKills([playerDied], twoPlayerWorld(), into);
+    tallyCoopKills([playerDied], twoPlayerWorld(), into, []);
     expect(into[0]).toBeUndefined();
     expect(into[1]).toBeUndefined();
   });
@@ -2082,6 +2154,7 @@ describe('tallyCoopKills', () => {
       [destroyedEnemy(3, 1), destroyedEnemy(4, 2), destroyedEnemy(3, 4) /* friendly fire, excluded */],
       { tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'brown'), mkTank(4, 'teal')] } as World,
       into,
+      [],
     );
     expect(into[0]).toBe(1);
     expect(into[1]).toBe(1);
@@ -2090,8 +2163,66 @@ describe('tallyCoopKills', () => {
   it('a single-player world (no controlledBy) falls back to slot 0', () => {
     const into: number[] = [];
     const world = { tanks: [mkTank(1, 'player'), mkTank(3, 'brown')] } as World;
-    tallyCoopKills([destroyedEnemy(3, 1)], world, into);
+    tallyCoopKills([destroyedEnemy(3, 1)], world, into, []);
     expect(into[0]).toBe(1);
+  });
+});
+
+describe('tallyCoopKills: ffa/teams player-vs-player attribution (n-player arc PR 4)', () => {
+  const mkTank = (id: number, kind: string, controlledBy?: number): Tank =>
+    ({ id, kind, controlledBy }) as Tank;
+
+  const versusWorld = (mode: 'ffa' | 'teams') =>
+    ({
+      mode,
+      tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1), mkTank(3, 'player', 2)],
+    }) as World;
+
+  const playerDestroyed = (victimTankId: number, killerOwnerId: number): SimEvent =>
+    ({ type: 'tank-destroyed', tankId: victimTankId, kind: 'player', by: { source: 'shell', ownerId: killerOwnerId }, pos: { x: 0, y: 0 } }) as SimEvent;
+
+  for (const mode of ['ffa', 'teams'] as const) {
+    it(`${mode}: P2's shell killing P1 credits kills[1] and deaths[0]`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills([playerDestroyed(1, 2)], versusWorld(mode), kills, deaths); // victim tankId 1 (P1), killer tankId 2 (P2)
+      expect(kills[1]).toBe(1);
+      expect(kills[0]).toBeUndefined();
+      expect(deaths[0]).toBe(1);
+      expect(deaths[1]).toBeUndefined();
+    });
+
+    it(`${mode}: self-elimination (killer id === victim id) credits a death to the victim's slot and a kill to NOBODY`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills([playerDestroyed(1, 1)], versusWorld(mode), kills, deaths); // P1's own shell/mine kills P1
+      expect(kills).toEqual([]); // no slot credited a kill
+      expect(deaths[0]).toBe(1);
+    });
+
+    it(`${mode}: accumulates across multiple events, mixing a normal kill and a self-elimination`, () => {
+      const kills: number[] = [];
+      const deaths: number[] = [];
+      tallyCoopKills(
+        [playerDestroyed(1, 2) /* P2 kills P1 */, playerDestroyed(3, 3) /* P3 self-eliminates */],
+        versusWorld(mode),
+        kills,
+        deaths,
+      );
+      expect(kills[1]).toBe(1);
+      expect(kills[2]).toBeUndefined();
+      expect(deaths[0]).toBe(1);
+      expect(deaths[2]).toBe(1);
+    });
+  }
+
+  it('campaign-coop ignores player-vs-player deaths entirely -- the dispatch does not leak the new rule into the old mode', () => {
+    const kills: number[] = [];
+    const deaths: number[] = [];
+    const coopWorld = { mode: 'campaign-coop', tanks: [mkTank(1, 'player', 0), mkTank(2, 'player', 1)] } as World;
+    tallyCoopKills([playerDestroyed(1, 2)], coopWorld, kills, deaths);
+    expect(kills).toEqual([]);
+    expect(deaths).toEqual([]);
   });
 });
 
@@ -2710,6 +2841,52 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(last![0] ?? 0).toBe(0); // not misfiled onto P1's slot
       h.handle.dispose();
     });
+
+    // n-player arc PR 4 (FFA + teams): the versus twin of the test above. tallyCoopKills
+    // (loop.test.ts's own describe block) and hud.setVersusResults (hud.test.ts) are each
+    // unit-tested directly -- neither can see whether onFrameEvents' mode dispatch
+    // (`isVersus` above) still routes a real frame's kill into setVersusResults instead of
+    // setCoopKills. Before this test, versusResultsPushes was recorded but nothing read
+    // it -- a dangling hook: the dispatch branch that fires when isVersus is true was
+    // exercised by no test in this file, only by the isVersus===false branch above.
+    it('a versus (ffa) kill flows through tallyCoopKills into hud.setVersusResults, and setCoopKills gets null, in a real driven frame', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      const world = h.rec.builtWorlds[0];
+      // Confirms the fake levels.world() above actually threaded devFlags.mode into the
+      // REAL createWorldFor call -- if it silently built a campaign-coop world instead
+      // (as it did before this test motivated extending the fake), every assertion below
+      // would either fail confusingly or pass vacuously against the wrong dispatch branch.
+      expect(world.mode).toBe('ffa');
+      const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      world.bullets.push({
+        id: 901, ownerId: p2.id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const lastVersus = h.rec.versusResultsPushes.at(-1);
+      expect(lastVersus).not.toBeNull();
+      expect(lastVersus!.mode).toBe('ffa');
+      expect(lastVersus!.kills[1]).toBe(1); // P2's slot, attributed by tallyCoopKills
+      expect(lastVersus!.deaths[0]).toBe(1); // P1's slot died
+      // The coop line is suppressed while in a versus mode -- the two results lines are
+      // never both live at once (loop.ts's isVersus dispatch).
+      expect(h.rec.coopKillPushes.at(-1)).toBeNull();
+      h.handle.dispose();
+    });
+  });
+
+  it('a versus fixture with NO players flag still gets a REAL versus world -- the fake cannot silently hand back campaign-coop', () => {
+    // Review found this gap dormant: the fake took its real-world branch on playerCount
+    // alone, so `mode: 'ffa'` without `players` fell through to a synthetic coop world
+    // and any versus assertion would have been measuring the wrong dispatch branch.
+    // Breaks if the fake's branch condition drops its mode term.
+    const h = boot(makeDeps({ devFlags: { mode: 'ffa' } }));
+    const world = h.rec.builtWorlds.at(-1)!;
+    expect(world.mode).toBe('ffa');
+    expect(world.tanks.every((t: Tank) => t.kind === 'player')).toBe(true); // enemies stripped
+    h.handle.dispose();
   });
 
   describe('shared-attempts ruling (docs/superpowers/plans/2026-08-16-coop-attempts.md): level clear revives everyone', () => {
@@ -3015,38 +3192,7 @@ describe('startGameWith: round-phase HUD', () => {
     h.handle.dispose();
   });
 
-  it('makes the FIRST round of the page load prominent', () => {
-    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
-    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
-    // and knock these assertions out of step with `renders`.
-    const h = bootAtSplash(inCountdown());
-    h.setState('playing');
-    h.fireFrame(100);
-    expect(h.rec.roundPhases[0]?.prominent).toBe(true);
-    h.handle.dispose();
-  });
-
-  it('drops to the quiet chip on the next round', () => {
-    // Rounds restart on every respawn, not just a new game -- resetArena moves
-    // roundStartTick -- so the second round must not re-teach.
-    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
-    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
-    // and knock these assertions out of step with `renders`.
-    const h = bootAtSplash(inCountdown());
-    h.setState('playing');
-    h.fireFrame(100);
-    expect(h.rec.roundPhases[0]?.prominent).toBe(true);
-    // A restart builds a fresh world, which carries a different roundStartTick.
-    h.setState('win');
-    h.hud.startRestart();
-    h.setState('playing');
-    h.fireFrame(200);
-    const last = h.rec.roundPhases[h.rec.roundPhases.length - 1];
-    expect(last?.prominent).toBe(false);
-    h.handle.dispose();
-  });
-
-  // bootAtSplash for the same reason as its five siblings: leaving the title screen
+  // bootAtSplash for the same reason as its three siblings: leaving the title screen
   // pushes a round-phase clear, and this test's `length > 0` guard would be satisfied
   // by that null alone -- adjudication proved it passes with the live-branch clear
   // deleted.
@@ -3106,24 +3252,6 @@ describe('startGameWith: level progression', () => {
     h.hud.startRestart();
     expect(h.rec.hapticsRebinds).toHaveLength(1);
     expect(h.rec.hapticsRebinds[0]).toBe(h.rec.hapticsPlayerIds[0] + 71);
-    h.handle.dispose();
-  });
-
-  it('counts the next level\'s opening round, so the teaching banner does not re-show', () => {
-    // Two FRESH worlds start on the same roundStartTick, so without an explicit reset
-    // the round tracker cannot tell level 2's opening round from level 1's -- and the
-    // prominent banner, promised "once per page load", re-taught on every advance.
-    const h = boot(makeDeps({
-      levelCount: 2,
-      staticRoundStart: true,
-    }));
-    h.setState('playing');
-    h.fireFrame(16);
-    expect(h.rec.roundPhases.at(-1)?.prominent).toBe(true); // level 1 teaches
-    h.setState('win');
-    h.hud.startRestart();
-    h.fireFrame(32);
-    expect(h.rec.roundPhases.at(-1)?.prominent).toBe(false); // level 2 gets the chip
     h.handle.dispose();
   });
 
@@ -3517,7 +3645,8 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
     h.handle.dispose();
   });
 
-  it('toasts again after a disconnect/reconnect cycle, one toast per rising edge', () => {
+  it('toasts on both edges across a disconnect/reconnect cycle (controller assignment UI: ' +
+    'falling-edge disconnect toast)', () => {
     const h = boot(makeDeps());
     h.setState('playing');
     h.setGamepadConnected(true);
@@ -3526,7 +3655,11 @@ describe('startGameWith: gamepad connect toast (issue #114)', () => {
     h.fireFrame(200);
     h.setGamepadConnected(true);
     h.fireFrame(300);
-    expect(h.rec.plainToasts).toEqual(['Gamepad connected', 'Gamepad connected']);
+    expect(h.rec.plainToasts).toEqual([
+      'Gamepad connected',
+      'Gamepad disconnected',
+      'Gamepad connected',
+    ]);
     h.handle.dispose();
   });
 });
@@ -3591,8 +3724,9 @@ describe('startGameWith: per-slot gamepad connect toast (pad[i] -> slot[i], n-pl
     h.handle.dispose();
   });
 
-  it('HOTPLUG at a non-zero slot (index 2): connecting mid-session toasts once, and a later ' +
-    'disconnect/reconnect toasts again -- one toast per rising edge, the same rule slot 0 already had', () => {
+  it('HOTPLUG at a non-zero slot (index 2): connecting mid-session toasts once, a later ' +
+    'disconnect toasts too (controller assignment UI: falling-edge disconnect toast), and a ' +
+    'reconnect toasts again -- both edges, the same rule slot 0 already had', () => {
     const h = boot(makeDeps({ devFlags: { players: 3 } }));
     h.setState('playing');
     h.fireFrame(100); // no pad yet at slot 2
@@ -3606,6 +3740,7 @@ describe('startGameWith: per-slot gamepad connect toast (pad[i] -> slot[i], n-pl
     h.fireFrame(400);
     expect(h.rec.plainToasts).toEqual([
       "Player 3's controller connected",
+      "Player 3's controller disconnected",
       "Player 3's controller connected",
     ]);
     h.handle.dispose();
@@ -4084,6 +4219,292 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
       });
       expect(anyMoved).toBe(true);
     });
+  });
+});
+
+describe('startGameWith: reassignSlot (controller assignment UI, docs/superpowers/plans/2026-08-17-controller-assignment.md)', () => {
+  it('reassigning a slot to a NEW gamepad padIndex disposes the OLD dedicated source and builds a fresh one at the new index', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } })); // slot1->pad1, slot2->pad2
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]);
+
+    h.hud.reassignSlot(2, { kind: 'gamepad', padIndex: 5 });
+    expect(h.rec.slotDisposed[2]).toBe(true); // the OLD padIndex-2 source was torn down
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2, 5]); // a FRESH source, not a re-point
+    expect(h.rec.gamepadSourceBuilds).toBe(3);
+    // The UNRELATED slot 1's own dedicated source is untouched: reassigning slot 2 must
+    // not dispose or rebuild anything at padIndex 1.
+    expect(h.rec.slotDisposed[1]).toBeFalsy();
+
+    h.setState('playing');
+    h.fireFrame(100);
+    // Slot 2 now samples the NEW padIndex-5 source, not the disposed padIndex-2 one.
+    expect(h.rec.slotSamples[5]).toBeGreaterThan(0);
+    h.handle.dispose();
+  });
+
+  it("keyboard reassignment bounces the old holder to 'none' -- BOTH slots' sources are " +
+    'rebuilt, not just the target: the bounced slot must not keep sampling its old source ' +
+    'while assignment says none (the exact exclusivity bug the bounce exists to prevent)', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, seed: 42 } })); // slot0=keyboard, slot1=gamepad(1)
+    expect(h.rec.gamepadSourceBuildIndices).toEqual([1]);
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawn0 = spawned.find((t: Tank) => t.controlledBy === 0)!;
+
+    h.hud.reassignSlot(1, { kind: 'keyboard' }); // bounces slot 0 to 'none'
+    // Slot 1 (the TARGET) disposes its old dedicated padIndex-1 source.
+    expect(h.rec.slotDisposed[1]).toBe(true);
+    // `input` (the keyboard singleton) is never disposed by a reassignment -- only slot
+    // 0's dedicated realSources ENTRY is dropped, not the collaborator itself.
+    expect(h.rec.disposed).not.toContain('input');
+
+    h.setState('playing');
+    h.fireFrame(500); // many ticks
+
+    const live0 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 0)!;
+    const live1 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+
+    // Slot 0 (bounced to 'none'): HELD, not slewed -- createHeldInputSource echoes the
+    // tank's own position, so aimDir is exactly {0,0} on every tick. If reassignSlot had
+    // rebuilt only the TARGET and left slot 0 still pointing at its old `input` source,
+    // this would instead show slot 0's turret slewing toward the fake keyboard's FIXED
+    // aim point (1, 0) -- two slots sampling the same source, the exact bug the bounce
+    // exists to prevent.
+    expect(live0.pos).toEqual(spawn0.pos);
+    expect(live0.turretAngle).toBe(spawn0.turretAngle);
+
+    // Slot 1 (now keyboard): genuinely samples the fake `input` controller -- its FIXED
+    // aim point (1, 0) slews the turret away from spawn, proving slot 1 is driven by
+    // `input` now, not by the disposed gamepad(1) source (whose fake never touches
+    // turretAngle via aim in a way distinguishable from spawn... it does move +x, so use
+    // turretAngle specifically, which only `input`'s fixed-aim fake perturbs this way).
+    expect(live1.turretAngle).not.toBe(0);
+    h.handle.dispose();
+  });
+
+  it('reassigning a slot to \'none\' seeds setPlayerPosition IMMEDIATELY, before the first tick -- ' +
+    'without it, the first sample() would run with playerPos===null and the turret would slew ' +
+    'toward world-origin for one tick, undercutting the reserved-idle-hold guarantee', () => {
+    const h = boot(makeDeps({ devFlags: { players: 2, seed: 42 } }));
+    const spawned = h.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawn1 = spawned.find((t: Tank) => t.controlledBy === 1)!;
+    // A non-origin spawn is load-bearing here -- see createHeldInputSource's own doc
+    // comment: a literal {0,0} aim is only neutral for a tank spawned AT the origin.
+    expect(spawn1.pos.x !== 0 || spawn1.pos.y !== 0).toBe(true);
+
+    h.hud.reassignSlot(1, { kind: 'none' });
+    h.setState('playing');
+    h.fireFrame(500); // many ticks -- held is held at every one, not just the first
+
+    const live1 = h.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+    expect(live1.turretAngle).toBe(spawn1.turretAngle);
+    h.handle.dispose();
+  });
+
+  describe("bot conversion touches exactly one botSources entry -- an UNRELATED bot's own RNG " +
+    "draw is unchanged by a reassignment elsewhere", () => {
+    // A FULL PHYSICAL-TRAJECTORY comparison (boot two sessions, reassign an unrelated
+    // slot to bot in one, drive both for many ticks, compare) was tried FIRST and
+    // rejected on evidence, not preference: it diverges by tick ~30 even with a
+    // correct single-entry `reassignSlot`. The cause is real, not a test bug --
+    // CLAUDE.md's "the bot brain reads the whole board" -- `assessThreats` only
+    // treats non-player-kind tanks as opponents in campaign-coop (isOpponent,
+    // player-profile.ts), so the newly-bot-claimed slot is never a TARGET, but its
+    // shells and mines still land in `world.bullets`/`world.mines`, which every
+    // bot's hazard-avoidance reads regardless of owner. So "an unrelated bot's
+    // trajectory is identical" is FALSE by design the instant the reassigned slot
+    // fires -- asserting it would be exactly the overclaim CLAUDE.md's "claims must
+    // match evidence" warns against. What IS true, and what `reassignSlot` actually
+    // promises, is narrower: the OTHER bot's `botSources` Map entry -- its `rnd`
+    // stream and its `PlayerAiState` object -- is never rebuilt. That is provable at
+    // two levels without the board-interaction confound: `createBotSources` itself
+    // is a pure, per-slot-independent function (pinned already, see "createBotSources
+    // / BOT_SEED_SPACING: independence from every enemy-AI stream" above -- the same
+    // seed+slot always draws the same first value, regardless of what else is in the
+    // passed slot Set, because the per-slot loop never reads another slot's entry);
+    // and `reassignSlot`'s own bot-claim branch calls it with a Set containing ONLY
+    // the slot being reassigned (`new Set([i])`, loop.ts), never the full bot roster
+    // -- so it cannot rebuild an existing bot's Map entry at all. The two tests below
+    // pin those two halves directly.
+    it('createBotSources draws the SAME first value for a slot whether or not another slot ' +
+      'shares the passed Set -- the mathematical half of "touches exactly one entry"', () => {
+      const alone = createBotSources(100, new Set([3])).get(3)!;
+      const withCompany = createBotSources(100, new Set([1, 3])).get(3)!;
+      expect(withCompany.rnd()).toBe(alone.rnd());
+    });
+
+    it("reassigning slot 1 to bot never disposes or rebuilds slot 3's REAL-source entry -- " +
+      'the wiring half, checkable without the AI board-reading confound above', () => {
+      // players=4, bots=1: slot 3 is bot-claimed from boot (no realSources entry --
+      // see botSlots' own doc comment). Slot 1 starts as a dedicated gamepad(1) source.
+      const h = boot(makeDeps({ devFlags: { players: 4, bots: 1 } }));
+      expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // slots 1, 2 -- slot 3 is the bot
+      h.hud.reassignSlot(1, { kind: 'bot' }); // slot 1: gamepad -> bot
+      // Slot 1's OWN old source is disposed (it is the target)...
+      expect(h.rec.slotDisposed[1]).toBe(true);
+      // ...but slot 2's UNRELATED dedicated source is not, and no NEW gamepad source is
+      // built for slot 3 (it never had one, and gaining a bot must not build one now).
+      expect(h.rec.slotDisposed[2]).toBeFalsy();
+      expect(h.rec.gamepadSourceBuildIndices).toEqual([1, 2]); // unchanged: no new build
+      h.handle.dispose();
+    });
+  });
+
+  it("reassigning a slot AWAY from a genuinely-connected pad does not fire a spurious " +
+    "'disconnected' toast -- reassignSlot must re-sync gamepadConnectedPrev to the new " +
+    "source's truth, or the falling edge fires for a deliberate UI move, not an unplug", () => {
+    const h = boot(makeDeps({ devFlags: { players: 3 } })); // slot1->pad1, slot2->pad2
+    h.setState('playing');
+    h.setSlotGamepadConnected(2, true);
+    h.fireFrame(100);
+    expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
+
+    h.hud.reassignSlot(2, { kind: 'bot' }); // move slot 2 away from its still-connected pad
+    h.fireFrame(200); // many ticks past the reassignment, not just one
+
+    // No new toast: the pad never physically disconnected, so nothing should read as a
+    // falling edge. Without the re-sync this appends "Player 3's controller disconnected".
+    expect(h.rec.plainToasts).toEqual(["Player 3's controller connected"]);
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: reserved-idle hold END TO END -- a REAL mid-session disconnect ' +
+  'leaves the tank holding, not stolen (docs/superpowers/plans/2026-08-17-controller-assignment.md ' +
+  'section 4: "Reserved-idle semantics")', () => {
+  // Every other test in this file drives slot >= 1 through the FAKE createGamepadSource
+  // (always move +x, never touches turretAngle via a real hold/echo mechanism), which is
+  // right for pinning loop.ts's OWN wiring but cannot show the reserved-idle guarantee
+  // itself -- that lives inside gamepad.ts's REAL createGamepadInputSource. This test
+  // substitutes the REAL production function for slot 1's source, wrapped only to COUNT
+  // how many times it is built, so "the same source persists across a live disconnect/
+  // reconnect, with no reassignment" is provable by that count staying at 1 -- there is
+  // no other mechanism in loop.ts that could be driving slot 1's tank if this count never
+  // moves.
+  it('disconnecting a REAL pad mid-session holds the tank -- no move, turret frozen -- ' +
+    'and reconnecting at the SAME index resumes it, with the underlying source rebuilt ZERO times', () => {
+    let padPresent = true;
+    let axes = [0, 0, 1, 0]; // aim stick deflected hard right while connected
+    const getGamepads = () =>
+      padPresent
+        ? [null, { axes, buttons: [{ pressed: false }, { pressed: false }] }]
+        : [];
+    let builds = 0;
+    const h = makeDeps({ devFlags: { players: 2, seed: 42 } });
+    h.deps = {
+      ...h.deps,
+      createGamepadSource: (padIndex: number) => {
+        builds += 1;
+        return createGamepadInputSource(getGamepads, padIndex);
+      },
+    };
+    const booted = boot(h);
+
+    booted.setState('playing');
+    booted.fireFrame(500); // past countdown; the deflected stick has time to slew the turret
+    const spawned = booted.rec.builtWorlds[0].tanks.filter((t: Tank) => t.kind === 'player');
+    const spawn1 = spawned.find((t: Tank) => t.controlledBy === 1)!;
+    const live1AtConnect = booted.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+    // Sanity: the deflected stick actually did something -- a vacuous "nothing ever
+    // moves" comparison later would not prove the hold, it would just prove nothing runs.
+    expect(live1AtConnect.turretAngle, 'the deflected stick never turned the turret').not.toBe(
+      spawn1.turretAngle,
+    );
+
+    // DISCONNECT. No reassignSlot call anywhere in this test -- the descriptor never
+    // changes; only the hardware does.
+    padPresent = false;
+    booted.fireFrame(1500); // many more ticks
+    const held = booted.rec.renders.at(-1)!.curr.tanks.find((t: Tank) => t.controlledBy === 1)!;
+    // Held: position unchanged (move is {0,0} while disconnected) and turret FROZEN at
+    // whatever heading it had at the moment of disconnect -- not reset to spawn, not
+    // slewed toward world-origin, not slewed anywhere further at all, since the real
+    // gamepad source's no-pad fallback echoes the tank's OWN position as `aim`, making
+    // `aimDir` exactly {0,0} on every subsequent tick.
+    expect(held.pos).toEqual(live1AtConnect.pos);
+    expect(held.turretAngle).toBe(live1AtConnect.turretAngle);
+    expect(booted.rec.plainToasts).toContain("Player 2's controller disconnected");
+
+    // RECLAIM: reconnect at the SAME index. No reassignSlot call here either --
+    // reconnecting at the same index auto-resumes (the plan's own §2 rule), which this
+    // proves by the source having never been rebuilt at all.
+    axes = [0, 0, 0, 0]; // stick recentred on reconnect
+    padPresent = true;
+    booted.fireFrame(2500);
+    expect(booted.rec.plainToasts).toContain("Player 2's controller connected");
+    // Population: every call to the (wrapped) production factory across the WHOLE test,
+    // boot included -- built exactly once, at boot, for padIndex 1. Neither the
+    // disconnect nor the reconnect rebuilt it: reassignSlot was never called, so there
+    // was nothing TO rebuild -- the descriptor stayed `{kind: 'gamepad', padIndex: 1}`
+    // throughout, which is what "reserved-idle, not stolen" actually means.
+    expect(builds).toBe(1);
+
+    booted.handle.dispose();
+  });
+});
+
+describe('startGameWith: the controller assignment panel\'s wiring (docs/superpowers/plans/' +
+  '2026-08-17-controller-assignment.md)', () => {
+  it('pushes hud.setControllers with the boot-derived assignment', () => {
+    const h = boot(makeDeps({ devFlags: { players: 3, bots: 1 } })); // slot 2 is the bot
+    expect(h.rec.controllersPushes[0]).toEqual([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 1 },
+      { kind: 'bot' },
+    ]);
+    h.handle.dispose();
+  });
+
+  it('reassignSlot pushes a FRESH hud.setControllers reflecting the new assignment', () => {
+    // `bots: 0` rather than omitting it: the flag's PRESENCE is what opens the campaign
+    // to bot players (`botAssignmentAllowed`), and 0 keeps the boot assignment free of
+    // them, so this still starts from [keyboard, gamepad] and the reassignment below is
+    // the only thing that introduces a bot. Without the flag the reassignment is refused
+    // and this test would be asserting the boundary instead of the push.
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 0 } }));
+    const before = h.rec.controllersPushes.length;
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.length).toBe(before + 1);
+    expect(h.rec.controllersPushes.at(-1)).toEqual([{ kind: 'keyboard' }, { kind: 'bot' }]);
+    h.handle.dispose();
+  });
+
+  it('onControllersOpen reads deps.readDetectedPads ONCE immediately, then adds the two ' +
+    'window listeners -- the events fire only on CHANGE, so opening over already-connected ' +
+    'pads would otherwise show nothing until the next hotplug', () => {
+    const h = boot(makeDeps());
+    h.setDetectedPadsFixture([{ padIndex: 0, id: 'Pad' }]);
+    expect(h.rec.detectedPadsPushes).toEqual([]);
+    h.hud.openControllers();
+    expect(h.rec.detectedPadsPushes).toEqual([[{ padIndex: 0, id: 'Pad' }]]);
+    const types = h.rec.listeners.map(([t]) => t);
+    expect(types).toContain('gamepadconnected');
+    expect(types).toContain('gamepaddisconnected');
+    h.handle.dispose();
+  });
+
+  it('a gamepadconnected/gamepaddisconnected event while open pushes a fresh read', () => {
+    const h = boot(makeDeps());
+    h.hud.openControllers();
+    const connectedFn = h.rec.listeners.find(([t]) => t === 'gamepadconnected')![1] as () => void;
+    h.setDetectedPadsFixture([{ padIndex: 5, id: 'Hotplugged Pad' }]);
+    connectedFn();
+    expect(h.rec.detectedPadsPushes.at(-1)).toEqual([{ padIndex: 5, id: 'Hotplugged Pad' }]);
+    const disconnectedFn = h.rec.listeners.find(([t]) => t === 'gamepaddisconnected')![1] as () => void;
+    h.setDetectedPadsFixture([]);
+    disconnectedFn();
+    expect(h.rec.detectedPadsPushes.at(-1)).toEqual([]);
+    h.handle.dispose();
+  });
+
+  it('onControllersClose removes both window listeners -- scoped to exactly while the ' +
+    'panel that reads them is on screen', () => {
+    const h = boot(makeDeps());
+    h.hud.openControllers();
+    h.hud.closeControllers();
+    const removedTypes = h.rec.removed.map(([t]) => t);
+    expect(removedTypes).toContain('gamepadconnected');
+    expect(removedTypes).toContain('gamepaddisconnected');
+    h.handle.dispose();
   });
 });
 
@@ -4625,3 +5046,90 @@ describe('startGameWith: the input recorder', () => {
     h.handle.dispose();
   });
 });
+
+describe('startGameWith: bots may not drive a player tank in the campaign (boundary enforcement)', () => {
+  it('refuses a reassignment to bot in the campaign when the bots flag is absent', () => {
+    // The panel does not offer Bot there, so this is the SECOND enforcement point --
+    // it exists so the rule survives a caller that does not go through the panel.
+    // Fails if `reassignSlot`'s guard is removed: the assignment would change and a
+    // fresh setControllers would be pushed.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    const before = h.rec.controllersPushes.length;
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.length).toBe(before);
+    h.handle.dispose();
+  });
+
+  it('leaves the refused slot on its previous source, not on none', () => {
+    // Distinguishes "refused" from "bounced": `reassign` sends a displaced slot to
+    // 'none', so a guard placed AFTER the reassign call would still corrupt the slot.
+    const h = boot(makeDeps({ devFlags: { players: 2 } }));
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.at(-1)).toEqual([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 1 },
+    ]);
+    h.handle.dispose();
+  });
+
+  it('permits it once the bots flag is present', () => {
+    // The negative control for both tests above: without this, deleting the whole
+    // reassign-to-bot path would satisfy them.
+    const h = boot(makeDeps({ devFlags: { players: 2, bots: 0 } }));
+    h.hud.reassignSlot(1, { kind: 'bot' });
+    expect(h.rec.controllersPushes.at(-1)).toEqual([{ kind: 'keyboard' }, { kind: 'bot' }]);
+    h.handle.dispose();
+  });
+
+  it('tells the hud whether to offer the candidate, matching the same rule', () => {
+    // Fails if the loop stops pushing, or pushes a constant. The hud defaults to false,
+    // so a dropped push would silently look correct in the campaign and wrong in versus
+    // -- which is why both directions are asserted.
+    const campaign = boot(makeDeps({ devFlags: { players: 2 } }));
+    expect(campaign.rec.botAllowedPushes).toEqual([false]);
+    campaign.handle.dispose();
+
+    const withFlag = boot(makeDeps({ devFlags: { players: 2, bots: 0 } }));
+    expect(withFlag.rec.botAllowedPushes).toEqual([true]);
+    withFlag.handle.dispose();
+
+    const versus = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+    expect(versus.rec.botAllowedPushes).toEqual([true]);
+    versus.handle.dispose();
+  });
+});
+
+describe('startGameWith: leaving a CLEARED level for the main menu keeps the run', () => {
+  it('routes to title from win and leaves Continue available', () => {
+    // A directive: clearing a level must offer the main menu, and the run persists --
+    // going back is not abandoning it. `advanceLevel` already ran when the level
+    // cleared, so the surviving run points at the NEXT level, not the one just beaten.
+    // Fails if loop.ts's quit guard is narrowed back to `paused` only: the handler
+    // returns early, the state never becomes 'title', and no fresh Continue signal is
+    // pushed.
+    // levelCount 5 / start 2 makes this an INTERMEDIATE win. It matters: loop.ts's own
+    // state-change handler calls endRun() on a win with no next level (campaign
+    // completion), so a default-sized harness would end the run before quit was ever
+    // reached and this would be asserting the wrong thing entirely.
+    const h = boot(
+      makeDeps({ tracksProgress: true, levelCount: 5, levelStart: 2, savedRun: { level: 2, lives: 3 } }),
+    );
+    h.setState('win');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('title');
+    expect(h.rec.continueAvailable.at(-1)).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('still refuses to quit straight out of PLAYING', () => {
+    // The negative control for the widened guard. Without it, replacing the guard with
+    // an unconditional pass would satisfy the test above. Quit rebuilds the world, so
+    // reaching it from a live game is exactly what the guard exists to stop.
+    const h = boot(makeDeps({ tracksProgress: true, savedRun: { level: 2, lives: 3 } }));
+    h.setState('playing');
+    h.hud.quitToTitle();
+    expect(h.getState()).toBe('playing');
+    h.handle.dispose();
+  });
+});
+

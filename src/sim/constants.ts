@@ -112,6 +112,15 @@ export const MINE_BLAST_THROUGH_DESTRUCTIBLE = true;
 // ---- Meta ----
 export const LIVES = data.lives;
 
+/**
+ * Versus's Smash-style life counter (n-player arc, stock PR): how many respawns each
+ * player-kind tank starts an FFA/teams match with -- see Tank.stockRemaining (types.ts)
+ * and world.ts's resolveStatusFfa/resolveStatusTeams. Distinct from LIVES, which is
+ * campaign-coop's own shared/per-round pool (world.lives): stock is tracked PER TANK,
+ * never shared, and a tank's last death eliminates it rather than restarting a round.
+ */
+export const VERSUS_STOCK = data.versusStock;
+
 // ---- Round phases (roundPhase, applied uniformly to player + AI) ----
 // Two phases run before normal play, timed from `world.roundStartTick` (reset on every
 // resetArena, so every respawn gets the same protection as the very start of the game):
@@ -129,17 +138,21 @@ export const COUNTDOWN_TICKS = 180;
 // 'grace' whenever this is positive -- so restoring it is this one number.
 export const GRACE_TICKS = 0;
 
-// ---- Coop per-tank respawn (stepRespawns, resolveStatusCoop -- world.ts) ----
+// ---- Per-tank respawn (stepRespawns, resolveStatusCoop/resolveStatusFfa/
+// resolveStatusTeams -- world.ts) ----
 // Feel values, same treatment as TANK_TURN_RATE/MINE_BLAST_EXPAND_TICKS: tests pin
 // behavior against the constant, not a hardcoded tick count, so retuning either is a
 // one-line edit. Deliberately NOT GRACE_TICKS/roundPhase -- that machinery is
 // world-scoped (one roundStartTick drives every tank), and reusing it for an
-// individual respawn would freeze the surviving partner's fire/movement too, which
+// individual respawn would freeze every other live tank's fire/movement too, which
 // is exactly wrong mid-fight. See the coop semantics plan
-// (docs/superpowers/plans/2026-08-15-coop-semantics.md).
+// (docs/superpowers/plans/2026-08-15-coop-semantics.md). Shared by versus's stock
+// respawns (the stock PR) rather than given a second pair of constants -- versus's
+// respawn timing and post-revival grace are not new feel values, they are coop's own.
 //
 // RESPAWN_DELAY_TICKS = 120 ticks = 2.0s at 60Hz: how long a corpse waits before
-// reviving at its own spawn.
+// reviving (at its own spawn in coop; at a `pickVersusSpawnCell`-chosen cell in
+// versus -- see stepRespawns).
 export const RESPAWN_DELAY_TICKS = 120;
 // RESPAWN_SHIELD_TICKS = 90 ticks = 1.5s: post-revival damage immunity. Stands in for
 // everything resetArena would otherwise have guaranteed safe (wall state, the

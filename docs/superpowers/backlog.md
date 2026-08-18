@@ -544,12 +544,17 @@ player can drive but a round with no enemies does not yet know how to end.
   `src/sim/math/` (PR #165) — so a diverging device would indicate a bug in the vendored
   port or the harness, not a fork in the road. Sole remaining gap: a physical iOS device,
   one URL away (`npm run trace:browser -- --beacon`, open the printed URL on the phone).
-- **Decide win/lose semantics for VERSUS.** Co-op is answered (see above), twice: the
-  default is shared ATTEMPTS (2026-08-16 ruling — a lone death costs nothing, a full wipe
-  spends a life and resets the arena), with the original shared-pool respawn-in-place
-  model behind `?dev=1&coopPool=1`. Versus remains open: "every non-player tank dead" and a HUD reading "Enemies
-  remaining" mean nothing with no AI, and nobody has decided what a win is with zero enemies
-  on the board.
+- **Decide win/lose semantics for VERSUS: ANSWERED 2026-08-17** (n-player arc PR 4;
+  docs/superpowers/plans/2026-08-17-versus-modes.md; docs/research/multiplayer.md's own
+  open question 3 carries the full write-up). Co-op is answered separately (see above),
+  twice: the default is shared ATTEMPTS (2026-08-16 ruling — a lone death costs nothing,
+  a full wipe spends a life and resets the arena), with the original shared-pool
+  respawn-in-place model behind `?dev=1&coopPool=1`. Versus (FFA + teams) is a THIRD and
+  FOURTH `World.mode`, dispatched at the same guard-first split: `loadArena` strips every
+  enemy spawn rather than repurposing one as a bonus player slot, single life per round
+  with no stock/lives system, FFA wins on exactly one player tank left alive, teams wins
+  when one team is wiped and the other has a survivor, and a simultaneous final wipeout
+  resolves to `'lose'` rather than a new `'draw'` status (named residual, not built).
 - **`TankKind` vs a `controlledBy` field on `Tank`: ANSWERED, route B (the field).** A
   scratch prototype (branch `p2-prototype`, commit `297bdaf`, off `be1bda8`) touched only
   `types.ts` and `arena.ts`, stayed `tsc --noEmit` clean, and needed no edit to any
@@ -905,6 +910,92 @@ successors.
 
 ---
 
+## Spike: the rest of versus mode -- setup UI and maps
+
+**Raised 2026-08-17**, alongside the versus-spawns PR
+(`docs/superpowers/plans/2026-08-17-versus-spawns.md`), which derives well-separated
+FFA/teams spawn cells from arena geometry but deliberately stops at initial placement.
+Originally six questions; the first three are answered and closed by
+`docs/superpowers/plans/2026-08-17-versus-stock.md` (a directive settled match-format
+order -- stock first -- and the spawn-protection/respawn-placement shapes), struck below
+rather than deleted so the record of what was open, and when it closed, survives.
+
+1. ~~**Stock/lives.**~~ -- CLOSED by the stock PR. `VERSUS_STOCK` (`constants.ts`,
+   `data/balance.json`), default 3, per-tank (`Tank.stockRemaining`), sharing
+   `RESPAWN_DELAY_TICKS`/`RESPAWN_SHIELD_TICKS` with campaign-coop rather than a second
+   pair of constants -- versus's respawn timing and post-revival grace are not new feel
+   values, they are coop's own.
+2. ~~**Respawn cell selection.**~~ -- CLOSED by the stock PR. `pickVersusSpawnCell` is
+   now wired to `stepRespawns` via `World.arenaGeometry`, scored against every currently
+   living tank's position.
+3. ~~**Spawn protection.**~~ -- CLOSED by the stock PR. A directive settled duration
+   (reuses `RESPAWN_SHIELD_TICKS`, no new timer) and shape (`isActionLocked`: fire/mine
+   locked, movement and aim unrestricted) -- no visual cue was in scope; that remains
+   render-layer work, not named as its own open question since nothing here depends on
+   it.
+4. **Spawn animation.** Named as deferred for the base game already (`## Unbuilt by
+   design`: "Spawn and victory animations. #61"); versus respawns would want the same
+   treatment, decided together rather than twice. Newly in scope now that something
+   actually respawns in versus (it did not, before the stock PR), but still not
+   answerable from the tree alone -- a render-layer decision, explicitly out of scope
+   for the stock PR's own brief.
+5. **A versus setup menu.** Mode, player count and (once maps exist as a choice, see
+   below) map selection are all dev-flag-only today (`?dev=1&mode=ffa&players=4`).
+   Shipping versus to a real player needs UI, which is real product surface no directive
+   has scoped yet.
+6. **Map selection / procedural generation.** Already named as unbuilt in this file's
+   Ledger ("Procedural generation of shipped levels; the four arenas are authored
+   grids... #43") -- and directly relevant here, since `pickVersusSpawnCell` was
+   deliberately written against the arena's OWN geometry (BFS + line-of-sight over
+   `grid`/`legend`/`cellSize`) rather than authored spawn points specifically so it would
+   work on a board with no author. That is now proven on the 5 shipped, hand-authored
+   arenas, for BOTH initial placement and (since the stock PR) respawn; it has not been
+   exercised against a generated one, because none exists yet. **Partly answered by the
+   board-rules PR** (`docs/superpowers/plans/2026-08-17-versus-board-rules.md`):
+   `src/sim/versus-board.ts` gives "which maps to offer at a given player count" a
+   checkable definition -- separation, mutual concealment and a room ratio, all derived
+   from geometry the same way `pickVersusSpawnCell` is, so it works on a generated board
+   too, once one exists. It answers the RULE, not the MENU: nothing calls it from
+   `loadArena`, no UI consults it, and it has only ever been measured against the 5
+   shipped arenas (15 of 15 (arena, N) combinations pass, by a wide margin -- none of the
+   3 criteria currently rejects a shipped board). **Further answered, on the map-supply
+   side, by the map-variants PR** (`docs/superpowers/plans/2026-08-17-versus-map-variants.md`):
+   `src/sim/versus-variants.ts` builds the directive's named middle step between "one
+   fixed board per arena" and full procedural generation -- a seeded, deterministic
+   SUBSET of an authored board's destructible cells is omitted per match (solid
+   geometry, dimensions and the `P` cell untouched), wired into `loadArena` guard-first
+   so campaign-coop is unaffected and every existing versus call that omits a seed stays
+   on the authored board. It DOES reach the shipped path this time (unlike the
+   board-rules PR): `createWorldFor` threads its own seed into `loadArena`, so a real
+   `?dev=1&mode=ffa` session gets a variant automatically, gated by a bounded retry
+   against `evaluateVersusBoard`'s own two regressable criteria (falling back to the
+   authored board if every retry is exhausted). Whole-board procedural generation --
+   a board with no authored solid-wall skeleton at all -- remains exactly as unbuilt as
+   before; this PR only varies destructible cells within one.
+
+**Why 4-6 still belong together rather than as three separate spikes:** they still gate
+each other, independent of what closed. Spawn animation (4) and a setup menu (5) are
+each real product surface no directive has scoped. A setup menu (5) that only offers 2
+shipped arenas is premature before map selection (6) has an answer. None of the three is
+"can a PR close it" on its own -- each needs a decision this file's own "Issues or
+backlog?" test names as the spike criterion.
+
+**What would answer it:** a product decision on whether versus ships with dev-flag-only
+access or a real menu (5), and a decision on spawn animation's shape (4); and either a
+decision to keep versus scoped to the existing 5 arenas indefinitely, or the
+procedural-generation spike above (`## Spike: pathfinding and risk-aversion weights in
+the movement AI`'s neighbour sections) reaching its own answer first (6).
+
+**Not scheduled.** Recorded so the remaining half of versus mode is not mistaken for
+finished, and is not rediscovered from scratch by the next person who reads
+`pickVersusSpawnCell`'s doc comment and wonders why `avoid` takes live positions when
+nothing calls it that way yet -- something has, since the stock PR, but the caveat this
+line originally guarded (an unwired signature) no longer applies; the sentence stays
+because the next reader's question is still worth answering directly rather than by
+implication.
+
+---
+
 ## Ledger: deferred work harvested from PR descriptions
 
 **Compiled 2026-08-03, rebuilt after adversarial review.** **Scope is an enumerated set, not
@@ -935,8 +1026,12 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **80 lines below** — 13 / 31 / 25 / 11 across four groups. **71** came from the
-harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
+Counts: **83 lines below** — 13 / 31 / 25 / 14 across four groups. **74** came from the
+harvested set and **9** from prose-only PRs outside it — though 3 of that 74 did not: the
+versus-spawn lines at the end of the fourth group were deferred by the PR that added them,
+not harvested from anything. The 74 is what `tools/backlog.test.ts` recomputes (it is
+`total − prose-only`, which cannot tell the two apart), so read it as "not prose-only"
+rather than literally as "harvested". They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
 
@@ -1035,6 +1130,10 @@ Each needs a measurement, a browser, or a person.
 - Whether a routine roam change landing seconds after a level ends reads as caused by it. #74 says this wants a decision rather than a quiet change. *(prose-only PR)*
 - **No judgement on arena-04's feel has been recorded.** The game has been played, so "nobody has played it" is no longer the claim — but its geometry, structure and pacifist outcomes are the only things measured, and nothing in the tree states whether the crossfire reads as a crossfire. (One quoted figure in `arenas.json` was recomputed by hand and cites `task-4-report.md`, which exists in neither the tree nor any commit.) #67
 - **The green ricochet sniper and the music have been experienced but not adjudicated.** The game has been played and the audio has been heard, so the old form of this line — "nobody has played against green, nobody has heard the music" — is false and is withdrawn. What remains open is narrower and still real: every number in the tree about either is a headless measurement, and no stated verdict exists on whether green's bank shots read as fair or on whether any specific music transition lands. #69, #76
+
+- Versus spawn concealment is guaranteed only AT SPAWN, on intact geometry. Measured over all 5 shipped arenas x player counts 2/3/4 (15 pairs): on 4 of the 15, exactly one spawn pair becomes mutually visible once every destructible is gone. Running the LOS filter on both wall phases would close it and is a much stricter criterion — unmeasured, so it is a decision, not a fix. #versus-p1-maximin
+- `versus-variants.ts`'s bounded retry is now close to unreachable on shipped boards: 0 unsuitable first draws in 1500 draws (arena-01 and arena-03, 250 seeds each at removal fractions 0.85 / 0.90 / 0.95, all well above the production 0.4). `pickVersusSpawnCell`'s LOS filter actively searches for concealment, so `allPairsConcealed` now fails only when no concealed pair exists anywhere. Whether the criterion should be strengthened, rather than leaving a retry that almost never fires, is undecided. #versus-p1-maximin
+- The removal-fraction sweep in `2026-08-17-versus-map-variants.md` was measured under the OLD spawn placement and is stale. `DESTRUCTIBLE_REMOVAL_FRACTION` is unchanged at 0.4 and is now more conservative than that sweep implied; re-measuring it is a separate decision, deliberately not bundled. #versus-p1-maximin
 
 ### Where the numbers went
 

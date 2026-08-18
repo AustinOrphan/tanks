@@ -233,8 +233,17 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
         // still detonates on it -- letting it pass through would shield nothing and
         // read as a collision bug -- but no one dies. Event order matches mines.ts
         // for a mortal kill: tank-destroyed, then explosion.
+        //
+        // Friendly fire (n-player arc PR 4, teams mode -- team is a three-place
+        // concept, this is place 1 of 3): resolved via the OWNER tank's team, not a
+        // new Bullet field -- mirrors how shell tint already resolves owner identity
+        // at hit/render time (render/entities.ts) rather than widening the struct.
+        // `!== undefined` on both sides makes this self-disabling outside 'teams' by
+        // construction: loadArena only ever stamps `team` when mode === 'teams'.
+        const ownerTeam = world.tanks.find((o) => o.id === b.ownerId)?.team
+        const isFriendly = t.team !== undefined && ownerTeam !== undefined && t.team === ownerTeam && !world.friendlyFire
         b.alive = false
-        if (!isDamageImmune(t, world.tick)) {
+        if (!isDamageImmune(t, world.tick) && !isFriendly) {
           t.alive = false
           events.push({ type: 'tank-destroyed', tankId: t.id, kind: t.kind, by: { source: 'shell', ownerId: b.ownerId }, pos: { x: t.pos.x, y: t.pos.y } })
         }

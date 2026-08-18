@@ -8,7 +8,7 @@
  * Parsing a string rather than reading `location` directly keeps this a pure
  * function, so the whole table is assertable without a browser.
  */
-import type { TankKind, UnarmedTrigger } from '../sim/types';
+import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import type { QualityPreset } from '../render/quality';
 
@@ -236,6 +236,27 @@ export interface DevFlags {
    * instead of the input controller.
    */
   bots: number | null;
+  /**
+   * Which VERSUS mode a session builds with -- 'ffa'/'teams' only; `null` (absent or
+   * unrecognised) leaves World.mode's own default, 'campaign-coop' -- see GameMode
+   * (sim/types.ts). Same reject-to-null idiom as `quality`/`mineTrigger`: an
+   * unrecognised value (`?mode=ffa2`) leaves the shipped rule rather than guessing.
+   *
+   * Resolved into World.mode at world construction (levels.ts's campaign branch,
+   * closed over like `corpseBlock`/`muzzleInside`/`coopPool`); the sim never reads this
+   * flag itself, only the World field it decided -- see CLAUDE.md's flags-never-reach-
+   * the-sim rule.
+   */
+  mode: 'ffa' | 'teams' | null;
+  /**
+   * Whether a shell or mine blast harms a teammate -- meaningful only once `mode` is
+   * 'teams'. Default off (this flag's off state, `false`): protect teammates by
+   * default, the "Owner forks" call in the arc design. Resolved into
+   * World.friendlyFire the same way `mode` is; self-disabling outside 'teams' by
+   * construction (see World.friendlyFire's own doc comment), so this flag is inert
+   * whatever its value at `mode` unset/'campaign-coop'/'ffa'.
+   */
+  friendlyFire: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -262,6 +283,8 @@ export const DEV_FLAGS_OFF: DevFlags = {
   coopPool: false,
   quality: null,
   bots: null,
+  mode: null,
+  friendlyFire: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -271,6 +294,8 @@ const MINE_TRIGGERS = new Set(['none', 'proximity', 'bullet', 'both']);
 
 const QUALITY_PRESET_NAMES = new Set(['low', 'medium', 'high']);
 
+const VERSUS_MODE_NAMES = new Set(['ffa', 'teams']);
+
 /** One of the three named presets, or null when absent or unrecognised -- an
  * unrecognised value (`?quality=potato`) is rejected to null rather than guessed,
  * matching asMineTrigger below; null resolves to the `high` default downstream. */
@@ -278,6 +303,14 @@ function asQuality(params: URLSearchParams): QualityPreset | null {
   const raw = params.get('quality');
   if (raw === null) return null;
   return QUALITY_PRESET_NAMES.has(raw) ? (raw as QualityPreset) : null;
+}
+
+/** 'ffa' or 'teams', or null when absent or unrecognised -- null resolves to
+ *  World.mode's own default, 'campaign-coop', matching asQuality's idiom. */
+function asMode(params: URLSearchParams): Extract<GameMode, 'ffa' | 'teams'> | null {
+  const raw = params.get('mode');
+  if (raw === null) return null;
+  return VERSUS_MODE_NAMES.has(raw) ? (raw as Extract<GameMode, 'ffa' | 'teams'>) : null;
 }
 
 /** One of the four UnarmedTrigger values, or null when absent or unrecognised. */
@@ -389,6 +422,8 @@ export function parseDevFlags(search: string): DevFlags {
     coopPool: isOn(params, 'coopPool'),
     quality: asQuality(params),
     bots: asBots(params),
+    mode: asMode(params),
+    friendlyFire: isOn(params, 'friendlyFire'),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -648,6 +683,25 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       'Not excluded from the sandbox, unlike `players`: the sandbox always resolves to ' +
         'one slot, and `bots=1` there is the same substitution `autoplay=1` already does.',
     ],
+  },
+  mode: {
+    kind: 'valued',
+    values: [...VERSUS_MODE_NAMES],
+    description:
+      'Sets which versus mode a session builds with -- free-for-all or teams -- instead ' +
+      "of the shipped campaign-coop rule (win as every enemy dead, or coop's shared " +
+      'lives).',
+    notes: [
+      'Unrecognised or absent leaves the campaign-coop default.',
+      'Strips every enemy spawn from the built arena: versus modes have no AI opponents.',
+    ],
+  },
+  friendlyFire: {
+    kind: 'boolean',
+    description:
+      "Lets a shell or mine blast harm a teammate -- meaningful only once `mode=teams`; " +
+      'the default protects teammates.',
+    notes: ['Inert unless `mode=teams`.'],
   },
 };
 

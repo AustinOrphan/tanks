@@ -25,7 +25,21 @@ import {
   type ReplayTrace,
 } from './replay';
 import { createInputController, type InputController } from '../input/input';
-import { createGamepadInputSource, readNavigatorGamepads, type PlayerInputSource } from '../input/gamepad';
+import {
+  createGamepadInputSource,
+  readNavigatorGamepads,
+  readDetectedPads,
+  type PlayerInputSource,
+  type DetectedPad,
+} from '../input/gamepad';
+import {
+  deriveInitialAssignment,
+  reassign,
+  botAssignmentAllowed,
+  createHeldInputSource,
+  type Assignment,
+  type SlotSource,
+} from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
@@ -64,10 +78,17 @@ export interface HostWindow {
   addEventListener(type: 'resize', fn: (e: Event) => void): void;
   addEventListener(type: 'blur', fn: (e: Event) => void): void;
   addEventListener(type: 'pointerdown', fn: (e: Event) => void): void;
+  // The controller assignment panel's live pad list (docs/superpowers/plans/
+  // 2026-08-17-controller-assignment.md): added/removed ONLY while `.hud-controllers`
+  // is open (hud.onControllersOpen/Close), never at boot -- see that wiring below.
+  addEventListener(type: 'gamepadconnected', fn: (e: Event) => void): void;
+  addEventListener(type: 'gamepaddisconnected', fn: (e: Event) => void): void;
   removeEventListener(type: 'keydown', fn: (e: KeyboardEvent) => void): void;
   removeEventListener(type: 'resize', fn: (e: Event) => void): void;
   removeEventListener(type: 'blur', fn: (e: Event) => void): void;
   removeEventListener(type: 'pointerdown', fn: (e: Event) => void): void;
+  removeEventListener(type: 'gamepadconnected', fn: (e: Event) => void): void;
+  removeEventListener(type: 'gamepaddisconnected', fn: (e: Event) => void): void;
 }
 
 /**
@@ -122,6 +143,17 @@ export interface GameDeps {
    * different indices of the same pads array, not a shared one arbitrated at runtime.
    */
   readonly createGamepadSource: (padIndex: number) => PlayerInputSource;
+  /**
+   * Every currently-connected pad, for the controller assignment panel's live list
+   * (docs/superpowers/plans/2026-08-17-controller-assignment.md) -- `gamepad.ts`'s
+   * `readDetectedPads` bound to the one production `GetGamepads`. Injected for the same
+   * reason `createGamepadSource` is: going through GameDeps keeps the read testable
+   * without a real `navigator.getGamepads`. Called once immediately on
+   * `hud.onControllersOpen` (the browser's `gamepadconnected`/`gamepaddisconnected`
+   * events fire only on CHANGE) and once per hotplug event after that, both scoped to
+   * while the panel is open.
+   */
+  readonly readDetectedPads: () => DetectedPad[];
   readonly createAudio: () => AudioEngine;
   /**
    * playerId is required here even though createAudioDirector defaults it. The
@@ -307,14 +339,14 @@ export function botSlotsFor(playerCount: number, botCount: number): Set<number> 
   return slots;
 }
 
-// createIdleInputSource() is RETIRED (n-player arc PR3, `pad[i] -> slot[i]`): it used to
-// fill every co-player slot beyond 1 with a hand-built `PlayerInputSource` that echoed
-// the tank's own position back as `aim`, avoiding `driveTank`'s literal-{0,0}-slews-
-// toward-world-origin defect. Every co-player slot now gets its own
-// `createGamepadInputSource(padIndex)` instead (see `realSources`' construction below),
-// and that function's own "no pad ever connected" branch (`input/gamepad.ts`, see its
-// module doc comment) already produces the byte-identical echo -- so deleted rather than
-// kept unused, per CLAUDE.md's "a generator nothing calls rots."
+// createIdleInputSource() was RETIRED at n-player arc PR3 (`pad[i] -> slot[i]`), when
+// every co-player slot got its own dedicated `createGamepadInputSource(padIndex)` whose
+// own "no pad ever connected" branch (`input/gamepad.ts`) already produced the identical
+// echo -- so it was deleted rather than kept unused, per CLAUDE.md's "a generator nothing
+// calls rots." The controller assignment UI UN-retires that exact shape as
+// `createHeldInputSource` (`input/assignment.ts`): a `'none'` slot is a real,
+// UI-selectable call site again, and CLAUDE.md's retirement note only applies while
+// nothing calls a generator.
 
 /**
  * Holding M fires ~30 keydowns a second, so an unguarded toggle lands on
@@ -372,31 +404,63 @@ export function isPlayerDeath(events: SimEvent[], playerId: number): boolean {
 }
 
 /**
- * Per-player kill attribution for coop's results-screen tally (coop semantics plan,
- * docs/superpowers/plans/2026-08-15-coop-semantics.md). Mutates `into` in place,
- * indexed by slot (`controlledBy`), the same array-as-accumulator shape
- * `checkAchievements`'s callers already use elsewhere in this file.
+ * Per-player kill/death attribution for the results-screen tally (coop semantics plan,
+ * docs/superpowers/plans/2026-08-15-coop-semantics.md; generalized to versus modes by
+ * the n-player arc's PR 4). Mutates `kills`/`deaths` in place, indexed by slot
+ * (`controlledBy`), the same array-as-accumulator shape `checkAchievements`'s callers
+ * already use elsewhere in this file.
  *
- * `e.kind === 'player'` is excluded -- only ENEMY kills count as a "kill" for this
- * tally, matching the results screen's existing lifetime/attempt stat semantics
- * (stats.ts's shellKills/mineKills never count a teammate). AI-on-AI friendly fire
- * (brown.ts's bank shots, teal's alternation -- CLAUDE.md's "A green tank changed
- * what structuralFailures has to check") is excluded too: `killer?.kind !== 'player'`
- * skips any credit whose `by.ownerId` resolves to a non-player-kind tank, so an
- * enemy killing another enemy increments nothing.
+ * `world.mode` dispatches two entirely separate rules:
+ *
+ *  - `'campaign-coop'`: TODAY'S rule, byte-for-byte. `e.kind === 'player'` is excluded
+ *    -- only ENEMY kills count as a "kill" here, matching the results screen's existing
+ *    lifetime/attempt stat semantics (stats.ts's shellKills/mineKills never count a
+ *    teammate). AI-on-AI friendly fire (brown.ts's bank shots, teal's alternation --
+ *    CLAUDE.md's "A green tank changed what structuralFailures has to check") is
+ *    excluded too: `killer?.kind !== 'player'` skips any credit whose `by.ownerId`
+ *    resolves to a non-player-kind tank, so an enemy killing another enemy increments
+ *    nothing. `deaths` is untouched in this branch -- campaign-coop has no per-slot
+ *    death tally, only the shared win/lose machinery in world.ts.
+ *  - `'ffa'`/`'teams'`: the OPPOSITE selection -- a `tank-destroyed` event where BOTH
+ *    victim and killer are player-kind. The killer's slot gets a kill, the victim's
+ *    slot gets a death. Self-elimination (`killer.id === victim.id`, an own shell or
+ *    own mine) credits a death to the victim and a kill to NOBODY -- the no-suicide-
+ *    credit convention common to arena shooters. There are no enemy-kind tanks to
+ *    exclude in these modes (loadArena strips them), so this is not merely the
+ *    campaign-coop rule with the polarity flipped -- it is genuinely victim-first
+ *    where campaign-coop is killer-only.
+ *
+ * Teams sums a per-team total from these same per-slot figures as a DERIVED reduction
+ * at render/HUD time (Tank.team, no new storage here) -- this function stays unaware of
+ * teams beyond dispatching on `world.mode`.
  *
  * Not `stats.ts`: `StatCounts` has no per-player axis, and bolting one on would
  * conflate two orthogonal dimensions (metric vs. player) in one shape -- adopted
  * default 4 keeps lifetime stats P1-scoped. This stays a small loop.ts-local array
- * instead.
+ * pair instead.
  */
-export function tallyCoopKills(events: SimEvent[], world: World, into: number[]): void {
+export function tallyCoopKills(events: SimEvent[], world: World, kills: number[], deaths: number[]): void {
+  if (world.mode === 'ffa' || world.mode === 'teams') {
+    for (const e of events) {
+      if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue; // player-vs-player only
+      const victim = world.tanks.find((t) => t.id === e.tankId);
+      if (!victim) continue;
+      const victimSlot = victim.controlledBy ?? 0;
+      deaths[victimSlot] = (deaths[victimSlot] ?? 0) + 1;
+      if (e.by.ownerId === e.tankId) continue; // self-elimination: a death, credited to nobody's kill total
+      const killer = world.tanks.find((t) => t.id === e.by.ownerId);
+      if (killer?.kind !== 'player') continue;
+      const killerSlot = killer.controlledBy ?? 0;
+      kills[killerSlot] = (kills[killerSlot] ?? 0) + 1;
+    }
+    return;
+  }
   for (const e of events) {
     if (e.type !== 'tank-destroyed' || e.kind === 'player') continue; // enemy kills only
     const killer = world.tanks.find((t) => t.id === e.by.ownerId);
     if (killer?.kind !== 'player') continue; // AI friendly fire doesn't count as a "kill"
     const slot = killer.controlledBy ?? 0;
-    into[slot] = (into[slot] ?? 0) + 1;
+    kills[slot] = (kills[slot] ?? 0) + 1;
   }
 }
 
@@ -483,6 +547,7 @@ export function createBrowserDeps(): GameDeps {
     createPreview: createTankPreview,
     createInput: createInputController,
     createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
+    readDetectedPads: () => readDetectedPads(readNavigatorGamepads),
     createAudio: () => createAudioEngine(AUDIO_MANIFEST),
     createDirector: createAudioDirector,
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
@@ -548,8 +613,47 @@ export function startGameWith(
    * `autoplay=1` already does unguarded.
    */
   const botCount = Math.min(deps.devFlags.bots ?? 0, playerCount);
+
+  /**
+   * May a bot drive a player tank in THIS session -- see `botAssignmentAllowed`. Fixed
+   * for the session's life: `world.mode` never changes within one (see the versus-results
+   * dispatch below), and a dev flag cannot be set mid-session.
+   *
+   * The BOOT path already honours this without any help, since `botCount` is 0 whenever
+   * the `bots` flag is absent. The panel was the hole: it offered `'bot'` for every slot
+   * unconditionally, so a shipped campaign could hand Player 1 to a bot from the title or
+   * pause screen and watch the game play itself.
+   */
+  const botsMayDrivePlayers = botAssignmentAllowed(
+    deps.devFlags.mode ?? 'campaign-coop',
+    deps.devFlags.bots !== null,
+  );
   /** The LAST `botCount` of `playerCount` slots -- see botSlotsFor's own doc comment. */
   const botSlots = botSlotsFor(playerCount, botCount);
+
+  /**
+   * The controller assignment UI's SESSION-HELD model (input/assignment.ts, owner
+   * ruling: no persistence, no seventh store). Seeded ONCE from `botSlots` -- today's
+   * rule, made explicit -- and mutated only by `reassignSlot` below, via the panel.
+   * `botSlots` itself is not read again after this: every later site that needs "which
+   * slots are bots right now" reads it off `assignment` (`botSlotsFromAssignment`),
+   * since a session-long reassignment can move a slot to or from `'bot'`.
+   */
+  let assignment: Assignment = deriveInitialAssignment(playerCount, botSlots);
+
+  /** Which slots `assignment` currently marks `'bot'` -- recomputed, never cached, so a
+   *  mid-session reassignment is always reflected. */
+  function botSlotsFromAssignment(a: Assignment): Set<number> {
+    const s = new Set<number>();
+    for (let i = 0; i < a.length; i++) if (a[i].kind === 'bot') s.add(i);
+    return s;
+  }
+
+  /** Structural equality for the small `SlotSource` union -- `reassign`'s own diff. */
+  function sameSlotSource(a: SlotSource, b: SlotSource): boolean {
+    if (a.kind !== b.kind) return false;
+    return a.kind === 'gamepad' && b.kind === 'gamepad' ? a.padIndex === b.padIndex : true;
+  }
 
   // A pinned dev seed makes a scripted playthrough reproducible; without one
   // every session is a different fight, which is right for playing and useless
@@ -629,7 +733,7 @@ export function startGameWith(
    * reseeding here keeps every level's bot behaviour a pure function of that level's
    * own seed rather than of how much a previous level's stream had already consumed.
    */
-  let botSources = createBotSources(world.seed, botSlots);
+  let botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
   // Whether the CURRENT session is practice (Level Select), as opposed to the
   // campaign run. Practice must not consume, restore, replace, advance or complete
   // the active run (the spec's hard rule) -- this is the flag every run-mutation
@@ -711,25 +815,44 @@ export function startGameWith(
   // the aim side already reads under the right gesture.
   input.setFireMode(deps.touchSettings.fireMode());
   /**
-   * The real, constructed `PlayerInputSource` for every NON-bot-claimed slot, keyed by
-   * slot number -- always has slot 0 (`input`). A bot-claimed slot (see `botSlots`
-   * above) has NO entry here at all: `decidePlayerInput` needs no injected controller
-   * to drive from, so building one for a slot that will never call `.sample()` on it
-   * would be dead construction. This is the generalisation `botSlots.has(i)` adds to
-   * every site that used to build unconditionally on `playerCount` alone.
-   *
-   * Slots 1..playerCount-1: EVERY one gets its own standalone gamepad-only source,
-   * bound to `padIndex === i` (`pad[i] -> slot[i]`, n-player arc PR3) -- no fallback,
-   * no idle-fill function distinct from this one. Hotplug and "no pad ever connected"
-   * both fall out of `createGamepadInputSource` itself (see its own doc comment): it
-   * polls `getGamepads()[padIndex]` fresh every tick, so a slot with nothing plugged in
-   * echoes its tank's own position back as `aim` (the turret holds instead of slewing
-   * toward world-origin) with no separate mechanism needed, and a pad connecting or
-   * disconnecting mid-session at that index is visible on the very next tick.
+   * Build the `PlayerInputSource` a `SlotSource` DESCRIBES -- `null` for `'bot'`, which
+   * has none: `decidePlayerInput` reads straight off `botSources`/`world`, so building a
+   * source for a slot that will never call `.sample()` on it would be dead construction.
+   * `'keyboard'` is always the ONE `input` singleton, whichever slot currently holds it
+   * -- never a fresh instance, and never disposed here (see `reassignSlot`'s doc comment
+   * for why). `'gamepad'`/`'none'` are each a fresh construction, per the controller
+   * assignment UI's "rebuild, don't re-point" rule -- `createGamepadInputSource` closes
+   * over `padIndex` at construction, so a slot that changes which pad it reads gets a
+   * new instance, not a mutated one.
    */
-  const realSources = new Map<number, PlayerInputSource>([[0, input]]);
-  for (let i = 1; i < playerCount; i++) {
-    if (!botSlots.has(i)) realSources.set(i, deps.createGamepadSource(i));
+  function buildRealSource(source: SlotSource): PlayerInputSource | null {
+    switch (source.kind) {
+      case 'keyboard':
+        return input;
+      case 'gamepad':
+        return deps.createGamepadSource(source.padIndex);
+      case 'none':
+        return createHeldInputSource();
+      case 'bot':
+        return null;
+    }
+  }
+  /**
+   * The real, constructed `PlayerInputSource` for every NON-bot slot, keyed by slot
+   * number -- driven entirely by `assignment`, not by a hardcoded slot-0/1..N-1 split
+   * (the controller assignment UI's whole point: which slot holds keyboard vs. which
+   * gamepad index is now an explicit, sticky field, not `i === 0` / `i`). Hotplug and
+   * "no pad ever connected" both still fall out of `createGamepadInputSource` itself
+   * (see its own doc comment): it polls `getGamepads()[padIndex]` fresh every tick, so a
+   * slot with nothing plugged in echoes its tank's own position back as `aim` (the
+   * turret holds instead of slewing toward world-origin), and a pad connecting or
+   * disconnecting mid-session at that index is visible on the very next tick. A `'none'`
+   * slot gets the same hold, from `createHeldInputSource` (`input/assignment.ts`).
+   */
+  const realSources = new Map<number, PlayerInputSource>();
+  for (let i = 0; i < playerCount; i++) {
+    const src = buildRealSource(assignment[i]);
+    if (src) realSources.set(i, src);
   }
   const audio = deps.createAudio();
   // MUTABLE: loadArena numbers tanks in grid-scan order, so the player's id differs
@@ -842,13 +965,19 @@ export function startGameWith(
   let pendingClear: number | null = null;
 
   /**
-   * Coop's results-screen kill tally (coop semantics plan,
-   * docs/superpowers/plans/2026-08-15-coop-semantics.md), indexed by slot. Per-attempt
-   * scope, mirroring `attempt`'s own lifecycle: reset at both `startAttempt()` call
-   * sites below, since it feeds the same win/lose panel. Fed to the HUD unconditionally
-   * -- whether the line actually shows is the HUD's own gate on `countPlayerTanks`.
+   * The results-screen kill tally, indexed by slot -- coop's own (coop semantics plan,
+   * docs/superpowers/plans/2026-08-15-coop-semantics.md) generalized by n-player arc PR
+   * 4's `tallyCoopKills` to also hold ffa/teams' player-vs-player kills: the two never
+   * coexist in one session (`world.mode` is fixed for its whole life), so one array
+   * safely serves both. `versusDeaths` is the PR 4 addition `tallyCoopKills` needs only
+   * for its ffa/teams branch -- unused, always empty, in campaign-coop. Per-attempt
+   * scope, mirroring `attempt`'s own lifecycle: both reset at every `startAttempt()`
+   * call site below, since they feed the same win/lose panel. Fed to the HUD
+   * unconditionally -- whether either line actually shows is the HUD's own gate
+   * (`setCoopKills`/`setVersusResults`, dispatched below on `driver.world.mode`).
    */
   let coopKills: number[] = [];
+  let versusDeaths: number[] = [];
 
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
@@ -874,15 +1003,9 @@ export function startGameWith(
     }
   }
 
-  // Rounds restart on every RESPAWN, not just at game start (resetArena moves
-  // roundStartTick), so a player with 3 lives sees the opening phases at least
-  // three times. The banner teaches once per page load; every round after it
-  // gets the quiet chip.
-  let lastRoundStartTick: number | null = null;
   // The denominator for musical intensity. Re-read on every world rebuild, since
   // arenas differ in enemy count.
   let enemiesAtRoundStart = countEnemies(world);
-  let roundsSeen = 0;
   /**
    * Per-slot rising-edge state for the connect toast, index = slot number
    * (n-player arc PR3). Generalizes the pre-PR3 single `wasGamepadConnected` boolean,
@@ -899,11 +1022,22 @@ export function startGameWith(
    * one moment that confirms the press was seen.
    */
   const gamepadConnectedPrev: boolean[] = new Array(playerCount).fill(false);
+  /**
+   * Single source of truth for "is slot i's physical pad connected right now",
+   * shared by the toast edge-detector below and by `reassignSlot`. Reassignment
+   * needs its own read of this: moving a slot away from a connected gamepad (to
+   * bot/none, or bouncing it via a keyboard/gamepad exclusivity swap) removes its
+   * `realSources` entry, so `connected` would read false on the very next tick even
+   * though nothing physically disconnected. Without re-syncing `gamepadConnectedPrev`
+   * at the moment of reassignment, that reads as a falling edge and fires a spurious
+   * "Player N's controller disconnected" toast for a deliberate UI action.
+   */
+  function slotGamepadConnected(i: number): boolean {
+    return assignment[i].kind === 'keyboard'
+      ? input.gamepadConnected()
+      : (realSources.get(i)?.gamepadConnected() ?? false);
+  }
   function refreshRoundPhase(w: World): void {
-    if (w.roundStartTick !== lastRoundStartTick) {
-      lastRoundStartTick = w.roundStartTick;
-      roundsSeen += 1;
-    }
     const phase = roundPhase(w);
     if (phase === 'live') {
       hud.setRoundPhase(null);
@@ -912,7 +1046,6 @@ export function startGameWith(
     hud.setRoundPhase({
       phase,
       secondsLeft: Math.ceil(roundPhaseTicksLeft(w) / TICK_HZ),
-      prominent: roundsSeen <= 1,
     });
   }
 
@@ -949,16 +1082,25 @@ export function startGameWith(
       // co-op or controllers -- see the co-op plan's audit for why a per-player touch
       // affordance is out of scope; touch is inherently a single-device input.
       hud.setTouchIndicator(input.touchIndicator());
-      // Gamepad connect toast, PER SLOT -- see gamepadConnectedPrev's own doc comment.
-      // Slot 0 reads `input.gamepadConnected()` (the optional `?dev=1&gamepad=1`
-      // merge); every other NON-BOT slot reads its own dedicated
-      // `PlayerInputSource.gamepadConnected()`. A bot-claimed slot has no entry in
-      // `realSources` and never toasts -- there is no physical pad to have connected
-      // there.
+      // Gamepad connect/disconnect toast, PER SLOT -- see gamepadConnectedPrev's own doc
+      // comment. Gated on `assignment[i].kind === 'keyboard'`, NOT `i === 0`: the
+      // controller assignment UI can move keyboard to any slot, and that slot -- whichever
+      // one it is -- is the one whose `input.gamepadConnected()` (the optional
+      // `?dev=1&gamepad=1` merge) is the right read; every other REAL slot reads its own
+      // dedicated `PlayerInputSource.gamepadConnected()`. A bot-claimed slot has no entry
+      // in `realSources` and never toasts -- there is no physical pad to have
+      // connected there. Toasts on BOTH edges: the rising edge is the pre-existing rule
+      // (issue #114); the falling edge closes the loop during play, so a mid-round
+      // disconnect is visible immediately rather than only through the panel's dimmed row
+      // (see input/assignment.ts's Reserved-idle semantics -- the slot's tank keeps
+      // holding either way, this is purely the notification).
       for (let i = 0; i < playerCount; i++) {
-        const connected = i === 0 ? input.gamepadConnected() : (realSources.get(i)?.gamepadConnected() ?? false);
+        const isKeyboardSlot = assignment[i].kind === 'keyboard';
+        const connected = slotGamepadConnected(i);
         if (connected && !gamepadConnectedPrev[i]) {
-          hud.showToast(i === 0 ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
+          hud.showToast(isKeyboardSlot ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
+        } else if (!connected && gamepadConnectedPrev[i]) {
+          hud.showToast(isKeyboardSlot ? 'Gamepad disconnected' : `Player ${i + 1}'s controller disconnected`);
         }
         gamepadConnectedPrev[i] = connected;
       }
@@ -990,9 +1132,9 @@ export function startGameWith(
       // Attributed against the CURRENT world's player: ids are arena-dependent, and
       // a stale id would misfile every stat from level 2 onward.
       deps.stats.record(events, playerId ?? -1);
-      // Coop's own per-slot tally, alongside stats.record -- see coopKills' own
+      // The results-screen per-slot tally, alongside stats.record -- see coopKills' own
       // comment above for why this stays out of stats.ts.
-      tallyCoopKills(events, driver.world, coopKills);
+      tallyCoopKills(events, driver.world, coopKills, versusDeaths);
       // AFTER record, so an attempt feat sees the attempt that just finished.
       checkAchievements(pendingClear);
       pendingClear = null;
@@ -1004,9 +1146,90 @@ export function startGameWith(
       // convention replayMetaFor uses, and the two never diverge in practice (the
       // sandbox exclusion keeps playerCount and countPlayerTanks(world) in lockstep by
       // construction). null means "never show", not merely "hide right now".
-      hud.setCoopKills(countPlayerTanks(driver.world) >= 2 ? coopKills : null);
+      //
+      // n-player arc PR 4: dispatched on the world's own mode, mirroring resolveStatus's
+      // dispatch one layer up -- campaign-coop feeds ONLY the coop line (today's rule,
+      // unchanged), ffa/teams feed ONLY the versus line, so a session's two results
+      // lines are never both live at once.
+      const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
+      hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
+      hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
     },
   });
+
+  /**
+   * The controller assignment UI's one write path: apply `reassign`'s pure exclusivity-
+   * bounce, then bring every slot whose DESCRIPTOR actually changed (the target, and any
+   * bounced slot) into line -- both are real changes and both need rebuilding, or the
+   * bounced slot would keep sampling its old source while `assignment` says `'none'`,
+   * which is the exact exclusivity bug the bounce exists to prevent.
+   *
+   * Rebuild, don't re-point (see input/assignment.ts's module doc comment and this
+   * plan's own reasoning): `createGamepadInputSource` closes over `padIndex` at
+   * construction, so a slot changing kind or pad index gets a FRESH source, never a
+   * mutated one. `input` (the `'keyboard'` singleton) is the one exception -- it is
+   * never disposed here, whichever slot loses it; only `dispose()` at final teardown
+   * frees it.
+   *
+   * A slot gaining a REAL source (gamepad/none) is seeded from `driver.world`
+   * IMMEDIATELY, not left for the next `onSimulated` tick: `setPlayerPosition` is what
+   * keeps a `'none'` slot's turret held rather than slewing toward world-origin for one
+   * tick (see createHeldInputSource's own doc comment), and a freshly-built gamepad
+   * source starts with `playerPos === null` otherwise.
+   *
+   * A slot gaining `'bot'` gets exactly one new `botSources` entry, seeded from the
+   * CURRENT world -- `createBotSources` with a single-element slot set, so an unrelated
+   * bot's own RNG stream (keyed by its own slot number) is untouched. A slot LOSING
+   * `'bot'` has its entry deleted the same way, incrementally.
+   */
+  function reassignSlot(slot: number, source: SlotSource): void {
+    // The boundary's second enforcement point. The panel does not OFFER `'bot'` when it
+    // is disallowed, so this is unreachable through the UI -- which is exactly why it is
+    // here: a rule enforced only by the thing that draws the buttons is one stale DOM
+    // node or one new caller away from not being a rule.
+    if (source.kind === 'bot' && !botsMayDrivePlayers) return;
+    const next = reassign(assignment, slot, source);
+    const changed: number[] = [];
+    for (let i = 0; i < next.length; i++) {
+      const prev = assignment[i];
+      if (sameSlotSource(next[i], prev)) continue;
+      changed.push(i);
+      const old = realSources.get(i);
+      if (old && old !== input) old.dispose();
+      realSources.delete(i);
+      if (prev.kind === 'bot') botSources.delete(i);
+      const nextSource = next[i];
+      if (nextSource.kind === 'bot') {
+        const seeded = createBotSources(driver.world.seed, new Set([i]));
+        botSources.set(i, seeded.get(i)!);
+      } else {
+        const built = buildRealSource(nextSource);
+        if (built) {
+          realSources.set(i, built);
+          const tank = tankForSlot(driver.world, i);
+          built.setPlayerPosition(tank ? { x: tank.pos.x, y: tank.pos.y } : null);
+        }
+      }
+    }
+    assignment = next;
+    // Re-sync the toast edge-detector for every slot whose source just changed.
+    // Without this, a slot that HAD a connected pad and gets reassigned away from it
+    // (to bot/none directly, or bounced to 'none' by another slot claiming its
+    // padIndex/keyboard) loses its `realSources` entry, so `slotGamepadConnected`
+    // reads false on the very next tick with `gamepadConnectedPrev[i]` still true --
+    // a spurious falling edge that would toast "Player N's controller disconnected"
+    // for a deliberate reassignment, not a physical unplug. Reading truth here at the
+    // moment of change is what keeps the falling-edge toast meaning "the hardware
+    // disconnected" rather than "the UI moved this slot".
+    for (const i of changed) {
+      gamepadConnectedPrev[i] = slotGamepadConnected(i);
+    }
+    // Refresh the panel's own display. setControllers rebuilds unconditionally
+    // (see hud.ts) so this always re-renders, open or not -- cheap, and it is what
+    // lets hud.css.test.ts's mountEveryButton fixture drive rows without opening
+    // the panel first.
+    hud.setControllers(assignment);
+  }
 
   hud.onMuteToggle(() => {
     hud.setMuted(audio.toggleMute());
@@ -1055,9 +1278,11 @@ export function startGameWith(
   function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
-    // Reseeded here too -- see the initial assignment's own doc comment for why bots
-    // are per-world, not per-session.
-    botSources = createBotSources(world.seed, botSlots);
+    // Reseeded here too -- see botSources' own doc comment above for why bots are
+    // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
+    // `botSlots` set: a mid-session reassignment can have moved a slot to or from
+    // `'bot'` since boot, and switchTo must not resurrect a stale bot roster.
+    botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
     // A new world means a new trace: the recorded inputs only mean anything
     // applied to the world they were sampled against, so carrying them across a
     // level switch would produce a trace that replays into a different game.
@@ -1065,10 +1290,6 @@ export function startGameWith(
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     haptics.setPlayerId(playerId ?? -1);
-    // A FRESH world's roundStartTick can equal the old one's (both start at the same
-    // tick), so without this reset the round tracker would not count the new level's
-    // opening round and the teaching banner would re-show.
-    lastRoundStartTick = null;
     enemiesAtRoundStart = countEnemies(world);
     const b = deps.levels.bounds(level);
     if (b.width !== shownBounds.width || b.height !== shownBounds.height || b.cellSize !== shownBounds.cellSize) {
@@ -1085,9 +1306,10 @@ export function startGameWith(
     // builds a world; every caller above decides for itself whether this world is
     // campaign or practice, and mutates (or does not mutate) the run accordingly.
     deps.stats.startAttempt();
-    // Same lifecycle as `attempt` above: coopKills resets on every new attempt, not
-    // just at boot -- see coopKills' own comment for why.
+    // Same lifecycle as `attempt` above: coopKills/versusDeaths reset on every new
+    // attempt, not just at boot -- see coopKills' own comment for why.
     coopKills = [];
+    versusDeaths = [];
     hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   }
 
@@ -1263,9 +1485,18 @@ export function startGameWith(
   });
 
   hud.onQuitToTitle(() => {
-    // The HUD hides the Quit button outside pause, but a handler that rebuilds the
-    // world deserves its own guard, not a CSS class as its only defence.
-    if (sm.state !== 'paused') return;
+    // The HUD hides the Quit button outside pause and the level-cleared panel, but a
+    // handler that rebuilds the world deserves its own guard, not a CSS class as its
+    // only defence.
+    //
+    // 'win' joined 'paused' when a directive asked for a main-menu route out of a
+    // cleared level. The run SURVIVES that trip, which needs no work here and is the
+    // reason this reuses the quit path rather than inventing one: `advanceLevel` already
+    // ran at the moment the level cleared (see the `s === 'win'` branch below), not when
+    // Next Level is pressed, so the run is already sitting on the NEXT level by the time
+    // this panel is on screen. Leaving from here resumes there, not on the level just
+    // beaten.
+    if (sm.state !== 'paused' && sm.state !== 'win') return;
     // Quit suspends presentation of the run; it must not create or replenish one
     // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
     // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
@@ -1332,6 +1563,28 @@ export function startGameWith(
     deps.customization.setAccent(id);
     hud.setAccentColor(deps.customization.accent());
     restyle();
+  });
+
+  // The controller assignment UI's one write path -- see reassignSlot's own doc comment.
+  hud.onReassignSlot(reassignSlot);
+
+  // The panel's live pad list -- read once immediately on open (the browser's
+  // gamepadconnected/disconnected events fire only on CHANGE, so opening over
+  // already-connected pads would otherwise show nothing until the next hotplug), then
+  // kept live by the two window listeners for as long as the panel stays open. Added and
+  // removed at exactly this chokepoint -- the driver does not tick during title/paused,
+  // so nothing else would refresh the panel while it is up.
+  const onGamepadHotplug = (): void => {
+    hud.setDetectedPads(deps.readDetectedPads());
+  };
+  hud.onControllersOpen(() => {
+    onGamepadHotplug();
+    deps.host.addEventListener('gamepadconnected', onGamepadHotplug);
+    deps.host.addEventListener('gamepaddisconnected', onGamepadHotplug);
+  });
+  hud.onControllersClose(() => {
+    deps.host.removeEventListener('gamepadconnected', onGamepadHotplug);
+    deps.host.removeEventListener('gamepaddisconnected', onGamepadHotplug);
   });
 
   hud.onResetStats(() => {
@@ -1447,6 +1700,7 @@ export function startGameWith(
   hud.setContinueAvailable(deps.run.active() !== null);
   deps.stats.startAttempt();
   coopKills = [];
+  versusDeaths = [];
   hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
@@ -1455,6 +1709,8 @@ export function startGameWith(
   hud.setFireMode(deps.touchSettings.fireMode());
   hud.setHaptics(deps.touchSettings.haptics());
   hud.setAchievements(deps.achievements.earned());
+  hud.setBotAssignmentAllowed(botsMayDrivePlayers);
+  hud.setControllers(assignment);
   refreshStats(world);
 
   // The title screen leaves on ANY gesture. Both listeners are unconditional and the
@@ -1538,14 +1794,16 @@ export function startGameWith(
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
       input.dispose();
-      // Every co-player slot beyond slot 0 that built a REAL source -- its own
-      // dedicated gamepad reader at padIndex === slot -- none hold listeners of their
-      // own today (see GamepadReader.dispose's own doc comment), but disposed
-      // alongside slot 0 for symmetry and so a future stateful slot has somewhere to
-      // release. A bot-claimed slot has nothing here to dispose -- see `realSources`'
-      // own doc comment.
-      realSources.forEach((s, i) => {
-        if (i !== 0) s.dispose();
+      // Every REAL source except `input` itself, whichever slot currently holds it --
+      // `input` is the boot-to-teardown singleton, disposed exactly once above,
+      // regardless of which slot the controller assignment UI has it in right now.
+      // Gamepad readers hold no listeners of their own today (see
+      // GamepadReader.dispose's own doc comment) and `createHeldInputSource` holds none
+      // either, but both are disposed for symmetry and so a future stateful slot has
+      // somewhere to release. A bot-claimed slot has nothing here to dispose -- see
+      // `realSources`' own doc comment.
+      realSources.forEach((s) => {
+        if (s !== input) s.dispose();
       });
       renderer.dispose();
       // The panel can still be open at teardown (main.ts's pagehide path can fire

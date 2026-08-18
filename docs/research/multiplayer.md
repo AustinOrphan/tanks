@@ -587,6 +587,30 @@ behaviour under the `/tanks/` deploy are all unverified.
    > `RESPAWN_SHIELD_TICKS` and `stepRespawns` still exist and still work exactly as
    > described above, but only reachably under `coopPool=1` — attempts mode never
    > stamps a `respawnAtTick`, so `stepRespawns` is a structural no-op there.
+   >
+   > **ANSWERED for versus, 2026-08-17** (n-player arc PR 4;
+   > docs/superpowers/plans/2026-08-17-versus-modes.md). `World.mode`
+   > (`'campaign-coop'` default, `'ffa'`, `'teams'`) dispatches `resolveStatus` a third
+   > and fourth way, alongside the coop split above — `'campaign-coop'` still falls
+   > through into the guard-first body untouched. Single life per round, no stock/lives
+   > system: FFA wins when exactly one player tank is left alive; teams wins when one
+   > team's players are all dead and the other has a survivor. A simultaneous final
+   > wipeout (the last two tanks, or the last two teams, trade a kill the same tick)
+   > resolves to `'lose'` — deliberately no `'draw'` status, named as a residual rather
+   > than built, since that touches `game/state.ts`'s branches, HUD copy and
+   > achievements gating. `loadArena` strips every enemy spawn in a versus world rather
+   > than repurposing an enemy letter as a bonus player slot (enemy letters are typed,
+   > and repurposing one would couple a versus session's player count to a campaign
+   > level's authored roster), so the arena-claims/`structuralFailures` machinery named
+   > in question 4 below needs no change for versus modes: it is entirely about ENEMY
+   > spawns, and versus modes have none — question 4 itself, about co-op's TWO player
+   > spawns, is untouched by this. `stepRespawns`' gate is tightened to
+   > `mode === 'campaign-coop' && countPlayerTanks >= 2` — functionally a no-op, since
+   > only the coop branch ever schedules a respawn, but it makes the mode boundary
+   > legible everywhere it is checked. `World.friendlyFire` (default off, `'teams'`-only
+   > by construction) gates shell and mine-blast damage identically in `bullets.ts`/
+   > `mines.ts`, and `ai/player-profile.ts`'s `isOpponent` becomes mode-aware so a bot
+   > can actually fight in a versus match instead of finding no targets and wandering.
 4. **How do the arena `claims` and `structuralFailures` rules generalise past one player
    spawn?** With two spawns, "no enemy sees the player spawn" becomes a cross product; on a
    versus board with zero AI it becomes vacuous, which is the failure mode CLAUDE.md warns

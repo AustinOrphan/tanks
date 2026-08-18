@@ -738,7 +738,7 @@ describe('hud: dev shell count', () => {
   });
 });
 
-describe('hud: round-start phase feedback', () => {
+describe('hud: round-start countdown', () => {
   function mount(): { root: HTMLElement; hud: ReturnType<typeof createHud> } {
     const root = document.createElement('div');
     document.body.appendChild(root);
@@ -747,52 +747,59 @@ describe('hud: round-start phase feedback', () => {
 
   it('shows nothing until it is told to', () => {
     const { root, hud } = mount();
-    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
-    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    expect(root.querySelector('.hud-count')?.className).toContain('hud-count--hidden');
     hud.dispose();
   });
 
-  it('shows the teaching banner when prominent', () => {
+  it('is a bare number -- no "AIM"/"TAKE AIM" word, on either non-live phase', () => {
+    // Design ruling: the countdown must not say a word, ever -- just the number.
     const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: true });
-    const banner = root.querySelector('.hud-banner') as HTMLElement;
-    expect(banner.className).not.toContain('hud-banner--hidden');
-    expect(root.querySelector('.hud-banner-word')?.textContent).toBe('TAKE AIM');
-    expect(root.querySelector('.hud-banner-count')?.textContent).toBe('3');
-    // and not both at once
-    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
-    hud.dispose();
-  });
-
-  it('shows the quiet chip when not prominent', () => {
-    const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'grace', secondsLeft: 2, prominent: false });
-    expect(root.querySelector('.hud-phase')?.textContent).toBe('MOVE 2');
-    expect(root.querySelector('.hud-phase')?.className).not.toContain('hud-phase--hidden');
-    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
-    hud.dispose();
-  });
-
-  it('uses the phase word, not a generic countdown', () => {
-    const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 1, prominent: false });
-    expect(root.querySelector('.hud-phase')?.textContent).toBe('AIM 1');
-    hud.setRoundPhase({ phase: 'grace', secondsLeft: 1, prominent: false });
-    expect(root.querySelector('.hud-phase')?.textContent).toBe('MOVE 1');
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
+    const count = root.querySelector('.hud-count') as HTMLElement;
+    expect(count.textContent).toBe('3');
+    expect(count.className).not.toContain('hud-count--hidden');
+    hud.setRoundPhase({ phase: 'grace', secondsLeft: 2 });
+    expect(count.textContent).toBe('2');
     hud.dispose();
   });
 
   it('hides on null and on live', () => {
     const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: true });
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
     hud.setRoundPhase(null);
-    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: false });
-    hud.setRoundPhase({ phase: 'live', secondsLeft: 0, prominent: false });
-    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    expect(root.querySelector('.hud-count')?.className).toContain('hud-count--hidden');
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
+    hud.setRoundPhase({ phase: 'live', secondsLeft: 0 });
+    expect(root.querySelector('.hud-count')?.className).toContain('hud-count--hidden');
     hud.dispose();
   });
 
+  it('restarts the pop animation on each new second, not on every call', () => {
+    // The transient pop is the whole point (design ruling): each new second must read
+    // as a fresh pop, not a continuation of the last one's fade-out, and a tick that
+    // repeats the same second must NOT restart it (the driver calls this every
+    // simulated tick, dozens of times per second -- restarting on every call would
+    // just as surely break the design as never restarting at all). Same restart
+    // trick as signalPlayerDeath: remove the class, force a reflow, add it back --
+    // proven here via the classList.remove calls, since jsdom does not run CSS
+    // animations at all.
+    const { root, hud } = mount();
+    const countEl = root.querySelector('.hud-count') as HTMLElement;
+    const removeSpy = vi.spyOn(countEl.classList, 'remove');
+
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
+    const popRemovals = (): number =>
+      removeSpy.mock.calls.filter(([c]) => c === 'hud-count--pop').length;
+    expect(popRemovals()).toBe(1);
+
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 }); // same second, repeated
+    expect(popRemovals()).toBe(1); // unchanged: no restart mid-second
+
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 2 }); // a new second
+    expect(popRemovals()).toBe(2); // restarted
+
+    hud.dispose();
+  });
 });
 
 describe('hud: level progression', () => {
@@ -852,9 +859,11 @@ describe('hud: pause panel', () => {
   });
 
   it('keeps Quit out of every other panel state, and settings off the END screens', () => {
-    // Population: all four non-paused states. A quit button on the win panel would
-    // be a second untested path out of a finished game. The settings row serves the
-    // TITLE (the main menu) and pause; win/lose panels stay verdict-only.
+    // Population: all four non-paused states. Quit reaches the level-cleared panel too
+    // (a directive), but that needs an INTERMEDIATE level position -- this fixture sets
+    // none, so `win` here is the final-win shape and stays verdict-only. The cleared
+    // case has its own describe block below; without it this loop would keep passing
+    // for the wrong reason, since a null level position hides the button regardless.
     const { hud: h, root } = mount();
     for (const s of ['title', 'win', 'lose'] as const) {
       h.setState(s);
@@ -1181,6 +1190,166 @@ describe('hud: level select panel', () => {
   });
 });
 
+describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-controller-assignment.md)', () => {
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-controllers-open') as HTMLButtonElement;
+  const view = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-controllers') as HTMLElement;
+  const backBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-controllers-back') as HTMLButtonElement;
+  const heading = (root: HTMLElement): string =>
+    (root.querySelector('.hud-controllers-title') as HTMLElement).textContent ?? '';
+  const rows = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-controller-row'));
+  const currentOf = (row: HTMLElement): HTMLElement =>
+    row.querySelector('.hud-controller-row-current') as HTMLElement;
+  const candidateButtons = (row: HTMLElement): HTMLButtonElement[] =>
+    Array.from(row.querySelectorAll('.hud-controller-source-btn'));
+
+  it('is reachable from BOTH the title screen and the pause panel, unlike every sibling subpanel', () => {
+    // 'playing' is excluded from this per-button check, matching the established
+    // convention (see 'hud: level select panel's own equivalent test): setState's
+    // early-return for playing/splash hides the whole .hud-panel wrapper rather than
+    // toggling each button's own class, so the button's OWN class is not the right
+    // oracle there.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    expect(openBtn(root).classList.contains('hud-controllers-open--hidden')).toBe(false);
+    h.setState('paused');
+    expect(openBtn(root).classList.contains('hud-controllers-open--hidden')).toBe(false);
+    for (const s of ['win', 'lose'] as const) {
+      h.setState(s);
+      expect(openBtn(root).classList.contains('hud-controllers-open--hidden'), s).toBe(true);
+    }
+  });
+
+  it('renders one row per slot, with the current source\'s label per SlotSource kind', () => {
+    const { hud: h, root } = mount();
+    h.setDetectedPads([{ padIndex: 2, id: 'Xbox Wireless Controller' }]);
+    h.setControllers([
+      { kind: 'keyboard' },
+      { kind: 'gamepad', padIndex: 2 }, // connected -- matches the detected pad above
+      { kind: 'gamepad', padIndex: 7 }, // NOT in the detected list -- disconnected
+      { kind: 'bot' },
+      { kind: 'none' },
+    ]);
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const rs = rows(root);
+    expect(rs).toHaveLength(5);
+    expect(currentOf(rs[0]).textContent).toBe('Keyboard / Mouse / Touch');
+    expect(currentOf(rs[1]).textContent).toBe('Xbox Wireless Controller (index 2)');
+    expect(currentOf(rs[1]).classList.contains('hud-controller-row-current--disconnected')).toBe(false);
+    // Falls back to "Controller N" when the id is unknown -- unreachable once
+    // disconnected (a pad's id cannot be read once unplugged), and dimmed.
+    expect(currentOf(rs[2]).textContent).toBe('Controller 7 (index 7) — disconnected');
+    expect(currentOf(rs[2]).classList.contains('hud-controller-row-current--disconnected')).toBe(true);
+    expect(currentOf(rs[3]).textContent).toBe('Bot');
+    expect(currentOf(rs[4]).textContent).toBe('Unassigned');
+  });
+
+  it('one candidate button per Keyboard/Bot/None plus one per DETECTED pad, the current one selected', () => {
+    const { hud: h, root } = mount();
+    h.setBotAssignmentAllowed(true);
+    h.setDetectedPads([{ padIndex: 0, id: 'Pad A' }, { padIndex: 1, id: 'Pad B' }]);
+    h.setControllers([{ kind: 'gamepad', padIndex: 1 }]);
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const btns = candidateButtons(rows(root)[0]);
+    // 3 fixed (Keyboard/Bot/None) + 2 detected pads = 5.
+    expect(btns.map((b) => b.textContent)).toEqual(['Keyboard', 'Bot', 'None', 'Pad A (index 0)', 'Pad B (index 1)']);
+    // Only the slot's CURRENT source (gamepad padIndex 1) carries the selection ring.
+    expect(btns.map((b) => b.classList.contains('hud-controller-source-btn--selected')))
+      .toEqual([false, false, false, false, true]);
+  });
+
+  it('clicking a candidate button fires onReassignSlot with the SLOT and the candidate SlotSource', () => {
+    const { hud: h, root } = mount();
+    h.setBotAssignmentAllowed(true);
+    h.setDetectedPads([{ padIndex: 3, id: 'Pad' }]);
+    h.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 3 }]);
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    const calls: Array<[number, unknown]> = [];
+    h.onReassignSlot((slot, source) => calls.push([slot, source]));
+    const row1Buttons = candidateButtons(rows(root)[1]);
+    row1Buttons[1].dispatchEvent(new MouseEvent('click')); // 'Bot'
+    expect(calls).toEqual([[1, { kind: 'bot' }]]);
+    const row0Buttons = candidateButtons(rows(root)[0]);
+    row0Buttons[3].dispatchEvent(new MouseEvent('click')); // the one detected pad
+    expect(calls).toEqual([[1, { kind: 'bot' }], [0, { kind: 'gamepad', padIndex: 3 }]]);
+  });
+
+  it('re-rendering (setControllers/setDetectedPads) REPLACES rows, never appends', () => {
+    const { hud: h, root } = mount();
+    h.setControllers([{ kind: 'keyboard' }]);
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(rows(root)).toHaveLength(1);
+    h.setControllers([{ kind: 'keyboard' }, { kind: 'bot' }, { kind: 'none' }]);
+    expect(rows(root)).toHaveLength(3);
+    h.setControllers([{ kind: 'bot' }]);
+    expect(rows(root)).toHaveLength(1);
+  });
+
+  it('the heading branches on which screen opened it: "Choose who\'s playing" at title, "Controllers" at pause', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(heading(root)).toBe("Choose who's playing");
+    backBtn(root).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing');
+    h.setState('paused');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(heading(root)).toBe('Controllers');
+  });
+
+  it('Back routes to shownState, not a hardcoded \'title\' -- opening from PAUSED and clicking ' +
+    'Back must return to the live round, not abandon it', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.setState('playing');
+    h.setState('paused');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(view(root).classList.contains('hud-controllers--hidden')).toBe(false);
+    backBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
+    // Landed back on PAUSED, not title -- the pause panel's own Resume button is
+    // visible again, and the title-only Continue/New Game pair is not.
+    expect((root.querySelector('.hud-action') as HTMLButtonElement).textContent).toBe('Resume');
+  });
+
+  it('onControllersOpen/onControllersClose fire once per ACTUAL transition, matching onCustomizeOpen/Close\'s own contract', () => {
+    const { hud: h, root } = mount();
+    let opens = 0;
+    let closes = 0;
+    h.onControllersOpen(() => { opens += 1; });
+    h.onControllersClose(() => { closes += 1; });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens).toBe(1);
+    expect(closes).toBe(0);
+    backBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens).toBe(1);
+    expect(closes).toBe(1);
+    // A redundant close (setState while already closed) must not fire again.
+    h.setState('playing');
+    expect(closes).toBe(1);
+  });
+
+  it('is closed unconditionally by ANY state change -- setState\'s close chokepoint, not just Back ' +
+    '-- and fires onControllersClose either way, so a caller cleaning up a live listener never misses it', () => {
+    const { hud: h, root } = mount();
+    let closes = 0;
+    h.onControllersClose(() => { closes += 1; });
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing'); // NOT via Back -- e.g. Resume from the pause-opened panel
+    expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
+    expect(closes).toBe(1);
+  });
+});
+
 describe('hud: continue vs new game', () => {
   const continueBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-continue') as HTMLButtonElement;
@@ -1393,6 +1562,51 @@ describe('hud: the stats page', () => {
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 0');
     h.setCoopKills([1, 1]);
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 1');
+  });
+});
+
+describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills precedent)', () => {
+  it('win panel carries the ffa results line, per-slot kills/deaths', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults({ mode: 'ffa', kills: [2, 0, 1], deaths: [1, 3, 0] });
+    h.setState('win');
+    const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
+    expect(line).toBe('P1: 2/1 · P2: 0/3 · P3: 1/0');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(false);
+  });
+
+  it('win panel carries the teams results line as PER-TEAM sums, not per-slot', () => {
+    const { hud: h, root } = mount();
+    // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
+    h.setVersusResults({ mode: 'teams', kills: [2, 1, 3], deaths: [1, 4, 0] });
+    h.setState('win');
+    const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
+    expect(line).toBe('Team 1: 5/1 · Team 2: 1/4');
+  });
+
+  it('setVersusResults(null) keeps the line hidden even at win/lose', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults(null);
+    h.setState('win');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+    h.setState('lose');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+  });
+
+  it('the versus results line is hidden outside win/lose, even with live data set', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults({ mode: 'ffa', kills: [1], deaths: [0] });
+    h.setState('playing');
+    expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
+  });
+
+  it('updates live while the win panel is already open, same as the coop kill line', () => {
+    const { hud: h, root } = mount();
+    h.setVersusResults({ mode: 'ffa', kills: [1, 0], deaths: [0, 1] });
+    h.setState('win');
+    expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/0 · P2: 0/1');
+    h.setVersusResults({ mode: 'ffa', kills: [1, 1], deaths: [1, 1] });
+    expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/1 · P2: 1/1');
   });
 });
 
@@ -1813,15 +2027,16 @@ describe('hud: the paint shop', () => {
 
 describe('createHud roving-tabindex focus navigation (issue #115)', () => {
   it('every focus-target container names itself from its own heading', () => {
-    // The five tabindex="-1" containers are what panel-open transitions focus; a bare
+    // The six tabindex="-1" containers are what panel-open transitions focus; a bare
     // div's accessible name is the flattened text of everything inside it, so each one
     // carries aria-labelledby pointing at its own h1. Derived from the DOM, not a list:
-    // a sixth focusable container added without the attribute fails here. Breaks if an
+    // a seventh focusable container added without the attribute fails here. Breaks if an
     // aria-labelledby is dropped, its id target renamed, or the target moves outside
     // the container it names.
     const { root } = mount();
     const containers = Array.from(root.querySelectorAll<HTMLElement>('[tabindex="-1"]'));
-    expect(containers.length, '5 panel containers carry tabindex=-1 (panel + 4 subpanels)').toBe(5);
+    expect(containers.length, '6 panel containers carry tabindex=-1 (panel + 5 subpanels, ' +
+      'controller assignment landing (docs/superpowers/plans/2026-08-17-controller-assignment.md))').toBe(6);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
@@ -1880,12 +2095,14 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     'hud-stats-open': 'hud-stats',
     'hud-achievements-open': 'hud-achievements',
     'hud-levelselect-open': 'hud-levelselect',
+    'hud-controllers-open': 'hud-controllers',
   };
   const BACK_OF_PANEL: Record<string, string> = {
     'hud-customize': 'hud-customize-back',
     'hud-stats': 'hud-stats-back',
     'hud-achievements': 'hud-achievements-back',
     'hud-levelselect': 'hud-levelselect-back',
+    'hud-controllers': 'hud-controllers-back',
   };
 
   it('reaches every visible, enabled control from the title screen using arrow keys alone', () => {
@@ -1965,7 +2182,13 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // doc comment in hud.ts.
     // 42 since the haptics toggle (issue #112's deferred HUD control) landed: 41 + the
     // toggle beside the fire-mode toggle in the title panel's settings row.
-    expect(totalControls, 'recount the panels above if this moves').toBe(42);
+    // 44 since the controller assignment panel landed (docs/superpowers/plans/
+    // 2026-08-17-controller-assignment.md): 42 + 1 (the title panel's own new
+    // Controllers-open button) + 1 (the Controllers panel's own Back button -- this test
+    // never calls hud.setControllers, so its rows are empty and Back is its only
+    // reachable control; row-button reachability is covered by hud.css.test.ts's
+    // buttons.length sweep and this file's own controller-row rendering tests instead).
+    expect(totalControls, 'recount the panels above if this moves').toBe(44);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -2054,7 +2277,12 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     expect(isMuteHotkey(ev('m')), 'M-to-mute is dead while paused').toBe(true);
   });
 
-  it('reaches Resume then Quit from the pause panel with two ArrowDowns', () => {
+  it('reaches Resume, then Controllers, then Quit from the pause panel with three ArrowDowns', () => {
+    // Was "two ArrowDowns" before the controller assignment panel landed (docs/
+    // superpowers/plans/2026-08-17-controller-assignment.md): its own open button sits
+    // between the action button and Quit in DOM order and is now visible at 'paused'
+    // too (owner ruling: "in case controllers disconnect"), so it is a real, reachable
+    // stop, not a skip.
     const { hud: h, root } = mount();
     h.setState('title');
     h.setState('playing');
@@ -2064,7 +2292,13 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
       root.querySelector('.hud-action'),
     );
     pressActive('ArrowDown');
-    expect(document.activeElement).toBe(root.querySelector('.hud-quit'));
+    expect(document.activeElement, 'the second ArrowDown did not reach Controllers').toBe(
+      root.querySelector('.hud-controllers-open'),
+    );
+    pressActive('ArrowDown');
+    expect(document.activeElement, 'the third ArrowDown did not reach Quit').toBe(
+      root.querySelector('.hud-quit'),
+    );
   });
 
   it('keeps the menu hotkeys alive returning to title via a subpanel\'s Back button too', () => {
@@ -2227,3 +2461,117 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     removeSpy.mockRestore();
   });
 });
+
+describe('hud: the Bot candidate is gated (bots may not drive a player tank in the campaign)', () => {
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-controllers-open') as HTMLButtonElement;
+  const rows = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-controller-row'));
+  const candidateLabels = (row: HTMLElement): string[] =>
+    Array.from(row.querySelectorAll('.hud-controller-source-btn')).map(
+      (b) => (b as HTMLButtonElement).textContent ?? '',
+    );
+
+  function openPanel(h: Hud, root: HTMLElement): void {
+    h.setControllers([{ kind: 'keyboard' }]);
+    h.setState('title');
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+  }
+
+  it('omits Bot by default -- a shipped campaign cannot hand a player slot to a bot', () => {
+    // Fails if `renderControllerRows` puts `{ kind: 'bot' }` back in the candidate list
+    // unconditionally, or if `botAssignmentAllowedNow` defaults to true.
+    const { hud: h, root } = mount();
+    openPanel(h, root);
+    expect(candidateLabels(rows(root)[0])).not.toContain('Bot');
+  });
+
+  it('offers Bot once it is allowed', () => {
+    // The other half: without this, deleting the candidate entirely would still pass the
+    // test above, so that one alone would not distinguish "gated" from "removed".
+    const { hud: h, root } = mount();
+    h.setBotAssignmentAllowed(true);
+    openPanel(h, root);
+    expect(candidateLabels(rows(root)[0])).toContain('Bot');
+  });
+
+  it('re-renders when the permission changes while the panel is already open', () => {
+    // setBotAssignmentAllowed must call renderControllerRows, not merely set the flag for
+    // the next unrelated re-render. Fails if that call is dropped.
+    const { hud: h, root } = mount();
+    openPanel(h, root);
+    expect(candidateLabels(rows(root)[0])).not.toContain('Bot');
+    h.setBotAssignmentAllowed(true);
+    expect(candidateLabels(rows(root)[0])).toContain('Bot');
+  });
+});
+
+describe('hud: the title screen carries no tagline', () => {
+  const subtitle = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-subtitle') as HTMLElement;
+
+  it('leaves the title subtitle empty AND out of layout', () => {
+    // A directive: the menu is crowded and the tagline was the least load-bearing thing
+    // on it. Both halves are asserted because blanking alone is not enough -- .hud-panel
+    // is a gapped flex column, so an emptied element still costs its 14px gap. Fails if
+    // the string comes back, or if setSubtitle stops toggling the hidden class.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    expect(subtitle(root).textContent).toBe('');
+    expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(true);
+  });
+
+  it('still shows a subtitle in states that have one', () => {
+    // The negative control: without it, deleting setSubtitle's write entirely -- or
+    // hiding the element permanently -- would satisfy the test above.
+    const { hud: h, root } = mount();
+    h.setState('lose');
+    expect(subtitle(root).textContent).toBe('Out of lives.');
+    expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(false);
+  });
+});
+
+describe('hud: the level-cleared panel offers the main menu', () => {
+  const quitBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-quit') as HTMLButtonElement;
+  const hidden = (root: HTMLElement): boolean =>
+    quitBtn(root).classList.contains('hud-quit--hidden');
+
+  it('shows it after clearing an INTERMEDIATE level, labelled Main Menu', () => {
+    // Fails if the clearedIntermediate condition is dropped, or if the label is left as
+    // "Quit to Title" -- wrong copy for leaving a level you just won.
+    const { hud: h, root } = mount();
+    h.setLevel(2, 5);
+    h.setState('win');
+    expect(hidden(root)).toBe(false);
+    expect(quitBtn(root).textContent).toBe('Main Menu');
+  });
+
+  it('hides it on the FINAL win, where the run has already ended', () => {
+    // The discriminator, and the reason `s === 'win'` alone is not the condition:
+    // endRun has run by then, so there is no run to return to.
+    const { hud: h, root } = mount();
+    h.setLevel(5, 5);
+    h.setState('win');
+    expect(hidden(root)).toBe(true);
+  });
+
+  it('hides it on lose even mid-campaign', () => {
+    // A loss ends the run too, so a cleared-level route out does not apply. Fails if the
+    // condition widens from `s === 'win'` to "any end screen with levels left".
+    const { hud: h, root } = mount();
+    h.setLevel(2, 5);
+    h.setState('lose');
+    expect(hidden(root)).toBe(true);
+  });
+
+  it('still says Quit to Title when paused', () => {
+    // The label is per-state, not a global rename: pause keeps its own wording.
+    const { hud: h, root } = mount();
+    h.setLevel(2, 5);
+    h.setState('paused');
+    expect(hidden(root)).toBe(false);
+    expect(quitBtn(root).textContent).toBe('Quit to Title');
+  });
+});
+

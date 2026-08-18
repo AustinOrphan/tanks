@@ -84,6 +84,22 @@ function identityColor(slot: number): number {
 }
 
 /**
+ * Team colours (n-player arc PR 4) -- 'teams' mode's alternative to IDENTITY_RING_COLORS
+ * at the SAME lookup site (syncTanks' ring creation, shellTintFor), dispatched on
+ * `world.mode === 'teams'`. Where per-slot identity answers "which of 4 players",
+ * teams answers "which of 2 SIDES" -- knowing your teammate's shell apart from an
+ * opponent's matters more than telling two teammates apart. A vivid red/blue pair
+ * (Tank.team = teamOf(slot) = slot % 2, arena.ts), picked by eye and verified distinct
+ * from every roster colour, both identity-ring hues and the unstyled-slot placeholder
+ * by entities.test.ts's sweep -- same reuse-the-mechanism, new-colour-source shape PR1
+ * itself used for IDENTITY_RING_COLORS' own placeholder swatch.
+ */
+export const TEAM_COLORS: readonly [number, number] = [0xff3b3b, 0x3b82ff];
+function teamColor(team: number): number {
+  return TEAM_COLORS[team] ?? IDENTITY_COLOR_FALLBACK;
+}
+
+/**
  * How many player-kind tanks a world has to have before identity rings/shell tints draw
  * at all. Below this, both are the single-player game exactly as shipped before this
  * feature -- byte-identical, not merely visually similar -- which is the stated
@@ -1165,9 +1181,16 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // Recomputed from the
       // CURRENT world every sync rather than latched at tank-view creation, since
       // `multiPlayer` is a property of the world, not of this one tank.
+      //
+      // n-player arc PR 4: `curr.mode === 'teams'` colours by TEAM (teamColor) instead
+      // of by SLOT (identityColor) -- same site, alternative colour source, mirroring
+      // PR1's own placeholder-swatch shape. `t.team` is always defined here in real
+      // play (loadArena only reaches a 'teams' world with it stamped); `?? 0` is a
+      // defensive fallback for a hand-built fixture, not a reachable campaign state.
       if (t.kind === 'player') {
         if (multiPlayer && !view.ring) {
-          view.ring = makeIdentityRing(identityColor(slot));
+          const color = curr.mode === 'teams' ? teamColor(t.team ?? 0) : identityColor(slot);
+          view.ring = makeIdentityRing(color);
           view.group.add(view.ring);
         } else if (!multiPlayer && view.ring) {
           disposeObject(view.ring);
@@ -1216,7 +1239,9 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   function shellTintFor(curr: World, ownerId: number): number | null {
     const owner = curr.tanks.find((t) => t.id === ownerId);
     if (!owner || owner.kind !== 'player') return null;
-    return identityColor(owner.controlledBy ?? 0);
+    // n-player arc PR 4: teams mode tints by TEAM, mirroring the ring dispatch above --
+    // see its own comment for why `t.team ?? 0`'s fallback is defensive, not reachable.
+    return curr.mode === 'teams' ? teamColor(owner.team ?? 0) : identityColor(owner.controlledBy ?? 0);
   }
 
   function syncBullets(prev: World, curr: World, alpha: number, multiPlayer: boolean): void {

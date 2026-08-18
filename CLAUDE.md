@@ -96,10 +96,31 @@ adds 3, for 9 distinct. The deploy runs 5 of them, all from `verify`: Typecheck,
 Build, portability, audit.) The construction is written out because the bare number went
 stale twice unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule over
 that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest` (→ 8)
-and #128 added `Baseline trace (chromium)` (→ 9), and neither recounted. **`main` still
-carries no branch protection and no ruleset** — nothing forces work through a PR, and
-nothing stops a direct push. The CI gate above is on the DEPLOY, not on the branch: a red
-commit can still land on `main`, it just will not publish. Two consequences of the shared
+and #128 added `Baseline trace (chromium)` (→ 9), and neither recounted. **`main` IS
+protected now, by a REPOSITORY RULESET rather than classic branch protection** — which is
+why `GET /repos/:owner/:repo/branches/main/protection` still answers 404, and why the
+sentence this replaces ("no branch protection and no ruleset — nothing forces work through
+a PR, and nothing stops a direct push") read as true to anyone who checked only that
+endpoint. It was false on every clause. Read the rulesets API instead:
+`gh api repos/AustinOrphan/tanks/rulesets`.
+
+The ruleset is named `Protect main`, targets `~DEFAULT_BRANCH`, is `active`, and has **an
+empty `bypass_actors` list — nobody can bypass it, including the repository owner.** It
+carries five rules: `deletion`, `non_fast_forward`, `required_linear_history`,
+`pull_request` (squash the ONLY allowed merge method, `required_approving_review_count` 0,
+but `required_review_thread_resolution` true) and `required_status_checks` on exactly three
+contexts — **`verify (20.19.0)`, `verify (22)` and `visual`**, the same three jobs `ci.yml`
+defines.
+
+Three consequences that invert what this file used to say. Work **is** forced through a PR
+and a direct push to `main` is refused. A red commit **cannot** land on `main` any more —
+the CI gate is now on the BRANCH as well as on the deploy, so the "a red commit can still
+land, it just will not publish" reading is retired. And an unresolved review thread blocks
+a merge even though zero approvals are required, which is the one rule here that is easy
+to trip over, because it fails with the same generic "base branch policy prohibits the
+merge" message that a red check does — `gh pr checks` will look green while the merge
+stays blocked. **`gh pr merge` reports that message for any ruleset violation**, so
+diagnose with `gh pr checks` AND the thread state before assuming CI is the cause. Two consequences of the shared
 origin, neither fixable from this repo: every project page under `austinorphan.com` shares
 one localStorage namespace (the game's **six** keys are all `tanks.*`-prefixed —
 `progress`, `touch`, `stats`, `custom`, `achievements`, `run`; five stay `.v1`, and
