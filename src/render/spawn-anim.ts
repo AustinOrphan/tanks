@@ -77,10 +77,25 @@ const rise: SpawnAnimator = (phase, progress) => {
   };
 };
 
-// Beacon is implemented in Task 4; aliased to warp here so the typed
-// Record is complete and compiles. It is replaced by its own function next.
+const beacon: SpawnAnimator = (phase, progress) => {
+  const p = clamp01(progress);
+  if (phase === 'entrance') {
+    return {
+      tankOpacity: clamp01(p * 1.6), // materializes to opaque quickly
+      tankScale: 1,
+      ring: { radius: 0.5 + 1.2 * p, opacity: 1 - p, arc: 1 },
+    };
+  }
+  // Opaque tank; the ring is the timer — its arc depletes as the shield runs out.
+  return {
+    tankOpacity: 1,
+    tankScale: 1,
+    ring: { radius: 1, opacity: 0.9, arc: 1 - p },
+  };
+};
+
 export const SPAWN_ANIMATORS: Record<SpawnAnimId, SpawnAnimator> = {
   warp,
   rise,
-  beacon: warp,
+  beacon,
 };

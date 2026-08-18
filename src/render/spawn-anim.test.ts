@@ -57,3 +57,19 @@ describe('rise animator', () => {
     expect(monotone).toBe(false);
   });
 });
+
+const beacon = SPAWN_ANIMATORS.beacon;
+
+describe('beacon animator', () => {
+  it('invincible: tank stays opaque; ring ARC depletes from full to empty', () => {
+    const start = beacon('invincible', 0, 0x3fd0ff);
+    const end = beacon('invincible', 1, 0x3fd0ff);
+    // Mutations that break this: beacon aliased to warp (start opacity would be 0.45,
+    // and arc would be constant 1 the whole time).
+    expect(start.tankOpacity).toBeCloseTo(1, 5);
+    expect(end.tankOpacity).toBeCloseTo(1, 5);
+    expect(start.ring.arc).toBeCloseTo(1, 5);
+    expect(end.ring.arc).toBeCloseTo(0, 5);
+    expect(end.ring.arc).toBeLessThan(start.ring.arc);
+  });
+});
