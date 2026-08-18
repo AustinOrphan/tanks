@@ -2014,6 +2014,13 @@ describe('spawn animation (#199)', () => {
     return (hull as THREE.Mesh).material as THREE.MeshStandardMaterial;
   }
 
+  /** Same lookup as `tankBodyMaterial`, generalised to any of the tank's own mesh names. */
+  function tankMaterial(scene: THREE.Scene, name: string): THREE.MeshStandardMaterial {
+    const obj = findByName(scene, name);
+    if (!obj) throw new Error(`no ${name} mesh found`);
+    return (obj as THREE.Mesh).material as THREE.MeshStandardMaterial;
+  }
+
   function deadPlayerWorld(): World {
     const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: false };
     const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
@@ -2083,18 +2090,34 @@ describe('spawn animation (#199)', () => {
   });
 
   it('drives the invincibility overlay from shieldUntilTick, not a latched copy', () => {
+    // An early/late `>` comparison survives two wrong reads that both still move the
+    // right direction over two syncs: reading shieldLeft off `prev.tick` instead of
+    // `curr.tick`, and deriving invincible progress from `spawn.elapsed` instead of
+    // `shieldUntilTick - curr.tick`. Asserting the EXACT opacity against the `warp`
+    // animator's own formula (spawn-anim.ts) discriminates both, in a single sync.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);
-    const prev = deadPlayerWorld();
-    // First sync: dead->alive edge triggers the entrance AND, with dt 0.6 > ENTRANCE_SECONDS
-    // (0.5), advances straight into the invincibility branch. tick 10 -> 80 shield ticks left.
-    views.sync(prev, alivePlayerWorld(90, 10), 1, 0.6);
-    const early = tankBodyMaterial(scene, 1).opacity;
-    // Same view (no new edge), clock past entrance; tick 89 -> 1 shield tick left, nearly solid.
-    views.sync(alivePlayerWorld(90, 10), alivePlayerWorld(90, 89), 1, 0.016);
-    const late = tankBodyMaterial(scene, 1).opacity;
-    // Mutation that breaks this: reading a fixed duration instead of shieldUntilTick - tick.
-    expect(late).toBeGreaterThan(early);
+    const prev = deadPlayerWorld(); // tick 0
+    // dt 0.6 > ENTRANCE_SECONDS (0.5), so this ONE sync both triggers the entrance edge
+    // AND advances straight past it into the invincibility branch -- prev.tick (0) and
+    // curr.tick (10) are both live inputs to this single call, which is what lets a
+    // wrong-tick read diverge from the right one without needing a second sync.
+    const curr = alivePlayerWorld(90, 10); // shieldUntilTick 90, tick 10 -> 80 ticks left
+    views.sync(prev, curr, 1, 0.6);
+    const opacity = tankBodyMaterial(scene, 1).opacity;
+    // Expected value re-derived from spawn-anim.ts's `warp` invincible formula
+    // (tankOpacity = 0.45 + 0.55*p) rather than hardcoded, so the assertion states its
+    // own derivation: shieldLeft = shieldUntilTick - curr.tick = 90 - 10 = 80,
+    // p = 1 - shieldLeft/RESPAWN_SHIELD_TICKS = 1 - 80/90 = 1/9.
+    const shieldLeft = 90 - 10;
+    const expectedP = 1 - shieldLeft / RESPAWN_SHIELD_TICKS;
+    const expectedOpacity = 0.45 + 0.55 * expectedP;
+    // Mutation A (shieldLeft read off `prev.tick` instead of `curr.tick`): shieldLeft
+    // becomes 90 - 0 = 90, p = 0, opacity = 0.45 -- fails this assertion.
+    // Mutation B (progress derived from `spawn.elapsed` instead of shieldUntilTick -
+    // curr.tick): elapsed is 0.6 on this first sync, a different number entirely --
+    // fails this assertion too.
+    expect(opacity).toBeCloseTo(expectedOpacity, 5);
     views.dispose();
   });
 
@@ -2109,6 +2132,13 @@ describe('spawn animation (#199)', () => {
     views.sync(alivePlayerWorld(90, 10), alivePlayerWorld(90, 91), 1, 0.016);
     expect(tankBodyMaterial(scene, 1).opacity).toBe(1);
     expect(findByName(scene, 'spawn-ring')).toBeUndefined();
+    // Mutation that breaks this: setTankOpacity(view, 1) restores opacity but never
+    // resets `transparent`, so a tank that has ever animated stays in the transparent
+    // render pass forever after the animation completes. Covers body, track and turret
+    // (the barrel shares the turret's material, so it needs no separate check).
+    for (const name of ['hull', 'track', 'turret']) {
+      expect(tankMaterial(scene, name).transparent).toBe(false);
+    }
     views.dispose();
   });
 

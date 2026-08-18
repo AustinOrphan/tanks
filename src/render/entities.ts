@@ -454,6 +454,23 @@ function setTankOpacity(view: TankView, k: number): void {
 }
 
 /**
+ * Undoes `setTankOpacity`'s `transparent = true` once the spawn animation is fully done.
+ * `setTankOpacity(view, 1)` alone restores full opacity but leaves the material in the
+ * transparent render pass forever -- a steady-state divergence from a tank that never
+ * animated, reachable on every respawn. Called once, from the Done branch, after opacity
+ * is back at 1.
+ */
+function resetTankTransparency(view: TankView): void {
+  view.group.traverse((child) => {
+    const mat = (child as THREE.Mesh).material;
+    if (mat instanceof THREE.MeshStandardMaterial) {
+      mat.transparent = false;
+      mat.needsUpdate = true;
+    }
+  });
+}
+
+/**
  * The spawn ring's arc is a fraction of a full circle (Beacon's depleting timer); every
  * other variant always passes 1 (a full ring), which the ring's default geometry already
  * is. Rebuilt only when `arc` actually changes -- tracked on the mesh's own `userData`,
@@ -1322,9 +1339,11 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
           } else {
             // Done: restore solid, drop the ring, clear state.
             setTankOpacity(view, 1);
+            resetTankTransparency(view);
             view.visual.scale.setScalar(1);
+            // disposeObject already detaches the ring (obj.parent?.remove(obj)); a
+            // second view.group.remove(spawn.ring) here would be a no-op.
             disposeObject(spawn.ring);
-            view.group.remove(spawn.ring);
             view.spawn = null;
             frame = null;
           }
