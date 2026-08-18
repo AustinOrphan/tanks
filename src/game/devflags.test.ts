@@ -230,6 +230,18 @@ describe('parseDevFlags: corpseBlock and muzzleInside', () => {
   });
 });
 
+describe('parseDevFlags: enemyDeathPulse', () => {
+  it('needs dev, like every other flag', () => {
+    expect(parseDevFlags('?dev=1&enemyDeathPulse=1').enemyDeathPulse).toBe(true);
+    expect(parseDevFlags('?dev=1').enemyDeathPulse).toBe(false);
+    expect(parseDevFlags('').enemyDeathPulse).toBe(false);
+  });
+
+  it('is NOT part of the playtest bundle', () => {
+    expect(parseDevFlags('?dev=1&playtest=1').enemyDeathPulse).toBe(false);
+  });
+});
+
 describe('parseDevFlags: coopPool (restores the shipped shared-pool coop model)', () => {
   it('needs dev, like every other flag', () => {
     expect(parseDevFlags('?coopPool=1').coopPool).toBe(false);

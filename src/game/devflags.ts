@@ -257,6 +257,12 @@ export interface DevFlags {
    * whatever its value at `mode` unset/'campaign-coop'/'ffa'.
    */
   friendlyFire: boolean;
+  /**
+   * Enemy tanks also fire the identity death pulse (a coloured world ring) on death.
+   *
+   * Off = players only, enemies keep just the explosion burst -- the shipped rule.
+   */
+  enemyDeathPulse: boolean;
 }
 
 export const DEV_FLAGS_OFF: DevFlags = {
@@ -285,6 +291,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   bots: null,
   mode: null,
   friendlyFire: false,
+  enemyDeathPulse: false,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -424,6 +431,7 @@ export function parseDevFlags(search: string): DevFlags {
     bots: asBots(params),
     mode: asMode(params),
     friendlyFire: isOn(params, 'friendlyFire'),
+    enemyDeathPulse: isOn(params, 'enemyDeathPulse'),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -702,6 +710,12 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
       "Lets a shell or mine blast harm a teammate -- meaningful only once `mode=teams`; " +
       'the default protects teammates.',
     notes: ['Inert unless `mode=teams`.'],
+  },
+  enemyDeathPulse: {
+    kind: 'boolean',
+    description:
+      'Enemy tanks also fire the identity death pulse (a coloured world ring); off = ' +
+      'players only, enemies keep just the explosion burst.',
   },
 };
 
