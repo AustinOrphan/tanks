@@ -16,6 +16,7 @@ import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
 import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
+import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor } from '../sim/config';
 import { TANK_KINDS } from '../sim/config/validate';
 import { createSkinTexture } from './skins';
@@ -1991,6 +1992,120 @@ describe('player identity: ring and shell tint', () => {
     views.sync(w, w, 0.5);
     views.sync(w, w, 1);
     expect(shellEmissiveAt(scene, 4)).toBe(IDENTITY_RING_COLORS[0]);
+    views.dispose();
+  });
+});
+
+describe('spawn animation (#199)', () => {
+  // Traverses the WHOLE scene for the first object with this name -- the same shape as
+  // `identityRings`/`shellGroup` above, generalised to a name argument since spawn-ring
+  // is the only name this block needs to find.
+  function findByName(scene: THREE.Scene, name: string): THREE.Object3D | undefined {
+    let found: THREE.Object3D | undefined;
+    scene.traverse((o) => {
+      if (!found && o.name === name) found = o;
+    });
+    return found;
+  }
+
+  // Every test in this block runs a single player tank (id 1), so the sole 'hull' mesh
+  // in the scene IS that tank's body -- `id` is kept in the signature for symmetry with
+  // a future multi-tank case, not because it disambiguates one here.
+  function tankBodyMaterial(scene: THREE.Scene, _id: number): THREE.MeshStandardMaterial {
+    const hull = findByName(scene, 'hull');
+    if (!hull) throw new Error('no hull mesh found');
+    return (hull as THREE.Mesh).material as THREE.MeshStandardMaterial;
+  }
+
+  function deadPlayerWorld(): World {
+    const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: false };
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
+    return createWorld({ walls: [], tanks: [p], spawns, lives: 3 });
+  }
+
+  function alivePlayerWorld(shieldUntilTick: number | undefined, tick: number): World {
+    const p: Tank = { ...makeTank(1, 'player', 5, 5), alive: true, shieldUntilTick };
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 5, y: 5 }, angle: 0 }];
+    const w = createWorld({ walls: [], tanks: [p], spawns, lives: 3 });
+    w.tick = tick;
+    return w;
+  }
+
+  it('starts a spawn entrance and adds a spawn ring on the dead->alive edge', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    const curr = alivePlayerWorld(undefined, 0);
+    views.sync(prev, curr, 1, 0.016);
+    // Mutation that breaks this: never creating the ring on the respawn edge.
+    const ring = findByName(scene, 'spawn-ring');
+    expect(ring).toBeTruthy();
+    views.dispose();
+  });
+
+  it('starts the entrance on a campaign round restart even though the tank was alive in both frames', () => {
+    // resetArena (world.ts) revives the player AND bumps roundStartTick in the SAME
+    // tick, so campaign's single-player respawn can go straight from alive->alive and
+    // never pass through alive: false -- enteredRespawn alone would miss it entirely.
+    // This is the trigger Step 1's investigation exists to justify: only
+    // roundStartTick moving distinguishes a campaign round restart from ordinary play.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = alivePlayerWorld(undefined, 0); // roundStartTick 1 (createWorld's default)
+    const curr = alivePlayerWorld(undefined, 0);
+    curr.roundStartTick = 5; // what resetArena's own bump looks like from here
+    views.sync(prev, curr, 1, 0.016);
+    // Mutation that breaks this: dropping the `enteredRound` half of the trigger.
+    expect(findByName(scene, 'spawn-ring')).toBeTruthy();
+    views.dispose();
+  });
+
+  it('drives the invincibility overlay from shieldUntilTick, not a latched copy', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    // First sync: dead->alive edge triggers the entrance AND, with dt 0.6 > ENTRANCE_SECONDS
+    // (0.5), advances straight into the invincibility branch. tick 10 -> 80 shield ticks left.
+    views.sync(prev, alivePlayerWorld(90, 10), 1, 0.6);
+    const early = tankBodyMaterial(scene, 1).opacity;
+    // Same view (no new edge), clock past entrance; tick 89 -> 1 shield tick left, nearly solid.
+    views.sync(alivePlayerWorld(90, 10), alivePlayerWorld(90, 89), 1, 0.016);
+    const late = tankBodyMaterial(scene, 1).opacity;
+    // Mutation that breaks this: reading a fixed duration instead of shieldUntilTick - tick.
+    expect(late).toBeGreaterThan(early);
+    views.dispose();
+  });
+
+  it('restores full opacity, drops the ring and clears state once the shield expires', () => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    views.sync(prev, alivePlayerWorld(90, 10), 1, 0.6);
+    expect(findByName(scene, 'spawn-ring')).toBeTruthy();
+    // Shield already expired (tick 91 > shieldUntilTick 90): the very next sync should
+    // restore solid opacity and remove the ring rather than leaving it lingering.
+    views.sync(alivePlayerWorld(90, 10), alivePlayerWorld(90, 91), 1, 0.016);
+    expect(tankBodyMaterial(scene, 1).opacity).toBe(1);
+    expect(findByName(scene, 'spawn-ring')).toBeUndefined();
+    views.dispose();
+  });
+
+  it('does not retrigger the entrance on every tick a respawned tank stays alive', () => {
+    // A dead->alive edge only exists on the FIRST sync after the respawn; every later
+    // sync between the same two alive worlds must leave the existing spawn state (and
+    // its ring) alone rather than re-adding a second ring.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const prev = deadPlayerWorld();
+    const curr = alivePlayerWorld(RESPAWN_SHIELD_TICKS, 0);
+    views.sync(prev, curr, 1, 0.016);
+    views.sync(curr, curr, 1, 0.016);
+    views.sync(curr, curr, 1, 0.016);
+    let ringCount = 0;
+    scene.traverse((o) => {
+      if (o.name === 'spawn-ring') ringCount++;
+    });
+    expect(ringCount).toBe(1);
     views.dispose();
   });
 });

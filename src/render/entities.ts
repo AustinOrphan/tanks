@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { BULLET_RADIUS, SHELL_SPAWN_FORWARD, TANK_RADIUS } from '../sim/constants';
+import { BULLET_RADIUS, SHELL_SPAWN_FORWARD, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
-import { skinScroll, type SkinId } from '../game/customization';
+import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../game/customization';
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
+import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
 
 export interface EntityViews {
   /** `dt` drives animated skins; omitting it freezes them, which is what tests want. */
@@ -418,6 +419,60 @@ function disposeObject(obj: THREE.Object3D): void {
   obj.parent?.remove(obj);
 }
 
+/** A player tank's live entrance/invincibility animation -- see spawn-anim.ts. */
+interface SpawnViewState {
+  variant: SpawnAnimId;
+  elapsed: number;
+  ring: THREE.Mesh;
+}
+
+interface TankView {
+  group: THREE.Group;
+  turret: THREE.Object3D;
+  kind: TankKind;
+  gen: number;
+  ring: THREE.Mesh | null;
+  spawn: SpawnViewState | null;
+}
+
+/**
+ * Sets opacity on the tank's own painted materials -- body, tracks, turret, barrel --
+ * without touching either ring (identity or spawn), which stay MeshBasicMaterial and so
+ * are skipped by the `instanceof` check below. That is what lets this run every spawn-anim
+ * frame without having to know each part's name.
+ */
+function setTankOpacity(view: TankView, k: number): void {
+  view.group.traverse((child) => {
+    const mat = (child as THREE.Mesh).material;
+    if (mat instanceof THREE.MeshStandardMaterial) {
+      mat.transparent = true;
+      mat.opacity = k;
+    }
+  });
+}
+
+/**
+ * The spawn ring's arc is a fraction of a full circle (Beacon's depleting timer); every
+ * other variant always passes 1 (a full ring), which the ring's default geometry already
+ * is. Rebuilt only when `arc` actually changes -- tracked on the mesh's own `userData`,
+ * since a per-frame rebuild at a constant value would churn a geometry for nothing.
+ */
+function applyRingArc(mesh: THREE.Mesh, arc: number): void {
+  if (arc >= 1 || mesh.userData.spawnRingArc === arc) return;
+  mesh.userData.spawnRingArc = arc;
+  const p = (mesh.geometry as THREE.RingGeometry).parameters;
+  const old = mesh.geometry;
+  mesh.geometry = new THREE.RingGeometry(
+    p.innerRadius,
+    p.outerRadius,
+    p.thetaSegments,
+    p.phiSegments,
+    p.thetaStart,
+    arc * Math.PI * 2,
+  );
+  old.dispose();
+}
+
 export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
@@ -430,10 +485,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   // paths -- a stale ring reference after a rebuild would otherwise be a real bug class,
   // the same one `view.group`'s own re-creation on a kind/gen change already had to
   // solve once.
-  const tankViews = new Map<
-    number,
-    { group: THREE.Group; turret: THREE.Object3D; kind: TankKind; gen: number; ring: THREE.Mesh | null }
-  >();
+  const tankViews = new Map<number, TankView>();
 
   /** One co-op SLOT's paint-shop state -- see `styleFor` and `setPlayerStyle` below. */
   interface PlayerStyle {
@@ -1150,7 +1202,14 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     return mesh;
   }
 
-  function syncTanks(prev: World, curr: World, alpha: number, snap: boolean, multiPlayer: boolean): void {
+  function syncTanks(
+    prev: World,
+    curr: World,
+    alpha: number,
+    snap: boolean,
+    multiPlayer: boolean,
+    dt: number,
+  ): void {
     const prevMap = indexById(prev.tanks);
     const seen = new Set<number>();
     for (const t of curr.tanks) {
@@ -1170,7 +1229,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       }
       if (!view) {
         const gen = t.kind === 'player' ? styleFor(slot).gen : 0;
-        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null };
+        view = { ...makeTank(t.kind, t.controlledBy), kind: t.kind, gen, ring: null, spawn: null };
         tankViews.set(t.id, view);
       }
       // Identity ring: WHO, not WHAT style -- see IDENTITY_RING_COLORS. Only a
@@ -1215,6 +1274,53 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // aimed the barrel at bodyAngle + turretAngle, i.e. anywhere but the
       // crosshair the moment the tank was driving in any direction but +x.
       view.turret.rotation.y = -(turretA - bodyA);
+
+      // Spawn animation: entrance ring + fade-in, then a live invincibility overlay
+      // read off shieldUntilTick every frame (never latched), then restore-and-clear.
+      // Enemies are out of scope here -- their death effect is a separate issue.
+      if (t.kind === 'player') {
+        const prevT = prevMap.get(t.id);
+        const enteredRespawn = !!prevT && !prevT.alive && t.alive;
+        const enteredRound = curr.roundStartTick !== prev.roundStartTick;
+        if ((enteredRespawn || enteredRound) && !view.spawn) {
+          const variant = DEFAULT_SPAWN_ANIM; // per-slot selection arrives with the picker UI
+          const color = curr.mode === 'teams' ? teamColor(t.team ?? 0) : identityColor(slot);
+          const ring = makeSpawnRing(color);
+          view.group.add(ring);
+          view.spawn = { variant, elapsed: 0, ring };
+        }
+        if (view.spawn) {
+          // Captured locally: `view.spawn`'s own narrowing does not survive the
+          // `view.spawn = null` assignment in the Done branch below, even on a path
+          // that never reaches it -- TS drops property narrowing across any
+          // assignment to that property within the same scope.
+          const spawn = view.spawn;
+          spawn.elapsed += dt;
+          const shieldLeft = (t.shieldUntilTick ?? 0) - curr.tick;
+          let frame;
+          if (spawn.elapsed < ENTRANCE_SECONDS) {
+            frame = SPAWN_ANIMATORS[spawn.variant]('entrance', spawn.elapsed / ENTRANCE_SECONDS, 0);
+          } else if (shieldLeft > 0) {
+            const p = 1 - shieldLeft / RESPAWN_SHIELD_TICKS; // 0 fresh -> 1 ending
+            frame = SPAWN_ANIMATORS[spawn.variant]('invincible', p, 0);
+          } else {
+            // Done: restore solid, drop the ring, clear state.
+            setTankOpacity(view, 1);
+            view.group.scale.setScalar(1);
+            disposeObject(spawn.ring);
+            view.group.remove(spawn.ring);
+            view.spawn = null;
+            frame = null;
+          }
+          if (frame) {
+            setTankOpacity(view, frame.tankOpacity);
+            view.group.scale.setScalar(frame.tankScale);
+            spawn.ring.scale.setScalar(frame.ring.radius);
+            (spawn.ring.material as THREE.MeshBasicMaterial).opacity = frame.ring.opacity;
+            applyRingArc(spawn.ring, frame.ring.arc);
+          }
+        }
+      }
     }
     for (const [id, view] of tankViews) {
       if (!seen.has(id)) {
@@ -1426,7 +1532,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // game before this feature -- see IDENTITY_RING_COLORS' own comment.
     const multiPlayer = countPlayerTanks(curr.tanks) >= MULTIPLAYER_THRESHOLD;
     syncWalls(curr);
-    syncTanks(prev, curr, a, snap, multiPlayer);
+    syncTanks(prev, curr, a, snap, multiPlayer, dt);
     syncBullets(prev, curr, a, multiPlayer);
     syncMines(prev, curr, a);
     syncBlasts(prev, curr, a);
