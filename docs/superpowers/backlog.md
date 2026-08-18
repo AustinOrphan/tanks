@@ -958,8 +958,20 @@ rather than deleted so the record of what was open, and when it closed, survives
    too, once one exists. It answers the RULE, not the MENU: nothing calls it from
    `loadArena`, no UI consults it, and it has only ever been measured against the 5
    shipped arenas (15 of 15 (arena, N) combinations pass, by a wide margin -- none of the
-   3 criteria currently rejects a shipped board). Procedural generation itself remains
-   exactly as unbuilt as before.
+   3 criteria currently rejects a shipped board). **Further answered, on the map-supply
+   side, by the map-variants PR** (`docs/superpowers/plans/2026-08-17-versus-map-variants.md`):
+   `src/sim/versus-variants.ts` builds the directive's named middle step between "one
+   fixed board per arena" and full procedural generation -- a seeded, deterministic
+   SUBSET of an authored board's destructible cells is omitted per match (solid
+   geometry, dimensions and the `P` cell untouched), wired into `loadArena` guard-first
+   so campaign-coop is unaffected and every existing versus call that omits a seed stays
+   on the authored board. It DOES reach the shipped path this time (unlike the
+   board-rules PR): `createWorldFor` threads its own seed into `loadArena`, so a real
+   `?dev=1&mode=ffa` session gets a variant automatically, gated by a bounded retry
+   against `evaluateVersusBoard`'s own two regressable criteria (falling back to the
+   authored board if every retry is exhausted). Whole-board procedural generation --
+   a board with no authored solid-wall skeleton at all -- remains exactly as unbuilt as
+   before; this PR only varies destructible cells within one.
 
 **Why 4-6 still belong together rather than as three separate spikes:** they still gate
 each other, independent of what closed. Spawn animation (4) and a setup menu (5) are
