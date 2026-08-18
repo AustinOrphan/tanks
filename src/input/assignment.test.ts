@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   deriveInitialAssignment,
   reassign,
+  botAssignmentAllowed,
   createHeldInputSource,
   type Assignment,
   type SlotSource,
@@ -176,5 +177,27 @@ describe('createHeldInputSource: the un-retired echo, for a deliberately unassig
     src.setPlayerPosition({ x: tank.pos.x, y: tank.pos.y });
     applyPlayerInput(world, src.sample(), []);
     expect(tank.turretAngle).toBe(0); // held, not slewed toward (0,0)
+  });
+});
+
+describe('botAssignmentAllowed: bots may not drive a player tank in the campaign', () => {
+  // A directive: bots must not control player tanks in the campaign unless campaign bot
+  // players are enabled by a dev flag. The full 2x3 truth table, so neither limb can be
+  // dropped without a failure -- returning `true` unconditionally breaks the first case,
+  // returning `campaignBotsEnabled` alone breaks both versus cases, and returning
+  // `mode !== 'campaign-coop'` alone breaks the second.
+  it('refuses in campaign-coop when the dev flag is absent', () => {
+    expect(botAssignmentAllowed('campaign-coop', false)).toBe(false);
+  });
+
+  it('allows in campaign-coop when the dev flag is present', () => {
+    expect(botAssignmentAllowed('campaign-coop', true)).toBe(true);
+  });
+
+  it('allows in ffa and teams regardless of the flag -- standing in for absent players is the point there', () => {
+    expect(botAssignmentAllowed('ffa', false)).toBe(true);
+    expect(botAssignmentAllowed('ffa', true)).toBe(true);
+    expect(botAssignmentAllowed('teams', false)).toBe(true);
+    expect(botAssignmentAllowed('teams', true)).toBe(true);
   });
 });

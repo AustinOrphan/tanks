@@ -1,4 +1,4 @@
-import type { InputState, Vec2 } from '../sim/types';
+import type { GameMode, InputState, Vec2 } from '../sim/types';
 import type { PlayerInputSource } from './gamepad';
 
 /**
@@ -70,6 +70,37 @@ export function reassign(assignment: Assignment, slot: number, source: SlotSourc
   }
   next[slot] = source;
   return next;
+}
+
+/**
+ * Whether a player slot may be handed to a BOT.
+ *
+ * A directive draws this boundary: bots must not control player tanks in the CAMPAIGN
+ * unless campaign bot players are enabled by a dev flag. Versus modes are the opposite
+ * case -- standing in for absent players with computer-controlled ones is the point there
+ * -- so the rule keys on MODE, not on player count.
+ *
+ * `campaignBotsEnabled` is the `bots` dev flag being PRESENT (`devFlags.bots !== null`),
+ * which is deliberately narrower than "the session is in dev mode": `?dev=1` on its own
+ * does not open the campaign to bots, `?dev=1&bots=N` does. That flag already means
+ * exactly "how many player slots are computer-controlled", so it is the existing switch
+ * for this rather than a new one -- a dedicated flag would owe a `FLAG_REGISTRY` entry
+ * and a generated-doc line to express a condition `bots` already expresses.
+ *
+ * Nothing outside dev can satisfy it: `parseDevFlags` returns `DEV_FLAGS_OFF` unless
+ * `?dev=1` is present, so `bots` is null in every shipped session.
+ *
+ * Co-op counts as campaign. `'campaign-coop'` covers both the solo campaign and a
+ * multi-player one. Whether a bot CO-OP PARTNER should eventually be a real, shipped
+ * feature is a product decision this does not make; it would be a new setting, not a
+ * quiet widening of this predicate.
+ *
+ * This is the rule, not its only enforcement: `hud.ts` uses it to decide whether to OFFER
+ * the candidate and `loop.ts` uses it to decide whether to PERFORM the reassignment, so
+ * the boundary holds even if a caller reaches the second without passing the first.
+ */
+export function botAssignmentAllowed(mode: GameMode, campaignBotsEnabled: boolean): boolean {
+  return mode !== 'campaign-coop' || campaignBotsEnabled;
 }
 
 /**
