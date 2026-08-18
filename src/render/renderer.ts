@@ -102,7 +102,7 @@ export function createRenderer(
     mineDebug?.sync(curr);
     particles.spawn(events);
     particles.update(dt);
-    deathPulse.spawn(prev, curr, { enemyEnabled: !!options.enemyDeathPulse });
+    deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
     deathPulse.update(dt);
     ctx.renderer.render(ctx.scene, ctx.camera);
   }

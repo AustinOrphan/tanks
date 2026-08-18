@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { World } from '../sim/world';
+import type { SimEvent } from '../sim/events';
 import { makeSpawnRing } from './spawn-anim';
 import { resolveOwnerColor } from './entities';
 
@@ -16,13 +17,27 @@ import { resolveOwnerColor } from './entities';
  */
 export interface DeathPulseSystem {
   /**
-   * Diffs `prev`/`curr`: any tank alive in `prev` and dead-or-absent in `curr` spawns a
-   * ring at its PREV position (the last place it was actually seen alive), coloured by
-   * `resolveOwnerColor` -- unless it is a non-player tank and `opts.enemyEnabled` is
-   * false, in which case it is skipped. Player deaths always ring, regardless of the
-   * flag.
+   * Event-driven, mirroring `particles.spawn(events)` one line above it in
+   * `renderer.render` -- deliberately NOT a `prev`/`curr` world diff (what this used to
+   * be). `render` is called every FRAME with the driver's per-frame world snapshots, not
+   * once per sim TICK: a 0-tick frame (common above 60Hz refresh) hands `spawn` the same
+   * `(prev, curr)` pair as the frame before it, so a stateless diff re-fires the same
+   * death every frame until the next tick moves the world; a >=2-tick frame (<=30Hz,
+   * post-stall catch-up) only ever exposes the LAST tick's world, so an intermediate
+   * tick's death is invisible to any diff of `prev` against `curr`. `events` is the
+   * driver's `frameEvents` -- every tick-stamped event this frame actually produced --
+   * so each `tank-destroyed` fires its ring exactly once, on the frame it happened,
+   * however many ticks that frame advanced.
+   *
+   * For each `tank-destroyed` event, spawns a ring at `event.pos` (the death position
+   * the sim recorded, not a re-derived one), coloured by `resolveOwnerColor` for the
+   * tank looked up by `event.tankId` in `world` -- tanks are never removed from
+   * `world.tanks` (they flip `alive: false`), so the lookup always finds a dead tank,
+   * never a live one. Skipped if the tank is a non-player kind and `opts.enemyEnabled`
+   * is false; player deaths always ring, regardless of the flag. If the lookup somehow
+   * fails, the event is skipped rather than throwing.
    */
-  spawn(prev: World, curr: World, opts: { enemyEnabled: boolean }): void;
+  spawn(events: SimEvent[], world: World, opts: { enemyEnabled: boolean }): void;
   /** Ages every active ring by `dt`, expanding it outward and fading it out; recycles
    * any ring whose own clock has run out. */
   update(dt: number): void;
@@ -76,20 +91,20 @@ export function createDeathPulseSystem(scene: THREE.Scene): DeathPulseSystem {
     pool.push(r);
   }
 
-  function spawn(prev: World, curr: World, opts: { enemyEnabled: boolean }): void {
-    const currAlive = new Set(curr.tanks.filter((t) => t.alive).map((t) => t.id));
-    for (const p of prev.tanks) {
-      if (!p.alive) continue;
-      if (currAlive.has(p.id)) continue; // still alive in curr: not a death
-      const isPlayer = p.kind === 'player';
+  function spawn(events: SimEvent[], world: World, opts: { enemyEnabled: boolean }): void {
+    for (const event of events) {
+      if (event.type !== 'tank-destroyed') continue;
+      const isPlayer = event.kind === 'player';
       if (!isPlayer && !opts.enemyEnabled) continue;
-      const color = resolveOwnerColor(curr, p);
+      const tank = world.tanks.find((t) => t.id === event.tankId);
+      if (!tank) continue; // should be unreachable (tanks are never removed), but never throw
+      const color = resolveOwnerColor(world, tank);
       const r = acquire(color);
-      if (!r) return; // pool exhausted; drop the effect, never the tick
-      // PREV position -- the tank's last-seen alive place, not wherever curr (if it
-      // even still has an entry) put it.
-      r.mesh.position.x = p.pos.x;
-      r.mesh.position.z = p.pos.y;
+      if (!r) continue; // pool exhausted; drop this ring, never the tick
+      // The event's OWN position -- the place the sim recorded the death, on the tick
+      // it actually happened -- not a re-derived "current tank position".
+      r.mesh.position.x = event.pos.x;
+      r.mesh.position.z = event.pos.y;
     }
   }
 
