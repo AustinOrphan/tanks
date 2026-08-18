@@ -118,15 +118,36 @@ function isOpenFloor(ch: string): boolean {
 }
 
 /**
- * Whether a tank can currently DRIVE THROUGH `ch` -- broader than `isOpenFloor`: a former
- * enemy spawn letter is real floor once the game is running (the letter is a data marker,
- * not a wall), so the geodesic graph below walks through it even though it is not itself
- * a candidate spawn cell. Only `legend`-mapped wall characters block movement, matching
- * both wall kinds' state at arena load (neither is destroyed yet).
+ * Whether a tank can DRIVE THROUGH `ch` **at any point in the round** -- broader than
+ * `isOpenFloor` in two separate ways, and the second one is a design ruling.
+ *
+ * First, a former enemy spawn letter is real floor once the game is running (the letter
+ * is a data marker, not a wall), so the geodesic graph walks through it even though it is
+ * not itself a candidate spawn cell.
+ *
+ * Second, and deliberately: **a destructible cell counts as traversable.** This is the
+ * BREACHED phase, and it is the conservative reading -- a destructible wall is temporary
+ * by construction, so two spawns separated only by one are not actually separated for the
+ * length of a match. It is the same both-wall-phases discipline `spawnBlockRobust` already
+ * applies in `arena-claims.ts`, and it is load-bearing rather than pedantic: measured over
+ * all 5 shipped arenas x player counts 2/3/4 (15 pairs), optimising against the INTACT
+ * graph instead puts arena-02's 4-player spawns 4 breached-cell-steps and 2.67 world units
+ * apart -- two tanks either side of that level's centre barrier, which the level is
+ * designed to blow open. Against the breached graph the same board gives 25 steps and
+ * 13.74 units. The two graphs pick identical sets on arena-01, arena-03 and arena-04 at
+ * every count, so the choice only bites where destructibles partition space -- which is
+ * exactly where it matters.
+ *
+ * The LINE-OF-SIGHT filter in `pickVersusSpawnCell` deliberately does NOT follow this
+ * rule: it runs against intact geometry (`wallsForQuery`), because a destructible wall
+ * really does block sight at the instant players spawn, and the opening seconds are what
+ * that filter is for. Distance is a question about the whole round; concealment is a
+ * question about spawn time. Consequence, measured and NOT papered over: on 4 of those 15
+ * (arena, count) pairs exactly one spawn pair becomes mutually visible once every
+ * destructible is gone. The filter's guarantee is an at-spawn one, never a match-long one.
  */
 function isWalkable(ch: string, legend: Record<string, WallKind>): boolean {
-  const kind = legend[ch];
-  return kind !== 'solid' && kind !== 'destructible';
+  return legend[ch] !== 'solid';
 }
 
 /**
@@ -186,8 +207,18 @@ function isEarlier(a: Cell, b: Cell): boolean {
  *     NEAREST `avoid` entry is largest wins. This is an APPROXIMATION of the true
  *     "farthest cell from everything already placed" problem (classic p-dispersion), not
  *     its optimum -- see `versus-spawns.test.ts` for a measured gap on one small fixture
- *     via brute force.
- *  3. Ties broken deterministically on (row, col) ascending (`isEarlier`).
+ *     via brute force, and `pickVersusSpawnSet` for the relaxation pass that closes some
+ *     of that gap in practice.
+ *  3. Geodesic ties broken on EUCLIDEAN distance to the nearest `avoid` entry, largest
+ *     wins. This is not cosmetic. Geodesic distance saturates at `Infinity` for any cell
+ *     in a component `avoid` cannot reach, so on a board whose walls partition it, EVERY
+ *     unreachable cell ties at `Infinity` and the positional tie-break below decides --
+ *     which picked a cell 2.67 world units from the anchor, straight through the wall, on
+ *     arena-02 at 2 players. Preferring the physically-farthest of the equally-unreachable
+ *     cells took that to 27.49. Ties still arise constantly on connected boards too (cell
+ *     steps are integers), so this key does work on every board, not only partitioned ones.
+ *  4. Remaining ties broken deterministically on (row, col) ascending (`isEarlier`), which
+ *     is what keeps the whole ranking a pure function of the grid.
  *
  * `avoid` is world-space `Vec2[]`, not cells, so this same signature can later take LIVE
  * OPPONENT POSITIONS for a respawn increment without a type change: today's one caller
@@ -239,14 +270,172 @@ export function pickVersusSpawnCell(
   const pool = invisible.length > 0 ? invisible : candidates;
 
   let best = pool[0];
-  let bestScore = -Infinity;
+  let bestGeo = -Infinity;
+  let bestEuclid = -Infinity;
   for (const cand of pool) {
-    let score = Infinity;
-    for (const dg of avoidDist) score = Math.min(score, dg[cand.row][cand.col]);
-    if (score > bestScore || (score === bestScore && isEarlier(cand, best))) {
+    let geo = Infinity;
+    for (const dg of avoidDist) geo = Math.min(geo, dg[cand.row][cand.col]);
+    const candPos = cellCentre(cand, cellSize);
+    let euclid = Infinity;
+    for (const a of avoid) euclid = Math.min(euclid, Math.hypot(candPos.x - a.x, candPos.y - a.y));
+    let wins: boolean;
+    if (geo !== bestGeo) wins = geo > bestGeo;
+    else if (euclid !== bestEuclid) wins = euclid > bestEuclid;
+    else wins = isEarlier(cand, best);
+    if (wins) {
       best = cand;
-      bestScore = score;
+      bestGeo = geo;
+      bestEuclid = euclid;
     }
   }
   return best;
+}
+
+/**
+ * How many coordinate-ascent rounds `pickVersusSpawnSet` may run. Each round is bounded
+ * work and the pass only ever accepts a STRICT improvement, so the loop terminates on its
+ * own; this is a backstop, not the termination argument. Measured over all 5 shipped
+ * arenas x player counts 2/3/4 (15 pairs) the pass converged in at most 4 rounds, so 8 is
+ * roughly double the observed worst case and is reached by nothing shipped.
+ */
+export const VERSUS_RELAX_ROUNDS = 8;
+
+/** Lexicographic separation score for a whole spawn set: (min geodesic, min Euclidean). */
+function setSeparation(cells: Cell[], walkable: boolean[][], cols: number, rows: number, cellSize: number): [number, number] {
+  let minGeo = Infinity;
+  let minEuclid = Infinity;
+  for (let i = 0; i < cells.length; i++) {
+    const dist = geodesicDistances(cells[i], walkable, cols, rows);
+    for (let j = i + 1; j < cells.length; j++) {
+      minGeo = Math.min(minGeo, dist[cells[j].row][cells[j].col]);
+      const a = cellCentre(cells[i], cellSize);
+      const b = cellCentre(cells[j], cellSize);
+      minEuclid = Math.min(minEuclid, Math.hypot(a.x - b.x, a.y - b.y));
+    }
+  }
+  return [minGeo, minEuclid];
+}
+
+/** Strictly better on the lexicographic (geodesic, Euclidean) separation score. */
+function isBetterSeparation(a: [number, number], b: [number, number]): boolean {
+  return a[0] !== b[0] ? a[0] > b[0] : a[1] > b[1];
+}
+
+/**
+ * The ANCHOR: where the first spawn goes when nothing is placed yet.
+ *
+ * `pickVersusSpawnCell` cannot answer this -- with an empty `avoid` every candidate scores
+ * `Infinity` and its own tie-breaks hand back the (row, col)-earliest open cell, which is
+ * a board corner by construction and an accident of the tie-break rather than a decision.
+ *
+ * So the anchor is derived instead, by the standard double-sweep: BFS from an arbitrary
+ * deterministic candidate to find the farthest one, then BFS again from THAT to find the
+ * farthest from it. In a tree the second sweep lands on a true diameter endpoint; on a
+ * general graph -- which an arena is -- it is a well-known approximation, and an
+ * approximation is all this needs, since the relaxation pass below re-picks every spawn
+ * anyway. Deterministic at every step: the arbitrary start is the (row, col)-earliest
+ * candidate and both sweeps break ties with `isEarlier`.
+ */
+function anchorCell(cands: Cell[], walkable: boolean[][], cols: number, rows: number): Cell {
+  const sweep = (from: Cell): Cell => {
+    const dist = geodesicDistances(from, walkable, cols, rows);
+    let best = cands[0];
+    let bestDist = -Infinity;
+    for (const cand of cands) {
+      const d = dist[cand.row][cand.col];
+      if (d === Infinity) continue; // unreachable tells us nothing about which end is far
+      if (d > bestDist || (d === bestDist && isEarlier(cand, best))) {
+        best = cand;
+        bestDist = d;
+      }
+    }
+    return best;
+  };
+  return sweep(sweep(cands[0]));
+}
+
+/**
+ * Picks the WHOLE versus spawn set at once -- `count` mutually well-separated cells, with
+ * **no player privileged over any other**.
+ *
+ * This is the design ruling this function exists to implement. Before it, P1 sat on the
+ * campaign-authored `P` cell and every other player was placed to be far from P1. That
+ * makes P1's spawn a property of a CAMPAIGN level's design -- where `P` marks "the spot
+ * the level was built to be entered from" -- carried unexamined into a symmetric mode
+ * where no such spot should exist. In versus the authored `P` is now ignored entirely for
+ * placement; it remains in the grid as data, and `loadArena` still stamps P1's tank there
+ * in PASS 1a before relocating it here, which is what keeps tank ids (and therefore every
+ * seeded RNG stream keyed on them) identical to a one-player load.
+ *
+ * Three stages, each earning its place against the measured alternative:
+ *
+ *  1. ANCHOR (`anchorCell`) -- an approximate geodesic-diameter endpoint.
+ *  2. GREEDY CHAIN -- `pickVersusSpawnCell` once per remaining player, each against the
+ *     spawns already chosen. Classic farthest-point sampling.
+ *  3. RELAXATION -- bounded coordinate ascent. Each round re-picks every spawn in turn
+ *     against the other `count - 1`, keeping the new cell only if the WHOLE SET's
+ *     separation strictly improves. Stops as soon as a full round changes nothing.
+ *
+ * Stage 3 is not polish. Greedy farthest-point sampling is anchor-sensitive: measured over
+ * all 5 shipped arenas x counts 2/3/4 (15 pairs), the chain alone is WORSE than the old
+ * P-cell placement on 2 of them (arena-01 and arena-03 at 3 players, 29 breached
+ * cell-steps against 34 and 32). With relaxation it beats the old placement on **15 of
+ * those 15 pairs, on both the geodesic and the Euclidean measure, with zero regressions**,
+ * and improves on the chain alone on 8 of 15. Whole sweep, not a sample: 15 is every
+ * (shipped arena, supported player count) pair there is.
+ *
+ * Returns exactly `count` cells, `[0]` being P1's. Degenerate boards degrade rather than
+ * throw, inheriting `pickVersusSpawnCell`'s own zero-candidate fallback.
+ */
+export function pickVersusSpawnSet(
+  grid: string[],
+  cols: number,
+  rows: number,
+  cellSize: number,
+  legend: Record<string, WallKind>,
+  count: number,
+): Cell[] {
+  const walkable: boolean[][] = [];
+  const cands: Cell[] = [];
+  for (let r = 0; r < rows; r++) {
+    walkable.push([]);
+    for (let c = 0; c < cols; c++) {
+      const ch = grid[r][c];
+      walkable[r].push(isWalkable(ch, legend));
+      if (isOpenFloor(ch)) cands.push({ row: r, col: c });
+    }
+  }
+  if (count <= 0) return [];
+  // No open floor anywhere: the same total, no-throw degradation pickVersusSpawnCell
+  // takes. separateTanks (world.ts) already runs every tick and handles worse overlaps.
+  // Distinct objects, not `new Array(count).fill(cell)` -- that fills every slot with ONE
+  // shared reference, and callers treat these as their own to keep.
+  if (cands.length === 0) return Array.from({ length: count }, () => ({ row: 0, col: 0 }));
+
+  let cells: Cell[] = [anchorCell(cands, walkable, cols, rows)];
+  for (let i = 1; i < count; i++) {
+    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize))));
+  }
+
+  let score = setSeparation(cells, walkable, cols, rows, cellSize);
+  for (let round = 0; round < VERSUS_RELAX_ROUNDS; round++) {
+    let changed = false;
+    for (let i = 0; i < cells.length; i++) {
+      const others = cells.filter((_, j) => j !== i);
+      if (others.length === 0) break; // a 1-player set has nothing to be separated from
+      const cand = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, others.map((c) => cellCentre(c, cellSize)));
+      const next = cells.slice();
+      next[i] = cand;
+      const nextScore = setSeparation(next, walkable, cols, rows, cellSize);
+      // STRICT improvement only. This is the termination argument: the score is bounded
+      // above and rises every time the set moves, so the loop cannot cycle.
+      if (isBetterSeparation(nextScore, score)) {
+        cells = next;
+        score = nextScore;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return cells;
 }

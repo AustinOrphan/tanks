@@ -316,7 +316,12 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
     expect(visiblePairs).toBe(0);
   });
 
-  it('AFTER: minimum pairwise Euclidean spawn distance clears 5 world units everywhere in the sweep -- comfortably above the pre-fix constant of 1.3333, comfortably below the measured floor of ~9.07 so a future arena has headroom before this needs retuning', () => {
+  // The `> 5` guarantee below is the contract; the measured floor is pinned SEPARATELY
+  // and exactly, because quoting a floor in prose is how the previous one went stale. It
+  // read "~9.07" -- true when written, and still passing afterwards, since the change
+  // that invalidated it moved the floor UP. A one-sided assertion cannot notice that, so
+  // the number now sits in an assertion of its own that fails in either direction.
+  it('AFTER: minimum pairwise Euclidean spawn distance clears 5 world units everywhere in the sweep -- comfortably above the pre-fix constant of 1.3333, with the actual floor pinned below', () => {
     function dist(a: { x: number; y: number }, b: { x: number; y: number }) {
       const dx = a.x - b.x;
       const dy = a.y - b.y;
@@ -335,6 +340,12 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
       }
     }
     expect(globalMin).toBeGreaterThan(5);
+    // Exact, and deliberately a two-place edit if placement is ever retuned: this is
+    // arena-03 / ffa / N=4, the tightest of the 100 pairs in the sweep. It was 9.0738…
+    // while P1 sat on the authored `P` cell and 11.6619… once P1 joined the maximin set
+    // (pickVersusSpawnSet) -- so this line is also the record that the ruling moved the
+    // WORST case, not just the average.
+    expect(globalMin).toBeCloseTo(11.6619037896906, 9);
   });
 
   it('every player spawn is a distinct cell (never co-located), across the full sweep', () => {
@@ -362,22 +373,15 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
         const ffa = loadArena(arena, n, 'ffa');
         const coopPos = coop.tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
         const ffaPos = ffa.tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
-        // P1 (slot 0) is identical either way; at least one co-player differs whenever
-        // n > 1, since the ring search and the geodesic maximin disagree on every
-        // shipped arena (measured: every scenario in the sweep above moved the minimum
-        // pairwise distance from 1.3333 to something larger).
-        //
-        // The coopPos[0]/ffaPos[0] equality below is coupled to a design point that is
-        // OPEN with the owner, not settled: today P1 is seeded from the authored `P`
-        // cell and never itself passed through pickVersusSpawnCell (see arena.ts's
-        // versus branch and this file's own "greedy maximin" describe block, which only
-        // ever exercises co-player slots). If that is later decided the other way --
-        // maximin-placing every player including P1 -- this exact assertion breaks,
-        // which is correct: it is PINNING today's P1-fixed behaviour, not asserting a
-        // requirement that behaviour must have. Revisit this line specifically if that
-        // decision changes; the `.not.toEqual(slice(1))` half below carries the
-        // "the guard actually routes" claim on its own and does not depend on it.
-        expect(coopPos[0]).toEqual(ffaPos[0]);
+        // EVERY slot differs, P1 included. This assertion used to read
+        // `expect(coopPos[0]).toEqual(ffaPos[0])`, pinning that P1 sat on the authored
+        // `P` cell in both modes, with a comment flagging it as pinning behaviour rather
+        // than a requirement and naming the exact decision that would invert it:
+        // "maximin-placing every player including P1". That decision was subsequently
+        // taken (see pickVersusSpawnSet), so the line is inverted here rather than
+        // deleted -- it is the most direct statement of the ruling that exists, and it
+        // fails if arena.ts ever stops relocating P1.
+        expect(coopPos[0], 'versus must not inherit the campaign `P` cell for P1').not.toEqual(ffaPos[0]);
         expect(coopPos.slice(1)).not.toEqual(ffaPos.slice(1));
       }
     }

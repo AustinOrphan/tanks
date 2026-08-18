@@ -272,20 +272,54 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
 // ---------------------------------------------------------------------------
 
 describe('pickVersusVariantGrid: retries with a chained seed when the first draw is unsuitable', () => {
-  // Measured, not hand-derived: seed 7920 on arena-03 at N=4 and fraction 0.7 (above the
-  // production fraction, chosen because the sweep in the plan doc shows real, if rare,
-  // failures start appearing there) draws a candidate evaluateVersusBoard reports
-  // unsuitable (concealment). The SECOND draw, from the chained seed, is suitable.
-  it('seed 7920 / arena-03 / N=4 / fraction 0.7: attempt 0 is unsuitable, pickVersusVariantGrid returns a DIFFERENT, suitable grid', () => {
-    const arena = ARENA_DEFS.find((a) => a.id === 'arena-03')!;
-    const firstDraw = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 7920, 0.7);
-    const firstVerdict = evaluateVersusBoard({ ...arena, grid: firstDraw }, 4);
+  // A SYNTHETIC fixture, and it has to be one now. This test used to run on shipped
+  // arena-03 at seed 7920 / fraction 0.7, which drew an unsuitable candidate at the time
+  // it was written. Making P1 part of the maximin set (pickVersusSpawnSet) destroyed that
+  // premise, and the reason is worth writing down because it is a property of the
+  // criterion rather than of the seed: pickVersusSpawnCell's line-of-sight filter
+  // actively SEARCHES for concealment, so `allPairsConcealed` fails only when no
+  // concealed pair exists anywhere on the board. While P1 was pinned to the authored `P`
+  // cell the filter only had freedom over the other slots and could be defeated; with
+  // every slot free it almost never is. Re-measured after the change: 0 unsuitable first
+  // draws in 1500 shipped-arena draws (arena-01 and arena-03, 250 seeds each at removal
+  // fractions 0.85 / 0.90 / 0.95 -- all well above the production 0.4), where the old
+  // placement had failures at 0.7. So this is not "seed 7920 went stale", it is "no
+  // shipped board plus seed can express this premise any more".
+  //
+  // The fixture below can, because it is built to. Two destructible cells and nothing
+  // else: one in the middle of an open room, where it genuinely occludes, and one hard
+  // against the far corner, where it occludes nothing any pair of well-separated cells
+  // would use. Fraction 0.5 removes exactly one of the two, so the DRAW decides which
+  // survives -- the decoy surviving leaves the room with no usable cover at all.
+  // Measured on this fixture: 23 of the 40 seeds 1..40 give an unsuitable first draw.
+  const grid: string[] = [];
+  for (let r = 0; r < 10; r++) {
+    if (r === 0) grid.push('P.........');
+    else if (r === 4) grid.push('....d.....'); // real cover, mid-room
+    else if (r === 9) grid.push('.........d'); // decoy, jammed in the far corner
+    else grid.push('..........');
+  }
+  const arena: Arena = { cols: 10, rows: 10, cellSize: 1, legend: { d: 'destructible' }, grid };
+
+  it('seed 1 / fraction 0.5: attempt 0 keeps only the decoy and is unsuitable, pickVersusVariantGrid returns a DIFFERENT, suitable grid', () => {
+    expect(evaluateVersusBoard(arena, 2).suitable, 'premise: the authored fixture is itself suitable').toBe(true);
+
+    const firstDraw = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 1, 0.5);
+    const firstVerdict = evaluateVersusBoard({ ...arena, grid: firstDraw }, 2);
     expect(firstVerdict.suitable, 'premise: the first draw really is unsuitable').toBe(false);
     expect(firstVerdict.allPairsConcealed, 'premise: concealment is the criterion that fails').toBe(false);
+    // Names the MECHANISM rather than trusting the verdict: the first draw is unsuitable
+    // BECAUSE it removed the mid-room block and kept the corner decoy. Without this, a
+    // change that made the fixture unsuitable for some unrelated reason would still pass.
+    expect(firstDraw[4], 'the first draw removed the real cover').toBe('..........');
+    expect(firstDraw[9], 'the first draw kept the decoy').toBe('.........d');
 
-    const picked = pickVersusVariantGrid(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 4, 7920, 0.7);
+    const picked = pickVersusVariantGrid(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 2, 1, 0.5);
     expect(picked).not.toEqual(firstDraw);
-    expect(evaluateVersusBoard({ ...arena, grid: picked }, 4).suitable).toBe(true);
+    expect(evaluateVersusBoard({ ...arena, grid: picked }, 2).suitable).toBe(true);
+    // The retry made the opposite choice, which is the whole point of retrying.
+    expect(picked[4], 'the retry kept the real cover').toBe('....d.....');
+    expect(picked[9], 'the retry removed the decoy').toBe('..........');
     // Discriminates a genuine second-attempt success from a bound-of-1 mutation that
     // would immediately fall back to the (also suitable, on this arena) authored grid --
     // both would satisfy the two assertions above for the WRONG reason. A real retry

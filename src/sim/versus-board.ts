@@ -141,9 +141,13 @@ export interface VersusBoardVerdict {
  * this module found while proving it independently mutation-testable: given
  * `MIN_OPEN_FLOOR_PER_PLAYER` >= 1, `roomOk` (`openFloorCells / playerCount >=
  * MIN_OPEN_FLOOR_PER_PLAYER`) already implies `openFloorCells >= playerCount`, which
- * is strictly more open-floor cells than the `playerCount - 1` co-player picks ever
- * need to stay distinct from one another and from P1's own (non-open-floor) cell --
- * so on every fixture this module's own criteria can construct, `distinctSpawns` false
+ * is exactly as many open-floor cells as the picks need to stay distinct. (That
+ * arithmetic changed shape when P1 stopped sitting on the authored `P` cell and joined
+ * the maximin set -- see `pickVersusSpawnSet`. All `playerCount` spawns now come out of
+ * the open-floor pool rather than `playerCount - 1` of them, so the margin is exact
+ * instead of one to spare. The implication still holds: each pick excludes the cells
+ * already taken, so `openFloorCells >= playerCount` is sufficient.)
+ * So on every fixture this module's own criteria can construct, `distinctSpawns` false
  * implies `roomOk` false too, never the other way round. `versus-board.test.ts`
  * discloses this the same way versus-spawns.test.ts discloses its own two equivalent
  * mutations: `distinctSpawns` is still checked directly (a dedicated mutation targets

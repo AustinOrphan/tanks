@@ -37,6 +37,23 @@ const cellPos = (cell: { row: number; col: number }, cellSize: number): Vec2 => 
   y: (cell.row + 0.5) * cellSize,
 });
 
+/**
+ * A NOTE ON WHY THE SURVIVOR IS MOVED FIRST in the two N=2 tests below.
+ *
+ * Each test asserts `expected !== spawns[0].pos` before trusting its comparison -- the
+ * fixture must discriminate "the respawn picker ran" from "the picker was skipped and we
+ * fell back to the authored spawn", and those are indistinguishable if the two coincide.
+ * That guard started FAILING when P1 stopped sitting on the campaign-authored `P` cell
+ * and joined the maximin set (`pickVersusSpawnSet`), and the reason is not a defect: at
+ * N=2 the set is {A, B} with B chosen to be maximally far from A, so with P2 sitting
+ * still at B, "the safest cell given one opponent at B" is A -- exactly where P1 spawned.
+ * The picker and the fallback agreed, so the test could no longer tell them apart.
+ *
+ * Driving the survivor away from its spawn first restores the discrimination and makes
+ * these tests strictly better: the pick now has to be a function of where the opponent
+ * ACTUALLY IS, not of where it started, which is the property `respawnPos` exists to
+ * have. The guard did its job -- it is left in place, unchanged, below.
+ */
 describe('versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometry is present', () => {
   it('ffa N=2: the revived tank lands on the picked cell, not its own authored spawn', () => {
     const { walls, tanks, spawns, arenaGeometry } = loadArena(ARENA_01, 2, 'ffa');
@@ -47,6 +64,8 @@ describe('versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometr
     dead.alive = false;
     dead.respawnAtTick = 1; // due on the very first simulated tick
     world.tick = 1;
+    // Drive the survivor off its own spawn -- see the note above this describe block.
+    survivor.pos = { x: spawns[0].pos.x, y: spawns[0].pos.y };
 
     const { cols, rows, cellSize, grid, legend } = arenaGeometry;
     const expected = cellPos(
@@ -71,6 +90,8 @@ describe('versus respawn: picks a cell via pickVersusSpawnCell when arenaGeometr
     dead.alive = false;
     dead.respawnAtTick = 1;
     world.tick = 1;
+    // Drive the survivor off its own spawn -- see the note above the describe block.
+    survivor.pos = { x: spawns[0].pos.x, y: spawns[0].pos.y };
 
     const { cols, rows, cellSize, grid, legend } = arenaGeometry;
     const expected = cellPos(
