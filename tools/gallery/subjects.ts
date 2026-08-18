@@ -6,7 +6,7 @@ import { createMineDebug } from '../../src/render/minedebug';
 import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
 } from '../../src/sim/constants';
-import type { SkinId } from '../../src/game/customization';
+import type { SkinId, SpawnAnimId } from '../../src/game/customization';
 
 export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
 
@@ -243,6 +243,14 @@ export interface GalleryOptions {
   hull: string | null;
   accent: string | null;
   /**
+   * Which spawn-entrance/invincibility animator the player tank plays, passed through to
+   * `setPlayerStyle`'s 5th argument (the render seam #201 adds). Optional -- callers built
+   * before #201 (main.ts's URL parsing, tools/gl/harness.ts's fixtures) do not set it, and
+   * `setPlayerStyle`'s own default parameter resolves `undefined` to `DEFAULT_SPAWN_ANIM`
+   * the same way it always has for the 4-arg call shape.
+   */
+  spawnAnim?: SpawnAnimId;
+  /**
    * Override how many animation steps the subject wants. Null keeps what the elements
    * declare. It exists for skins: every shipped element is static (`frames: 1`) or a
    * few ticks long, so `--anim` on a tank had nothing to step and a scrolling skin had
@@ -285,7 +293,7 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   // Same call the game makes (renderer.ts's setPlayerStyle) and the Customize preview
   // makes -- the gallery has no skin machinery of its own to drift from it.
   if (opts.skin !== 'solid' || opts.hull || opts.accent) {
-    views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null);
+    views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
   }
   const debug = createMineDebug(scene, { reach: opts.reach, timer: opts.timer });
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });

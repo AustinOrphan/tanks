@@ -28,7 +28,13 @@ export interface EntityViews {
    * styled falls back to today's roster default at slot 0, or a neutral placeholder
    * swatch at any other slot -- see `styleFor` in entities.ts.
    */
-  setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null, slot?: number): void;
+  setPlayerStyle(
+    hex: string | null,
+    skin: SkinId,
+    accentHex: string | null,
+    slot?: number,
+    spawnAnim?: SpawnAnimId,
+  ): void;
   dispose(): void;
 }
 
@@ -534,6 +540,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     // Resolved once per restyle, not per frame: sync runs at 60fps.
     scroll: { u: number; v: number } | null;
     gen: number;
+    /**
+     * Which spawn-entrance/invincibility animator this slot's tank plays -- the render
+     * seam #201 adds. Read at the entrance trigger site below instead of the hardcoded
+     * DEFAULT_SPAWN_ANIM; the player-facing picker UI that writes something other than
+     * the default through setPlayerStyle is still deferred.
+     */
+    spawnAnim: SpawnAnimId;
   }
   /**
    * Per co-op SLOT (`Tank.controlledBy`, defaulting to 0) rather than one global
@@ -552,10 +565,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
    */
   const UNSTYLED_SLOT_HEX = '#c23b8f';
   /** The bit-identical-to-boot default for slot 0: no hex override, no skin map. */
-  const DEFAULT_SLOT_0_STYLE: PlayerStyle = { hex: null, skinMap: null, skin: 'solid', scroll: null, gen: 0 };
+  const DEFAULT_SLOT_0_STYLE: PlayerStyle = {
+    hex: null, skinMap: null, skin: 'solid', scroll: null, gen: 0, spawnAnim: DEFAULT_SPAWN_ANIM,
+  };
   /** The placeholder for any other slot until it is explicitly styled. */
   const DEFAULT_OTHER_SLOT_STYLE: PlayerStyle = {
-    hex: UNSTYLED_SLOT_HEX, skinMap: null, skin: 'solid', scroll: null, gen: 0,
+    hex: UNSTYLED_SLOT_HEX, skinMap: null, skin: 'solid', scroll: null, gen: 0, spawnAnim: DEFAULT_SPAWN_ANIM,
   };
 
   /**
@@ -1333,7 +1348,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         const enteredRespawn = !!prevT && !prevT.alive && t.alive;
         const enteredRound = curr.roundStartTick !== prev.roundStartTick;
         if ((enteredRespawn || enteredRound) && !view.spawn) {
-          const variant = DEFAULT_SPAWN_ANIM; // per-slot selection arrives with the picker UI
+          // Per-slot selection: the player-facing picker UI that writes anything but the
+          // default is still deferred (#201's own brief), but the render seam reads the
+          // stored variant now, so tooling (the gallery's --spawn-anim) can already reach it.
+          const variant = styleFor(slot).spawnAnim;
           const color = resolveOwnerColor(curr, t);
           const ring = makeSpawnRing(color);
           view.group.add(ring);
@@ -1614,7 +1632,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
 
   return {
     sync,
-    setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null, slot: number = 0): void {
+    setPlayerStyle(
+      hex: string | null,
+      skin: SkinId,
+      accentHex: string | null,
+      slot: number = 0,
+      spawnAnim: SpawnAnimId = DEFAULT_SPAWN_ANIM,
+    ): void {
       const prev = playerStyles.get(slot);
       prev?.skinMap?.dispose();
       playerStyles.set(slot, {
@@ -1625,6 +1649,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         // Bumped from THIS slot's own previous gen (0 if never styled), not a shared
         // counter -- styling slot 1 must not force slot 0's tank to rebuild too.
         gen: (prev?.gen ?? 0) + 1,
+        spawnAnim,
       });
     },
     dispose,

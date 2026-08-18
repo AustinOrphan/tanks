@@ -3,8 +3,8 @@
 // in the image as literal text. Those are cheap to pin and expensive to rediscover.
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the runner can use it
-import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS } from './args.mjs';
-import { SKINS } from '../../src/game/customization';
+import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS } from './args.mjs';
+import { SKINS, SPAWN_ANIMATIONS } from '../../src/game/customization';
 
 const ESC = String.fromCharCode(27);
 
@@ -173,6 +173,21 @@ describe('gallery args', () => {
     // customization.ts without adding it here fails HERE, not in a black screenshot.
     expect([...SKIN_IDS].sort()).toEqual(SKINS.map((s) => s.id).sort());
     for (const s of SKINS) expect(parseArgs(['--skin', s.id]).skin).toBe(s.id);
+  });
+
+  it('accepts exactly the spawn animations the game ships, in both directions (#201)', () => {
+    // Mirrors the SKIN_IDS/SKINS pin above: args.mjs cannot import SpawnAnimId (no build
+    // step under node), so the list is duplicated. This is what stops the copy drifting.
+    expect([...SPAWN_ANIM_IDS].sort()).toEqual(SPAWN_ANIMATIONS.map((s) => s.id).sort());
+    for (const s of SPAWN_ANIMATIONS) expect(parseArgs(['--spawn-anim', s.id]).spawnAnim).toBe(s.id);
+  });
+
+  it('parses --spawn-anim and rejects an unknown id (#201)', () => {
+    expect(parseArgs(['--spawn-anim', 'beacon']).spawnAnim).toBe('beacon');
+    expect(parseArgs([]).spawnAnim).toBe('warp'); // DEFAULT_SPAWN_ANIM
+    // Mirrors the --skin rejection: an unknown id would otherwise reach setPlayerStyle
+    // and fail deep inside the page, behind a full browser launch.
+    expect(() => parseArgs(['--spawn-anim', 'nope'])).toThrow(/--spawn-anim must be one of/);
   });
 
   it('takes a frame count for the gallery scene only, since --scene game has no age', () => {

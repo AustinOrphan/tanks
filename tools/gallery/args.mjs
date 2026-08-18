@@ -64,6 +64,13 @@ export const DEFAULTS = {
   hull: null,
   accent: null,
   /**
+   * Which spawn-entrance/invincibility animator the player tank plays, dressed on via the
+   * game's own `setPlayerStyle` 5th argument (the render seam #201 adds). The player-facing
+   * picker UI that lets someone choose this in real play is still deferred -- this is the
+   * tooling seam that lets the gallery already reach rise/beacon, not just warp.
+   */
+  spawnAnim: 'warp',
+  /**
    * Override how many animation steps to render, for --anim. Null keeps whatever the
    * chosen elements declare. It exists because every shipped element is static or a few
    * ticks long, so an animated SKIN had no timeline to scroll along.
@@ -80,6 +87,17 @@ export const DEFAULTS = {
  * failing at the URL.
  */
 export const SKIN_IDS = ['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow', 'two-tone'];
+
+/**
+ * The spawn animations --spawn-anim accepts, duplicated from `src/game/customization.ts`'s
+ * `SpawnAnimId` for the same reason SKIN_IDS is: this file is loaded by node with no build
+ * step and cannot import TypeScript.
+ *
+ * `args.test.ts` asserts this list equals the shipped `SPAWN_ANIMATIONS` ids, in both
+ * directions, so adding a variant without teaching the gallery about it fails a test rather
+ * than failing at the URL.
+ */
+export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
@@ -122,6 +140,7 @@ export function parseArgs(argv) {
     else if (key === 'values') out.values = parseValues(value);
     else if (key === 'sweep') out.sweep = value.split(',').map((s) => s.trim()).filter(Boolean);
     else if (key === 'labels') out.labels = value.split(';').map((s) => s.trim());
+    else if (key === 'spawn-anim') out.spawnAnim = value;
     else if (NUMERIC.includes(key)) {
       const n = Number(value);
       if (!Number.isFinite(n)) throw new Error(`--${key} must be a number, got ${value}`);
@@ -137,6 +156,12 @@ export function parseArgs(argv) {
     // undefined and the page dies with "PAINTERS[skin] is not a function" behind the
     // runner's pageerror log -- after a full browser launch and a black screenshot.
     throw new Error(`--skin must be one of ${SKIN_IDS.join(', ')}, got '${out.skin}'`);
+  }
+  if (!SPAWN_ANIM_IDS.includes(out.spawnAnim)) {
+    // Same failure mode as the --skin guard above: a typo'd id would otherwise reach
+    // setPlayerStyle's 5th argument and read as SPAWN_ANIMATORS[spawnAnim] undefined deep
+    // inside the page, behind a full browser launch.
+    throw new Error(`--spawn-anim must be one of ${SPAWN_ANIM_IDS.join(', ')}, got '${out.spawnAnim}'`);
   }
   for (const key of ['hull', 'accent']) {
     if (out[key] !== null && !HEX.test(out[key])) {
