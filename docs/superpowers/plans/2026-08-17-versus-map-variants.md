@@ -2,6 +2,16 @@
 
 Status: adopted 2026-08-17, implemented on branch `versus-map-variants`.
 
+> **STALE (2026-08-18): the removal-fraction sweep below was measured under the OLD spawn
+> placement, where P1 sat on the campaign-authored `P` cell.** Making P1 part of the maximin
+> set (`2026-08-18-versus-p1-maximin.md`) frees the LOS filter to search for concealment
+> across every slot, so `evaluateVersusBoard`'s `allPairsConcealed` now almost never fails:
+> re-measured, **0 unsuitable first draws in 1500 shipped-arena draws** at removal fractions
+> 0.85 / 0.90 / 0.95, where this sweep found failures at 0.70.
+> `DESTRUCTIBLE_REMOVAL_FRACTION` is UNCHANGED at 0.4 and is now more conservative than the
+> numbers below imply. Re-measuring the sweep is deliberately not bundled with that change;
+> it has a backlog line. Everything else in this document still holds.
+
 Provenance: a directive that versus maps should start as **authored boards with
 randomized subsets**, moving to full procedural generation later. Builds on
 `docs/superpowers/plans/2026-08-17-versus-spawns.md` (`pickVersusSpawnCell`, PR #188)

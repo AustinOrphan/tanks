@@ -1026,8 +1026,12 @@ recomputed in `tools/backlog.test.ts` and compared against the figures stated he
 a quoted measurement that nothing recomputes is how the previous draft of this file shipped
 a fabricated figure.
 
-Counts: **80 lines below** — 13 / 31 / 25 / 11 across four groups. **71** came from the
-harvested set and **9** from prose-only PRs outside it. They do not sum to the number of
+Counts: **83 lines below** — 13 / 31 / 25 / 14 across four groups. **74** came from the
+harvested set and **9** from prose-only PRs outside it — though 3 of that 74 did not: the
+versus-spawn lines at the end of the fourth group were deferred by the PR that added them,
+not harvested from anything. The 74 is what `tools/backlog.test.ts` recomputes (it is
+`total − prose-only`, which cannot tell the two apart), so read it as "not prose-only"
+rather than literally as "harvested". They do not sum to the number of
 items triaged; the difference is itemised at the end. All five figures are recomputed in
 `tools/backlog.test.ts`, so this paragraph cannot drift from the list below.
 
@@ -1126,6 +1130,10 @@ Each needs a measurement, a browser, or a person.
 - Whether a routine roam change landing seconds after a level ends reads as caused by it. #74 says this wants a decision rather than a quiet change. *(prose-only PR)*
 - **No judgement on arena-04's feel has been recorded.** The game has been played, so "nobody has played it" is no longer the claim — but its geometry, structure and pacifist outcomes are the only things measured, and nothing in the tree states whether the crossfire reads as a crossfire. (One quoted figure in `arenas.json` was recomputed by hand and cites `task-4-report.md`, which exists in neither the tree nor any commit.) #67
 - **The green ricochet sniper and the music have been experienced but not adjudicated.** The game has been played and the audio has been heard, so the old form of this line — "nobody has played against green, nobody has heard the music" — is false and is withdrawn. What remains open is narrower and still real: every number in the tree about either is a headless measurement, and no stated verdict exists on whether green's bank shots read as fair or on whether any specific music transition lands. #69, #76
+
+- Versus spawn concealment is guaranteed only AT SPAWN, on intact geometry. Measured over all 5 shipped arenas x player counts 2/3/4 (15 pairs): on 4 of the 15, exactly one spawn pair becomes mutually visible once every destructible is gone. Running the LOS filter on both wall phases would close it and is a much stricter criterion — unmeasured, so it is a decision, not a fix. #versus-p1-maximin
+- `versus-variants.ts`'s bounded retry is now close to unreachable on shipped boards: 0 unsuitable first draws in 1500 draws (arena-01 and arena-03, 250 seeds each at removal fractions 0.85 / 0.90 / 0.95, all well above the production 0.4). `pickVersusSpawnCell`'s LOS filter actively searches for concealment, so `allPairsConcealed` now fails only when no concealed pair exists anywhere. Whether the criterion should be strengthened, rather than leaving a retry that almost never fires, is undecided. #versus-p1-maximin
+- The removal-fraction sweep in `2026-08-17-versus-map-variants.md` was measured under the OLD spawn placement and is stale. `DESTRUCTIBLE_REMOVAL_FRACTION` is unchanged at 0.4 and is now more conservative than that sweep implied; re-measuring it is a separate decision, deliberately not bundled. #versus-p1-maximin
 
 ### Where the numbers went
 
