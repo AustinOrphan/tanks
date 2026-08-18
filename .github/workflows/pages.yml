@@ -106,11 +106,9 @@ jobs:
       contents: read
       pages: read
     steps:
-      # Current majors, which are NOT the ones ci.yml pins: that file is on
-      # checkout@v4 / setup-node@v4 / cache@v4 / upload-artifact@v4. Three of those
-      # four are three majors behind (current v7 / v7 / v7); `cache` is two behind,
-      # because actions/cache has no v7 -- its current major is v6. Bumping ci.yml is
-      # separate work with its own gate to watch.
+      # CI and this deploy now use GitHub-owned action majors that natively run on
+      # Node 24. Keep their embedded runtimes aligned when GitHub deprecates another
+      # Node version.
       # THE `workflow_run` TRAP THAT SILENTLY PUBLISHES THE WRONG COMMIT. Under
       # `workflow_run`, checkout's default ref is the DEFAULT BRANCH'S HEAD, not the
       # commit CI ran on. Those differ whenever a second merge lands while the first

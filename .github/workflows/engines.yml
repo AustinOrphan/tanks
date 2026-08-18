@@ -81,9 +81,9 @@ jobs:
           - os: windows-latest
             pw-cache-path: ~\AppData\Local\ms-playwright
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -105,7 +105,7 @@ jobs:
       # chromium+firefox+webkit together.
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ matrix.pw-cache-path }}
           key: playwright-all-1.62.0-${{ runner.os }}
@@ -159,7 +159,7 @@ jobs:
       # the log is exactly as useful when the step above failed.
       - name: Upload trace output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-trace-${{ runner.os }}
           path: trace-${{ runner.os }}.log
@@ -182,9 +182,9 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -206,7 +206,7 @@ jobs:
 
       - name: Upload trace output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-trace-safari
           path: trace-safari.log
@@ -237,9 +237,9 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -295,7 +295,7 @@ jobs:
 
       - name: Upload trace output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: engine-trace-ios-simulator
           path: beacon-ios.log
