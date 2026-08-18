@@ -1500,9 +1500,18 @@ export function startGameWith(
   });
 
   hud.onQuitToTitle(() => {
-    // The HUD hides the Quit button outside pause, but a handler that rebuilds the
-    // world deserves its own guard, not a CSS class as its only defence.
-    if (sm.state !== 'paused') return;
+    // The HUD hides the Quit button outside pause and the level-cleared panel, but a
+    // handler that rebuilds the world deserves its own guard, not a CSS class as its
+    // only defence.
+    //
+    // 'win' joined 'paused' when a directive asked for a main-menu route out of a
+    // cleared level. The run SURVIVES that trip, which needs no work here and is the
+    // reason this reuses the quit path rather than inventing one: `advanceLevel` already
+    // ran at the moment the level cleared (see the `s === 'win'` branch below), not when
+    // Next Level is pressed, so the run is already sitting on the NEXT level by the time
+    // this panel is on screen. Leaving from here resumes there, not on the level just
+    // beaten.
+    if (sm.state !== 'paused' && sm.state !== 'win') return;
     // Quit suspends presentation of the run; it must not create or replenish one
     // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
     // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
