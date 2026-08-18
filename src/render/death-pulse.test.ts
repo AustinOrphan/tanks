@@ -187,6 +187,30 @@ describe('death pulse: its own clock', () => {
   });
 });
 
+describe('death pulse: no re-fire while staying dead', () => {
+  it('does not spawn a second ring for a tank that was already dead in prev', () => {
+    // Mutation this catches: dropping the `!p.alive` skip (or the `currAlive.has`
+    // check) in spawn -- either one would treat "dead in both frames" as a fresh
+    // death and add a second ring every tick a corpse sits in the world.
+    const { scene, dp } = setup();
+    const prevAlive = makeTank(1, 'player', 0, 0);
+    const currDead = makeTank(1, 'player', 0, 0, { alive: false });
+    const currDead2 = makeTank(1, 'player', 0, 0, { alive: false });
+    const spawns: Spawn[] = [{ kind: 'player', pos: { x: 0, y: 0 }, angle: 0 }];
+    const worldAlive = createWorld({ walls: [], tanks: [prevAlive], spawns, lives: 3 });
+    const worldDead = createWorld({ walls: [], tanks: [currDead], spawns, lives: 3 });
+    const worldDead2 = createWorld({ walls: [], tanks: [currDead2], spawns, lives: 3 });
+
+    // Frame 1: the actual death transition.
+    dp.spawn(worldAlive, worldDead, { enemyEnabled: false });
+    expect(deathRings(scene).length).toBe(1);
+
+    // Frame 2: the tank is dead in BOTH prev and curr -- no new death occurred.
+    dp.spawn(worldDead, worldDead2, { enemyEnabled: false });
+    expect(deathRings(scene).length).toBe(1); // not 2
+  });
+});
+
 describe('death pulse: dispose', () => {
   it('removes every mesh it added from the scene, active and pooled alike', () => {
     const { scene, dp } = setup();

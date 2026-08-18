@@ -3040,7 +3040,7 @@ describe('startGameWith: dev flags stay off by default', () => {
     // catches a NEW overlay flag shipped defaulting to on. Adding a flag should make you
     // come here and write `false`.
     const off = boot();
-    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(off.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     off.handle.dispose();
   });
 
@@ -3048,16 +3048,25 @@ describe('startGameWith: dev flags stay off by default', () => {
     // One at a time, so a wiring that turns them all on together -- or crosses two of
     // them -- fails rather than passing on the aggregate.
     const ray = boot(makeDeps({ devFlags: { aimRay: true } }));
-    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(ray.rec.rendererArgs[0][4]).toEqual({ aimRay: true, mineReach: false, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     ray.handle.dispose();
 
     const reach = boot(makeDeps({ devFlags: { mineReach: true } }));
-    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(reach.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: true, mineTimer: false, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     reach.handle.dispose();
 
     const timer = boot(makeDeps({ devFlags: { mineTimer: true } }));
-    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high });
+    expect(timer.rec.rendererArgs[0][4]).toEqual({ aimRay: false, mineReach: false, mineTimer: true, playerColor: '#hex-blue', playerSkin: 'solid', playerAccent: null, quality: QUALITY_PRESETS.high, enemyDeathPulse: false });
     timer.handle.dispose();
+  });
+
+  it('threads the enemyDeathPulse dev flag through to the renderer', () => {
+    // The wiring this feature adds: devFlags.enemyDeathPulse -> the renderer's
+    // construction options, the same shape as aimRay/mineReach/mineTimer above.
+    const h = boot(makeDeps({ devFlags: { enemyDeathPulse: true } }));
+    const options = h.rec.rendererArgs[0][4] as { enemyDeathPulse?: boolean };
+    expect(options.enemyDeathPulse).toBe(true);
+    h.handle.dispose();
   });
 
   it('threads the quality dev flag through to the renderer', () => {

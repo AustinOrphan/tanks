@@ -114,6 +114,7 @@ export interface GameDeps {
       playerSkin?: SkinId;
       playerAccent?: string | null;
       quality?: RenderQuality;
+      enemyDeathPulse?: boolean;
     },
   ) => Renderer3D;
   /**
@@ -821,6 +822,9 @@ export function startGameWith(
     // `?dev=1&quality=low|medium|high`; a null flag resolves to `high`, today's shipped
     // values -- see render/quality.ts.
     quality: qualityFor(deps.devFlags.quality),
+    // `?dev=1&enemyDeathPulse=1` (issue #200): player deaths always ring; this only
+    // gates non-player ones. See death-pulse.ts's own doc comment.
+    enemyDeathPulse: deps.devFlags.enemyDeathPulse,
   });
   const input = deps.createInput(canvas, (x, y) => renderer.screenToGround(x, y), {
     // `pad[i] -> slot[i]` (n-player arc PR3): NOT forced off at `playerCount >= 2`
