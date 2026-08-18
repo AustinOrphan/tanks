@@ -173,14 +173,20 @@ Every failure across the whole sweep is concealment -- never `distinctSpawns`, n
 `room` (consistent with room's proof above). **This is not the non-discriminating
 finding the board-rules PR reported**: unlike that PR's fixed 15 (arena, N)
 combinations (no removal fraction to vary), this sweep DOES reject boards once the
-fraction climbs past roughly 0.45-0.5, which is what makes the retry/fallback
-machinery real rather than decorative -- it has somewhere to matter, even though the
-CHOSEN operating fraction sits below where failures start appearing.
+fraction climbs (sporadically from 0.50, consistently from 0.65), which is what makes
+the retry/fallback machinery real rather than decorative -- it has somewhere to matter,
+even though the CHOSEN operating fraction sits below every measured failure.
 
-**Chosen: `DESTRUCTIBLE_REMOVAL_FRACTION = 0.4`.** On the frontier just before failures
-start appearing (0.45 is also clean; 0.5 is the first fraction with a measured
-failure), while still removing a substantial, visibly different fraction of each
-arena's destructible cells:
+**Chosen: `DESTRUCTIBLE_REMOVAL_FRACTION = 0.4`.** The largest swept fraction with no
+measured failure at all, while still removing a substantial, visibly different fraction
+of each arena's destructible cells.
+
+**The sweep is NOT monotonic in the fraction, and calling 0.4 "just below the threshold"
+would overstate it.** 0.50 shows 1 failure of 1500, then 0.55 and 0.60 show ZERO, and
+0.70's 5 drops to 0.75's 3 before rising again. What the data supports is "none observed
+at or below 0.45, sporadic from 0.50, consistent from 0.65" -- not a single crossing
+point. 0.4 is a conservative reading of noisy data, not a threshold the data
+establishes:
 
 | arena | destructible cells | removed at 0.4 (`round(count * 0.4)`) |
 |---|---|---|
