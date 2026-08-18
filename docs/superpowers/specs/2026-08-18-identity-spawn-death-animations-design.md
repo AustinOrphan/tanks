@@ -116,9 +116,12 @@ One fixed effect — the mirror of the spawn ring, in vs out:
   because the tank's own view is hidden once dead, so the ring must outlive it.
 - **Screen vignette recolour** — `signalPlayerDeath()` (`src/game/hud.ts`) gains a colour
   parameter and tints the current red vignette to the dying player's identity colour.
-  **Open look-call, to settle in the gallery:** whether single-player keeps the classic red
-  (red = damage is a strong convention) or also adopts the identity tint. The spec ships
-  the colour parameter; the single-player choice is a one-line default, decided on renders.
+  **Single-player keeps the classic red** (red = damage is a strong convention) — but as an
+  **adjustable named constant** (e.g. `SINGLE_PLAYER_DEATH_VIGNETTE`), not a baked-in
+  literal, so changing that decision later is a one-constant edit. This follows the repo's
+  "numbers that are feel, not measurement" convention: the constant is chosen by eye and the
+  tests assert *against the constant*, not against a hardcoded red, so retuning it does not
+  rewrite tests.
 
 Colour is resolved render-side from `controlledBy`, so `tank-destroyed` is **not** widened
 and its consumers are not swept.
@@ -168,10 +171,39 @@ The "customizable later" requirement is served by copying the skins pattern exac
 - `hud.test.ts` — `signalPlayerDeath(color)` tints the vignette; the classic-red default
   path still holds.
 - `tools/devflags/doc.test.ts` — regenerated `docs/dev-flags.md` matches the registry.
-- **Feel** — the gallery `coop` scene with `--slowmo` and a new `--spawn-anim <id>` arg
-  (mirroring `--skin`), plus a before/after comparison against the cyan burst being removed
-  (§9). The gallery is how the translucency-vs-ring look and the single-player-vignette
-  colour get settled.
+- **Feel & exhibition** — the gallery, covered in its own section below, since it is both
+  how the look gets tuned and a required deliverable.
+
+## 8a. Gallery: comparisons & exhibition media (a deliverable, not just a check)
+
+The gallery renders these animations through the REAL render modules against a REAL world,
+and it already produces stills (PNG), animated **gifs** (ffmpeg: `--anim`/`--frames` for an
+element timeline, `--scene game --slowmo --burst N` for real gameplay, `--out clip.gif`,
+`--fps`), and directories of raw frames. A new **`--spawn-anim <id>`** arg (mirroring
+`--skin`) selects the variant, the same way `--skin`/`--hull`/`--accent` already dress the
+tank.
+
+Two distinct outputs are required:
+
+- **Comparisons** — before/after gifs of a respawn: the removed cyan burst (§9) vs the new
+  identity ring, and a three-up of Warp / Rise / Beacon at matched timing. These are the
+  evidence that replacing the burst is not a regression and that the variants are visibly
+  distinct — they go in the PR body (the established practice; PR #139 carried the tile
+  render it turned on).
+- **Exhibition media** — polished gifs/images of each spawn variant and the death pulse in
+  the player identity colours, for showing the feature off. Produced from the same gallery
+  recipes at a higher frame count / slow-mo.
+
+**Video (mp4/webm) is not something the gallery does today** — animated output is gif or a
+raw-frames directory only (`tools/gallery/args.mjs` refuses a non-`.gif` animated target).
+Gifs cover animated exhibition media; if true video is wanted, the small addition is a
+`raw-frames → ffmpeg libx264/vp9` step behind an `--out clip.mp4` path, and the plan will
+scope it as an explicit, separable task rather than bundling it silently.
+
+**Where the media lives:** comparison and exhibition artifacts attach to the **PR**, not the
+repo tree — gifs and (any) videos are heavy binaries and committing them bloats history.
+A curated, committed `docs/` media set is a separate decision; if wanted it should be a
+short, deliberately chosen few, not every render.
 
 ## 9. Migration & one detail to pin
 
@@ -200,9 +232,14 @@ The "customizable later" requirement is served by copying the skins pattern exac
 
 - The spawn-animation **picker UI and its per-slot store field** — the registry ships, the
   chooser does not.
-- The **single-player death-vignette colour** — ships as a parameter; the red-vs-identity
-  default is a gallery look-call.
+- The **single-player death-vignette colour** — decided (classic red), but kept as an
+  adjustable constant so a change of mind is a one-line edit, not a code hunt.
 - The **enemy death pulse** — behind `enemyDeathPulse`, to be shipped-or-deleted once
   playtested.
 - Death pulse as a **customizable variant set** — one fixed effect for now; it lives in its
   own module so it could gain variants later without disturbing the spawn registry.
+- **Gallery mp4/webm output** — gifs cover animated exhibition media today; a
+  `raw-frames → ffmpeg libx264` `--out clip.mp4` path is a small separable add if true video
+  is wanted, scoped as its own task.
+- A **committed `docs/` media gallery** — exhibition artifacts attach to PRs by default;
+  a curated in-repo set is a separate call because of binary weight.
