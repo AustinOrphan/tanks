@@ -52,6 +52,28 @@ export type AiState = 'idle' | 'aim' | 'fire' | 'reposition';
  */
 export type GameMode = 'campaign-coop' | 'ffa' | 'teams';
 
+/**
+ * The grid a world's walls were built from -- `cols`/`rows`/`cellSize`/`grid`/`legend`,
+ * exactly the shape `arena.ts`'s own `Arena` interface carries (structurally identical,
+ * deliberately not imported from there: `arena.ts` already imports `world.ts`, so the
+ * reverse import would close a cycle -- see `arena.ts`'s own comment on the analogous
+ * `versus-spawns.ts` situation).
+ *
+ * Carried on `World` (optional -- see `World.arenaGeometry`) because
+ * `pickVersusSpawnCell` (`versus-spawns.ts`) needs the grid CHARACTERS themselves to
+ * find an open-floor cell; `World.walls` alone cannot answer that, since it only carries
+ * already-merged solid rectangles and per-cell destructible boxes -- a former enemy
+ * spawn letter is real floor but produces no wall entry, so nothing in `Wall[]`
+ * distinguishes "open floor" from "a letter that happens not to be a wall".
+ */
+export interface ArenaGeometry {
+  cols: number;
+  rows: number;
+  cellSize: number;
+  grid: string[];
+  legend: Record<string, WallKind>;
+}
+
 export interface Spawn {
   kind: TankKind;
   pos: Vec2;
@@ -120,13 +142,38 @@ export interface Tank {
    */
   respawnAtTick?: number;
   /**
-   * Coop's post-respawn damage immunity: the absolute tick (world.tick) until which
-   * this tank cannot be killed -- see isDamageImmune below. Set only at the moment
-   * of revival (stepRespawns, world.ts); no explicit clear, self-expires by
-   * comparison, the same idiom round.ts's roundPhase already uses for elapsed-based
-   * checks. OPTIONAL for the same reason as `respawnAtTick`.
+   * Post-respawn damage immunity AND action lockout: the absolute tick (world.tick)
+   * until which this tank cannot be killed (isDamageImmune below) and cannot fire or
+   * lay a mine (isActionLocked below) -- movement and aim are NOT gated by this field,
+   * only the two weapon triggers. Set only at the moment of revival (stepRespawns,
+   * world.ts) for EVERY per-tank respawn stepRespawns handles -- coop's shared-pool
+   * mode, and, since this field's own second reader was added, versus's per-tank
+   * stock respawns too. No explicit clear, self-expires by comparison, the same idiom
+   * round.ts's roundPhase already uses for elapsed-based checks. OPTIONAL for the same
+   * reason as `respawnAtTick`.
    */
   shieldUntilTick?: number;
+  /**
+   * Versus's Smash-style life counter (n-player arc, stock PR): how many MORE times
+   * this player-kind tank may respawn after its CURRENT death. OPTIONAL like `team`:
+   * stamped only by `loadArena` when `mode === 'ffa' || mode === 'teams'` (arena.ts's
+   * PASS 1a/1b), to `VERSUS_STOCK` (constants.ts) -- so every campaign-coop fixture,
+   * including a full-object `toEqual`, is unaffected by this field's mere existence.
+   * A TANK field rather than a parallel `Map<tankId, number>` on `World`: it clones with
+   * the tank for free (cloneWorld already deep-clones every `Tank`) and needs no id
+   * bookkeeping of its own.
+   *
+   * Decremented by `applyVersusStock` (world.ts) the tick a player-kind tank dies with
+   * `respawnAtTick` still `undefined` (the same tally-once idempotency guard
+   * `resolveStatusCoop`'s POOL MODE block already uses). A tank whose stock reaches 0 is
+   * ELIMINATED -- `!alive && (stockRemaining ?? 0) === 0`, see world.ts's
+   * `isVersusEliminated` -- and stays down for the rest of the round; stock still
+   * remaining schedules a respawn exactly like coop's pool. The `?? 0` fallback means a
+   * hand-built fixture Tank that never sets this field reads as "already at zero
+   * stock" -- i.e. today's pre-stock single-life FFA/teams behaviour, unchanged for
+   * every existing test that does not opt in.
+   */
+  stockRemaining?: number;
   /**
    * Which of the 2 alternating teams this player-kind tank belongs to, `teamOf(slot) =
    * slot % 2` (arena.ts). OPTIONAL like `controlledBy`/`respawnAtTick`: stamped ONLY when
@@ -149,19 +196,40 @@ export interface Tank {
  * Is this tank immune to damage on the current tick?
  *
  * Two ways in: `invincible` (dev playtest mode, permanent for the tank's life) or a
- * live `shieldUntilTick` (coop's post-respawn grace -- see world.ts's stepRespawns).
+ * live `shieldUntilTick` (post-respawn grace -- see world.ts's stepRespawns, which
+ * stamps it for both coop's shared-pool respawns and versus's stock respawns).
  * Lives here, not in world.ts, for the same reason round.ts's own placement gives:
  * world.ts already imports bullets.ts/mines.ts, so a helper there importing back
  * would be circular.
  *
  * Replaces bullets.ts's and mines.ts's separate `t.invincible` checks -- both
  * already have `world` in scope at their call sites, so `world.tick` is available.
- * Value-identical at N=1: `shieldUntilTick` is only ever set by the coop respawn
+ * Value-identical at N=1: `shieldUntilTick` is only ever set by a per-tank respawn
  * stage, so it is always undefined in single-player, and the OR collapses to
  * today's `t.invincible` check exactly.
  */
 export function isDamageImmune(t: Tank, tick: number): boolean {
   return t.invincible === true || (t.shieldUntilTick !== undefined && tick < t.shieldUntilTick);
+}
+
+/**
+ * Is this tank locked out of FIRING and MINE-LAYING by its own post-respawn shield?
+ *
+ * A directive-scoped subset of the shield window, not the same question
+ * `isDamageImmune` answers: `invincible` (the permanent dev playtest cheat) has no
+ * bearing here at all -- an `?dev=1&invincible=1` player fights normally, it is only
+ * damage that cannot touch it -- so this checks `shieldUntilTick` alone, never
+ * `invincible`. Movement and aim are deliberately NOT gated by this: the directive is
+ * "shots can't be fired and mines can't be placed... only movement [is unrestricted]",
+ * a narrower lockout than the per-WORLD round countdown/grace phase (round.ts's
+ * `roundPhase`, which blocks movement too and applies to every tank at once) -- this is
+ * per-TANK and fires-only.
+ *
+ * Reuses `shieldUntilTick` rather than a second parallel timer: the brief window that
+ * protects a freshly respawned tank from damage is the same window it may not act in.
+ */
+export function isActionLocked(t: Tank, tick: number): boolean {
+  return t.shieldUntilTick !== undefined && tick < t.shieldUntilTick;
 }
 
 export interface Bullet {

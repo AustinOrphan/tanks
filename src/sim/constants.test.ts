@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   bulletConfig, DT, TICK_HZ, COUNTDOWN_TICKS, RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS, SHELL_CAP, MINE_CAP,
-  NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES,
+  NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES, VERSUS_STOCK,
   PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE,
   TANK_RADIUS, TANK_SPEED, TANK_TURN_RATE, BULLET_RADIUS, MINE_TRIGGER_RADIUS,
   NORMAL_SPEED, FAST_SPEED, RICOCHET_SPEED,
@@ -56,6 +56,16 @@ describe('constants', () => {
     expect(SHELL_CAP).toBe(5);
     expect(MINE_CAP).toBe(2);
     expect(LIVES).toBe(3);
+  });
+
+  it('versus stock defaults to 3 respawns per player, distinct from LIVES', () => {
+    // Not a restatement of LIVES: this is a SEPARATE balance.json key
+    // (constants.ts's own comment explains why -- per-tank vs. shared/per-round), so
+    // retuning one must not silently retune the other. No behavioural test can pin
+    // this the way MINE_BLAST_RADIUS-ordering-style tests do -- a versus match plays
+    // out identically in shape at any positive stock count -- so the literal is
+    // pinned here the same way AI_AIM_SPREAD is.
+    expect(VERSUS_STOCK).toBe(3);
   });
 
   it('carries the shipped tank and bullet geometry/speeds', () => {

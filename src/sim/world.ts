@@ -1,5 +1,5 @@
-import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger, GameMode } from './types';
-import { angleOf, slewAngle, vsub } from './types';
+import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger, GameMode, Vec2, ArenaGeometry } from './types';
+import { angleOf, slewAngle, vsub, isActionLocked } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks, resolveWalls } from './collision';
 import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
@@ -8,6 +8,7 @@ import { stepAi } from './ai';
 import { DT, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE, RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS } from './constants';
 import { configFor, hasAbility, TankAbility } from './config';
 import { roundPhase } from './round';
+import { pickVersusSpawnCell } from './versus-spawns';
 
 export interface World {
   tick: number;
@@ -97,6 +98,17 @@ export interface World {
   // resetArena on every respawn so the opening-phase protection applies after every
   // life lost, not just at game start. See src/sim/round.ts's roundPhase().
   roundStartTick: number;
+  /**
+   * The grid this world's walls were built from -- see ArenaGeometry's own doc comment
+   * (types.ts). Populated by loadArena (arena.ts); OPTIONAL because most of this file's
+   * own test fixtures, and sandbox.ts's dev worlds, build a World straight from raw
+   * tanks/walls/spawns arrays with no grid behind them at all.
+   *
+   * Read only by stepRespawns' versus branch below, to pick a respawn cell with
+   * pickVersusSpawnCell (versus-spawns.ts). Absence degrades gracefully to the tank's
+   * own authored spawn -- see respawnPos's own comment -- rather than throwing.
+   */
+  arenaGeometry?: ArenaGeometry;
 }
 
 export interface StepResult {
@@ -122,6 +134,8 @@ export function createWorld(init: {
   mode?: GameMode;
   /** Defaults to false. See World.friendlyFire. */
   friendlyFire?: boolean;
+  /** Absent unless the caller went through loadArena. See World.arenaGeometry. */
+  arenaGeometry?: ArenaGeometry;
 }): World {
   const maxId = Math.max(
     0,
@@ -149,6 +163,7 @@ export function createWorld(init: {
     // 1, not 0: step() increments `tick` before evaluating the phase, so the
     // first simulated tick is tick 1. Anchoring at 0 cost the countdown a tick.
     roundStartTick: 1,
+    arenaGeometry: init.arenaGeometry,
   };
 }
 
@@ -181,6 +196,11 @@ export function cloneWorld(world: World): World {
     blasts: world.blasts.map((b) => ({ ...b, pos: { ...b.pos } })),
     walls: world.walls.map((w) => ({ ...w, aabb: { ...w.aabb } })),
     spawns: world.spawns.map((s) => ({ ...s, pos: { ...s.pos } })),
+    // A reference copy, deliberately not deep-cloned like walls/spawns above: the grid
+    // strings and legend never mutate after loadArena builds them (only Wall.destroyed,
+    // which lives in `walls` above, changes mid-round), so sharing one object across
+    // every tick's clone is safe and free.
+    arenaGeometry: world.arenaGeometry,
   };
 }
 
@@ -250,7 +270,16 @@ function driveTank(world: World, player: Tank, input: InputState, events: SimEve
   if (player.fireCooldown > 0) player.fireCooldown -= 1;
   if (player.mineCooldown > 0) player.mineCooldown -= 1;
 
-  const canAct = phase === 'live';
+  // `!isActionLocked` -- spawn protection's fire/mine lockout (types.ts). This is the
+  // ONE place every kind==='player' tank's fire/mine input is consumed, human or bot:
+  // a bot-claimed slot's InputState (ai/player-profile.ts's decidePlayerInput, wired in
+  // game/loop.ts) arrives here through the exact same applyPlayerInputs -> driveTank
+  // path a human's does, so gating here covers both without a second gate anywhere
+  // else. Deliberately NOT the per-WORLD round countdown/grace (`phase`, just above) --
+  // that already blocks every tank uniformly; this is per-TANK, reusing the freshly
+  // respawned tank's own shieldUntilTick rather than a second timer. Movement and aim
+  // above are untouched: the directive is fire/mine only.
+  const canAct = phase === 'live' && !isActionLocked(player, world.tick);
 
   if (canAct && input.fire && player.fireCooldown <= 0) {
     if (spawnBullet(world, player.id, player.turretAngle, pcfg.weapon.bulletType, events)) {
@@ -318,6 +347,36 @@ export function countPlayerTanks(world: World): number {
 }
 
 /**
+ * Where a reviving player tank reappears.
+ *
+ * Campaign-coop keeps EXACTLY today's behaviour -- the tank's own authored
+ * world.spawns[i] position, a fresh copy -- which is what keeps coop-respawn.test.ts's
+ * pins byte-for-byte and is why this returns a plain object rather than the stored
+ * Vec2 itself (aliasing world.spawns[i].pos would let a later mutation of the revived
+ * tank's own `pos` corrupt the world's spawn table).
+ *
+ * Versus modes (ffa/teams) instead ask pickVersusSpawnCell (versus-spawns.ts) for the
+ * cell farthest, by that function's own greedy-maximin/line-of-sight ranking, from
+ * every currently LIVING tank -- "the most isolated/safest spawn point" per the
+ * directive this implements. That ranking is a documented APPROXIMATION of true
+ * p-dispersion, not an optimum (see pickVersusSpawnCell's own doc comment); this
+ * function does not claim otherwise. Falls back to the tank's own authored spawn --
+ * campaign-coop's behaviour -- when world.arenaGeometry is absent: most of this file's
+ * own test fixtures (and sandbox.ts's dev worlds) build a World from raw
+ * tanks/walls/spawns with no grid behind it, so there is nothing for
+ * pickVersusSpawnCell to search. Total, no-throw degradation, the same posture
+ * pickVersusSpawnCell's own zero-candidate fallback already takes.
+ */
+function respawnPos(world: World, tankIndex: number): Vec2 {
+  const authored = world.spawns[tankIndex].pos;
+  if (world.mode === 'campaign-coop' || !world.arenaGeometry) return { x: authored.x, y: authored.y };
+  const avoid: Vec2[] = world.tanks.filter((t) => t.alive).map((t) => ({ x: t.pos.x, y: t.pos.y }));
+  const { cols, rows, cellSize, grid, legend } = world.arenaGeometry;
+  const cell = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, avoid);
+  return { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
+}
+
+/**
  * Revives any player tank whose respawnAtTick has arrived. Per-tank, deliberately a
  * SHORTER field list than resetArena's -- see the coop semantics plan
  * (docs/superpowers/plans/2026-08-15-coop-semantics.md) for the "hard problem" this
@@ -331,14 +390,20 @@ export function countPlayerTanks(world: World): number {
  * tank's own mines are still live in world.mines would desync the count dropMine's
  * cap check reads, letting the revived tank exceed its mine cap.
  *
- * Uses world.spawns[i] at the tank's own array index -- the same world.tanks[i] <->
- * world.spawns[i] invariant resetArena's own comment documents, preserved for an
- * appended P2 by loadArena's append-at-end insertion (see the coop foundation plan).
+ * WHERE it reappears is respawnPos's decision (above) -- campaign-coop's own
+ * world.spawns[i], or, in ffa/teams, a cell pickVersusSpawnCell picks fresh on every
+ * call, scored against whichever OTHER tanks are alive at that exact moment. Processing
+ * `world.tanks` in array order and mutating `t.alive` in place (below) means that if two
+ * tanks revive on the SAME tick, the second one's pick already sees the first one as
+ * alive and avoids it -- no extra bookkeeping needed for that case. Facing angle stays
+ * `s.angle` in every mode (arena.ts stamps 0 for every ffa/teams spawn, same as initial
+ * placement, so there is no separate "safe facing" decision to make here).
  *
- * Called from stepInputs, gated on countPlayerTanks(draft) >= 2 -- see that gate's own
- * comment for why it runs BEFORE applyPlayerInputs. No internal player-count gate of
- * its own: that is stepInputs' job, matching resolveStatus's guard-first split one
- * level up (pinned directly in coop-respawn.test.ts).
+ * Called from stepInputs, gated on countPlayerTanks(draft) >= 2 in campaign-coop, or
+ * unconditionally in ffa/teams -- see that gate's own comment for why it runs BEFORE
+ * applyPlayerInputs. No internal mode/player-count gate of its own: that is stepInputs'
+ * job, matching resolveStatus's guard-first split one level up (pinned directly in
+ * coop-respawn.test.ts and versus-modes.test.ts).
  */
 export function stepRespawns(world: World, events: SimEvent[]): void {
   for (let i = 0; i < world.tanks.length; i++) {
@@ -346,7 +411,7 @@ export function stepRespawns(world: World, events: SimEvent[]): void {
     if (t.kind !== 'player' || t.alive) continue;
     if (t.respawnAtTick === undefined || world.tick < t.respawnAtTick) continue;
     const s = world.spawns[i];
-    t.pos = { ...s.pos };
+    t.pos = respawnPos(world, i);
     t.bodyAngle = s.angle;
     t.turretAngle = s.angle;
     t.alive = true;
@@ -358,8 +423,9 @@ export function stepRespawns(world: World, events: SimEvent[]): void {
     t.aimTicks = 0;
     t.respawnAtTick = undefined;
     // Set only at the moment of revival, no explicit clear -- self-expires by
-    // comparison in isDamageImmune (types.ts), the same idiom roundPhase's own
-    // elapsed-based checks already use.
+    // comparison in isDamageImmune/isActionLocked (types.ts), the same idiom
+    // roundPhase's own elapsed-based checks already use. isActionLocked is what makes
+    // this ALSO a fire/mine lockout in versus, not merely a damage shield.
     t.shieldUntilTick = world.tick + RESPAWN_SHIELD_TICKS;
     events.push({ type: 'respawn', tankId: t.id, controlledBy: t.controlledBy ?? 0, pos: { x: t.pos.x, y: t.pos.y } });
   }
@@ -498,47 +564,95 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
 }
 
 /**
- * FFA's win rule (n-player arc PR 4): exactly one player tank alive, every other player
- * tank dead. Single life per round -- no stock/lives system (see the arc design's "Owner
- * forks" section) -- so there is no death handling to speak of, unlike resolveStatusCoop:
- * a dead player simply stays dead (stepRespawns is gated off outside campaign-coop, see
- * stepInputs below), and this function only ever has to notice when the LAST one falls.
+ * A versus player-kind tank is ELIMINATED -- out for the rest of the round, no more
+ * respawns coming -- exactly when it is currently dead AND has no stock left. This is
+ * NOT the same question `!t.alive` answers: a player awaiting a scheduled respawn
+ * (stock > 0, respawnAtTick set by applyVersusStock below) is dead right now but is
+ * very much still IN the match. Getting this distinction wrong is the specific failure
+ * named for this feature: counting bare `alive` here ends a stock match on the very
+ * first death, stock or no stock -- versus-modes.test.ts's
+ * "a mid-stock death must not end the match" tests exist to catch exactly that.
  *
- * A simultaneous final wipeout (the last two players trade a kill the same tick) leaves
- * ZERO alive, which fails "exactly one alive" -- resolves to 'lose', not a third status.
- * Deliberately no `'draw'`: growing `World.status`'s 3-value union touches game/state.ts,
- * HUD copy and achievements gating, real separately-scoped surface no owner directive
- * asked for -- named residual, not a silent gap.
+ * `?? 0`: a hand-built Tank fixture that never sets stockRemaining reads as already at
+ * zero -- i.e. today's pre-stock single-life behaviour, unchanged for every existing
+ * test that does not opt into the field. Real ffa/teams play always sets it (loadArena
+ * stamps VERSUS_STOCK on every player-kind tank in those modes).
+ */
+function isVersusEliminated(t: Tank): boolean {
+  return !t.alive && (t.stockRemaining ?? 0) === 0;
+}
+
+/**
+ * Versus's stock bookkeeping: for every player-kind death THIS tick, decrement the
+ * dying tank's own stock and, if any remains, schedule its respawn. Same event-tally
+ * shape resolveStatusCoop's POOL MODE block above already uses -- `tank-destroyed`
+ * events, idempotency-guarded on `respawnAtTick !== undefined` so a corpse already
+ * tallied (waiting on an earlier-scheduled respawn) is never charged twice for the same
+ * death. Runs before either resolveStatusFfa or resolveStatusTeams counts who remains,
+ * so a stock-exhausted death is reflected in THIS SAME tick's elimination count --
+ * exactly what lets a mutual last-stock kill still resolve to 'lose' immediately below,
+ * matching the pre-existing simultaneous-wipe behaviour (a named gap, not fixed here).
+ *
+ * Reuses RESPAWN_DELAY_TICKS rather than a second delay constant: versus's respawn
+ * timing is not a new feel value, it is coop's own.
+ */
+function applyVersusStock(world: World, events: SimEvent[]): void {
+  for (const e of events) {
+    if (e.type !== 'tank-destroyed' || e.kind !== 'player') continue;
+    const tank = world.tanks.find((t) => t.id === e.tankId);
+    if (!tank || tank.respawnAtTick !== undefined) continue;
+    tank.stockRemaining = Math.max(0, (tank.stockRemaining ?? 0) - 1);
+    if (tank.stockRemaining > 0) tank.respawnAtTick = world.tick + RESPAWN_DELAY_TICKS;
+  }
+}
+
+/**
+ * FFA's win rule (n-player arc PR 4, extended by the stock PR): exactly one player tank
+ * NOT ELIMINATED, every other player tank eliminated -- see isVersusEliminated's own
+ * doc comment for why that is "not eliminated", not "alive". Stock bookkeeping
+ * (applyVersusStock) runs first, every call, so a death that still has respawns coming
+ * never counts as an elimination.
+ *
+ * A simultaneous final wipeout (the last two players trade a last-stock kill the same
+ * tick) leaves ZERO non-eliminated, which fails "exactly one remains" -- resolves to
+ * 'lose', not a third status. Deliberately no `'draw'`: growing `World.status`'s
+ * 3-value union touches game/state.ts, HUD copy and achievements gating, real
+ * separately-scoped surface no owner directive asked for -- named residual, not a
+ * silent gap. This is the SAME named gap resolveStatusFfa always had; the stock PR
+ * does not touch it, only what "wipeout" means before that fires.
  */
 function resolveStatusFfa(world: World, events: SimEvent[]): void {
+  applyVersusStock(world, events);
   const players = world.tanks.filter((t) => t.kind === 'player');
-  const alive = players.filter((t) => t.alive);
-  if (alive.length === 1) {
+  const remaining = players.filter((t) => !isVersusEliminated(t));
+  if (remaining.length === 1) {
     world.status = 'win';
     events.push({ type: 'win' });
-  } else if (alive.length === 0) {
+  } else if (remaining.length === 0) {
     world.status = 'lose';
     events.push({ type: 'lose' });
   }
 }
 
 /**
- * Teams' win rule (n-player arc PR 4): one team's players are all dead, the other team
- * has a survivor. `Tank.team` is `teamOf(slot) = slot % 2` (arena.ts), stamped only when
- * `mode === 'teams'`, so every player tank here carries one. Same single-life,
- * no-stock, no-draw shape as resolveStatusFfa -- see its own doc comment.
+ * Teams' win rule (n-player arc PR 4, extended by the stock PR): one team's players are
+ * all ELIMINATED, the other team has a non-eliminated survivor. `Tank.team` is
+ * `teamOf(slot) = slot % 2` (arena.ts), stamped only when `mode === 'teams'`, so every
+ * player tank here carries one. Same stock-then-eliminated shape as resolveStatusFfa --
+ * see its own doc comment, including the unfixed simultaneous-wipe gap.
  *
- * A simultaneous wipeout of BOTH teams the same tick leaves neither with a survivor,
- * which is neither team's win -- resolves to 'lose', matching FFA's own simultaneous
- * case rather than inventing a second rule for it.
+ * A simultaneous wipeout of BOTH teams' last stock the same tick leaves neither with a
+ * survivor, which is neither team's win -- resolves to 'lose', matching FFA's own
+ * simultaneous case rather than inventing a second rule for it.
  */
 function resolveStatusTeams(world: World, events: SimEvent[]): void {
+  applyVersusStock(world, events);
   const players = world.tanks.filter((t) => t.kind === 'player');
-  const teamsAlive = new Set(players.filter((t) => t.alive).map((t) => t.team));
-  if (teamsAlive.size === 1) {
+  const teamsRemaining = new Set(players.filter((t) => !isVersusEliminated(t)).map((t) => t.team));
+  if (teamsRemaining.size === 1) {
     world.status = 'win';
     events.push({ type: 'win' });
-  } else if (teamsAlive.size === 0) {
+  } else if (teamsRemaining.size === 0) {
     world.status = 'lose';
     events.push({ type: 'lose' });
   }
@@ -630,20 +744,28 @@ export function stepInputs(world: World, inputs: InputState[]): StepResult {
   const events: SimEvent[] = [];
 
   if (draft.status === 'playing') {
-    // Coop only, and BEFORE applyPlayerInputs: a tank that crosses its revival tick
-    // gets that same tick's input rather than sitting inert one extra frame -- a
-    // deliberate improvement on resetArena's incidental one-tick lag. At N < 2 this
-    // line always executes but the guard is always false -- a value-identical no-op
-    // (cheap boolean, touches nothing when false), not a "never even called"
+    // BEFORE applyPlayerInputs, every mode: a tank that crosses its revival tick gets
+    // that same tick's input rather than sitting inert one extra frame -- a deliberate
+    // improvement on resetArena's incidental one-tick lag. At campaign-coop N < 2 the
+    // whole expression always evaluates but is always false -- a value-identical no-op
+    // (cheap booleans, touches nothing when false), not a "never even called"
     // structural no-op; see tools/baseline/trace.test.ts's comment on why the golden
     // trace cannot distinguish the two.
     //
-    // `mode === 'campaign-coop' &&` (n-player arc PR 4) is functionally a no-op on top
-    // of the player-count check: only resolveStatusCoop ever sets respawnAtTick, so the
-    // old gate already never revived anyone in 'ffa'/'teams' (versus modes never call
-    // stepRespawns' setter). Added anyway to make the mode boundary legible at every
-    // place it is checked, not only inside resolveStatus -- see the arc design.
-    if (draft.mode === 'campaign-coop' && countPlayerTanks(draft) >= 2) stepRespawns(draft, events);
+    // Two independent conditions, not one shared gate: campaign-coop keeps its original
+    // player-count guard (only resolveStatusCoop's POOL MODE ever sets respawnAtTick
+    // there, and only once a second player exists); ffa/teams have no such guard because
+    // the stock PR's applyVersusStock (resolveStatusFfa/resolveStatusTeams, above) can
+    // schedule a respawn at any player count. `mode === 'campaign-coop' &&` on the first
+    // arm still exists to make the mode boundary legible at every place it is checked,
+    // not only inside resolveStatus -- see the arc design.
+    if (
+      draft.mode === 'ffa' ||
+      draft.mode === 'teams' ||
+      (draft.mode === 'campaign-coop' && countPlayerTanks(draft) >= 2)
+    ) {
+      stepRespawns(draft, events);
+    }
     applyPlayerInputs(draft, inputs, events);
     stepAi(draft, events);
     stepBlasts(draft, events);

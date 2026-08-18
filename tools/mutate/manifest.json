@@ -160,5 +160,55 @@
     "expectFailures": 2,
     "why": "A directive draws a boundary: bots must not control player tanks in the campaign unless campaign bot players are enabled by a dev flag. The rule is enforced TWICE on purpose -- hud.ts decides whether to OFFER the 'bot' candidate, loop.ts decides whether to PERFORM the reassignment -- so neither half's mutation proves the other, and this entry covers the loop half specifically. That is the half that matters if a caller ever reaches reassignSlot without going through the panel (a stale DOM node, or new wiring): a rule enforced only by the code that draws the buttons is one caller away from not being a rule. Caught by 2 of the 270 cases in loop.test.ts -- the refusal test (a fresh setControllers push appears where none should) and the previous-source test, which distinguishes 'refused' from 'bounced to none': `reassign` sends a displaced slot to 'none', so a guard placed AFTER the reassign call would still corrupt the slot instead of leaving it alone.",
     "tests": ["src/game/loop.test.ts"]
+  },
+  {
+    "id": "versus-stock-ffa-counts-alive-not-eliminated",
+    "file": "src/sim/world.ts",
+    "find": "  const remaining = players.filter((t) => !isVersusEliminated(t));",
+    "replace": "  const remaining = players.filter((t) => t.alive);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "resolveStatusFfa's win/lose decision must count players who are NOT ELIMINATED (dead AND out of stock), not players who are merely alive -- a player awaiting a scheduled respawn is dead this instant but still in the match. Reverting to a bare `alive` filter is exactly the pre-stock rule the FFA branch shipped with, and is the specific regression the task brief asked to be reviewed hardest for: it ends a stock match on the very first death. Caught by 2 of the 25 cases in versus-modes.test.ts: the N=2 regression test built specifically to discriminate the two rules (a 3+-player death leaves 2+ ALIVE tanks either way, so a larger N cannot tell them apart -- verified directly, an earlier N=3 draft of this same test passed under this mutation) and the mutual-kill-with-stock-remaining test, which this mutation reads as an immediate 'lose' instead of 'playing'.",
+    "tests": ["src/sim/versus-modes.test.ts"]
+  },
+  {
+    "id": "versus-stock-teams-counts-alive-not-eliminated",
+    "file": "src/sim/world.ts",
+    "find": "  const teamsRemaining = new Set(players.filter((t) => !isVersusEliminated(t)).map((t) => t.team));",
+    "replace": "  const teamsRemaining = new Set(players.filter((t) => t.alive).map((t) => t.team));",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The teams analogue of versus-stock-ffa-counts-alive-not-eliminated, and a SEPARATE function with its own filter -- resolveStatusFfa's own fix does not cover this one, which is why it is a second entry rather than folded into the first. A 4-player teams fixture with one death per team does not discriminate the two rules either (2+ ALIVE members remain on the losing side's team regardless), which is why this is caught by only 1 of 25: the one-player-per-team (N=2) regression test built to force the same first-death-ends-it failure the FFA entry names.",
+    "tests": ["src/sim/versus-modes.test.ts"]
+  },
+  {
+    "id": "versus-respawn-clone-drops-arena-geometry",
+    "file": "src/sim/world.ts",
+    "find": "    arenaGeometry: world.arenaGeometry,\n",
+    "replace": "    // arenaGeometry dropped by mutation\n",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "cloneWorld must carry World.arenaGeometry across every tick's clone, or a versus respawn silently falls back to the tank's own authored spawn from the very first stepInputs call onward -- exactly the near-miss this file's own test-writing notes describe finding while authoring versus-respawn.test.ts. Caught by only 1 of the 6 cases there: the direct-stepRespawns tests bypass cloneWorld entirely (by design -- see that file's own doc comment on why position-exactness is checked before stepMovement's physics can touch it) and so cannot see this mutation; only the end-to-end test that goes through the real stepInputs pipeline does.",
+    "tests": ["src/sim/versus-respawn.test.ts"]
+  },
+  {
+    "id": "versus-respawn-always-falls-back-to-authored-spawn",
+    "file": "src/sim/world.ts",
+    "find": "  if (world.mode === 'campaign-coop' || !world.arenaGeometry) return { x: authored.x, y: authored.y };",
+    "replace": "  if (true) return { x: authored.x, y: authored.y };",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "respawnPos must actually reach pickVersusSpawnCell for ffa/teams -- forcing the fallback branch unconditionally (as if arenaGeometry were always absent) restores the campaign-coop-only behaviour for every mode. Caught by 5 of the 6 cases in versus-respawn.test.ts: every test that asserts a revived tank lands on the PICKED cell rather than its authored spawn. The one survivor is the dedicated fallback test itself (arenaGeometry genuinely absent), which asserts exactly the behaviour this mutation makes universal and so cannot tell the difference -- it is not blind to this mutation by accident, it is testing the state this mutation forces on every other case too.",
+    "tests": ["src/sim/versus-respawn.test.ts"]
+  },
+  {
+    "id": "spawn-protection-drops-action-lock-gate",
+    "file": "src/sim/world.ts",
+    "find": "  const canAct = phase === 'live' && !isActionLocked(player, world.tick);",
+    "replace": "  const canAct = phase === 'live';",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "driveTank is the ONE site every kind==='player' tank's fire/mine input is consumed, human or bot (a bot-claimed slot's InputState, from ai/player-profile.ts's decidePlayerInput, is fed through this exact same applyPlayerInputs path in game/loop.ts) -- so dropping the isActionLocked half of canAct here reopens fire/mine for every shielded tank regardless of input source. Caught by 5 of the 12 cases in spawn-protection.test.ts: both human-path refusal tests (fire, mine), both bot-path refusal tests (fire, mine -- each paired with its own 'control' test proving the SAME decision fires when unshielded, so the fixture is not merely inert), and the coop-POOL-mode reachability test, which shows the gate was never mode-specific to begin with. The movement/aim/invincible/no-shield/shield-expired tests all survive unchanged, which is the point: this mutation should touch fire/mine only.",
+    "tests": ["src/sim/spawn-protection.test.ts"]
   }
 ]
