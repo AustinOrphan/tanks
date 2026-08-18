@@ -1203,21 +1203,7 @@
   display: none;
 }
 
-/* ---- Round-start phase feedback ------------------------------------------- */
-
-/* Topbar chip: the quiet form, used on every round after the first. */
-.hud-phase {
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: rgba(216, 221, 230, 0.12);
-  color: #d8dde6;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-}
-
-.hud-phase--hidden {
-  display: none;
-}
+/* ---- Round-start countdown ------------------------------------------------- */
 
 /* Level chip: hidden until the loop reports a multi-level sequence. Without this rule
  * the chip renders as a bare "Level:" from page load -- the class does nothing on its
@@ -1227,66 +1213,86 @@
 }
 
 /*
- * Centred banner: the teaching form, first round of the page load only.
+ * The countdown: a bare number, huge and centred, shown on every round -- design
+ * ruling, not a "first round only" teaching form (the old banner/chip split this
+ * replaces had one; this design does not, so there is one rule, not two).
  *
- * pointer-events: none is load-bearing, not defensive. NOTE: it is NOT covered
- * by a test, and three approaches were tried and rejected rather than shipping
- * one that cannot fail -- jsdom applies no stylesheet so a computed-style check
- * passes against an empty cascade; `?raw` returns an empty string under vitest;
- * and a file read needs @types/node, which this project does not carry. If you
- * remove this line, nothing will tell you. The whole point of the
- * countdown phase is that the player aims with the mouse, and this sits over
- * the board for exactly those seconds -- if it swallowed the pointer it would
- * break the thing it is announcing. No background either, for the same reason:
- * the player needs to see what they are aiming at.
+ * Centred is the whole design change from what this replaced. The old banner was
+ * anchored to the dead space ABOVE the board, deliberately not centred, because it
+ * SAT there for the full countdown -- centred, it covered a wall and a tank for
+ * exactly the seconds whose entire purpose is looking at the board and aiming. That
+ * constraint does not apply here because the number is TRANSIENT: it pops in over
+ * the first ~15% of each second, holds barely long enough to read, then scales up
+ * and fades out for the rest of it (see .hud-count-pop below), so at any moment
+ * past that first beat it is fading toward invisible rather than sitting on top of
+ * the board. Centred is correct once the element does not linger.
+ *
+ * pointer-events: none is load-bearing, not defensive, same as it was on the
+ * banner -- and the same reasons it went UNTESTED there still apply here: jsdom
+ * applies no stylesheet so a computed-style check passes against an empty cascade,
+ * `?raw` returns an empty string under vitest without `test.css: true`, and a file
+ * read needs @types/node, which this project does not carry. If you remove this
+ * line, nothing will tell you. The player aims with the mouse throughout the
+ * countdown; a number that swallowed the pointer would break the thing it is
+ * announcing. No background either, for the same reason: the player needs to see
+ * what they are aiming at.
+ *
+ * `GRACE_TICKS` is 0 today, so the `'grace'` phase never actually occurs in play
+ * (see round.ts / phaseAt). setRoundPhase is phase-agnostic -- any non-'live' phase
+ * shows this same number -- so if grace is ever switched back on, it will show a
+ * second, indistinguishable 3-2-1 immediately after the countdown's own. That gap
+ * is known and deliberate: see setRoundPhase's doc comment in hud.ts. No
+ * grace-specific styling is shipped here for a phase nothing can currently reach.
  */
-.hud-banner {
+.hud-count {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: row;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
-  gap: 0.5em;
-  /*
-   * Anchored to the dead space ABOVE the board, not centred in the viewport.
-   * Centred, it sat across the middle of the arena -- over a wall and a tank --
-   * during the one phase whose entire purpose is looking at the board and
-   * aiming. Measured top dead space, board-only screenshots: 158px at 1280x800,
-   * 213px at 1920x1080, 314px at 390x844, and 103px at 1560x520 ultrawide,
-   * which is the binding case. Bottom dead space is 16-32px at three of those
-   * four, so below the board is not an option.
-   *
-   * MEASURED at 1560x520, the binding viewport: the topbar ends at 51px and the
-   * board starts at 103px, so the band is 52px. 55px top padding with the type
-   * capped at 26px puts the banner at 55..91 -- 4px below the topbar and 12px
-   * above the board. An earlier 32px cap left only 3px of board clearance,
-   * which is not enough to survive a font or framing change. It is also why the
-   * word and count share one line instead of stacking.
-   */
-  align-content: flex-start;
-  padding-top: 55px;
-  align-items: flex-start;
   pointer-events: none;
+  font-size: clamp(72px, 20vmin, 240px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #f2f5fa;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  opacity: 0; /* base state between pops -- see .hud-count-pop */
 }
 
-.hud-banner--hidden {
+.hud-count--hidden {
   display: none;
 }
 
-.hud-banner-word {
-  font-size: clamp(16px, 2.2vw, 26px);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: #f2f5fa;
+/*
+ * The pop, restarted (remove class, force reflow, re-add -- signalPlayerDeath's
+ * trick) every time setRoundPhase sees a new secondsLeft. Same idiom as
+ * .hud-damage/.hud-damage-flash just below: the animation's own 100% keyframe
+ * (opacity 0) already matches .hud-count's base opacity: 0, so no fill-mode is
+ * needed to hold the end state -- when the animation's iteration count is spent,
+ * the element reverts to a base rule that says the same thing the keyframe just
+ * ended on, and nothing visibly changes.
+ */
+.hud-count--pop {
+  animation: hud-count-pop 1s ease-out 1;
 }
 
-.hud-banner-count {
-  font-size: clamp(16px, 2.2vw, 26px);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: rgba(242, 245, 250, 0.85);
+@keyframes hud-count-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
 }
 
 /* ---- Losing a life -------------------------------------------------------- */

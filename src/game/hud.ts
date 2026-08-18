@@ -20,8 +20,6 @@ export interface RoundPhaseInfo {
   phase: RoundPhase;
   /** Whole seconds left in this phase. */
   secondsLeft: number;
-  /** Centred banner when true, topbar chip when false. */
-  prominent: boolean;
 }
 
 export interface Hud {
@@ -72,8 +70,19 @@ export interface Hud {
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
   /**
-   * Round-start phase feedback. `null` hides it. `prominent` picks the centred
-   * banner over the topbar chip; the caller decides which, not the HUD.
+   * Round-start countdown. `null` hides it; otherwise a bare number, centred and
+   * transient -- it pops in and fades out (the `hud-count-pop` keyframes, applied via
+   * the `.hud-count--pop` class, in hud.css) rather than sitting on screen, so it
+   * never obscures the board it counts down over. Design
+   * ruling: no word ("AIM"/"TAKE AIM"), just the number, and it shows on EVERY
+   * round -- there is no "first round only" teaching form. `setRoundPhase` is
+   * phase-agnostic: any phase other than `'live'` shows the number, unconditionally.
+   *
+   * `GRACE_TICKS` is 0 today, so the `'grace'` phase never actually occurs in play.
+   * If it is ever switched back on, this will show a second 3-2-1 immediately after
+   * the countdown's, with nothing distinguishing the two -- a known, deliberate gap.
+   * Shipping phase-specific presentation for a phase nothing can currently reach
+   * would be speculative CSS for code no test exercises.
    *
    * Shipped on: the round opens with 3.0s in which nothing moves, and without
    * this the player presses a direction and the game appears broken.
@@ -347,7 +356,6 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
-      <div class="hud-phase hud-phase--hidden"></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
@@ -359,10 +367,7 @@ export function createHud(root: HTMLElement): Hud {
         <input class="hud-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
       </div>
     </div>
-    <div class="hud-banner hud-banner--hidden">
-      <div class="hud-banner-word"></div>
-      <div class="hud-banner-count"></div>
-    </div>
+    <div class="hud-count hud-count--hidden"></div>
     <div class="hud-damage" aria-hidden="true"></div>
     <!-- Where the thumbs are, drawn back on screen. Playtest feedback: with nothing
          rendered, the aiming thumb gave no clue which way the shot was going, and the
@@ -572,10 +577,7 @@ export function createHud(root: HTMLElement): Hud {
   `;
   root.appendChild(el);
 
-  const phaseEl = el.querySelector('.hud-phase') as HTMLElement;
-  const bannerEl = el.querySelector('.hud-banner') as HTMLElement;
-  const bannerWordEl = el.querySelector('.hud-banner-word') as HTMLElement;
-  const bannerCountEl = el.querySelector('.hud-banner-count') as HTMLElement;
+  const countEl = el.querySelector('.hud-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const splashEl = el.querySelector('.hud-splash') as HTMLElement;
@@ -1708,6 +1710,12 @@ export function createHud(root: HTMLElement): Hud {
   // a handful of times a round, so skip the write when nothing changed.
   let lastLives: number | null = null;
   let lastEnemies: number | null = null;
+  // Same reasoning as lastLives/lastEnemies, plus a second job: it is the signal
+  // setRoundPhase uses to tell "still the same second" from "a new one arrived",
+  // which is what decides whether the pop animation restarts. Reset to null
+  // whenever the countdown hides, so the next time it shows -- even mid-count,
+  // e.g. resuming from pause -- reads as a fresh number and pops.
+  let lastCountShown: number | null = null;
 
   /**
    * Position a ring+knob pair from a `{originX, originY, x, y}` thumb reading. Shared by
@@ -1792,22 +1800,20 @@ export function createHud(root: HTMLElement): Hud {
     setMuted,
     setRoundPhase(info: RoundPhaseInfo | null): void {
       if (!info || info.phase === 'live') {
-        bannerEl.classList.add('hud-banner--hidden');
-        phaseEl.classList.add('hud-phase--hidden');
+        countEl.classList.add('hud-count--hidden');
+        lastCountShown = null;
         return;
       }
-      const word = info.phase === 'countdown' ? 'TAKE AIM' : 'MOVE';
-      const short = info.phase === 'countdown' ? 'AIM' : 'MOVE';
-      if (info.prominent) {
-        bannerWordEl.textContent = word;
-        bannerCountEl.textContent = String(info.secondsLeft);
-        bannerEl.classList.remove('hud-banner--hidden');
-        phaseEl.classList.add('hud-phase--hidden');
-      } else {
-        phaseEl.textContent = `${short} ${info.secondsLeft}`;
-        phaseEl.classList.remove('hud-phase--hidden');
-        bannerEl.classList.add('hud-banner--hidden');
-      }
+      countEl.classList.remove('hud-count--hidden');
+      if (info.secondsLeft === lastCountShown) return; // same second, still popping
+      lastCountShown = info.secondsLeft;
+      countEl.textContent = String(info.secondsLeft);
+      // Restart the pop animation even if one is already running -- same trick as
+      // signalPlayerDeath: consecutive seconds must each read as a fresh pop, not a
+      // continuation of the last one's fade-out.
+      countEl.classList.remove('hud-count--pop');
+      void countEl.offsetWidth;
+      countEl.classList.add('hud-count--pop');
     },
     setShellCount(info): void {
       if (!info) {
