@@ -1,4 +1,4 @@
-import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, Vec2, ArenaGeometry } from './types';
+import type { Wall, Tank, Spawn, AABB, TankKind, WallKind, UnarmedTrigger, GameMode, ArenaGeometry } from './types';
 import { createWorld, type World } from './world';
 import { LIVES, TANK_RADIUS, VERSUS_STOCK } from './constants';
 import { ARENA_DEFS, arenaById } from './config/arenas';
@@ -10,7 +10,7 @@ import {
   FIRST_CAMPAIGN_LEVEL,
 } from './config/campaign';
 import type { CampaignDefinition, CampaignLevel } from './config/campaign-types';
-import { pickVersusSpawnCell } from './versus-spawns';
+import { pickVersusSpawnSet } from './versus-spawns';
 import { pickVersusVariantGrid } from './versus-variants';
 import { mergeSolidRuns } from './wall-merge';
 
@@ -261,6 +261,9 @@ export function loadArena(
   let id = 1;
   let p1Row = -1;
   let p1Col = -1;
+  // Which `spawns` entry is P1's. Versus placement relocates it (PASS 1b) and must move
+  // the SPAWN as well as the tank, since world.ts respawns from `spawns`.
+  let p1SpawnIndex = -1;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const kind = SPAWN_LETTERS[grid[r][c]];
@@ -283,7 +286,7 @@ export function loadArena(
       // co-player the same way.
       if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) tank.stockRemaining = VERSUS_STOCK;
       tanks.push(tank);
-      if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; }
+      if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; p1SpawnIndex = spawns.length - 1; }
     }
   }
 
@@ -304,11 +307,29 @@ export function loadArena(
     // bounded ring around P1 is exactly wrong for FFA/teams: every player lands in one
     // small ring, in mutual point-blank line of sight.
     if (mode === 'ffa' || mode === 'teams') {
-      const chosen: Vec2[] = [{ x: (p1Col + 0.5) * cellSize, y: (p1Row + 0.5) * cellSize }];
-      for (let i = 1; i < playerCount; i++) {
-        const cell = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, chosen);
-        const pos = { x: (cell.col + 0.5) * cellSize, y: (cell.row + 0.5) * cellSize };
-        chosen.push(pos);
+      // The whole set is chosen at once, P1 included -- a design ruling: versus is
+      // symmetric, so no player may inherit the campaign author's `P` cell as a
+      // privileged start. See pickVersusSpawnSet's own doc comment for the measured
+      // case (15 of 15 shipped arena x player-count pairs improve on both separation
+      // measures, zero regressions).
+      //
+      // P1's tank and spawn already exist, stamped at the authored `P` in PASS 1a, and
+      // are RELOCATED here rather than created here. That ordering is load-bearing:
+      // ids are handed out in PASS 1a before this branch can run, so a versus load
+      // numbers its tanks exactly as a one-player load does, and every per-tank RNG
+      // stream keyed on `tank.id` (ai/targeting.ts) is unmoved. Moving P1's creation
+      // into this branch would renumber them.
+      const cells = pickVersusSpawnSet(grid, cols, rows, cellSize, legend, playerCount);
+      for (let i = 0; i < playerCount; i++) {
+        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };
+        if (i === 0) {
+          // Both records move, not just the tank: `spawns` is what world.ts respawns
+          // from, so leaving it on the `P` cell would put P1 back on the campaign start
+          // after its first death while every other player respawned symmetrically.
+          p1Tank.pos = { ...pos };
+          spawns[p1SpawnIndex].pos = { ...pos };
+          continue;
+        }
         spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
         const tank = makeTank(id++, 'player', pos, 0, i);
         if (mode === 'teams') tank.team = teamOf(i);

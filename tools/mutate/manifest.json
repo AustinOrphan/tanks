@@ -137,18 +137,18 @@
     "find": "  const pool = invisible.length > 0 ? invisible : candidates;",
     "replace": "  const pool = candidates;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 5,
     "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
     "tests": ["src/sim/versus-spawns.test.ts"]
   },
   {
-    "id": "versus-spawns-wiring-drops-accumulation",
-    "file": "src/sim/arena.ts",
-    "find": "        chosen.push(pos);",
-    "replace": "        if (false) chosen.push(pos);",
+    "id": "versus-spawns-chain-drops-accumulation",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize))));",
+    "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)]));",
     "expect": "killed",
-    "expectFailures": 3,
-    "why": "loadArena's versus branch (PASS 1b) must feed each co-player's OWN chosen cell back into `chosen` before picking the next one, or every co-player after P1 scores against `[P1]` alone and pickVersusSpawnCell picks the same single best cell for all of them, collapsing N-1 co-players onto one point. This line is the wiring, not versus-spawns.ts's own internal logic -- every other entry in this manifest for that module mutates inside pickVersusSpawnCell itself, so this one exists specifically to prove the CALL SITE is covered too. Caught by 3 of the 14 cases in versus-spawns.test.ts's real-shipped-arena describe block: the distinct-cells sweep (arena-01/ffa collapses from 4 unique positions to 2), the 0-mutual-LOS sweep (rises to 40 of 100 visible pairs, since collapsed spawns are coincident and therefore always mutually visible), and the >5-world-unit minimum-distance sweep (falls to 0, since coincident spawns are 0 apart). versus-spawns.test.ts's synthetic fixtures do not catch this -- they exercise pickVersusSpawnCell directly and never go through loadArena's own loop -- which is why the real-arena integration block is what kills it.",
+    "expectFailures": 5,
+    "why": "Greedy farthest-point sampling must place each spawn against EVERY spawn already chosen, not just the most recent one. Avoiding only the last one lets the chain walk back and forth between two ends of the board, putting spawn 3 on top of spawn 1. This entry replaces `versus-spawns-wiring-drops-accumulation`, which targeted a `chosen.push(pos)` accumulator in arena.ts's versus branch; that variable became dead when pickVersusSpawnSet took over the picking, and the old entry silently degraded to SURVIVES because it was mutating code nothing read -- which is how the dead variable was found at all. The accumulation now lives here. Caught by 5 of 17 in versus-spawns.test.ts.",
     "tests": ["src/sim/versus-spawns.test.ts"]
   },
   {
@@ -280,5 +280,45 @@
     "expectFailures": 3,
     "why": "buildVariantGrid must only ever draw from DESTRUCTIBLE cells -- solid geometry defines the arena's shape and must never vary between playthroughs of the same board. Including solid cells in the draw pool means a variant can turn a load-bearing wall into open floor, changing the board's identity rather than varying it. Caught by 3 of 25 in versus-variants.test.ts: the 'every character that differs... was a destructible cell' invariant (a changed cell's authored legend entry is now 'solid', not 'destructible'), the 'removes exactly round(destructibleCount * fraction)' count (47 removed on arena-01 instead of 7, since the pool nearly quadruples), and the seed-7920/arena-03 retry test's own premise check (the much larger removal pool changes what that specific seed draws). Solid-versus geometry is otherwise unreachable from any test in this file at the ungated buildVariantGrid layer, which is why the wired-through-loadArena describe block exists separately.",
     "tests": ["src/sim/versus-variants.test.ts"]
+  },
+  {
+    "id": "versus-p1-not-relocated",
+    "file": "src/sim/arena.ts",
+    "find": "      for (let i = 0; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
+    "replace": "      for (let i = 1; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee.",
+    "tests": ["src/sim/versus-spawns.test.ts"]
+  },
+  {
+    "id": "versus-spawns-intact-graph",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "  return legend[ch] !== 'solid';",
+    "replace": "  return legend[ch] !== 'solid' && legend[ch] !== 'destructible';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The geodesic graph spawn separation is measured on must treat a DESTRUCTIBLE cell as traversable -- the breached phase, the same both-wall-phases discipline spawnBlockRobust already applies in arena-claims.ts. A destructible wall is temporary by construction, so two spawns separated only by one are not separated for the length of a match. Reverting to the intact graph is not merely a different-but-equivalent reading: measured over all 5 shipped arenas x counts 2/3/4, it puts arena-02's 4-player spawns 2.67 world units apart either side of the centre barrier that level is designed to blow open. Caught by 1 of 17 in versus-spawns.test.ts -- the separation floor collapses from 11.6619... to 2.67, failing both the exact pin and the greater-than-5-world-units guarantee. Note the LOS filter deliberately does NOT follow this rule and stays on intact geometry; see isWalkable's own doc comment for why the two questions differ.",
+    "tests": ["src/sim/versus-spawns.test.ts"]
+  },
+  {
+    "id": "versus-spawns-drop-euclid-tiebreak",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else if (euclid !== bestEuclid) wins = euclid > bestEuclid;\n    else wins = isEarlier(cand, best);",
+    "replace": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else wins = isEarlier(cand, best);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Geodesic distance saturates at Infinity for every cell in a component the avoid set cannot reach, so on a partitioned board EVERY unreachable candidate ties and, without the Euclidean key, (row, col) order decides -- which picks the cell hard against the far side of the dividing wall. This mutation SURVIVED when first run (the gap was proved before the test was written, per this repo's rule); the dedicated tie-break fixture and the pickVersusSpawnSet pin were added because of it. Caught by 2 of 17 in versus-spawns.test.ts: the partitioned-board fixture returns {row:0,col:6} instead of {row:0,col:11}, and arena-04's 3-player set moves to (0,0) (32,44) (13,25).",
+    "tests": ["src/sim/versus-spawns.test.ts"]
+  },
+  {
+    "id": "versus-relax-rounds-one",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "export const VERSUS_RELAX_ROUNDS = 8;",
+    "replace": "export const VERSUS_RELAX_ROUNDS = 1;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The coordinate-ascent pass must be allowed to run to convergence. Greedy farthest-point sampling alone is anchor-sensitive and, measured over all 5 shipped arenas x counts 2/3/4, is WORSE than the pre-ruling placement on 2 of those 15 pairs; the relaxation is what turns that into 15 of 15 improved with no regressions. A cap of 1 stops it after a single sweep. This mutation also SURVIVED when first run, which is why the arena-04 N=3 exact-set pin exists at all. Caught by 1 of 17 in versus-spawns.test.ts: arena-04 at N=3 returns (0,30) (32,44) (23,0) instead of (0,26) (32,44) (24,0). Three further pairs move under the same mutation -- arena-01 and arena-03 at N=3, arena-05 at N=4 -- but only the arena-04 one is pinned, so the numerator is 1, not 4.",
+    "tests": ["src/sim/versus-spawns.test.ts"]
   }
 ]
