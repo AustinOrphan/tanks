@@ -76,7 +76,7 @@ interface Recorder {
   hudStates: GameState[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
-  roundPhases: Array<{ phase: string; secondsLeft: number; prominent: boolean } | null>;
+  roundPhases: Array<{ phase: string; secondsLeft: number } | null>;
   deathSignals: number;
   inputClears: number;
   minePresses: number;
@@ -3192,38 +3192,7 @@ describe('startGameWith: round-phase HUD', () => {
     h.handle.dispose();
   });
 
-  it('makes the FIRST round of the page load prominent', () => {
-    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
-    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
-    // and knock these assertions out of step with `renders`.
-    const h = bootAtSplash(inCountdown());
-    h.setState('playing');
-    h.fireFrame(100);
-    expect(h.rec.roundPhases[0]?.prominent).toBe(true);
-    h.handle.dispose();
-  });
-
-  it('drops to the quiet chip on the next round', () => {
-    // Rounds restart on every respawn, not just a new game -- resetArena moves
-    // roundStartTick -- so the second round must not re-teach.
-    // bootAtSplash, not boot: leaving the title screen pushes a round-phase CLEAR
-    // (loop.ts nulls the chip on every non-playing state), which would sit at index 0
-    // and knock these assertions out of step with `renders`.
-    const h = bootAtSplash(inCountdown());
-    h.setState('playing');
-    h.fireFrame(100);
-    expect(h.rec.roundPhases[0]?.prominent).toBe(true);
-    // A restart builds a fresh world, which carries a different roundStartTick.
-    h.setState('win');
-    h.hud.startRestart();
-    h.setState('playing');
-    h.fireFrame(200);
-    const last = h.rec.roundPhases[h.rec.roundPhases.length - 1];
-    expect(last?.prominent).toBe(false);
-    h.handle.dispose();
-  });
-
-  // bootAtSplash for the same reason as its five siblings: leaving the title screen
+  // bootAtSplash for the same reason as its three siblings: leaving the title screen
   // pushes a round-phase clear, and this test's `length > 0` guard would be satisfied
   // by that null alone -- adjudication proved it passes with the live-branch clear
   // deleted.
@@ -3283,24 +3252,6 @@ describe('startGameWith: level progression', () => {
     h.hud.startRestart();
     expect(h.rec.hapticsRebinds).toHaveLength(1);
     expect(h.rec.hapticsRebinds[0]).toBe(h.rec.hapticsPlayerIds[0] + 71);
-    h.handle.dispose();
-  });
-
-  it('counts the next level\'s opening round, so the teaching banner does not re-show', () => {
-    // Two FRESH worlds start on the same roundStartTick, so without an explicit reset
-    // the round tracker cannot tell level 2's opening round from level 1's -- and the
-    // prominent banner, promised "once per page load", re-taught on every advance.
-    const h = boot(makeDeps({
-      levelCount: 2,
-      staticRoundStart: true,
-    }));
-    h.setState('playing');
-    h.fireFrame(16);
-    expect(h.rec.roundPhases.at(-1)?.prominent).toBe(true); // level 1 teaches
-    h.setState('win');
-    h.hud.startRestart();
-    h.fireFrame(32);
-    expect(h.rec.roundPhases.at(-1)?.prominent).toBe(false); // level 2 gets the chip
     h.handle.dispose();
   });
 

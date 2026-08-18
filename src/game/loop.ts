@@ -1003,15 +1003,9 @@ export function startGameWith(
     }
   }
 
-  // Rounds restart on every RESPAWN, not just at game start (resetArena moves
-  // roundStartTick), so a player with 3 lives sees the opening phases at least
-  // three times. The banner teaches once per page load; every round after it
-  // gets the quiet chip.
-  let lastRoundStartTick: number | null = null;
   // The denominator for musical intensity. Re-read on every world rebuild, since
   // arenas differ in enemy count.
   let enemiesAtRoundStart = countEnemies(world);
-  let roundsSeen = 0;
   /**
    * Per-slot rising-edge state for the connect toast, index = slot number
    * (n-player arc PR3). Generalizes the pre-PR3 single `wasGamepadConnected` boolean,
@@ -1044,10 +1038,6 @@ export function startGameWith(
       : (realSources.get(i)?.gamepadConnected() ?? false);
   }
   function refreshRoundPhase(w: World): void {
-    if (w.roundStartTick !== lastRoundStartTick) {
-      lastRoundStartTick = w.roundStartTick;
-      roundsSeen += 1;
-    }
     const phase = roundPhase(w);
     if (phase === 'live') {
       hud.setRoundPhase(null);
@@ -1056,7 +1046,6 @@ export function startGameWith(
     hud.setRoundPhase({
       phase,
       secondsLeft: Math.ceil(roundPhaseTicksLeft(w) / TICK_HZ),
-      prominent: roundsSeen <= 1,
     });
   }
 
@@ -1301,10 +1290,6 @@ export function startGameWith(
     playerId = world.tanks.find((t) => t.kind === 'player')?.id;
     director.setPlayerId(playerId ?? -1);
     haptics.setPlayerId(playerId ?? -1);
-    // A FRESH world's roundStartTick can equal the old one's (both start at the same
-    // tick), so without this reset the round tracker would not count the new level's
-    // opening round and the teaching banner would re-show.
-    lastRoundStartTick = null;
     enemiesAtRoundStart = countEnemies(world);
     const b = deps.levels.bounds(level);
     if (b.width !== shownBounds.width || b.height !== shownBounds.height || b.cellSize !== shownBounds.cellSize) {

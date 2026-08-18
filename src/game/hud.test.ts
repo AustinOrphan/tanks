@@ -738,7 +738,7 @@ describe('hud: dev shell count', () => {
   });
 });
 
-describe('hud: round-start phase feedback', () => {
+describe('hud: round-start countdown', () => {
   function mount(): { root: HTMLElement; hud: ReturnType<typeof createHud> } {
     const root = document.createElement('div');
     document.body.appendChild(root);
@@ -747,52 +747,59 @@ describe('hud: round-start phase feedback', () => {
 
   it('shows nothing until it is told to', () => {
     const { root, hud } = mount();
-    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
-    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    expect(root.querySelector('.hud-count')?.className).toContain('hud-count--hidden');
     hud.dispose();
   });
 
-  it('shows the teaching banner when prominent', () => {
+  it('is a bare number -- no "AIM"/"TAKE AIM" word, on either non-live phase', () => {
+    // Design ruling: the countdown must not say a word, ever -- just the number.
     const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: true });
-    const banner = root.querySelector('.hud-banner') as HTMLElement;
-    expect(banner.className).not.toContain('hud-banner--hidden');
-    expect(root.querySelector('.hud-banner-word')?.textContent).toBe('TAKE AIM');
-    expect(root.querySelector('.hud-banner-count')?.textContent).toBe('3');
-    // and not both at once
-    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
-    hud.dispose();
-  });
-
-  it('shows the quiet chip when not prominent', () => {
-    const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'grace', secondsLeft: 2, prominent: false });
-    expect(root.querySelector('.hud-phase')?.textContent).toBe('MOVE 2');
-    expect(root.querySelector('.hud-phase')?.className).not.toContain('hud-phase--hidden');
-    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
-    hud.dispose();
-  });
-
-  it('uses the phase word, not a generic countdown', () => {
-    const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 1, prominent: false });
-    expect(root.querySelector('.hud-phase')?.textContent).toBe('AIM 1');
-    hud.setRoundPhase({ phase: 'grace', secondsLeft: 1, prominent: false });
-    expect(root.querySelector('.hud-phase')?.textContent).toBe('MOVE 1');
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
+    const count = root.querySelector('.hud-count') as HTMLElement;
+    expect(count.textContent).toBe('3');
+    expect(count.className).not.toContain('hud-count--hidden');
+    hud.setRoundPhase({ phase: 'grace', secondsLeft: 2 });
+    expect(count.textContent).toBe('2');
     hud.dispose();
   });
 
   it('hides on null and on live', () => {
     const { root, hud } = mount();
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: true });
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
     hud.setRoundPhase(null);
-    expect(root.querySelector('.hud-banner')?.className).toContain('hud-banner--hidden');
-    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3, prominent: false });
-    hud.setRoundPhase({ phase: 'live', secondsLeft: 0, prominent: false });
-    expect(root.querySelector('.hud-phase')?.className).toContain('hud-phase--hidden');
+    expect(root.querySelector('.hud-count')?.className).toContain('hud-count--hidden');
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
+    hud.setRoundPhase({ phase: 'live', secondsLeft: 0 });
+    expect(root.querySelector('.hud-count')?.className).toContain('hud-count--hidden');
     hud.dispose();
   });
 
+  it('restarts the pop animation on each new second, not on every call', () => {
+    // The transient pop is the whole point (design ruling): each new second must read
+    // as a fresh pop, not a continuation of the last one's fade-out, and a tick that
+    // repeats the same second must NOT restart it (the driver calls this every
+    // simulated tick, dozens of times per second -- restarting on every call would
+    // just as surely break the design as never restarting at all). Same restart
+    // trick as signalPlayerDeath: remove the class, force a reflow, add it back --
+    // proven here via the classList.remove calls, since jsdom does not run CSS
+    // animations at all.
+    const { root, hud } = mount();
+    const countEl = root.querySelector('.hud-count') as HTMLElement;
+    const removeSpy = vi.spyOn(countEl.classList, 'remove');
+
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 });
+    const popRemovals = (): number =>
+      removeSpy.mock.calls.filter(([c]) => c === 'hud-count--pop').length;
+    expect(popRemovals()).toBe(1);
+
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 3 }); // same second, repeated
+    expect(popRemovals()).toBe(1); // unchanged: no restart mid-second
+
+    hud.setRoundPhase({ phase: 'countdown', secondsLeft: 2 }); // a new second
+    expect(popRemovals()).toBe(2); // restarted
+
+    hud.dispose();
+  });
 });
 
 describe('hud: level progression', () => {
