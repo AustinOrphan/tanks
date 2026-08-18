@@ -59,10 +59,28 @@ const warp: SpawnAnimator = (phase, progress) => {
   };
 };
 
-// Rise and Beacon are implemented in Tasks 3 and 4; aliased to warp here so the typed
-// Record is complete and compiles. Each is replaced by its own function next.
+const rise: SpawnAnimator = (phase, progress) => {
+  const p = clamp01(progress);
+  if (phase === 'entrance') {
+    return {
+      tankOpacity: clamp01(p * 1.4),
+      tankScale: p, // grows from 0
+      ring: { radius: 0.9 + 0.3 * Math.sin(p * Math.PI), opacity: 0.6 * (1 - p), arc: 1 },
+    };
+  }
+  // pulse faster as the shield ends: frequency rises with p.
+  const pulse = 0.5 + 0.5 * Math.sin(p * Math.PI * (4 + 6 * p));
+  return {
+    tankOpacity: 0.45 + 0.55 * p,
+    tankScale: 1,
+    ring: { radius: 1, opacity: 0.3 * pulse, arc: 1 },
+  };
+};
+
+// Beacon is implemented in Task 4; aliased to warp here so the typed
+// Record is complete and compiles. It is replaced by its own function next.
 export const SPAWN_ANIMATORS: Record<SpawnAnimId, SpawnAnimator> = {
   warp,
-  rise: warp,
+  rise,
   beacon: warp,
 };

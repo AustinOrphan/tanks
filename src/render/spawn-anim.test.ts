@@ -36,3 +36,24 @@ describe('warp animator', () => {
     expect(Number.isFinite(ENTRANCE_SECONDS)).toBe(true);
   });
 });
+
+const rise = SPAWN_ANIMATORS.rise;
+
+describe('rise animator', () => {
+  it('entrance: scales up from near-zero (distinct from warp, which starts at 0.6)', () => {
+    const a = rise('entrance', 0, 0x3fd0ff);
+    const b = rise('entrance', 1, 0x3fd0ff);
+    // Mutation that breaks this: rise === warp (its start scale would be 0.6, not < 0.2).
+    expect(a.tankScale).toBeLessThan(0.2);
+    expect(b.tankScale).toBeCloseTo(1, 5);
+    expect(a.tankScale).toBeLessThan(b.tankScale);
+  });
+  it('invincible: ring opacity oscillates (pulse), unlike warp\'s monotone fade', () => {
+    const samples = [0, 0.25, 0.5, 0.75, 1].map((p) => rise('invincible', p, 0x3fd0ff).ring.opacity);
+    // A pulse is non-monotone: at least one sample rises after falling (or vice versa).
+    // Mutation that breaks this: a monotone ring opacity (rise aliased to warp).
+    const monotone = samples.every((v, i) => i === 0 || v <= samples[i - 1])
+      || samples.every((v, i) => i === 0 || v >= samples[i - 1]);
+    expect(monotone).toBe(false);
+  });
+});
