@@ -10,17 +10,21 @@ permissions:
 
 jobs:
   verify:
+    # Semantic names keep the required-check contexts stable when supported Node
+    # versions advance; the ruleset should require verify (floor) and verify (current).
+    name: verify (${{ matrix.label }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # 20.19.0 is the real floor, not 20: the dependency tree (jsdom's, mostly)
-        # declares ^20.19.0 || ^22.13.0 || >=24.0.0, so `20` as a bare major
-        # resolved to a version the tree does not actually support while CI
-        # stayed green on whatever latest-20 happened to be. Pin the declared
-        # floor so the claim in package.json is the thing being tested, and keep
-        # a current LTS so a version-specific break cannot hide behind one runner.
-        node: ['20.19.0', '22']
+        # 22.13.0 is the declared supported floor. Pin it exactly so CI tests the
+        # claim in package.json, and pair it with the Node 24 LTS line so a
+        # version-specific break cannot hide behind the minimum runtime.
+        include:
+          - label: floor
+            node: '22.13.0'
+          - label: current
+            node: '24'
 
     steps:
       - uses: actions/checkout@v4
@@ -50,10 +54,10 @@ jobs:
       # value changed) and one entry's declared outcome flipped from a real change
       # elsewhere. Nothing caught that until it was re-run by hand. This step is what
       # makes staleness a CI failure instead of a fact nobody re-checks.
-      # On pull requests, Node 22 retains full manifest-staleness detection; the
-      # Node 20 floor still exercises the harness after merge on pushes to main.
+      # On pull requests, Node 24 retains full manifest-staleness detection; the
+      # Node 22 floor still exercises the harness after merge on pushes to main.
       - name: Mutation manifest
-        if: matrix.node == '22' || github.event_name == 'push'
+        if: matrix.node == '24' || github.event_name == 'push'
         run: npm run mutate
 
       - name: Build
@@ -99,7 +103,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
 
       - run: npm ci
