@@ -210,5 +210,35 @@
     "expectFailures": 5,
     "why": "driveTank is the ONE site every kind==='player' tank's fire/mine input is consumed, human or bot (a bot-claimed slot's InputState, from ai/player-profile.ts's decidePlayerInput, is fed through this exact same applyPlayerInputs path in game/loop.ts) -- so dropping the isActionLocked half of canAct here reopens fire/mine for every shielded tank regardless of input source. Caught by 5 of the 12 cases in spawn-protection.test.ts: both human-path refusal tests (fire, mine), both bot-path refusal tests (fire, mine -- each paired with its own 'control' test proving the SAME decision fires when unshielded, so the fixture is not merely inert), and the coop-POOL-mode reachability test, which shows the gate was never mode-specific to begin with. The movement/aim/invincible/no-shield/shield-expired tests all survive unchanged, which is the point: this mutation should touch fire/mine only.",
     "tests": ["src/sim/spawn-protection.test.ts"]
+  },
+  {
+    "id": "versus-board-drops-concealment-requirement",
+    "file": "src/sim/versus-board.ts",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
+    "replace": "    suitable: distinctSpawns && roomOk,",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "suitable must require every spawn pair to lack mutual line of sight, not just distinct cells and enough floor -- dropping allPairsConcealed from the conjunction leaves a fully-visible board reading as suitable. Caught by 1 of the 12 cases in versus-board.test.ts: the 10x10-open-room fixture built specifically to isolate concealment (no interior walls, so separation and room both measure true while every spawn pair stays mutually visible at every N in {2,3,4}) asserts suitable=false at N=2 and fails immediately once the mutation makes it true. The 15-shipped-arena sweep does not catch this: every shipped arena already measures 0 of its pairs visible (pickVersusSpawnCell's own hard LOS filter succeeds on all of them), so allPairsConcealed is true regardless of whether the mutation is applied, and suitable's value is unchanged for every shipped (arena, N) combination.",
+    "tests": ["src/sim/versus-board.test.ts"]
+  },
+  {
+    "id": "versus-board-drops-room-requirement",
+    "file": "src/sim/versus-board.ts",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
+    "replace": "    suitable: distinctSpawns && allPairsConcealed,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "suitable must also require the open-floor-per-player ratio to clear MIN_OPEN_FLOOR_PER_PLAYER -- dropping roomOk from the conjunction leaves a board with plenty of separation and concealment but almost no floor space reading as suitable. Caught by 2 of the 12 cases in versus-board.test.ts: the 7x7 pillar-room fixture (39 open-floor cells, separation and concealment measuring true at every N while the ratio drops below the bound at N=3 and N=4) and the versusBoardCatalog test built against the same fixture at N=4. Equivalent to the concealment entry above in shape but not in effect -- this one changes a different conjunct and is caught by a different, deliberately non-overlapping fixture, so the two mutations cannot silently cover for each other.",
+    "tests": ["src/sim/versus-board.test.ts"]
+  },
+  {
+    "id": "versus-board-distinct-count-ignores-duplicates",
+    "file": "src/sim/versus-board.ts",
+    "find": "  const spawnCount = new Set(positions.map((p) => `${p.x},${p.y}`)).size;",
+    "replace": "  const spawnCount = positions.length;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "spawnCount must count DISTINCT positions, not merely how many players were placed -- using positions.length instead of a Set's size makes every co-located spawn look like a unique one. This mutates the field's own computation, deliberately not its participation in the suitable conjunction: dropping distinctSpawns from suitable is EQUIVALENT (not in this manifest -- see docs/superpowers/plans/2026-08-17-versus-board-rules.md for the analytic argument and the by-hand verification that all 12 cases in versus-board.test.ts stay green under that specific mutation), because MIN_OPEN_FLOOR_PER_PLAYER >= 1 already forces roomOk false on every fixture where distinctSpawns is false. This entry is caught instead by the pathological zero-open-floor fixture's DIRECT assertion on the spawnCount field (expected 1, the co-located fallback cell, at every N): the mutation reports spawnCount = playerCount regardless of the collision, so the field assertion fails 1 of 12 cases before suitable is ever consulted.",
+    "tests": ["src/sim/versus-board.test.ts"]
   }
 ]

@@ -950,7 +950,16 @@ rather than deleted so the record of what was open, and when it closed, survives
    `grid`/`legend`/`cellSize`) rather than authored spawn points specifically so it would
    work on a board with no author. That is now proven on the 5 shipped, hand-authored
    arenas, for BOTH initial placement and (since the stock PR) respawn; it has not been
-   exercised against a generated one, because none exists yet.
+   exercised against a generated one, because none exists yet. **Partly answered by the
+   board-rules PR** (`docs/superpowers/plans/2026-08-17-versus-board-rules.md`):
+   `src/sim/versus-board.ts` gives "which maps to offer at a given player count" a
+   checkable definition -- separation, mutual concealment and a room ratio, all derived
+   from geometry the same way `pickVersusSpawnCell` is, so it works on a generated board
+   too, once one exists. It answers the RULE, not the MENU: nothing calls it from
+   `loadArena`, no UI consults it, and it has only ever been measured against the 5
+   shipped arenas (15 of 15 (arena, N) combinations pass, by a wide margin -- none of the
+   3 criteria currently rejects a shipped board). Procedural generation itself remains
+   exactly as unbuilt as before.
 
 **Why 4-6 still belong together rather than as three separate spikes:** they still gate
 each other, independent of what closed. Spawn animation (4) and a setup menu (5) are
