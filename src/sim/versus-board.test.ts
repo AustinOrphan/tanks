@@ -242,3 +242,49 @@ describe('versusBoardCatalog', () => {
     expect(rows[1].suitable).toBe(false); // N=4: room fails (9.75)
   });
 });
+
+describe("versus-board: the 'ffa' hardcode rests on teams placing identically", () => {
+  // evaluateVersusBoard calls loadArena(..., 'ffa') for BOTH versus modes, justified by
+  // the claim that 'teams' differs only in stamping `tank.team` -- which this module
+  // never reads. That claim was argued from reading the code; this measures it, because
+  // it is load-bearing: if placement ever diverged, versusBoardCatalog would silently
+  // report FFA's verdict for a teams match.
+  //
+  // Fails if PASS 1b ever branches on 'teams' for anything positional -- a co-player
+  // placed by team, a team-aware avoid set, a different ring order. Deliberately compares
+  // POSITIONS rather than whole tanks: `team` is expected to differ, and asserting whole
+  // tanks equal would fail for the one reason that is not a defect.
+  const COUNTS = [2, 3, 4] as const;
+
+  it('places every player at identical positions in ffa and teams, on all 5 shipped arenas', () => {
+    let compared = 0;
+    for (const arena of ARENA_DEFS) {
+      for (const n of COUNTS) {
+        const ffa = loadArena(arena, n, 'ffa').tanks.filter((t) => t.kind === 'player');
+        const teams = loadArena(arena, n, 'teams').tanks.filter((t) => t.kind === 'player');
+        expect(teams.length, `${arena.id} N=${n} player count`).toBe(ffa.length);
+        for (let i = 0; i < ffa.length; i++) {
+          expect(
+            { x: teams[i].pos.x, y: teams[i].pos.y },
+            `${arena.id} N=${n} slot ${i}`,
+          ).toEqual({ x: ffa[i].pos.x, y: ffa[i].pos.y });
+          compared++;
+        }
+      }
+    }
+    // Denominator, so a change that stops loading players cannot read as a pass:
+    // 5 arenas x (2 + 3 + 4) players = 45 position comparisons.
+    expect(compared).toBe(45);
+  });
+
+  it('still stamps team ONLY in teams mode -- the one difference that is expected', () => {
+    // The negative control. Without it, the test above would also pass if `teams` mode
+    // stopped stamping teams altogether, which would make the modes identical in the
+    // wrong direction and break friendly fire and the win rule.
+    const ffa = loadArena(ARENA_DEFS[0], 4, 'ffa').tanks.filter((t) => t.kind === 'player');
+    const teams = loadArena(ARENA_DEFS[0], 4, 'teams').tanks.filter((t) => t.kind === 'player');
+    expect(ffa.every((t) => t.team === undefined)).toBe(true);
+    expect(teams.every((t) => t.team !== undefined)).toBe(true);
+  });
+});
+
