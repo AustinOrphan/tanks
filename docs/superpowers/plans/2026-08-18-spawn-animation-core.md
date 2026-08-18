@@ -437,15 +437,19 @@ it('starts a spawn entrance and adds a spawn ring on the dead->alive edge', () =
 
 it('drives the invincibility overlay from shieldUntilTick, not a latched copy', () => {
   const views = createEntityViews(scene);
-  const tank = { ...makeTank(1, 'player', { x: 5, y: 5 }, 0), alive: true,
-    shieldUntilTick: 90 };
-  const w0 = makeWorld([tank]); w0.tick = 10;   // 80 ticks of shield left
-  const w1 = makeWorld([tank]); w1.tick = 89;   // 1 tick left -> nearly solid
-  const bodyMat = () => (tankBodyMaterial(scene, 1)); // helper: the tank's body material
-  views.sync(w0, w0, 1, 0.016);
-  const early = bodyMat().opacity;
-  views.sync(w1, w1, 1, 0.016);
-  const late = bodyMat().opacity;
+  const shielded = (tick: number) => {
+    const w = makeWorld([{ ...makeTank(1, 'player', { x: 5, y: 5 }, 0), alive: true, shieldUntilTick: 90 }]);
+    w.tick = tick;
+    return w;
+  };
+  const prev = makeWorld([{ ...makeTank(1, 'player', { x: 5, y: 5 }, 0), alive: false }]);
+  // First sync: dead->alive edge triggers the entrance AND, with dt 0.6 > ENTRANCE_SECONDS
+  // (0.5), advances straight into the invincibility branch. tick 10 -> 80 shield ticks left.
+  views.sync(prev, shielded(10), 1, 0.6);
+  const early = tankBodyMaterial(scene, 1).opacity;
+  // Same view (no new edge), clock past entrance; tick 89 -> 1 shield tick left, nearly solid.
+  views.sync(shielded(10), shielded(89), 1, 0.016);
+  const late = tankBodyMaterial(scene, 1).opacity;
   // Mutation that breaks this: reading a fixed duration instead of shieldUntilTick - tick.
   expect(late).toBeGreaterThan(early);
 });
