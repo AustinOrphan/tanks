@@ -286,6 +286,13 @@ describe('pickVersusVariantGrid: retries with a chained seed when the first draw
     const picked = pickVersusVariantGrid(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 4, 7920, 0.7);
     expect(picked).not.toEqual(firstDraw);
     expect(evaluateVersusBoard({ ...arena, grid: picked }, 4).suitable).toBe(true);
+    // Discriminates a genuine second-attempt success from a bound-of-1 mutation that
+    // would immediately fall back to the (also suitable, on this arena) authored grid --
+    // both would satisfy the two assertions above for the WRONG reason. A real retry
+    // still removed cells (just a different subset than the failed first draw), so
+    // `picked` is neither the authored grid NOR free of removed cells.
+    expect(picked, 'must not silently be the authored fallback').not.toBe(arena.grid);
+    expect(countRemoved(arena.grid, picked), 'a retried draw still removes cells').toBeGreaterThan(0);
   });
 });
 
