@@ -1,0 +1,517 @@
+# Architecture reference
+
+Detailed invariants, measurements, provenance, and rejected approaches. Use the matching path-scoped rule first, then search this file for the named mechanism.
+
+## Architecture invariants
+
+**`src/sim/` is a pure, deterministic core.** It must import nothing from `three`,
+`howler`, or the DOM. That purity is what makes it headlessly testable and makes replays
+exact functions of their inputs. `src/sim/purity.test.ts` enforces it by scanning every
+file under `src/sim/`; it is the only file there that mentions those packages.
+
+**Fixed timestep.** `TICK_HZ = 60`, `DT = 1/60`. The sim never sees wall-clock time.
+
+**Render and audio are one-way projections.** The sim emits a `SimEvent[]` stream
+(`src/sim/events.ts`) and never reaches back. Consumers today: `render/renderer.ts`,
+`render/particles.ts`, `audio/director.ts`, `game/haptics.ts` (issue #112's seam --
+`navigator.vibrate` on web, injected so a future Capacitor build can swap in the native
+plugin), `game/state.ts` (win/lose drives the game-over screen) and `game/loop.ts`. If
+you change an event's shape, check all six.
+
+`step(world, input)` clones its input and returns `{ world, events }` — it never mutates
+what it is given.
+
+**The step boundary takes a LIST.** `stepInputs(world, inputs: InputState[])` is the
+primitive and pairs `inputs[i]` with the i-th `kind === 'player'` tank in tank-array
+order; `step(world, input)` is a one-line adapter (`stepInputs(world, [input])`) and is
+what every caller in the tree uses. The adapter must stay one line: two copies of the
+single-player path is exactly what would break the argument that the golden trace hash
+proves single-player behaviour did not move. Nothing else about multiplayer exists —
+`config/validate.ts` still hard-fails any grid without exactly one `P`, `resolveStatus`
+still defines a win as "every non-player tank dead", and four AI sites still take the
+FIRST player. The pairing rules (a dead player keeps its slot; surplus inputs are
+ignored; a player past the end of the list gets NO input, which differs from an idle one)
+are unreachable from gameplay today and are pinned ONLY by
+`src/sim/step-inputs.test.ts` — the trace drives one player and cannot see them, measured:
+all 8 mutations swept there leave the hash unchanged.
+
+**Persistence is one seam, `src/game/storage.ts`.** All six stores take an injected
+`Storage`; `resolveStorage()` picks the browser's or a complete in-memory shim (the old
+inline stand-in was `{getItem, setItem}` cast to `Storage`, so `removeItem`/`clear`/`key`
+were TypeErrors waiting), and `createStores(storage)` gives all six the SAME one **by
+signature** — resolving per store was harmless only because localStorage returns the same
+object every time, and would have given each store a private namespace under the shim.
+Pointing the game at Capacitor Preferences or a file-backed desktop shim is a one-file
+change with a test that can fail. `src/game/save.ts` serialises those six keys as one
+blob at the RAW key/value layer, deliberately not through the typed stores: they validate
+on read and drop what they do not recognise, which is exactly the data an export exists to
+preserve. Import writes only keys on the `SAVE_KEYS` allow-list — the origin is shared, so
+a pasted blob must not be able to set a neighbour's key — and an imported save is
+**invisible until reload**, because every store snapshots its key into an in-memory shadow
+at construction.
+
+**A run is recordable because the sim is pure, and the recorder is a DECORATOR.**
+`src/game/replay.ts` wraps the input collaborator `loop.ts` hands the driver — `driver.ts`
+already calls `input.sample()` exactly once per simulated tick, so nothing in the driver
+changed. It wraps `effectiveInput`, not `input`, so an autoplay demo records the stream
+`step` actually saw. A trace spans ONE world and restarts on every level switch.
+**The stamp is two things**: `schema` (can this build parse it?) and a canonical, key-sorted
+FNV-1a fingerprint of all four sim data files — balance, tank-defs, ai-profiles, arenas
+(can this build reproduce it?). Key-sorted because JSON module property order is a bundler
+artefact. It does **not** cover CODE: a change to `targeting.ts` diverges a replay with the
+fingerprint unchanged, so a mismatch proves a trace is stale while a match does not prove
+it is fresh.
+
+**The RENDER ANIMATION CLOCK is a second clock, and it is now named and decided.** The sim
+is fixed-step and never sees wall time; the render layer does, as the `dt` `driver.ts`
+hands `renderer.render`, which forwards it to **two** consumers — `entities.sync` (an
+animated skin's texture scroll, gated on `dt > 0`) and `particles.update`. `frame.ts`'s
+`animationDt(dt, state)` decides how much of it a frame gets: **it runs whenever the game
+is not `paused`**. Pause is the one non-simulating state a player enters deliberately to
+make the board hold still, so the cosmetics stop with it; `splash`/`title` keep a live
+board behind the menu, and `win`/`lose` arrive mid-explosion, where freezing would hang
+debris in the air. Before it was named, the answer was "always, silently" — an unstated
+consequence of the non-playing branch dropping the accumulator but still forwarding
+`plan.dt`, asserted nowhere. `frame.test.ts` pins the rule and `driver.test.ts` pins that
+the driver applies it, the same split `renderAlpha` has. It must stay out of `src/sim/`:
+a wall clock there would break replay.
+
+**A SKIN'S UV MAPPING IS DECIDED PER PART, and the three parts disagree on purpose.**
+`entities.ts` is the only place this lives, and each rule exists because a render was
+wrong in a way no numeric probe caught.
+
+The HULL must read as one continuous surface — the design ruling's "the hull should be
+distinctly one piece". `ExtrudeGeometry` carries THREE parameterisations: the caps come from the
+shape's own (x, y), while the bevel ring and side walls come from `generateSideWallUV`,
+which returns `(x, 1 - z)` or `(y, 1 - z)` and **chooses between them per quad** on
+`Math.abs(a_y - b_y) < Math.abs(a_x - b_x)`. So the perimeter's own u axis flipped with
+the direction of that stretch of outline. `projectBodyUV` projects the body from above
+and `unrollSkirtUV` folds the skirt outward by its drop; a plain top-down projection is
+NOT enough on its own, because the near-vertical walls collapse and the skirt renders as
+vertical streaks (checker became columns, camo a picket fence). The unroll averages the
+outward direction over every vertex sharing a position, which is load-bearing rather
+than tidy: the geometry is non-indexed, so facet normals split the UV at every rounded
+corner — per-facet measures 0.102506 over the VISIBLE surface (normal.y > −0.1, 729 of
+1248 vertices) and 0.400000 over all 1248, against 0.000000 either way once averaged and
+1.472500 for the untouched default. **State which population**: an earlier draft quoted
+0.102506 bare and a reviewer reproducing it over all vertices got 0.400000 and could not
+match the figure.
+
+**Three separate guards, because one metric cannot see all three failures.**
+Co-located vertices agreeing pins continuity (negative control: the unmapped enemy hull).
+It is blind to the unroll, since a collapsed skirt is perfectly continuous — so skirt
+TEXEL DENSITY pins that the sides are drawn at authored size, and UV footprint exceeding
+the plan footprint pins that the unroll goes OUTWARD rather than folding back inward.
+Both of those mutations, and collapsing `projectPlanarUV`'s `along` axis, each left the
+full suite green before those tests existed.
+
+The TURRET keeps `LatheGeometry`'s own wrap and **must not be touched**: u around the
+axis is what makes checker a pinwheel and flow a swirl, and the design feedback asked for
+both by name. The generalisation that "fixes" the hull everywhere is exactly the wrong move
+here; a test compares the dome's position, normal and uv arrays against a freshly built
+reference so that move fails loudly.
+
+The BARREL is a lathe too, and its defect was DENSITY, not topology. Lathe u is one full
+texture repeat around the circumference whatever that circumference is, so the same tile
+was packed 2.8x tighter on the 0.82-unit gun than on the 2.26-unit turret and flow's
+swirl arrived as corduroy; lathe v is INDEX-based, so the 0.05-unit flare step and the
+0.4-unit tube got equal shares. `matchLatheToTurret` scales u by the radius ratio and
+rebuilds v from real arc length, both against the turret. That makes u a FRACTION of a
+repeat, so it no longer meets itself and there is a seam — `BARREL_SEAM_PHI` puts it on
+the gun's underside, and `PI/2` is exactly 4 of the barrel's 16 segments, so the surface
+is unchanged and only the seam moves. Pick an angle that is not a whole number of
+segments and the silhouette rotates with it.
+
+`stripes` is the exception to all of it: a hard-edged band wrapped around a lathe axis
+arrives as pie slices, so its turret and barrel are projected flat. `STRIPE_TURRET_MODE`
+is `'body'` — one field at world scale, 0.084 wide on every part, which was chosen from
+renders ("I like continuous stripes actually"). `'part'` normalises each part to its own
+half-width (0.084 / 0.069 / 0.025 on hull / turret / barrel) and was rejected because the
+three sets do not line up. Pinned through the behaviour — all three parts must share one
+v scale — not through the constant alone.
+
+**CAMO AND CLOUDS ARE DIFFERENT SHAPE LANGUAGES — but only camo got a new generator.**
+They shared one `blotches` helper (lobed clusters of circles) and differed only in count,
+radius and lobes, so review twice reported them as swapped. The coverage WAS backwards
+and swapping it was necessary — camo covers, clouds does not — but it was not sufficient,
+because two skins cut from one silhouette generator read as versions of each other at any
+density. `camoCells` is now a seeded power diagram: hard-edged interlocking polygons,
+straight edges, no arcs, which a circle-based generator cannot produce at any parameter
+setting.
+
+**A soft-edged clouds generator (`cumulus`) was built for the other half of that split
+and REJECTED ON LOOK** — "before clouds looks better actually" — so clouds is back on
+`blotches` at the sparse post-swap setting, byte-identical to the texture it had at
+`76ef38a`. `cumulus` is deleted rather than parked behind a switch; a generator nothing
+calls rots. Do not rebuild it without new evidence: PR #139 carries the tile render it
+lost on.
+
+Two pins moved with it, and both had said something that stopped being true:
+
+- **Coverage is measured by EXACT hull-hex equality.** It briefly used a nearest-tone
+  classifier, which was genuinely forced by `cumulus`'s rim pixels (they equal no tone
+  exactly, scoring 0.5913 exact against 0.6484 nearest). With both skins hard-edged again
+  the two metrics are the same function — measured equal to 4 dp on all 12 (skin, hull)
+  pairs — and exact is the one that cannot be fooled, since nearest has to guess the
+  three flat tones by taking the three commonest.
+- **The shape discriminator is EDGE GEOMETRY, not edge hardness.** Hardness now reads
+  0.0000 for both. The test measures the share of boundary pixels lying on a locally
+  straight run (7px window, 0.6px RMS): camo 0.2855, clouds 0.0355. Three cheaper
+  candidates — base-region connectivity, triple-junction count, accent-meets-accent
+  boundary share — were tried first and all three collapsed under a coverage-matched
+  control, scoring camo's generator at clouds' coverage the same as clouds. The straight-
+  run metric does not (0.2651 there), which is what makes it a shape metric rather than a
+  density one wearing a shape's name.
+
+Both skins still tile toroidally and stay deterministic from one seed, and neither tone
+derivation moved: `autoAccent` keeps camo muted, `cloudTone` keeps clouds light, and the
+white hull's deliberate darkening survives.
+
+**`clouds is LIGHT on every hull that has room to be` was a tautology for two commits**,
+which is worth knowing because nothing announced it. It read the tile's commonest colour
+as "the dominant tone, the second one painted" — true only at the DENSE setting. The
+density swap made the hull itself the majority tone, so that colour became the hull, and
+the comparison became `hullL < hullL`. Forcing `cloudTone` to darken unconditionally left
+it green. It now excludes the hull before taking the commonest, and the same mutation
+fails it on 5 of the 6 hulls (all but white, which is allowed to darken).
+
+**Entity configs are data, resolved through `src/sim/config/`.** A tank is
+`TankDefinition` (`data/tank-defs.json`) + `BalanceConstants` (balance.ts, whose
+AI profiles come from `data/ai-profiles.json`) → `resolveTankConfig` →
+`ResolvedTankConfig`, read via `configFor(kind)`; gameplay code never branches
+on a kind literal **to pick stats or behaviour** (identity checks like
+`kind === 'player'` and the render's per-kind texture choice remain). The JSON
+is validated at module load by `validate.ts` — a bad edit is a boot failure
+naming the exact path, and the validator's own tests carry negative controls.
+Adding a `TankKind` member is a compile error until `TANK_KINDS` (validate.ts)
+lists it, which is what forces the JSON entry. Walls are the second family on
+the same catalog machinery (`walls.ts`, `wallConfigFor`); new families
+(power-ups, turrets, bosses) should ride `createCatalog` rather than invent
+parallel plumbing. The **authoritative balance scalars live in
+`config/data/balance.json`**; `constants.ts` derives from it and stays the
+sim's one import site, so retuning is a two-file edit — the JSON entry and its
+literal pin in `constants.test.ts` (every balance.json value is pinned;
+`SHELL_SPAWN_FORWARD` stays a TS literal, render-coupled).
+`decideAi` routes by the resolved profile's `behavior`; grey's dodge patience is
+`(1 − aggression) · TICK_HZ`, rounded, pinned equal to `DODGE_PATIENCE_TICKS` in
+`config/roster.test.ts`. Profile fields consumed today: `behavior`, `aggression`,
+the signs of `directShotWeight`/`bankShotWeight`/`minePlacementChance`, and the
+movement band — `preferredDistance`/`minimumDistance`/`retreatChance` (magnitude
+included) drive `seekMove`, the mobile decisions' baseline move (approach beyond
+preferred, seeded retreat draw inside minimum, wander in the band; tuned by
+sweep, see `SEEK_APPROACH_BIAS`) — and `aimAccuracy`: per-profile jitter is
+`AI_AIM_SPREAD / aimAccuracy` (`profileAimSpread`), the anchor being a
+perfect-accuracy profile's spread; curve chosen by sweep, see the anchor's
+comment in constants.ts — and `estimationAccuracy` (directive B): per-profile hazard
+misjudgement is `AI_HAZARD_SPREAD / estimationAccuracy` (`profileHazardSpread`), the same
+anchor/derate shape, feeding a per-tank-per-window `estimationError` draw that perturbs
+the perceived mine-flee radius, danger corridor and mine-tactical radius `dangerAvoidMove`/
+`incomingThreats`/`mineThreatensPlayer`/`friendlyInMineBlast` gate on — and
+`minePlacementChance` in full: its magnitude is
+the per-bucket mine-proposal probability (`mineInclination`) — and
+`reactionTime`: the dispatcher holds every AI shot until the solution has been
+HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
+span; cover resets the clock. **Every profile field is consumed by the
+implementations it applies to** — a scoped claim since 2026-08-16, not a universal
+one: `estimationAccuracy` is read only where hazard estimation happens, so
+STATIONARY's two profiles (STATIC_BASIC, RICOCHET_SNIPER) carry a value nothing
+reads, the same shape as their `preferredDistance`/`minimumDistance`/`retreatChance`
+(see the estimation-error paragraph below). That includes
+both shot weights in BOTH mobile and stationary implementations — `brown.ts`
+gained bank shots gated on `bankShotWeight > 0`, which is what makes
+RICOCHET_SNIPER (the **green** tank, level 4) a real enemy rather than authored
+intent. It prefers the DIRECT shot and falls back to the bank, where `teal.ts`
+alternates: a turret that can already see you has no reason to take the longer
+path. Brown is unaffected because STATIC_BASIC carries `bankShotWeight` 0 — proven
+by an identical trace hash over 4 arenas × 6 seeds × 2500 ticks, with a control
+showing the probe moves when banking is switched on.
+
+**`estimationAccuracy` (directive B, the 2026-08-16 owner ruling: AIs must not have
+oracle knowledge of exact mine blast radii or perfect dodge positions) is the same
+asymmetric-consumption shape `bankShotWeight` set the precedent for.** It is a REQUIRED
+field on all 8 profiles, but only DEFENSIVE/TACTICAL/OFFENSIVE/BERSERKER behaviours ever
+reach a site that reads it (`targeting.ts`'s `dangerAvoidMove`/`incomingThreats`/
+`mineThreatensPlayer`/`friendlyInMineBlast`, all now taking an optional perceived-radius
+parameter defaulted to today's exact constant); STATIONARY (brown, green/RICOCHET_SNIPER)
+never imports `dangerAvoidMove` and never reaches `friendlyInMineBlast` (gated on
+`TankAbility.MINE_LAYER`, which neither carries), so the field sits on their profile
+unread by the SHARED path, same as `preferredDistance`/`minimumDistance`/`retreatChance`
+already do for STATIONARY. The PLAYER rescues STATIC_BASIC's copy from being unread
+everywhere: it also resolves to STATIC_BASIC and DOES consume its `estimationAccuracy`,
+through an independently written mirror of the same gates in `player-profile.ts`
+(oracle-knowledge site #5, drawn from the player's own injected `rnd`, never
+`world.seed`) — so the field the shared AI path ignores for brown is exactly the field
+the player's own code reads for the identical profile. Nothing rescues RICOCHET_SNIPER's
+copy the same way: green is STATIONARY too, is never the player, and nothing else in the
+tree reads `estimationAccuracy` off it — its 0.90 sits on the profile as inert as its own
+`preferredDistance`/`minimumDistance`/`retreatChance` already are, not exempted by the
+player-side path the way STATIC_BASIC's is. `AI_HAZARD_SPREAD` (`constants.ts`, sourced
+from `balance.json` per the `AI_AIM_SPREAD` precedent) is the anchor a
+perfect-estimationAccuracy profile would still misjudge by; every shipped profile that
+reaches a consuming site sits below accuracy 1.
+
+**A green tank changed what `structuralFailures` has to check.** "No enemy sees
+the player spawn" tested `lineOfSight` only, which was the same as "no enemy can
+SHOOT the player spawn" for exactly as long as no stationary enemy could bank.
+There is now a second rule: no STATIONARY banking enemy may hold a ricochet path
+onto the spawn. Restricted to stationary bankers on evidence, not taste — applied
+to every banking profile it rejects shipped arena-01 (grey banks onto the spawn
+off 1 wall, teal off 2) and arena-04's teals. Mobile tanks leave that geometry
+within a second; a turret never does. `BANK_SIGHTLINE_ARENA` is the negative
+control, and swapping its one spawn letter for `T` and `B` controls the
+behaviour gate and the weight gate separately.
+
+**`determinism.test.ts` does not catch AI behaviour changes**, which is easy to
+assume it does. It asserts self-consistency — same seed, same result — and that
+is invariant under behaviour changes: giving brown a 0.5 `bankShotWeight` leaves
+all 7 of its tests passing while a trace probe moves. When that mutation was first
+run it passed the WHOLE suite (1155 tests); it now fails 5 tests in 2 files,
+because green's arrival added tests that watch the bank path — so the hole is
+narrower than it was, and the general point stands. Any claim that an AI edit is
+behaviour-preserving needs a golden trace comparison, not a green suite. The same blind
+spot applies to `estimationAccuracy` (directive B): a broken wiring of the perceived-
+radius sites would leave every unit test in `profile.test.ts`/`targeting.test.ts` green
+by itself, since they inject the field directly rather than exercising the seeded
+call-site draw. The hash move this PR records (`324aa9b5…` → `a5458ede…`) IS the proof
+obligation, not a decorative side effect of the change — `determinism.test.ts` passed
+before and after and could not have told the difference either way.
+
+STATIONARY still ignores `preferredDistance`/`minimumDistance`/`retreatChance`,
+and always will: they are a distance band for a tank that moves. "Every profile
+field is consumed" means consumed by the implementations it applies to. The 9-type Wii taxonomy in `config/reference/` is reference
+data only — nothing in the game reads it.
+
+**Arenas are data too.** Grids, design rationale (`notes`) and machine-checkable
+design `claims` live in `config/data/arenas.json`, validated at load by
+`validateArenas` — a bad edit is a boot failure naming the exact path (e.g.
+`arenas[2].grid[4]`). `arena.ts` keeps every export it always had; `SPAWN_LETTERS`
+(`config/arena-types.ts`) is the single source of the spawn-letter map for the
+validator and `loadArena` — green is `N`, because grey already holds `G` and
+re-lettering grey would rewrite every shipped grid — `src/sim/sandbox.ts` keeps its own `KIND_LETTER`
+table (plus a hardcoded `'P'`) for grid GENERATION, so re-lettering a kind in
+`SPAWN_LETTERS` without also updating `sandbox.ts` would leave the dev sandbox
+emitting a character `loadArena` rejects. Three claim types —
+`sightlineAfterBreach`, `lane`, `spawnBlockRobust` — are verified by
+`src/sim/arena-claims.ts` from the test layer (it imports the AI's
+`lineOfSight`, so it must never be imported by `config/`). `sightlineAfterBreach`
+is all-or-nothing per arena: declaring one commits the arena to declaring one
+for EVERY enemy spawn, checked by set equality (both directions) in
+`arena-validation.test.ts` — an arena's claims of this type are a COMPLETE
+statement of its post-breach spawn lines, never a sample (an arena may still
+declare zero, as arena-01 does). `spawnBlockRobust` checks more than its name
+suggests: every enemy spawn against 4 cardinal nudges of the player, in BOTH
+wall phases (intact and breached) — measured across all 6 scenarios that can
+run it (arena-01, arena-02, arena-03, arena-04, and the two fixtures built in
+`arena-claims.test.ts` to discriminate the phases), 0 failures were
+intact-only, so the intact phase's value is labelling which wall state a
+failure lives in, not added detection power on its own; the breached phase is
+what actually catches a corner tangency. arena-04 contributes 0 failures in
+either phase (0 of 24 probes each: 6 enemies × 4 cardinal nudges). Only 5 of
+those 6 DECLARE the claim —
+arena-02 does not, because checked the same way it fails 12 of its 16
+breached-phase checks (0 of 16 intact): the level's design is to open
+sightlines when its centre barrier breaches, not survive it. The switch case in
+`arena-claims.ts` only runs a claim type an arena actually DECLARES, so nothing
+about arena-02's number falls out of the claim runner — it is recomputed
+instead by its own test in `arena-validation.test.ts` (denominator pinned at 4
+enemies × 4 cardinal nudges), which fails if that grid changes. Deliberately
+not a claim: making it one would assert a property arena-02 does not have. Adding a level is editing JSON: the generic runner in
+`arena-validation.test.ts` picks up its claims automatically, and `npx vitest
+watch src/sim/arena-validation.test.ts` is the authoring loop — though the
+claim MIX itself is pinned separately by that file's `EXPECTED_CLAIMS` table,
+so changing an arena's claims is a deliberate two-file edit. `spawnBlockRobust`
+exists because arena-03 once shipped a corner tangency a 0.1-unit nudge opened.
+A `lane` claim's `from`/`to` are LITERAL grid cells, not tied to a spawn by the
+validator (`cell()`, not `enemySpawnCell()`) — moving the spawn a lane's `why`
+refers to does not invalidate the claim, which keeps measuring the same two
+cells and keeps passing; arena-03's two lanes and arena-04's seven survive this
+only because every one of them has an enemy spawn at its `from` end carrying a
+`sightlineAfterBreach` claim at that same cell, which DOES require a live spawn
+there and so catches the move at load time instead. Their `to` ends are plain
+floor cells and are pinned by nothing — moving a wall so a lane's target cell
+stops meaning what its `why` says is a change no test can see. See the `lane`
+variant's doc comment in `config/arena-types.ts`.
+
+**arena-04 is the first shipped board that is not 33x27** (45x33; world dimensions are
+unchanged by the 3x cell-size rescale — only the cell counts moved), so PR #53's
+per-level render refit is now exercised by a level players actually reach rather
+than only by a fixture. `WIDE_ARENA` moved 15x11 -> 17x13 when it landed, because
+`arena-validation.test.ts` asserts the fixture differs from every shipped arena
+and a fixture whose whole job is to be an unshipped size gives way to production
+data. Three distinct board sizes are now covered.
+
+**Adding a level moves more pins than the level file.** Five places moved when
+arena-04 landed; arena-05 then proved that list stale in both directions, so the
+checklist below is ARENA-05'S measured list, and the lesson is to re-derive it
+each time rather than trust this paragraph: `cell-mapping.test.ts`'s cell and
+spawn totals (5864 / 33 since arena-05); `EXPECTED_CLAIMS` in
+`arena-validation.test.ts` (the claim mix, not a count); that file's cover-ratio
+`EXPECTED` table (and its `tightest` assertion, which names one arena);
+`framing.test.ts`'s two `ARENAS.length` pins; `difficulty.test.ts`'s per-arena
+`EXPECTED` table and arena-list assertion (landed after arena-04, so the old
+checklist never knew it); the `demolition` threshold in `achievements.ts`
+(derived from the total destructible-cell count, which a new arena moves);
+`BASELINE_HASH` in `tools/baseline/trace.test.ts` (the trace runs over ALL
+shipped arenas); and the `framing-fit-bracket-4.5` entry's `expectFailures` in
+`tools/mutate/manifest.json`. Two items from arena-04's list dropped off: the
+`variable arena dimensions` fixture block only moves if the new size collides
+with a fixture, and the "three size labels in `tools/gl/harness.ts`" no longer
+exist — grep at arena-05 found no arena-size prose there to update. The harness
+labels were prose, so nothing failed when one was missed — review caught it —
+and the same class of miss is why this paragraph now says re-derive. Any number a `notes` string quotes is likewise unpinned by construction:
+`notes` are validated as strings only. Three blocks in `arena-validation.test.ts`
+exist purely to recompute quoted prose — arena-02's `12 of 16`, arena-04's cover
+ratios, and arena-04's bank-reach count (275 cells reached by ricochet, covering
+171 of the 284 nothing else sees) — because all three were measured once by hand
+and nothing checked them again. Quote a measurement in `notes` and you owe it a
+recomputing test. **This whole checklist is the `ARENA_DEFS` side only.** Since
+issue #154, a new board joining the catalog (`arenas.json`) and a new LEVEL
+joining the campaign (`config/data/campaign.json` / `CAMPAIGN_LEVELS`) are two
+separate, consciously-linked edits — `campaign.test.ts`'s arenaId-set pin forces
+the link (an arena shipped but not placed in the campaign, or the reverse, fails
+there), but nothing on the list above does. Landing an arena without a matching
+campaign entry is a legal, deliberate state (the campaign's own "out of scope":
+not every shipped arena has to be in play), so a new arena alone does not
+necessarily mean a new level's worth of pins moved — check `campaign.test.ts`
+and `achievements.test.ts`'s demolition-threshold sum (now over `CAMPAIGN_LEVELS`,
+not raw `ARENAS`) if it does.
+
+**Walls load as geometry, not as cells.** `loadArena` merges SOLID cells into maximal
+rectangles (`mergeSolidRuns`) and numbers tanks from a counter of their own. Both exist
+because four parts of the sim read the wall ARRAY rather than the arena's shape, and
+the 3x resolution upscale exposed all four: tank ids shared a counter with walls, so
+wall count reseeded every per-tank RNG stream in `ai/targeting.ts`; `resolveWalls`
+applied one push per overlapping wall, so a sliced wall pushed several times and its
+interior seams offered phantom corners; `bankShot` chose the first reflector in
+wall-array order; and `circleVsAABB`'s `inside` branch resolved a hull escape
+differently depending on which sub-cell box it was handed.
+
+**The bank-shot dependence turned out to live one function deeper**, which is worth
+knowing before anyone "simplifies" it. `bankShot` now picks the SHORTEST muzzle ->
+bounce -> target path, ties broken on the angle, so its answer is a property of the
+arena rather than of the array. But the defect a subdivided wall actually triggered was
+in `losIgnoring`: a bounce landing exactly on a seam put the segment's own ENDPOINT on
+the neighbouring box's corner, and `raySegmentVsAABB` counts a boundary touch as a hit,
+so a legitimate shot was reported blocked. `losIgnoring` now disambiguates with
+`headingIntoBox` — the same direction-probe form `reflectSweep` already ships, NOT the
+step-out-along-the-normal form this file records as tried and reverted. It is safe here
+for a structural reason: `losIgnoring` has exactly two callers, both inside `bankShot`,
+so it cannot reach `reflectSweep` and cannot reopen the escape bug.
+
+An explicit `faceIsBuried` guard was written first and then DELETED, on evidence with a
+stated DOMAIN — the unqualified version of this paragraph was falsified in review. With
+both endpoints strictly outside every wall, which is the only state the sim produces
+(`resolveWalls` keeps every hull centre out of the mass), removing the guard changed
+0 of **4,195,692** (muzzle, target) probes across 12 synthetic shapes and all 4 shipped
+arenas' real merged geometry. With an endpoint exactly ON a wall surface it is not a
+no-op: **81 of 1,966,116** probes differ, all on arena-03. So the guard is unnecessary
+because of REACHABILITY. The structural argument this file used to give — "if a face is
+buried the neighbour occupies the space outside it, so any ray reaching it is already a
+real penetration" — is FALSE, and there is a witness: an approach arriving exactly at the
+seam CORNER only touches the neighbour, and the graze check correctly lets it through.
+`targeting.ts:277` is the ledger of record. Do not re-add the guard without a fixture
+that fails when it is removed — and such a fixture has to put an endpoint on a wall
+surface, which is why none exists.
+
+**Destructible walls are never merged**, and that is a rule, not an oversight. A
+destructible cell is a destruction UNIT: mine blasts destroy by world-space radius
+(`mines.ts`), so a finer grid means finer breaching. arena-02's centre barrier is
+authored as adjacent blocks whose separate destruction is the level's design.
+
+**The fourth is the hull-escape case: a hull INSIDE a wall escapes the mass, not the
+sub-cell.** `circleVsAABB`'s `inside` branch pushes out through the nearest face of the
+ONE box it is handed, which for a sub-cell is usually a buried internal seam — so the
+same hull in the same place resolved differently depending only on the slicing
+(measured: 780 of 1,681 interior centres on an isolated destructible mass).
+`resolveWalls` now marches box to box along each axis to find where the wall MASS ends,
+which is a property of the union. `circleVsAABB` itself is untouched, because
+`bullets.ts` depends on it. This was reachable, not theoretical:
+`separateTanks` drives hulls up to 0.375 units into a block and `stepMovement` calls
+`resolveWalls` immediately afterwards.
+
+**Two numbers in this section are NOT pinned by any test**, which by this file's own rule
+is a debt: the 780 above (an independent reconstruction at the pre-fix commit measured
+774, a 0.8% difference nobody has resolved — treat it as "most of an isolated destructible
+mass's interior", not as a figure), and `targeting.ts`'s buried-face probe count, whose
+guard is deleted so nothing can ever re-derive it. The decomposition GUARANTEES are pinned,
+by `decomposition.test.ts`; these two provenance figures are not.
+
+`src/sim/decomposition.test.ts` pins the property directly — the same geometry
+expressed at two cell sizes must agree on `resolveWalls`, `lineOfSight` and `bankShot`.
+`tools/baseline/trace.test.ts` is a golden trace over 5 arenas x 6 seeds x 2500 ticks
+(4 until arena-05 joined — the trace runs over ALL shipped arenas, so adding a level
+moves `BASELINE_HASH` by construction) and is now ASSERTED, not merely printed:
+`determinism.test.ts` only proves
+self-consistency, which is invariant under behaviour changes. **Know what it does not
+cover, RE-MEASURED at the 4-arena tree (arena-05 has not re-measured these probes;
+the hash values below predate it, and so does the "estimation error" PR that moved
+`BASELINE_HASH` again — see below — so both figures are now unmeasured at TWO trees
+past their own, not one).** Mutating `bankShot` to return the first
+valid candidate instead of the shortest changed the then-current hash (to
+`0cf1f76a14060992eb8763c9cd20e95b8c17cde2d1dbe3e8de6c87ff47137e9a`) and fails the test —
+a later change to `resolveWalls` altered trajectories enough that bank shots now DO
+influence the trace, even though the bank-shot rewrite itself did not move it when it
+first landed. Mutating the inside-wall escape (disabling `resolveWalls`' union-mass
+marching so a hull inside a wall resolves through the single sub-cell box instead) still
+leaves the hash unchanged: the seeded replay never drives a hull inside a wall, so that
+path stays uncovered. The lesson generalises: a coverage claim recorded at one commit can
+go stale as later changes alter trajectories, so re-measure rather than carrying it
+forward. The decomposition guarantees are held by `decomposition.test.ts`, not by this
+hash.
+
+**The trace body lives in `tools/baseline/trace.ts` and runs in a BROWSER too.** It
+imports `src/sim` only and hashes through `crypto.subtle` + `TextEncoder` rather than
+`node:crypto`, which is the whole reason it can: the same code under vitest and under
+Playwright. `npm run trace:browser -- --all` serves `tools/baseline/page.html` on
+localhost (secure context — `crypto.subtle` is undefined without one) and prints one hash
+per engine. Measured on this box at the 5-ARENA trace (2026-08-16, the day directive B's
+estimation error landed — see "AIs must not have oracle knowledge" below, the trace
+arc's FIRST deliberate hash move; every prior entry in this history left the hash exactly
+where it started): **chromium 151, firefox 153 and Playwright's webkit (JavaScriptCore,
+UA-spoofed as macOS Safari but a Linux build) all produce `a5458ede…`, matching the pinned
+baseline** — so V8, SpiderMonkey and JSC agree on this trace, on Linux x86-64, headless.
+(The previous baseline, `324aa9b5…` (2026-08-11, the day arena-05 landed), and the one
+before it, `015a5d17…` (the 4-arena trace), each had the identical three-engine agreement
+measured in their own turn; a new arena moves the hash by construction, and this PR is
+the first case of a BEHAVIOUR change doing the same — see the dedicated paragraph below.
+This re-run is owed again after every arena or deliberate behaviour change. CI's
+`Baseline trace (chromium)` step keeps V8 current on every
+push; firefox and webkit re-verify on push to `main`, weekly, and on demand, via
+`.github/workflows/engines.yml` ("Engines matrix") — a SEPARATE workflow from `CI`,
+deliberately: see "The deploy waits for CI" above for why a checking job that can fail for
+reasons unrelated to the tree must not sit inside `ci.yml`. It runs the angle probe
+(`tools/baseline/angles.ts`, `ANGLE_HASH`) alongside the golden trace on every run, since
+`--all` always runs both, and prints and uploads both hashes per (OS, engine) — the
+acceptance harness issue #133's vendored-math work landed against, now a THIRD result on
+the same run rather than a future one. **#133 is closed**: `src/sim/math/` ports
+netlib.org/fdlibm's sin/cos/atan2 and V8's own Torque hypot formula, wired at all 17 of
+the sim's former `Math.sin`/`cos`/`atan2`/`hypot` call sites (the 4 `Math.sqrt` sites
+stay native — ES2025 correctly-rounded). `BASELINE_HASH` did **not** move — measured, not
+assumed: `324aa9b5…` (the value pinned at the time, superseded by directive B's move to
+`a5458ede…` above — this migration's own claim is about that specific pre-/post- pair and
+stays true on its own terms) is unchanged pre- and post-migration, on Node and on all three
+browser engines alike, which the plan's own Node/V8-13.6-provenance argument predicted as
+plausible but not certain. `ANGLE_HASH` is unaffected by construction (it sweeps native
+`Math.*`, never touched by this work) and the three engines still disagree on it, same
+finding as before. The new **`VENDORED_ANGLE_HASH`** is the pin this paragraph used to
+describe only as a future acceptance harness: `tools/baseline/angles.ts`'s vendored bands
+(`vsin`/`vcos`/`vatan2`/`vhypot`), asserted equal ACROSS ENGINES rather than merely
+self-stable on Node, and measured — chromium, firefox and webkit all produced
+`a4fdbbfb32de…`, matching the pin — which is the actual demonstration that a JS port
+built only from ECMA-262's exactly-specified operations achieves what native
+`Math.sin`/`cos`/`atan2`/`hypot` cannot: bit-identical output on every engine. `npm run
+trace:browser -- --all`'s exit code now reflects this: a vendored-hash mismatch counts
+into `failed`, unlike a native `ANGLE_HASH` mismatch, which stays structural and
+unfixable. **What #133 does not fix**: `InputState.aim`'s canvas-size dependence and
+`SimEvent`'s missing tick field, both still open, both recorded in the multiplayer spike
+in `docs/superpowers/backlog.md`.) **That is not the whole
+question**: one matching hash is agreement on the sampled trajectory, not a proof about
+`Math.hypot`. The shipped-Safari/iOS half is now MEASURED, not open: the engines
+workflow's macOS legs (PR #168, first run at `15989dd`, 2026-08-15) drove real shipped
+Safari 26.5.2 via safaridriver and real iOS WebKit (Mobile Safari, iOS 18.7 Simulator,
+arm64) via the beacon, and both matched `BASELINE_HASH` and `VENDORED_ANGLE_HASH` **as
+they stood that day** — against the pre-directive-B `324aa9b5…`, not the current
+`a5458ede…`; that leg has not re-run since the hash moved, so shipped Safari/iOS agreement
+on THIS baseline is unmeasured, not disproven. The
+sole remaining gap is a physical iOS device — one URL away:
+`npm run trace:browser -- --beacon`, open the printed URL on the phone.
