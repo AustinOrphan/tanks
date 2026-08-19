@@ -38,11 +38,10 @@
 # raw-HTTP client in tools/baseline/safari.mjs -- no new npm dependency). `ios-simulator-leg`
 # opens tools/baseline/run.mjs's new `--beacon` mode in a real iOS Simulator via `xcrun
 # simctl openurl`, the driverless mechanism page.html/harness.mjs grew for exactly this
-# (any browser you can merely open, not drive). Both are BRAND NEW and have never run on a
-# real macOS runner from this Linux dev box -- see each job's own comments for what is
-# proven only by their first execution. Both are separate top-level jobs with no `needs:`
-# on `engines` above (and nothing depends on them), so GitHub Actions runs and reports them
-# independently: a first-run flake in either cannot fail or cancel the 3-OS matrix job.
+# (any browser you can merely open, not drive). Both are separate top-level jobs with no
+# `needs:` on `engines` above (and nothing depends on them), so GitHub Actions runs and
+# reports them independently: a runner flake in either cannot fail or cancel the 3-OS
+# matrix job. The iOS leg's measured runner timing and retry policy live beside that job.
 name: Engines matrix
 
 on:
@@ -281,18 +280,13 @@ jobs:
   # at the right URL and left to report back on its own, the same trick a physical device
   # would use.
   #
-  # FIRST RUN ON A REAL RUNNER: this job has never executed outside this Linux dev box's
-  # simulation (a real Playwright chromium standing in for "any browser we can merely open"
-  # -- see tools/baseline/beacon-check.mjs). The load-bearing ASSUMPTION, unverified until
-  # this job runs for real, is that Mobile Safari inside the iOS Simulator shares the
-  # HOST's own loopback interface, so the `http://localhost:<port>` URLs run.mjs prints
-  # (unchanged from its normal local usage) are reachable from inside the Simulator exactly
-  # as from the host -- no `--host`/LAN address needed. If that assumption is wrong, the
-  # fix is to pass `--host` and swap the printed URL's host for the LAN address run.mjs
-  # already computes for that case (see run.mjs's own comment on why LAN is best-effort:
-  # crypto.subtle needs a secure context, which plain http://<lan-ip> is not). Also
-  # unproven: exact `xcrun simctl` timing and CLI surface on this runner image. Its own job,
-  # same reasoning as safari-leg above: a flake here cannot fail `engines` or cancel it.
+  # OBSERVED RUNNER BEHAVIOUR (issue #207): Mobile Safari has repeatedly proved it can use
+  # the host's localhost vite/collector pair, but `bootstatus -b` does not prove URL handling
+  # is ready. Across runs #23--#37 the job failed 6 of 15 times; five were one-shot
+  # `simctl openurl` code-60 timeouts and one was Vite missing its 30s startup allowance.
+  # Run #40 attempt 1 reproduced the openurl timeout, then attempt 2 passed unchanged. The
+  # settling delay, bounded retries and beacon-only timeout budgets below target those two
+  # measured failure modes without weakening any hash gate or unrelated browser job.
   ios-simulator-leg:
     name: iOS Simulator (beacon, Mobile Safari)
     runs-on: macos-latest
@@ -308,12 +302,31 @@ jobs:
       - run: npm ci
 
       - name: Pick and boot a simulator
+        shell: bash
         run: |
           set -euo pipefail
-          UDID=$(node tools/baseline/find-simulator.mjs)
-          echo "picked simulator $UDID"
-          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          IFS=$'\t' read -r SIM_NAME UDID SIM_RUNTIME < <(
+            node tools/baseline/find-simulator.mjs --details
+          )
+          if [ -z "$SIM_NAME" ] || [ -z "$UDID" ] || [ -z "$SIM_RUNTIME" ]; then
+            echo "::error title=Simulator selection failed::The selected Simulator record was incomplete"
+            exit 1
+          fi
+          echo "picked simulator: $SIM_NAME ($SIM_RUNTIME), UDID $UDID"
+          {
+            echo "SIM_NAME=$SIM_NAME"
+            echo "SIM_UDID=$UDID"
+            echo "SIM_RUNTIME=$SIM_RUNTIME"
+          } >> "$GITHUB_ENV"
           xcrun simctl bootstatus "$UDID" -b
+
+          echo "warming Mobile Safari on $SIM_NAME ($SIM_RUNTIME)"
+          if ! WARM_OUTPUT=$(xcrun simctl launch "$UDID" com.apple.mobilesafari 2>&1); then
+            echo "::warning title=Mobile Safari warmup failed::The bounded settling period will continue before openurl retries"
+            printf '%s\n' "$WARM_OUTPUT"
+          fi
+          echo "allowing Mobile Safari URL handling to settle for 60 seconds"
+          sleep 60
 
       # run.mjs --beacon backgrounds itself here so this step can extract the BEACON_URL it
       # prints (only after vite is confirmed serving THIS checkout's page.html) and hand it
@@ -323,32 +336,95 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node tools/baseline/run.mjs --beacon --timeout 180000 > beacon-ios.log 2>&1 &
+          RUNNER_PID=""
+          cleanup() {
+            STATUS=$?
+            trap - EXIT
+            if [ -n "$RUNNER_PID" ] && kill -0 "$RUNNER_PID" 2>/dev/null; then
+              # run.mjs owns the collector in-process and spawns Vite directly. Stop its
+              # child before the parent so an early openurl failure cannot orphan Vite.
+              pkill -TERM -P "$RUNNER_PID" 2>/dev/null || true
+              kill -TERM "$RUNNER_PID" 2>/dev/null || true
+              for _ in $(seq 1 20); do
+                kill -0 "$RUNNER_PID" 2>/dev/null || break
+                sleep 0.25
+              done
+              if kill -0 "$RUNNER_PID" 2>/dev/null; then
+                pkill -KILL -P "$RUNNER_PID" 2>/dev/null || true
+                kill -KILL "$RUNNER_PID" 2>/dev/null || true
+              fi
+              wait "$RUNNER_PID" 2>/dev/null || true
+            fi
+            if [ -f beacon-ios.log ]; then
+              echo "beacon runner log:"
+              cat beacon-ios.log
+            fi
+            exit "$STATUS"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          node tools/baseline/run.mjs --beacon --timeout 300000 > beacon-ios.log 2>&1 &
           RUNNER_PID=$!
           URL=""
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 120); do
             if grep -q '^BEACON_URL ' beacon-ios.log 2>/dev/null; then
               URL=$(grep '^BEACON_URL ' beacon-ios.log | head -1 | cut -d' ' -f2-)
               break
             fi
             if ! kill -0 "$RUNNER_PID" 2>/dev/null; then
-              echo "run.mjs --beacon exited before printing a URL"; cat beacon-ios.log; exit 1
+              set +e
+              wait "$RUNNER_PID"
+              EARLY_EXIT=$?
+              set -e
+              RUNNER_PID=""
+              echo "::error title=Beacon startup failed::run.mjs exited $EARLY_EXIT before printing a URL"
+              exit 1
             fi
             sleep 1
           done
           if [ -z "$URL" ]; then
-            echo "beacon collector never printed a URL within 60s"; cat beacon-ios.log
-            kill "$RUNNER_PID" 2>/dev/null || true
+            echo "::error title=Beacon startup timed out::The collector never printed a URL within 120 seconds"
             exit 1
           fi
-          echo "opening $URL in simulator $SIM_UDID"
-          xcrun simctl openurl "$SIM_UDID" "$URL"
+
+          OPENURL_MAX_ATTEMPTS=3
+          OPENED=false
+          FINAL_OPENURL_ERROR=""
+          FINAL_OPENURL_EXIT=0
+          for ATTEMPT in $(seq 1 "$OPENURL_MAX_ATTEMPTS"); do
+            echo "openurl attempt $ATTEMPT/$OPENURL_MAX_ATTEMPTS: $SIM_NAME ($SIM_RUNTIME), UDID $SIM_UDID"
+            if OPENURL_OUTPUT=$(xcrun simctl openurl "$SIM_UDID" "$URL" 2>&1); then
+              printf '%s\n' "$OPENURL_OUTPUT"
+              OPENED=true
+              break
+            else
+              FINAL_OPENURL_EXIT=$?
+              FINAL_OPENURL_ERROR=$OPENURL_OUTPUT
+              printf 'simctl openurl attempt %s failed with exit %s:\n%s\n' \
+                "$ATTEMPT" "$FINAL_OPENURL_EXIT" "$FINAL_OPENURL_ERROR"
+            fi
+            if [ "$ATTEMPT" -lt "$OPENURL_MAX_ATTEMPTS" ]; then
+              BACKOFF_SECONDS=$((ATTEMPT * 10))
+              echo "retrying in $BACKOFF_SECONDS seconds"
+              sleep "$BACKOFF_SECONDS"
+            fi
+          done
+          if [ "$OPENED" != true ]; then
+            ANNOTATION_ERROR=${FINAL_OPENURL_ERROR//'%'/'%25'}
+            ANNOTATION_ERROR=${ANNOTATION_ERROR//$'\r'/'%0D'}
+            ANNOTATION_ERROR=${ANNOTATION_ERROR//$'\n'/'%0A'}
+            echo "::error title=iOS Simulator URL launch failed::$SIM_NAME ($SIM_RUNTIME, $SIM_UDID) exhausted $OPENURL_MAX_ATTEMPTS attempts; final simctl exit $FINAL_OPENURL_EXIT: $ANNOTATION_ERROR"
+            exit 1
+          fi
+
           set +e
           wait "$RUNNER_PID"
-          EXIT=$?
+          BEACON_EXIT=$?
           set -e
-          cat beacon-ios.log
-          exit $EXIT
+          RUNNER_PID=""
+          exit "$BEACON_EXIT"
 
       - name: Shut down the simulator
         if: always()

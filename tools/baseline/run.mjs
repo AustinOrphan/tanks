@@ -40,6 +40,7 @@ import {
   startBeaconCollector,
   stopVite,
   verifyServedMarker,
+  waitForBeaconReport,
   waitForVite,
 } from './harness.mjs';
 
@@ -91,8 +92,7 @@ function findLanIPv4() {
  *
  * localhost is the SUPPORTED path -- the iOS Simulator shares the host's own loopback
  * interface, so a simulator opening this exact URL reaches this exact vite/collector pair
- * with no extra plumbing (verify this assumption; see engines.yml's iOS Simulator leg,
- * where it is stated as unproven until that job's first real run). `--host` additionally
+ * with no extra plumbing (verified by the real Engines Matrix iOS leg). `--host` additionally
  * binds vite (and, since node:http's default listen has no host argument, the collector)
  * to every interface for a phone on the same LAN -- but crypto.subtle, which every
  * measurement here needs, is a secure-context API and plain http://<lan-ip> is NOT secure.
@@ -122,7 +122,11 @@ async function runBeaconMode(opts) {
   const vite = spawnVite(opts.port, { host: opts.host });
   const { server: collector, reportPromise } = await startBeaconCollector(opts.beaconPort);
   try {
-    await waitForVite(BASE, vite);
+    // The iOS runner starts this immediately after booting a Simulator. Measured macOS
+    // runner contention has pushed Vite beyond the generic 30s allowance, while the
+    // Playwright and safaridriver paths do not need that extra budget. Keep the relaxation
+    // scoped to beacon mode rather than changing waitForVite's shared default.
+    await waitForVite(BASE, vite, { timeoutMs: 90_000 });
     await verifyServedMarker(BASE);
 
     console.log(`BEACON_URL ${beaconUrl}`);
@@ -148,10 +152,7 @@ async function runBeaconMode(opts) {
       console.log('tunnel or an https proxy in front of the address above to actually work.');
     }
 
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`no report received within ${opts.timeout}ms`)), opts.timeout);
-    });
-    const report = await Promise.race([reportPromise, timeoutPromise]);
+    const report = await waitForBeaconReport(reportPromise, opts.timeout);
     console.log('');
     console.log(`report received from: ${report.userAgent ?? '(no userAgent in report)'}`);
     const failed = reportResult(

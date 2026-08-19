@@ -34,6 +34,10 @@
 //   gate install-deps on cache-hit               -> installs Linux system dependencies unconditionally
 //   delete the annotated failure                 -> reports an actionable dependency-install failure
 //   timeout 60 -> 30                             -> gives the matrix a final 60-minute safety net
+//   delete simulator identity / Safari warmup    -> identifies and settles the iOS Simulator
+//   replace the openurl retry loop with one call -> retries transient Simulator URL failures
+//   delete the EXIT trap or child-process kill   -> cleans up the beacon process tree
+//   restore either old timeout                   -> gives beacon startup and reporting real headroom
 //
 // The three `push:` spellings are there because review DEFEATED the first version of that
 // assertion, which required `push:` to be followed immediately by a newline. A trailing
@@ -48,6 +52,7 @@ const read = (p: string): string => readFileSync(new URL(`../${p}`, import.meta.
 const PAGES = read('.github/workflows/pages.yml');
 const CI = read('.github/workflows/ci.yml');
 const ENGINES = read('.github/workflows/engines.yml');
+const BASELINE_RUN = read('tools/baseline/run.mjs');
 
 const namedStep = (workflow: string, name: string): string => {
   const marker = `      - name: ${name}\n`;
@@ -166,5 +171,52 @@ describe('the Engines Matrix Ubuntu dependency install', () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     expect(ENGINES.slice(start, end)).toContain('timeout-minutes: 60');
+  });
+});
+
+describe('the Engines Matrix iOS Simulator beacon', () => {
+  it('identifies the selected Simulator and gives Mobile Safari time to settle', () => {
+    const step = namedStep(ENGINES, 'Pick and boot a simulator');
+    expect(step).toContain('node tools/baseline/find-simulator.mjs --details');
+    expect(step).toContain('SIM_NAME');
+    expect(step).toContain('SIM_RUNTIME');
+    expect(step).toContain(
+      'if ! WARM_OUTPUT=$(xcrun simctl launch "$UDID" com.apple.mobilesafari 2>&1); then',
+    );
+    expect(step).toContain('sleep 60');
+  });
+
+  it('retries a transient simctl openurl failure and diagnoses exhausted retries', () => {
+    const step = namedStep(ENGINES, 'Open the beacon URL in the Simulator and wait for its report');
+    expect(step).toContain('OPENURL_MAX_ATTEMPTS=3');
+    expect(step).toContain('for ATTEMPT in $(seq 1 "$OPENURL_MAX_ATTEMPTS")');
+    expect(step).toContain(
+      'if OPENURL_OUTPUT=$(xcrun simctl openurl "$SIM_UDID" "$URL" 2>&1); then',
+    );
+    expect(step).toContain("ANNOTATION_ERROR=${FINAL_OPENURL_ERROR//'%'/'%25'}");
+    expect(step).toContain(
+      'iOS Simulator URL launch failed::$SIM_NAME ($SIM_RUNTIME, $SIM_UDID) exhausted $OPENURL_MAX_ATTEMPTS attempts; final simctl exit $FINAL_OPENURL_EXIT: $ANNOTATION_ERROR',
+    );
+  });
+
+  it('cleans up the beacon runner and its Vite child on every exit path', () => {
+    const step = namedStep(ENGINES, 'Open the beacon URL in the Simulator and wait for its report');
+    expect(step).toContain('trap cleanup EXIT');
+    expect(step).toContain('pkill -TERM -P "$RUNNER_PID"');
+    expect(step).toContain('kill -TERM "$RUNNER_PID"');
+    expect(step).toContain('cat beacon-ios.log');
+  });
+
+  it('gives beacon-mode Vite startup and the Mobile Safari report real headroom', () => {
+    const step = namedStep(ENGINES, 'Open the beacon URL in the Simulator and wait for its report');
+    expect(step).toContain('run.mjs --beacon --timeout 300000');
+    expect(BASELINE_RUN).toContain('waitForVite(BASE, vite, { timeoutMs: 90_000 })');
+  });
+
+  it('still gates on the beacon runner that checks the golden and vendored hashes', () => {
+    const step = namedStep(ENGINES, 'Open the beacon URL in the Simulator and wait for its report');
+    expect(step).toContain(
+      'set +e\n          wait "$RUNNER_PID"\n          BEACON_EXIT=$?\n          set -e\n          RUNNER_PID=""\n          exit "$BEACON_EXIT"',
+    );
   });
 });
