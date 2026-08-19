@@ -47,6 +47,42 @@ function rootPath(relative: string): string {
   return fileURLToPath(new URL(`../${relative}`, import.meta.url));
 }
 
+/**
+ * Claude Code treats an unquoted `@path` anywhere in instruction prose as an import, but
+ * ignores fenced code and inline code spans. Reserve prose `@` for imports so this guard
+ * cannot miss a future inline form such as "See @README". Literal values that contain `@`
+ * belong in a code span.
+ */
+function containsClaudeImport(text: string): boolean {
+  const prose: string[] = [];
+  let fence: { marker: string; length: number } | undefined;
+
+  for (const line of text.split(/\r?\n/)) {
+    const openingOrClosing = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+
+    if (fence) {
+      if (
+        openingOrClosing?.[0] === fence.marker
+        && openingOrClosing.length >= fence.length
+      ) {
+        fence = undefined;
+      }
+      prose.push('');
+      continue;
+    }
+
+    if (openingOrClosing) {
+      fence = { marker: openingOrClosing[0], length: openingOrClosing.length };
+      prose.push('');
+      continue;
+    }
+
+    prose.push(line.replace(/(`+)(.*?)\1/g, ''));
+  }
+
+  return prose.join('\n').includes('@');
+}
+
 describe('the instruction files', () => {
   it('load as substantive text within the global context budget', () => {
     const text = readFileSync(CLAUDE, 'utf8');
@@ -60,7 +96,16 @@ describe('the instruction files', () => {
 
   it('does not pull on-demand references back into startup context', () => {
     const text = readFileSync(CLAUDE, 'utf8');
-    expect(text).not.toMatch(/^\s*@\S+/m);
+    expect(containsClaudeImport(text)).toBe(false);
+  });
+
+  it('detects imports anywhere in prose without mistaking code literals for imports', () => {
+    for (const sample of ['@README', 'See @README', '- workflow @docs/review.md']) {
+      expect(containsClaudeImport(sample), sample).toBe(true);
+    }
+
+    expect(containsClaudeImport('See `@README` for the literal path')).toBe(false);
+    expect(containsClaudeImport('```md\nSee @README\n```')).toBe(false);
   });
 
   it('keeps the recorded after-measurement synchronized with the root file', () => {
@@ -94,7 +139,7 @@ describe('the instruction files', () => {
       expect(frontmatter, `${name} must have YAML frontmatter`).not.toBeNull();
       expect(frontmatter?.[1], `${name} must declare paths`).toMatch(/^paths:\s*$/m);
       expect(frontmatter?.[1], `${name} must declare at least one path`).toMatch(/^\s+-\s+.+$/m);
-      expect(text, `${name} must link rather than import references`).not.toMatch(/^\s*@\S+/m);
+      expect(containsClaudeImport(text), `${name} must link rather than import references`).toBe(false);
     }
   });
 

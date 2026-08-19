@@ -6,8 +6,9 @@ layer. Specifications, plans, and deferred work live under `docs/superpowers/`.
 ## Start here
 
 - Work from the current tree; inspect the branch and existing changes before editing.
-- Claude Code loads matching files from `.claude/rules/` by path. Other agents should open
-  the rule files matching every path they touch.
+- Claude Code loads a scoped rule from `.claude/rules/` when it reads a file matching that
+  rule's `paths` patterns. Other agents should open the rule files matching every path they
+  touch.
 - Use `docs/agent/README.md` to locate detailed rationale and historical landmines. Read only
   the relevant section; these references are intentionally not imported globally.
 - Preserve unrelated user changes and keep a task in its own branch or worktree.

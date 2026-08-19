@@ -1,9 +1,9 @@
 # Agent reference index
 
-`CLAUDE.md` contains only instructions needed in nearly every session. Claude Code loads
-the matching `.claude/rules/*.md` files when work touches their configured paths. The
-documents here preserve detailed reasoning, measurements, rejected approaches, and
-landmines without spending that context at startup.
+`CLAUDE.md` contains only instructions needed in nearly every session. Claude Code loads a
+matching `.claude/rules/*.md` file after it reads a file covered by that rule's `paths`
+patterns. The documents here preserve detailed reasoning, measurements, rejected
+approaches, and landmines without spending that context at startup.
 
 These files are normal Markdown references, not `@path` imports. Search for the relevant
 heading and read only the required section.

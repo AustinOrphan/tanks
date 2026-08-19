@@ -7,13 +7,13 @@ Measured for issue #211 on 2026-08-19.
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 97 | 4968 |
-| Reduction | globally loaded project prose | — | 67425 (93.1%) |
+| After | root `CLAUDE.md` on this branch | 98 | 5020 |
+| Reduction | globally loaded project prose | — | 67373 (93.1%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.
 No rule under `.claude/rules/` is unscoped, and no on-demand reference is imported by
 the root file. Therefore the exact repository-owned prose Claude Code loads
-unconditionally is the root `CLAUDE.md`: 4968 bytes, before built-in, user, skill,
+unconditionally is the root `CLAUDE.md`: 5020 bytes, before built-in, user, skill,
 MCP, or auto-memory context.
 
 This is an exact byte/line measurement, not a tokenizer or billing estimate. Token count
@@ -21,7 +21,7 @@ varies by model and surrounding context.
 
 ## Conditional instruction footprint
 
-These files load only when their `paths` frontmatter matches work:
+These files load only after Claude Code reads a file matching their `paths` frontmatter:
 
 | Rule | Lines | UTF-8 bytes |
 | --- | ---: | ---: |
@@ -45,5 +45,6 @@ npx vitest run tools/instructions.test.ts
 ```
 
 In an interactive Claude Code session, `/context` can confirm the root instruction file
-at startup; touching a matching path should then add only its scoped rule. The automated
-test enforces the global budgets and rejects unscoped rules or `@path` imports.
+at startup; reading a matching file should then add only its scoped rule. The automated
+test enforces the global budgets and rejects unscoped rules or unquoted `@path` imports,
+including imports embedded in prose.
