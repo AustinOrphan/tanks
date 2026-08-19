@@ -9,7 +9,7 @@
 // a residual heading) are deliberately NOT pinned -- they move on every merge, and the
 // file says so instead of quoting a frozen number.
 //
-// CLAUDE.md's rule is "quote a measurement and you owe it a recomputing test". This is
+// The repository rule is "quote a measurement and you owe it a recomputing test". This is
 // that debt for backlog.md.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -18,15 +18,15 @@ import tracks from '../src/audio/data/music-tracks.json';
 import suitesJson from '../src/audio/data/music-suites.json';
 
 const BACKLOG = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url)), 'utf8');
-const CLAUDE_MD = readFileSync(fileURLToPath(new URL('../CLAUDE.md', import.meta.url)), 'utf8');
+const KNOWN_HOLES = readFileSync(fileURLToPath(new URL('../docs/agent/known-holes.md', import.meta.url)), 'utf8');
 /**
  * Both files hard-wrap, so any sentence-level match must ignore where the lines break.
- * The first version collapsed only CLAUDE.md, which left every backlog.md regex brittle:
+ * The first version collapsed only the instruction reference, which left every backlog.md regex brittle:
  * re-flowing a paragraph failed with "expected undefined to be '63'" — a wording problem
  * reported as a wrong number. Collapse both.
  */
 const FLAT_BACKLOG = BACKLOG.replace(/\s+/g, ' ');
-const FLAT_CLAUDE = CLAUDE_MD.replace(/\s+/g, ' ');
+const FLAT_KNOWN_HOLES = KNOWN_HOLES.replace(/\s+/g, ' ');
 
 /** Bullet counts per `###` subsection of the Ledger, in document order. */
 function ledgerSections(): { title: string; bullets: number; prose: number }[] {
@@ -48,20 +48,21 @@ function proseInSections(secs: { prose: number }[]): number {
 
 describe('backlog.md quotes numbers it can still justify', () => {
   it('loads as text at all', () => {
-    // Without this every match below passes vacuously on "". CLAUDE.md is guarded here too
+    // Without this every match below passes vacuously on "". The reference is guarded here too
     // rather than relying on tools/instructions.test.ts to do it: this file asserts against
-    // CLAUDE.md, so it owes its own non-vacuity check.
+    // that reference, so it owes its own non-vacuity check.
     expect(BACKLOG.length).toBeGreaterThan(2000);
-    expect(CLAUDE_MD.length).toBeGreaterThan(2000);
+    expect(KNOWN_HOLES.length).toBeGreaterThan(2000);
     expect(BACKLOG).toContain('## Ledger');
   });
 
   // These two cases deliberately pin NO absolute number. The section counts are the file
   // describing itself, not a measurement of the world, so freezing them here would make
-  // every legitimate backlog edit -- adding a line, or closing one, which CLAUDE.md now
-  // REQUIRES -- also an edit to this file's expected values. That trains the one habit
+  // every legitimate backlog edit -- adding a line, or closing one, which the root
+  // instructions require -- also an edit to this file's expected values. That trains the
+  // one habit
   // that defeats guards: repairing a red build by changing what the test expects. It is
-  // also what made CLAUDE.md's "removing a line fails the build until the header agrees"
+  // also what made the reference's "removing a line fails the build until the header agrees"
   // false when first written; with literals here, fixing the header left it red.
   //
   // So: parse the header's own claim and compare it to the list. Update the prose, go
@@ -113,7 +114,7 @@ describe('backlog.md quotes numbers it can still justify', () => {
   });
 
   // Pull a number out of a sentence NUMERICALLY, never by substring. `toContain('147 ...')`
-  // matched a CLAUDE.md that said 1147 -- an unanchored needle is a superstring away from
+  // matched a reference sentence that said 1147 -- an unanchored needle is a superstring away from
   // any left-extended number, and the same hole accepted "143%" for 43%. Found by mutation.
   function figure(text: string, re: RegExp, what: string): number {
     const m = re.exec(text);
@@ -151,8 +152,8 @@ describe('backlog.md quotes numbers it can still justify', () => {
     expect(closed + unsettleable + open).toBe(enumerated);
   });
 
-  it('quotes the same harvest figures in CLAUDE.md and backlog.md', () => {
-    // CLAUDE.md argues the delete-when-you-close rule from these two numbers; backlog.md is
+  it('quotes the same harvest figures in the agent reference and backlog.md', () => {
+    // The known-holes reference argues the delete-when-you-close rule from these two numbers; backlog.md is
     // where they came from. Compared as NUMBERS, not needles.
     //
     // What this does NOT do, stated because a green tick invites the opposite reading: it
@@ -162,8 +163,8 @@ describe('backlog.md quotes numbers it can still justify', () => {
     // looks like.
     const enumerated = figure(FLAT_BACKLOG, /(\d+) items were enumerated/, 'backlog enumerated');
     const closed = figure(FLAT_BACKLOG, /(\d+) were already closed by later work/, 'backlog closed');
-    const quoted = /enumerated (\d+) items.{0,80}?found \*\*(\d+) already done\*\*/.exec(FLAT_CLAUDE);
-    expect(quoted, "CLAUDE.md's harvest sentence must exist and keep its shape").not.toBeNull();
+    const quoted = /enumerated (\d+) items.{0,80}?found \*\*(\d+) already done\*\*/.exec(FLAT_KNOWN_HOLES);
+    expect(quoted, "the known-holes harvest sentence must exist and keep its shape").not.toBeNull();
     expect(Number(quoted![1])).toBe(enumerated);
     expect(Number(quoted![2])).toBe(closed);
   });
