@@ -169,6 +169,26 @@ export function reportResult(name, r, ar, vr) {
 }
 
 /**
+ * Waits for the first beacon report without leaving the timeout handle alive after an
+ * early success. An uncleared five-minute timer keeps Node (and therefore the workflow's
+ * background runner) alive even after the hashes have already been checked.
+ */
+export async function waitForBeaconReport(reportPromise, timeoutMs) {
+  let timeoutHandle;
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error(`no report received within ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+    return await Promise.race([reportPromise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
+/**
  * The beacon collector (mechanism 1 of the Safari/iOS CI work): a tiny native HTTP
  * server on its OWN port, separate from vite. Vite serves static files and ES modules
  * only -- it has no request handler for an arbitrary POST without writing a vite plugin,

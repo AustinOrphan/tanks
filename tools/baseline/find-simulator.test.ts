@@ -4,7 +4,7 @@
 // (devices keyed by runtime identifier), not a guess.
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free (see harness.mjs)
-import { pickSimulatorUdid } from './find-simulator.mjs';
+import { formatSimulator, pickSimulator, pickSimulatorUdid } from './find-simulator.mjs';
 
 const fixture = (overrides = {}) => ({
   devices: {
@@ -23,6 +23,18 @@ const fixture = (overrides = {}) => ({
 });
 
 describe('pickSimulatorUdid', () => {
+  it('returns the identity needed to diagnose a runner failure, not only the UDID', () => {
+    const picked = pickSimulator(fixture());
+    expect(picked).toEqual({
+      name: 'iPhone 15',
+      runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-17-4',
+      udid: 'udid-17-4-iphone15',
+    });
+    expect(formatSimulator(picked, { details: true })).toBe(
+      'iPhone 15\tudid-17-4-iphone15\tcom.apple.CoreSimulator.SimRuntime.iOS-17-4',
+    );
+  });
+
   it('picks an iPhone on the highest available iOS runtime', () => {
     expect(pickSimulatorUdid(fixture())).toBe('udid-17-4-iphone15');
   });

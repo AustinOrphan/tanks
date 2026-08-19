@@ -1,9 +1,10 @@
 /**
  * Picks one bootable iPhone simulator from `xcrun simctl list devices available -j`
- * output and prints its UDID on stdout -- engines.yml's iOS Simulator leg boots exactly
- * that device rather than parsing `simctl`'s human-readable table (not meant to be
- * machine-read) or depending on `jq` (not guaranteed present on every macOS runner
- * image; Node already is, via actions/setup-node).
+ * output and prints its UDID on stdout, or a tab-separated name/UDID/runtime record with
+ * `--details`. engines.yml uses the detailed form so a failed runner names the exact
+ * device it exercised rather than reporting an opaque UUID. This avoids parsing
+ * `simctl`'s human-readable table (not meant to be machine-read) or depending on `jq`
+ * (not guaranteed present on every macOS runner image; Node already is, via setup-node).
  *
  * pickSimulatorUdid is exported separately from the CLI entry point specifically so it
  * can be unit-tested on ANY platform, including this Linux dev box, by feeding it
@@ -27,7 +28,7 @@ function iosVersion(runtimeId) {
  * carry the device-type id at this list depth) on the HIGHEST available iOS runtime,
  * since that is the version most representative of what a real user's phone runs today.
  */
-export function pickSimulatorUdid(simctlJson) {
+export function pickSimulator(simctlJson) {
   const data = typeof simctlJson === 'string' ? JSON.parse(simctlJson) : simctlJson;
   const devicesByRuntime = data.devices ?? {};
   const candidates = [];
@@ -47,12 +48,31 @@ export function pickSimulatorUdid(simctlJson) {
     const [bMaj, bMin] = iosVersion(b.runtime);
     return bMaj - aMaj || bMin - aMin;
   });
-  return candidates[0].udid;
+  const { name, runtime, udid } = candidates[0];
+  return { name, runtime, udid };
+}
+
+/** Backward-compatible narrow result for callers that need only the boot target. */
+export function pickSimulatorUdid(simctlJson) {
+  return pickSimulator(simctlJson).udid;
+}
+
+/** Formats the CLI contract consumed by engines.yml's tab-delimited `read`. */
+export function formatSimulator(picked, { details = false } = {}) {
+  return details
+    ? `${picked.name}\t${picked.udid}\t${picked.runtime}`
+    : picked.udid;
 }
 
 // CLI entry only runs `simctl` when invoked directly (`node find-simulator.mjs`), so
 // pickSimulatorUdid stays importable and testable without it -- see find-simulator.test.ts.
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const args = process.argv.slice(2);
+  if (args.some((arg) => arg !== '--details')) {
+    console.error(`unknown argument "${args.find((arg) => arg !== '--details')}"`);
+    process.exit(2);
+  }
   const json = execFileSync('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], { encoding: 'utf8' });
-  console.log(pickSimulatorUdid(json));
+  const picked = pickSimulator(json);
+  console.log(formatSimulator(picked, { details: args.includes('--details') }));
 }
