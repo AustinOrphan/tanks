@@ -1159,6 +1159,50 @@ check('the gallery advances an ANIMATED skin along its timeline, and only an ani
   return results.length > 0 ? results.join('; ') : null;
 });
 
+check('--spawn-anim reaches pixels: rise and warp differ at a matched entrance frame, and rise matches itself', () => {
+  // The owner's deferral reason for b897825 (#201) was that nothing end-to-end proved
+  // `--spawn-anim` reaches pixels. This proves it at the deepest layer under a repository
+  // gate: buildGallery({ spawnAnim }) -> setPlayerStyle -> entities.ts's entrance trigger
+  // -> a real WebGL readback.
+  //
+  // `entrant` (subjects.ts) is dead before age 0 and alive from age 0 -- the `tank`
+  // element used elsewhere is always alive and cannot supply the dead->alive edge
+  // entities.ts's trigger actually needs. `draw(0, 0)` is the gallery's FIRST draw, so
+  // its own dt is clamped to 0 (subjects.ts's clock comment); the edge still fires there,
+  // with the entrance starting at elapsed 0. `draw(15, 0)` then carries the timeline
+  // 15 ticks forward: dt = 15 * DT (1/60s) = 0.25s, exactly ENTRANCE_SECONDS (0.5) / 2 --
+  // the same midpoint entities.test.ts already proved the variants diverge at (rise
+  // tankScale 0.5, warp 0.8).
+  const render = (spawnAnim: 'warp' | 'rise'): Uint8Array => {
+    const c = galleryCanvas(128, 96);
+    const g = buildGallery(c, c.width, c.height, {
+      elements: ['entrant'], view: 'low', reach: false, timer: false, fill: false,
+      skin: 'solid', hull: null, accent: null, frames: null, spawnAnim,
+    });
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    g.draw(0, 0);
+    g.draw(15, 0);
+    const px = grab(gl, c.width, c.height);
+    g.dispose();
+    c.remove();
+    return px;
+  };
+  const warp = render('warp');
+  const rise = render('rise');
+  const rise2 = render('rise');
+  // Built-in negative control: two identical `rise` renders must be pixel-identical
+  // before `warp !== rise` is allowed to mean anything about spawnAnim.
+  const control = bytesDiffering(rise, rise2);
+  if (control !== 0) return `control failed: two identical rise renders differ by ${control} of ${rise.length} bytes -- the check cannot discriminate`;
+  // Measured on this fixture: warp vs. rise differ by 9024 of 49152 bytes at this
+  // matched frame -- orders of magnitude, not a margin (bytesDiffering's own doc
+  // comment), so this follows the file's `< 1000` convention (harness.ts's other two
+  // gallery checks) rather than a bare `=== 0`/`!== 0`.
+  const moved = bytesDiffering(warp, rise);
+  if (moved < 1000) return `only ${moved} of ${warp.length} bytes differ between warp and rise -- the spawnAnim option is not reaching the entrance`;
+  return null;
+});
+
 // ---------------------------------------------------------------------------
 // The idle spin, on the REAL requestAnimationFrame.
 //

@@ -72,6 +72,26 @@ export const ELEMENTS: Record<string, ElementDef> = {
     },
   },
   /**
+   * A player tank that is DEAD before age 0 and alive from age 0 on -- the one dead->alive
+   * edge entities.ts's respawn entrance actually triggers on. `tank` above is always
+   * `alive: true` and deliberately stays that way: tools/gl/harness.ts's skin checks
+   * assert a static skin comes back byte-IDENTICAL across 600 ticks of `tank`, which an
+   * entrance ring appearing/fading on the first draw would break. This element exists so
+   * the GL harness's --spawn-anim proof (buildGallery -> setPlayerStyle -> entities) has
+   * a world shape that actually exercises the trigger, without touching `tank`'s contract.
+   */
+  entrant: {
+    width: 1.4, frames: 1, focusY: 0.3,
+    place: (w, x, age) => {
+      w.tanks.push({
+        id: 1 + w.tanks.length, kind: 'player',
+        pos: { x, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: age >= 0,
+        desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+        aiState: 'idle', aiTimer: 0,
+      });
+    },
+  },
+  /**
    * Two player-kind tanks, distinct co-op slots, each with a shell already in flight --
    * the identity ring and the shell tint side by side, in one still. `createWorld`
    * (not a loadable arena -- config/validate.ts still hard-fails a grid without exactly
@@ -292,7 +312,14 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   const views = createEntityViews(scene);
   // Same call the game makes (renderer.ts's setPlayerStyle) and the Customize preview
   // makes -- the gallery has no skin machinery of its own to drift from it.
-  if (opts.skin !== 'solid' || opts.hull || opts.accent) {
+  //
+  // `opts.spawnAnim` belongs in this guard too: without it, `--spawn-anim rise` with no
+  // `--skin`/`--hull`/`--accent` (the CLI's actual default-ish invocation) never calls
+  // setPlayerStyle at all, so the 5th argument never reaches entities.ts and the option
+  // silently does nothing -- the exact failure mode #201's own deferral was about, one
+  // layer up. `opts.spawnAnim` is a string when set, so this stays falsy when callers
+  // (main.ts, and every pre-#201 harness fixture) never pass it.
+  if (opts.skin !== 'solid' || opts.hull || opts.accent || opts.spawnAnim) {
     views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
   }
   const debug = createMineDebug(scene, { reach: opts.reach, timer: opts.timer });

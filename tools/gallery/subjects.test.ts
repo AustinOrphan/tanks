@@ -63,4 +63,23 @@ describe('compose still lays subjects out the way the camera assumes', () => {
     const tankIds = new Set(players.map((t) => t.id));
     for (const b of w.bullets) expect(tankIds.has(b.ownerId)).toBe(true);
   });
+
+  it('the entrant element is dead before age 0 and alive from age 0 on', () => {
+    // entities.ts's respawn entrance only triggers on a dead->alive (or roundStartTick)
+    // edge; `tank` is always alive and cannot supply that edge (see subjects.ts's own
+    // comment on `entrant`), which is why this element exists at all -- for
+    // tools/gl/harness.ts's --spawn-anim pixel check to have a world shape that actually
+    // fires the trigger.
+    // Mutation that breaks this: flipping the `age >= 0` threshold (an off-by-one at the
+    // boundary tested here) or hardcoding `alive: true` regardless of age.
+    const dead = compose(['entrant'], -1).world;
+    expect(dead.tanks).toHaveLength(1);
+    expect(dead.tanks[0].alive).toBe(false);
+    expect(dead.tanks[0].kind).toBe('player');
+
+    const alive = compose(['entrant'], 0).world;
+    expect(alive.tanks).toHaveLength(1);
+    expect(alive.tanks[0].alive).toBe(true);
+    expect(alive.tanks[0].kind).toBe('player');
+  });
 });
