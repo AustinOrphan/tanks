@@ -103,11 +103,10 @@ export function createParticleSystem(scene: THREE.Scene): ParticleSystem {
           burst(ev.pos.x, ev.pos.y, 40, 0xffbb33, 8, 0.7, 1.4);
           break;
         case 'respawn':
-          // Coop only (unreachable at playerCount 1 -- see events.ts). Reuses the
-          // existing burst() primitive, no new asset -- a cyan-leaning colour distinct
-          // from explosion's orange and mine-detonate's amber, reading as arrival
-          // rather than destruction.
-          burst(ev.pos.x, ev.pos.y, 20, 0x66e0ff, 5, 0.5, 0.9);
+          // No burst of its own: the identity spawn ring (entities.ts, #199's
+          // makeSpawnRing) and the death pulse (#200) are the single source of truth
+          // for a respawn's look now. This used to draw an ad-hoc cyan burst here;
+          // removed by #201.
           break;
         // 'mine-dropped', 'mine-armed', 'win', 'lose' produce no particles.
         default:

@@ -60,33 +60,31 @@ describe('particles: where a burst is drawn', () => {
     expect(xs).toEqual(new Set([-5, 11]));
   });
 
-  it('draws a respawn burst at exactly ev.pos, discriminated against another event in the same batch', () => {
-    // Not presence-only (CLAUDE.md): a `fire` in the same spawn() call proves this
-    // isn't reading the wrong event's position off a shared stream.
+  it('draws no burst for a respawn, discriminated against another event in the same batch', () => {
+    // The identity spawn ring (entities.ts, #199) is the single source of truth for a
+    // respawn's look now -- the old cyan burst here was ad-hoc and is removed (#201).
+    // Not presence-only (CLAUDE.md): a `fire` in the same spawn() call proves the
+    // absence isn't an accident of the fixture -- the fire burst still draws while the
+    // respawn at a distinct position draws nothing.
     const { scene, ps } = setup();
     ps.spawn([
       { type: 'fire', ownerId: 9, bulletType: 'normal', pos: { x: -8, y: 4 }, angle: 0 },
       { type: 'respawn', tankId: 1, controlledBy: 0, pos: { x: 6, y: -3 } },
     ]);
     const atRespawnPos = activeMeshes(scene).filter((m) => m.position.x === 6 && m.position.z === -3);
-    expect(atRespawnPos.length).toBeGreaterThan(0);
-    for (const m of atRespawnPos) {
-      expect(m.position.x).toBe(6);
-      expect(m.position.y).toBe(EVENT_Y);
-      expect(m.position.z).toBe(-3);
-    }
+    expect(atRespawnPos.length).toBe(0);
+    expect(activeMeshes(scene).length).toBe(5); // only the fire burst
   });
 });
 
 describe('particles: which events burst, and how much', () => {
-  // Population: all 11 SimEvent kinds. Six burst, five deliberately do not.
+  // Population: all 11 SimEvent kinds. Five burst, six deliberately do not.
   const bursting: Array<[SimEvent, number]> = [
     [{ type: 'fire', ownerId: 1, bulletType: 'normal', pos: { x: 0, y: 0 }, angle: 0 }, 5],
     [{ type: 'ricochet', ownerId: 1, pos: { x: 0, y: 0 }, bounceIndex: 0 }, 6],
     [{ type: 'explosion', pos: { x: 0, y: 0 } }, 24],
     [{ type: 'wall-destroyed', wallId: 1, ownerId: 1, pos: { x: 0, y: 0 } }, 16],
     [{ type: 'mine-detonate', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } }, 40],
-    [{ type: 'respawn', tankId: 1, controlledBy: 0, pos: { x: 0, y: 0 } }, 20],
   ];
 
   for (const [ev, count] of bursting) {
@@ -105,13 +103,14 @@ describe('particles: which events burst, and how much', () => {
     expect(activeMeshes(scene).length).toBe(0);
   });
 
-  it('the four non-visual events spawn nothing', () => {
+  it('the five non-visual events spawn nothing', () => {
     const { scene, ps } = setup();
     ps.spawn([
       { type: 'mine-dropped', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
       { type: 'mine-armed', mineId: 1, ownerId: 1, pos: { x: 0, y: 0 } },
       { type: 'win' },
       { type: 'lose' },
+      { type: 'respawn', tankId: 1, controlledBy: 0, pos: { x: 0, y: 0 } },
     ]);
     expect(activeMeshes(scene).length).toBe(0);
   });
