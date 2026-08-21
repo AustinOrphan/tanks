@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta name="color-scheme" content="dark" />
+      <title>Privacy Policy &mdash; Tanks!</title>
+      <style>
+      body {
+        margin: 0;
+        padding: 8vw 8vw 48px;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #1a1a1a;
+        color: #ddd;
+        line-height: 1.55;
+        max-width: 680px;
+      }
+      h1 { font-size: 1.4rem; margin-bottom: 2px; }
+      h2 { font-size: 1.1rem; margin-top: 1.6rem; margin-bottom: 4px; }
+      p, ul, table { font-size: 0.92rem; }
+      table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+      th, td { text-align: left; padding: 3px 8px; border-bottom: 1px solid #333; }
+      th { font-size: 0.82rem; color: #aaa; }
+      code { background: #2a2a2a; padding: 1px 5px; border-radius: 3px; }
+      a { color: #7ab; }
+      </style>
+    </head>
+    <body>
+      <h1>Privacy Policy</h1>
+      <p>Last updated: August 21, 2026</p>
+
+      <p>This policy covers the <strong>Tanks!</strong> browser game (the &ldquo;game&rdquo; or
+      &ldquo;app&rdquo;), published at <code>austinorphan.com/tanks/</code>.</p>
+
+      <h2>Summary</h2>
+      <p>The game collects <strong>no data</strong>. Nothing leaves your device.</p>
+
+      <h2>Data the game collects</h2>
+      <p><strong>Nothing.</strong> The game does not send any data over the network &mdash;
+      no analytics, no telemetry, no API calls. All game data stays on your device.</p>
+
+      <h2>Data the game stores</h2>
+      <p>The game saves your progress and settings to your device using <code>localStorage</code>.
+      If persistent storage is unavailable, the game uses an in-memory backup that
+      expires when the page is closed. Data is organized into the following keys:</p>
+
+      <table>
+        <thead><tr><th>Key</th><th>Contents</th></tr></thead>
+        <tbody>
+          <tr><td><code>tanks.progress.v1</code></td><td>Highest level cleared in the campaign</td></tr>
+          <tr><td><code>tanks.stats.v1</code></td><td>Lifetime and per-attempt game statistics</td></tr>
+          <tr><td><code>tanks.run.v2</code></td><td>Active campaign run: current level, remaining lives</td></tr>
+          <tr><td><code>tanks.custom.v1</code></td><td>Chosen tank color and paint customization</td></tr>
+          <tr><td><code>tanks.touch.v1</code></td><td>Touch control settings: stick position, button layout</td></tr>
+          <tr><td><code>tanks.achievements.v1</code></td><td>Earned achievements</td></tr>
+        </tbody>
+      </table>
+
+      <p>This data is stored entirely in the browser and <strong>never leaves your device</strong>.
+      It is scoped to the game&rsquo;s origin: only the origin serving the game may
+      access it, and it is unreachable by other sites.</p>
+
+       <h2>Audio &amp; visuals</h2>
+       <p><strong>Sound is synthesized in real time.</strong> The game uses the Web Audio API
+      to generate sound effects and music. No audio files are downloaded from the network.
+      All visuals are generated in real time via the Canvas API; no external assets
+      (images, models, textures) are downloaded or included.</p>
+
+      <h2>Third-party services</h2>
+      <p>The game has <strong>no third-party integrations</strong>. It does not use
+      analytics, advertising, social media plugins, external APIs, or cookies.</p>
+
+      <p>The game does use a few browser APIs for local input only:</p>
+      <ul>
+        <li><strong>Gamepad API</strong> &mdash; reads connected controllers. Data stays on-device.</li>
+        <li><strong>Web Vibrations API</strong> &mdash; provides haptic feedback on supported devices. No data is sent.</li>
+      </ul>
+
+      <h2>Children&rsquo;s privacy</h2>
+      <p>The game is designed for all ages. No personal information is collected from
+      any user, including children. This policy is provided to comply with best
+      practices and platform requirements (notably the Google Play policy requiring
+      a privacy policy even for zero-collection apps).</p>
+
+      <h2>Changes to this policy</h2>
+      <p>If the game&rsquo;s privacy practices change, this policy will be updated.</p>
+
+      <h2>Contact</h2>
+      <p>For questions, open an issue on the
+      <a href="https://github.com/AustinOrphan/tanks/issues">Tanks! GitHub
+      repository</a>.</p>
+    </body>
+</html>
