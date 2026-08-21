@@ -18,11 +18,16 @@ const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: fals
 export interface MomentDef {
   /**
    * Ticks to simulate. Becomes GALLERY_FRAMES. Keep clips short: shipped moments run
-   * 10-200 (6 of 9 -- fire, destroyed, ricochet, wall-break, drive, traverse -- sit in
-   * 20-45; pivot is the short outlier at 10). The two long outliers are justified, not
-   * drift: respawn's 180 is the measured kill tick plus RESPAWN_DELAY_TICKS plus a
-   * window for the revival + entrance animation to play out; mine-cycle's 200 gives the
-   * full MINE_TIMER fuse (drop to detonation) room to run rather than cutting it short.
+   * 10-230 (4 of 9 -- fire, ricochet, drive, traverse -- sit in 20-45; pivot is the
+   * short outlier at 10). The other four are justified, not drift: destroyed's 60 and
+   * wall-break's 66 each add ~40 ticks past their kill/detonation tick (15, 26) so the
+   * explosion/wall-destroyed particle burst (particles.ts's `burst()`, whose randomized
+   * `life` can run past the shorter windows this task's final-review fix wave found
+   * truncating them) has room to decay rather than cutting the clip mid-fade; respawn's
+   * 180 is the measured kill tick plus RESPAWN_DELAY_TICKS plus a window for the
+   * revival + entrance animation to play out; mine-cycle's 230 gives the full MINE_TIMER
+   * fuse (drop to detonation) plus the same ~40-tick decay margin past its tick-190
+   * detonation.
    */
   ticks: number;
   /** Events that MUST fire on exact ticks; moments.test.ts pins every entry. */
@@ -199,7 +204,12 @@ export const MOMENTS: Record<string, MomentDef> = {
 
   /** Versus kill only -- the death pulse moment. Two tanks, a bullet already lethal. */
   destroyed: {
-    ticks: 20,
+    // 60, not the tick-15 kill plus a token margin: `destroyed`'s whole point is the
+    // death pulse / explosion burst, so the clip needs to run long enough for both to
+    // finish, not just long enough to show the kill tick (final-review finding I2 --
+    // the original 20-tick window cut the explosion burst off mid-fade). See
+    // MomentDef.ticks's doc comment for the particle-decay math.
+    ticks: 60,
     // MEASURED (buildKillWorld, fire at input(9) -> events[10]): the shell (speed
     // 6 = 0.1 unit/tick) leaves the muzzle at (4.35, 4.5), 1.15 units from the victim's
     // centre, and closes to the TANK_RADIUS + BULLET_RADIUS = 0.6 hit threshold 5 ticks
@@ -340,7 +350,10 @@ export const MOMENTS: Record<string, MomentDef> = {
       // it at events[26], and the age-0 blast (already ~0.72 radius, comfortably past
       // the wall's 0.3-unit gap from the mine) destroys the wall on that SAME tick --
       // `mine-detonate` and `wall-destroyed` both land at events[26], not two ticks.
-      ticks: 36,
+      // 66, not 36 (final-review finding I2): the wall-destroyed particle burst
+      // (particles.ts's `burst()`) needs room past tick 26 to decay, same reasoning as
+      // `destroyed` above -- see MomentDef.ticks's doc comment.
+      ticks: 66,
       expect: [
         { type: 'mine-detonate', tick: 26 },
         { type: 'wall-destroyed', tick: 26 },
@@ -383,9 +396,15 @@ export const MOMENTS: Record<string, MomentDef> = {
       // east and clears MINE_PROXIMITY_RADIUS (stepMines' arming distance) at
       // events[40]. No shell, no proximity re-trigger (the owner keeps walking away,
       // never re-entering blast range) -- the fuse alone ends it, at events[190]. No
-      // 'explosion'/'tank-destroyed' anywhere in the 200-tick window: by tick 190 the
-      // owner is 9 units clear, well outside MINE_BLAST_RADIUS + TANK_RADIUS (2.5).
-      ticks: 200,
+      // 'explosion'/'tank-destroyed' anywhere in the 230-tick window: by tick 190 the
+      // owner is 9 units clear, well outside MINE_BLAST_RADIUS + TANK_RADIUS (2.5), and
+      // only keeps walking further away through tick 230.
+      // 230, not 200 (final-review finding I2): the mine-detonate particle burst
+      // (particles.ts's `burst()`) needs room past tick 190 to decay, same reasoning as
+      // `destroyed`/`wall-break` above -- see MomentDef.ticks's doc comment. The fuse
+      // itself still ends at 190; the extra 40 ticks are decay margin only, walked
+      // through by the same MINE_CYCLE_WALK input the fuse-running portion already uses.
+      ticks: 230,
       expect: [
         { type: 'mine-dropped', tick: 10 },
         { type: 'mine-armed', tick: 40 },

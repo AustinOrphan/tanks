@@ -74,10 +74,11 @@ describe('beacon animator', () => {
   });
 });
 
-// Anti-rot guard: until the picker UI and the `--spawn-anim` gallery arg (issue #201)
-// land, this is the only thing that exercises rise/beacon by id through the registry
-// rather than through the module-level const above. Fails if a variant is ever aliased
-// to a dead/constant frame.
+// Anti-rot guard: until the picker UI (issue #201) lands, this is the only thing that
+// exercises rise/beacon by id through the registry rather than through the module-level
+// const above -- the `--spawn-anim` gallery arg has landed and reaches them too, but a
+// player-facing way to choose this in real play is still deferred. Fails if a variant is
+// ever aliased to a dead/constant frame.
 it.each(['warp', 'rise', 'beacon'] as const)('%s is a live animator, not a constant', (id) => {
   const a = SPAWN_ANIMATORS[id]('entrance', 0, 0);
   const b = SPAWN_ANIMATORS[id]('entrance', 1, 0);

@@ -2199,7 +2199,7 @@ describe('spawn animation (#199)', () => {
   });
 
   it('plays the STYLED slot\'s spawn variant, not the hardcoded default (#201)', () => {
-    // setPlayerStyle's 5th arg stores a per-slot spawnAnim; the entrance at :1336 must
+    // setPlayerStyle's 5th arg stores a per-slot spawnAnim; the entrance at :1354 must
     // read it back through styleFor(slot) rather than reading DEFAULT_SPAWN_ANIM
     // directly. warp and rise disagree sharply on entrance tankScale, so reading the
     // composed world scale off a real mesh (the same technique the ring-radius test
@@ -2216,8 +2216,8 @@ describe('spawn animation (#199)', () => {
     expect(hull).toBeTruthy();
     const worldScale = hull.getWorldScale(new THREE.Vector3());
     // rise's entrance tankScale is `p` itself: 0.5. warp's (the default, and what this
-    // test would read if :1336 ignored the stored variant) is 0.6 + 0.4*p = 0.8.
-    // Mutation that breaks this: entities.ts:1336 reading DEFAULT_SPAWN_ANIM instead of
+    // test would read if :1354 ignored the stored variant) is 0.6 + 0.4*p = 0.8.
+    // Mutation that breaks this: entities.ts:1354 reading DEFAULT_SPAWN_ANIM instead of
     // styleFor(slot).spawnAnim -- the tank would come back at 0.8, not 0.5.
     expect(worldScale.x).toBeCloseTo(0.5, 5);
     expect(worldScale.y).toBeCloseTo(0.5, 5);

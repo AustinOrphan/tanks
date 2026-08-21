@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the runner can use it
 import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS, MOMENT_IDS } from './args.mjs';
-import { SKINS, SPAWN_ANIMATIONS } from '../../src/game/customization';
+import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/game/customization';
 import { MOMENTS } from './moments';
 
 const ESC = String.fromCharCode(27);
@@ -185,7 +185,12 @@ describe('gallery args', () => {
 
   it('parses --spawn-anim and rejects an unknown id (#201)', () => {
     expect(parseArgs(['--spawn-anim', 'beacon']).spawnAnim).toBe('beacon');
-    expect(parseArgs([]).spawnAnim).toBe('warp'); // DEFAULT_SPAWN_ANIM
+    // Pinned against the shipped constant, not a bare literal -- args.mjs's DEFAULTS
+    // duplicates this value for the same reason SKIN_IDS/SPAWN_ANIM_IDS are duplicated
+    // above (no build step under node); this is what stops the duplicate drifting from
+    // src/game/customization.ts's own default.
+    expect(DEFAULTS.spawnAnim).toBe(DEFAULT_SPAWN_ANIM);
+    expect(parseArgs([]).spawnAnim).toBe(DEFAULT_SPAWN_ANIM);
     // Mirrors the --skin rejection: an unknown id would otherwise reach setPlayerStyle
     // and fail deep inside the page, behind a full browser launch.
     expect(() => parseArgs(['--spawn-anim', 'nope'])).toThrow(/--spawn-anim must be one of/);

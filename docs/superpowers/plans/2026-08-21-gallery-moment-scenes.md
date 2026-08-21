@@ -35,6 +35,10 @@ authority for the moment taxonomy and the end-to-end test requirement.
 - The only `src/` change in this plan is carrying commit b897825 (`src/render/entities.ts`
   + test: the 5th `setPlayerStyle` arg). It cherry-picks cleanly onto `3cd883d` (verified
   2026-08-21: `git cherry-pick --no-commit b897825` stages 5 files, zero conflicts).
+  As built: Task 7's fix wave also added a defaulted `rng` seam to
+  `src/render/particles.ts` (+ test), after the twice-render determinism control failed
+  (`burst()` called unseeded `Math.random()`); game call sites are unchanged, since the
+  parameter defaults to `Math.random`.
 - Determinism: no `Date.now`, no `Math.random`, no wall clock in moment fixtures. Seeds go
   through `createWorld({ seed })` / `loadArena(..., seed)`.
 - Media (gifs) attach to the PR, never the repo tree (spec §8a). mp4/webm stays out of
