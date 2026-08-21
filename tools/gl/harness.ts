@@ -23,6 +23,7 @@ import { trackById } from '../../src/audio/music-data';
 import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../gallery/subjects';
+import { buildMomentScene } from '../gallery/moment-scene';
 import { QUALITY_PRESETS } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -1200,6 +1201,68 @@ check('--spawn-anim reaches pixels: rise and warp differ at a matched entrance f
   // gallery checks) rather than a bare `=== 0`/`!== 0`.
   const moved = bytesDiffering(warp, rise);
   if (moved < 1000) return `only ${moved} of ${warp.length} bytes differ between warp and rise -- the spawnAnim option is not reaching the entrance`;
+  return null;
+});
+
+check('a moment scene renders the fire tick\'s muzzle burst, and a repeated draw is pixel-identical', () => {
+  // The brief's original design compared a draw of the tick BEFORE the pinned fire tick
+  // (moments.ts: MOMENTS.fire.expect) against the tick after, expecting the muzzle burst
+  // to be the visible delta. MEASURED not to discriminate: the newly spawned SHELL is
+  // also part of that delta (worlds[9] has no bullet, worlds[11] does, moving under its
+  // own velocity) and dominates it -- one run each on this harness (200x150 canvas,
+  // 120000 bytes) gave 534 AS SHIPPED and 495 under the very mutation this check exists
+  // to catch (particles.spawn([]) in place of the tick's events) -- not separated at all.
+  //
+  // This form isolates the burst instead: hold `age` FIXED at the fire tick (10) and
+  // advance only `alpha`. entities.ts's syncBullets has no `prev` counterpart for a
+  // bullet that did not exist before tick 10, so it falls back to the bullet's CURRENT
+  // position regardless of alpha (entities.ts:1437) -- and the shooter tank never moves
+  // in this moment (IDLE input throughout). Only `particles.update(dt)`, driven by the
+  // alpha-advanced clock, can move anything between the two draws below.
+  //
+  // alpha=10 is a HAND-DRIVEN PROBE, not a state the shipped runner ever reaches --
+  // run.mjs only ever calls GALLERY_DRAW with alpha in `[0, 1)` (one sub-tick fraction
+  // per --subdiv step). It is used here because it drives the real timelineDt ->
+  // particles.update(dt) path with enough elapsed time for the burst to have visibly
+  // moved, through the same public draw() signature the runner calls.
+  const c = galleryCanvas(320, 240);
+  const g = buildMomentScene(c, c.width, c.height, {
+    moment: 'fire', view: 'low', skin: 'solid', hull: null, accent: null, spawnAnim: 'warp',
+  });
+  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+  g.draw(10, 0); // first draw: dt clamped to 0, so the burst is captured at its spawn point
+  const spawn0 = grab(gl, c.width, c.height);
+  g.draw(10, 10); // same age, alpha 10 ticks later (~0.17s) -- only particles can have moved
+  const moved = grab(gl, c.width, c.height);
+  // Built-in negative control: redrawing the SAME (age, alpha) a second time must be
+  // pixel-identical -- the clock is already at this instant, so dt is 0 and nothing
+  // should move further, before "delta > 0" is allowed to mean anything about the burst.
+  //
+  // This control is not a formality: it also kills moment-scene.ts's `fed` idempotency
+  // guard on its own. MEASURED by dropping `while (fed <= a) { ...; fed++ }` for a bare
+  // `particles.spawn(tl.events[a])` on every call (no idempotency at all): this exact
+  // redraw then re-spawns 5 fresh particles at the muzzle, and the control below reddens
+  // at "differs by 60 of 307200 bytes" instead of the delta assertion ever running.
+  g.draw(10, 10);
+  const repeat = grab(gl, c.width, c.height);
+  g.dispose();
+  c.remove();
+  const control = bytesDiffering(moved, repeat);
+  if (control !== 0) return `control failed: redrawing (10, 10) differs by ${control} of ${moved.length} bytes -- the check cannot discriminate`;
+  const delta = bytesDiffering(spawn0, moved);
+  // MEASURED with this exact (age, alpha) pair, 320x240 canvas, 307200 bytes total: 5
+  // runs as shipped landed at 90, 117, 174, 180 and 213 (particles.ts's burst() seeds
+  // direction/speed/lifetime from Math.random(), so the exact count varies run to run),
+  // and 2 runs under `particles.spawn([])` in place of the tick's events (the mutation
+  // this check exists to catch) both landed at EXACTLY 0. 0 is not a margin call here:
+  // with no particle ever spawned, nothing left in the scene can move while the world
+  // tick is held fixed, so the mutated case is deterministically zero rather than merely
+  // small -- unlike this file's other gallery checks, no `< 1000`-style margin is needed
+  // to tell the two apart. The threshold below is set well under the observed shipped
+  // minimum (90) and well over the mutated constant (0).
+  if (delta < 20) {
+    return `only ${delta} of ${spawn0.length} bytes moved between a freshly spawned fire burst and 0.17s later -- the moment's events are not reaching particles`;
+  }
   return null;
 });
 

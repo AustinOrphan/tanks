@@ -99,6 +99,18 @@ export const SKIN_IDS = ['solid', 'stripes', 'camo', 'clouds', 'checker', 'flow'
  */
 export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
 
+/**
+ * The scripted moment timelines `--scene` accepts beyond `'gallery'` and `'game'`,
+ * duplicated from `tools/gallery/moments.ts`'s `MOMENTS` for the same reason
+ * SKIN_IDS/SPAWN_ANIM_IDS are: this file is loaded by node with no build step and
+ * cannot import the TS moment definitions.
+ *
+ * `args.test.ts` asserts this list equals `Object.keys(MOMENTS)` in both directions,
+ * so adding a moment in moments.ts without teaching the gallery about it here fails a
+ * test rather than a `--scene` typo reaching the browser.
+ */
+export const MOMENT_IDS = ['fire', 'destroyed', 'respawn']; // grows with Task 6
+
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 const BOOLISH = ['anim', 'reach', 'timer', 'fill'];
@@ -148,8 +160,10 @@ export function parseArgs(argv) {
     } else if (key in DEFAULTS) out[key] = value;
     else throw new Error(`unknown flag --${key}`);
   }
-  if (out.scene !== 'gallery' && out.scene !== 'game') {
-    throw new Error(`--scene must be 'gallery' or 'game', got '${out.scene}'`);
+  if (out.scene !== 'gallery' && out.scene !== 'game' && !MOMENT_IDS.includes(out.scene)) {
+    throw new Error(
+      `--scene must be 'gallery' or 'game', or a moment (${MOMENT_IDS.join(', ')}), got '${out.scene}'`,
+    );
   }
   if (!SKIN_IDS.includes(out.skin)) {
     // A typo'd skin would otherwise reach setPlayerStyle, where `PAINTERS[skin]` is
@@ -175,6 +189,13 @@ export function parseArgs(argv) {
     // --scene game runs the real clock and shoots one frame per rAF; there is no age to
     // step. Same reason --anim is refused there, and --burst is the answer.
     throw new Error('--frames does not apply to --scene game (use --burst N)');
+  }
+  if (out.frames !== null && MOMENT_IDS.includes(out.scene)) {
+    // Same shape as the --scene game guard above, different reason: a moment scene's
+    // frame count is fixed by the moment's own scripted `ticks` (moments.ts), not a
+    // caller-chosen animation length -- accepting --frames here would silently be
+    // overridden by moment-scene.ts rather than doing anything.
+    throw new Error(`--frames does not apply to --scene ${out.scene}: a moment's frame count comes from the moment`);
   }
   if (out.crop !== null && !/^\d+x\d+\+\d+\+\d+$/.test(out.crop)) {
     throw new Error(`--crop must look like 640x480+100+50, got '${out.crop}'`);

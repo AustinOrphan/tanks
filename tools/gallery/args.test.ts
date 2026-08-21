@@ -3,8 +3,9 @@
 // in the image as literal text. Those are cheap to pin and expensive to rediscover.
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the runner can use it
-import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS } from './args.mjs';
+import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS, MOMENT_IDS } from './args.mjs';
 import { SKINS, SPAWN_ANIMATIONS } from '../../src/game/customization';
+import { MOMENTS } from './moments';
 
 const ESC = String.fromCharCode(27);
 
@@ -188,6 +189,27 @@ describe('gallery args', () => {
     // Mirrors the --skin rejection: an unknown id would otherwise reach setPlayerStyle
     // and fail deep inside the page, behind a full browser launch.
     expect(() => parseArgs(['--spawn-anim', 'nope'])).toThrow(/--spawn-anim must be one of/);
+  });
+
+  it('accepts exactly the moments the gallery can script, in both directions (#208)', () => {
+    // Mirrors the SKIN_IDS/SKINS pin above: args.mjs cannot import moments.ts (no build
+    // step under node), so the list is duplicated. This is what stops the copy drifting
+    // -- a moment added to MOMENTS without adding it here would otherwise fail only at
+    // the URL, behind a full browser launch.
+    expect([...MOMENT_IDS].sort()).toEqual(Object.keys(MOMENTS).sort());
+    for (const id of MOMENT_IDS) expect(parseArgs(['--scene', id]).scene).toBe(id);
+  });
+
+  it('rejects a --scene that is neither gallery/game nor a known moment', () => {
+    expect(() => parseArgs(['--scene', 'nope'])).toThrow(/must be 'gallery' or 'game'/);
+  });
+
+  it('rejects --frames for a moment scene: its frame count comes from the moment, not the caller', () => {
+    // Same shape as the --scene game rejection below -- a moment's clip length is fixed
+    // by its own scripted `ticks` (moments.ts), so accepting --frames here would either
+    // be silently overridden or lie about what the gif actually contains.
+    expect(() => parseArgs(['--scene', 'fire', '--frames', '10'])).toThrow(/does not apply to --scene fire/);
+    expect(() => parseArgs(['--scene', 'respawn', '--frames', '10'])).toThrow(/moment/);
   });
 
   it('takes a frame count for the gallery scene only, since --scene game has no age', () => {

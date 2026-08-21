@@ -1,0 +1,132 @@
+import * as THREE from 'three';
+import { createEntityViews } from '../../src/render/entities';
+import { createParticleSystem } from '../../src/render/particles';
+import { createDeathPulseSystem } from '../../src/render/death-pulse';
+import type { SkinId, SpawnAnimId } from '../../src/game/customization';
+import { MOMENTS, simulateMoment } from './moments';
+import { VIEWS, timelineDt } from './subjects';
+
+export interface MomentSceneOptions {
+  /** Key into MOMENTS. */
+  moment: string;
+  /** Key into VIEWS. */
+  view: string;
+  skin: SkinId;
+  hull: string | null;
+  accent: string | null;
+  /**
+   * Dressing for the entrance the moment stages -- required here, unlike
+   * `GalleryOptions.spawnAnim` (subjects.ts), which is optional and only reaches
+   * `setPlayerStyle` behind a "something is being styled" guard. A moment scene always
+   * renders the player tank through the paint shop (see `views.setPlayerStyle` below),
+   * so there is no undecorated invocation to protect the way that guard protects
+   * `buildGallery`'s plain `--elements tank` call.
+   */
+  spawnAnim: SpawnAnimId;
+}
+
+/**
+ * Renders a `MOMENTS` timeline (Task 3/4) through the SAME render consumer set and
+ * order the game itself drives (renderer.ts: `entities.sync`, `particles.spawn` +
+ * `update`, `deathPulse.spawn` + `update`), so a moment gif is evidence about the
+ * shipped render path rather than a bespoke replay of it.
+ *
+ * The scene/lighting/ground/camera construction below is copied from `buildGallery`
+ * (subjects.ts) rather than shared: subjects.ts's own header warns that a scene
+ * builder with its own meshes is a mockup, and the same risk applies one level up to
+ * a SECOND scene builder that drifts from the first. Keeping this byte-for-byte in
+ * step with `buildGallery`'s construction is what closes that gap, rather than
+ * factoring out a "shared" builder that both could silently drift from later.
+ */
+export function buildMomentScene(
+  canvas: HTMLCanvasElement,
+  w: number,
+  h: number,
+  opts: MomentSceneOptions,
+): { draw(age: number, alpha: number): void; frames: number; dispose(): void } {
+  const def = MOMENTS[opts.moment];
+  const tl = simulateMoment(def);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x14171a);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+  const key = new THREE.DirectionalLight(0xffffff, 1.05);
+  key.position.set(6, 12, 4);
+  scene.add(key);
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshStandardMaterial({ color: 0x2d5a3d }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  const views = createEntityViews(scene);
+  // Same call the game makes (renderer.ts's setPlayerStyle) -- unconditional here,
+  // unlike buildGallery's guarded call, because opts.spawnAnim is always meaningful
+  // for a moment (see the field doc above).
+  views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
+  const particles = createParticleSystem(scene);
+  const deathPulse = createDeathPulseSystem(scene);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setSize(w, h, false);
+
+  const v = VIEWS[opts.view] ?? VIEWS.game;
+  const FOV = 38;
+  const cam = new THREE.PerspectiveCamera(FOV, w / h, 0.01, 200);
+  if (v.up) cam.up.set(...v.up);
+  // Same fit math as buildGallery: distance that fits `def.span` across the SHORTER of
+  // the two axes, with a margin, so a wide moment is not cropped by a tall viewport or
+  // vice versa.
+  const vFov = (FOV * Math.PI) / 180;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (w / h));
+  const dist = (def.span / 2 / Math.tan(Math.min(vFov, hFov) / 2)) * 1.12;
+  const focus = new THREE.Vector3(...def.focus);
+  const dir = new THREE.Vector3(...v.dir).normalize();
+  cam.position.copy(focus).addScaledVector(dir, dist);
+  cam.lookAt(focus);
+
+  // Where on the timeline the last draw left off, in ticks. Null until the first draw,
+  // which therefore advances nothing -- see subjects.ts's timelineDt.
+  let clock: number | null = null;
+  // Ticks whose events have already been handed to particles/deathPulse. A plain
+  // "spawn events[age]" would re-fire the SAME tick's burst once per --subdiv alpha,
+  // since the runner redraws one integer age at several alphas before advancing it;
+  // `fed` instead walks the tick index forward once, independent of how many times
+  // draw() is called at the same age.
+  //
+  // DISCLOSED LIMITATION: this only walks forward. A rewind (`GALLERY_DRAW(0, 0)`
+  // called again after the timeline has already advanced) does not replay ticks
+  // 0..fed-1's events -- `fed` never resets. run.mjs's runner only walks ages forward,
+  // so this is unreached from `npm run gallery`, but a hand-driven rewind through the
+  // dev server would silently miss those bursts.
+  let fed = 0;
+  function draw(age: number, alpha: number): void {
+    const at = age + alpha;
+    const dt = clock === null ? 0 : timelineDt(clock, at);
+    clock = at;
+    const a = Math.min(Math.max(0, age), tl.worlds.length - 1);
+    while (fed <= a) {
+      particles.spawn(tl.events[fed]);
+      deathPulse.spawn(tl.events[fed], tl.worlds[fed], { enemyEnabled: true });
+      fed++;
+    }
+    // prev/curr one tick apart, so interpolated quantities animate rather than step.
+    views.sync(tl.worlds[Math.max(0, a - 1)], tl.worlds[a], alpha, dt);
+    particles.update(dt);
+    deathPulse.update(dt);
+    renderer.render(scene, cam);
+  }
+
+  function dispose(): void {
+    views.dispose();
+    particles.dispose();
+    deathPulse.dispose();
+    renderer.dispose();
+  }
+
+  // `def.ticks` -- NOT `tl.worlds.length` (one longer). The runner loops `age` in
+  // [0, frames), so `events[def.ticks]` is never fed; every shipped moment's `expect`
+  // ticks sit well inside that range (fire@10/40, destroyed@15/20, respawn@135/180), so
+  // this is a real constraint to keep in mind for a future moment, not a live bug.
+  return { draw, frames: def.ticks, dispose };
+}
