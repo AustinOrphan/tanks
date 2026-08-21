@@ -1216,7 +1216,7 @@ check('a moment scene renders the fire tick\'s muzzle burst, and a repeated draw
   // This form isolates the burst instead: hold `age` FIXED at the fire tick (10) and
   // advance only `alpha`. entities.ts's syncBullets has no `prev` counterpart for a
   // bullet that did not exist before tick 10, so it falls back to the bullet's CURRENT
-  // position regardless of alpha (entities.ts:1437) -- and the shooter tank never moves
+  // position regardless of alpha (entities.ts:1439) -- and the shooter tank never moves
   // in this moment (IDLE input throughout). Only `particles.update(dt)`, driven by the
   // alpha-advanced clock, can move anything between the two draws below.
   //

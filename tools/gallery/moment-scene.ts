@@ -34,9 +34,14 @@ export interface MomentSceneOptions {
  * The scene/lighting/ground/camera construction below is copied from `buildGallery`
  * (subjects.ts) rather than shared: subjects.ts's own header warns that a scene
  * builder with its own meshes is a mockup, and the same risk applies one level up to
- * a SECOND scene builder that drifts from the first. Keeping this byte-for-byte in
- * step with `buildGallery`'s construction is what closes that gap, rather than
- * factoring out a "shared" builder that both could silently drift from later.
+ * a SECOND scene builder that drifts from the first. Keeping this in step with
+ * `buildGallery`'s construction -- same background/ambient/key light colour,
+ * intensity and position; same ground plane size, material and rotation; same
+ * camera FOV, span-fit math and view direction -- is what closes that gap, rather
+ * than factoring out a "shared" builder that both could silently drift from later.
+ * Two pieces are deliberately NOT copied: `buildGallery`'s conditional fill light
+ * (`opts.fill`) and its mine-debug overlay (`createMineDebug`) -- neither applies to
+ * a moment, which has no `--fill`/`--reach`/`--timer` knobs of its own.
  */
 export function buildMomentScene(
   canvas: HTMLCanvasElement,
@@ -98,13 +103,28 @@ export function buildMomentScene(
   // called again after the timeline has already advanced) does not replay ticks
   // 0..fed-1's events -- `fed` never resets. run.mjs's runner only walks ages forward,
   // so this is unreached from `npm run gallery`, but a hand-driven rewind through the
-  // dev server would silently miss those bursts.
+  // dev server would silently miss those bursts. The FORWARD counterpart of the same
+  // limitation is the ordinary case, not an edge one: a hand-typed `?age=N` for N > 0
+  // is the first draw() call ever made, so the `while (fed <= a)` loop below feeds
+  // every skipped tick 0..N in one shot -- all of them at `dt` 0 (clock was still
+  // null), so every past event spawns at its own tick's creation state rather than
+  // animating in. Only tick N's own events, fed on some LATER draw(), ever get a
+  // nonzero dt to animate with.
   let fed = 0;
   function draw(age: number, alpha: number): void {
     const at = age + alpha;
     const dt = clock === null ? 0 : timelineDt(clock, at);
     clock = at;
     const a = Math.min(Math.max(0, age), tl.worlds.length - 1);
+    // Spawn-loop-then-sync-then-update, not renderer.ts's own per-frame order
+    // (entities.sync, THEN particles.spawn/update, deathPulse.spawn/update). The
+    // deviation is required, not incidental: a multi-tick catch-up (see the
+    // DISCLOSED LIMITATION above) must feed EVERY skipped tick's events, not just the
+    // latest, and only this loop knows how many ticks that is -- renderer.ts always
+    // advances exactly one. It stays functionally equivalent to renderer.ts's order
+    // because `spawn()` reads only the events/world arguments passed to it, never
+    // scene state `sync()` would have touched -- reordering the two changes nothing
+    // either call observes.
     while (fed <= a) {
       particles.spawn(tl.events[fed]);
       deathPulse.spawn(tl.events[fed], tl.worlds[fed], { enemyEnabled: true });
