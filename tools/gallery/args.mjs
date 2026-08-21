@@ -109,7 +109,10 @@ export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
  * so adding a moment in moments.ts without teaching the gallery about it here fails a
  * test rather than a `--scene` typo reaching the browser.
  */
-export const MOMENT_IDS = ['fire', 'destroyed', 'respawn', 'ricochet', 'wall-break', 'mine-cycle']; // grows with Task 6
+export const MOMENT_IDS = [
+  'fire', 'destroyed', 'respawn', 'ricochet', 'wall-break', 'mine-cycle',
+  'drive', 'pivot', 'traverse',
+];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 

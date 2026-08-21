@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MOMENTS, simulateMoment } from './moments';
+import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from './moments';
 import type { World } from '../../src/sim/world';
 import { RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ } from '../../src/sim/constants';
 
@@ -128,5 +128,60 @@ describe('mine-cycle moment specifics', () => {
     expect(types).not.toContain('explosion');
     expect(types).not.toContain('tank-destroyed');
     expect(tl.worlds[MOMENTS['mine-cycle'].ticks].tanks[0].alive).toBe(true);
+  });
+});
+
+describe('drive moment specifics', () => {
+  it('position.x increases every tick while position.y, bodyAngle, and turretAngle hold exactly still', () => {
+    // Negative control: a move input with a nonzero y component (e.g. {x: 1, y: 0.1})
+    // moves position.y off 0 -- verified live against this exact assertion and
+    // reverted (see this task's report).
+    const tl = simulateMoment(MOMENTS.drive);
+    for (let t = 1; t <= MOMENTS.drive.ticks; t++) {
+      const prev = tl.worlds[t - 1].tanks[0];
+      const cur = tl.worlds[t].tanks[0];
+      expect(cur.pos.x).toBeGreaterThan(prev.pos.x);
+      expect(cur.pos.y).toBe(0);
+      expect(cur.bodyAngle).toBe(0);
+      expect(cur.turretAngle).toBe(0);
+    }
+  });
+});
+
+describe('pivot moment specifics', () => {
+  it('bodyAngle increases every tick while position and turretAngle stay inside their measured bounds', () => {
+    // Negative controls (both verified live and reverted, see this task's report):
+    // - an already-aligned move (e.g. {x: 1, y: 0}, `drive`'s own input) leaves
+    //   bodyAngle FLAT -- the "every tick differs" half of this assertion reds
+    //   immediately, and the position bound below is exceeded by tick 5.
+    // - a NEARER aim point (e.g. {x: 10, y: 0} instead of {x: 1e6, y: 0}) pushes
+    //   turretAngle's drift past PIVOT_TURRET_EPS by tick 4.
+    const tl = simulateMoment(MOMENTS.pivot);
+    const start = tl.worlds[0].tanks[0];
+    for (let t = 1; t <= MOMENTS.pivot.ticks; t++) {
+      const prev = tl.worlds[t - 1].tanks[0];
+      const cur = tl.worlds[t].tanks[0];
+      expect(cur.bodyAngle).toBeGreaterThan(prev.bodyAngle);
+      const dist = Math.hypot(cur.pos.x - start.pos.x, cur.pos.y - start.pos.y);
+      expect(dist).toBeLessThan(PIVOT_POSITION_BOUND);
+      expect(Math.abs(cur.turretAngle - start.turretAngle)).toBeLessThan(PIVOT_TURRET_EPS);
+    }
+  });
+});
+
+describe('traverse moment specifics', () => {
+  it('turretAngle increases every tick while position and bodyAngle hold exactly still', () => {
+    // Negative control: a nonzero move input (e.g. {x: 1, y: 0}) moves position off
+    // (0, 0) -- verified live against this exact assertion and reverted (see this
+    // task's report).
+    const tl = simulateMoment(MOMENTS.traverse);
+    for (let t = 1; t <= MOMENTS.traverse.ticks; t++) {
+      const prev = tl.worlds[t - 1].tanks[0];
+      const cur = tl.worlds[t].tanks[0];
+      expect(cur.turretAngle).toBeGreaterThan(prev.turretAngle);
+      expect(cur.pos.x).toBe(0);
+      expect(cur.pos.y).toBe(0);
+      expect(cur.bodyAngle).toBe(0);
+    }
   });
 });

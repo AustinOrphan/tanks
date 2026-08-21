@@ -395,4 +395,97 @@ export const MOMENTS: Record<string, MomentDef> = {
       },
     };
   })(),
+
+  /**
+   * Straight-line motion, no event to pin: the issue's `drive` state, isolated so a
+   * moment can prove position moves while the other two axes hold still.
+   *
+   * bodyAngle is already aligned with the move direction at spawn (both 0, due east),
+   * so `moveTank` (collision.ts) never needs to turn the hull -- `align` (its own
+   * dot-product term) is 1 on every tick from the first, not ramping up from a turn.
+   * That is what makes this moment's "holds still" EXACT rather than the bounded
+   * approximation `pivot` below needs: with no turn in progress there is nothing for
+   * "a turn costs ground" (collision.ts's own phrase) to cost.
+   */
+  drive: {
+    ticks: 30,
+    expect: [],
+    focus: [0.75, 0.3, 0], span: 4,
+    build: buildSoloWorld,
+    // aim far down the SAME line the tank drives, so aimDir (a world-space point minus
+    // the tank's own, ever-advancing position) keeps angle 0 the whole clip -- the
+    // aim-is-a-world-point landmine every other moment here documents, satisfied by
+    // construction rather than by re-aiming every tick.
+    input: () => ({ move: { x: 1, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false }),
+  },
+
+  /**
+   * Turning in place, no event to pin: the issue's `pivot` state.
+   *
+   * UNLIKE `drive`, position here cannot be held EXACTLY still: `moveTank`
+   * (collision.ts) updates bodyAngle first and only then computes `align` from the
+   * JUST-turned heading, so any tick that turns the hull at all also drives it forward
+   * by `align` -- the file's own comment calls this "a turn costs ground rather than
+   * being free". MEASURED (throwaway vite-node probe) with a target held 90 degrees
+   * off the tank's OWN starting heading: over 10 ticks bodyAngle sweeps a full 0.8333
+   * rad (strictly increasing every tick, no plateau -- the tank does not reach the
+   * 90-degree target until tick ~19) while position drifts to a maximum straight-line
+   * distance of 0.2104 from the start -- bounded well under PIVOT_POSITION_BOUND below,
+   * and a fraction of what 10 ticks of an aligned (`drive`-shaped) move would cover
+   * (0.5). That contrast, not literal zero, is what "holds still" means here.
+   */
+  pivot: {
+    ticks: 10,
+    expect: [],
+    focus: [0, 0.3, 0], span: 3,
+    build: buildSoloWorld,
+    // move: north -- 90 degrees off the tank's initial (east) bodyAngle, so it turns
+    // rather than reverses (moveTank's reverse gear only engages past 90 degrees).
+    // aim: a point far enough away (1e6) that the position drift above moves the
+    // turret's target angle by an amount PIVOT_TURRET_EPS can absorb -- unrelated to
+    // `move` on purpose, so a turret-vs-hull coupling bug would show up here.
+    input: () => ({ move: { x: 0, y: 1 }, aim: { x: 1e6, y: 0 }, fire: false, mine: false }),
+  },
+
+  /**
+   * Turret traverse, no event to pin: the issue's `traverse` state.
+   *
+   * move stays zero for the whole clip, so `moveTank` (collision.ts) never even enters
+   * its `mlen > 0` branch -- position and bodyAngle are untouched, not merely close:
+   * this moment's "holds still" IS exact, the same as `drive`'s, for the opposite
+   * reason (no motion attempted at all, rather than motion already fully aligned).
+   * turretAngle is independent of both (`driveTank`, world.ts, slews it from `aimDir`
+   * with no reference to bodyAngle or position), so aiming a fixed point ~170 degrees
+   * around from the turret's own start sweeps it steadily without the two ever moving.
+   * MEASURED (throwaway vite-node probe): turretAngle increases every tick through
+   * tick 23 (arrival), so this moment's whole 20-tick clip stays inside that window --
+   * no plateau to design around, unlike the shorter margin `pivot` needed.
+   */
+  traverse: {
+    ticks: 20,
+    expect: [],
+    focus: [0, 0.3, 0], span: 3,
+    build: buildSoloWorld,
+    input: () => {
+      const theta = (170 * Math.PI) / 180;
+      return { move: { x: 0, y: 0 }, aim: { x: Math.cos(theta) * 1000, y: Math.sin(theta) * 1000 }, fire: false, mine: false };
+    },
+  },
 };
+
+/**
+ * `pivot`'s own tuned tolerances, not a generic `MomentDef` field -- `MOMENTS.pivot`
+ * cannot hold still exactly (see its doc comment), so its motion-specific test in
+ * moments.test.ts needs a bound to compare against. Exported here, next to the
+ * geometry and measurements that set them, rather than re-derived or duplicated in
+ * the test file.
+ */
+// Comfortably above the measured 0.2104 (margin for the exact float path taken),
+// comfortably below what 10 ticks of a `drive`-shaped, fully-aligned move covers
+// (0.5) -- verified live in this task's report (pivot-negctrl-aligned-move probe).
+export const PIVOT_POSITION_BOUND = 0.25;
+// The turret slews toward a FIXED aim point every tick; with position bounded under
+// 0.21 and the aim point 1e6 units away, the resulting angleDelta is ~1e-7 rad at
+// worst -- effectively zero for anything this bound needs to catch. A NEARER aim
+// point (verified live: 10 units away) pushes it past 1e-4 by tick 4.
+export const PIVOT_TURRET_EPS = 1e-4;
