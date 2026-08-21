@@ -1250,19 +1250,77 @@ check('a moment scene renders the fire tick\'s muzzle burst, and a repeated draw
   const control = bytesDiffering(moved, repeat);
   if (control !== 0) return `control failed: redrawing (10, 10) differs by ${control} of ${moved.length} bytes -- the check cannot discriminate`;
   const delta = bytesDiffering(spawn0, moved);
-  // MEASURED with this exact (age, alpha) pair, 320x240 canvas, 307200 bytes total: 5
-  // runs as shipped landed at 90, 117, 174, 180 and 213 (particles.ts's burst() seeds
-  // direction/speed/lifetime from Math.random(), so the exact count varies run to run),
-  // and 2 runs under `particles.spawn([])` in place of the tick's events (the mutation
-  // this check exists to catch) both landed at EXACTLY 0. 0 is not a margin call here:
-  // with no particle ever spawned, nothing left in the scene can move while the world
-  // tick is held fixed, so the mutated case is deterministically zero rather than merely
-  // small -- unlike this file's other gallery checks, no `< 1000`-style margin is needed
-  // to tell the two apart. The threshold below is set well under the observed shipped
-  // minimum (90) and well over the mutated constant (0).
+  // MEASURED with this exact (age, alpha) pair, 320x240 canvas, 307200 bytes total: 2
+  // runs as shipped landed at EXACTLY 102 both times, and 2 runs under
+  // `particles.spawn([])` in place of the tick's events (the mutation this check exists
+  // to catch) both landed at EXACTLY 0. Both are fixed constants, not ranges: task 7's
+  // fix seeded moment-scene.ts's particle rng (a local mulberry32, fixed literal seed),
+  // so `buildMomentScene` renders are now deterministic by construction -- before that
+  // fix, this same measurement (`particles.ts`'s burst() drawing directly from
+  // `Math.random()`) varied run to run (5 runs landed at 90, 117, 174, 180, 213). The
+  // threshold below is set well under the shipped 102 and well over the mutated 0.
   if (delta < 20) {
     return `only ${delta} of ${spawn0.length} bytes moved between a freshly spawned fire burst and 0.17s later -- the moment's events are not reaching particles`;
   }
+  return null;
+});
+
+check('a moment scene applies --spawn-anim to the tank that actually respawns, not slot 0', () => {
+  // Task 7's routing bug: moment-scene.ts wrote the CLI's chosen spawnAnim into slot 0
+  // only, but MOMENTS.respawn's revived tank is buildKillWorld's VICTIM,
+  // `controlledBy: 1` -- slot 1. entities.ts's entrance trigger reads
+  // `styleFor(t.controlledBy ?? 0).spawnAnim`, so a slot-0-only call never reached the
+  // tank whose entrance is actually on screen; task 7's report measured all three
+  // `--spawn-anim` variants pixel-identical outside the (unrelated) particle-noise
+  // window. Fixed by styling every co-op slot (0-3) with the chosen variant. This is
+  // the same construction as the `--spawn-anim reaches pixels` check above (matched
+  // entrance frame at elapsed = ENTRANCE_SECONDS / 2, where rise/warp tankScale is
+  // measured to diverge: 0.5 vs 0.8), through buildMomentScene instead of buildGallery
+  // -- the builder this bug actually lived in.
+  const render = (spawnAnim: 'warp' | 'rise'): Uint8Array => {
+    const c = galleryCanvas(200, 150);
+    const g = buildMomentScene(c, c.width, c.height, {
+      moment: 'respawn', view: 'low', skin: 'solid', hull: null, accent: null, spawnAnim,
+    });
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    // First draw ever for this instance: age held at 135, MOMENTS.respawn's pinned
+    // revival tick, so `clock === null` clamps dt to 0 and entities.ts's
+    // `enteredRespawn` edge (prev dead, curr alive) fires with the entrance starting
+    // at elapsed 0 -- same shape as the fire-tick check above, moved from the muzzle
+    // tick to the revival tick.
+    g.draw(135, 0);
+    // Same age (world pose held fixed, same reason the fire-tick check holds age
+    // fixed): alpha advances the clock 15 ticks, dt = 15 * DT = 0.25s =
+    // ENTRANCE_SECONDS / 2.
+    g.draw(135, 15);
+    const px = grab(gl, c.width, c.height);
+    g.dispose();
+    c.remove();
+    return px;
+  };
+  const warp = render('warp');
+  const rise = render('rise');
+  const rise2 = render('rise');
+  // Built-in negative control: two identical `rise` renders must be pixel-identical
+  // before `warp !== rise` is allowed to mean anything -- also exercises that
+  // moment-scene.ts's particle rng seed makes independent renders reproducible, not
+  // just this check's own entrance-frame comparison.
+  const control = bytesDiffering(rise, rise2);
+  if (control !== 0) return `control failed: two identical rise renders of the respawn moment differ by ${control} of ${rise.length} bytes -- the check cannot discriminate`;
+  const moved = bytesDiffering(warp, rise);
+  // MEASURED on this exact fixture (200x150 canvas, 120000 bytes): 241 as shipped
+  // (fixed), and EXACTLY 0 under the mutation this check exists to catch (reverting
+  // moment-scene.ts's slots 1-3 loop back to the slot-0-only call -- verified live and
+  // reverted, see this task's report). 0 is not a margin call here: `respawn`'s revived
+  // tank is slot 1, so with no slot-1 style ever written, entities.ts's `styleFor(1)`
+  // falls back to the SAME unstyled-slot default (DEFAULT_SPAWN_ANIM) regardless of
+  // which variant the CLI asked for, making warp and rise render byte-identical at this
+  // frame rather than merely close. `respawn`'s span (13, far wider than the
+  // `--spawn-anim reaches pixels` check's `entrant` element) puts the revived tank far
+  // from camera, so the shipped delta is two orders of magnitude smaller than that
+  // check's 9024/49152 -- the threshold below is set well under the measured 241 and
+  // well over the mutated 0.
+  if (moved < 40) return `only ${moved} of ${warp.length} bytes differ between warp and rise at the revived tank's entrance -- --spawn-anim is not reaching the tank that actually respawns`;
   return null;
 });
 

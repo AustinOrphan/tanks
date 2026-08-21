@@ -6,6 +6,30 @@ import type { SkinId, SpawnAnimId } from '../../src/game/customization';
 import { MOMENTS, simulateMoment } from './moments';
 import { VIEWS, timelineDt } from './subjects';
 
+/**
+ * A tiny, fast, deterministic PRNG (mulberry32), duplicated here rather than imported
+ * from `src/sim/ai/player-profile.ts`: that module's copy is exported for the sim/AI
+ * layer (pacifist.test.ts, the autoplay dev flag), and this is a presentation-tooling
+ * concern with no reason to import across that boundary for six lines. Same algorithm,
+ * same seed -> same sequence guarantee.
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed | 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Fixed literal seed: a moment gif is evidence about the shipped render path, and that
+// evidence has to be reproducible run to run. `particles.ts`'s burst() draws from
+// `Math.random()` by default (see its own doc comment) precisely so the GAME keeps its
+// unrepeatable look; this is the one caller that instead needs two independent renders
+// of the same moment to come back byte-identical, so it supplies its own seeded stream.
+const PARTICLE_SEED = 0xc0ffee;
+
 export interface MomentSceneOptions {
   /** Key into MOMENTS. */
   moment: string;
@@ -68,9 +92,30 @@ export function buildMomentScene(
   const views = createEntityViews(scene);
   // Same call the game makes (renderer.ts's setPlayerStyle) -- unconditional here,
   // unlike buildGallery's guarded call, because opts.spawnAnim is always meaningful
-  // for a moment (see the field doc above).
+  // for a moment (see the field doc above). Slot 0 carries the CLI's hull/skin/accent
+  // triple, same as before.
   views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
-  const particles = createParticleSystem(scene);
+  // Slots 1-3 too: entities.ts's entrance trigger reads `styleFor(t.controlledBy ??
+  // 0).spawnAnim`, keyed by whichever slot's tank actually respawns -- and in
+  // `buildKillWorld` (moments.ts), that is the VICTIM, `controlledBy: 1`, not the
+  // slot-0 shooter this call alone used to reach. Styling every slot with the chosen
+  // variant means the entrance animation follows whichever tank the moment's own script
+  // revives, instead of silently landing on slot 0 by construction.
+  //
+  // VISIBLE SIDE EFFECT (measured, task 7's follow-up): passing `hex: null` here writes
+  // an ENTRY into entities.ts's playerStyles map for slots 1-3, so `styleFor(slot)` no
+  // longer falls through to `DEFAULT_OTHER_SLOT_STYLE` (hex `#c23b8f`, a magenta
+  // placeholder distinct from every roster tank). It resolves `null ?? configFor
+  // ('player').color` instead -- the same roster blue slot 0 uses. A moment with a
+  // second player tank (`destroyed`, `respawn`) now renders BOTH tanks the same hull
+  // colour for the whole clip, distinguished only by the identity ring (cyan/orange),
+  // not just at the entrance. This is a consequence of the exact call signature this
+  // fix was ruled to use, not a bug in it -- flagged here for whoever next edits this
+  // block, and in the task report.
+  for (let slot = 1; slot <= 3; slot++) {
+    views.setPlayerStyle(null, 'solid', null, slot, opts.spawnAnim);
+  }
+  const particles = createParticleSystem(scene, mulberry32(PARTICLE_SEED));
   const deathPulse = createDeathPulseSystem(scene);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
