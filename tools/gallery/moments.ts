@@ -16,7 +16,14 @@ const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: fals
  * ships (see moments.test.ts).
  */
 export interface MomentDef {
-  /** Ticks to simulate. Becomes GALLERY_FRAMES. Keep clips short: 30-120. */
+  /**
+   * Ticks to simulate. Becomes GALLERY_FRAMES. Keep clips short: shipped moments run
+   * 10-200 (6 of 9 -- fire, destroyed, ricochet, wall-break, drive, traverse -- sit in
+   * 20-45; pivot is the short outlier at 10). The two long outliers are justified, not
+   * drift: respawn's 180 is the measured kill tick plus RESPAWN_DELAY_TICKS plus a
+   * window for the revival + entrance animation to play out; mine-cycle's 200 gives the
+   * full MINE_TIMER fuse (drop to detonation) room to run rather than cutting it short.
+   */
   ticks: number;
   /** Events that MUST fire on exact ticks; moments.test.ts pins every entry. */
   expect: { type: SimEvent['type']; tick: number }[];
@@ -467,6 +474,13 @@ export const MOMENTS: Record<string, MomentDef> = {
     focus: [0, 0.3, 0], span: 3,
     build: buildSoloWorld,
     input: () => {
+      // 170 degrees, not 180 or beyond: angleDelta (types.ts) wraps its result to
+      // (-PI, PI], so a target more than a half-turn from the turret's current angle
+      // would flip sign mid-sweep instead of continuing to grow. Staying 10 degrees
+      // under that boundary keeps every tick's raw (target - current) delta inside
+      // (0, PI) for the whole 0 -> ~2.967 rad sweep, so it never trips the wrap
+      // correction -- which is what keeps this moment's monotonic-increase assertion
+      // (moments.test.ts) positive from start to arrival, not just at the endpoints.
       const theta = (170 * Math.PI) / 180;
       return { move: { x: 0, y: 0 }, aim: { x: Math.cos(theta) * 1000, y: Math.sin(theta) * 1000 }, fire: false, mine: false };
     },
