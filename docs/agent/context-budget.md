@@ -7,13 +7,13 @@ Measured for issue #211 on 2026-08-19.
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 98 | 5020 |
-| Reduction | globally loaded project prose | — | 67373 (93.1%) |
+| After | root `CLAUDE.md` on this branch | 107 | 5843 |
+| Reduction | globally loaded project prose | — | 66550 (91.9%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.
 No rule under `.claude/rules/` is unscoped, and no on-demand reference is imported by
 the root file. Therefore the exact repository-owned prose Claude Code loads
-unconditionally is the root `CLAUDE.md`: 5020 bytes, before built-in, user, skill,
+unconditionally is the root `CLAUDE.md`: 5843 bytes, before built-in, user, skill,
 MCP, or auto-memory context.
 
 This is an exact byte/line measurement, not a tokenizer or billing estimate. Token count

@@ -61,13 +61,22 @@ Command behavior and CI/deployment details are in
 
 ## Verification and review
 
-- Start with the smallest relevant test, then run the applicable repository gate.
-- Run `npm test` and `npm run build` before proposing executable or build/config changes.
-- Rendering changes also require `npm run test:gl` and visual evidence.
-- Simulation behavior changes require the golden trace; determinism tests alone prove only
-  self-consistency.
-- Before merge, follow `docs/agent/testing-and-review.md#merge-bar` and independently
-  reproduce material claims rather than relaying tool output unexamined.
+- Classify the complete diff as low, standard, or high risk before choosing checks. Mixed
+  changes use the highest tier present; uncertainty escalates rather than downgrades.
+- Low risk covers prose-only docs, comments, and non-runtime metadata: inspect the diff, run
+  directly relevant documentation/format/generator checks, and perform a concise self-review.
+- Standard risk covers ordinary application code, agent instructions, and focused tests or
+  tooling: typecheck, run relevant tests, build if production output can change, and review
+  the affected subsystem.
+- High risk covers simulation, persistence/campaign compatibility, renderer/WebGL
+  infrastructure, CI/release behavior, and cross-cutting contracts: run the full applicable
+  gate plus subsystem checks and adversarially review invariants and failure modes.
+- User-visible visual changes require visual evidence. Build/deploy, entry-point, PWA, and
+  asset-path changes require a built-output portability check.
+- Delegate only a concrete, bounded, independent investigation whose isolation or parallelism
+  is worth its startup and handoff cost. Mutating workers use separate worktrees.
+- Before merge, apply the full matrix in `docs/agent/testing-and-review.md#merge-bar` and
+  independently reproduce material claims rather than relaying tool output unexamined.
 
 ## Git and pull requests
 

@@ -19,6 +19,7 @@ const AGENTS = fileURLToPath(new URL('../AGENTS.md', import.meta.url));
 const BACKLOG = fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url));
 const RULES_DIR = fileURLToPath(new URL('../.claude/rules/', import.meta.url));
 const CONTEXT_BUDGET = fileURLToPath(new URL('../docs/agent/context-budget.md', import.meta.url));
+const TESTING_AND_REVIEW = fileURLToPath(new URL('../docs/agent/testing-and-review.md', import.meta.url));
 
 const MAX_ROOT_LINES = 200;
 const MAX_ROOT_BYTES = 12_000;
@@ -42,6 +43,8 @@ const REQUIRED_REFERENCES = [
   'docs/agent/known-holes.md',
   'docs/agent/testing-and-review.md',
 ];
+
+const REQUIRED_RISK_TIERS = ['Low risk', 'Standard risk', 'High risk'];
 
 function rootPath(relative: string): string {
   return fileURLToPath(new URL(`../${relative}`, import.meta.url));
@@ -81,6 +84,17 @@ function containsClaudeImport(text: string): boolean {
   }
 
   return prose.join('\n').includes('@');
+}
+
+function riskTierHeadings(text: string): string[] {
+  return [...text.matchAll(/^### (Low risk|Standard risk|High risk)$/gm)]
+    .map((match) => match[1]);
+}
+
+function markdownSection(text: string, heading: string): string {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^### ${escaped}\\r?\\n([\\s\\S]*?)(?=^### |^## |$(?![\\s\\S]))`, 'm')
+    .exec(text)?.[1] ?? '';
 }
 
 describe('the instruction files', () => {
@@ -154,6 +168,66 @@ describe('the instruction files', () => {
     for (const relative of REQUIRED_REFERENCES) {
       expect(existsSync(rootPath(relative)), relative).toBe(true);
     }
+  });
+
+  it('routes low, standard, and high risk verification without universal fanout', () => {
+    const root = readFileSync(CLAUDE, 'utf8');
+    const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
+
+    expect(root).toContain('low, standard, or high risk');
+    expect(root).toMatch(/Mixed\s+changes use the highest tier present/);
+    expect(root).toContain('docs/agent/testing-and-review.md#merge-bar');
+    expect(riskTierHeadings(policy)).toEqual(REQUIRED_RISK_TIERS);
+    expect(`${root}\n${policy}`).not.toMatch(
+      /Nothing reaches `main` without comprehensive adversarial review|reviewers fan out per subsystem/,
+    );
+  });
+
+  it('keeps each risk tier mapped to its categories and minimum evidence', () => {
+    const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
+    const low = markdownSection(policy, 'Low risk');
+    const standard = markdownSection(policy, 'Standard risk');
+    const high = markdownSection(policy, 'High risk');
+
+    expect(low).toMatch(/prose-only documentation/);
+    expect(low).toMatch(/inspect the complete diff/);
+    expect(low).toMatch(/directly relevant formatting, documentation, link, or generator-drift checks/);
+    expect(low).toMatch(/concise self-review/);
+    expect(low).toMatch(/Do not create reviewer or implementation\s+fanout/);
+
+    expect(standard).toMatch(/game, input, audio, HUD, or UI behavior/);
+    expect(standard).toMatch(/repository instructions and review policy/);
+    expect(standard).toMatch(/typecheck and the directly relevant unit or integration tests/);
+    expect(standard).toMatch(/build when production output can change/);
+    expect(standard).toMatch(/focused self-review/);
+
+    expect(high).toMatch(/deterministic simulation/);
+    expect(high).toMatch(/save\/persistence compatibility/);
+    expect(high).toMatch(/renderer\/WebGL infrastructure/);
+    expect(high).toMatch(/CI, build, dependency\/engine, release, deployment/);
+    expect(high).toMatch(/cross-cutting change/);
+    expect(high).toMatch(/full applicable automated gate and production build/);
+    expect(high).toMatch(/adversarially review invariants/);
+  });
+
+  it('keeps escalation, conditional evidence, and bounded delegation explicit', () => {
+    const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
+
+    expect(policy).toMatch(/mixed change inherits the highest tier present/);
+    expect(policy).toMatch(/Visual evidence is mandatory for any user-visible/);
+    expect(policy).toMatch(/run the portability check when changing Vite base\/output behavior/);
+    expect(policy).toMatch(/Delegate when the question is concrete, bounded, independent/);
+    expect(policy).toMatch(/worker that mutates files must use its own worktree/);
+    expect(policy).toMatch(/lead agent verifies returned claims/);
+  });
+
+  it('makes missing or duplicate risk tiers fail the heading guard', () => {
+    const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
+    const missingHigh = policy.replace('### High risk', '#### High risk');
+    const duplicateLow = `${policy}\n### Low risk\nKnown-bad duplicate.`;
+
+    expect(riskTierHeadings(missingHigh)).not.toEqual(REQUIRED_RISK_TIERS);
+    expect(riskTierHeadings(duplicateLow)).not.toEqual(REQUIRED_RISK_TIERS);
   });
 
   it('names the backlog as the home for deferred investigations, and it exists', () => {

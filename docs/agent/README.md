@@ -12,7 +12,7 @@ heading and read only the required section.
 | --- | --- |
 | `commands-and-operations.md` | specialized commands, CI, Pages, rulesets, portability |
 | `architecture.md` | simulation, rendering, data catalogs, AI, arenas, geometry, traces |
-| `testing-and-review.md` | test design, mutation evidence, measurement, merge review |
+| `testing-and-review.md` | risk tiers, test design, mutation evidence, measurement, merge review |
 | `development.md` | development flags, feel constants, branch and squash conventions |
 | `known-holes.md` | untested seams, deferred-work policy, rejected collision fixes |
 | `context-budget.md` | exact global instruction-size measurement and enforced budget |
