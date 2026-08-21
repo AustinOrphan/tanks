@@ -1,7 +1,7 @@
 import { createWorld, step } from '../../src/sim/world';
 import type { World } from '../../src/sim/world';
 import type { SimEvent } from '../../src/sim/events';
-import type { ArenaGeometry, InputState } from '../../src/sim/types';
+import type { ArenaGeometry, InputState, Wall } from '../../src/sim/types';
 import { RESPAWN_DELAY_TICKS } from '../../src/sim/constants';
 
 const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
@@ -139,6 +139,32 @@ function buildKillWorld(): World {
   return w;
 }
 
+/**
+ * One player tank alone on an open, wall-less floor -- the shared skeleton for every
+ * Task 6 moment below that does not need a second tank (unlike `buildKillWorld`'s
+ * versus pair). `walls` defaults empty because most of these moments need none;
+ * `ricochet`/`wall-break` are the only two that pass one.
+ */
+function buildSoloWorld(walls: Wall[] = []): World {
+  const w = createWorld({
+    walls,
+    spawns: [{ pos: { x: 0, y: 0 }, angle: 0 }],
+    lives: 3,
+    tanks: [{
+      id: 1, kind: 'player',
+      pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+      desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+      aiState: 'idle', aiTimer: 0,
+    }],
+    seed: 7,
+  });
+  // Same landmine `fire` and `buildKillWorld` both document: a fresh world's
+  // roundStartTick locks fire/mine actions through the round-start countdown/grace
+  // phase, so tick 0 must already be live.
+  w.roundStartTick = -600;
+  return w;
+}
+
 export const MOMENTS: Record<string, MomentDef> = {
   /** One tank, one trigger pull: the muzzle flash / fire event, dead centre. */
   fire: {
@@ -189,10 +215,21 @@ export const MOMENTS: Record<string, MomentDef> = {
   respawn: {
     // MEASURED kill tick (15, see `destroyed` above) + RESPAWN_DELAY_TICKS (the shipped
     // revival delay) + 45 ticks so the entrance animation has room to play out after the
-    // revival tick.
+    // revival tick. Deriving the WINDOW size from RESPAWN_DELAY_TICKS is fine here --
+    // it only decides how long simulateMoment runs, not what a pin claims happened --
+    // the tautology risk the comment below guards against is specific to `expect[]`
+    // tick literals, which moments.test.ts's own delay assertion re-derives against.
     ticks: 15 + RESPAWN_DELAY_TICKS + 45,
     expect: [
       { type: 'tank-destroyed', tick: 15 },
+      // MEASURED alongside tank-destroyed, same tick, same point-blank shot `destroyed`
+      // documents: the kill also emits `explosion` unconditionally (resolveBulletHits,
+      // bullets.ts). Pinned here too, deliberately, rather than left to `destroyed`
+      // alone -- the generic per-moment purity check runs independently per moment
+      // over EACH one's own window, so `destroyed` pinning it says nothing about
+      // whether `explosion` also fires again somewhere inside respawn's much longer
+      // 0..180 window; pinning it here confirms it does not.
+      { type: 'explosion', tick: 15 },
       // MEASURED: tick 135. Pinned as a literal, deliberately NOT `15 +
       // RESPAWN_DELAY_TICKS` -- moments.test.ts's own delay assertion computes
       // `revived - killed` and compares it to the SAME imported RESPAWN_DELAY_TICKS
@@ -217,4 +254,103 @@ export const MOMENTS: Record<string, MomentDef> = {
     build: buildKillWorld,
     input: (t) => (t === 9 ? { ...KILL_IDLE, fire: true } : KILL_IDLE),
   },
+
+  /**
+   * A solid wall face, hit at a shallow angle so the shell bounces off rather than
+   * stopping dead -- the normal shell (`shells.normal.bounces` in balance.json) budgets
+   * exactly 1 bounce, so this fixture only ever needs to show the first one.
+   */
+  ricochet: (() => {
+    // atan2(1, 3): shallow relative to the wall's face (the x = RICOCHET_WALL.aabb.minX
+    // plane) rather than a near-perpendicular hit, so the shell visibly deflects instead
+    // of bouncing straight back the way it came.
+    const RICOCHET_ANGLE = Math.atan2(1, 3);
+    const RICOCHET_WALL: Wall = {
+      id: 1, kind: 'solid', destroyed: false,
+      aabb: { minX: 3.0, minY: -5, maxX: 3.2, maxY: 5 },
+    };
+    // Same `aim`-is-a-world-point landmine `KILL_IDLE` documents: a point far along the
+    // firing direction from the tank's own (fixed) position keeps the turret's aimDir --
+    // and so the shell's heading -- steady at RICOCHET_ANGLE with no slew needed, since
+    // the shooter never moves in this moment.
+    const RICOCHET_IDLE: InputState = {
+      move: { x: 0, y: 0 },
+      aim: { x: Math.cos(RICOCHET_ANGLE) * 1000, y: Math.sin(RICOCHET_ANGLE) * 1000 },
+      fire: false, mine: false,
+    };
+    return {
+      // MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit):
+      // fire lands at events[10] (input(9) -> events[10], the shared convention every
+      // other moment uses); the shell (0.1 unit/tick) reaches the wall and ricochets at
+      // events[33], with no second bounce anywhere in a 60-tick probe -- consistent with
+      // the normal shell's 1-bounce budget: after the first ricochet event bouncesLeft
+      // is 0, so a later wall hit would stop the shell dead rather than emit a second
+      // ricochet event.
+      ticks: 45,
+      expect: [
+        { type: 'fire', tick: 10 },
+        { type: 'ricochet', tick: 33 },
+      ],
+      focus: [1.5, 0.3, 0.5], span: 5,
+      build: () => buildSoloWorld([RICOCHET_WALL]),
+      input: (t) => (t === 9 ? { ...RICOCHET_IDLE, fire: true } : RICOCHET_IDLE),
+    };
+  })(),
+
+  /**
+   * `wall-destroyed` has exactly one production emission site in the whole sim
+   * (`applyBlast`, mines.ts) -- a shell alone never touches a destructible wall's
+   * `destroyed` flag; `stepBullets`/`resolveBulletHits` only ever bounce or stop a
+   * shell against one (grep confirms no other `destroyed = true` write in src/sim).
+   * So "shooter fires at a destructible cell" can only be staged through the ONE path
+   * that credits the shooter with a wall kill: a shell detonating a MINE next to the
+   * wall (resolveBulletHits' mine loop passes `{source: 'shell', ownerId: b.ownerId}`
+   * as the blast's credit), whose blast then destroys the wall.
+   *
+   * The mine is pushed into `world.mines` directly rather than staged through a real
+   * `mine: true` input + `dropMine` -- it needs to be ARMED from tick 0 (so
+   * `shellMayDetonate` accepts the shell unconditionally, independent of
+   * `world.unarmedTrigger`) and parked well clear of the shooter (see below), neither
+   * of which a scripted drop-then-walk-away input buys anything for here (that sequence
+   * IS the `mine-cycle` moment). This skips `dropMine`'s `owner.activeMineIds`
+   * bookkeeping and the `mine-dropped` event, both harmless here: `detonateMine` only
+   * reads `activeMineIds` to remove an ID that was never added, and this moment never
+   * claims a `mine-dropped` pin.
+   */
+  'wall-break': (() => {
+    const WALLBREAK_WALL: Wall = {
+      id: 1, kind: 'destructible', destroyed: false,
+      aabb: { minX: 3.3, minY: -0.5, maxX: 3.6, maxY: 0.5 },
+    };
+    const WALLBREAK_MINE_POS = { x: 3.0, y: 0 };
+    // Far enough from the mine (distance 3.0) that the shooter sits outside
+    // MINE_BLAST_RADIUS + TANK_RADIUS (2.0 + 0.5 = 2.5) at every age of the blast, so
+    // this moment stays a pure wall-break with no incidental self-kill to also pin.
+    const WALLBREAK_IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
+    return {
+      // MEASURED (throwaway vite-node probe): fire at events[10]; the shell reaches the
+      // mine's trigger radius (MINE_TRIGGER_RADIUS + BULLET_RADIUS = 0.45) and detonates
+      // it at events[26], and the age-0 blast (already ~0.72 radius, comfortably past
+      // the wall's 0.3-unit gap from the mine) destroys the wall on that SAME tick --
+      // `mine-detonate` and `wall-destroyed` both land at events[26], not two ticks.
+      ticks: 36,
+      expect: [
+        { type: 'mine-detonate', tick: 26 },
+        { type: 'wall-destroyed', tick: 26 },
+      ],
+      focus: [2, 0.3, 0], span: 5,
+      build: () => {
+        const w = buildSoloWorld([WALLBREAK_WALL]);
+        w.mines.push({
+          id: 500, ownerId: 1, pos: { ...WALLBREAK_MINE_POS },
+          // Large enough that the fuse never expires on its own before the shell
+          // reaches it (the shell arrives well under 30 ticks in); this moment is
+          // about the shell-triggered path, not the timer, which `mine-cycle` covers.
+          timer: 999, armed: true, detonated: false,
+        });
+        return w;
+      },
+      input: (t) => (t === 9 ? { ...WALLBREAK_IDLE, fire: true } : WALLBREAK_IDLE),
+    };
+  })(),
 };

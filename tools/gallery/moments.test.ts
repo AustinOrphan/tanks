@@ -61,3 +61,45 @@ describe('respawn moment specifics', () => {
     expect(victim(tl.worlds[revived]).alive).toBe(true);
   });
 });
+
+describe('ricochet moment specifics', () => {
+  it('is the first bounce, and lands on the wall line it bounced off', () => {
+    const tl = simulateMoment(MOMENTS.ricochet);
+    const tick = MOMENTS.ricochet.expect.find((e) => e.type === 'ricochet')!.tick;
+    const ev = tl.events[tick].find((e) => e.type === 'ricochet');
+    expect(ev).toBeDefined();
+    if (ev?.type !== 'ricochet') throw new Error('narrowed above');
+    // bounceIndex 0: the FIRST bounce this shell has spent, not a second shell's or a
+    // re-fired later one -- a bounce budget bug (e.g. crediting the wrong shell, or
+    // reusing an index) would fail this without needing a second wall to reproduce.
+    expect(ev.bounceIndex).toBe(0);
+    // The wall this moment actually built, read back from the simulated world rather
+    // than a bare literal -- a wall moved, missed, or hit on a different face all fail
+    // this the same way a wrong-tick pin would.
+    const wall = tl.worlds[0].walls[0];
+    expect(ev.pos.x).toBeCloseTo(wall.aabb.minX, 6);
+  });
+});
+
+describe('wall-break moment specifics', () => {
+  it('flips the cell\'s destroyed flag exactly at the pinned tick, not before or after', () => {
+    const tl = simulateMoment(MOMENTS['wall-break']);
+    const tick = MOMENTS['wall-break'].expect.find((e) => e.type === 'wall-destroyed')!.tick;
+    expect(tl.worlds[tick - 1].walls[0].destroyed).toBe(false);
+    expect(tl.worlds[tick].walls[0].destroyed).toBe(true);
+  });
+  it('credits the shooter, and never catches the shooter in the same blast', () => {
+    const tl = simulateMoment(MOMENTS['wall-break']);
+    const tick = MOMENTS['wall-break'].expect.find((e) => e.type === 'wall-destroyed')!.tick;
+    const ev = tl.events[tick].find((e) => e.type === 'wall-destroyed');
+    expect(ev).toBeDefined();
+    if (ev?.type !== 'wall-destroyed') throw new Error('narrowed above');
+    expect(ev.ownerId).toBe(1);
+    // No 'explosion'/'tank-destroyed' anywhere in the clip: the shooter is staged far
+    // enough from the mine (see moments.ts) to survive its own shot's blast.
+    const other = tl.events.flat().map((e) => e.type);
+    expect(other).not.toContain('explosion');
+    expect(other).not.toContain('tank-destroyed');
+    expect(tl.worlds[MOMENTS['wall-break'].ticks].tanks[0].alive).toBe(true);
+  });
+});
