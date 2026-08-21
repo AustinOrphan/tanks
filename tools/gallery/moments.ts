@@ -353,4 +353,46 @@ export const MOMENTS: Record<string, MomentDef> = {
       input: (t) => (t === 9 ? { ...WALLBREAK_IDLE, fire: true } : WALLBREAK_IDLE),
     };
   })(),
+
+  /**
+   * The full mine lifecycle, staged through the real drop input rather than a
+   * hand-placed mine (contrast `wall-break` above, which needs an already-armed one):
+   * lay it, walk clear so it arms, then let the fuse run out on its own -- the `fuse`
+   * element (subjects.ts) renders a single POSE at a chosen age using the same
+   * MINE_TIMER math; this is the sim actually living through that countdown tick by
+   * tick and detonating at the end of it.
+   */
+  'mine-cycle': (() => {
+    // Fixed far downrange so aimDir stays steady while the tank walks (same
+    // aim-is-a-world-point landmine every other moment here documents); unrelated to
+    // the mine mechanic itself, just keeps the turret from wandering on screen.
+    const MINE_CYCLE_AIM = { x: 1000, y: 0 };
+    const MINE_CYCLE_IDLE: InputState = { move: { x: 0, y: 0 }, aim: MINE_CYCLE_AIM, fire: false, mine: false };
+    const MINE_CYCLE_WALK: InputState = { move: { x: 1, y: 0 }, aim: MINE_CYCLE_AIM, fire: false, mine: false };
+    return {
+      // MEASURED (throwaway vite-node probe): the mine is dropped at rest (owner hasn't
+      // moved yet) at events[10], at the owner's position (0, 0) -- it stays there for
+      // the rest of the clip; only the owner walks. Starting tick 10 the owner walks
+      // east and clears MINE_PROXIMITY_RADIUS (stepMines' arming distance) at
+      // events[40]. No shell, no proximity re-trigger (the owner keeps walking away,
+      // never re-entering blast range) -- the fuse alone ends it, at events[190]. No
+      // 'explosion'/'tank-destroyed' anywhere in the 200-tick window: by tick 190 the
+      // owner is 9 units clear, well outside MINE_BLAST_RADIUS + TANK_RADIUS (2.5).
+      ticks: 200,
+      expect: [
+        { type: 'mine-dropped', tick: 10 },
+        { type: 'mine-armed', tick: 40 },
+        { type: 'mine-detonate', tick: 190 },
+      ],
+      // Tight on the mine's own (fixed) position rather than the walking owner, same
+      // choice `respawn` makes for its frozen shooter: the mine is the subject.
+      focus: [0, 0.3, 0], span: 3,
+      build: buildSoloWorld,
+      input: (t) => {
+        if (t === 9) return { ...MINE_CYCLE_IDLE, mine: true };
+        if (t > 9) return MINE_CYCLE_WALK;
+        return MINE_CYCLE_IDLE;
+      },
+    };
+  })(),
 };

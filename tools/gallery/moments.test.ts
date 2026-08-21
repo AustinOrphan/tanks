@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MOMENTS, simulateMoment } from './moments';
 import type { World } from '../../src/sim/world';
-import { RESPAWN_DELAY_TICKS } from '../../src/sim/constants';
+import { RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ } from '../../src/sim/constants';
 
 describe('every moment pins its events to exact ticks', () => {
   for (const [name, def] of Object.entries(MOMENTS)) {
@@ -101,5 +101,32 @@ describe('wall-break moment specifics', () => {
     expect(other).not.toContain('explosion');
     expect(other).not.toContain('tank-destroyed');
     expect(tl.worlds[MOMENTS['wall-break'].ticks].tanks[0].alive).toBe(true);
+  });
+});
+
+describe('mine-cycle moment specifics', () => {
+  const drop = () => MOMENTS['mine-cycle'].expect.find((e) => e.type === 'mine-dropped')!.tick;
+  const arm = () => MOMENTS['mine-cycle'].expect.find((e) => e.type === 'mine-armed')!.tick;
+  const detonate = () => MOMENTS['mine-cycle'].expect.find((e) => e.type === 'mine-detonate')!.tick;
+
+  it('arms only once the owner has cleared MINE_PROXIMITY_RADIUS, the ticks the sim balance actually needs', () => {
+    // Independent cross-check against the imported constants, same shape as respawn's
+    // `revived - killed === RESPAWN_DELAY_TICKS` -- the expect[] ticks above stay
+    // literals, so this can genuinely fail if MINE_PROXIMITY_RADIUS or TANK_SPEED moves
+    // without the fixture moving with it.
+    const ticksToClear = Math.ceil(MINE_PROXIMITY_RADIUS / (TANK_SPEED * DT));
+    expect(arm() - drop()).toBe(ticksToClear);
+  });
+
+  it('detonates on fuse expiry, MINE_TIMER seconds after the drop, not a proximity re-trigger', () => {
+    expect(detonate() - drop()).toBe(Math.round(MINE_TIMER * TICK_HZ));
+  });
+
+  it('never fires an explosion or kills its own owner: the walk-away clears blast range first', () => {
+    const tl = simulateMoment(MOMENTS['mine-cycle']);
+    const types = tl.events.flat().map((e) => e.type);
+    expect(types).not.toContain('explosion');
+    expect(types).not.toContain('tank-destroyed');
+    expect(tl.worlds[MOMENTS['mine-cycle'].ticks].tanks[0].alive).toBe(true);
   });
 });
