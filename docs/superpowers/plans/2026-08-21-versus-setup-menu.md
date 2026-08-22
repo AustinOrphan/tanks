@@ -1,3 +1,14 @@
+---
+status: completed
+date: 2026-08-21
+last-reviewed: 2026-08-22
+scope: VS setup UI, session boot flow, map selection, stock configuration, and HUD readout
+implementation-issues: [228]
+implementation-prs: [262]
+supersedes: []
+superseded-by: []
+---
+
 # Versus Setup Menu Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

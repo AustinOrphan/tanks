@@ -1,3 +1,14 @@
+---
+status: active
+date: 2026-08-21
+last-reviewed: 2026-08-22
+scope: Authoritative VS setup, session configuration, match exit, and stock-readout decisions
+implementation-issues: [228]
+implementation-prs: [262]
+supersedes: []
+superseded-by: []
+---
+
 # Spec — versus setup menu
 
 **Adopted 2026-08-21** (owner rulings via in-session Q&A, recorded the same day). Closes

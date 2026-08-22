@@ -7,6 +7,7 @@ paths:
   - ".claude/**"
   - "tools/instructions.test.ts"
   - "tools/backlog.test.ts"
+  - "tools/docs/**"
   - "tools/devflags/**"
   - "tools/tanks/**"
 ---
@@ -19,6 +20,8 @@ paths:
 - `docs/agent/README.md` is the routing index for agent-oriented reference material.
 - Plans, specifications, and the backlog live under `docs/superpowers/`. Do not delete
   historical rationale merely to reduce context; make it discoverable on demand.
+- New or changed plans and specifications must follow `docs/agent/document-metadata.md`;
+  run `npm run docs:check` and never refresh a legacy baseline hash to exempt new work.
 - If a PR can close deferred work, use an issue. Keep only prerequisite decisions or
   measurements in `docs/superpowers/backlog.md` and update its counts through the guarded
   one-file workflow.
