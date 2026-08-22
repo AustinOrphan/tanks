@@ -1,6 +1,6 @@
 # Testing and review reference
 
-Detailed testing failures and the review policy preserved from the original project instructions. Issue #212 will replace the universal review fanout with an explicit risk-tier model.
+Detailed testing failures and the repository's risk-tiered verification policy.
 
 ## Testing conventions, learned the hard way
 
@@ -143,10 +143,99 @@ any defect a LATER call's own no-op path happens to undo: `run.test.ts`'s
 
 ## Merge bar
 
-Nothing reaches `main` without comprehensive adversarial review: reviewers fan out per
-subsystem and must prove each finding with a command and its real output, then an
-independent pass adjudicates every claim. Re-measure headline numbers yourself rather than
-relaying an agent's self-report.
+Classify the complete diff before choosing verification. The tier is a minimum, not a
+ceiling. A mixed change inherits the highest tier present, and uncertainty moves the
+change up rather than down. Tests or documentation accompanying a production change do
+not reduce that production change's tier.
 
-Review agents that *mutate* files each need their own worktree, or they overwrite each
-other's experiments and every result becomes noise.
+### Low risk
+
+Use for changes that cannot affect executable behavior, build output, tests, deployment,
+or agent behavior:
+
+- prose-only documentation and spelling fixes
+- comments that do not contain executable examples or directives
+- issue templates and narrowly scoped non-runtime metadata
+- generated documentation only when its source and generator are unchanged
+
+Minimum evidence:
+
+- inspect the complete diff and verify both the intended change and expected absences
+- run directly relevant formatting, documentation, link, or generator-drift checks
+- perform a concise self-review of accuracy, stale references, and unsupported claims
+
+Keep low-risk work in the main conversation. Do not create reviewer or implementation
+fanout merely to satisfy a process ritual.
+
+### Standard risk
+
+Use for contained changes whose failure is limited to one ordinary subsystem and does not
+alter a high-risk contract:
+
+- ordinary game, input, audio, HUD, or UI behavior outside persistence and renderer/WebGL
+  infrastructure
+- local styling or presentation changes
+- focused tests, developer tools, and non-release configuration
+- repository instructions and review policy that change agent behavior
+- refactors contained within one non-critical subsystem
+
+Minimum evidence:
+
+- run the typecheck and the directly relevant unit or integration tests
+- build when production output can change
+- inspect the affected subsystem's callers, consumers, and negative cases
+- perform a focused self-review; delegate only if a separate bounded question justifies it
+
+Any user-visible result also requires visual evidence, even when the implementation is
+otherwise standard risk.
+
+### High risk
+
+Use when a defect could violate a core invariant, corrupt durable state, affect releases,
+or cross subsystem boundaries:
+
+- deterministic simulation, AI, collision, balance, arena, or campaign rules
+- save/persistence compatibility, campaign/run state, achievements, or imported data
+- renderer/WebGL infrastructure and shared render lifecycle
+- CI, build, dependency/engine, release, deployment, or GitHub Pages behavior
+- shared events, public types, security boundaries, or any cross-cutting change with
+  multiple independent consumers
+
+Minimum evidence:
+
+- run the full applicable automated gate and production build
+- run every affected subsystem-specific check, such as the golden trace for simulation,
+  persistence compatibility tests, WebGL/visual checks, or built-output portability
+- adversarially review invariants, failure modes, compatibility, and expected absences
+- independently reproduce material measurements and claims from primary output
+
+High risk requires strong review, not automatic fanout. Delegate only concrete independent
+investigations that benefit from isolated context, large-output containment, or useful
+parallelism. The lead agent owns synthesis, adjudicates every finding, and reruns the
+evidence it relies on.
+
+### Cross-tier evidence
+
+- Visual evidence is mandatory for any user-visible CSS, HUD, renderer, animation, skin,
+  authored asset, or layout change. Rendering infrastructure remains high risk even when
+  the visible diff looks small.
+- Build first and run the portability check when changing Vite base/output behavior,
+  `index.html`, public assets, the manifest/PWA shell, Pages/release workflows, or artifact
+  paths.
+- Simulation behavior needs the golden trace in addition to behavioral tests;
+  determinism alone proves only self-consistency.
+- Recompute quoted counts and measurements after the final tree changes.
+
+### Delegation
+
+Use the main conversation for quick targeted work, iterative changes, and phases that share
+substantial context. Delegate when the question is concrete, bounded, independent, and can
+return a reviewable summary without repeated coordination. Good candidates include noisy
+logs, an isolated subsystem audit, or independent research that would otherwise flood the
+main context.
+
+Do not delegate solely because a tier is high, and do not split coupled work across agents
+that must repeatedly exchange the same context. Every delegated task needs an explicit
+scope and expected evidence. Any worker that mutates files must use its own worktree; a
+read-only investigation may share the checkout. The lead agent verifies returned claims
+before using them as merge evidence.
