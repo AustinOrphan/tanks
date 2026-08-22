@@ -16,13 +16,15 @@ layer. Specifications, plans, and deferred work live under `docs/superpowers/`.
 ## Essential commands
 
 ```sh
-npm test       # tsc --noEmit && vitest run
-npm run build  # tsc --noEmit && vite build
-npm run dev    # Vite development server
+npm run verify:quick  # typecheck + unit tests; `npm test` is an alias
+npm run verify:build  # production build + subpath-portability check
+npm run verify:full   # quick + mutation + build + production audit; no browser
+npm run dev           # Vite development server
 ```
 
 Specialized tools:
 
+- `npm run verify:visual` with Playwright and Chromium already installed
 - `npm run gallery -- --elements mine,tank,shell --view low`
 - `npm run mutate -- --only <id>`
 - `npm run test:gl`
@@ -66,11 +68,12 @@ Command behavior and CI/deployment details are in
 - Low risk covers prose-only docs, comments, and non-runtime metadata: inspect the diff, run
   directly relevant documentation/format/generator checks, and perform a concise self-review.
 - Standard risk covers ordinary application code, agent instructions, and focused tests or
-  tooling: typecheck, run relevant tests, build if production output can change, and review
-  the affected subsystem.
+  tooling: run `npm run verify:quick`, add `npm run verify:build` if production output can
+  change, and review the affected subsystem.
 - High risk covers simulation, persistence/campaign compatibility, renderer/WebGL
-  infrastructure, CI/release behavior, and cross-cutting contracts: run the full applicable
-  gate plus subsystem checks and adversarially review invariants and failure modes.
+  infrastructure, CI/release behavior, and cross-cutting contracts: run
+  `npm run verify:full` plus applicable subsystem checks, and adversarially review
+  invariants and failure modes.
 - User-visible visual changes require visual evidence. Build/deploy, entry-point, PWA, and
   asset-path changes require a built-output portability check.
 - Delegate only a concrete, bounded, independent investigation whose isolation or parallelism

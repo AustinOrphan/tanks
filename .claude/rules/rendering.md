@@ -23,8 +23,8 @@ paths:
   `cumulus` generator without new visual evidence.
 - Use `npm run gallery` for authored comparisons and `--sweep` for constants; it refuses
   dirty target files and restores patches in a finally block.
-- A green Vitest run is not the render gate. Run `npm run build`, `npm run test:gl`, and
-  the applicable visual check, and attach evidence for visible changes.
+- A green Vitest run is not the render gate. Run `npm run verify:visual` with its documented
+  browser prerequisites, and attach evidence for visible changes.
 - `renderer.ts` and `scene.ts` are covered through the real-browser GL harness rather than
   sibling Vitest files.
 
