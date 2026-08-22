@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createEntityViews } from '../../src/render/entities';
 import { createParticleSystem } from '../../src/render/particles';
 import { createDeathPulseSystem } from '../../src/render/death-pulse';
+import { createTreadTrailSystem } from '../../src/render/tread-trails';
 import type { SkinId, SpawnAnimId } from '../../src/game/customization';
 import { MOMENTS, simulateMoment } from './moments';
 import { VIEWS, timelineDt } from './subjects';
@@ -117,6 +118,10 @@ export function buildMomentScene(
   }
   const particles = createParticleSystem(scene, mulberry32(PARTICLE_SEED));
   const deathPulse = createDeathPulseSystem(scene);
+  // No RNG seam needed (unlike particles): emission is purely a function of world
+  // position/orientation, so two renders of the same moment are already
+  // byte-identical without one -- see tread-trails.ts's own doc comment.
+  const treadTrails = createTreadTrailSystem(scene);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(w, h, false);
 
@@ -179,6 +184,12 @@ export function buildMomentScene(
     views.sync(tl.worlds[Math.max(0, a - 1)], tl.worlds[a], alpha, dt);
     particles.update(dt);
     deathPulse.update(dt);
+    // Same prev/curr pair as views.sync above -- treadTrails reads only
+    // roundStartTick off `prev`, never its tank positions (tread-trails.ts's own
+    // doc comment), so it is unaffected by this loop feeding events/spawn a
+    // different (possibly multi-tick) pairing than renderer.ts's per-frame call.
+    treadTrails.sync(tl.worlds[Math.max(0, a - 1)], tl.worlds[a]);
+    treadTrails.update(dt);
     renderer.render(scene, cam);
   }
 
@@ -186,6 +197,7 @@ export function buildMomentScene(
     views.dispose();
     particles.dispose();
     deathPulse.dispose();
+    treadTrails.dispose();
     renderer.dispose();
   }
 
