@@ -4996,6 +4996,12 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       expect(result.devFlags.players).toBe(3);
       const world = result.levels.world(result.levels.start, 7, undefined, 3);
       expect(countPlayerTanks(world)).toBe(3);
+      // The versus branch's other two fields, otherwise unasserted anywhere in this
+      // describe block: fails if `initialVersusConfig`/`requestVersusSession` are
+      // dropped (e.g. left at the no-versus branch's `null`/unset) when a config IS
+      // present -- exactly what a later task's setup-pane prefill would read.
+      expect(result.initialVersusConfig).toBe(CONFIG);
+      expect(result.requestVersusSession).toBe(noop);
     });
   });
 });
