@@ -14,6 +14,7 @@ heading and read only the required section.
 | `architecture.md` | simulation, rendering, data catalogs, AI, arenas, geometry, traces |
 | `testing-and-review.md` | risk tiers, test design, mutation evidence, measurement, merge review |
 | `development.md` | development flags, feel constants, branch and squash conventions |
+| `task-sizing.md` | issue size, risk, decomposition, and agent-readiness criteria |
 | `known-holes.md` | untested seams, deferred-work policy, rejected collision fixes |
 | `context-budget.md` | exact global instruction-size measurement and enforced budget |
 

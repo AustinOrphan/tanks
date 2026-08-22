@@ -41,6 +41,7 @@ const REQUIRED_REFERENCES = [
   'docs/agent/context-budget.md',
   'docs/agent/development.md',
   'docs/agent/known-holes.md',
+  'docs/agent/task-sizing.md',
   'docs/agent/testing-and-review.md',
 ];
 
