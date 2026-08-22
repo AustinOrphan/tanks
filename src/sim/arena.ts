@@ -204,7 +204,7 @@ export function loadArena(
   // candidate fallback already takes.
   seed?: number,
   // Trailing and defaulted, same precedent again: every existing call site (none of
-  // which pass an 8th argument today) gets VERSUS_STOCK, byte-identical to before this
+  // which pass a 5th argument today) gets VERSUS_STOCK, byte-identical to before this
   // parameter existed. Only stamped onto player tanks in 'ffa'/'teams' mode (both
   // stamping sites below); campaign-coop tanks never carry stockRemaining regardless of
   // this value. A future per-match setup menu is the only caller that will ever pass a
