@@ -62,6 +62,15 @@ npm run portability                                        # inspect an existing
 npm run visual                                             # inspect an existing dist/ in Chromium
 ```
 
+`npm run issues:audit` checks every open issue for the repository's required size, risk,
+area, impact, horizon, readiness, and active-queue invariants. It infers the repository from
+`GITHUB_REPOSITORY` or the current Git remote, uses `GH_TOKEN`/`GITHUB_TOKEN` when available,
+and can audit this public repository anonymously within GitHub's lower unauthenticated rate
+limit. Contract violations exit non-zero with issue-specific remediation; explicitly uncertain
+dependency or decision wording is reported as a warning. `npm run issues:maintain` is the
+workflow-only event handler that applies allowlisted area/impact choices from issue forms and
+cleans transient labels from closed issues.
+
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
 through the REAL render modules against a REAL world. `--skin`/`--hull`/`--accent` dress
 the player tank through the game's own `setPlayerStyle`, and `--frames N` gives an

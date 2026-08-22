@@ -1,0 +1,95 @@
+name: Bug report
+description: Report reproducible incorrect game or repository behavior.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this report implementation-ready and concise. Triage guidance lives in the [task sizing and readiness guide](https://github.com/AustinOrphan/tanks/blob/main/docs/agent/task-sizing.md).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is broken, and why does it matter?
+      placeholder: Describe the failure and its player or developer impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give the shortest reliable sequence, including relevant device, browser, mode, map, or tank details.
+      placeholder: |
+        1. Start ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Current and expected behavior
+      description: State what happens now and what should happen instead.
+      placeholder: "Current: ...\nExpected: ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      description: Choose the single area that should own the fix.
+      options:
+        - area:repository — Repository configuration, automation, or documentation
+        - area:ui — Menus, HUD, settings, or interaction presentation
+        - area:ai — AI perception, decisions, aiming, or movement
+        - area:versus — Versus modes, rules, spawning, maps, or setup
+        - area:rendering — Three.js projection, effects, animation, or visual assets
+        - area:gameplay — Shared player-facing mechanics outside the other areas
+        - area:developer-tools — Gallery, diagnostics, generators, or developer workflows
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Expected impact
+      description: Choose the outcome's expected value, not its implementation size.
+      options:
+        - impact:high — Blocks a primary flow, protects user data, or unlocks a major dependency chain
+        - impact:medium — Materially improves quality, maintainability, or a secondary workflow
+        - impact:low — Optional polish, experimentation, or longer-horizon breadth
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that prove the defect is fixed.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Constraints and boundaries
+      description: Note relevant files, invariants, compatibility requirements, and anything explicitly out of scope.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Verification and evidence
+      description: Name useful tests, commands, screenshots, recordings, traces, or device coverage.
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link blockers, superseded issues, or related work. Write "None" when there are none.
+      placeholder: None

@@ -30,6 +30,41 @@ Risk is independent of size:
 Mixed work inherits the highest applicable risk. Use the risk tier to choose verification and
 review depth; do not inflate the size to represent risk.
 
+## Required metadata
+
+Every open implementation issue or roll-up epic has exactly one label from each of five
+dimensions: size, risk, primary area, impact, and planning horizon. Choose one primary area
+even when secondary systems are involved:
+
+| Label | Primary ownership |
+| --- | --- |
+| `area:repository` | Repository configuration, automation, project documentation, or governance. |
+| `area:ui` | Menus, HUD, settings, accessibility, or interaction presentation. |
+| `area:ai` | AI perception, decisions, aiming, movement, or difficulty behavior. |
+| `area:versus` | Versus modes, setup, spawning, maps, scoring, or match rules. |
+| `area:rendering` | Three.js projection, effects, animation, materials, or visual assets. |
+| `area:gameplay` | Shared player-facing mechanics not primarily owned by another area. |
+| `area:developer-tools` | Gallery, diagnostics, generators, probes, or developer workflows. |
+
+Impact describes expected value, independently of size and risk:
+
+| Label | Use it when |
+| --- | --- |
+| `impact:high` | The outcome blocks a current release or primary player flow, protects user data, or unlocks a major dependency chain. |
+| `impact:medium` | The outcome materially improves quality, maintainability, or a secondary workflow. |
+| `impact:low` | The outcome is optional polish, experimentation, or longer-horizon breadth. |
+
+Planning horizon describes when work belongs in the execution queue, not how valuable it is:
+
+| Label | Use it when |
+| --- | --- |
+| `priority:now` | A bounded, unblocked leaf selected for the active queue. Keep no more than eight open Now issues. |
+| `priority:next` | Expected after the current queue or after named blockers clear. |
+| `priority:later` | Intentionally deferred. |
+
+Only an `agent-ready` `size:xs`, `size:s`, or `size:m` leaf may be `priority:now`.
+Roll-up epics stay Next or Later and are completed through their linked children.
+
 ## Readiness labels
 
 Add `agent-ready` only when all of these are true:
@@ -48,14 +83,20 @@ Use `needs-split` for a `size:l` implementation issue or a `size:xl` proposal th
 yet have a complete child breakdown. Remove it once the children cover the parent outcome and
 acceptance criteria. A completed roll-up epic remains `size:xl` but is not `agent-ready`.
 
+When an issue closes, automation removes `agent-ready` and every `priority:*` label. Size,
+risk, area, and impact remain as durable history. Reopening does not restore priority or
+readiness; triage the issue again against its current scope and blockers.
+
 ## Triage workflow
 
-1. Assign one size and one risk label.
+1. Assign exactly one size, risk, primary area, impact, and planning-horizon label.
 2. Split `size:l` work and turn `size:xl` work into a roll-up checklist of linked children.
 3. Put the local outcome, constraints, and acceptance criteria in each child. Link the parent
    for shared rationale instead of copying the entire epic into every child.
-4. Add `agent-ready` only to unblocked leaf issues that pass the readiness checklist.
+4. Add `agent-ready` only to unblocked leaf issues that pass the readiness checklist; only
+   those XS-M leaves may enter the bounded Now queue.
 5. During implementation, re-size or split before allowing a branch to absorb unrelated work.
+6. On closure, retain durable metadata and let automation clear transient priority/readiness.
 
 This keeps issue prompts self-contained without forcing every agent session to ingest the
 whole roadmap or a long global instruction file.
