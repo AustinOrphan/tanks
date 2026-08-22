@@ -1,0 +1,81 @@
+name: Feature or behavior change
+description: Propose a bounded player-facing capability or behavior change.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the desired outcome rather than prescribing a large implementation. Triage guidance lives in the [task sizing and readiness guide](https://github.com/AustinOrphan/tanks/blob/main/docs/agent/task-sizing.md).
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should players or developers be able to do, and why does it matter?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_gap
+    attributes:
+      label: Current behavior or gap
+      description: Explain the current limitation and the expected behavior at completion.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      description: Choose the single area that should own the change.
+      options:
+        - area:repository — Repository configuration, automation, or documentation
+        - area:ui — Menus, HUD, settings, or interaction presentation
+        - area:ai — AI perception, decisions, aiming, or movement
+        - area:versus — Versus modes, rules, spawning, maps, or setup
+        - area:rendering — Three.js projection, effects, animation, or visual assets
+        - area:gameplay — Shared player-facing mechanics outside the other areas
+        - area:developer-tools — Gallery, diagnostics, generators, or developer workflows
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Expected impact
+      description: Choose the outcome's expected value, not its implementation size.
+      options:
+        - impact:high — Blocks a primary flow, protects user data, or unlocks a major dependency chain
+        - impact:medium — Materially improves quality, maintainability, or a secondary workflow
+        - impact:low — Optional polish, experimentation, or longer-horizon breadth
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that define completion.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Constraints and boundaries
+      description: Note relevant files or subsystems, invariants, compatibility requirements, and anything explicitly out of scope.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Verification and evidence
+      description: Name useful tests, commands, screenshots, recordings, traces, or device coverage.
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link blockers, superseded issues, or related work. Write "None" when there are none.
+      placeholder: None

@@ -1,0 +1,61 @@
+name: Issue metadata
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled, unlabeled, closed]
+  schedule:
+    - cron: '17 13 * * 1'
+  workflow_dispatch:
+
+# Deny everything by default. Only the event-maintenance job can mutate labels; the
+# recurring/manual audit is read-only.
+permissions: {}
+
+jobs:
+  maintain:
+    name: maintain explicit metadata
+    if: >-
+      github.event_name == 'issues' &&
+      (github.event.action == 'opened' ||
+       github.event.action == 'edited' ||
+       github.event.action == 'reopened' ||
+       github.event.action == 'closed')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      # This repository-owned handler parses stable issue-form headings and exact
+      # allowlisted values. The event body is never interpolated into the shell.
+      - name: Maintain explicit issue metadata
+        run: npm run issues:maintain
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  audit:
+    name: audit open issue metadata
+    needs: [maintain]
+    # A skipped maintenance job is normal for schedule, dispatch, labeled, and unlabeled.
+    # Audit anyway, and also report the backlog if maintenance itself failed.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Audit open issue metadata
+        run: npm run issues:audit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

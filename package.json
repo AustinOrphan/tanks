@@ -28,6 +28,8 @@
     "trace:beacon:check": "node tools/baseline/beacon-check.mjs",
     "gallery": "node tools/gallery/run.mjs",
     "audio": "node tools/audio/render.mjs",
+    "issues:audit": "node tools/issues/run.mjs audit",
+    "issues:maintain": "node tools/issues/run.mjs event",
     "mutate": "node tools/mutate/run.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",

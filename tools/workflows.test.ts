@@ -41,6 +41,9 @@
 //   restore the pre-#213 raw CI/Pages commands   -> canonical verification command assertions
 //   drop the PR-only Node-22 mutation condition  -> preserves the matrix condition assertion
 //   parse a comment as an executable run line    -> executable-line extractor negative fixture
+//   delete an issue-metadata trigger              -> issue-metadata trigger assertion
+//   grant write access to the audit job           -> issue-metadata permission assertion
+//   invoke the issue tool directly in workflow    -> canonical command assertion
 //
 // The three `push:` spellings are there because review DEFEATED the first version of that
 // assertion, which required `push:` to be followed immediately by a newline. A trailing
@@ -59,6 +62,7 @@ const read = (p: string): string => readFileSync(new URL(`../${p}`, import.meta.
 const PAGES = read('.github/workflows/pages.yml');
 const CI = read('.github/workflows/ci.yml');
 const ENGINES = read('.github/workflows/engines.yml');
+const ISSUE_METADATA = read('.github/workflows/issue-metadata.yml');
 const BASELINE_RUN = read('tools/baseline/run.mjs');
 const COMMAND_REFERENCE = read('docs/agent/commands-and-operations.md');
 
@@ -77,6 +81,8 @@ const ATOMIC = {
   visual: 'node tools/visual/verify.mjs dist --check',
   mutate: 'node tools/mutate/run.mjs',
   'audit:prod': 'npm audit --omit=dev --audit-level=high',
+  'issues:audit': 'node tools/issues/run.mjs audit',
+  'issues:maintain': 'node tools/issues/run.mjs event',
 } as const;
 
 const COMPOSITES = {
@@ -242,6 +248,7 @@ describe('the canonical verification scripts', () => {
       'verify:build',
       'verify:visual',
       'verify:full',
+      'issues:audit',
     ]) {
       expect(COMMAND_REFERENCE, name).toContain(`npm run ${name}`);
     }
@@ -395,6 +402,7 @@ describe('canonical verification commands in workflows', () => {
       ...executableRunCommands(CI),
       ...executableRunCommands(PAGES),
       ...executableRunCommands(ENGINES),
+      ...executableRunCommands(ISSUE_METADATA),
     ].map((command) => command.replace(DIRECT_BEACON_COMMAND, ''));
     for (const forbidden of [
       'npx tsc --noEmit',
@@ -405,6 +413,7 @@ describe('canonical verification commands in workflows', () => {
       'node tools/baseline/safari.mjs',
       'node tools/visual/verify.mjs',
       'npm audit --omit=dev --audit-level=high',
+      'node tools/issues/run.mjs',
     ]) {
       expect(commands.some((command) => command.includes(forbidden)), forbidden).toBe(false);
     }
@@ -449,6 +458,58 @@ describe('canonical verification commands in workflows', () => {
     expect(jobBlock(knownBad, 'verify')).toContain('Verify only');
     expect(jobBlock(knownBad, 'verify')).not.toContain('Visual only');
     expect(jobBlock(knownBad, 'visual')).toContain('Visual only');
+  });
+});
+
+describe('issue metadata automation', () => {
+  const maintain = jobBlock(ISSUE_METADATA, 'maintain');
+  const audit = jobBlock(ISSUE_METADATA, 'audit');
+
+  it('loads substantive workflow and package-command inputs', () => {
+    expect(ISSUE_METADATA.length).toBeGreaterThan(1000);
+    expect(maintain).not.toBe('');
+    expect(audit).not.toBe('');
+    expect(SCRIPTS['issues:audit']).toBe('node tools/issues/run.mjs audit');
+    expect(SCRIPTS['issues:maintain']).toBe('node tools/issues/run.mjs event');
+  });
+
+  it('runs on relevant issue changes, manual dispatch, and a fallback schedule only', () => {
+    expect(ISSUE_METADATA).toMatch(/^on:\n/m);
+    expect(ISSUE_METADATA).toContain(
+      'types: [opened, edited, reopened, labeled, unlabeled, closed]',
+    );
+    expect(ISSUE_METADATA).toContain("cron: '17 13 * * 1'");
+    expect(ISSUE_METADATA).toMatch(/^\s*workflow_dispatch:\s*$/m);
+    expect(ISSUE_METADATA).not.toMatch(/^\s*pull_request(?:_target)?:/m);
+  });
+
+  it('isolates write access to deterministic event maintenance', () => {
+    expect(ISSUE_METADATA).toContain('permissions: {}');
+    expect(maintain).toContain('contents: read');
+    expect(maintain).toContain('issues: write');
+    expect(audit).toContain('contents: read');
+    expect(audit).toContain('issues: read');
+    expect(audit).not.toContain('issues: write');
+  });
+
+  it('maintains only opened, edited, reopened, and closed issue events', () => {
+    for (const action of ['opened', 'edited', 'reopened', 'closed']) {
+      expect(maintain).toContain(`github.event.action == '${action}'`);
+    }
+    expect(maintain).not.toContain("github.event.action == 'labeled'");
+    expect(maintain).not.toContain("github.event.action == 'unlabeled'");
+    expect(namedStep(maintain, 'Maintain explicit issue metadata')).toContain(
+      'run: npm run issues:maintain',
+    );
+  });
+
+  it('always audits after the optional maintenance job through the package command', () => {
+    expect(audit).toContain('needs: [maintain]');
+    expect(audit).toContain('if: ${{ always() }}');
+    expect(namedStep(audit, 'Audit open issue metadata')).toContain(
+      'run: npm run issues:audit',
+    );
+    expect(ISSUE_METADATA).not.toContain('npm ci');
   });
 });
 
