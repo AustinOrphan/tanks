@@ -946,17 +946,26 @@ the stock PR -- also struck below, same idiom.
    `docs/superpowers/plans/2026-08-21-versus-setup-menu.md`, branch
    `feat/versus-setup-menu`). A **Versus** button on the title screen opens a setup pane
    -- mode, players (2-4), map (the 5 arenas + Random, seeded variants always on), a
-   stock-count selector, friendly fire (Teams only) and who's-playing -- built on the
-   same panel open/back machinery Controllers/Customize already use. Start reboots the
-   session through the existing `startGameWith` seam (one-value-per-session, unchanged);
-   match end returns to the pane with the previous selections intact (session-only
-   retention, no seventh store) rather than to title. `?dev=1&mode=…&players=…` still
-   parses and still works -- the menu supersedes it as the player-facing path, and
-   retiring the flags is a separate per-flag decision this PR does not make. This PR is
-   "Part of #228" (the tracking issue for shipping versus to a real player), not a close
-   of it: per-slot bot difficulty, a match-rules table for sim-enforced shell/mine caps,
-   invalid-combination explanations, pad/touch keyboard-navigation validation of the
-   pane, and the persistence ruling (session-only vs. `localStorage`) remain open there.
+   stock-count selector, and friendly fire (Teams only) -- built on the same panel
+   open/back machinery Controllers/Customize already use. Start reboots the session
+   through the existing `startGameWith` seam (one-value-per-session, unchanged); match
+   end returns to the pane with the previous selections intact (session-only retention,
+   no seventh store) rather than to title, with an in-match per-player stock readout in
+   the HUD top bar for the whole session. `?dev=1&mode=…&players=…` still parses and
+   still works -- the menu supersedes it as the player-facing path, and retiring the
+   flags is a separate per-flag decision this PR does not make. Who's-playing rows are
+   shown in the pane (reusing the Controllers panel's row renderer) but do NOT carry
+   through Start: the rows edit only the running session's assignment, which Start
+   disposes, so a pane-chosen Bot slot never reaches the next match, and the pane offers
+   no Bot option at all before any versus session has run -- open as issue #260 (#228
+   AC2), not shipped by this PR. This PR is "Part of #228" (the tracking issue for
+   shipping versus to a real player), not a close of it: the assignment/bot-fill gap
+   above (issue #260, AC2); Quit landing on the versus-kind title instead of the pane,
+   plus every reboot (including every rematch) showing a second "press any key" splash
+   before play (issue #261, AC5); per-slot bot difficulty; a match-rules table for
+   sim-enforced shell/mine caps; invalid-combination explanations; pad/touch
+   keyboard-navigation validation of the pane; and the persistence ruling (session-only
+   vs. `localStorage`) remain open there.
 6. **Map selection / procedural generation.** Already named as unbuilt in this file's
    Ledger ("Procedural generation of shipped levels; the four arenas are authored
    grids... #43") -- and directly relevant here, since `pickVersusSpawnCell` was
