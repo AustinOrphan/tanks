@@ -38,12 +38,19 @@
 //   replace the openurl retry loop with one call -> retries transient Simulator URL failures
 //   delete the EXIT trap or child-process kill   -> cleans up the beacon process tree
 //   restore either old timeout                   -> gives beacon startup and reporting real headroom
+//   restore the pre-#213 raw CI/Pages commands   -> canonical verification command assertions
+//   drop the PR-only Node-22 mutation condition  -> preserves the matrix condition assertion
+//   parse a comment as an executable run line    -> executable-line extractor negative fixture
 //
 // The three `push:` spellings are there because review DEFEATED the first version of that
 // assertion, which required `push:` to be followed immediately by a newline. A trailing
 // comment, a trailing space and a quoted key all restored a working push trigger with the
 // guard green -- and in a file where every key carries a comment, the commented form is
 // the likely way it comes back.
+//
+// This file also treats package.json's verification scripts as the workflow command API.
+// It expands their npm-run graph so duplicate work, cycles, missing leaves, or drift
+// between agents and CI fail at the same boundary.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -53,6 +60,58 @@ const PAGES = read('.github/workflows/pages.yml');
 const CI = read('.github/workflows/ci.yml');
 const ENGINES = read('.github/workflows/engines.yml');
 const BASELINE_RUN = read('tools/baseline/run.mjs');
+const COMMAND_REFERENCE = read('docs/agent/commands-and-operations.md');
+
+type ScriptTable = Record<string, string>;
+
+const PACKAGE = JSON.parse(read('package.json')) as { scripts?: ScriptTable };
+const SCRIPTS = PACKAGE.scripts ?? {};
+
+const ATOMIC = {
+  typecheck: 'tsc --noEmit',
+  'test:unit': 'vitest run',
+  build: 'vite build',
+  portability: 'node tools/portability/check.mjs dist',
+  'test:gl': 'node tools/gl/run.mjs',
+  'trace:browser': 'node tools/baseline/run.mjs',
+  visual: 'node tools/visual/verify.mjs dist --check',
+  mutate: 'node tools/mutate/run.mjs',
+  'audit:prod': 'npm audit --omit=dev --audit-level=high',
+} as const;
+
+const COMPOSITES = {
+  test: 'npm run verify:quick --',
+  'verify:quick': 'npm run typecheck && npm run test:unit --',
+  'verify:build': 'npm run build && npm run portability',
+  'verify:visual': 'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual',
+  'verify:full': 'npm run verify:quick && npm run mutate && npm run verify:build && npm run audit:prod',
+} as const;
+
+const BROWSER_LEAVES = ['test:gl', 'trace:browser', 'visual'] as const;
+const DIRECT_BEACON_COMMAND = 'node tools/baseline/run.mjs --beacon --timeout 300000';
+
+const referencedScripts = (command: string): string[] =>
+  [...command.matchAll(/\bnpm run ([a-zA-Z0-9:_-]+)/g)].map((match) => match[1]);
+
+function expandScript(name: string, scripts: ScriptTable, stack: string[] = []): string[] {
+  const command = scripts[name];
+  if (command === undefined) {
+    throw new Error(`script '${stack.at(-1) ?? '<entry>'}' references missing script '${name}'`);
+  }
+  if (stack.includes(name)) {
+    throw new Error(`script cycle: ${[...stack, name].join(' -> ')}`);
+  }
+
+  const references = referencedScripts(command);
+  if (references.length === 0) return [name];
+  return references.flatMap((reference) => expandScript(reference, scripts, [...stack, name]));
+}
+
+const duplicates = (names: string[]): string[] =>
+  [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
+
+const browserLeaks = (names: string[]): string[] =>
+  names.filter((name) => BROWSER_LEAVES.some((browserLeaf) => browserLeaf === name));
 
 const namedStep = (workflow: string, name: string): string => {
   const marker = `      - name: ${name}\n`;
@@ -61,6 +120,153 @@ const namedStep = (workflow: string, name: string): string => {
   const next = workflow.indexOf('\n      - name: ', start + marker.length);
   return workflow.slice(start, next < 0 ? workflow.length : next);
 };
+
+const jobBlock = (workflow: string, name: string): string => {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const marker = new RegExp(`^  ${escapedName}:[ \\t]*(?:#.*)?$`, 'm');
+  const current = marker.exec(workflow);
+  if (current === null) return '';
+  const start = current.index;
+  const next = /^  [a-zA-Z0-9_-]+:[ \t]*(?:#.*)?$/gm;
+  next.lastIndex = start + current[0].length;
+  const match = next.exec(workflow);
+  return workflow.slice(start, match?.index ?? workflow.length);
+};
+
+const executableRunCommands = (workflow: string): string[] => {
+  const lines = workflow.split('\n');
+  const commands: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s*)(?:-\s*)?run:\s*(.*?)\s*$/.exec(lines[index]);
+    if (match === null) continue;
+
+    const [, indentation, value] = match;
+    if (!value.startsWith('|') && !value.startsWith('>')) {
+      commands.push(value);
+      continue;
+    }
+
+    const body: string[] = [];
+    for (index += 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (line.trim() === '') {
+        body.push('');
+        continue;
+      }
+      const bodyIndent = /^\s*/.exec(line)?.[0].length ?? 0;
+      if (bodyIndent <= indentation.length) {
+        index -= 1;
+        break;
+      }
+      const commandLine = line.trimStart();
+      if (!commandLine.trimStart().startsWith('#')) body.push(commandLine);
+    }
+    commands.push(body.join('\n').trim());
+  }
+
+  return commands;
+};
+
+describe('the canonical verification scripts', () => {
+  it('loads a substantive script table', () => {
+    expect(Object.keys(SCRIPTS).length).toBeGreaterThan(10);
+  });
+
+  it('keeps typecheck, unit test, build, and specialized operations atomic', () => {
+    for (const [name, command] of Object.entries(ATOMIC)) {
+      expect(SCRIPTS[name], name).toBe(command);
+      expect(referencedScripts(command), `${name} must not hide another package script`).toEqual([]);
+    }
+  });
+
+  it('keeps the compatibility alias and composites explicit and ordered', () => {
+    for (const [name, command] of Object.entries(COMPOSITES)) {
+      expect(SCRIPTS[name], name).toBe(command);
+    }
+  });
+
+  it('preserves dash-prefixed Vitest arguments across both npm alias boundaries', () => {
+    expect(SCRIPTS.test).toMatch(/npm run verify:quick --$/);
+    expect(SCRIPTS['verify:quick']).toMatch(/npm run test:unit --$/);
+
+    // These are the pre-fix forms: npm consumes appended flags at the nested boundary.
+    expect('npm run verify:quick').not.toMatch(/ --$/);
+    expect('npm run typecheck && npm run test:unit').not.toMatch(/ --$/);
+  });
+
+  it('resolves every package-script graph without missing references or cycles', () => {
+    for (const name of Object.keys(SCRIPTS)) {
+      expect(() => expandScript(name, SCRIPTS), name).not.toThrow();
+    }
+  });
+
+  it('performs each atomic operation at most once in every canonical composite', () => {
+    for (const name of Object.keys(COMPOSITES)) {
+      const leaves = expandScript(name, SCRIPTS);
+      expect(duplicates(leaves), `${name}: ${leaves.join(' -> ')}`).toEqual([]);
+    }
+
+    expect(expandScript('verify:quick', SCRIPTS)).toEqual(['typecheck', 'test:unit']);
+    expect(expandScript('verify:build', SCRIPTS)).toEqual(['build', 'portability']);
+    expect(expandScript('verify:full', SCRIPTS)).toEqual([
+      'typecheck',
+      'test:unit',
+      'mutate',
+      'build',
+      'portability',
+      'audit:prod',
+    ]);
+  });
+
+  it('keeps browser verification explicit instead of hiding it in the core full gate', () => {
+    expect(expandScript('verify:visual', SCRIPTS)).toEqual([
+      'build',
+      'portability',
+      'test:gl',
+      'trace:browser',
+      'visual',
+    ]);
+    expect(browserLeaks(expandScript('verify:full', SCRIPTS))).toEqual([]);
+    expect(browserLeaks(['typecheck', 'visual'])).toEqual(['visual']);
+    expect(browserLeaks(['test:gl', 'audit:prod'])).toEqual(['test:gl']);
+    expect(COMMAND_REFERENCE).toMatch(/`verify:full` is the complete core, non-browser merge gate/);
+  });
+
+  it('documents every stable entry point with scope and approximate runtime', () => {
+    for (const name of [
+      'typecheck',
+      'test:unit',
+      'build',
+      'verify:quick',
+      'verify:build',
+      'verify:visual',
+      'verify:full',
+    ]) {
+      expect(COMMAND_REFERENCE, name).toContain(`npm run ${name}`);
+    }
+    expect(COMMAND_REFERENCE).toContain('Typical warm local runtime');
+    expect(COMMAND_REFERENCE).toMatch(/Run `verify:full` against the clean candidate commit/);
+  });
+
+  it('proves the graph guard detects its duplicate, missing-reference, and cycle failures', () => {
+    // Known-bad fixtures exercise the same helpers as the real-table assertions above.
+    // Without them, a parser that returned [] for every command would make the guard green.
+    const duplicate = {
+      typecheck: 'tsc --noEmit',
+      entry: 'npm run typecheck && npm run typecheck',
+    };
+    expect(duplicates(expandScript('entry', duplicate))).toEqual(['typecheck']);
+
+    expect(() => expandScript('entry', { entry: 'npm run absent' })).toThrow(
+      "references missing script 'absent'",
+    );
+    expect(() => expandScript('entry', {
+      entry: 'npm run second',
+      second: 'npm run entry',
+    })).toThrow('script cycle: entry -> second -> entry');
+  });
+});
 
 describe('the deploy workflow', () => {
   it('loads at all -- every assertion below is vacuous on an empty read', () => {
@@ -126,6 +332,123 @@ describe('the deploy workflow', () => {
     // different commit whenever a second merge lands while the first is still in CI, and
     // deploying it publishes a commit whose CI has not finished.
     expect(PAGES).toMatch(/uses: actions\/checkout@v\d+\n\s*with:\n\s*ref: \$\{\{ github\.event\.workflow_run\.head_sha/);
+  });
+});
+
+describe('canonical verification commands in workflows', () => {
+  const ciVerify = jobBlock(CI, 'verify');
+  const ciVisual = jobBlock(CI, 'visual');
+  const pagesBuild = jobBlock(PAGES, 'build');
+
+  it('keeps required jobs and the Pages build available to inspect', () => {
+    expect(ciVerify).toContain('name: verify (${{ matrix.label }})');
+    expect(ciVisual).not.toBe('');
+    expect(pagesBuild).not.toBe('');
+  });
+
+  it('routes CI named steps through atomic package scripts without flattening conditions', () => {
+    const expected = {
+      Typecheck: 'npm run typecheck',
+      Test: 'npm run test:unit',
+      'Mutation manifest': 'npm run mutate',
+      Build: 'npm run build',
+      'Assert the build is subpath-portable': 'npm run portability',
+      'Audit production dependencies': 'npm run audit:prod',
+    };
+    for (const [name, command] of Object.entries(expected)) {
+      expect(namedStep(ciVerify, name), name).toContain(`run: ${command}`);
+    }
+    expect(namedStep(ciVerify, 'Mutation manifest')).toContain(
+      "if: matrix.node == '24' || github.event_name == 'push'",
+    );
+
+    const visualExpected = {
+      Build: 'npm run build',
+      'GL tests (scene.ts)': 'npm run test:gl',
+      'Baseline trace (chromium)': 'npm run trace:browser',
+      'Visual check': 'npm run visual -- --out visual-out',
+    };
+    for (const [name, command] of Object.entries(visualExpected)) {
+      expect(namedStep(ciVisual, name), name).toContain(`run: ${command}`);
+    }
+  });
+
+  it('routes the ungated manual Pages checks through the same atomic scripts', () => {
+    const expected = {
+      Typecheck: 'npm run typecheck',
+      Test: 'npm run test:unit',
+      Build: 'npm run build',
+      'Assert the build is subpath-portable': 'npm run portability',
+      'Audit production dependencies': 'npm run audit:prod',
+    };
+    for (const [name, command] of Object.entries(expected)) {
+      expect(namedStep(pagesBuild, name), name).toContain(`run: ${command}`);
+    }
+  });
+
+  it('does not duplicate atomic tool commands in executable workflow run bodies', () => {
+    expect(CI).not.toContain(DIRECT_BEACON_COMMAND);
+    expect(PAGES).not.toContain(DIRECT_BEACON_COMMAND);
+    expect(ENGINES.split(DIRECT_BEACON_COMMAND)).toHaveLength(2);
+
+    const commands = [
+      ...executableRunCommands(CI),
+      ...executableRunCommands(PAGES),
+      ...executableRunCommands(ENGINES),
+    ].map((command) => command.replace(DIRECT_BEACON_COMMAND, ''));
+    for (const forbidden of [
+      'npx tsc --noEmit',
+      'npx vitest run',
+      'npx vite build',
+      'node tools/gl/run.mjs',
+      'node tools/baseline/run.mjs',
+      'node tools/baseline/safari.mjs',
+      'node tools/visual/verify.mjs',
+      'npm audit --omit=dev --audit-level=high',
+    ]) {
+      expect(commands.some((command) => command.includes(forbidden)), forbidden).toBe(false);
+    }
+
+    expect(namedStep(ENGINES, 'Run the golden trace + angle probe (Safari)')).toContain(
+      'run: npm run trace:safari 2>&1 | tee trace-safari.log',
+    );
+  });
+
+  it('proves the run extractor catches composite, flagged, and block-scalar raw commands', () => {
+    const knownBad = [
+      '# run: npm run typecheck',
+      'steps:',
+      '  - run: npx tsc --noEmit && npx vitest run --reporter=dot',
+      '  - run: |',
+      '      # npx vite build in a shell comment is not executable',
+      '      npm ci',
+      '      npx vite build --debug',
+    ].join('\n');
+    const commands = executableRunCommands(knownBad);
+    expect(commands).toEqual([
+      'npx tsc --noEmit && npx vitest run --reporter=dot',
+      'npm ci\nnpx vite build --debug',
+    ]);
+    expect(commands.some((command) => command.includes('npx tsc --noEmit'))).toBe(true);
+    expect(commands.some((command) => command.includes('npx vitest run'))).toBe(true);
+    expect(commands.some((command) => command.includes('npx vite build'))).toBe(true);
+  });
+
+  it('keeps job blocks bounded when the following job key has a comment', () => {
+    const knownBad = [
+      'jobs:',
+      '  verify:',
+      '    steps:',
+      '      - name: Verify only',
+      '        run: npm run typecheck',
+      '  visual: # independent required job',
+      '    steps:',
+      '      - name: Visual only',
+      '        run: npm run visual',
+    ].join('\n');
+    expect(jobBlock(knownBad, 'verify')).toContain('Verify only');
+    expect(jobBlock(knownBad, 'verify')).not.toContain('Visual only');
+    expect(jobBlock(knownBad, 'visual')).toContain('Visual only');
   });
 });
 
@@ -209,7 +532,9 @@ describe('the Engines Matrix iOS Simulator beacon', () => {
 
   it('gives beacon-mode Vite startup and the Mobile Safari report real headroom', () => {
     const step = namedStep(ENGINES, 'Open the beacon URL in the Simulator and wait for its report');
-    expect(step).toContain('run.mjs --beacon --timeout 300000');
+    // This stays direct: the cleanup trap must own run.mjs's PID and its Vite child,
+    // rather than an npm wrapper process that can orphan the actual runner on failure.
+    expect(step).toContain(DIRECT_BEACON_COMMAND);
     expect(BASELINE_RUN).toContain('waitForVite(BASE, vite, { timeoutMs: 90_000 })');
   });
 

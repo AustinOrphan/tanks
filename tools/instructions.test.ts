@@ -198,8 +198,8 @@ describe('the instruction files', () => {
 
     expect(standard).toMatch(/game, input, audio, HUD, or UI behavior/);
     expect(standard).toMatch(/repository instructions and review policy/);
-    expect(standard).toMatch(/typecheck and the directly relevant unit or integration tests/);
-    expect(standard).toMatch(/build when production output can change/);
+    expect(standard).toContain('npm run verify:quick');
+    expect(standard).toContain('npm run verify:build');
     expect(standard).toMatch(/focused self-review/);
 
     expect(high).toMatch(/deterministic simulation/);
@@ -207,7 +207,7 @@ describe('the instruction files', () => {
     expect(high).toMatch(/renderer\/WebGL infrastructure/);
     expect(high).toMatch(/CI, build, dependency\/engine, release, deployment/);
     expect(high).toMatch(/cross-cutting change/);
-    expect(high).toMatch(/full applicable automated gate and production build/);
+    expect(high).toContain('npm run verify:full');
     expect(high).toMatch(/adversarially review invariants/);
   });
 
@@ -215,8 +215,9 @@ describe('the instruction files', () => {
     const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
 
     expect(policy).toMatch(/mixed change inherits the highest tier present/);
-    expect(policy).toMatch(/Visual evidence is mandatory for any user-visible/);
-    expect(policy).toMatch(/run the portability check when changing Vite base\/output behavior/);
+    expect(policy).toMatch(/Visual evidence.*mandatory for any user-visible/);
+    expect(policy).toContain('npm run verify:visual');
+    expect(policy).toMatch(/verify:build` when changing Vite base\/output behavior/);
     expect(policy).toMatch(/Delegate when the question is concrete, bounded, independent/);
     expect(policy).toMatch(/worker that mutates files must use its own worktree/);
     expect(policy).toMatch(/lead agent verifies returned claims/);

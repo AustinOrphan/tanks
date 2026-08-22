@@ -262,7 +262,7 @@ jobs:
       # angle-probe MISMATCH is reported but does not, matching every other leg in this
       # workflow.
       - name: Run the golden trace + angle probe (Safari)
-        run: node tools/baseline/safari.mjs 2>&1 | tee trace-safari.log
+        run: npm run trace:safari 2>&1 | tee trace-safari.log
 
       - name: Upload trace output
         if: always()

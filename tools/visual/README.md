@@ -4,15 +4,17 @@ Measures what the game actually paints, in a real browser, and fails on the two
 classes of defect that have actually shipped here.
 
 ```
-node tools/visual/verify.mjs dist                 # report + screenshots
-node tools/visual/verify.mjs dist --check         # exit 1 if a check fails
-node tools/visual/verify.mjs dist --label after --out visual-out/after
+npm run visual                                    # check dist/ + report/screenshots
+npm run visual -- --label after --out visual-out/after
+npm run verify:visual                             # build + portability + browser checks
 ```
 
 Playwright is **not** a dependency of this repo — the package downloads browsers
-on install, and this tool is not wired into CI. Resolution order is
-`$PLAYWRIGHT_MODULE`, then a `playwright` in `node_modules`, then a known local
-install. Install with `npm i -D playwright` if you want it local.
+on install, while only the separate CI `visual` job needs it. That job installs the
+version pinned in `.github/workflows/ci.yml` with `--no-save` and caches Chromium.
+Local resolution order is `$PLAYWRIGHT_MODULE`, then a `playwright` in `node_modules`,
+then a known local install. Match CI's pinned version and install its Chromium browser
+before running `npm run verify:visual` locally.
 
 ## Why it does not read the canvas directly
 
@@ -86,8 +88,8 @@ board width at 3 viewports, detached felt at 4.
 
 ## What it does not do
 
-- **It is not wired into CI.** Doing so means adding Playwright and a browser
-  download to every run.
+- It does not add Playwright to ordinary installs or run inside either Node matrix job;
+  CI isolates the dependency and browser download in the required `visual` job.
 - It only looks at the **title screen**. Nothing here exercises a running game,
   particles, or the win/lose panels.
 - Thresholds are calibrated against **one** defect pair. A different visual

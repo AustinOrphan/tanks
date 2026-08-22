@@ -49,13 +49,13 @@ entry in `package.json`: it is resolved as a binary path
 declaration buys no resolution correctness here -- and it has a real, measured cost.
 Declaring it created a non-dev edge from this (non-dev) workspace package to vitest,
 which pulled vitest's own dev-only transitive dependencies (postcss, nanoid) out of
-their `"dev": true` classification in `package-lock.json`. `npm audit --omit=dev`
+their `"dev": true` classification in `package-lock.json`. `npm run audit:prod`
 audits by that classification, not by resolved version, so those packages' advisories
 started failing a gate that is specifically designed to stay green on dev-only CVEs
 (see `ci.yml`'s "Audit production dependencies" step). Confirmed by reverting the
 field and re-locking: the audit returns to 0 vulnerabilities. If a future change adds a
 real dependency edge from this package to anything in the app's own devDependency
-subtree, re-check `npm audit --omit=dev --audit-level=high` before landing it.
+subtree, re-run `npm run audit:prod` before landing it.
 
 ## Distribution
 
@@ -69,8 +69,9 @@ outward-facing decision for later.
 ## Typechecking
 
 `orchestrate.test.ts` is a `.ts` file and is included in the project root's
-`tsconfig.json`, so it is typechecked by the same `tsc --noEmit` that gates `npm test`
-and `npm run build`. `allowJs`/`checkJs` there also pull `run.mjs`, `lib.mjs` and
+`tsconfig.json`, so it is typechecked by `npm run typecheck`, which is included in
+`npm test`, `npm run verify:quick`, and `npm run verify:full`. `npm run build` is
+deliberately build-only. `allowJs`/`checkJs` also pull `run.mjs`, `lib.mjs` and
 `orchestrate.mjs` into that same typecheck, all three as `orchestrate.test.ts`'s own
 direct value-level imports -- see the root `tsconfig.json` and `CLAUDE.md` for what
 that surfaced and what is still deferred.

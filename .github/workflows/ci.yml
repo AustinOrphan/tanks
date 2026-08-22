@@ -39,14 +39,14 @@ jobs:
       # checkout a deploy would build from.
       - run: npm ci
 
-      # The npm scripts prefix `tsc --noEmit` onto both `test` and `build`, so
-      # calling the tools directly runs the typecheck once instead of three
-      # times.
+      # Keep these as atomic named steps rather than one composite command: the
+      # matrix's mutation condition and each failure's diagnostic boundary stay
+      # visible, while package.json remains the one command source of truth.
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Test
-        run: npx vitest run
+        run: npm run test:unit
 
       # tools/mutate/manifest.json is hand-verified against a specific commit, and this
       # repo's own history has that go stale: a rebase onto a later main left two `find`
@@ -61,7 +61,7 @@ jobs:
         run: npm run mutate
 
       - name: Build
-        run: npx vite build
+        run: npm run build
 
       # The base-path regression guard. A bundle built with the default base
       # references /assets/... absolutely and is a blank page on any host that
@@ -82,7 +82,7 @@ jobs:
       # Dev-only advisories (vite/vitest dev-server CVEs) cannot reach a static
       # bundle, so gating on them would be a permanent, non-actionable red.
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: npm run audit:prod
 
   # The visual check runs as its own job, not as a step in `verify`.
   #
@@ -134,7 +134,7 @@ jobs:
         run: npx playwright install chromium
 
       - name: Build
-        run: npx vite build
+        run: npm run build
 
       # Measures the SCREENSHOT, never the WebGL canvas directly -- reading the
       # canvas with drawImage returns all black without preserveDrawingBuffer,
@@ -145,18 +145,19 @@ jobs:
       # left behind stayed untested while BOTH shipped visual defects lived
       # there. This job already has chromium, so those tests run here.
       - name: GL tests (scene.ts)
-        run: node tools/gl/run.mjs
+        run: npm run test:gl
 
-      # The golden trace, run in the browser this job already has. `npx vitest run` in the
-      # `verify` job pins the same hash under Node, so this is not about catching a sim
-      # change -- it is about tools/baseline/{page.html,run.mjs} not rotting unread, which
-      # is how hud.css lost a brace for the life of a feature. It also means a divergence
-      # between Node and V8 would surface here rather than at netcode time. ~5 seconds.
+      # The golden trace, run in the browser this job already has. `npm run test:unit` in
+      # the `verify` job pins the same hash under Node, so this is not about catching a
+      # sim change -- it is about tools/baseline/{page.html,run.mjs} not rotting unread,
+      # which is how hud.css lost a brace for the life of a feature. It also means a
+      # divergence between Node and V8 would surface here rather than at netcode time.
+      # ~5 seconds.
       - name: Baseline trace (chromium)
-        run: node tools/baseline/run.mjs
+        run: npm run trace:browser
 
       - name: Visual check
-        run: node tools/visual/verify.mjs dist --check --out visual-out
+        run: npm run visual -- --out visual-out
 
       # The numbers alone do not tell you WHAT went wrong; the screenshots do.
       - name: Upload screenshots

@@ -181,8 +181,8 @@ alter a high-risk contract:
 
 Minimum evidence:
 
-- run the typecheck and the directly relevant unit or integration tests
-- build when production output can change
+- run `npm run verify:quick` (typecheck plus the complete unit suite)
+- add `npm run verify:build` when production output can change
 - inspect the affected subsystem's callers, consumers, and negative cases
 - perform a focused self-review; delegate only if a separate bounded question justifies it
 
@@ -203,7 +203,8 @@ or cross subsystem boundaries:
 
 Minimum evidence:
 
-- run the full applicable automated gate and production build
+- from a clean candidate worktree, run `npm run verify:full`, the complete core
+  non-browser gate; its mutation phase refuses uncommitted changes to manifest targets
 - run every affected subsystem-specific check, such as the golden trace for simulation,
   persistence compatibility tests, WebGL/visual checks, or built-output portability
 - adversarially review invariants, failure modes, compatibility, and expected absences
@@ -216,12 +217,11 @@ evidence it relies on.
 
 ### Cross-tier evidence
 
-- Visual evidence is mandatory for any user-visible CSS, HUD, renderer, animation, skin,
-  authored asset, or layout change. Rendering infrastructure remains high risk even when
-  the visible diff looks small.
-- Build first and run the portability check when changing Vite base/output behavior,
-  `index.html`, public assets, the manifest/PWA shell, Pages/release workflows, or artifact
-  paths.
+- Visual evidence and `npm run verify:visual` are mandatory for any user-visible CSS, HUD,
+  renderer, animation, skin, authored asset, or layout change. Rendering infrastructure
+  remains high risk even when the visible diff looks small.
+- Run `npm run verify:build` when changing Vite base/output behavior, `index.html`, public
+  assets, the manifest/PWA shell, Pages/release workflows, or artifact paths.
 - Simulation behavior needs the golden trace in addition to behavioral tests;
   determinism alone proves only self-consistency.
 - Recompute quoted counts and measurements after the final tree changes.

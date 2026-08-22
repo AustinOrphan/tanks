@@ -2,15 +2,64 @@
 
 On-demand detail for repository tools, CI, deployment, and branch protection. For the short command entry points, start in `CLAUDE.md`.
 
-## Commands
+## Verification command surface
 
-```
-npm test     # tsc --noEmit && vitest run
-npm run build # tsc --noEmit && vite build
-npm run dev   # vite
-npm run gallery -- --elements mine,tank,shell --view low   # look at any element
-npm run mutate                                              # run the hand-picked mutation manifest
-npm run trace:browser -- --all                              # the golden trace, in three real engines
+The package scripts separate atomic operations from stable composites. CI uses the atomic
+scripts in separate named steps for clear diagnostics and matrix conditions; people and
+agents should normally start with the composites.
+
+| Command | Scope | Typical warm local runtime |
+| --- | --- | ---: |
+| `npm run typecheck` | TypeScript validation only; emits nothing | about 5 seconds |
+| `npm run test:unit` | Complete Vitest suite only | about 55 seconds |
+| `npm run build` | Vite production bundle only | about 1 second |
+| `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
+| `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
+| `npm run verify:visual` | Build/portability, GL tests, Chromium trace, and screenshot checks | roughly 30–90 seconds after browser setup |
+| `npm run verify:full` | Quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
+
+The figures are approximate measurements/bands from a warm Node 24 Linux checkout on
+2026-08-21; hardware, cache state, mutation selection, audit networking, and browser
+startup move them substantially. The command contract matters more than the exact timing.
+
+`npm test` remains a compatibility alias for `npm run verify:quick`; both package scripts
+retain a trailing `--` boundary so `npm test -- <Vitest arguments>` reaches Vitest. For a
+focused test without an implicit typecheck, use `npm run test:unit -- <Vitest arguments>`.
+
+`verify:full` is the complete core, non-browser merge gate. It deliberately does not
+silently skip or install browser prerequisites. Run `verify:visual` in addition when a
+change affects user-visible rendering or renderer/WebGL infrastructure. Playwright is not
+a repository dependency: install the version pinned in `.github/workflows/ci.yml` and its
+Chromium browser before running the visual composite locally. Safari and the cross-OS/
+architecture engine matrix remain separate because Linux cannot reproduce them.
+
+The mutation phase also refuses to run when a file named by its manifest has uncommitted
+changes. Run `verify:full` against the clean candidate commit in a clean worktree. While
+editing, run the applicable quick, build, and subsystem checks first; do not discard or
+stash unrelated work merely to satisfy the mutation preflight.
+
+Risk tiers map to the minimum command set as follows:
+
+| Risk | Minimum command set |
+| --- | --- |
+| Low | Directly relevant documentation, formatting, link, or generator checks; no universal composite |
+| Standard | `npm run verify:quick`; add `npm run verify:build` when production output can change and `npm run verify:visual` for user-visible rendering |
+| High | `npm run verify:full`, plus every affected subsystem check; renderer/WebGL work adds `npm run verify:visual` |
+
+The tier is a floor rather than a substitute for targeted evidence. Simulation changes
+still need the applicable browser/Safari trace; persistence changes still need focused
+compatibility coverage; Pages and artifact-path changes still need built-output review.
+
+Specialized commands remain directly available:
+
+```sh
+npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
+npm run mutate -- --only <id>                              # run one mutation entry
+npm run test:gl                                            # renderer construction checks
+npm run trace:browser -- --all                              # golden trace in three Playwright engines
+npm run trace:safari                                       # real Safari on supported macOS
+npm run portability                                        # inspect an existing dist/
+npm run visual                                             # inspect an existing dist/ in Chromium
 ```
 
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
@@ -48,14 +97,17 @@ The exit code is non-zero if any entry's real outcome (including a suite that fa
 COLLECT under the mutation, which counts as killed even at 0 failed tests) does not
 match what it declared, which is what turns a manifest entry from a transcript into
 something CI can check. **SURVIVES means the scoped vitest run does not catch it, not
-that the full gate (`tsc --noEmit && vitest run`) doesn't** -- this tool does not run
-`tsc` as part of the verdict, so a type-only mutation can still be caught by the build
-even when every entry here reports SURVIVES. `--only <id>` runs a single entry.
+that `npm run verify:full` doesn't** -- this tool does not run the `typecheck` script as
+part of the verdict, so a type-only mutation can still be caught by the full gate even
+when every entry here reports SURVIVES. `--only <id>` runs a single entry.
 
-CI (`.github/workflows/ci.yml`) runs typecheck, tests, build and a bundle-portability
-assertion on Node 22.13.0 — the declared floor — and the Node 24 LTS line. `engines.node`
-is `^22.13.0 || ^24.0.0`, matching those two tested LTS lines exactly. Node 20 was
-removed from the support claim after reaching EOL.
+CI (`.github/workflows/ci.yml`) invokes the same atomic package scripts in named steps:
+typecheck, unit tests, the conditionally selected mutation manifest, build, bundle
+portability, and production audit on Node 22.13.0 — the declared floor — and the Node 24
+LTS line. Its separate visual job uses the direct build, GL, browser-trace, and visual
+scripts so setup failures and rendering failures retain distinct diagnostics.
+`engines.node` is `^22.13.0 || ^24.0.0`, matching those two tested LTS lines exactly.
+Node 20 was removed from the support claim after reaching EOL.
 
 **The game deploys from `main` to GitHub Pages** (`.github/workflows/pages.yml`), live at
 `https://austinorphan.com/tanks/` — a **custom apex domain inherited from the user page**,
@@ -97,7 +149,7 @@ up the runner, so `checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`In
 Playwright` and `Install chromium` are separate named steps), the browser cache and
 `upload-artifact` are all excluded. `verify` contributes 6: Typecheck, Test, Mutation
 manifest, Build, portability, audit. `visual` contributes 4 — Build, GL tests, Baseline
-trace, Visual check — but its `Build` is the same `npx vite build` already counted, so it
+trace, Visual check — but its `Build` is the same `npm run build` already counted, so it
 adds 3, for 9 distinct. The deploy runs 5 of them, all from `verify`: Typecheck, Test,
 Build, portability, audit.) The construction is written out because the bare number went
 stale twice unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule over

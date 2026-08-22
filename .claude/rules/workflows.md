@@ -27,6 +27,8 @@ paths:
 - Main protection is a repository ruleset, not classic branch protection. Required status
   contexts are `verify (floor)`, `verify (current)`, and `visual`.
 - Keep workflow-token permissions least-privilege and update action runtimes deliberately.
+- Keep CI's diagnostic and conditional boundaries as named atomic package-script steps;
+  agents use the composite `verify:*` entry points instead of duplicating tool commands.
 - Recount named checking steps whenever workflow structure changes; historical bare counts
   have repeatedly gone stale.
 
