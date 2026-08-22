@@ -13,6 +13,7 @@ agents should normally start with the composites.
 | `npm run typecheck` | TypeScript validation only; emits nothing | about 5 seconds |
 | `npm run test:unit` | Complete Vitest suite only | about 55 seconds |
 | `npm run build` | Vite production bundle only | about 1 second |
+| `npm run docs:check` | Plan/spec metadata and unchanged-legacy validation | under 1 second |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
 | `npm run verify:visual` | Build/portability, GL tests, Chromium trace, and screenshot checks | roughly 30–90 seconds after browser setup |
