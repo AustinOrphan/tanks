@@ -15,6 +15,26 @@
       content="A top-down arena tank game: ricochet shells, mines, and three enemy personalities."
     />
     <meta name="theme-color" content="#1a1a1a" />
+    <!-- Absolute, unlike every other URL-bearing tag below it in this file: canonical and
+         Open Graph URLs are read by crawlers and link-unfurlers off-origin, not resolved
+         by a browser that already has /tanks/ as its base, so the relative-href rule the
+         favicon/manifest/icon comments describe does not apply here. This is the one
+         live location the game is served from. -->
+    <link rel="canonical" href="https://austinorphan.com/tanks/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://austinorphan.com/tanks/" />
+    <meta property="og:title" content="Tanks!" />
+    <!-- Same sentence as the description meta above, deliberately: one honest description
+         of the game, not a second copy that could drift from the first. -->
+    <meta
+      property="og:description"
+      content="A top-down arena tank game: ricochet shells, mines, and three enemy personalities."
+    />
+    <!-- No og:image/twitter:image: no share-image asset exists in this repo yet, and a
+         summary card renders fine without one. Inventing a placeholder file here would be
+         worse than omitting the tag; adding a real one is deferred, tracked separately
+         from this change. -->
+    <meta name="twitter:card" content="summary" />
     <!-- Relative href, deliberately: on a GitHub Pages PROJECT page the browser
          resolves a bare /favicon.ico against the ORIGIN root, not the project
          subpath, so dropping a file in public/ is not enough on its own. -->
