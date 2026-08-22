@@ -24,7 +24,8 @@
     "audio": "node tools/audio/render.mjs",
     "mutate": "node tools/mutate/run.mjs",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",
-    "tanks:doc": "vite-node tools/tanks/generate.mjs"
+    "tanks:doc": "vite-node tools/tanks/generate.mjs",
+    "notices": "node tools/notices/generate.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
