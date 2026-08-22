@@ -122,6 +122,8 @@ interface Recorder {
   versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
   /** Every (show, initial) passed to hud.showVersusSetup, in order. */
   versusSetupPushes: Array<{ show: boolean; initial: VersusConfig | null }>;
+  /** Every value passed to hud.setSessionKind, in order (Task 5b). */
+  sessionKinds: Array<'campaign' | 'versus'>;
   /**
    * A SINGLE shared log of every hud.setState and hud.showVersusSetup call, in the
    * exact order loop.ts made them -- unlike hudStates/versusSetupPushes (each its own
@@ -250,6 +252,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     closeControllers(): void;
     openVersus(): void;
     startVersus(config: VersusConfig): void;
+    openCampaign(): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -316,6 +319,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     coopKillPushes: [],
     versusResultsPushes: [],
     versusSetupPushes: [],
+    sessionKinds: [],
     hudCallLog: [],
     levelSelects: [],
     continueAvailable: [],
@@ -403,6 +407,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onControllersClose = (): void => {};
   let onVersusOpenCb = (): void => {};
   let onVersusStartCb = (_config: VersusConfig): void => {};
+  let onCampaignOpenCb = (): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
   // fake createPreview below can assert it received the SAME element the HUD exposed --
   // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
@@ -851,6 +856,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
           rec.versusSetupPushes.push({ show, initial: initial ?? null });
           rec.hudCallLog.push(`versusSetup:${show}`);
         },
+        // Task 5b: this fake has no real DOM, so it only records what loop.ts pushed --
+        // "the button is hidden" can only be asserted against the real hud.ts (hud.test.ts).
+        // What IS assertable here: which kind was pushed, and in what order relative to
+        // other construction-time calls (rec.hudCallLog, mirroring setState/
+        // showVersusSetup's own shared log).
+        setSessionKind: (kind: 'campaign' | 'versus') => {
+          rec.sessionKinds.push(kind);
+          rec.hudCallLog.push(`sessionKind:${kind}`);
+        },
+        onCampaignOpen: (cb: () => void) => {
+          onCampaignOpenCb = cb;
+        },
         dispose: () => rec.disposed.push('hud'),
       };
     },
@@ -1176,6 +1193,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       closeControllers: () => onControllersClose(),
       openVersus: () => onVersusOpenCb(),
       startVersus: (config: VersusConfig) => onVersusStartCb(config),
+      openCampaign: () => onCampaignOpenCb(),
     },
     setState: (s) => {
       state = s;
@@ -5143,6 +5161,92 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
   });
 });
 
+describe('startGameWith: campaign return from a versus session (Task 5b)', () => {
+  // A concrete (non-'random') arenaId -- same posture as Task 5's own describe block's
+  // CONFIG just above; a seed-driven map pick has no bearing on any test here.
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+
+  /** Same shape as Task 5's own `versusDeps` helper (scoped to its own describe block,
+   *  so not reusable here) -- widens devFlags.players (H2) and stamps
+   *  initialVersusConfig, optionally threading a requestCampaignSession spy. */
+  function versusDeps(
+    base: ReturnType<typeof makeDeps>,
+    config: VersusConfig,
+    requestCampaignSession?: () => void,
+  ): GameDeps {
+    return {
+      ...base.deps,
+      devFlags: { ...base.deps.devFlags, players: config.players },
+      initialVersusConfig: config,
+      ...(requestCampaignSession ? { requestCampaignSession } : {}),
+    };
+  }
+
+  it("a versus session's construction pushes setSessionKind('versus') exactly once", () => {
+    // Fails if the call is dropped, duplicated, or reads the wrong deps field (e.g.
+    // always 'campaign', or keyed off something other than initialVersusConfig).
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+    expect(h.rec.sessionKinds).toEqual(['versus']);
+    h.handle.dispose();
+  });
+
+  it("a plain campaign session's construction pushes setSessionKind('campaign') exactly once", () => {
+    const h = boot(makeDeps());
+    expect(h.rec.sessionKinds).toEqual(['campaign']);
+    h.handle.dispose();
+  });
+
+  it('setSessionKind runs before the very first setState push -- order pin', () => {
+    // hud.ts's real applyTitleAffordances reads sessionKind live, so this ordering is
+    // not load-bearing there the way Task 5's setState/showVersusSetup swap is -- but a
+    // FUTURE hud.ts that snapshotted sessionKind only at setState-time would need it,
+    // and this fails immediately if setSessionKind is ever moved after the constructor's
+    // first hud.setState/showVersusSetup calls.
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+    const kindIndex = h.rec.hudCallLog.findIndex((e) => e.startsWith('sessionKind:'));
+    const stateIndex = h.rec.hudCallLog.findIndex((e) => e.startsWith('state:'));
+    expect(kindIndex).toBeGreaterThanOrEqual(0);
+    expect(stateIndex).toBeGreaterThan(kindIndex);
+    h.handle.dispose();
+  });
+
+  it('the Campaign button click invokes requestCampaignSession exactly once, with no arguments', () => {
+    // Fails if onCampaignOpen's handler drops the call, calls something else, or
+    // forwards an argument requestCampaignSession does not take.
+    const calls: unknown[][] = [];
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG, (...args: unknown[]) => calls.push(args)) });
+    h.hud.openCampaign();
+    expect(calls).toEqual([[]]);
+    h.handle.dispose();
+  });
+
+  it('optional and absent: a Campaign click does not throw when nothing is wired to receive it', () => {
+    // Kills the mutation that drops the `?.` guard (a bare or `!`-asserted call) --
+    // GameDeps' own doc comment says every existing caller with no reboot seam at all
+    // must keep WORKING, not merely compiling.
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) }); // no requestCampaignSession
+    expect(() => h.hud.openCampaign()).not.toThrow();
+    h.handle.dispose();
+  });
+
+  it("negative control: a plain campaign session's sessionKind stays 'campaign' through a full win/restart cycle, with nothing calling openCampaign as a side effect", () => {
+    // This fake has no real DOM, so it cannot show that a campaign session's Campaign
+    // button is absent (hud.test.ts's own session-kind suite proves that half) -- what
+    // IS assertable here is that loop.ts itself never flips sessionKind mid-session and
+    // never invokes the harness's own openCampaign trigger unprompted, mirroring Task
+    // 5's identical-shaped control for openVersus/startVersus.
+    const h = boot(makeDeps());
+    h.setState('win');
+    h.hud.startRestart();
+    expect(h.rec.sessionKinds).toEqual(['campaign']);
+    h.handle.dispose();
+  });
+});
+
 describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
   // A concrete (non-'random') arenaId suitable at players:3 -- see versus-config.test.ts
   // and levels.test.ts's own fixtures, reused here rather than hand-rolled -- so `world()`
@@ -5179,6 +5283,45 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     const result = versusAwareDeps(null, fn);
     expect(result.requestVersusSession).toBe(fn);
     expect(result.initialVersusConfig).toBeNull();
+  });
+
+  describe('requestCampaignSession threading (Task 5b): versus-only, same posture as initialVersusConfig', () => {
+    const campaignNoop = (): void => {};
+
+    it('with no versus config: requestCampaignSession is left UNSET, not defaulted to a no-op', () => {
+      // Fails if applyVersusToDeps stamps some fallback (e.g. `() => {}`) onto a plain
+      // campaign boot instead of leaving the field absent -- a campaign session has no
+      // Campaign button to call it from (hud.ts's own session-kind gating).
+      const base = baseDeps();
+      const result = applyVersusToDeps(base, null, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBeUndefined();
+    });
+
+    it('with a versus config: requestCampaignSession is threaded through by identity', () => {
+      // Fails if the versus branch drops the 4th argument on the floor, or rebuilds a
+      // fresh closure instead of passing the caller's own function through.
+      const result = applyVersusToDeps(baseDeps(), { config: CONFIG }, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBe(campaignNoop);
+    });
+
+    it('versusAwareDeps forwards requestCampaignSession to applyVersusToDeps unchanged', () => {
+      const result = versusAwareDeps({ config: CONFIG }, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBe(campaignNoop);
+    });
+
+    it('versusAwareDeps with no versus config also leaves requestCampaignSession unset', () => {
+      const result = versusAwareDeps(null, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBeUndefined();
+    });
+
+    it('omitting requestCampaignSession entirely (an existing 3-arg caller) still compiles and works -- both functions stay optional', () => {
+      // Every pre-Task-5b call site (this describe block's own two tests above pass
+      // only 3 args in several places) must keep compiling AND keep returning a usable
+      // GameDeps with no reboot-to-campaign seam at all.
+      const result = applyVersusToDeps(baseDeps(), { config: CONFIG }, noop);
+      expect(result.requestCampaignSession).toBeUndefined();
+      expect(result.requestVersusSession).toBe(noop);
+    });
   });
 
   describe('H1 (carried from Task 2): the real devFlags reach the versus world, not DEV_FLAGS_OFF', () => {

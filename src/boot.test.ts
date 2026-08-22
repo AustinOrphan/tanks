@@ -9,6 +9,7 @@ type StartArgs = [
   HTMLElement,
   { config: VersusConfig } | null,
   (config: VersusConfig) => void,
+  () => void,
 ];
 
 function harness(
@@ -55,8 +56,8 @@ function harness(
       canvases.push(canvas);
       return canvas;
     },
-    startGame: (canvas, uiRoot, versus, requestVersusSession): GameHandle => {
-      startArgs.push([canvas, uiRoot, versus, requestVersusSession]);
+    startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession): GameHandle => {
+      startArgs.push([canvas, uiRoot, versus, requestVersusSession, requestCampaignSession]);
       if ('throwOnStart' in opts) throw opts.throwOnStart;
       const id = nextId++;
       return {
@@ -315,5 +316,119 @@ describe('boot: versus session reboot', () => {
     expect(h.root.contains(firstCanvas)).toBe(false);
     expect(h.root.contains(h.canvases[1])).toBe(true);
     expect(h.startArgs[1][0]).toBe(h.canvases[1]);
+  });
+});
+
+describe('boot: campaign session reboot (Task 5b)', () => {
+  // A rebooted versus session's title screen otherwise offers nothing back to
+  // campaign (its deps carry the versus level system for its whole life) -- this is
+  // boot's symmetric counterpart to requestVersusSession above, reached through the
+  // versus-kind title screen's Campaign button (hud.ts's onCampaignOpen).
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 4, friendlyFire: false };
+  const CONFIG_B: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-03', stock: 2, friendlyFire: true };
+
+  it('the initial boot call is also handed a requestCampaignSession', () => {
+    const h = harness();
+    boot(h.deps);
+    const [, , , , requestCampaignSession] = h.startArgs[0];
+    expect(typeof requestCampaignSession).toBe('function');
+  });
+
+  it('requesting a campaign session from a versus one disposes the versus handle and starts a new one with versus: null', () => {
+    // Fails if requestCampaignSession passes `{ config: lastVersusConfig }` instead of
+    // `null` for `versus` -- the exact copy-paste mistake requestVersusSession's own
+    // body invites, and the one that would silently reboot BACK into a versus match
+    // instead of a plain campaign session.
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG); // -> a versus session (handle #1)
+    const requestCampaignSession = h.startArgs[1][4];
+    requestCampaignSession();
+    expect(h.disposedIds).toEqual([0, 1]);
+    expect(h.startArgs).toHaveLength(3);
+    expect(h.startArgs[2][2]).toBeNull();
+  });
+
+  it('threads the SAME requestVersusSession/requestCampaignSession functions through to the new campaign session', () => {
+    // Both reboot callbacks are the SAME function on every call (each's own doc
+    // comment in boot.ts) -- fails if requestCampaignSession rebuilds either as a
+    // fresh closure instead of passing the two originals straight through.
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG);
+    const requestCampaignSession = h.startArgs[1][4];
+    requestCampaignSession();
+    expect(h.startArgs[2][3]).toBe(h.startArgs[0][3]); // requestVersusSession identity
+    expect(h.startArgs[2][4]).toBe(h.startArgs[1][4]); // requestCampaignSession identity
+  });
+
+  it('a second campaign request disposes the SECOND campaign-reachable handle, not an earlier one -- the stale-capture control', () => {
+    // Same bug class the versus suite's own stale-capture test guards: a `const`
+    // capture (rather than the shared reassigned `handle`/`canvas`) would dispose an
+    // earlier handle a second time instead of advancing.
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG); // handle #1: versus
+    h.startArgs[1][4](); // handle #2: campaign
+    h.startArgs[2][3](CONFIG_B); // handle #3: versus again
+    const requestCampaignSession = h.startArgs[3][4];
+    requestCampaignSession(); // handle #4: campaign
+    expect(h.disposedIds).toEqual([0, 1, 2, 3]);
+    expect(h.startArgs).toHaveLength(5);
+    expect(h.startArgs[4][2]).toBeNull();
+  });
+
+  it('pagehide after a campaign reboot disposes the CURRENT handle, not an earlier one', () => {
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG); // handle #1: versus
+    h.startArgs[1][4](); // handle #2: campaign
+    expect(h.disposedIds).toEqual([0, 1]);
+    h.firePagehide(false);
+    expect(h.disposedIds).toEqual([0, 1, 2]);
+  });
+
+  it('does not dispose the campaign-rebooted session when the page only goes into the bfcache', () => {
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG);
+    h.startArgs[1][4]();
+    h.firePagehide(true);
+    expect(h.disposedIds).toEqual([0, 1]); // only the two reboots' own disposes
+  });
+
+  it('builds a fresh canvas for the campaign reboot and removes the dead one', () => {
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG); // versus reboot -> canvases[1]
+    const versusCanvas = h.canvases[1];
+    const requestCampaignSession = h.startArgs[1][4];
+    requestCampaignSession();
+    expect(h.canvases).toHaveLength(3);
+    expect(h.canvases[2]).not.toBe(versusCanvas);
+    expect(h.root.contains(versusCanvas)).toBe(false);
+    expect(h.root.contains(h.canvases[2])).toBe(true);
+    expect(h.startArgs[2][0]).toBe(h.canvases[2]);
+  });
+
+  it('a subsequent requestVersusSession after a campaign detour still boots versus with its OWN config -- the retained-lastVersusConfig pin', () => {
+    // The brief's "do NOT clear lastVersusConfig" instruction, in the shape it is
+    // actually testable today: requestVersusSession sets `lastVersusConfig` fresh from
+    // its OWN argument on every call and never reads a stale value first (see its own
+    // doc comment in boot.ts) -- so this passes whether or not requestCampaignSession
+    // also clears `lastVersusConfig`, and is NOT a killing-mutation test for that
+    // specific instruction. It is included anyway as a real regression check: a
+    // campaign detour must not corrupt or freeze the shared `handle`/`canvas` closure
+    // requestVersusSession depends on. See requestCampaignSession's own doc comment
+    // in boot.ts and this task's report for why "retained, not cleared" has no
+    // independently observable effect in this tree today.
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG); // versus (handle #1)
+    h.startArgs[1][4](); // campaign (handle #2)
+    const requestVersusSession = h.startArgs[2][3];
+    requestVersusSession(CONFIG_B);
+    expect(h.startArgs).toHaveLength(4);
+    expect(h.startArgs[3][2]!.config).toBe(CONFIG_B);
   });
 });

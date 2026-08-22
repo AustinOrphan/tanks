@@ -608,6 +608,7 @@
 .hud-levelselect-open,
 .hud-controllers-open,
 .hud-versus-open,
+.hud-campaign-open,
 .hud-stats-back,
 .hud-customize-back,
 .hud-achievements-back,
@@ -632,7 +633,8 @@
 .hud-customize-open,
 .hud-levelselect-open,
 .hud-controllers-open,
-.hud-versus-open {
+.hud-versus-open,
+.hud-campaign-open {
   margin-top: 2px;
   font-size: 15px;
 }
@@ -1480,6 +1482,13 @@
    session, so there is nothing this pane could offer mid-round. ------------------- */
 
 .hud-versus-open--hidden {
+  display: none;
+}
+
+/* Task 5b's Campaign button (docs/superpowers/sdd/2026-08-21-versus-setup-menu/
+ * task-5b-brief.md): hidden unless setSessionKind('versus') AND the title state both
+ * hold -- see hud.ts's applyTitleAffordances for the combined gate. */
+.hud-campaign-open--hidden {
   display: none;
 }
 

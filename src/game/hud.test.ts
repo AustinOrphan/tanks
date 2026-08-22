@@ -2973,3 +2973,216 @@ describe('hud: the level-cleared panel offers the main menu', () => {
   });
 });
 
+describe('hud: session kind (Task 5b -- campaign return from a versus session)', () => {
+  const continueBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-continue') as HTMLButtonElement;
+  const newGameBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-new-game') as HTMLButtonElement;
+  const levelSelectOpenBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-levelselect-open') as HTMLButtonElement;
+  const campaignOpenBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-campaign-open') as HTMLButtonElement;
+  const versusOpenBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-versus-open') as HTMLButtonElement;
+  const actionBtn = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-action') as HTMLElement;
+
+  /** The whole visibility/label set applyTitleAffordances drives, snapshotted together
+   *  so a single assertion can pin the exact combination rather than one class at a
+   *  time. */
+  function titleAffordances(root: HTMLElement): {
+    continueVisible: boolean;
+    newGameVisible: boolean;
+    newGameLabel: string;
+    levelsVisible: boolean;
+    campaignVisible: boolean;
+    versusVisible: boolean;
+  } {
+    return {
+      continueVisible: !continueBtn(root).classList.contains('hud-continue--hidden'),
+      newGameVisible: !newGameBtn(root).classList.contains('hud-new-game--hidden'),
+      newGameLabel: newGameBtn(root).textContent ?? '',
+      levelsVisible: !levelSelectOpenBtn(root).classList.contains('hud-levelselect-open--hidden'),
+      campaignVisible: !campaignOpenBtn(root).classList.contains('hud-campaign-open--hidden'),
+      versusVisible: !versusOpenBtn(root).classList.contains('hud-versus-open--hidden'),
+    };
+  }
+
+  it("the default kind ('campaign'), never calling setSessionKind, is byte-identical to the title screen before this method existed -- the pre-5b fixture", () => {
+    // Fails if the default sessionKind is ever 'versus', or if applyTitleAffordances
+    // changes anything a campaign session's title screen showed before this task --
+    // the plan's own "campaign flow is untouched" invariant.
+    const { hud: h, root } = mount();
+    h.setContinueAvailable(true);
+    h.setLevelSelect(2, 4);
+    h.setState('title');
+    expect(titleAffordances(root)).toEqual({
+      continueVisible: true,
+      newGameVisible: true,
+      newGameLabel: 'New Game',
+      levelsVisible: true,
+      campaignVisible: false,
+      versusVisible: true,
+    });
+  });
+
+  it("an explicit setSessionKind('campaign') produces the IDENTICAL DOM as never calling it at all", () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('campaign');
+    h.setContinueAvailable(true);
+    h.setLevelSelect(2, 4);
+    h.setState('title');
+    expect(titleAffordances(root)).toEqual({
+      continueVisible: true,
+      newGameVisible: true,
+      newGameLabel: 'New Game',
+      levelsVisible: true,
+      campaignVisible: false,
+      versusVisible: true,
+    });
+  });
+
+  it("setSessionKind('versus') hides Continue and Levels-open, relabels New Game to 'Start Match' (kept VISIBLE, not hidden), and shows Campaign -- Versus stays visible either way", () => {
+    // New Game is deliberately NOT hidden: unlike Continue, its handler
+    // (loop.ts's onNewGame) always rebuilds the world via switchTo before
+    // startPlaying(), and for a versus session it is the ONLY path from title into
+    // the just-configured match (a versus session is never campaignActive(), so
+    // nothing else reaches sm.startPlaying() from title once Levels is hidden).
+    // Hiding it, as the controller ruling's literal text asked, would make a freshly
+    // rebooted versus session unplayable through this UI -- see setSessionKind's own
+    // doc comment on the Hud interface.
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setContinueAvailable(true); // a real campaign run is ALSO active -- see below
+    h.setLevelSelect(2, 4); // a hypothetical multi-level versus system
+    h.setState('title');
+    expect(titleAffordances(root)).toEqual({
+      continueVisible: false,
+      newGameVisible: true,
+      newGameLabel: 'Start Match',
+      levelsVisible: false,
+      campaignVisible: true,
+      versusVisible: true,
+    });
+  });
+
+  it('is order-independent: setSessionKind before or after setState/setContinueAvailable lands on the same DOM', () => {
+    // Fails if `sessionKind` is only consulted INSIDE setState (e.g. a stale `s`
+    // closed over rather than re-read live) -- that shape would leave Continue VISIBLE
+    // when setSessionKind runs after setState/setContinueAvailable, since those two
+    // would have already computed visibility against the OLD (campaign) kind.
+    const before = mount();
+    before.hud.setSessionKind('versus');
+    before.hud.setContinueAvailable(true);
+    before.hud.setState('title');
+
+    const after = mount();
+    after.hud.setContinueAvailable(true);
+    after.hud.setState('title');
+    after.hud.setSessionKind('versus');
+
+    expect(titleAffordances(before.root)).toEqual(titleAffordances(after.root));
+    // Sanity: hasProgress is true in both, so if the order bug above were present this
+    // would read `continueVisible: true` for `after` instead.
+    expect(titleAffordances(after.root).continueVisible).toBe(false);
+    before.hud.dispose();
+  });
+
+  it("closes the corpse-world window: setContinueAvailable(true) pushed AFTER setState('title') on a versus session still keeps Continue hidden", () => {
+    // The discriminating case gating only inside setState would miss: loop.ts pushes
+    // setContinueAvailable(deps.run.active() !== null) unconditionally on every
+    // 'title' transition (not gated on tracksProgress), and `deps.run` is the SAME
+    // store a versus session shares with campaign -- so this exact ordering fires
+    // whenever a real campaign run is ALSO active, true for most returning players,
+    // not an edge case.
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('title');
+    h.setContinueAvailable(true);
+    expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(true);
+  });
+
+  it("the corpse-window closure, end to end: a versus win/lose returning to title (Task 5's own return-to-setup flow) keeps Continue hidden -- the one title affordance that reaches sm.startPlaying() without rebuilding the frozen world", () => {
+    // Mirrors the reachable sequence Task 5's own report traced but could not exercise
+    // through its loop.test.ts fake (which only records calls, not real DOM/close-all
+    // interactions): versus win/lose -> the setup pane's Back button (setState('title'))
+    // -> title, with Continue otherwise reachable via a concurrently active campaign
+    // run. Fails if Continue's hide is gated on anything narrower than sessionKind alone.
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setContinueAvailable(true); // the shared run store says a campaign run is active
+    h.setState('lose'); // the match just ended
+    h.setState('title'); // the pane's own Back button (Task 4) lands here
+    expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(true);
+  });
+
+  it("the win/lose action button reads 'Versus Setup' for a versus session's FINAL win and its lose -- truthful about what the click now does", () => {
+    // Fails if the label branch is missing, or reads deps/state other than
+    // sessionKind (e.g. always 'Versus Setup' regardless of kind, which the
+    // campaign-kind tests elsewhere in this file would also have caught).
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setLevel(1, 1); // versus's single synthetic level -- always the FINAL win
+    h.setState('win');
+    expect(actionBtn(root).textContent).toBe('Versus Setup');
+    h.setState('lose');
+    expect(actionBtn(root).textContent).toBe('Versus Setup');
+  });
+
+  it("leaves 'Resume' and 'Next Level' alone for a versus session -- neither click opens the pane, so relabeling either would be the same lie in reverse", () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('paused');
+    expect(actionBtn(root).textContent).toBe('Resume');
+    h.setLevel(1, 2); // an intermediate win -- not reachable for a real versus session
+    // (single synthetic level), but the label branch must not fire on it regardless
+    h.setState('win');
+    expect(actionBtn(root).textContent).toBe('Next Level');
+  });
+
+  it('onCampaignOpen fires once per Campaign button click', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('title');
+    let opens = 0;
+    h.onCampaignOpen(() => opens++);
+    campaignOpenBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens).toBe(1);
+  });
+
+  it('Campaign is a title-only affordance, even for a versus session', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('title');
+    expect(campaignOpenBtn(root).classList.contains('hud-campaign-open--hidden')).toBe(false);
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(campaignOpenBtn(root).classList.contains('hud-campaign-open--hidden'), s).toBe(true);
+    }
+  });
+
+  it('roving tabindex reaches the Campaign button on a versus-kind title screen', () => {
+    // hud.ts's focusableControls is a GENERIC `button, [tabindex]` sweep of whatever is
+    // visible inside the active panel container -- not a hardcoded class list -- so a
+    // new title-panel button is reachable for free. This pins that it actually IS, the
+    // same shape as the versus setup pane's own "reaches Start, then Back" test: a
+    // bounded ArrowDown walk (not unbounded -- an unreachable control must fail loudly
+    // here rather than hang the suite the way flipping sessionKind's default did in
+    // this task's own mutation testing).
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('title');
+    expect(document.activeElement, 'opening the title panel did not focus its CONTAINER').toBe(
+      root.querySelector('.hud-panel'),
+    );
+    let steps = 0;
+    while (document.activeElement !== campaignOpenBtn(root) && steps < 40) {
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
+      steps += 1;
+    }
+    expect(document.activeElement, 'never reached the Campaign button').toBe(campaignOpenBtn(root));
+  });
+});
+

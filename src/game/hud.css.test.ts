@@ -255,6 +255,10 @@ describe('hud.css is syntactically whole', () => {
       '.hud-versus-map-row', '.hud-versus-stock-row', '.hud-versus-option-btn',
       '.hud-versus-option-btn--selected', '.hud-versus-friendlyfire-btn',
       '.hud-versus-assignment-note', '.hud-versus-assignment-note--hidden',
+      // Task 5b (a versus session's title screen): the Campaign button's hidden rule
+      // -- without it every versus session would show it permanently, even at
+      // non-title states.
+      '.hud-campaign-open--hidden',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
@@ -337,7 +341,13 @@ describe('hud.css is syntactically whole', () => {
     // mismatched count would produce -- a fixture with a different pane player count
     // or a different setControllers slot count would pin a different number here too.
     // 3 + 2 + 3 + 6 + 5 + 1 + 8 = 28.
-    expect(buttons.length).toBe(86);
+    // 87 since Task 5b's Campaign button landed: 86 + 1 static button
+    // (.hud-campaign-open), rendered unconditionally at construction (same convention
+    // as every other title-panel button here) and hidden via CSS class rather than
+    // removed from the DOM -- this fixture never calls setSessionKind('versus'), so it
+    // stays hidden throughout, exactly like .hud-continue/.hud-new-game/
+    // .hud-versus-open above ALREADY are counted here whether shown or not.
+    expect(buttons.length).toBe(87);
     expect(unstyled).toEqual([]);
 
     dispose();

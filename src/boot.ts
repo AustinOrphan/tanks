@@ -38,13 +38,16 @@ export interface BootDeps {
    * function on every call (this module's own, closed over `handle`/`canvas`) --
    * threaded here, not stored on `BootDeps`, so main.ts's wrapper can put it on the
    * new session's `GameDeps.requestVersusSession` (loop.ts's `versusAwareDeps`)
-   * without main.ts holding any state of its own.
+   * without main.ts holding any state of its own. `requestCampaignSession` (Task 5b)
+   * is the SAME shape, symmetric: a versus session's Campaign button reboots BACK to
+   * a plain campaign session through it, and it too is the SAME function on every call.
    */
   readonly startGame: (
     canvas: HTMLCanvasElement,
     uiRoot: HTMLElement,
     versus: { config: VersusConfig } | null,
     requestVersusSession: (config: VersusConfig) => void,
+    requestCampaignSession: () => void,
   ) => GameHandle;
   readonly host: BootHost;
   readonly reportError: (err: unknown) => void;
@@ -101,10 +104,35 @@ export function boot(deps: BootDeps): void {
       // `lastVersusConfig`, not the bare `config` parameter: the next session's start
       // call is handed exactly what was just recorded, one write ago -- not a second,
       // independent reference to the same object that a later refactor could split.
-      handle = deps.startGame(canvas, deps.root, { config: lastVersusConfig }, requestVersusSession);
+      handle = deps.startGame(canvas, deps.root, { config: lastVersusConfig }, requestVersusSession, requestCampaignSession);
     };
 
-    handle = deps.startGame(canvas, deps.root, null, requestVersusSession);
+    /**
+     * Task 5b's symmetric counterpart: the versus-kind title screen's Campaign button
+     * reaches this through `GameDeps.requestCampaignSession` to reboot BACK into a
+     * plain campaign session -- same dispose/fresh-canvas/reassign shape as
+     * `requestVersusSession` above (see its own doc comment for why each of those
+     * matters), with `versus: null` for the `startGame` call instead of `{ config }`,
+     * so the new session gets plain campaign deps (`applyVersusToDeps`'s no-versus
+     * branch).
+     *
+     * Deliberately does NOT touch `lastVersusConfig`: nothing here reads a STALE
+     * value between one `requestVersusSession` call and the next -- each sets it
+     * fresh from its own `config` argument the instant it runs (see that function's
+     * own comment on why `lastVersusConfig` exists as a name at all) -- so clearing
+     * it here would be a no-op no test can observe today. It is left alone anyway,
+     * on the chance a future prefill of a fresh campaign session's own setup pane
+     * wants a "last-played match" to read from; boot.test.ts documents this rather
+     * than asserting a behavior nothing yet consumes.
+     */
+    const requestCampaignSession = (): void => {
+      handle.dispose();
+      canvas.remove();
+      canvas = deps.bootCanvas(deps.root);
+      handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession);
+    };
+
+    handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession);
 
     // startGame's teardown was once unreachable: nothing called it, so the
     // frame loop, the window listeners and the GL context outlived the page.

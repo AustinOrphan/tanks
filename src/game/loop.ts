@@ -234,6 +234,25 @@ export interface GameDeps {
    */
   readonly requestVersusSession?: (config: VersusConfig) => void;
   /**
+   * Reboots the running session BACK into a plain campaign session -- Task 5b's
+   * symmetric counterpart to `requestVersusSession` above, called by the versus-kind
+   * title screen's Campaign button (`hud.onCampaignOpen`). Exists because a rebooted
+   * versus session's `deps.levels` is the versus level system for its whole life
+   * (levels.ts's own one-value-per-session posture): a plain campaign entry point
+   * reachable from THERE would build a versus world off `levels[0]`, not a campaign
+   * board (reviewer-confirmed against `onNewGame` above -- see its own doc comment).
+   * Boot-provided (boot.ts's `requestCampaignSession`, threaded through
+   * `versusAwareDeps`), and OPTIONAL for the same reason `requestVersusSession` is:
+   * every existing test/caller with no reboot seam at all keeps compiling.
+   *
+   * Threaded ONLY into a VERSUS session's own deps (`applyVersusToDeps`'s versus
+   * branch) -- same posture as `initialVersusConfig` just below: a campaign session
+   * has no Campaign button to call this from (its own title already shows the real
+   * Continue/New Game/Levels), so its deps leave this unset rather than wire a
+   * reboot seam nothing on screen can reach.
+   */
+  readonly requestCampaignSession?: () => void;
+  /**
    * Set when THIS session is itself a versus reboot, to the config it was rebooted
    * with -- so the setup pane can reopen pre-filled with the match just played
    * instead of its own defaults. `null`/absent for a fresh campaign boot, which has
@@ -643,17 +662,23 @@ export function createBrowserDeps(): GameDeps {
  *   count does not match the config the player chose.
  * - Threads `requestVersusSession` and stamps `initialVersusConfig: config` so the
  *   setup pane (a later task) can reopen pre-filled.
+ * - Threads `requestCampaignSession` (Task 5b) so the versus-kind title screen's
+ *   Campaign button has a reboot seam to call -- see `GameDeps.requestCampaignSession`'s
+ *   own doc comment for why this is versus-only, same as `initialVersusConfig`.
  *
  * When `versus` is absent (a fresh campaign boot): returns `deps` unchanged except for
  * `requestVersusSession` (still threaded, so a campaign session can reboot INTO
  * versus) and `initialVersusConfig: null` (no prior match to prefill from). `levels`
  * and `devFlags` are NOT touched here -- widening them unconditionally would corrupt a
- * plain campaign boot that no test below would otherwise catch.
+ * plain campaign boot that no test below would otherwise catch. `requestCampaignSession`
+ * is left UNSET here (not defaulted to a no-op): a campaign session's own title has no
+ * Campaign button to call it from, so there is nothing this seam would ever reach.
  */
 export function applyVersusToDeps(
   deps: GameDeps,
   versus: { config: VersusConfig } | null | undefined,
   requestVersusSession: (config: VersusConfig) => void,
+  requestCampaignSession?: () => void,
 ): GameDeps {
   if (!versus) {
     return { ...deps, requestVersusSession, initialVersusConfig: null };
@@ -670,6 +695,7 @@ export function applyVersusToDeps(
     },
     requestVersusSession,
     initialVersusConfig: config,
+    requestCampaignSession,
   };
 }
 
@@ -683,8 +709,9 @@ export function applyVersusToDeps(
 export function versusAwareDeps(
   versus: { config: VersusConfig } | null | undefined,
   requestVersusSession: (config: VersusConfig) => void,
+  requestCampaignSession?: () => void,
 ): GameDeps {
-  return applyVersusToDeps(createBrowserDeps(), versus, requestVersusSession);
+  return applyVersusToDeps(createBrowserDeps(), versus, requestVersusSession, requestCampaignSession);
 }
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): GameHandle {
@@ -1064,6 +1091,14 @@ export function startGameWith(
   haptics.setEnabled(deps.touchSettings.haptics());
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
+  // Task 5b: fixed for this session's whole life, same posture as `playerCount` below --
+  // a versus session's `deps.levels` never becomes a campaign level system mid-session
+  // (levels.ts's own one-value-per-session comment), so the title screen's affordances
+  // never need to change kind either. Drives which title buttons hud.ts shows (see
+  // setSessionKind's own doc comment) -- set once, here, before any setState/
+  // setContinueAvailable/setLevelSelect call below so the very first render already
+  // reflects it.
+  hud.setSessionKind(deps.initialVersusConfig ? 'versus' : 'campaign');
 
   /**
    * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
@@ -1420,6 +1455,14 @@ export function startGameWith(
   // receive it must not throw.
   hud.onVersusStart((config) => {
     deps.requestVersusSession?.(config);
+  });
+  // Task 5b's Campaign button -- a bare passthrough, same shape as the two above:
+  // `deps.requestCampaignSession` is only ever wired on a VERSUS session's own deps
+  // (applyVersusToDeps), so a campaign session's own click here (unreachable, since
+  // hud.ts hides the button there -- see setSessionKind) would no-op via `?.` exactly
+  // like a Start click with no requestVersusSession wired does above.
+  hud.onCampaignOpen(() => {
+    deps.requestCampaignSession?.();
   });
 
   /**

@@ -342,6 +342,46 @@ export interface Hud {
    * callback: see `onVersusOpen`'s own doc comment for why none is needed.
    */
   showVersusSetup(show: boolean, initial?: VersusConfig | null): void;
+  /**
+   * Which kind of session this is -- 'campaign' (the default, until a caller says
+   * otherwise) leaves every title-screen affordance exactly as it was before this
+   * method existed. 'versus' is Task 5b's own fix for a rebooted versus session's
+   * title screen: its `deps.levels` is the versus level system for the session's
+   * whole life (one-value-per-session, levels.ts), so Continue -- the one title
+   * affordance that reaches `sm.startPlaying()` WITHOUT rebuilding the world
+   * (loop.ts's `onStartRestart`) -- would resume whatever frozen win/lose world is
+   * still sitting in `driver.world` rather than a fresh campaign board (the
+   * "corpse-world window" a versus win/lose -> this pane's Back -> title sequence
+   * opens: reviewer-confirmed reachable whenever a real campaign run is also active,
+   * since `deps.run` is the SAME store both session kinds share). Continue and the
+   * Levels-open button (whose own `levelChoice` gate is already permanently false for
+   * a versus session's single synthetic level -- this is belt-and-suspenders, not a
+   * live fix) both hide; a new Campaign button shows instead, wired through
+   * `onCampaignOpen` to `boot.ts`'s `requestCampaignSession` reboot seam.
+   *
+   * New Game is treated differently, DELIBERATELY NOT hidden: unlike Continue, its
+   * handler (`loop.ts`'s `onNewGame`) always rebuilds the world via `switchTo` before
+   * `startPlaying()` -- for a versus session this is the ONLY path from title into
+   * the just-configured match (a versus session is never `campaignActive()`, so
+   * nothing else ever calls `sm.startPlaying()` from title once Levels is hidden).
+   * Hiding it as the controller ruling's literal text asked would have made a freshly
+   * rebooted versus session unplayable through this UI. It is RELABELED "Start Match"
+   * instead (see setState's action-button label branch for the parallel "Versus
+   * Setup" relabel) so it no longer reads as a campaign action while doing exactly
+   * what it always has for a non-campaign session.
+   *
+   * Also drives the win/lose action button's label (setState): a finished versus
+   * match's "Play Again"/"Retry" becomes "Versus Setup", since that click now reopens
+   * this pane rather than restarting.
+   */
+  setSessionKind(kind: 'campaign' | 'versus'): void;
+  /**
+   * The versus-kind title screen's Campaign button was clicked -- a bare click
+   * passthrough, the exact shape `onVersusOpen`/`onNewGame` already use. `loop.ts`'s
+   * one subscriber calls `deps.requestCampaignSession?.()`, `boot.ts`'s symmetric
+   * counterpart to the versus reboot seam.
+   */
+  onCampaignOpen(cb: () => void): void;
   dispose(): void;
 }
 
@@ -659,6 +699,12 @@ export function createHud(root: HTMLElement): Hud {
            comment on the Hud interface for why its click handler is a bare
            passthrough rather than a local showX(true) call. -->
       <button class="hud-versus-open hud-versus-open--hidden" type="button">Versus</button>
+      <!-- Task 5b: a versus session's title has nothing for Continue/Levels-open to do
+           (see setSessionKind's own doc comment on the Hud interface) -- this replaces
+           them with a reboot back to a plain campaign session instead. Hidden by
+           default, same convention as every other kind-gated button here; only shown
+           once setSessionKind('versus') runs. -->
+      <button class="hud-campaign-open hud-campaign-open--hidden" type="button">Campaign</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
@@ -759,6 +805,7 @@ export function createHud(root: HTMLElement): Hud {
   const controllerRowsEl = el.querySelector('.hud-controller-rows') as HTMLElement;
   const controllersBackBtn = el.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const versusOpenBtn = el.querySelector('.hud-versus-open') as HTMLButtonElement;
+  const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
   const versusSetupView = el.querySelector('.hud-versus-setup') as HTMLElement;
   const versusModeRow = el.querySelector('.hud-versus-mode-row') as HTMLElement;
   const versusPlayersRow = el.querySelector('.hud-versus-players-row') as HTMLElement;
@@ -1672,8 +1719,48 @@ export function createHud(root: HTMLElement): Hud {
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: GameState = 'splash';
+  // Task 5b: which kind of session this is -- see setSessionKind's own doc comment on
+  // the Hud interface. Defaults to 'campaign' so a HUD that never calls setSessionKind
+  // (every caller before this task, including the css/gallery fixtures) renders
+  // byte-identical to before this method existed.
+  let sessionKind: 'campaign' | 'versus' = 'campaign';
   const levelSelectCbs: Array<(level: number) => void> = [];
   const newGameCbs: Array<() => void> = [];
+
+  /**
+   * The title-only affordances that depend on `sessionKind` -- Continue, New Game's
+   * LABEL, Levels-open, and Campaign-open -- recomputed together from
+   * `shownState`/`sessionKind`/`hasProgress`/`levelChoice`, whichever of the four last
+   * changed. One function instead of four inline toggles because `setContinueAvailable`
+   * and `setLevelSelect` each toggle their OWN button independent of `setState` (a
+   * run/unlock can change while another panel is up) -- and both must ALSO respect
+   * `sessionKind`: gating only inside `setState` would leave a later
+   * `setContinueAvailable(true)` re-show Continue at a versus session's title, reopening
+   * the exact corpse-world window this task exists to close. That is not theoretical:
+   * `deps.run` is the SAME store a versus session shares with campaign (loop.ts's
+   * `versusAwareDeps`), so this fires whenever a real campaign run is ALSO active --
+   * true for most returning players, not an edge case. Calling this from
+   * `setSessionKind` too makes the kind itself order-independent: a caller may set it
+   * before OR after `setState('title')` and land on the same DOM either way.
+   */
+  function applyTitleAffordances(): void {
+    const atTitle = shownState === 'title';
+    const versusKind = sessionKind === 'versus';
+    continueBtn.classList.toggle('hud-continue--hidden', !atTitle || !hasProgress || versusKind);
+    // New Game stays VISIBLE for a versus session, unlike Continue and Levels-open --
+    // see setSessionKind's own doc comment on the Hud interface for why: its handler
+    // (loop.ts's onNewGame) always rebuilds the world via switchTo before
+    // startPlaying(), so for a versus session it is the ONLY path from title into the
+    // just-configured match. Only its LABEL changes.
+    newGameBtn.classList.toggle('hud-new-game--hidden', !atTitle);
+    newGameBtn.textContent = versusKind ? 'Start Match' : 'New Game';
+    // Symmetric with Continue, but inert today: a versus session's single synthetic
+    // level already keeps `levelChoice` false (setLevelSelect's own `total > 1`), so
+    // this button is already hidden there without the kind check. Added anyway for
+    // defense-in-depth against a future multi-level versus system.
+    levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', !atTitle || !levelChoice || versusKind);
+    campaignOpenBtn.classList.toggle('hud-campaign-open--hidden', !atTitle || !versusKind);
+  }
 
   const handleLevelSelectOpen = (): void => showLevelSelect(true);
   const handleLevelSelectBack = (): void => {
@@ -1934,6 +2021,16 @@ export function createHud(root: HTMLElement): Hud {
   versusBackBtn.addEventListener('click', handleVersusBack);
   versusBackBtn.addEventListener('click', blurIfPointer);
 
+  // Task 5b's Campaign button -- a bare click passthrough, the same shape as
+  // handleVersusOpen just above. See onCampaignOpen's own doc comment on the Hud
+  // interface for what loop.ts's one subscriber does with it.
+  const campaignOpenCbs: Array<() => void> = [];
+  const handleCampaignOpen = (): void => {
+    for (const cb of campaignOpenCbs) cb();
+  };
+  campaignOpenBtn.addEventListener('click', handleCampaignOpen);
+  campaignOpenBtn.addEventListener('click', blurIfPointer);
+
   /**
    * The versus setup pane's own show/hide, and the ONE place pane-local selections
    * get (re)seeded from an `initial` config -- called by setState's unconditional
@@ -2035,7 +2132,6 @@ export function createHud(root: HTMLElement): Hud {
     statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
     customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
     achOpenBtn.classList.toggle('hud-achievements-open--hidden', s !== 'title');
-    levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', s !== 'title' || !levelChoice);
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !clearedIntermediate);
     // "Quit" is the wrong word for leaving a level you just WON -- the run is preserved
     // either way, but the copy should not imply abandoning it.
@@ -2050,8 +2146,10 @@ export function createHud(root: HTMLElement): Hud {
     // Continue/New Game replace the single action button AT TITLE ONLY -- Resume, Next
     // Level, Play Again and Retry all still route through actionBtn below, which is why
     // this toggles on `s === 'title'` alone rather than joining the group above.
-    continueBtn.classList.toggle('hud-continue--hidden', s !== 'title' || !hasProgress);
-    newGameBtn.classList.toggle('hud-new-game--hidden', s !== 'title');
+    // Continue, New Game (its label), Levels-open, and Campaign-open all also depend on
+    // `sessionKind` -- see applyTitleAffordances' own doc comment for why they are one
+    // function rather than four inline toggles here.
+    applyTitleAffordances();
     actionBtn.classList.toggle('hud-action--hidden', s === 'title');
     // The attempt summary belongs to the END screens alone.
     attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', s !== 'win' && s !== 'lose');
@@ -2095,12 +2193,19 @@ export function createHud(root: HTMLElement): Hud {
       } else {
         titleEl.textContent = 'You Win!';
         setSubtitle('Arena cleared.');
-        actionBtn.textContent = 'Play Again';
+        // Task 5b: a versus session's FINAL win never has a next level to advance to
+        // (its single synthetic level always lands here, not the `levelPos` branch
+        // above), and this click no longer restarts a match -- loop.ts's own
+        // `onStartRestart` reopens the setup pane instead (Task 5). "Play Again" would
+        // be a lie about what the click does; "Versus Setup" says it. Paused's "Resume"
+        // and the intermediate "Next Level" above are both left alone -- neither click
+        // opens the pane, so relabeling either would be the same lie in reverse.
+        actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Play Again';
       }
     } else {
       titleEl.textContent = 'Game Over';
       setSubtitle('Out of lives.');
-      actionBtn.textContent = 'Retry';
+      actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Retry';
     }
   }
 
@@ -2193,8 +2298,10 @@ export function createHud(root: HTMLElement): Hud {
       }
       // setLevelSelect may re-render while ANOTHER panel is up (unlocks are recorded at
       // the win event) and must not splash the button onto it -- same `shownState`
-      // convention the row itself used to follow directly.
-      levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', shownState !== 'title' || !levelChoice);
+      // convention the row itself used to follow directly. Routed through
+      // applyTitleAffordances so this also respects `sessionKind` (see its own doc
+      // comment for why gating only inside `setState` is not enough).
+      applyTitleAffordances();
     },
     onLevelSelect(cb: (level: number) => void): void {
       levelSelectCbs.push(cb);
@@ -2203,8 +2310,9 @@ export function createHud(root: HTMLElement): Hud {
       hasProgress = available;
       // Same `shownState` convention as setLevelSelect just above: this can be pushed
       // while another panel is up (a game-over/completion transition ends the run
-      // before the player is back at the title screen to see it).
-      continueBtn.classList.toggle('hud-continue--hidden', shownState !== 'title' || !hasProgress);
+      // before the player is back at the title screen to see it). Routed through
+      // applyTitleAffordances for the same `sessionKind` reason as setLevelSelect above.
+      applyTitleAffordances();
     },
     onNewGame(cb: () => void): void {
       newGameCbs.push(cb);
@@ -2400,6 +2508,13 @@ export function createHud(root: HTMLElement): Hud {
       versusStartCbs.push(cb);
     },
     showVersusSetup,
+    setSessionKind(kind: 'campaign' | 'versus'): void {
+      sessionKind = kind;
+      applyTitleAffordances();
+    },
+    onCampaignOpen(cb: () => void): void {
+      campaignOpenCbs.push(cb);
+    },
     setTouchScheme(scheme: TouchScheme): void {
       currentScheme = scheme;
       renderSchemeToggle();
@@ -2484,6 +2599,8 @@ export function createHud(root: HTMLElement): Hud {
       versusStartBtn.removeEventListener('click', blurIfPointer);
       versusBackBtn.removeEventListener('click', handleVersusBack);
       versusBackBtn.removeEventListener('click', blurIfPointer);
+      campaignOpenBtn.removeEventListener('click', handleCampaignOpen);
+      campaignOpenBtn.removeEventListener('click', blurIfPointer);
       continueBtn.removeEventListener('click', handleAction);
       continueBtn.removeEventListener('click', blurIfPointer);
       newGameBtn.removeEventListener('click', handleNewGame);

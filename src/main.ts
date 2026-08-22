@@ -15,8 +15,8 @@ boot({
   // with, and threads the reboot callback boot.ts hands back on every call. No
   // branching here -- that logic lives in versusAwareDeps/applyVersusToDeps, which
   // a test can reach directly.
-  startGame: (canvas, uiRoot, versus, requestVersusSession) =>
-    startGameWith(canvas, uiRoot, versusAwareDeps(versus, requestVersusSession)),
+  startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession) =>
+    startGameWith(canvas, uiRoot, versusAwareDeps(versus, requestVersusSession, requestCampaignSession)),
   host: window,
   reportError: (err) => console.error('Tanks! failed to start:', err),
 });
