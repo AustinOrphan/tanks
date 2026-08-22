@@ -19,9 +19,10 @@ import {
   type TouchScheme,
   type FireMode,
 } from '../input/touch';
-import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
+import { COUNTDOWN_TICKS, LIVES, VERSUS_STOCK } from '../sim/constants';
 import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
 import type { World } from '../sim/world';
+import { countPlayerTanks } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
@@ -40,11 +41,14 @@ import {
   isPauseHotkey,
   DEV_CONSOLE_KEY,
   createBrowserDeps,
+  applyVersusToDeps,
+  versusAwareDeps,
   type GameDeps,
   type HostWindow,
   type DevConsole,
   type DevConsoleTarget,
 } from './loop';
+import type { VersusConfig } from './versus-config';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeTick, replayTrace, checkTrace } from './replay';
@@ -116,6 +120,21 @@ interface Recorder {
   coopKillPushes: Array<number[] | null>;
   /** Every value passed to hud.setVersusResults, in order. */
   versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
+  /** Every value passed to hud.setVersusStocks, in order (Task 6, spec §3a). */
+  versusStocksPushes: Array<{ slot: number; stock: number; team?: number }[] | null>;
+  /** Every (show, initial) passed to hud.showVersusSetup, in order. */
+  versusSetupPushes: Array<{ show: boolean; initial: VersusConfig | null }>;
+  /** Every value passed to hud.setSessionKind, in order (Task 5b). */
+  sessionKinds: Array<'campaign' | 'versus'>;
+  /**
+   * A SINGLE shared log of every hud.setState and hud.showVersusSetup call, in the
+   * exact order loop.ts made them -- unlike hudStates/versusSetupPushes (each its own
+   * array), this is what lets a test tell "setState('title') ran before
+   * showVersusSetup(true, ...)" from "the other way round": two separate arrays each
+   * preserve their OWN call order but say nothing about the order BETWEEN them.
+   * Mirrors audioCalls' own precedent just below for the identical reason.
+   */
+  hudCallLog: string[];
   levelSelects: Array<[number, number]>;
   /** Every value pushed to hud.setContinueAvailable, in order. */
   continueAvailable: boolean[];
@@ -233,6 +252,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     reassignSlot(slot: number, source: SlotSource): void;
     openControllers(): void;
     closeControllers(): void;
+    openVersus(): void;
+    startVersus(config: VersusConfig): void;
+    openCampaign(): void;
   };
   setState(s: GameState): void;
   setTouch(t: TouchIndicator): void;
@@ -298,6 +320,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statPushes: 0,
     coopKillPushes: [],
     versusResultsPushes: [],
+    versusStocksPushes: [],
+    versusSetupPushes: [],
+    sessionKinds: [],
+    hudCallLog: [],
     levelSelects: [],
     continueAvailable: [],
     runNewRuns: [],
@@ -382,6 +408,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   let onReassignSlot = (_slot: number, _source: SlotSource): void => {};
   let onControllersOpen = (): void => {};
   let onControllersClose = (): void => {};
+  let onVersusOpenCb = (): void => {};
+  let onVersusStartCb = (_config: VersusConfig): void => {};
+  let onCampaignOpenCb = (): void => {};
   // A real element (not a mock): loop.ts hands it straight to deps.createPreview, so a
   // fake createPreview below can assert it received the SAME element the HUD exposed --
   // catching a wiring bug (passing some OTHER canvas, or none) that a mock would hide.
@@ -687,7 +716,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       return {
         setLives: (n) => rec.lives.push(n),
         setEnemiesRemaining: (n) => rec.enemies.push(n),
-        setState: (s) => rec.hudStates.push(s),
+        setState: (s) => {
+          rec.hudStates.push(s);
+          rec.hudCallLog.push(`state:${s}`);
+        },
         setTouchIndicator: (t: TouchIndicator) => rec.touchPushes.push(t),
         setMuted: (m) => rec.muted.push(m),
         setShellCount: (i) => rec.shellCounts.push(i),
@@ -742,6 +774,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setVersusResults: (data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null) => {
           rec.versusResultsPushes.push(data === null ? null : { mode: data.mode, kills: [...data.kills], deaths: [...data.deaths] });
+        },
+        setVersusStocks: (stocks: { slot: number; stock: number; team?: number }[] | null) => {
+          rec.versusStocksPushes.push(stocks === null ? null : stocks.map((s) => ({ ...s })));
         },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
@@ -811,6 +846,33 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         onControllersClose: (cb: () => void) => {
           onControllersClose = cb;
+        },
+        // Task 5's own wiring: loop.ts subscribes both, and calls showVersusSetup
+        // itself (on Versus-button open and on a finished versus session's rematch
+        // path) -- recorded here the same way onQuitToTitle/onStartRestart's
+        // subscriptions are, with this harness's own openVersus/startVersus trigger
+        // (below, mirroring openControllers) driving the recorded callback.
+        onVersusOpen: (cb: () => void) => {
+          onVersusOpenCb = cb;
+        },
+        onVersusStart: (cb: (config: VersusConfig) => void) => {
+          onVersusStartCb = cb;
+        },
+        showVersusSetup: (show: boolean, initial?: VersusConfig | null) => {
+          rec.versusSetupPushes.push({ show, initial: initial ?? null });
+          rec.hudCallLog.push(`versusSetup:${show}`);
+        },
+        // Task 5b: this fake has no real DOM, so it only records what loop.ts pushed --
+        // "the button is hidden" can only be asserted against the real hud.ts (hud.test.ts).
+        // What IS assertable here: which kind was pushed, and in what order relative to
+        // other construction-time calls (rec.hudCallLog, mirroring setState/
+        // showVersusSetup's own shared log).
+        setSessionKind: (kind: 'campaign' | 'versus') => {
+          rec.sessionKinds.push(kind);
+          rec.hudCallLog.push(`sessionKind:${kind}`);
+        },
+        onCampaignOpen: (cb: () => void) => {
+          onCampaignOpenCb = cb;
         },
         dispose: () => rec.disposed.push('hud'),
       };
@@ -1135,6 +1197,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       reassignSlot: (slot: number, source: SlotSource) => onReassignSlot(slot, source),
       openControllers: () => onControllersOpen(),
       closeControllers: () => onControllersClose(),
+      openVersus: () => onVersusOpenCb(),
+      startVersus: (config: VersusConfig) => onVersusStartCb(config),
+      openCampaign: () => onCampaignOpenCb(),
     },
     setState: (s) => {
       state = s;
@@ -2934,6 +2999,103 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     });
   });
 
+  describe('the in-match stock readout (Task 6, spec §3a)', () => {
+    // The relocation this fix round makes: the readout is now dispatched from
+    // onSimulated, which runs on EVERY 'playing' frame unconditionally -- unlike
+    // onFrameEvents, which only fires `if (frameEvents.length > 0)` (driver.ts). Before
+    // this fix, a frame with zero SimEvents (the pre-round countdown, or simply a quiet
+    // first tick before anyone has acted) left the strip undispatched -- no SimEvent
+    // marks "a versus match has started" for onFrameEvents to key off. `rec.directed`
+    // (the events batch handed to `director.handle`) only grows on an event-bearing
+    // frame, which is what proves THIS frame produced none -- without that check the
+    // test could pass by accident on a frame that happened to carry an event anyway.
+    it('populates from the very first simulated frame, even one with ZERO SimEvents', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      h.setState('playing');
+      const directedBefore = h.rec.directed.length;
+      h.fireFrame(20);
+      expect(
+        h.rec.directed.length,
+        'this frame produced a SimEvent -- not the zero-event path this test means to check',
+      ).toBe(directedBefore);
+      const last = h.rec.versusStocksPushes.at(-1);
+      expect(last).not.toBeNull();
+      const bySlot = new Map(last!.map((e) => [e.slot, e]));
+      expect(bySlot.get(0)?.stock).toBe(VERSUS_STOCK);
+      expect(bySlot.get(1)?.stock).toBe(VERSUS_STOCK);
+      h.handle.dispose();
+    });
+
+    // Twin of the versus-results test just above: setVersusStocks (hud.test.ts) and
+    // the derivation itself are each unit-testable in isolation, but neither can see
+    // whether onSimulated's isVersusFrame branch actually calls the setter on a real,
+    // driven frame. Reuses the exact bullet-on-P1 fixture the results test above
+    // drives, so the kill is real, not fabricated.
+    it('a versus kill updates the readout, decrementing the victim\'s stock and leaving the killer\'s untouched', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      const world = h.rec.builtWorlds[0];
+      expect(world.mode).toBe('ffa');
+      const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      // The negative control the advisor named: stockRemaining must actually be
+      // stamped BEFORE the kill, or a 0 -> 0 "decrement" would pass while proving
+      // nothing (stockRemaining's own `?? 0` fallback reads an unstamped tank as
+      // already eliminated).
+      expect(p1.stockRemaining).toBe(VERSUS_STOCK);
+      expect(p2.stockRemaining).toBe(VERSUS_STOCK);
+      world.bullets.push({
+        id: 902, ownerId: p2.id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const last = h.rec.versusStocksPushes.at(-1);
+      expect(last).not.toBeNull();
+      const bySlot = new Map(last!.map((e) => [e.slot, e]));
+      expect(bySlot.get(0)?.stock, "P1's own stock did not decrement").toBe(VERSUS_STOCK - 1);
+      expect(bySlot.get(1)?.stock, "P2's stock was touched by a kill it did not take").toBe(VERSUS_STOCK);
+      // ffa: no `team` on either entry.
+      expect(bySlot.get(0)?.team).toBeUndefined();
+      expect(bySlot.get(1)?.team).toBeUndefined();
+      h.handle.dispose();
+    });
+
+    // The no-thrash control: onSimulated runs on EVERY 'playing' frame, event or no
+    // event, so without the dedup guard EVERY frame of a live match would re-invoke the
+    // setter -- a frame where the player fires but nothing dies is just one easy way to
+    // prove it (firing is a REAL, common in-match action, not a contrived quiet frame).
+    // h.firePlayerShot() drives a REAL shot through the sim (not a fabricated event),
+    // so this measures the actual dedup guard in loop.ts, not a fixture that never
+    // calls it.
+    it('firing (an event, but no stock change) across several frames does not re-invoke the setter beyond the one triggering call', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      h.setState('playing');
+      h.firePlayerShot();
+      h.fireFrame(20); // the first shot: an event lands, the setter fires once
+      const afterFirstShot = h.rec.versusStocksPushes.length;
+      expect(afterFirstShot).toBeGreaterThan(0);
+      for (let i = 1; i <= 5; i++) {
+        h.firePlayerShot();
+        h.fireFrame(20 + i * 250); // spaced past the weapon cooldown, a real shot each time
+      }
+      // Breaks (fails to stay at afterFirstShot) if loop.ts's `key !== lastVersusStocksKey`
+      // guard is removed -- measured by deleting it locally and confirming this goes red.
+      expect(h.rec.versusStocksPushes.length, 'unchanged stocks re-invoked the setter').toBe(afterFirstShot);
+      h.handle.dispose();
+    });
+
+    it("a campaign session gets exactly one null call at wiring, and never entries", () => {
+      const h = boot(makeDeps());
+      h.setState('playing');
+      h.firePlayerShot();
+      h.fireFrame(20);
+      h.fireFrame(300);
+      h.fireFrame(600);
+      expect(h.rec.versusStocksPushes).toEqual([null]);
+      h.handle.dispose();
+    });
+  });
+
   it('a versus fixture with NO players flag still gets a REAL versus world -- the fake cannot silently hand back campaign-coop', () => {
     // Review found this gap dormant: the fake took its real-world branch on playerCount
     // alone, so `mode: 'ffa'` without `players` fell through to a synthetic coop world
@@ -3296,6 +3458,12 @@ describe('startGameWith: level progression', () => {
     h.hud.startRestart();
     expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: 2 });
     expect(h.rec.hudLevels[1]).toEqual([2, 2]);
+    // The FSM transition, not only the world rebuild -- Task 5's own wiring moved
+    // this arm's `sm.restart()` off a trailing statement shared with the versus/
+    // campaign branches into its own call inside `if (next !== null)`. Fails if that
+    // call was dropped in the move: the world rebuild above would still happen (it
+    // is unconditional) while the HUD stayed on the win screen underneath it.
+    expect(h.getState()).toBe('playing');
     h.handle.dispose();
   });
 
@@ -4923,6 +5091,377 @@ describe('createBrowserDeps', () => {
     } finally {
       globalThis.localStorage.clear();
     }
+  });
+});
+
+describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5)', () => {
+  // A concrete (non-'random') arenaId, same posture as the reboot-seam describe block's
+  // own CONFIG just below -- a seed-driven map pick has no bearing on any test here.
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+  const REMATCH_CONFIG: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-01', stock: 5, friendlyFire: true };
+
+  /**
+   * `makeDeps()`'s own GameDeps, widened the same way `applyVersusToDeps` widens a real
+   * boot's (H2, carried from Task 2): `devFlags.players` set to `config.players`, so
+   * `campaignActive()` reads false here exactly as it does for a real versus session --
+   * without this, the default `playerCount 1` would leave `campaignActive()` true and a
+   * win/lose here would also run the CAMPAIGN run-completion side effects (endRun/
+   * advanceLevel), which is not what this describe block is testing. Deliberately keeps
+   * `makeDeps`'s own FAKE `levels` (not the real `createVersusLevelSystem`) -- its
+   * `world`/`bounds` recording (`rec.levelBuilds`, `rec.hudLevels`) is what proves a
+   * "return to setup" click did NOT touch the world, which the real level system's
+   * silent build would not expose.
+   */
+  function versusDeps(
+    base: ReturnType<typeof makeDeps>,
+    config: VersusConfig,
+    requestVersusSession?: (c: VersusConfig) => void,
+  ): GameDeps {
+    return {
+      ...base.deps,
+      devFlags: { ...base.deps.devFlags, players: config.players },
+      initialVersusConfig: config,
+      ...(requestVersusSession ? { requestVersusSession } : {}),
+    };
+  }
+
+  describe('the Versus button: opens the pane with the retained config', () => {
+    it('a rebooted versus session retains its own config and hands it straight through', () => {
+      // Fails if onVersusOpen's handler drops `deps.initialVersusConfig` (e.g. always
+      // passing `null`, or omitting the argument) instead of forwarding it.
+      const base = makeDeps();
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+      h.hud.openVersus();
+      expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
+      h.handle.dispose();
+    });
+
+    it('a fresh campaign boot (no retained match) opens with null, not undefined or a stale default', () => {
+      // The `?? null` half of the wiring: fails if the handler passes `undefined`
+      // through unconverted, or hardcodes some other fallback.
+      const h = boot(makeDeps());
+      h.hud.openVersus();
+      expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: null });
+      h.handle.dispose();
+    });
+  });
+
+  describe('Start: forwards the pane\'s own config to requestVersusSession', () => {
+    it('invokes the spy with exactly the config the pane handed back', () => {
+      // Fails if the handler ignores its argument (e.g. calls
+      // `deps.requestVersusSession?.(deps.initialVersusConfig)` instead of `(config)`),
+      // or drops the call, or calls it with something else.
+      const calls: VersusConfig[] = [];
+      const base = makeDeps();
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
+      h.hud.startVersus(REMATCH_CONFIG);
+      expect(calls).toEqual([REMATCH_CONFIG]);
+      h.handle.dispose();
+    });
+
+    it('optional and absent: a Start click does not throw when nothing is wired to receive it', () => {
+      // Kills the mutation that drops the `?.` guard (`deps.requestVersusSession!(config)`
+      // or a bare call) -- GameDeps' own doc comment says every existing caller with no
+      // reboot seam at all must keep WORKING, not merely compiling.
+      const base = makeDeps();
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG) }); // no requestVersusSession
+      expect(() => h.hud.startVersus(REMATCH_CONFIG)).not.toThrow();
+      h.handle.dispose();
+    });
+  });
+
+  describe('a finished versus session\'s "Play Again": returns to the setup pane, not a rebuilt match', () => {
+    it('win: lands on title, reopens the pane with the retained config, and rebuilds nothing', () => {
+      const calls: VersusConfig[] = [];
+      const base = makeDeps();
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
+      const levelBuildsBeforeClick = h.rec.levelBuilds.length;
+      h.setState('win');
+      h.hud.startRestart(); // the win screen's ONLY affordance for a single-level session
+      // Fails if the versus branch is missing entirely (falls through to the campaign
+      // else-branch): state would land on 'playing', not 'title'.
+      expect(h.getState()).toBe('title');
+      // Fails if showVersusSetup is never called, or called with the wrong `show`/
+      // `initial` -- e.g. `null` instead of the match just played.
+      expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
+      // Fails if the branch still rebuilds a world (switchTo/landOnCampaignBoard) before
+      // showing the pane -- "no reboot until Start again" is the whole point of this
+      // branch existing instead of reusing the campaign else-branch's `sm.restart()`.
+      expect(h.rec.levelBuilds.length).toBe(levelBuildsBeforeClick);
+      // The reboot seam itself must NOT have fired: only the pane's own Start does that.
+      expect(calls).toEqual([]);
+      h.handle.dispose();
+    });
+
+    it('lose: the same return-to-setup path, not the campaign Retry rebuild', () => {
+      const base = makeDeps();
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+      const levelBuildsBeforeClick = h.rec.levelBuilds.length;
+      h.setState('lose');
+      h.hud.startRestart();
+      expect(h.getState()).toBe('title');
+      expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
+      expect(h.rec.levelBuilds.length).toBe(levelBuildsBeforeClick);
+      h.handle.dispose();
+    });
+
+    it('order pin: setState(\'title\') runs BEFORE showVersusSetup -- a test that fails if the two calls are swapped', () => {
+      // hud.ts's real setState unconditionally re-hides the versus pane on every state
+      // change (its own close-all discipline) -- so showVersusSetup must run AFTER
+      // sm.toTitle(), or the pane would open and then be immediately hidden again by
+      // the state transition. This fake does not model that hide/show interaction
+      // (it only records), so this test pins the ORDER directly via the one shared
+      // log both calls write to -- a swap in loop.ts flips the last two entries here
+      // even though every OTHER assertion in this describe block would keep passing.
+      const base = makeDeps();
+      const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+      h.setState('win');
+      h.rec.hudCallLog.length = 0; // isolate this one click's own call order
+      h.hud.startRestart();
+      expect(h.rec.hudCallLog).toEqual(['state:title', 'versusSetup:true']);
+      h.handle.dispose();
+    });
+  });
+
+  describe('campaign sessions: byte-identical behavior (negative controls)', () => {
+    it('a plain campaign win/lose restart never calls requestVersusSession and never shows the pane uninvited', () => {
+      // `requestVersusSession` wired (as a real boot always threads it, per
+      // applyVersusToDeps/versusAwareDeps) but `initialVersusConfig` absent -- the
+      // dev-flag-session shape the brief calls out (`?dev=1&mode=ffa` with no menu).
+      // Fails if the branch condition is inverted (e.g. `!deps.initialVersusConfig`),
+      // which would route EVERY session through the versus return-to-setup path.
+      const calls: VersusConfig[] = [];
+      const base = makeDeps();
+      const h = boot({ ...base, deps: { ...base.deps, requestVersusSession: (c) => calls.push(c) } });
+      h.setState('win');
+      h.hud.startRestart();
+      expect(h.getState()).toBe('playing'); // today's exact behavior: Play Again restarts directly
+      expect(h.rec.versusSetupPushes).toEqual([]);
+      expect(calls).toEqual([]);
+      h.handle.dispose();
+    });
+
+    it('a campaign session with no reboot seam at all (no requestVersusSession, no initialVersusConfig) is untouched', () => {
+      const h = boot(makeDeps());
+      h.setState('lose');
+      h.hud.startRestart();
+      expect(h.getState()).toBe('playing');
+      expect(h.rec.versusSetupPushes).toEqual([]);
+      h.handle.dispose();
+    });
+
+    it('the Versus button and Start are never fired by a campaign session on its own -- both are pane-driven, never called uninvited', () => {
+      // Not a wiring assertion on loop.ts (nothing in loop.ts would fire these without
+      // the pane) -- this pins the harness's OWN triggers stay silent unless a test
+      // calls them, so a passing suite above cannot be explained by these firing as a
+      // side effect of boot/win/restart.
+      const h = boot(makeDeps());
+      h.setState('win');
+      h.hud.startRestart();
+      expect(h.rec.versusSetupPushes).toEqual([]);
+      h.handle.dispose();
+    });
+  });
+});
+
+describe('startGameWith: campaign return from a versus session (Task 5b)', () => {
+  // A concrete (non-'random') arenaId -- same posture as Task 5's own describe block's
+  // CONFIG just above; a seed-driven map pick has no bearing on any test here.
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+
+  /** Same shape as Task 5's own `versusDeps` helper (scoped to its own describe block,
+   *  so not reusable here) -- widens devFlags.players (H2) and stamps
+   *  initialVersusConfig, optionally threading a requestCampaignSession spy. */
+  function versusDeps(
+    base: ReturnType<typeof makeDeps>,
+    config: VersusConfig,
+    requestCampaignSession?: () => void,
+  ): GameDeps {
+    return {
+      ...base.deps,
+      devFlags: { ...base.deps.devFlags, players: config.players },
+      initialVersusConfig: config,
+      ...(requestCampaignSession ? { requestCampaignSession } : {}),
+    };
+  }
+
+  it("a versus session's construction pushes setSessionKind('versus') exactly once", () => {
+    // Fails if the call is dropped, duplicated, or reads the wrong deps field (e.g.
+    // always 'campaign', or keyed off something other than initialVersusConfig).
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+    expect(h.rec.sessionKinds).toEqual(['versus']);
+    h.handle.dispose();
+  });
+
+  it("a plain campaign session's construction pushes setSessionKind('campaign') exactly once", () => {
+    const h = boot(makeDeps());
+    expect(h.rec.sessionKinds).toEqual(['campaign']);
+    h.handle.dispose();
+  });
+
+  it('setSessionKind runs before the very first setState push -- order pin', () => {
+    // hud.ts's real applyTitleAffordances reads sessionKind live, so this ordering is
+    // not load-bearing there the way Task 5's setState/showVersusSetup swap is -- but a
+    // FUTURE hud.ts that snapshotted sessionKind only at setState-time would need it,
+    // and this fails immediately if setSessionKind is ever moved after the constructor's
+    // first hud.setState/showVersusSetup calls.
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
+    const kindIndex = h.rec.hudCallLog.findIndex((e) => e.startsWith('sessionKind:'));
+    const stateIndex = h.rec.hudCallLog.findIndex((e) => e.startsWith('state:'));
+    expect(kindIndex).toBeGreaterThanOrEqual(0);
+    expect(stateIndex).toBeGreaterThan(kindIndex);
+    h.handle.dispose();
+  });
+
+  it('the Campaign button click invokes requestCampaignSession exactly once, with no arguments', () => {
+    // Fails if onCampaignOpen's handler drops the call, calls something else, or
+    // forwards an argument requestCampaignSession does not take.
+    const calls: unknown[][] = [];
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG, (...args: unknown[]) => calls.push(args)) });
+    h.hud.openCampaign();
+    expect(calls).toEqual([[]]);
+    h.handle.dispose();
+  });
+
+  it('optional and absent: a Campaign click does not throw when nothing is wired to receive it', () => {
+    // Kills the mutation that drops the `?.` guard (a bare or `!`-asserted call) --
+    // GameDeps' own doc comment says every existing caller with no reboot seam at all
+    // must keep WORKING, not merely compiling.
+    const base = makeDeps();
+    const h = boot({ ...base, deps: versusDeps(base, CONFIG) }); // no requestCampaignSession
+    expect(() => h.hud.openCampaign()).not.toThrow();
+    h.handle.dispose();
+  });
+
+  it("negative control: a plain campaign session's sessionKind stays 'campaign' through a full win/restart cycle, with nothing calling openCampaign as a side effect", () => {
+    // This fake has no real DOM, so it cannot show that a campaign session's Campaign
+    // button is absent (hud.test.ts's own session-kind suite proves that half) -- what
+    // IS assertable here is that loop.ts itself never flips sessionKind mid-session and
+    // never invokes the harness's own openCampaign trigger unprompted, mirroring Task
+    // 5's identical-shaped control for openVersus/startVersus.
+    const h = boot(makeDeps());
+    h.setState('win');
+    h.hud.startRestart();
+    expect(h.rec.sessionKinds).toEqual(['campaign']);
+    h.handle.dispose();
+  });
+});
+
+describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
+  // A concrete (non-'random') arenaId suitable at players:3 -- see versus-config.test.ts
+  // and levels.test.ts's own fixtures, reused here rather than hand-rolled -- so `world()`
+  // below needs no seed-driven map pick to reason about.
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+  const noop = (_config: VersusConfig): void => {};
+
+  /**
+   * `createBrowserDeps()` with `run` swapped for a fresh in-memory store (so a real
+   * run on this machine's actual localStorage cannot leak in -- `createVersusLevelSystem`
+   * never reads it anyway, per its own doc comment) and `devFlags` overridable, so H1's
+   * `corpseBlock` fixture does not have to round-trip through a real `location.search`.
+   */
+  function baseDeps(devFlags: Partial<DevFlags> = {}): GameDeps {
+    const deps = createBrowserDeps();
+    return { ...deps, run: createRunStore(createMemoryStorage()), devFlags: { ...deps.devFlags, ...devFlags } };
+  }
+
+  it('with no versus config: threads requestVersusSession and nulls initialVersusConfig, leaving levels/devFlags untouched', () => {
+    // The H2 widening's own negative control: fails if the widening runs unconditionally
+    // (e.g. `mode: config?.mode ?? null`), which would corrupt a plain campaign boot.
+    const base = baseDeps();
+    const result = applyVersusToDeps(base, null, noop);
+    expect(result.levels).toBe(base.levels);
+    expect(result.devFlags).toEqual(base.devFlags);
+    expect(result.requestVersusSession).toBe(noop);
+    expect(result.initialVersusConfig).toBeNull();
+  });
+
+  it('versusAwareDeps composes createBrowserDeps with the override, threading requestVersusSession through', () => {
+    // Fails if versusAwareDeps drops `versus`/`requestVersusSession` on the floor instead
+    // of forwarding to applyVersusToDeps -- otherwise nothing below exercises the composition.
+    const fn = (_c: VersusConfig): void => {};
+    const result = versusAwareDeps(null, fn);
+    expect(result.requestVersusSession).toBe(fn);
+    expect(result.initialVersusConfig).toBeNull();
+  });
+
+  describe('requestCampaignSession threading (Task 5b): versus-only, same posture as initialVersusConfig', () => {
+    const campaignNoop = (): void => {};
+
+    it('with no versus config: requestCampaignSession is left UNSET, not defaulted to a no-op', () => {
+      // Fails if applyVersusToDeps stamps some fallback (e.g. `() => {}`) onto a plain
+      // campaign boot instead of leaving the field absent -- a campaign session has no
+      // Campaign button to call it from (hud.ts's own session-kind gating).
+      const base = baseDeps();
+      const result = applyVersusToDeps(base, null, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBeUndefined();
+    });
+
+    it('with a versus config: requestCampaignSession is threaded through by identity', () => {
+      // Fails if the versus branch drops the 4th argument on the floor, or rebuilds a
+      // fresh closure instead of passing the caller's own function through.
+      const result = applyVersusToDeps(baseDeps(), { config: CONFIG }, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBe(campaignNoop);
+    });
+
+    it('versusAwareDeps forwards requestCampaignSession to applyVersusToDeps unchanged', () => {
+      const result = versusAwareDeps({ config: CONFIG }, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBe(campaignNoop);
+    });
+
+    it('versusAwareDeps with no versus config also leaves requestCampaignSession unset', () => {
+      const result = versusAwareDeps(null, noop, campaignNoop);
+      expect(result.requestCampaignSession).toBeUndefined();
+    });
+
+    it('omitting requestCampaignSession entirely (an existing 3-arg caller) still compiles and works -- both functions stay optional', () => {
+      // Every pre-Task-5b call site (this describe block's own two tests above pass
+      // only 3 args in several places) must keep compiling AND keep returning a usable
+      // GameDeps with no reboot-to-campaign seam at all.
+      const result = applyVersusToDeps(baseDeps(), { config: CONFIG }, noop);
+      expect(result.requestCampaignSession).toBeUndefined();
+      expect(result.requestVersusSession).toBe(noop);
+    });
+  });
+
+  describe('H1 (carried from Task 2): the real devFlags reach the versus world, not DEV_FLAGS_OFF', () => {
+    it('devFlags.corpseBlock=true reaches the built world as corpseBlocksShells', () => {
+      // Fails if applyVersusToDeps calls createVersusLevelSystem with only 2 args (its
+      // own DEV_FLAGS_OFF default), or with a fresh DevFlags object instead of deps.devFlags.
+      const result = applyVersusToDeps(baseDeps({ corpseBlock: true }), { config: CONFIG }, noop);
+      const world = result.levels.world(result.levels.start, 7, undefined, 3);
+      expect(world.corpseBlocksShells).toBe(true);
+    });
+
+    it('negative control: corpseBlock=false (the default) keeps corpseBlocksShells false', () => {
+      // Without this, the positive case above would also pass a mutant that hard-codes
+      // `true` regardless of deps.devFlags.
+      const result = applyVersusToDeps(baseDeps({ corpseBlock: false }), { config: CONFIG }, noop);
+      const world = result.levels.world(result.levels.start, 7, undefined, 3);
+      expect(world.corpseBlocksShells).toBe(false);
+    });
+  });
+
+  describe('H2 (carried from Task 2): devFlags.players agrees with config.players', () => {
+    it('config.players widens devFlags.players, and the built world spawns that many player tanks', () => {
+      // Both halves, per the brief: the devFlags field startGameWith's own playerCount
+      // derivation reads (loop.ts's `deps.devFlags.players`), AND the world outcome --
+      // fails if only one side is wired (e.g. devFlags widened but createVersusLevelSystem
+      // still reads a stale config, or vice versa).
+      const result = applyVersusToDeps(baseDeps(), { config: CONFIG }, noop);
+      expect(result.devFlags.players).toBe(3);
+      const world = result.levels.world(result.levels.start, 7, undefined, 3);
+      expect(countPlayerTanks(world)).toBe(3);
+      // The versus branch's other two fields, otherwise unasserted anywhere in this
+      // describe block: fails if `initialVersusConfig`/`requestVersusSession` are
+      // dropped (e.g. left at the no-versus branch's `null`/unset) when a config IS
+      // present -- exactly what a later task's setup-pane prefill would read.
+      expect(result.initialVersusConfig).toBe(CONFIG);
+      expect(result.requestVersusSession).toBe(noop);
+    });
   });
 });
 

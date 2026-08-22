@@ -110,18 +110,19 @@
   display: none;
 }
 
-/* Every panel CONTAINER -- .hud-panel and its five siblings (.hud-stats, .hud-customize,
- * .hud-achievements, .hud-levelselect, .hud-controllers) -- is focused programmatically
- * on every panel-open transition, never by tabbing (hud.ts's roving focus lands on the
- * container so isMuteHotkey/isPauseHotkey's focused-widget guard stays clear; see the
- * doc comment above `activePanelContainer`), so a ring around the entire pane would be
- * noise with nothing to explain it. */
+/* Every panel CONTAINER -- .hud-panel and its six siblings (.hud-stats, .hud-customize,
+ * .hud-achievements, .hud-levelselect, .hud-controllers, .hud-versus-setup) -- is
+ * focused programmatically on every panel-open transition, never by tabbing (hud.ts's
+ * roving focus lands on the container so isMuteHotkey/isPauseHotkey's focused-widget
+ * guard stays clear; see the doc comment above `activePanelContainer`), so a ring
+ * around the entire pane would be noise with nothing to explain it. */
 .hud-panel:focus,
 .hud-stats:focus,
 .hud-customize:focus,
 .hud-achievements:focus,
 .hud-levelselect:focus,
-.hud-controllers:focus {
+.hud-controllers:focus,
+.hud-versus-setup:focus {
   outline: none;
 }
 
@@ -231,6 +232,7 @@
 .hud-achievements,
 .hud-levelselect,
 .hud-controllers,
+.hud-versus-setup,
 .hud-splash {
   touch-action: pan-y;
 }
@@ -555,7 +557,8 @@
  * primary". */
 .hud-action,
 .hud-continue,
-.hud-new-game {
+.hud-new-game,
+.hud-versus-start {
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -570,7 +573,8 @@
 
 .hud-action:active,
 .hud-continue:active,
-.hud-new-game:active {
+.hud-new-game:active,
+.hud-versus-start:active {
   transform: translateY(3px);
   box-shadow: 0 3px 0 #2f8f45;
 }
@@ -586,7 +590,7 @@
 
 /* ---- The quiet button theme ----------------------------------------------------- */
 
-/* Every secondary button in the HUD -- the menu's four panes, Quit, and the four
+/* Every secondary button in the HUD -- the menu's five panes, Quit, and the five
  * Back buttons -- is the same quiet slab, deliberately less loud than `.hud-action`.
  *
  * Grouped rather than repeated, because the repetition is what hid a real defect:
@@ -603,11 +607,14 @@
 .hud-customize-open,
 .hud-levelselect-open,
 .hud-controllers-open,
+.hud-versus-open,
+.hud-campaign-open,
 .hud-stats-back,
 .hud-customize-back,
 .hud-achievements-back,
 .hud-levelselect-back,
-.hud-controllers-back {
+.hud-controllers-back,
+.hud-versus-back {
   pointer-events: auto;
   cursor: pointer;
   border: none;
@@ -625,7 +632,9 @@
 .hud-achievements-open,
 .hud-customize-open,
 .hud-levelselect-open,
-.hud-controllers-open {
+.hud-controllers-open,
+.hud-versus-open,
+.hud-campaign-open {
   margin-top: 2px;
   font-size: 15px;
 }
@@ -1203,6 +1212,32 @@
   display: none;
 }
 
+/* ---- Versus in-match stock readout (spec §3a, owner addition 2026-08-21) --------- */
+
+/* One compact strip, alongside .hud-stat/.hud-shells in the topbar -- never an
+ * overlay on the arena (the constraint stated as binding in the spec). Each entry
+ * carries its OWN inline `color` (hud.ts's renderVersusStocks, tinted from
+ * IDENTITY_RING_COLORS/TEAM_COLORS), so this rule only lays the row out; the
+ * strip-level font/shadow below is what an entry inherits before its own colour
+ * overrides it. */
+.hud-versus-stocks {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.hud-versus-stock-entry {
+  white-space: nowrap;
+}
+
+.hud-versus-stocks--hidden {
+  display: none;
+}
+
 /* ---- Round-start countdown ------------------------------------------------- */
 
 /* Level chip: hidden until the loop reports a multi-level sequence. Without this rule
@@ -1465,4 +1500,119 @@
  * current-source signal. */
 .hud-controller-source-btn--selected {
   border-color: #ffffff;
+}
+
+/* ---- Versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
+   design.md) -- reached from a TITLE-ONLY button, unlike .hud-controllers just above
+   (title AND paused): a live round's mode/players/stock are fixed for its whole
+   session, so there is nothing this pane could offer mid-round. ------------------- */
+
+.hud-versus-open--hidden {
+  display: none;
+}
+
+/* Task 5b's Campaign button (docs/superpowers/sdd/2026-08-21-versus-setup-menu/
+ * task-5b-brief.md): hidden unless setSessionKind('versus') AND the title state both
+ * hold -- see hud.ts's applyTitleAffordances for the combined gate. */
+.hud-campaign-open--hidden {
+  display: none;
+}
+
+/* Same overlay shape as every sibling subpanel above: without the hidden rule it
+ * covers the game from load. */
+.hud-versus-setup {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 0; /* under the topbar, like every other subpanel */
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(11, 14, 20, 0.86);
+  color: #d8dde6;
+  text-align: center;
+  /* The pane's own six rows plus the who's-playing preview can exceed the viewport
+   * on a phone (the same reason .hud-achievement-list scrolls) -- pan-y above already
+   * permits the gesture; this is what gives it something to scroll. */
+  overflow-y: auto;
+  padding: 12px 0;
+}
+
+.hud-versus-setup--hidden {
+  display: none;
+}
+
+/* One row per option group (Mode/Players/Map/Stock/who's-playing), the same
+ * flex-column-plus-heading shape .hud-customize-section already uses -- a separate
+ * rule rather than reusing that class, so this pane's layout does not couple to the
+ * paint shop's. */
+.hud-versus-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-versus-row h2 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.hud-versus-mode-row,
+.hud-versus-players-row,
+.hud-versus-map-row,
+.hud-versus-stock-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* One button per choice -- Mode, Players, Map and Stock all reuse this ONE control
+ * rather than four near-identical rules, the same "one button per option, a ring for
+ * the current one" convention .hud-level-btn/.hud-controller-source-btn already use. */
+.hud-versus-option-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-weight: 700;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
+
+/* Same contract as every other selection ring in this file: the border is the only
+ * current-choice signal. */
+.hud-versus-option-btn--selected {
+  border-color: #ffffff;
+}
+
+/* The friendly-fire toggle -- built only under Teams (renderVersusFriendlyFireRow in
+ * hud.ts), so unlike every hidden-class pair above there is no `--hidden` modifier
+ * here: the row is genuinely absent from the DOM under FFA, not merely hidden. */
+.hud-versus-friendlyfire-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-weight: 700;
+  background: rgba(216, 221, 230, 0.16);
+  color: #d8dde6;
+}
+
+/* Shown only while the pane's chosen player count does not match the running
+ * session's real Assignment -- see renderVersusControllerRows (hud.ts). */
+.hud-versus-assignment-note {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.hud-versus-assignment-note--hidden {
+  display: none;
 }

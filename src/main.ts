@@ -1,5 +1,5 @@
 import { bootCanvas } from './render/canvas';
-import { startGame } from './game/loop';
+import { startGameWith, versusAwareDeps } from './game/loop';
 import { boot } from './boot';
 
 // Wiring only. Everything this file used to do -- the WebGL error page, the
@@ -10,7 +10,13 @@ import { boot } from './boot';
 boot({
   root: document.getElementById('app')!,
   bootCanvas,
-  startGame,
+  // The one wrapper line the versus reboot seam needs: builds this session's real
+  // GameDeps (versusAwareDeps, game/loop.ts) from whatever boot.ts is rebooting
+  // with, and threads the reboot callback boot.ts hands back on every call. No
+  // branching here -- that logic lives in versusAwareDeps/applyVersusToDeps, which
+  // a test can reach directly.
+  startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession) =>
+    startGameWith(canvas, uiRoot, versusAwareDeps(versus, requestVersusSession, requestCampaignSession)),
   host: window,
   reportError: (err) => console.error('Tanks! failed to start:', err),
 });

@@ -9,7 +9,8 @@ import {
   type PlayerAiState,
 } from '../sim/ai/player-profile';
 import type { CampaignLevel } from '../sim/arena';
-import { createLevelSystem, type LevelSystem } from './levels';
+import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
+import type { VersusConfig } from './versus-config';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
@@ -224,6 +225,40 @@ export interface GameDeps {
   /** Opt-in switches for unshipped work. Off unless the URL says otherwise. */
   /** Opt-in diagnostics. Off unless the URL says otherwise. */
   readonly devFlags: DevFlags;
+  /**
+   * Reboots the running session into a versus match with this config -- the versus
+   * setup pane's "Start" (a later task) calls it. Boot-provided (boot.ts's
+   * `requestVersusSession`, threaded through `versusAwareDeps`): the campaign path
+   * never calls it, and OPTIONAL so every existing test/caller in this file, which
+   * builds a `GameDeps` with no reboot seam at all, keeps compiling unchanged.
+   */
+  readonly requestVersusSession?: (config: VersusConfig) => void;
+  /**
+   * Reboots the running session BACK into a plain campaign session -- Task 5b's
+   * symmetric counterpart to `requestVersusSession` above, called by the versus-kind
+   * title screen's Campaign button (`hud.onCampaignOpen`). Exists because a rebooted
+   * versus session's `deps.levels` is the versus level system for its whole life
+   * (levels.ts's own one-value-per-session posture): a plain campaign entry point
+   * reachable from THERE would build a versus world off `levels[0]`, not a campaign
+   * board (reviewer-confirmed against `onNewGame` above -- see its own doc comment).
+   * Boot-provided (boot.ts's `requestCampaignSession`, threaded through
+   * `versusAwareDeps`), and OPTIONAL for the same reason `requestVersusSession` is:
+   * every existing test/caller with no reboot seam at all keeps compiling.
+   *
+   * Threaded ONLY into a VERSUS session's own deps (`applyVersusToDeps`'s versus
+   * branch) -- same posture as `initialVersusConfig` just below: a campaign session
+   * has no Campaign button to call this from (its own title already shows the real
+   * Continue/New Game/Levels), so its deps leave this unset rather than wire a
+   * reboot seam nothing on screen can reach.
+   */
+  readonly requestCampaignSession?: () => void;
+  /**
+   * Set when THIS session is itself a versus reboot, to the config it was rebooted
+   * with -- so the setup pane can reopen pre-filled with the match just played
+   * instead of its own defaults. `null`/absent for a fresh campaign boot, which has
+   * no prior versus match to prefill from.
+   */
+  readonly initialVersusConfig?: VersusConfig | null;
 }
 
 export interface GameHandle {
@@ -605,8 +640,78 @@ export function createBrowserDeps(): GameDeps {
   };
 }
 
-export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): GameHandle {
-  return startGameWith(canvas, uiRoot, createBrowserDeps());
+/**
+ * The OVERRIDE step `versusAwareDeps` applies on top of a base `GameDeps`, factored out
+ * as its own PURE function so it is testable without `createBrowserDeps`'s real
+ * `location`/`localStorage` reads. `createBrowserDeps` itself IS callable under jsdom
+ * (see its own describe block below) -- but proving that `corpseBlock`/`muzzleInside`
+ * dev flags keep reaching the world in a versus session (Task 2's carried hazard H1)
+ * would otherwise mean driving them through a real `location.search`, which conflates
+ * THIS function's own job with `parseDevFlags`'s, already proven in devflags.test.ts.
+ * A fake `GameDeps` with `devFlags.corpseBlock` set directly is the more honest fixture.
+ *
+ * When `versus` is present:
+ * - Swaps `levels` for `createVersusLevelSystem(config, deps.run, deps.devFlags)` --
+ *   the session's REAL parsed dev flags, not the `DEV_FLAGS_OFF` `createVersusLevelSystem`
+ *   defaults to, so `corpseBlock`/`muzzleInside` keep working during a versus playtest
+ *   (H1). Dropping this argument would silently lose that dev-flag support.
+ * - Widens `devFlags` with `{ mode, players, friendlyFire }` from `config` so
+ *   `startGameWith`'s own `playerCount` derivation (`deps.devFlags.players`, see
+ *   `startGameWith` below) AGREES with the world `createVersusLevelSystem` builds from
+ *   `config.players` directly (H2) -- otherwise the two disagree and the spawned tank
+ *   count does not match the config the player chose.
+ * - Threads `requestVersusSession` and stamps `initialVersusConfig: config` so the
+ *   setup pane (a later task) can reopen pre-filled.
+ * - Threads `requestCampaignSession` (Task 5b) so the versus-kind title screen's
+ *   Campaign button has a reboot seam to call -- see `GameDeps.requestCampaignSession`'s
+ *   own doc comment for why this is versus-only, same as `initialVersusConfig`.
+ *
+ * When `versus` is absent (a fresh campaign boot): returns `deps` unchanged except for
+ * `requestVersusSession` (still threaded, so a campaign session can reboot INTO
+ * versus) and `initialVersusConfig: null` (no prior match to prefill from). `levels`
+ * and `devFlags` are NOT touched here -- widening them unconditionally would corrupt a
+ * plain campaign boot that no test below would otherwise catch. `requestCampaignSession`
+ * is left UNSET here (not defaulted to a no-op): a campaign session's own title has no
+ * Campaign button to call it from, so there is nothing this seam would ever reach.
+ */
+export function applyVersusToDeps(
+  deps: GameDeps,
+  versus: { config: VersusConfig } | null | undefined,
+  requestVersusSession: (config: VersusConfig) => void,
+  requestCampaignSession?: () => void,
+): GameDeps {
+  if (!versus) {
+    return { ...deps, requestVersusSession, initialVersusConfig: null };
+  }
+  const { config } = versus;
+  return {
+    ...deps,
+    levels: createVersusLevelSystem(config, deps.run, deps.devFlags),
+    devFlags: {
+      ...deps.devFlags,
+      mode: config.mode,
+      players: config.players,
+      friendlyFire: config.friendlyFire,
+    },
+    requestVersusSession,
+    initialVersusConfig: config,
+    requestCampaignSession,
+  };
+}
+
+/**
+ * `createBrowserDeps()` plus `applyVersusToDeps`'s override step -- the one thing
+ * `main.ts`'s wiring-only wrapper calls (CLAUDE.md: `main.ts` stays wiring, behavior
+ * lives behind an injected seam). Exported so that seam is itself testable; see
+ * `applyVersusToDeps`'s own doc comment for why the override logic is a separate pure
+ * function rather than inlined here.
+ */
+export function versusAwareDeps(
+  versus: { config: VersusConfig } | null | undefined,
+  requestVersusSession: (config: VersusConfig) => void,
+  requestCampaignSession?: () => void,
+): GameDeps {
+  return applyVersusToDeps(createBrowserDeps(), versus, requestVersusSession, requestCampaignSession);
 }
 
 export function startGameWith(
@@ -982,6 +1087,35 @@ export function startGameWith(
   haptics.setEnabled(deps.touchSettings.haptics());
   const sm = deps.createStateMachine();
   const hud = deps.createHud(uiRoot);
+  // Task 5b: fixed for this session's whole life, same posture as `playerCount` below --
+  // a versus session's `deps.levels` never becomes a campaign level system mid-session
+  // (levels.ts's own one-value-per-session comment), so the title screen's affordances
+  // never need to change kind either. Drives which title buttons hud.ts shows (see
+  // setSessionKind's own doc comment) -- set once, here, before any setState/
+  // setContinueAvailable/setLevelSelect call below so the very first render already
+  // reflects it.
+  hud.setSessionKind(deps.initialVersusConfig ? 'versus' : 'campaign');
+  // Task 6 (spec §3a): the in-match stock readout is versus-only for this session's
+  // whole life, the same fixed-for-the-session posture as sessionKind just above.
+  // The gate is `!deps.initialVersusConfig`, NOT "is this a campaign session" --
+  // those are not the same test. `initialVersusConfig` is only ever set from a REAL
+  // `VersusConfig` the setup pane handed to `requestVersusSession` (`applyVersusToDeps`);
+  // a dev-flag-driven versus world (`?dev=1&mode=ffa`, no setup pane involved) has
+  // `world.mode === 'ffa'`/`'teams'` but NO `initialVersusConfig`, and so ALSO takes
+  // this branch -- see the "a versus fixture with NO players flag still gets a REAL
+  // versus world" test below for that exact shape. For a genuine campaign session this
+  // `null` really is the only call this session will ever make (a campaign world's
+  // `mode` is fixed to `'campaign-coop'`, so onSimulated's own `isVersusFrame` branch
+  // below never fires for it, all session long). For the dev-flag-versus case, this
+  // `null` is simply the FIRST call -- onSimulated's very next 'playing' frame
+  // overwrites the DATA with real entries the same way a setup-pane-driven versus
+  // session's does, since `world.mode` is what that branch actually keys off, not
+  // this flag. The STRIP stays hidden regardless, though: this session has no
+  // `initialVersusConfig`, so the `hud.setSessionKind` call above passed `'campaign'`,
+  // and hud.ts's visibility gate is `sessionKind === 'versus'` (not "does setVersusStocks
+  // carry entries") -- see hud.test.ts's "a campaign session never shows the strip,
+  // even with entries set" case for the proof.
+  if (!deps.initialVersusConfig) hud.setVersusStocks(null);
 
   /**
    * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
@@ -1013,6 +1147,18 @@ export function startGameWith(
    */
   let coopKills: number[] = [];
   let versusDeaths: number[] = [];
+  /**
+   * The stock readout's own no-thrash guard (Task 6, spec §3a): the joined key of the
+   * LAST `stocks` array actually handed to `hud.setVersusStocks`, so a frame whose
+   * stocks are unchanged does not re-invoke the setter with an identical array. This
+   * matters MORE than it would if the dispatch were event-gated: it is dispatched from
+   * `onSimulated` (see that callback's own comment), which runs EVERY 'playing' frame
+   * unconditionally, at up to 60/s -- without this guard the HUD would re-render the
+   * strip every single frame of a live match, event or no event. `null` is the sentinel
+   * "never dispatched yet" -- distinct from any real key, since a real versus world
+   * always has at least one player-kind tank and therefore a non-empty joined key.
+   */
+  let lastVersusStocksKey: string | null = null;
 
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
@@ -1141,6 +1287,50 @@ export function startGameWith(
       }
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
+      // Task 6's in-match stock readout (spec §3a), dispatched HERE rather than from
+      // onFrameEvents below (review of this task's own first landing): onSimulated
+      // runs on EVERY 'playing' frame, unconditionally, including the pre-round
+      // countdown -- no `SimEvent` marks "a versus match/countdown has started", so
+      // gating on an event arriving left the strip dark until whatever the first event
+      // happened to be (typically a shot). Reads `w`, the world this callback is
+      // actually handed (the post-step world for THIS frame), rather than reaching for
+      // `driver.world` the way onFrameEvents' own `isVersus`/setCoopKills/
+      // setVersusResults dispatch still does one section below (untouched, out of this
+      // relocation's scope) -- the two are the same world by the time either callback
+      // runs (driver.ts assigns `curr` before calling either), but `w` is the value
+      // this specific callback is actually given.
+      const isVersusFrame = w.mode === 'ffa' || w.mode === 'teams';
+      if (isVersusFrame) {
+        // One entry per player-kind tank still in the world (never spliced, even once
+        // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
+        // `controlledBy` (`?? 0`, the same convention `tankForSlot`'s own lookup uses
+        // above in this file); `stock` = `stockRemaining` (`?? 0`, the same "unstamped
+        // reads as already at zero" fallback that field's own doc comment on `Tank`
+        // names); `team` carried through only for 'teams' -- ffa tanks never have it
+        // stamped (loadArena), so it comes through `undefined` there, which is exactly
+        // what the optional `team?` on the HUD's own payload expects.
+        //
+        // Sorted by `slot`, NOT left in `w.tanks`' own array order: today that order
+        // happens to match slot order (loadArena's own grid-scan numbering), but
+        // nothing GUARANTEES it, and this is the one place a future tank-array reorder
+        // (a respawn splice, a different spawn pass ordering) could silently reshuffle
+        // the strip -- P1's own entry appearing after P2's, or the joined key changing
+        // shape for a stocks array that is semantically identical. Sorting by the
+        // value that actually identifies "which player" this is closes that off
+        // structurally rather than relying on today's incidental order staying true.
+        const stocks = w.tanks
+          .filter((t) => t.kind === 'player')
+          .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }))
+          .sort((a, b) => a.slot - b.slot);
+        // The no-thrash guard -- see lastVersusStocksKey's own doc comment above for why
+        // this matters even more now that the dispatch runs every frame, not only
+        // event-bearing ones.
+        const key = stocks.map((s) => `${s.slot}:${s.stock}:${s.team ?? ''}`).join('|');
+        if (key !== lastVersusStocksKey) {
+          lastVersusStocksKey = key;
+          hud.setVersusStocks(stocks);
+        }
+      }
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
@@ -1189,6 +1379,15 @@ export function startGameWith(
       const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
       hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
       hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
+      // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
+      // below, NOT here -- see that callback's own comment for why. `onFrameEvents`
+      // only fires `if (frameEvents.length > 0)` (driver.ts), so gating the readout on
+      // an EVENT arriving left it dark for the whole pre-round countdown (no `SimEvent`
+      // marks "a versus match's countdown is running") and, in production, dropped its
+      // very first real update entirely -- `hud.setState('playing')` always runs before
+      // the first event-bearing frame, and the OLD `setVersusStocks` guard read that
+      // as "already hidden, do not render" (fixed in hud.ts; see `versusStocksVisible`'s
+      // own doc comment there for the full mechanism).
     },
   });
 
@@ -1292,6 +1491,25 @@ export function startGameWith(
       const next = sm.state === 'win' ? nextInSession(level) : null;
       if (next !== null) {
         switchTo(next, driver.world.lives);
+        sm.restart();
+      } else if (deps.initialVersusConfig) {
+        // A versus match's own win/lose has nothing to advance to -- the versus
+        // level system is always a single synthetic level (levels.ts), so `next`
+        // above is null here exactly as it is for a campaign game-over. But unlike
+        // campaign, "Play Again" on a FINISHED versus match must not silently
+        // rebuild the same match: the versus-setup-menu plan's rematch flow returns
+        // to the setup pane, prefilled with the match just played, so players/map/
+        // stock can change before the next round. The actual reboot -- a new world,
+        // new bots, the lot -- happens only through `requestVersusSession`, wired
+        // below off the pane's OWN Start button; this click must not touch `world`.
+        //
+        // sm.toTitle() BEFORE showVersusSetup, not after: setState's close-all
+        // discipline (hud.ts) unconditionally re-hides the versus pane on every
+        // state change, so opening the pane first would just have that work undone
+        // a moment later by this very call. loop.test.ts pins the order with a case
+        // that fails if the two calls are swapped.
+        sm.toTitle();
+        hud.showVersusSetup(true, deps.initialVersusConfig);
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
@@ -1299,9 +1517,34 @@ export function startGameWith(
         // ended (sm.onChange's 'lose'/final-'win' branch already ran endRun()) is
         // gone, and playing on needs somewhere to persist the next death/clear.
         landOnCampaignBoard(campaignActive());
+        sm.restart();
       }
-      sm.restart();
     }
+  });
+
+  // The versus setup pane's own entry points -- both bare passthroughs, per the Hud
+  // interface's own doc comments on onVersusOpen/onVersusStart: the pane owns its
+  // config state and its own Back button, so loop.ts's only two jobs are handing it
+  // the retained config to prefill from (`?? null` for "no prior match this session",
+  // the same fallback applyVersusToDeps/versusAwareDeps use for a fresh campaign boot)
+  // and, on Start, forwarding the pane's chosen config to the reboot seam.
+  hud.onVersusOpen(() => {
+    hud.showVersusSetup(true, deps.initialVersusConfig ?? null);
+  });
+  // `?.`: `requestVersusSession` is optional (GameDeps' own doc comment) so every
+  // existing test/caller that builds a GameDeps with no reboot seam at all keeps
+  // compiling AND keeps working -- a Start click reaching here with nothing wired to
+  // receive it must not throw.
+  hud.onVersusStart((config) => {
+    deps.requestVersusSession?.(config);
+  });
+  // Task 5b's Campaign button -- a bare passthrough, same shape as the two above:
+  // `deps.requestCampaignSession` is only ever wired on a VERSUS session's own deps
+  // (applyVersusToDeps), so a campaign session's own click here (unreachable, since
+  // hud.ts hides the button there -- see setSessionKind) would no-op via `?.` exactly
+  // like a Start click with no requestVersusSession wired does above.
+  hud.onCampaignOpen(() => {
+    deps.requestCampaignSession?.();
   });
 
   /**

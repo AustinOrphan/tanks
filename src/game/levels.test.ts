@@ -2,12 +2,13 @@
 // starts, and how to build the world for any of them. loop.ts consumes it through
 // GameDeps, so these tests pin the real mapping the game wires in.
 import { describe, it, expect } from 'vitest';
-import { createLevelSystem } from './levels';
+import { createLevelSystem, createVersusLevelSystem } from './levels';
 import { createRunStore, type RunStore } from './run';
 import { createMemoryStorage } from './storage';
 import { DEV_FLAGS_OFF } from './devflags';
 import { ARENAS, arenaBounds, arenaById, createWorldFor, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { LIVES } from '../sim/constants';
+import type { VersusConfig } from './versus-config';
 
 /** No active run -- the boot-with-nothing-started case. */
 function noRun(): RunStore {
@@ -348,5 +349,123 @@ describe('createLevelSystem: resolves through campaign data, not ARENAS position
 
     const sandbox = createLevelSystem({ ...DEV_FLAGS_OFF, level: 'sandbox' as const }, noRun());
     expect(sandbox.levels.includes(sandbox.start)).toBe(true);
+  });
+});
+
+describe('createVersusLevelSystem', () => {
+  const ffa3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 4, friendlyFire: false };
+
+  it('is a single synthetic level, never a CAMPAIGN_LEVELS member -- same posture as the sandbox', () => {
+    const sys = createVersusLevelSystem(ffa3, noRun());
+    expect(sys.levels.length).toBe(1);
+    expect(sys.start).toBe(sys.levels[0]);
+    expect(CAMPAIGN_LEVELS.includes(sys.start)).toBe(false);
+    // Neither a campaign session nor a dev-flag jump -- must not touch run bookkeeping.
+    expect(sys.tracksProgress).toBe(false);
+    expect(sys.isDevJump).toBe(false);
+  });
+
+  it('builds a world with the config\'s mode/players/stock/friendlyFire on a concrete arena', () => {
+    const teams3: VersusConfig = { mode: 'teams', players: 3, arenaId: 'arena-02', stock: 2, friendlyFire: true };
+    const sys = createVersusLevelSystem(teams3, noRun());
+    const w = sys.world(sys.start, 42, undefined, 3);
+    // Deep-equal against the sim's own constructor with identical arguments: fails if
+    // ANY of mode/players/stock/friendlyFire/arena is dropped on the floor between
+    // this method and createWorldFor.
+    expect(w).toEqual(
+      createWorldFor(arenaById('arena-02'), 42, undefined, 3, undefined, undefined, 3, undefined, 'teams', true, 2),
+    );
+  });
+
+  it('stock reaches every player tank\'s stockRemaining -- fails if `stock` is dropped before createWorldFor', () => {
+    const sys = createVersusLevelSystem({ ...ffa3, stock: 5 }, noRun());
+    const w = sys.world(sys.start, 42, undefined, 3);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(3);
+    for (const t of players) expect(t.stockRemaining).toBe(5);
+  });
+
+  it('friendlyFire reaches world.friendlyFire -- fails if it is dropped before createWorldFor', () => {
+    const teams: VersusConfig = { mode: 'teams', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: true };
+    const on = createVersusLevelSystem(teams, noRun());
+    expect(on.world(on.start, 1, undefined, 3).friendlyFire).toBe(true);
+    const off = createVersusLevelSystem({ ...teams, friendlyFire: false }, noRun());
+    expect(off.world(off.start, 1, undefined, 3).friendlyFire).toBe(false);
+  });
+
+  describe('arenaId: \'random\' resolves per world() call, not once per session', () => {
+    // Measured (players: 3, all 5 shipped arenas offerable -- see versus-config.test.ts):
+    // seed 1 picks arena-04 (cols 45), seed 6 picks arena-03 (cols 33). Pinned literals,
+    // not swept at runtime -- fails if 'random' is resolved once at construction instead
+    // of fresh per `world()` call (a rematch would then be stuck on one arena forever).
+    const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+
+    it('two different seeds on the SAME system build different arenas', () => {
+      const sys = createVersusLevelSystem(random3, noRun());
+      const w1 = sys.world(sys.start, 1, undefined, 3);
+      const w6 = sys.world(sys.start, 6, undefined, 3);
+      expect(w1.arenaGeometry?.cols).toBe(45); // arena-04
+      expect(w6.arenaGeometry?.cols).toBe(33); // arena-03
+      expect(w1.arenaGeometry?.grid).not.toEqual(w6.arenaGeometry?.grid);
+    });
+
+    it('the same seed always re-picks the same arena (determinism, not just "differs")', () => {
+      const sys = createVersusLevelSystem(random3, noRun());
+      expect(sys.world(sys.start, 1, undefined, 3).arenaGeometry?.cols).toBe(45);
+      expect(sys.world(sys.start, 1, undefined, 3).arenaGeometry?.cols).toBe(45);
+    });
+  });
+
+  describe('bounds', () => {
+    it('a concrete arenaId reports that arena\'s own board size', () => {
+      const sys = createVersusLevelSystem(ffa3, noRun());
+      const arena = arenaById('arena-02');
+      expect(sys.bounds(sys.start)).toEqual({ ...arenaBounds(arena), cellSize: arena.cellSize });
+    });
+
+    it('\'random\' reports the LARGEST candidate\'s bounds -- the documented seed-blind coupling', () => {
+      // Measured: at players 2/3/4 every shipped arena is offerable (versus-config.test.ts),
+      // and arena-04/arena-05 (30x22 world units, area 660) dominate arena-01/02/03
+      // (22x18, area 396) in BOTH dimensions under the shared cellSize -- so the
+      // largest candidate is a real arena's own bounds triple, not a synthesized box.
+      // Fails if this ever returns a smaller candidate's bounds (which would clip the
+      // ground plane on a first-build 'random' pick of the larger class) or a
+      // synthesized width/height pairing that does not match any real arena's cellSize.
+      const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+      const sys = createVersusLevelSystem(random3, noRun());
+      const arena04 = arenaById('arena-04');
+      expect(sys.bounds(sys.start)).toEqual({ ...arenaBounds(arena04), cellSize: arena04.cellSize });
+    });
+  });
+
+  it('never reads or writes the RunStore it is handed -- the negative control for CLAUDE.md\'s "must not create or mutate a campaign run"', () => {
+    const run = runAt(2);
+    const before = run.active();
+    const sys = createVersusLevelSystem(ffa3, run);
+    sys.world(sys.start, 1, undefined, 3);
+    sys.world(sys.start, 2, undefined, 3);
+    void sys.start;
+    void sys.bounds(sys.start);
+    expect(run.active()).toEqual(before);
+  });
+
+  describe('corpseBlock/muzzleInside dev flags reach the built world (composition, not unit)', () => {
+    // Same composition question createLevelSystem's own equivalent block (above) asks:
+    // do the dev-flag-derived booleans actually reach World through THIS closure.
+    const cfg: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: false };
+
+    it('omitted flags param keeps the shipped defaults (corpseBlocksShells false, muzzleClearsTanks true)', () => {
+      const sys = createVersusLevelSystem(cfg, noRun());
+      const w = sys.world(sys.start, 1, undefined, 3);
+      expect(w.corpseBlocksShells).toBe(false);
+      expect(w.muzzleClearsTanks).toBe(true);
+    });
+
+    it('corpseBlock/muzzleInside flags reach the world exactly as the campaign branch\'s do', () => {
+      const sys = createVersusLevelSystem(cfg, noRun(), { ...DEV_FLAGS_OFF, corpseBlock: true, muzzleInside: true });
+      const w = sys.world(sys.start, 1, undefined, 3);
+      expect(w.corpseBlocksShells).toBe(true);
+      expect(w.muzzleClearsTanks).toBe(false);
+    });
   });
 });

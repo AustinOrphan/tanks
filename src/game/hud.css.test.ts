@@ -72,11 +72,12 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   const root = document.createElement('div');
   document.body.appendChild(root);
   const hud = createHud(root);
-  // The four `createElement('button')` sites in hud.ts today are the hull-swatch row,
-  // the skin row and the accent row (all three built during `createHud`) and the level
-  // row (built here). The other setters rebuild subtrees that hold no buttons today;
-  // they are driven anyway so a button added to one of them lands under this sweep
-  // instead of beside it.
+  // The `createElement('button')` sites in hud.ts today are the hull-swatch row, the
+  // skin row and the accent row (built during `createHud`), the level row (built
+  // here), the controller-assignment row buttons, and -- as of the versus setup pane
+  // -- its Mode/Players/Map/Stock/friendly-fire/who's-playing rows. The remaining
+  // setters rebuild subtrees that hold no buttons today; they are driven anyway so a
+  // button added to one of them lands under this sweep instead of beside it.
   //
   // KNOWN BLIND SPOT, found by review rather than assumed away: this sweeps the DOM
   // these calls produce, not every path that can produce a button. A button created by
@@ -97,6 +98,23 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   hud.setBotAssignmentAllowed(true);
   hud.setDetectedPads([{ padIndex: 1, id: 'Test Pad' }]);
   hud.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 }]);
+  // The versus setup pane's Mode/Players/Map/Stock rows and its who's-playing preview
+  // are all rendered UNCONDITIONALLY at construction (renderVersusMapRow/
+  // renderVersusControllerRows -- see hud.ts's own comment on why, mirroring
+  // setLevelSelect/setControllers' "not gated on the panel being open" convention), so
+  // they are already in the DOM with no call needed here. The pane's own default
+  // player count (2) matches this fixture's 2-slot setControllers call just above, so
+  // the who's-playing preview lands on the INTERACTIVE branch (real, enabled
+  // candidate buttons -- see renderVersusControllerRows), not the disabled preview
+  // branch a mismatched count would produce.
+  //
+  // The one row that IS conditional is friendly fire -- genuinely absent from the DOM
+  // under the pane's FFA default (renderVersusFriendlyFireRow) -- so switching to
+  // Teams here is what lands its button under this sweep at all.
+  const versusTeamsBtn = root.querySelector(
+    '.hud-versus-mode-row [data-mode="teams"]',
+  ) as HTMLButtonElement;
+  versusTeamsBtn.click();
   return {
     root,
     dispose: () => {
@@ -228,6 +246,24 @@ describe('hud.css is syntactically whole', () => {
       '.hud-controller-rows', '.hud-controller-row', '.hud-controller-row-label',
       '.hud-controller-row-current', '.hud-controller-row-current--disconnected',
       '.hud-controller-source-btn', '.hud-controller-source-btn--selected',
+      // versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
+      // design.md): hidden rules, the row/option-button layout, the selection ring,
+      // and the friendly-fire toggle -- the who's-playing preview reuses the
+      // controller-assignment selectors just above rather than duplicating them.
+      '.hud-versus-open--hidden', '.hud-versus-setup', '.hud-versus-setup--hidden',
+      '.hud-versus-row', '.hud-versus-mode-row', '.hud-versus-players-row',
+      '.hud-versus-map-row', '.hud-versus-stock-row', '.hud-versus-option-btn',
+      '.hud-versus-option-btn--selected', '.hud-versus-friendlyfire-btn',
+      '.hud-versus-assignment-note', '.hud-versus-assignment-note--hidden',
+      // Task 5b (a versus session's title screen): the Campaign button's hidden rule
+      // -- without it every versus session would show it permanently, even at
+      // non-title states.
+      '.hud-campaign-open--hidden',
+      // Task 6's in-match stock readout (spec §3a): the topbar strip's hidden rule
+      // (without it the strip -- with whatever stale entries it last held -- shows on
+      // every panel, not just playing/paused) and its per-entry layout, the row's only
+      // rule (without it the entries stack vertically like a bare <div>'s children).
+      '.hud-versus-stocks', '.hud-versus-stocks--hidden', '.hud-versus-stock-entry',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
@@ -294,7 +330,29 @@ describe('hud.css is syntactically whole', () => {
     // about every possible assignment. The Bot candidate is only present because the
     // fixture calls setBotAssignmentAllowed(true); without it the campaign default drops
     // one button per slot and this is 56.
-    expect(buttons.length).toBe(58);
+    // 86 since the versus setup pane landed (docs/superpowers/specs/2026-08-21-versus-
+    // setup-menu-design.md): 58 + 28, measured (not derived) against THIS fixture --
+    // 3 static (.hud-versus-open, .hud-versus-start, .hud-versus-back) + 2 Mode
+    // (FFA/Teams) + 3 Players (2/3/4) + 6 Map (versusMapChoices(2) -> arena-01..05,
+    // all 5 pass `suitable` at 2 players today, measured via versusBoardCatalog() --
+    // plus Random) + 5 Stock (1-5) + 1 friendly-fire toggle (present only because
+    // this fixture switches the pane to Teams -- see mountEveryButton's own comment;
+    // absent under the pane's FFA default, and this would be 85 without that click)
+    // + 8 who's-playing PREVIEW row buttons. That preview reuses the exact
+    // renderControllerRowsInto machinery the row above counts: the pane's default
+    // player count (2) matches THIS fixture's own 2-slot setControllers call, so it
+    // lands on the INTERACTIVE branch (2 slots x 4 candidates, same arithmetic as the
+    // real Controllers panel's 8 above) rather than the disabled preview branch a
+    // mismatched count would produce -- a fixture with a different pane player count
+    // or a different setControllers slot count would pin a different number here too.
+    // 3 + 2 + 3 + 6 + 5 + 1 + 8 = 28.
+    // 87 since Task 5b's Campaign button landed: 86 + 1 static button
+    // (.hud-campaign-open), rendered unconditionally at construction (same convention
+    // as every other title-panel button here) and hidden via CSS class rather than
+    // removed from the DOM -- this fixture never calls setSessionKind('versus'), so it
+    // stays hidden throughout, exactly like .hud-continue/.hud-new-game/
+    // .hud-versus-open above ALREADY are counted here whether shown or not.
+    expect(buttons.length).toBe(87);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -368,6 +426,27 @@ describe('hud.css is syntactically whole', () => {
     expect(accentsStyle.display).toBe('flex');
     expect(accentsStyle.display).toBe(swatchesStyle.display);
     expect(accentsStyle.gap).toBe(swatchesStyle.gap);
+
+    document.body.innerHTML = '';
+  });
+
+  it('lays out the versus stock readout as a row, and its hidden rule actually hides it', () => {
+    // Same class of gap the accent-row test above exists for: the presence-only sweep
+    // cannot tell "no rule" from "a rule with no layout declarations" -- both make
+    // `.hud-versus-stocks` match `toContain`. Without `display: flex` here, per-slot
+    // entries (block-level <span>s once hud.ts sets a className on them) would each
+    // take the full topbar row width and stack vertically instead of sitting in one
+    // compact strip. Without the `--hidden` rule resolving to `display: none`, the
+    // strip -- and whatever stale entries it last held -- would stay visible outside
+    // playing/paused, which is exactly the state gate this feature is bound to (spec
+    // §3a). Breaks if either rule is deleted or the hidden rule loses its declaration.
+    const row = document.createElement('div');
+    row.className = 'hud-versus-stocks';
+    document.body.appendChild(row);
+    expect(getComputedStyle(row).display).toBe('flex');
+
+    row.classList.add('hud-versus-stocks--hidden');
+    expect(getComputedStyle(row).display).toBe('none');
 
     document.body.innerHTML = '';
   });
