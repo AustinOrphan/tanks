@@ -64,7 +64,10 @@ interface Decal {
 }
 
 // Feel constants (CLAUDE.md's "numbers that are feel, not measurement"): cheap to
-// retune by eye, kept in this one place.
+// retune by eye, kept in this one place. The three the tests reason about
+// arithmetically (EMIT_SPACING, LIFETIME_SECONDS, MAX_TRAILS) are exported so
+// tread-trails.test.ts imports them rather than re-declaring literals that would
+// silently drift out of sync with a future retune.
 //
 // World-space distance between successive decal PAIRS along a tank's path. Small
 // enough that consecutive prints overlap (TREAD_LEN below is slightly larger) and
@@ -72,9 +75,9 @@ interface Decal {
 // frame-count-based, which is what makes emission frame-rate independent -- the same
 // physical spacing results whether the distance is covered in one render frame or a
 // hundred (see the accumulate-then-carry-remainder walk in `sync` below).
-const EMIT_SPACING = 0.25;
+export const EMIT_SPACING = 0.25;
 // How long a single decal takes to fade to fully transparent.
-const LIFETIME_SECONDS = 2.0;
+export const LIFETIME_SECONDS = 2.0;
 // Quad size, in world units. Longer than EMIT_SPACING so neighbouring prints overlap
 // a hair (hides the seam); narrower than TRACK_W (one physical tread's width) so the
 // mark reads as a print of the tread, not the tread itself.
@@ -108,7 +111,7 @@ const TREAD_OFFSET = HULL_WIDTH / 2 - TRACK_W / 2;
 // play. Past ~7 continuously-moving tanks (7 * 48 = 336 < 360 <= 8 * 48 = 384) the cap
 // binds and the OLDEST decal recycles before its natural lifetime elapses, shortening
 // visible trails under that load -- a deliberate degradation, not a bug.
-const MAX_TRAILS = 360;
+export const MAX_TRAILS = 360;
 
 function makeGeometry(): THREE.PlaneGeometry {
   // Built flat (XZ plane, facing +Y) ONCE via geo.rotateX, rather than leaving the

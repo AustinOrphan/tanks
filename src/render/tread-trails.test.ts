@@ -5,12 +5,13 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn } from '../sim/types';
-import { createTreadTrailSystem } from './tread-trails';
+import { createTreadTrailSystem, EMIT_SPACING, LIFETIME_SECONDS, MAX_TRAILS } from './tread-trails';
 import { HULL_WIDTH, TRACK_W } from './entities';
 
-const EMIT_SPACING = 0.25;
-const LIFETIME_SECONDS = 2.0;
-const MAX_TRAILS = 360;
+// Imported from the module rather than re-declared: a re-declared literal here
+// would silently stop matching the module's own constant the moment either one
+// is retuned, and the resulting test failures would read as a real regression
+// rather than a stale copy.
 const TREAD_OFFSET = HULL_WIDTH / 2 - TRACK_W / 2;
 
 function makeTank(
