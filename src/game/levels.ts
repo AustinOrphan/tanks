@@ -200,10 +200,13 @@ export function createLevelSystem(
  * resolve `'random'` with, so it fell back to guessing the largest candidate, which
  * could disagree with whatever `world()` actually built). That defensive handling is
  * deliberately NOT kept: a `config.arenaId` that is still `'random'` here is a caller
- * bug, not a case to paper over, and `arenaById` (below, all three sites) already
- * throws a clear `Unknown arena id: random` for it -- fail loud, so a future change
- * that drops the Start-boundary resolution breaks LOUDLY here, in the constructor,
- * rather than reintroducing #278's silent mismatch. See `versus-config.test.ts`'s and
+ * bug, not a case to paper over, and `arenaById` (called in `world()` and `bounds()`
+ * below; the synthetic level's own `arenaId` field is a raw assignment, not a third
+ * call) already throws a clear `Unknown arena id: random` for it -- fail loud. The
+ * throw is lazy, inside those closures, but effectively immediate in practice:
+ * `startGameWith` calls `.bounds()` at boot, so a future change that drops the
+ * Start-boundary resolution breaks LOUDLY on first use rather than reintroducing
+ * #278's silent mismatch. See `versus-config.test.ts`'s and
  * this file's own tests for the throw as the documented, deliberate contract.
  */
 export function createVersusLevelSystem(

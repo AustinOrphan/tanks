@@ -100,10 +100,13 @@ export function versusMapChoices(
  * passes straight through unchanged (untouched by `players`/`seed` -- a deliberate
  * choice picked by name is never second-guessed). `'random'` draws deterministically
  * from `versusMapChoices(config.players)` using `mulberry32(seed)`'s first value: same
- * seed, same pick, forever -- no `Math.random`, so a recorded replay's own seed
- * reproduces the exact board a `'random'` match was played on, with no extra stored
- * field (the same argument `createWorldFor`'s doc comment makes for reusing `seed`
- * itself as the versus-variant picker).
+ * seed, same pick, forever -- no `Math.random`. Since issue #278 the seed handed in is
+ * the START-BOUNDARY resolution seed (see `resolveVersusConfig`'s caller in loop.ts),
+ * which in general is NOT the world's own `trace.meta.seed` -- a recorded replay does
+ * not re-derive a `'random'` board from its seed; it reads the concrete
+ * `ReplayMeta.arenaId` stamped from the resolved config. Do not "restore" the old
+ * property by calling this per world() build with the world seed: that per-call,
+ * seed-blind resolution is exactly the #278 coupling the single-call contract removed.
  *
  * A pure function of `(config, seed)` with no opinion on how often it is called --
  * `resolveVersusConfig` below is the one shipped caller (issue #278: exactly ONCE per
