@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createWorld, resolveStatus, stepInputs, stepRespawns } from './world';
 import type { World } from './world';
+import { ARENA_01, createWorldFor } from './arena';
 import type { Tank, Spawn } from './types';
 import type { SimEvent } from './events';
-import { RESPAWN_DELAY_TICKS } from './constants';
+import { RESPAWN_DELAY_TICKS, VERSUS_STOCK } from './constants';
 
 /**
  * PR 4 of the n-player arc -- FFA + teams. `World.mode` (default `'campaign-coop'`)
@@ -308,4 +309,23 @@ describe('stepRespawns gate: campaign-coop needs 2+ players, ffa/teams need none
   // "byte-untouched" fallthrough, not resolveStatusCoop), which calls resetArena and
   // revives every tank unconditionally -- a completely different mechanism from
   // stepRespawns/respawnAtTick that would make such a test pass for the wrong reason.
+});
+
+// The versus-setup-menu plan's only src/sim change: a trailing, defaulted per-match
+// `stock` parameter threaded through createWorldFor -> loadArena, so a future menu can
+// pick a stock count without touching campaign-coop's own byte-identical trace path.
+describe('createWorldFor/loadArena: a defaulted per-match stock', () => {
+  it('a versus world built with an explicit stock stamps it on every player tank', () => {
+    const w = createWorldFor(ARENA_01, 7, undefined, 3, undefined, undefined, 3, undefined, 'ffa', undefined, 5);
+    const players = w.tanks.filter((t) => t.kind === 'player');
+    expect(players.length).toBe(3);
+    for (const t of players) expect(t.stockRemaining).toBe(5);
+  });
+
+  it('omitting stock keeps the shipped VERSUS_STOCK default — the defaulted-param negative control', () => {
+    const w = createWorldFor(ARENA_01, 7, undefined, 3, undefined, undefined, 2, undefined, 'ffa');
+    for (const t of w.tanks.filter((t) => t.kind === 'player')) {
+      expect(t.stockRemaining).toBe(VERSUS_STOCK);
+    }
+  });
 });

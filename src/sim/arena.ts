@@ -203,6 +203,13 @@ export function loadArena(
   // unchanged, the same total-degradation posture pickVersusSpawnCell's own zero-
   // candidate fallback already takes.
   seed?: number,
+  // Trailing and defaulted, same precedent again: every existing call site (none of
+  // which pass an 8th argument today) gets VERSUS_STOCK, byte-identical to before this
+  // parameter existed. Only stamped onto player tanks in 'ffa'/'teams' mode (both
+  // stamping sites below); campaign-coop tanks never carry stockRemaining regardless of
+  // this value. A future per-match setup menu is the only caller that will ever pass a
+  // non-default value.
+  stock: number = VERSUS_STOCK,
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
   const { cols, rows, cellSize, legend } = arena;
 
@@ -284,7 +291,7 @@ export function loadArena(
       // Stock is a PLAYER-only, versus-only concept -- see Tank.stockRemaining's own
       // doc comment. P1 is stamped here; PASS 1b's ffa/teams branch stamps every
       // co-player the same way.
-      if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) tank.stockRemaining = VERSUS_STOCK;
+      if (kind === 'player' && (mode === 'ffa' || mode === 'teams')) tank.stockRemaining = stock;
       tanks.push(tank);
       if (kind === 'player' && p1Row < 0) { p1Row = r; p1Col = c; p1SpawnIndex = spawns.length - 1; }
     }
@@ -333,7 +340,7 @@ export function loadArena(
         spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
         const tank = makeTank(id++, 'player', pos, 0, i);
         if (mode === 'teams') tank.team = teamOf(i);
-        tank.stockRemaining = VERSUS_STOCK;
+        tank.stockRemaining = stock;
         tanks.push(tank);
       }
     } else {
@@ -437,6 +444,14 @@ export function createWorldFor(
   // default (false) applies. Only levels.ts's campaign branch ever passes a non-default
   // value, closed over from `?dev=1&friendlyFire=1` -- see World.friendlyFire.
   friendlyFire?: boolean,
+  // Trailing and optional, same precedent again: undefined here means loadArena's own
+  // default (VERSUS_STOCK) applies, so every existing call site (none of which pass an
+  // 11th argument today) is untouched. Threaded straight to loadArena, which is the only
+  // place stock is ever stamped -- see loadArena's own doc comment above. Only meaningful
+  // in combination with mode 'ffa'/'teams'; a campaign-coop call ignores it exactly as it
+  // already ignores VERSUS_STOCK. The versus-setup-menu plan's per-match stock picker is
+  // the first caller that will ever pass a non-default value.
+  stock?: number,
 ): World {
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
@@ -446,7 +461,7 @@ export function createWorldFor(
   // (replayMetaFor, game/replay.ts) enough to reproduce the exact board it was played
   // on, with no extra field.
   return createWorld({
-    ...loadArena(arena, playerCount, mode, seed),
+    ...loadArena(arena, playerCount, mode, seed, stock),
     lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
     mode, friendlyFire,
   });
