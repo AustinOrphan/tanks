@@ -7,6 +7,7 @@ import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { versusMapChoices, type VersusConfig } from './versus-config';
 import { VERSUS_STOCK } from '../sim/constants';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 
 let hud: Hud | null = null;
 
@@ -1978,6 +1979,98 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/0 · P2: 0/1');
     h.setVersusResults({ mode: 'ffa', kills: [1, 1], deaths: [1, 1] });
     expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/1 · P2: 1/1');
+  });
+});
+
+describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', () => {
+  const strip = (root: HTMLElement): HTMLElement => root.querySelector('.hud-versus-stocks') as HTMLElement;
+  const entries = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-stock-entry')) as HTMLElement[];
+
+  /**
+   * `--hud-damage-color` (the death-vignette precedent above) is a CUSTOM property, so
+   * jsdom's `getPropertyValue` hands the literal `#rrggbb` string back unparsed. `color`
+   * is a REAL css property here -- `span.style.color`, not a custom property -- and
+   * jsdom's CSSOM (like a real browser's) normalizes any valid colour value to
+   * `rgb(r, g, b)` on read, hex included. Measured directly: assigning `#3fd0ff` and
+   * reading `.style.color` back gives `'rgb(63, 208, 255)'`, not `'#3fd0ff'`. This
+   * derives that same rgb() form from the exported constant's number, so it is still
+   * the CONTRACT being asserted (a colour derived from IDENTITY_RING_COLORS/
+   * TEAM_COLORS), not hud.ts's private cssColor implementation.
+   */
+  function expectedCssColor(hex: number): string {
+    const r = (hex >> 16) & 0xff;
+    const g = (hex >> 8) & 0xff;
+    const b = hex & 0xff;
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  it('setVersusStocks(null) keeps the strip hidden even while playing', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setVersusStocks(null);
+    h.setState('playing');
+    expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
+  });
+
+  it('renders one entry per slot, with the slot number and stock count as its text', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setState('playing');
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
+    expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(false);
+  });
+
+  it('ffa entries are tinted from IDENTITY_RING_COLORS[slot], not a copied-out hex', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    h.setState('playing');
+    const es = entries(root);
+    expect(es[0].style.color).toBe(expectedCssColor(IDENTITY_RING_COLORS[0]));
+    expect(es[1].style.color).toBe(expectedCssColor(IDENTITY_RING_COLORS[1]));
+  });
+
+  it("teams entries are tinted from TEAM_COLORS[team], not IDENTITY_RING_COLORS[slot]", () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    // slot 0 carries team 1 deliberately -- if the dispatch dropped `team` and fell
+    // through to the ffa branch, this would read IDENTITY_RING_COLORS[0] instead.
+    h.setVersusStocks([{ slot: 0, stock: 3, team: 1 }, { slot: 1, stock: 2, team: 0 }]);
+    h.setState('playing');
+    const es = entries(root);
+    expect(es[0].style.color).toBe(expectedCssColor(TEAM_COLORS[1]));
+    expect(es[1].style.color).toBe(expectedCssColor(TEAM_COLORS[0]));
+    expect(es[0].style.color).not.toBe(expectedCssColor(IDENTITY_RING_COLORS[0]));
+  });
+
+  it('hidden at title/win/lose even with entries set', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    for (const s of ['title', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(strip(root).classList.contains('hud-versus-stocks--hidden'), s).toBe(true);
+    }
+  });
+
+  it('visible at both playing and paused', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setVersusStocks([{ slot: 0, stock: 3 }]);
+    for (const s of ['playing', 'paused'] as const) {
+      h.setState(s);
+      expect(strip(root).classList.contains('hud-versus-stocks--hidden'), s).toBe(false);
+    }
+  });
+
+  it('a campaign session never shows the strip, even with entries set -- the gate is sessionKind, not trusting loop.ts to never call this with entries', () => {
+    const { hud: h, root } = mount();
+    // sessionKind defaults to 'campaign' -- no setSessionKind('versus') call.
+    h.setVersusStocks([{ slot: 0, stock: 3 }]);
+    h.setState('playing');
+    expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
   });
 });
 

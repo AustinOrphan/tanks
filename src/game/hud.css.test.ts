@@ -259,6 +259,11 @@ describe('hud.css is syntactically whole', () => {
       // -- without it every versus session would show it permanently, even at
       // non-title states.
       '.hud-campaign-open--hidden',
+      // Task 6's in-match stock readout (spec §3a): the topbar strip's hidden rule
+      // (without it the strip -- with whatever stale entries it last held -- shows on
+      // every panel, not just playing/paused) and its per-entry layout, the row's only
+      // rule (without it the entries stack vertically like a bare <div>'s children).
+      '.hud-versus-stocks', '.hud-versus-stocks--hidden', '.hud-versus-stock-entry',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
@@ -421,6 +426,27 @@ describe('hud.css is syntactically whole', () => {
     expect(accentsStyle.display).toBe('flex');
     expect(accentsStyle.display).toBe(swatchesStyle.display);
     expect(accentsStyle.gap).toBe(swatchesStyle.gap);
+
+    document.body.innerHTML = '';
+  });
+
+  it('lays out the versus stock readout as a row, and its hidden rule actually hides it', () => {
+    // Same class of gap the accent-row test above exists for: the presence-only sweep
+    // cannot tell "no rule" from "a rule with no layout declarations" -- both make
+    // `.hud-versus-stocks` match `toContain`. Without `display: flex` here, per-slot
+    // entries (block-level <span>s once hud.ts sets a className on them) would each
+    // take the full topbar row width and stack vertically instead of sitting in one
+    // compact strip. Without the `--hidden` rule resolving to `display: none`, the
+    // strip -- and whatever stale entries it last held -- would stay visible outside
+    // playing/paused, which is exactly the state gate this feature is bound to (spec
+    // §3a). Breaks if either rule is deleted or the hidden rule loses its declaration.
+    const row = document.createElement('div');
+    row.className = 'hud-versus-stocks';
+    document.body.appendChild(row);
+    expect(getComputedStyle(row).display).toBe('flex');
+
+    row.classList.add('hud-versus-stocks--hidden');
+    expect(getComputedStyle(row).display).toBe('none');
 
     document.body.innerHTML = '';
   });

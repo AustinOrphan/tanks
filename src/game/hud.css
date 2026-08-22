@@ -1212,6 +1212,32 @@
   display: none;
 }
 
+/* ---- Versus in-match stock readout (spec §3a, owner addition 2026-08-21) --------- */
+
+/* One compact strip, alongside .hud-stat/.hud-shells in the topbar -- never an
+ * overlay on the arena (the constraint stated as binding in the spec). Each entry
+ * carries its OWN inline `color` (hud.ts's renderVersusStocks, tinted from
+ * IDENTITY_RING_COLORS/TEAM_COLORS), so this rule only lays the row out; the
+ * strip-level font/shadow below is what an entry inherits before its own colour
+ * overrides it. */
+.hud-versus-stocks {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.hud-versus-stock-entry {
+  white-space: nowrap;
+}
+
+.hud-versus-stocks--hidden {
+  display: none;
+}
+
 /* ---- Round-start countdown ------------------------------------------------- */
 
 /* Level chip: hidden until the loop reports a multi-level sequence. Without this rule

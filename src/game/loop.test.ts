@@ -19,7 +19,7 @@ import {
   type TouchScheme,
   type FireMode,
 } from '../input/touch';
-import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
+import { COUNTDOWN_TICKS, LIVES, VERSUS_STOCK } from '../sim/constants';
 import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
 import type { World } from '../sim/world';
 import { countPlayerTanks } from '../sim/world';
@@ -120,6 +120,8 @@ interface Recorder {
   coopKillPushes: Array<number[] | null>;
   /** Every value passed to hud.setVersusResults, in order. */
   versusResultsPushes: Array<{ mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null>;
+  /** Every value passed to hud.setVersusStocks, in order (Task 6, spec §3a). */
+  versusStocksPushes: Array<{ slot: number; stock: number; team?: number }[] | null>;
   /** Every (show, initial) passed to hud.showVersusSetup, in order. */
   versusSetupPushes: Array<{ show: boolean; initial: VersusConfig | null }>;
   /** Every value passed to hud.setSessionKind, in order (Task 5b). */
@@ -318,6 +320,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     statPushes: 0,
     coopKillPushes: [],
     versusResultsPushes: [],
+    versusStocksPushes: [],
     versusSetupPushes: [],
     sessionKinds: [],
     hudCallLog: [],
@@ -771,6 +774,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setVersusResults: (data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null) => {
           rec.versusResultsPushes.push(data === null ? null : { mode: data.mode, kills: [...data.kills], deaths: [...data.deaths] });
+        },
+        setVersusStocks: (stocks: { slot: number; stock: number; team?: number }[] | null) => {
+          rec.versusStocksPushes.push(stocks === null ? null : stocks.map((s) => ({ ...s })));
         },
         setHullColor: (id: string) => {
           rec.hullEchoes.push(id);
@@ -2989,6 +2995,77 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // The coop line is suppressed while in a versus mode -- the two results lines are
       // never both live at once (loop.ts's isVersus dispatch).
       expect(h.rec.coopKillPushes.at(-1)).toBeNull();
+      h.handle.dispose();
+    });
+  });
+
+  describe('the in-match stock readout (Task 6, spec §3a)', () => {
+    // Twin of the versus-results test just above: setVersusStocks (hud.test.ts) and
+    // the derivation itself are each unit-testable in isolation, but neither can see
+    // whether onFrameEvents' isVersus branch actually calls the setter on a real,
+    // driven frame. Reuses the exact bullet-on-P1 fixture the results test above
+    // drives, so the kill is real, not fabricated.
+    it('a versus kill updates the readout, decrementing the victim\'s stock and leaving the killer\'s untouched', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      const world = h.rec.builtWorlds[0];
+      expect(world.mode).toBe('ffa');
+      const p1 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+      const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
+      // The negative control the advisor named: stockRemaining must actually be
+      // stamped BEFORE the kill, or a 0 -> 0 "decrement" would pass while proving
+      // nothing (stockRemaining's own `?? 0` fallback reads an unstamped tank as
+      // already eliminated).
+      expect(p1.stockRemaining).toBe(VERSUS_STOCK);
+      expect(p2.stockRemaining).toBe(VERSUS_STOCK);
+      world.bullets.push({
+        id: 902, ownerId: p2.id, type: 'normal', pos: { x: p1.pos.x, y: p1.pos.y },
+        vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true,
+      });
+      h.setState('playing');
+      h.fireFrame(20);
+      const last = h.rec.versusStocksPushes.at(-1);
+      expect(last).not.toBeNull();
+      const bySlot = new Map(last!.map((e) => [e.slot, e]));
+      expect(bySlot.get(0)?.stock, "P1's own stock did not decrement").toBe(VERSUS_STOCK - 1);
+      expect(bySlot.get(1)?.stock, "P2's stock was touched by a kill it did not take").toBe(VERSUS_STOCK);
+      // ffa: no `team` on either entry.
+      expect(bySlot.get(0)?.team).toBeUndefined();
+      expect(bySlot.get(1)?.team).toBeUndefined();
+      h.handle.dispose();
+    });
+
+    // The no-thrash control: onFrameEvents fires whenever ANY event lands in the
+    // frame, and a `fire` event is exactly as eligible as a `tank-destroyed` one (see
+    // "does NOT pulse when an ENEMY fires" above for the same shared-stream shape) --
+    // so a frame where the player fires but nothing dies must not re-invoke the
+    // setter with an identical stocks array. h.firePlayerShot() drives a REAL shot
+    // through the sim (not a fabricated event), so this measures the actual dedup
+    // guard in loop.ts, not a fixture that never calls it.
+    it('firing (an event, but no stock change) across several frames does not re-invoke the setter beyond the one triggering call', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      h.setState('playing');
+      h.firePlayerShot();
+      h.fireFrame(20); // the first shot: an event lands, the setter fires once
+      const afterFirstShot = h.rec.versusStocksPushes.length;
+      expect(afterFirstShot).toBeGreaterThan(0);
+      for (let i = 1; i <= 5; i++) {
+        h.firePlayerShot();
+        h.fireFrame(20 + i * 250); // spaced past the weapon cooldown, a real shot each time
+      }
+      // Breaks (fails to stay at afterFirstShot) if loop.ts's `key !== lastVersusStocksKey`
+      // guard is removed -- measured by deleting it locally and confirming this goes red.
+      expect(h.rec.versusStocksPushes.length, 'unchanged stocks re-invoked the setter').toBe(afterFirstShot);
+      h.handle.dispose();
+    });
+
+    it("a campaign session gets exactly one null call at wiring, and never entries", () => {
+      const h = boot(makeDeps());
+      h.setState('playing');
+      h.firePlayerShot();
+      h.fireFrame(20);
+      h.fireFrame(300);
+      h.fireFrame(600);
+      expect(h.rec.versusStocksPushes).toEqual([null]);
       h.handle.dispose();
     });
   });

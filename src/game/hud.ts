@@ -3,6 +3,7 @@ import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { teamOf } from '../sim/arena';
+import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
@@ -164,6 +165,32 @@ export interface Hud {
    * cares which SIDE won, not which teammate scored -- see arena.ts's `teamOf`.
    */
   setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void;
+  /**
+   * The in-match per-player STOCK readout (spec §3a, owner addition 2026-08-21) --
+   * genuinely different lifecycle from `setVersusResults` just above: that one is a
+   * win/lose-only tally; this is a LIVE strip in the topbar, visible only while a
+   * versus session is actually being played (`playing`/`paused` -- wired into
+   * setState's visibility toggles alongside every other state-gated element below),
+   * hidden at title/win/lose/splash, where a live per-tick count would be meaningless
+   * (the match has not begun or is already over). `null` hides it entirely -- the same
+   * "never show" convention `setCoopKills`/`setVersusResults` already use; campaign
+   * sessions call this with `null` exactly once, at wiring, and never again (loop.ts).
+   *
+   * One entry per active slot, `{ slot, stock, team? }` -- `team` present only in
+   * 'teams' mode (loop.ts derives it straight off `Tank.team`, which loadArena stamps
+   * ffa-never/teams-always, arena.ts). Each entry renders its OWN element (a joined
+   * string could not carry a per-slot inline tint) coloured from the SAME exported
+   * constants the rest of the identity system already uses for this slot's ring --
+   * `IDENTITY_RING_COLORS[slot]` in ffa, `TEAM_COLORS[team]` in teams -- imported here
+   * rather than copied out as literal hex, which is the drift hud.test.ts's own tint
+   * assertions are written to catch (retuning either palette must move this readout's
+   * colour too, with no second place to remember to edit).
+   *
+   * Placement is the topbar -- the screen edge the layout already reserves for
+   * `.hud-stat`/`.hud-shells` -- deliberately never an overlay on the arena; feel/size
+   * evidence against a real render is Task 7's job (screenshots), not this file's.
+   */
+  setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void;
   /** Two-click-confirmed on the stats page. */
   onResetStats(cb: () => void): void;
   /** Two-click-confirmed on the stats page. Re-locks levels; the loop refreshes. */
@@ -185,8 +212,12 @@ export interface Hud {
    * The paint shop's live tank preview canvas -- owned by the HUD (it is markup, same
    * as every other element here), driven by the caller. `render/preview.ts` builds a
    * SECOND WebGLRenderer against it, which is why the HUD only hands the element out
-   * rather than doing any WebGL of its own: keeping hud.ts free of `three` is what
-   * lets hud.test.ts keep running under plain jsdom.
+   * rather than doing any WebGL of its own: hud.ts constructs no WebGL context and
+   * builds no `three` object of its own, which is what lets hud.test.ts keep running
+   * under plain jsdom. (It DOES import render/entities' plain
+   * IDENTITY_RING_COLORS/TEAM_COLORS number arrays -- see setVersusStocks' own doc
+   * comment -- a value import, not a WebGL one; measured under this file's own jsdom
+   * suite before landing, since `entities.ts` pulls in `three` at module scope too.)
    */
   readonly previewCanvas: HTMLCanvasElement;
   /**
@@ -448,6 +479,11 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
       <div class="hud-shells hud-shells--hidden"></div>
+      <!-- The in-match stock readout (spec §3a): a topbar chip, same tier as
+           .hud-shells above -- never an overlay on the arena. Empty/hidden until
+           setVersusStocks hands it entries; see that setter's own doc comment on the
+           Hud interface for the full visibility rule. -->
+      <div class="hud-versus-stocks hud-versus-stocks--hidden"></div>
       <div class="hud-audio">
         <button class="hud-mute" type="button">Mute (M)</button>
         <!-- autocomplete="off": Firefox restores form-control values across a
@@ -733,6 +769,7 @@ export function createHud(root: HTMLElement): Hud {
 
   const countEl = el.querySelector('.hud-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
+  const versusStocksEl = el.querySelector('.hud-versus-stocks') as HTMLElement;
   const damageEl = el.querySelector('.hud-damage') as HTMLElement;
   const splashEl = el.querySelector('.hud-splash') as HTMLElement;
   const touchRow = el.querySelector('.hud-touch') as HTMLElement;
@@ -1039,6 +1076,9 @@ export function createHud(root: HTMLElement): Hud {
   /** `null` means "never show" (not a versus session, or one that has not started) --
    *  see setVersusResults. */
   let versusResultsData: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null = null;
+  /** `null` means "never show" (not a versus session, campaign always passes this) --
+   *  see setVersusStocks' own doc comment on the Hud interface. */
+  let versusStocksData: { slot: number; stock: number; team?: number }[] | null = null;
 
   const pct = (num: number, den: number): string =>
     den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
@@ -1128,6 +1168,39 @@ export function createHud(root: HTMLElement): Hud {
     }
     versusResultsEl.textContent = text;
     versusResultsEl.classList.remove('hud-versus-results--hidden');
+  }
+
+  /**
+   * The in-match stock strip -- see setVersusStocks' own doc comment on the Hud
+   * interface for the full contract. Rebuilt from scratch on every call (at most 4
+   * entries, the identity palette's own cap -- entities.ts's own IDENTITY_RING_COLORS
+   * comment) rather than diffed, the same "cheap enough to just rebuild" precedent
+   * renderAchievements/renderVersusControllerRows already use elsewhere in this file.
+   * ONE ELEMENT PER ENTRY, not one joined string like renderVersusResultsLine above:
+   * each slot needs its OWN inline tint, which a single text node cannot carry part of.
+   */
+  function renderVersusStocks(): void {
+    versusStocksEl.replaceChildren();
+    if (!versusStocksData || versusStocksData.length === 0) {
+      versusStocksEl.classList.add('hud-versus-stocks--hidden');
+      return;
+    }
+    for (const entry of versusStocksData) {
+      const span = document.createElement('span');
+      span.className = 'hud-versus-stock-entry';
+      span.textContent = `P${entry.slot + 1} ${entry.stock}`;
+      // teams: TEAM_COLORS[team]; ffa (no `team` on the entry): IDENTITY_RING_COLORS[
+      // slot] -- the SAME dispatch entities.ts's own ring/tint colouring uses at its
+      // `mode === 'teams' ? teamColor(...) : identityColor(...)` site, imported rather
+      // than copied out as literal hex (see setVersusStocks' own doc comment). The
+      // `?? 0xffffff` fallback is unreached today -- both palettes cover every slot the
+      // n-player cap (4) allows -- kept only so a future out-of-range slot degrades to
+      // a colour rather than an NaN hex string.
+      const hex = entry.team !== undefined ? (TEAM_COLORS[entry.team] ?? 0xffffff) : (IDENTITY_RING_COLORS[entry.slot] ?? 0xffffff);
+      span.style.color = cssColor(hex);
+      versusStocksEl.appendChild(span);
+    }
+    versusStocksEl.classList.remove('hud-versus-stocks--hidden');
   }
 
   /**
@@ -2105,6 +2178,17 @@ export function createHud(root: HTMLElement): Hud {
     // The topbar is the only chrome that outranks the menu panel, so it is also the
     // only thing that would show through on the title screen.
     topbarEl.classList.toggle('hud-topbar--hidden', s === 'splash');
+    // The in-match stock readout (spec §3a): visible ONLY while a versus session is
+    // actually being played -- `playing` OR `paused` -- never at title/win/lose/splash.
+    // Placed here, BEFORE the playing/splash early return just below, specifically so
+    // 'playing' itself is covered; `paused` is covered too since it falls through this
+    // far (its own early return is further down). `sessionKind` is fixed for a
+    // session's whole life (setSessionKind's own doc comment), so this cannot flip
+    // mid-match. `renderVersusStocks` re-applies the hidden class on top of this if
+    // `versusStocksData` is null/empty -- BOTH must be true to actually show the strip.
+    const versusStocksVisible = sessionKind === 'versus' && (s === 'playing' || s === 'paused');
+    versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
+    if (versusStocksVisible) renderVersusStocks();
     // Splash and playing both want the menu panel gone. Splash returns BEFORE the
     // branches below for the same reason `paused` returns early: the final `else`
     // renders a Game Over corpse screen, so any state that falls through to it gets
@@ -2405,6 +2489,13 @@ export function createHud(root: HTMLElement): Hud {
     setVersusResults(data: { mode: 'ffa' | 'teams'; kills: number[]; deaths: number[] } | null): void {
       versusResultsData = data;
       if (!versusResultsEl.classList.contains('hud-versus-results--hidden')) renderVersusResultsLine();
+    },
+    setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void {
+      versusStocksData = stocks;
+      // Same "only re-render while already shown" guard setCoopKills/setVersusResults
+      // use above -- setState's own visibility toggle is what flips the class in the
+      // first place, this only keeps an already-visible strip live.
+      if (!versusStocksEl.classList.contains('hud-versus-stocks--hidden')) renderVersusStocks();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);

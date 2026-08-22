@@ -1099,6 +1099,15 @@ export function startGameWith(
   // setContinueAvailable/setLevelSelect call below so the very first render already
   // reflects it.
   hud.setSessionKind(deps.initialVersusConfig ? 'versus' : 'campaign');
+  // Task 6 (spec §3a): the in-match stock readout is versus-only for this session's
+  // whole life, the same fixed-for-the-session posture as sessionKind just above --
+  // a campaign session never becomes versus mid-session, so there is no later point
+  // where this could need to flip. Campaign calls `null` here ONCE and never again;
+  // every OTHER call (real entries) comes from onFrameEvents' isVersus branch below,
+  // which never runs for a campaign world (`world.mode === 'campaign-coop'`) -- see
+  // that branch's own comment for why gating there is enough, with no reset needed on
+  // a campaign level switch.
+  if (!deps.initialVersusConfig) hud.setVersusStocks(null);
 
   /**
    * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
@@ -1130,6 +1139,16 @@ export function startGameWith(
    */
   let coopKills: number[] = [];
   let versusDeaths: number[] = [];
+  /**
+   * The stock readout's own no-thrash guard (Task 6, spec §3a): the joined key of the
+   * LAST `stocks` array actually handed to `hud.setVersusStocks`, so a frame whose
+   * events did not touch any player-kind tank's stock (the common case -- `fire`
+   * events reach `onFrameEvents` too, see `isVersus` below) does not re-invoke the
+   * setter with an identical array. `null` is the sentinel "never dispatched yet" --
+   * distinct from any real key, since a real versus world always has at least one
+   * player-kind tank and therefore a non-empty joined key.
+   */
+  let lastVersusStocksKey: string | null = null;
 
   function checkAchievements(clearedLevel: number | null): void {
     const ctx: AchievementContext = {
@@ -1306,6 +1325,38 @@ export function startGameWith(
       const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
       hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
       hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
+      // Task 6 (spec §3a): the in-match stock readout. Deliberately a SEPARATE `if`,
+      // not folded into the ternaries just above -- those two always call their
+      // setter (with `null` on the campaign side), which would give campaign a fresh
+      // `setVersusStocks(null)` on every event-bearing frame instead of the single
+      // wiring-time call this feature's own contract promises (see hud.setSessionKind's
+      // neighbour above). A campaign world never reaches this branch at all.
+      if (isVersus) {
+        // One entry per player-kind tank still in the world (never spliced, even once
+        // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
+        // `controlledBy` (`?? 0`, the same convention `tankForSlot`'s own lookup uses
+        // just above in this file); `stock` = `stockRemaining` (`?? 0`, the same
+        // "unstamped reads as already at zero" fallback that field's own doc comment
+        // on `Tank` names); `team` carried through only for 'teams' -- ffa tanks never
+        // have it stamped (loadArena), so it comes through `undefined` there, which is
+        // exactly what the optional `team?` on the HUD's own payload expects.
+        const stocks = driver.world.tanks
+          .filter((t) => t.kind === 'player')
+          .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }));
+        // The no-thrash guard: a joined key of the array just built, compared against
+        // the last one actually handed to the HUD. `onFrameEvents` fires whenever ANY
+        // event lands in the frame -- a `fire` event is exactly as eligible as a
+        // `tank-destroyed` one -- so without this, firing a shot (which touches no
+        // tank's stock) would still push an identical array to the HUD and thrash the
+        // DOM every such frame. Order-stable: `world.tanks`' own order does not change
+        // within a session, so two calls describing the same stocks always join to the
+        // same string.
+        const key = stocks.map((s) => `${s.slot}:${s.stock}:${s.team ?? ''}`).join('|');
+        if (key !== lastVersusStocksKey) {
+          lastVersusStocksKey = key;
+          hud.setVersusStocks(stocks);
+        }
+      }
     },
   });
 
