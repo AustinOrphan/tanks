@@ -2013,6 +2013,25 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(true);
   });
 
+  // The PRODUCTION order, not the data-then-state order every test above/below this one
+  // uses: loop.ts calls `hud.setState('playing')` BEFORE the first real
+  // `hud.setVersusStocks(entries)` call, because nothing marks "a versus match just
+  // started" as a SimEvent -- onFrameEvents (loop.ts) only fires once something has
+  // actually happened. Before this fix, that first setState('playing') ran
+  // renderVersusStocks against still-null data, which re-added `--hidden`; the OLD
+  // setVersusStocks guard then read that SAME class and silently dropped the very
+  // first real call, forever (nothing else touched the class until a later setState,
+  // e.g. a pause). Breaks if `setVersusStocks`'s render guard reads the DOM class
+  // instead of the state-derived `versusStocksVisible` variable.
+  it('production order -- setSessionKind then setState(playing) THEN setVersusStocks -- the strip still ends up visible with entries', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('playing');
+    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    expect(strip(root).classList.contains('hud-versus-stocks--hidden')).toBe(false);
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
+  });
+
   it('renders one entry per slot, with the slot number and stock count as its text', () => {
     const { hud: h, root } = mount();
     h.setSessionKind('versus');

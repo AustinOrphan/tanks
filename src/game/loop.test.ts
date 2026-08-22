@@ -3000,9 +3000,35 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
   });
 
   describe('the in-match stock readout (Task 6, spec §3a)', () => {
+    // The relocation this fix round makes: the readout is now dispatched from
+    // onSimulated, which runs on EVERY 'playing' frame unconditionally -- unlike
+    // onFrameEvents, which only fires `if (frameEvents.length > 0)` (driver.ts). Before
+    // this fix, a frame with zero SimEvents (the pre-round countdown, or simply a quiet
+    // first tick before anyone has acted) left the strip undispatched -- no SimEvent
+    // marks "a versus match has started" for onFrameEvents to key off. `rec.directed`
+    // (the events batch handed to `director.handle`) only grows on an event-bearing
+    // frame, which is what proves THIS frame produced none -- without that check the
+    // test could pass by accident on a frame that happened to carry an event anyway.
+    it('populates from the very first simulated frame, even one with ZERO SimEvents', () => {
+      const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      h.setState('playing');
+      const directedBefore = h.rec.directed.length;
+      h.fireFrame(20);
+      expect(
+        h.rec.directed.length,
+        'this frame produced a SimEvent -- not the zero-event path this test means to check',
+      ).toBe(directedBefore);
+      const last = h.rec.versusStocksPushes.at(-1);
+      expect(last).not.toBeNull();
+      const bySlot = new Map(last!.map((e) => [e.slot, e]));
+      expect(bySlot.get(0)?.stock).toBe(VERSUS_STOCK);
+      expect(bySlot.get(1)?.stock).toBe(VERSUS_STOCK);
+      h.handle.dispose();
+    });
+
     // Twin of the versus-results test just above: setVersusStocks (hud.test.ts) and
     // the derivation itself are each unit-testable in isolation, but neither can see
-    // whether onFrameEvents' isVersus branch actually calls the setter on a real,
+    // whether onSimulated's isVersusFrame branch actually calls the setter on a real,
     // driven frame. Reuses the exact bullet-on-P1 fixture the results test above
     // drives, so the kill is real, not fabricated.
     it('a versus kill updates the readout, decrementing the victim\'s stock and leaving the killer\'s untouched', () => {
@@ -3034,13 +3060,13 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
 
-    // The no-thrash control: onFrameEvents fires whenever ANY event lands in the
-    // frame, and a `fire` event is exactly as eligible as a `tank-destroyed` one (see
-    // "does NOT pulse when an ENEMY fires" above for the same shared-stream shape) --
-    // so a frame where the player fires but nothing dies must not re-invoke the
-    // setter with an identical stocks array. h.firePlayerShot() drives a REAL shot
-    // through the sim (not a fabricated event), so this measures the actual dedup
-    // guard in loop.ts, not a fixture that never calls it.
+    // The no-thrash control: onSimulated runs on EVERY 'playing' frame, event or no
+    // event, so without the dedup guard EVERY frame of a live match would re-invoke the
+    // setter -- a frame where the player fires but nothing dies is just one easy way to
+    // prove it (firing is a REAL, common in-match action, not a contrived quiet frame).
+    // h.firePlayerShot() drives a REAL shot through the sim (not a fabricated event),
+    // so this measures the actual dedup guard in loop.ts, not a fixture that never
+    // calls it.
     it('firing (an event, but no stock change) across several frames does not re-invoke the setter beyond the one triggering call', () => {
       const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
       h.setState('playing');

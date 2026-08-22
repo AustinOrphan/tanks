@@ -1079,6 +1079,27 @@ export function createHud(root: HTMLElement): Hud {
   /** `null` means "never show" (not a versus session, campaign always passes this) --
    *  see setVersusStocks' own doc comment on the Hud interface. */
   let versusStocksData: { slot: number; stock: number; team?: number }[] | null = null;
+  /**
+   * The state+sessionKind visibility GATE for the stock strip, maintained here as its
+   * own variable rather than read back off `versusStocksEl`'s classList (fix, review of
+   * this task's own first landing). The DOM class is not a safe proxy for "should this
+   * be showing": `renderVersusStocks` ALSO writes that same class off `versusStocksData`
+   * alone (it re-adds `--hidden` whenever there is no data yet, regardless of state), so
+   * reading the class back conflated two different questions -- "are we in a state that
+   * wants this visible" and "did the last render happen to find data" -- and production
+   * hits exactly the case where they disagree: `setState('playing')` always runs BEFORE
+   * the first `setVersusStocks` call (no `SimEvent` marks "a versus match just started";
+   * `onFrameEvents` only fires once something has actually happened), so at that first
+   * `setState('playing')`, `renderVersusStocks` ran with `versusStocksData` still `null`
+   * and left the class `--hidden` -- and the OLD guard here
+   * (`!versusStocksEl.classList.contains(...)`) then read that same `--hidden` and
+   * refused to render the very first real `setVersusStocks` call, permanently (nothing
+   * else touches the class until the next `setState` call -- a pause, if the player
+   * happens to hit one). This variable is set ONLY by `setState`, never by
+   * `renderVersusStocks`, so a data-driven re-hide can never masquerade as a state-driven
+   * one.
+   */
+  let versusStocksVisible = false;
 
   const pct = (num: number, den: number): string =>
     den === 0 ? '--' : `${Math.round((num / den) * 100)}%`;
@@ -2184,9 +2205,18 @@ export function createHud(root: HTMLElement): Hud {
     // 'playing' itself is covered; `paused` is covered too since it falls through this
     // far (its own early return is further down). `sessionKind` is fixed for a
     // session's whole life (setSessionKind's own doc comment), so this cannot flip
-    // mid-match. `renderVersusStocks` re-applies the hidden class on top of this if
-    // `versusStocksData` is null/empty -- BOTH must be true to actually show the strip.
-    const versusStocksVisible = sessionKind === 'versus' && (s === 'playing' || s === 'paused');
+    // mid-match. Assigns the OUTER `versusStocksVisible` variable (see its own doc
+    // comment above for why this must be a variable, never a classList read) --
+    // `setVersusStocks` below reads the SAME variable to decide whether to render, so
+    // the two can never disagree about "should this be showing" the way a class read
+    // could. `renderVersusStocks` still independently re-adds `--hidden` when there is
+    // no data yet (`setState('playing')` fires before the first real
+    // `setVersusStocks` call, in production -- no `SimEvent` marks a versus match's own
+    // start) -- that is a SEPARATE, legitimate reason to hide ("nothing to show"), and
+    // is exactly why `versusStocksVisible` must not be read back off the DOM: doing so
+    // once mistook that data-driven hide for a state-driven one and refused every
+    // subsequent `setVersusStocks` call until the next `setState` (a pause) revived it.
+    versusStocksVisible = sessionKind === 'versus' && (s === 'playing' || s === 'paused');
     versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
     if (versusStocksVisible) renderVersusStocks();
     // Splash and playing both want the menu panel gone. Splash returns BEFORE the
@@ -2492,10 +2522,14 @@ export function createHud(root: HTMLElement): Hud {
     },
     setVersusStocks(stocks: { slot: number; stock: number; team?: number }[] | null): void {
       versusStocksData = stocks;
-      // Same "only re-render while already shown" guard setCoopKills/setVersusResults
-      // use above -- setState's own visibility toggle is what flips the class in the
-      // first place, this only keeps an already-visible strip live.
-      if (!versusStocksEl.classList.contains('hud-versus-stocks--hidden')) renderVersusStocks();
+      // Reads the `versusStocksVisible` VARIABLE (set only by setState), NOT the
+      // element's own classList -- see that variable's doc comment for the production
+      // bug this fixes: `renderVersusStocks` writes `--hidden` for an ORTHOGONAL reason
+      // (no data yet), and a classList read here could not tell that apart from "the
+      // state says hide this", which meant the very first real call in a fresh versus
+      // match -- arriving after `setState('playing')` already rendered once against
+      // null data -- was silently dropped.
+      if (versusStocksVisible) renderVersusStocks();
     },
     onResetStats(cb: () => void): void {
       resetStatsCbs.push(cb);

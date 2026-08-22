@@ -1100,13 +1100,20 @@ export function startGameWith(
   // reflects it.
   hud.setSessionKind(deps.initialVersusConfig ? 'versus' : 'campaign');
   // Task 6 (spec §3a): the in-match stock readout is versus-only for this session's
-  // whole life, the same fixed-for-the-session posture as sessionKind just above --
-  // a campaign session never becomes versus mid-session, so there is no later point
-  // where this could need to flip. Campaign calls `null` here ONCE and never again;
-  // every OTHER call (real entries) comes from onFrameEvents' isVersus branch below,
-  // which never runs for a campaign world (`world.mode === 'campaign-coop'`) -- see
-  // that branch's own comment for why gating there is enough, with no reset needed on
-  // a campaign level switch.
+  // whole life, the same fixed-for-the-session posture as sessionKind just above.
+  // The gate is `!deps.initialVersusConfig`, NOT "is this a campaign session" --
+  // those are not the same test. `initialVersusConfig` is only ever set from a REAL
+  // `VersusConfig` the setup pane handed to `requestVersusSession` (`applyVersusToDeps`);
+  // a dev-flag-driven versus world (`?dev=1&mode=ffa`, no setup pane involved) has
+  // `world.mode === 'ffa'`/`'teams'` but NO `initialVersusConfig`, and so ALSO takes
+  // this branch -- see the "a versus fixture with NO players flag still gets a REAL
+  // versus world" test below for that exact shape. For a genuine campaign session this
+  // `null` really is the only call this session will ever make (a campaign world's
+  // `mode` is fixed to `'campaign-coop'`, so onSimulated's own `isVersusFrame` branch
+  // below never fires for it, all session long). For the dev-flag-versus case, this
+  // `null` is simply the FIRST call -- onSimulated's very next 'playing' frame
+  // overwrites it with real entries, exactly like a setup-pane-driven versus session
+  // does, since `world.mode` is what that branch actually keys off, not this flag.
   if (!deps.initialVersusConfig) hud.setVersusStocks(null);
 
   /**
@@ -1142,11 +1149,13 @@ export function startGameWith(
   /**
    * The stock readout's own no-thrash guard (Task 6, spec §3a): the joined key of the
    * LAST `stocks` array actually handed to `hud.setVersusStocks`, so a frame whose
-   * events did not touch any player-kind tank's stock (the common case -- `fire`
-   * events reach `onFrameEvents` too, see `isVersus` below) does not re-invoke the
-   * setter with an identical array. `null` is the sentinel "never dispatched yet" --
-   * distinct from any real key, since a real versus world always has at least one
-   * player-kind tank and therefore a non-empty joined key.
+   * stocks are unchanged does not re-invoke the setter with an identical array. This
+   * matters MORE than it would if the dispatch were event-gated: it is dispatched from
+   * `onSimulated` (see that callback's own comment), which runs EVERY 'playing' frame
+   * unconditionally, at up to 60/s -- without this guard the HUD would re-render the
+   * strip every single frame of a live match, event or no event. `null` is the sentinel
+   * "never dispatched yet" -- distinct from any real key, since a real versus world
+   * always has at least one player-kind tank and therefore a non-empty joined key.
    */
   let lastVersusStocksKey: string | null = null;
 
@@ -1277,6 +1286,50 @@ export function startGameWith(
       }
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
+      // Task 6's in-match stock readout (spec §3a), dispatched HERE rather than from
+      // onFrameEvents below (review of this task's own first landing): onSimulated
+      // runs on EVERY 'playing' frame, unconditionally, including the pre-round
+      // countdown -- no `SimEvent` marks "a versus match/countdown has started", so
+      // gating on an event arriving left the strip dark until whatever the first event
+      // happened to be (typically a shot). Reads `w`, the world this callback is
+      // actually handed (the post-step world for THIS frame), rather than reaching for
+      // `driver.world` the way onFrameEvents' own `isVersus`/setCoopKills/
+      // setVersusResults dispatch still does one section below (untouched, out of this
+      // relocation's scope) -- the two are the same world by the time either callback
+      // runs (driver.ts assigns `curr` before calling either), but `w` is the value
+      // this specific callback is actually given.
+      const isVersusFrame = w.mode === 'ffa' || w.mode === 'teams';
+      if (isVersusFrame) {
+        // One entry per player-kind tank still in the world (never spliced, even once
+        // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
+        // `controlledBy` (`?? 0`, the same convention `tankForSlot`'s own lookup uses
+        // above in this file); `stock` = `stockRemaining` (`?? 0`, the same "unstamped
+        // reads as already at zero" fallback that field's own doc comment on `Tank`
+        // names); `team` carried through only for 'teams' -- ffa tanks never have it
+        // stamped (loadArena), so it comes through `undefined` there, which is exactly
+        // what the optional `team?` on the HUD's own payload expects.
+        //
+        // Sorted by `slot`, NOT left in `w.tanks`' own array order: today that order
+        // happens to match slot order (loadArena's own grid-scan numbering), but
+        // nothing GUARANTEES it, and this is the one place a future tank-array reorder
+        // (a respawn splice, a different spawn pass ordering) could silently reshuffle
+        // the strip -- P1's own entry appearing after P2's, or the joined key changing
+        // shape for a stocks array that is semantically identical. Sorting by the
+        // value that actually identifies "which player" this is closes that off
+        // structurally rather than relying on today's incidental order staying true.
+        const stocks = w.tanks
+          .filter((t) => t.kind === 'player')
+          .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }))
+          .sort((a, b) => a.slot - b.slot);
+        // The no-thrash guard -- see lastVersusStocksKey's own doc comment above for why
+        // this matters even more now that the dispatch runs every frame, not only
+        // event-bearing ones.
+        const key = stocks.map((s) => `${s.slot}:${s.stock}:${s.team ?? ''}`).join('|');
+        if (key !== lastVersusStocksKey) {
+          lastVersusStocksKey = key;
+          hud.setVersusStocks(stocks);
+        }
+      }
     },
     // The event stream is shared, so a bare `some(e => e.type === 'tank-destroyed')`
     // fires on every enemy kill too -- exactly the presence-only mistake
@@ -1325,38 +1378,15 @@ export function startGameWith(
       const isVersus = driver.world.mode === 'ffa' || driver.world.mode === 'teams';
       hud.setCoopKills(!isVersus && countPlayerTanks(driver.world) >= 2 ? coopKills : null);
       hud.setVersusResults(isVersus ? { mode: driver.world.mode as 'ffa' | 'teams', kills: coopKills, deaths: versusDeaths } : null);
-      // Task 6 (spec §3a): the in-match stock readout. Deliberately a SEPARATE `if`,
-      // not folded into the ternaries just above -- those two always call their
-      // setter (with `null` on the campaign side), which would give campaign a fresh
-      // `setVersusStocks(null)` on every event-bearing frame instead of the single
-      // wiring-time call this feature's own contract promises (see hud.setSessionKind's
-      // neighbour above). A campaign world never reaches this branch at all.
-      if (isVersus) {
-        // One entry per player-kind tank still in the world (never spliced, even once
-        // eliminated -- world.ts's own comment on `alive: false` tanks). `slot` =
-        // `controlledBy` (`?? 0`, the same convention `tankForSlot`'s own lookup uses
-        // just above in this file); `stock` = `stockRemaining` (`?? 0`, the same
-        // "unstamped reads as already at zero" fallback that field's own doc comment
-        // on `Tank` names); `team` carried through only for 'teams' -- ffa tanks never
-        // have it stamped (loadArena), so it comes through `undefined` there, which is
-        // exactly what the optional `team?` on the HUD's own payload expects.
-        const stocks = driver.world.tanks
-          .filter((t) => t.kind === 'player')
-          .map((t) => ({ slot: t.controlledBy ?? 0, stock: t.stockRemaining ?? 0, team: t.team }));
-        // The no-thrash guard: a joined key of the array just built, compared against
-        // the last one actually handed to the HUD. `onFrameEvents` fires whenever ANY
-        // event lands in the frame -- a `fire` event is exactly as eligible as a
-        // `tank-destroyed` one -- so without this, firing a shot (which touches no
-        // tank's stock) would still push an identical array to the HUD and thrash the
-        // DOM every such frame. Order-stable: `world.tanks`' own order does not change
-        // within a session, so two calls describing the same stocks always join to the
-        // same string.
-        const key = stocks.map((s) => `${s.slot}:${s.stock}:${s.team ?? ''}`).join('|');
-        if (key !== lastVersusStocksKey) {
-          lastVersusStocksKey = key;
-          hud.setVersusStocks(stocks);
-        }
-      }
+      // Task 6's in-match stock readout (spec §3a) is dispatched from `onSimulated`
+      // below, NOT here -- see that callback's own comment for why. `onFrameEvents`
+      // only fires `if (frameEvents.length > 0)` (driver.ts), so gating the readout on
+      // an EVENT arriving left it dark for the whole pre-round countdown (no `SimEvent`
+      // marks "a versus match's countdown is running") and, in production, dropped its
+      // very first real update entirely -- `hud.setState('playing')` always runs before
+      // the first event-bearing frame, and the OLD `setVersusStocks` guard read that
+      // as "already hidden, do not render" (fixed in hud.ts; see `versusStocksVisible`'s
+      // own doc comment there for the full mechanism).
     },
   });
 
