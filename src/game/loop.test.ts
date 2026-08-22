@@ -816,6 +816,14 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         onControllersClose: (cb: () => void) => {
           onControllersClose = cb;
         },
+        // Placeholder implementations -- Task 4 (hud.ts) widened the Hud interface
+        // with these three; wiring loop.ts to actually call them (and giving this
+        // harness its own openVersus/startVersus trigger, the way openControllers
+        // already has one) is Task 5's own job. Kept as no-ops here just so this fake
+        // object keeps satisfying `Hud`.
+        onVersusOpen: (_cb: () => void) => {},
+        onVersusStart: (_cb: (config: VersusConfig) => void) => {},
+        showVersusSetup: (_show: boolean, _initial?: VersusConfig | null) => {},
         dispose: () => rec.disposed.push('hud'),
       };
     },

@@ -5,6 +5,8 @@ import { isMuteHotkey, isPauseHotkey } from './loop';
 import { SKINS, ACCENTS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
+import { versusMapChoices, type VersusConfig } from './versus-config';
+import { VERSUS_STOCK } from '../sim/constants';
 
 let hud: Hud | null = null;
 
@@ -1227,8 +1229,13 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     root.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const heading = (root: HTMLElement): string =>
     (root.querySelector('.hud-controllers-title') as HTMLElement).textContent ?? '';
+  // Scoped to view(root), NOT a bare `root.querySelectorAll` -- the versus setup
+  // pane's who's-playing preview REUSES this exact class (renderControllerRowsInto,
+  // hud.ts), so an unscoped query here would double-count its rows too the moment
+  // both panels' markup exists in the same document, which is every test in this
+  // file (mount() builds the whole HUD up front).
   const rows = (root: HTMLElement): HTMLElement[] =>
-    Array.from(root.querySelectorAll('.hud-controller-row'));
+    Array.from(view(root).querySelectorAll('.hud-controller-row'));
   const currentOf = (row: HTMLElement): HTMLElement =>
     row.querySelector('.hud-controller-row-current') as HTMLElement;
   const candidateButtons = (row: HTMLElement): HTMLButtonElement[] =>
@@ -1375,6 +1382,342 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     h.setState('playing'); // NOT via Back -- e.g. Resume from the pause-opened panel
     expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
     expect(closes).toBe(1);
+  });
+});
+
+describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md)', () => {
+  const openBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-versus-open') as HTMLButtonElement;
+  const view = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-versus-setup') as HTMLElement;
+  const backBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-versus-back') as HTMLButtonElement;
+  const startBtn = (root: HTMLElement): HTMLButtonElement =>
+    root.querySelector('.hud-versus-start') as HTMLButtonElement;
+  const modeBtn = (root: HTMLElement, mode: 'ffa' | 'teams'): HTMLButtonElement =>
+    root.querySelector(`.hud-versus-mode-row [data-mode="${mode}"]`) as HTMLButtonElement;
+  const playersBtn = (root: HTMLElement, players: number): HTMLButtonElement =>
+    root.querySelector(`.hud-versus-players-row [data-players="${players}"]`) as HTMLButtonElement;
+  const stockBtn = (root: HTMLElement, stock: number): HTMLButtonElement =>
+    root.querySelector(`.hud-versus-stock-row [data-stock="${stock}"]`) as HTMLButtonElement;
+  const mapButtons = (root: HTMLElement): HTMLButtonElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-map-row button'));
+  const mapBtn = (root: HTMLElement, map: string): HTMLButtonElement =>
+    root.querySelector(`.hud-versus-map-row [data-map="${map}"]`) as HTMLButtonElement;
+  const friendlyFireBtn = (root: HTMLElement): HTMLButtonElement | null =>
+    root.querySelector('.hud-versus-friendlyfire-btn');
+  // Scoped to view(root) -- .hud-controller-row/.hud-controller-source-btn are
+  // reused, unscoped, by the real Controllers panel elsewhere in the document (every
+  // test here builds the whole HUD via mount()); see the identical comment on that
+  // panel's own `rows` helper.
+  const rows = (root: HTMLElement): HTMLElement[] =>
+    Array.from(view(root).querySelectorAll('.hud-controller-row'));
+  const candidateButtons = (row: HTMLElement): HTMLButtonElement[] =>
+    Array.from(row.querySelectorAll('.hud-controller-source-btn'));
+  const note = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-versus-assignment-note') as HTMLElement;
+
+  it('the Versus button is a bare click passthrough: it does NOT open the pane itself, and fires onVersusOpen once per click', () => {
+    // Kills the mutation "the button calls showVersusSetup directly" -- see
+    // onVersusOpen's own doc comment on the Hud interface for why that would be
+    // wrong: only the caller (loop.ts) knows which VersusConfig to retain across a
+    // rematch, so the button cannot decide to open the pane on its own.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    let opens = 0;
+    h.onVersusOpen(() => {
+      opens += 1;
+    });
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens, 'onVersusOpen did not fire on click').toBe(1);
+    expect(
+      view(root).classList.contains('hud-versus-setup--hidden'),
+      'clicking Versus opened the pane without any subscriber -- it must not',
+    ).toBe(true);
+    openBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(opens, 'a second click did not fire the callback a second time').toBe(2);
+  });
+
+  it('is visible at title ONLY -- unlike Controllers, a live round has nothing this could offer', () => {
+    // 'playing'/'splash' excluded from this per-button check, matching the
+    // established convention (see 'hud: controller assignment panel's own
+    // equivalent test): setState's early-return for playing/splash hides the whole
+    // .hud-panel wrapper rather than toggling each button's own class, so the
+    // button's OWN class is not the right oracle there.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    expect(openBtn(root).classList.contains('hud-versus-open--hidden')).toBe(false);
+    for (const s of ['paused', 'win', 'lose'] as const) {
+      h.setState(s);
+      expect(openBtn(root).classList.contains('hud-versus-open--hidden'), s).toBe(true);
+    }
+  });
+
+  it("Start fires onVersusStart with exactly the selections made, not the pane's defaults", () => {
+    // Kills the mutation "emit versusConfigState's INITIAL value" / "emit a
+    // hardcoded default object" -- every field below is changed from its default
+    // before Start is clicked.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    const choices = versusMapChoices(3);
+    mapBtn(root, choices[1]).dispatchEvent(new MouseEvent('click')); // the SECOND map entry
+    stockBtn(root, 5).dispatchEvent(new MouseEvent('click'));
+    (friendlyFireBtn(root) as HTMLButtonElement).dispatchEvent(new MouseEvent('click')); // off -> on
+
+    const seen: VersusConfig[] = [];
+    h.onVersusStart((config) => seen.push(config));
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(seen).toEqual([
+      { mode: 'teams', players: 3, arenaId: choices[1], stock: 5, friendlyFire: true },
+    ]);
+  });
+
+  it('stock defaults to VERSUS_STOCK, the same constant the sim boundary uses (constants.ts)', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    expect(stockBtn(root, VERSUS_STOCK).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+  });
+
+  it('friendly fire is GENUINELY ABSENT from the DOM under FFA, present under Teams', () => {
+    // The spec's own wording (§3): "rendered only when Teams selected". Absent, not
+    // merely hidden -- kills the mutation "hide it with a CSS class instead of not
+    // building it", which a `.hud-versus-friendlyfire-row--hidden`-class check could
+    // not tell apart from a genuinely broken hidden rule (see hud.css.test.ts's own
+    // `.hud-accents` precedent for exactly that failure mode).
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    expect(friendlyFireBtn(root), 'present under the FFA default').toBeNull();
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+    expect(friendlyFireBtn(root), 'absent after switching to Teams').not.toBeNull();
+    modeBtn(root, 'ffa').dispatchEvent(new MouseEvent('click'));
+    expect(friendlyFireBtn(root), 'still present after switching back to FFA').toBeNull();
+  });
+
+  it('does not reset friendlyFire when leaving Teams -- Teams -> FFA -> Teams keeps the toggle', () => {
+    // Kills the mutation "zero friendlyFire on switching to FFA": versus-config.ts's
+    // own doc comment states loadArena/createWorld already ignore it outside
+    // 'teams', so carrying it unconditionally is harmless -- resetting it here would
+    // be an active regression against ruling 4's "selections persist" contract.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+    (friendlyFireBtn(root) as HTMLButtonElement).dispatchEvent(new MouseEvent('click')); // off -> on
+    modeBtn(root, 'ffa').dispatchEvent(new MouseEvent('click'));
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+    expect((friendlyFireBtn(root) as HTMLButtonElement).textContent).toBe('Friendly fire: On');
+  });
+
+  it('Players change REPLACES the Map row rather than appending to it, across two successive re-renders', () => {
+    // All 15 shipped (arena, playerCount) rows pass `suitable` today (measured via
+    // versusBoardCatalog(), see versus-config.ts's own doc comment), so 2/3/4
+    // players all offer the SAME five arenas -- which is exactly why row COUNT,
+    // not arena identity, is what proves REPLACE here: an APPEND mutation would
+    // grow the row count on every click below rather than holding steady.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    expect(mapButtons(root)).toHaveLength(versusMapChoices(2).length + 1); // + Random
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    expect(mapButtons(root)).toHaveLength(versusMapChoices(3).length + 1);
+    playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
+    expect(mapButtons(root)).toHaveLength(versusMapChoices(4).length + 1);
+  });
+
+  it('showVersusSetup(true, initial) pre-fills every field', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    const initial: VersusConfig = {
+      mode: 'teams',
+      players: 4,
+      arenaId: versusMapChoices(4)[2],
+      stock: 2,
+      friendlyFire: true,
+    };
+    h.showVersusSetup(true, initial);
+    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(mapBtn(root, initial.arenaId).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(stockBtn(root, 2).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(friendlyFireBtn(root)).not.toBeNull();
+    expect((friendlyFireBtn(root) as HTMLButtonElement).textContent).toBe('Friendly fire: On');
+  });
+
+  it("selections persist across a close (setState) and reopen with NO `initial` argument -- session-scoped state (ruling 4)", () => {
+    // Kills the mutation "reset versusConfigState to defaults whenever the pane
+    // closes or reopens".
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+    stockBtn(root, 5).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing'); // setState's close-all discipline hides the pane
+    h.setState('title');
+    h.showVersusSetup(true); // no `initial` argument at all
+    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(stockBtn(root, 5).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+  });
+
+  it("passing `null` -- Task 5's own `deps.initialVersusConfig ?? null` for \"nothing retained yet\" -- also keeps the pane's persisted selections, same as omitting the argument", () => {
+    // Kills the mutation "seed from `initial ?? DEFAULTS`", which would silently
+    // wipe a returning player's own selections on precisely this call -- the one
+    // Task 5's own wiring line makes on every FIRST open of a session.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
+    playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
+    h.setState('playing');
+    h.setState('title');
+    h.showVersusSetup(true, null);
+    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+  });
+
+  it("who's-playing renders the REAL session assignment, interactively, when the pane's player count matches it", () => {
+    // Controller ruling adopted for this task: MATCH -> the real thing, wired to the
+    // same onReassignSlot path the Controllers panel itself uses -- reassigning a
+    // slot here IS reassigning the running session.
+    const { hud: h, root } = mount();
+    h.setControllers([{ kind: 'keyboard' }, { kind: 'none' }]); // 2 slots == pane's default 2 players
+    h.setState('title');
+    h.showVersusSetup(true);
+    const rs = rows(root);
+    expect(rs).toHaveLength(2);
+    expect(
+      note(root).classList.contains('hud-versus-assignment-note--hidden'),
+      'a MATCH must hide the note',
+    ).toBe(true);
+    const calls: Array<[number, unknown]> = [];
+    h.onReassignSlot((slot, source) => calls.push([slot, source]));
+    const btn = candidateButtons(rs[0]).find((b) => b.textContent === 'None') as HTMLButtonElement;
+    btn.dispatchEvent(new MouseEvent('click'));
+    expect(calls).toEqual([[0, { kind: 'none' }]]);
+  });
+
+  it("who's-playing renders a DISABLED preview, sized to the PANE's player count, when it does not match the session", () => {
+    // Controller ruling: MISMATCH -> a non-interactive preview -- there is no slot 3
+    // to reassign in a 1-player session, so a click (even a programmatic one) must
+    // not fire onReassignSlot.
+    const { hud: h, root } = mount();
+    h.setControllers([{ kind: 'keyboard' }]); // 1 slot != pane's default 2 players
+    h.setState('title');
+    h.showVersusSetup(true);
+    const rs = rows(root);
+    expect(rs, "preview row COUNT follows the PANE's player count, not the session's").toHaveLength(2);
+    expect(
+      note(root).classList.contains('hud-versus-assignment-note--hidden'),
+      'a MISMATCH must show the note',
+    ).toBe(false);
+    let calls = 0;
+    h.onReassignSlot(() => {
+      calls += 1;
+    });
+    for (const b of candidateButtons(rs[0])) {
+      expect(b.disabled, `${b.textContent} must be disabled in preview mode`).toBe(true);
+      b.dispatchEvent(new MouseEvent('click'));
+    }
+    expect(calls, 'a disabled preview candidate fired onReassignSlot').toBe(0);
+  });
+
+  it("a session reassignment WHILE the pane is already open refreshes the who's-playing preview -- setControllers is not read only at construction/open", () => {
+    // Kills the mutation "drop the renderVersusControllerRows() refresh from
+    // setControllers/setDetectedPads/setBotAssignmentAllowed" -- found by review
+    // while implementing this task: those three setters are the panel's own
+    // "unconditional, regardless of visibility" convention (see setControllers' own
+    // doc comment), and the versus preview reads the exact same currentAssignment/
+    // currentDetectedPads/botAssignmentAllowedNow state, so it needs the identical
+    // refresh or it goes stale the instant a hotplug or reassignment happens while
+    // this pane -- not the Controllers panel -- is the one on screen.
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true); // opened BEFORE setControllers -- mismatch, disabled preview
+    const initialCandidates = candidateButtons(rows(root)[0]);
+    expect(initialCandidates.length, 'the assertion below must not vacuously pass on an empty list').toBeGreaterThan(0);
+    for (const b of initialCandidates) expect(b.disabled).toBe(true);
+    expect(note(root).classList.contains('hud-versus-assignment-note--hidden')).toBe(false);
+
+    h.setControllers([{ kind: 'keyboard' }, { kind: 'none' }]); // now MATCHES the pane's 2 players
+    const rs = rows(root);
+    expect(note(root).classList.contains('hud-versus-assignment-note--hidden'), 'match must hide the note').toBe(true);
+    for (const b of candidateButtons(rs[0])) expect(b.disabled, 'still disabled after the reassignment').toBe(false);
+    const calls: Array<[number, unknown]> = [];
+    h.onReassignSlot((slot, source) => calls.push([slot, source]));
+    (candidateButtons(rs[1]).find((b) => b.textContent === 'Keyboard') as HTMLButtonElement).dispatchEvent(
+      new MouseEvent('click'),
+    );
+    expect(calls).toEqual([[1, { kind: 'keyboard' }]]);
+  });
+
+  it("Players change REPLACES the who's-playing preview rows across two successive re-renders -- row COUNT follows the new player count, never appended", () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    expect(rows(root)).toHaveLength(2);
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    expect(rows(root)).toHaveLength(3);
+    playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
+    expect(rows(root)).toHaveLength(4);
+  });
+
+  it('Back hides the pane and returns to the TITLE menu -- hardcoded, unlike handleControllersBack\'s shownState routing', () => {
+    // The Versus button itself is visible only at 'title' (see its own test above),
+    // so Back has exactly one place to return to. Opened from 'paused' on purpose --
+    // a real user cannot (the open button is hidden there), but the point is to
+    // prove Back calls setState('title') REGARDLESS of what state was current when
+    // the pane opened, not merely that it happens to already look right: starting
+    // from 'title' would leave every title-only marker already correct before Back
+    // ever ran, so dropping the setState('title') call would go unnoticed -- verified
+    // by mutation (removing it from handleVersusBack) survived that shape of the test.
+    const { hud: h, root } = mount();
+    h.setState('paused');
+    h.showVersusSetup(true);
+    backBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
+    // Landed on TITLE, not back on 'paused': the pause panel's own action button
+    // (Resume) is exactly what would still be showing if setState('title') were
+    // never called -- showVersusSetup(false) alone only un-hides .hud-panel, it does
+    // not touch which of actionBtn/Continue/New Game is visible.
+    expect(
+      (root.querySelector('.hud-action') as HTMLButtonElement).classList.contains('hud-action--hidden'),
+      "Back did not land on title -- the pause panel's own action button is still showing",
+    ).toBe(true);
+    expect(
+      openBtn(root).classList.contains('hud-versus-open--hidden'),
+      'Back did not land back on the title menu',
+    ).toBe(false);
+  });
+
+  it('is closed unconditionally by ANY state change, same as every sibling subpanel', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    h.setState('playing');
+    expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
+  });
+
+  it('roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly', () => {
+    const { hud: h, root } = mount();
+    h.setState('title');
+    h.showVersusSetup(true);
+    expect(document.activeElement, 'opening the pane did not focus its CONTAINER').toBe(view(root));
+    let steps = 0;
+    while (document.activeElement !== startBtn(root) && steps < 40) {
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
+      steps += 1;
+    }
+    expect(document.activeElement, 'never reached Start').toBe(startBtn(root));
+    (document.activeElement as HTMLElement).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement, 'the step after Start did not reach Back').toBe(backBtn(root));
   });
 });
 
@@ -2055,16 +2398,18 @@ describe('hud: the paint shop', () => {
 
 describe('createHud roving-tabindex focus navigation (issue #115)', () => {
   it('every focus-target container names itself from its own heading', () => {
-    // The six tabindex="-1" containers are what panel-open transitions focus; a bare
+    // The seven tabindex="-1" containers are what panel-open transitions focus; a bare
     // div's accessible name is the flattened text of everything inside it, so each one
     // carries aria-labelledby pointing at its own h1. Derived from the DOM, not a list:
-    // a seventh focusable container added without the attribute fails here. Breaks if an
-    // aria-labelledby is dropped, its id target renamed, or the target moves outside
+    // an eighth focusable container added without the attribute fails here. Breaks if
+    // an aria-labelledby is dropped, its id target renamed, or the target moves outside
     // the container it names.
     const { root } = mount();
     const containers = Array.from(root.querySelectorAll<HTMLElement>('[tabindex="-1"]'));
-    expect(containers.length, '6 panel containers carry tabindex=-1 (panel + 5 subpanels, ' +
-      'controller assignment landing (docs/superpowers/plans/2026-08-17-controller-assignment.md))').toBe(6);
+    expect(containers.length, '7 panel containers carry tabindex=-1 (panel + 6 subpanels: ' +
+      'controller assignment landing added the 6th (docs/superpowers/plans/2026-08-17-' +
+      'controller-assignment.md), the versus setup pane the 7th (docs/superpowers/specs/' +
+      '2026-08-21-versus-setup-menu-design.md))').toBe(7);
     for (const c of containers) {
       const ref = c.getAttribute('aria-labelledby');
       expect(ref, `${c.className} has no aria-labelledby`).toBeTruthy();
@@ -2124,6 +2469,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     'hud-achievements-open': 'hud-achievements',
     'hud-levelselect-open': 'hud-levelselect',
     'hud-controllers-open': 'hud-controllers',
+    'hud-versus-open': 'hud-versus-setup',
   };
   const BACK_OF_PANEL: Record<string, string> = {
     'hud-customize': 'hud-customize-back',
@@ -2131,6 +2477,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     'hud-achievements': 'hud-achievements-back',
     'hud-levelselect': 'hud-levelselect-back',
     'hud-controllers': 'hud-controllers-back',
+    'hud-versus-setup': 'hud-versus-back',
   };
 
   it('reaches every visible, enabled control from the title screen using arrow keys alone', () => {
@@ -2140,6 +2487,13 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     const { hud: h, root } = mount();
     h.setLevelSelect(3, 5);
     h.setContinueAvailable(true); // Continue must be one of the reachable controls counted below
+    // The versus setup pane's Versus button is a bare click passthrough (onVersusOpen's
+    // own doc comment on the Hud interface) -- unlike every sibling panel's own open
+    // button, clicking it does NOT open the pane by itself; the real subscriber
+    // (loop.ts) decides that. Wiring the SAME one-liner loop.ts will use is what lets
+    // `walk` below enter this pane exactly like every other one, by an ACTUAL open
+    // transition rather than a special case.
+    h.onVersusOpen(() => h.showVersusSetup(true));
     h.setState('title'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
 
     let totalControls = 0;
@@ -2216,7 +2570,17 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // never calls hud.setControllers, so its rows are empty and Back is its only
     // reachable control; row-button reachability is covered by hud.css.test.ts's
     // buttons.length sweep and this file's own controller-row rendering tests instead).
-    expect(totalControls, 'recount the panels above if this moves').toBe(44);
+    // 63 since the versus setup pane landed (docs/superpowers/specs/2026-08-21-versus-
+    // setup-menu-design.md): 44 + 1 (the title panel's own new Versus-open button) +
+    // 18 (the versus pane's OWN reachable controls, measured against this test's own
+    // fixture -- 2 Mode + 3 Players + 6 Map (versusMapChoices(2), all 5 shipped arenas
+    // plus Random) + 5 Stock + 0 friendly fire (absent -- the pane defaults to FFA) +
+    // 0 who's-playing preview (this test never calls hud.setControllers, so the
+    // session's real assignment is length 0 against the pane's own default player
+    // count of 2 -- a MISMATCH, which renders the preview's candidates disabled, same
+    // "empty/disabled by construction" shape the Controllers panel's own +1 above
+    // already relies on) + Start + Back = 2+3+6+5+0+0+1+1 = 18).
+    expect(totalControls, 'recount the panels above if this moves').toBe(63);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -2493,8 +2857,14 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
 describe('hud: the Bot candidate is gated (bots may not drive a player tank in the campaign)', () => {
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-controllers-open') as HTMLButtonElement;
+  const view = (root: HTMLElement): HTMLElement =>
+    root.querySelector('.hud-controllers') as HTMLElement;
+  // Scoped to view(root) -- see the identical comment on the controller-assignment
+  // describe block's own `rows` helper above: .hud-controller-row is reused by the
+  // versus setup pane's who's-playing preview, so an unscoped query would also match
+  // ITS (disabled, mismatched-count) preview rows.
   const rows = (root: HTMLElement): HTMLElement[] =>
-    Array.from(root.querySelectorAll('.hud-controller-row'));
+    Array.from(view(root).querySelectorAll('.hud-controller-row'));
   const candidateLabels = (row: HTMLElement): string[] =>
     Array.from(row.querySelectorAll('.hud-controller-source-btn')).map(
       (b) => (b as HTMLButtonElement).textContent ?? '',
