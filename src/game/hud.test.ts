@@ -2093,6 +2093,57 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
   });
 });
 
+describe('hud: campaign Lives/Enemies stats hidden during versus (issue #282)', () => {
+  const statEls = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
+  const hidden = (root: HTMLElement): boolean[] =>
+    statEls(root).map((e) => e.classList.contains('hud-campaign-stat--hidden'));
+
+  it('hides Lives/Enemies for a versus session in both playing and paused', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    // Two stat elements exist (Lives, Enemies) -- fails silently (an empty sweep that
+    // still passes) if the markup ever drops one, so the population is asserted here
+    // rather than assumed.
+    expect(statEls(root).length).toBe(2);
+    for (const s of ['playing', 'paused'] as const) {
+      h.setState(s);
+      expect(hidden(root), s).toEqual([true, true]);
+    }
+  });
+
+  it('keeps Lives/Enemies visible and updating for a campaign session -- the negative control against over-hiding', () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('campaign');
+    for (const s of ['playing', 'paused'] as const) {
+      h.setState(s);
+      expect(hidden(root), s).toEqual([false, false]);
+    }
+    h.setLives(2);
+    h.setEnemiesRemaining(1);
+    expect((root.querySelector('.hud-lives') as HTMLElement).textContent).toBe('2');
+    expect((root.querySelector('.hud-enemies') as HTMLElement).textContent).toBe('1');
+  });
+
+  it("a session-kind switch restores the stats -- production reboots into a FRESH Hud per session (boot.ts's requestCampaignSession -> deps.startGame), so this exercises the stronger property that the gate tracks CURRENT kind rather than latching the first kind a Hud instance ever saw", () => {
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('playing');
+    expect(hidden(root)).toEqual([true, true]);
+
+    h.setSessionKind('campaign');
+    expect(hidden(root)).toEqual([false, false]);
+  });
+
+  it('a campaign session never hides the stats even if setVersusStocks somehow carried entries -- the gate is sessionKind, not versus data', () => {
+    const { hud: h, root } = mount();
+    // sessionKind defaults to 'campaign' -- no setSessionKind('versus') call.
+    h.setVersusStocks([{ slot: 0, stock: 3 }]);
+    h.setState('playing');
+    expect(hidden(root)).toEqual([false, false]);
+  });
+});
+
 describe('hud: achievements', () => {
   const openBtn = (root: HTMLElement): HTMLButtonElement =>
     root.querySelector('.hud-achievements-open') as HTMLButtonElement;

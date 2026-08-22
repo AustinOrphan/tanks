@@ -26,7 +26,19 @@ export interface RoundPhaseInfo {
 }
 
 export interface Hud {
+  /**
+   * The campaign topbar stat -- loop.ts pushes this every frame regardless of session
+   * kind, since nothing marks "this is a versus world" as a `SimEvent`. The DOM element
+   * itself is hidden for a versus session by `setSessionKind` (issue #282: `lives` reads
+   * as the campaign default there, meaningless beside the stock readout), so this setter
+   * stays unconditional -- the visibility gate lives entirely on the hidden class, not
+   * here, the same division `setVersusStocks`'s data/gate split already uses.
+   */
   setLives(n: number): void;
+  /** Twin of `setLives` just above -- same unconditional setter, same
+   *  `setSessionKind`-driven hidden class (a versus world has no enemy-kind tanks, so
+   *  `countEnemies` is always 0 there and could not tell "cleared" apart from "versus"
+   *  on its own). */
   setEnemiesRemaining(n: number): void;
   /**
    * Where the session stands in the level sequence: drives the topbar chip and the
@@ -475,8 +487,13 @@ export function createHud(root: HTMLElement): Hud {
   el.className = 'hud';
   el.innerHTML = `
     <div class="hud-topbar">
-      <div class="hud-stat">Lives: <span class="hud-lives">3</span></div>
-      <div class="hud-stat">Enemies: <span class="hud-enemies">3</span></div>
+      <!-- hud-campaign-stat (issue #282): both are campaign-only concepts -- lives is
+           the campaign default and a versus world has no enemy-kind tanks (countEnemies
+           is always 0 there), so both would read as noise beside the stock readout below.
+           The class carries no styling of its own (.hud-stat already does); only its
+           --hidden modifier, toggled from setSessionKind, does anything. -->
+      <div class="hud-stat hud-campaign-stat">Lives: <span class="hud-lives">3</span></div>
+      <div class="hud-stat hud-campaign-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
       <div class="hud-shells hud-shells--hidden"></div>
       <!-- The in-match stock readout (spec §3a): a topbar chip, same tier as
@@ -787,6 +804,9 @@ export function createHud(root: HTMLElement): Hud {
   const aimStickKnobEl = el.querySelector('.hud-aimstick .hud-stick-knob') as HTMLElement;
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
+  // Both campaign-only topbar stats, hidden together for a versus session -- see
+  // setSessionKind's own implementation below and the markup comment above.
+  const campaignStatEls = Array.from(el.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
   const levelNum = el.querySelector('.hud-level-num') as HTMLElement;
   const muteBtn = el.querySelector('.hud-mute') as HTMLButtonElement;
@@ -2635,6 +2655,20 @@ export function createHud(root: HTMLElement): Hud {
     showVersusSetup,
     setSessionKind(kind: 'campaign' | 'versus'): void {
       sessionKind = kind;
+      // Issue #282: the campaign Lives/Enemies stats, gated on sessionKind ALONE, not
+      // state -- unlike the stock strip (setState's own versusStocksVisible gate), there
+      // is no legitimate data-driven reason to hide these anyway (a campaign board with
+      // 0 enemies left is real "cleared" feedback, not noise), so no state re-check is
+      // needed here the way renderVersusStocks needs one for "no entries yet". sessionKind
+      // is fixed for a session's whole life (this method's own doc comment on the Hud
+      // interface), so setting the class once, here, covers every state the session will
+      // ever reach -- including ones already shown before this call and ones reached
+      // after it, the same order-independence applyTitleAffordances already gives this
+      // variable's other consumers.
+      const hideCampaignStats = kind === 'versus';
+      for (const statEl of campaignStatEls) {
+        statEl.classList.toggle('hud-campaign-stat--hidden', hideCampaignStats);
+      }
       applyTitleAffordances();
     },
     onCampaignOpen(cb: () => void): void {

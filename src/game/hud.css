@@ -47,6 +47,13 @@
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
+/* Issue #282: the campaign Lives/Enemies stats, hidden for a versus session (setSessionKind
+ * in hud.ts). The class alone does nothing -- this is the dead-CSS failure hud.css.test.ts
+ * exists to catch, same precedent as every other `--hidden` rule in this file. */
+.hud-campaign-stat--hidden {
+  display: none;
+}
+
 .hud-audio {
   margin-left: auto;
   display: flex;
