@@ -35,6 +35,28 @@ export interface VersusConfig {
   friendlyFire: boolean;
 }
 
+// Measured (vite-node, this tree): one `versusBoardCatalog()` call -- 15 `loadArena`
+// calls plus their pairwise `lineOfSight` sweeps -- costs ~240-370ms. `versus-board.ts`'s
+// own module doc states nothing in the shipped path calls it; `createVersusLevelSystem`
+// (levels.ts) is the first shipped caller, and it reaches `versusMapChoices` with no
+// `rows` override from THREE places per match build (`pickVersusArena` inside `world()`,
+// the 'random' branch of `bounds()`, and once at construction for the synthetic level's
+// placeholder id) -- so an unmemoized default would re-run the full 15-row sweep 3+
+// times before the first frame of every 'random' versus match, and twice more on every
+// retry (loop.ts's `switchTo` re-checks `bounds()`). Memoized lazily -- computed on the
+// FIRST call that omits `rows`, cached for the life of the module -- rather than at
+// module load (a top-level `versusBoardCatalog()` call here would tax every CAMPAIGN
+// boot too, since loop.ts -> levels.ts imports this module regardless of mode; a
+// campaign session never calls `versusMapChoices`/`pickVersusArena` at all, so it must
+// never pay this cost). Safe to cache: `ARENA_DEFS` is validated, static data loaded
+// once at import (config/arenas.ts) and never mutated, so the catalog is a pure
+// function of unchanging input for the process's whole lifetime.
+let cachedDefaultRows: VersusBoardCatalogRow[] | null = null;
+function defaultCatalogRows(): VersusBoardCatalogRow[] {
+  if (cachedDefaultRows === null) cachedDefaultRows = versusBoardCatalog();
+  return cachedDefaultRows;
+}
+
 /**
  * Arena ids offerable at `players`: the `versusBoardCatalog` rows for that player count
  * whose `suitable` flag holds (every one of the three versus-board criteria -- distinct
@@ -43,15 +65,19 @@ export interface VersusConfig {
  * needs the second thing yet.
  *
  * `rows` is an injected seam, exactly like `versusBoardCatalog`'s own `arenas`/
- * `playerCounts` parameters, defaulting to the real catalog -- so a synthetic fixture
- * with a MIX of suitable/unsuitable rows at one player count can prove this actually
- * filters, rather than only ever seeing the shipped catalog where all 15 (arena, N)
- * rows already pass (a `return rows.map(...)` with no filter at all would look
- * identical on that data). See versus-config.test.ts's synthetic-fixture case.
+ * `playerCounts` parameters -- so a synthetic fixture with a MIX of suitable/unsuitable
+ * rows at one player count can prove this actually filters, rather than only ever
+ * seeing the shipped catalog where all 15 (arena, N) rows already pass (a
+ * `rows.map(...)` with no filter at all would look identical on that data). See
+ * versus-config.test.ts's synthetic-fixture case -- passing `rows` explicitly bypasses
+ * `defaultCatalogRows()`'s cache entirely, so that test exercises the real filter, not
+ * a memoized value from an earlier test.  Omitting `rows` uses the memoized real
+ * catalog -- see `defaultCatalogRows`'s own comment for why that is NOT simply
+ * `= versusBoardCatalog()` as a default expression.
  */
 export function versusMapChoices(
   players: number,
-  rows: readonly VersusBoardCatalogRow[] = versusBoardCatalog(),
+  rows: readonly VersusBoardCatalogRow[] = defaultCatalogRows(),
 ): string[] {
   return rows.filter((r) => r.playerCount === players && r.suitable).map((r) => r.arenaId);
 }
