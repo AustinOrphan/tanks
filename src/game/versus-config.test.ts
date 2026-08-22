@@ -85,12 +85,15 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
     expect(resolveVersusConfig(concrete, 1)).toBe(concrete);
   });
 
-  it("'random' resolves to pickVersusArena's own pick for that seed", () => {
-    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04' at players:3.
-    // Fails if resolveVersusConfig ignores `pickVersusArena` (e.g. always the first
-    // catalog entry) or ignores `seed`.
-    const resolved = resolveVersusConfig(random3, 1);
-    expect(resolved.arenaId).toBe('arena-04');
+  it("'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument", () => {
+    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 6 ->
+    // 'arena-03' at players:3. Two seeds, not one: a single-seed assertion here would
+    // not catch a mutation that hardcodes the seed it forwards to `pickVersusArena`
+    // (e.g. always `pickVersusArena(config, 1)`) -- this negative control was found
+    // empirically while mutating this function for issue #278's PR (a seed-1-only
+    // version of this test stayed green under exactly that mutation).
+    expect(resolveVersusConfig(random3, 1).arenaId).toBe('arena-04');
+    expect(resolveVersusConfig(random3, 6).arenaId).toBe('arena-03');
   });
 
   it("'random' resolution preserves every other field unchanged", () => {
