@@ -7,6 +7,7 @@ import type { RenderQuality } from './quality';
 import { createEntityViews, type EntityViews } from './entities';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
+import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
 import { createAimRay, type AimRay } from './aimray';
 import type { SkinId } from '../game/customization';
 import { createMineDebug, type MineDebug } from './minedebug';
@@ -79,6 +80,7 @@ export function createRenderer(
   }
   const particles: ParticleSystem = createParticleSystem(ctx.scene);
   const deathPulse: DeathPulseSystem = createDeathPulseSystem(ctx.scene);
+  const treadTrails: TreadTrailSystem = createTreadTrailSystem(ctx.scene);
   const aimRay: AimRay | null = options.aimRay ? createAimRay(ctx.scene) : null;
   const mineDebug: MineDebug | null =
     options.mineReach || options.mineTimer
@@ -104,6 +106,8 @@ export function createRenderer(
     particles.update(dt);
     deathPulse.spawn(events, curr, { enemyEnabled: !!options.enemyDeathPulse });
     deathPulse.update(dt);
+    treadTrails.sync(prev, curr);
+    treadTrails.update(dt);
     ctx.renderer.render(ctx.scene, ctx.camera);
   }
 
@@ -133,6 +137,7 @@ export function createRenderer(
     entities.dispose();
     particles.dispose();
     deathPulse.dispose();
+    treadTrails.dispose();
     ctx.dispose();
   }
 

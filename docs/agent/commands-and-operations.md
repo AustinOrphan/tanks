@@ -77,11 +77,14 @@ to catch a sub-second moment (a shell leaving the muzzle) that a still would mis
 through the same `setPlayerStyle` call `--skin`/`--hull`/`--accent` use. `--scene
 <moment>` swaps the posed gallery for one of `tools/gallery/moments.ts`'s scripted
 timelines (`fire`, `destroyed`, `respawn`, `ricochet`, `wall-break`, `mine-cycle`,
-`drive`, `pivot`, `traverse`) — a moment is deterministic and scripted end to end, so its
-frame count comes from the moment itself; `--frames` is rejected outright for it.
-`--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a moment scene
-does not consume either, but they are dropped silently rather than rejected. See
-`tools/gallery/`.
+`drive`, `pivot`, `traverse`, `trail-stop`, `trail-cross`, `trail-skins`) — a moment is
+deterministic and scripted end to end, so its frame count comes from the moment itself;
+`--frames` is rejected outright for it. A moment composes with `--skin`/`--hull`/
+`--accent`, which dress `world.tanks[0]` only — every other slot renders the roster
+default, so a two-tank moment (`trail-cross`, `trail-skins`) already contrasts by
+construction. `--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a
+moment scene does not consume either, but they are dropped silently rather than rejected.
+See `tools/gallery/`.
 
 `npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,
 made checkable: for each hand-picked entry in `tools/mutate/manifest.json` (an exact

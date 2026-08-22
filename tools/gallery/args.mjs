@@ -112,6 +112,11 @@ export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
 export const MOMENT_IDS = [
   'fire', 'destroyed', 'respawn', 'ricochet', 'wall-break', 'mine-cycle',
   'drive', 'pivot', 'traverse',
+  // Issue #231's fix-round captures: stopping, overlapping paths, and multiple
+  // skins/colors, the three acceptance-criterion states `drive`/`pivot` above did not
+  // cover. Deliberately moving this two-way pin -- see args.test.ts's own comment on
+  // why it exists.
+  'trail-stop', 'trail-cross', 'trail-skins',
 ];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;

@@ -16,6 +16,8 @@ import { createRenderer } from '../../src/render/renderer';
 import { createAimRay } from '../../src/render/aimray';
 import { createArenaWorld } from '../../src/sim/arena';
 import { CURRENT_ARENA, arenaBounds } from '../../src/sim/arena';
+import { createWorld } from '../../src/sim/world';
+import type { Tank, Spawn } from '../../src/sim/types';
 import { framedBounds } from '../../src/render/framing';
 import { synthVoice, isSfxKey } from '../../src/audio/synth';
 import { createMusicBed } from '../../src/audio/music';
@@ -607,6 +609,66 @@ check('render draws a frame without throwing', () => {
   r.dispose();
   c.remove();
   return lost ? 'context lost after render' : null;
+});
+
+/** A single-tank, wall-free World at an exact position -- controlled and free of any
+ * arena-01 geometry, so a tank can be placed and re-placed without risking a wall
+ * underfoot (createRenderer's own W/H/BOUNDARY frame the camera and ground; nothing
+ * requires the WORLD's own content to match that arena's actual layout). */
+function soloTankWorld(x: number, y: number): ReturnType<typeof createWorld> {
+  const tank: Tank = {
+    id: 1, kind: 'player', pos: { x, y }, bodyAngle: 0, turretAngle: 0, alive: true,
+    desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+    aiState: 'idle', aiTimer: 0,
+  };
+  const spawns: Spawn[] = [{ kind: 'player', pos: { x, y }, angle: 0 }];
+  return createWorld({ walls: [], tanks: [tank], spawns, lives: 3 });
+}
+
+check('tread trails (#231) reach the framebuffer through the real renderer.ts wiring', () => {
+  // createRenderer does not expose its THREE.Scene (see the REMOVED aim-ray check's
+  // own comment above), and the gallery evidence for this feature goes through
+  // moment-scene.ts, which builds an entirely SEPARATE scene/entities/treadTrails
+  // instance of its own -- so nothing else in this repo exercises the tread-trails
+  // wiring actually added to renderer.ts's per-frame consumer set. This proves it
+  // the only way a black box allows: two tanks land at the EXACT SAME final pose --
+  // one that sat there for every call, one that walked there in
+  // EMIT_SPACING-sized (0.25) steps -- so their own rendered silhouette is
+  // pixel-identical between the two runs. Any framebuffer difference between the
+  // two final frames can only be the tread decals the driven run left behind.
+  const FINAL = { x: W / 2, y: H / 2 }; // arena centre: on-camera in every other check here
+  const START = { x: FINAL.x - 1.0, y: FINAL.y }; // 4 * EMIT_SPACING back
+  const STEPS = 4;
+
+  function frameFor(path: { x: number; y: number }[]): Uint8Array {
+    const c = placedCanvas(800, 500, 0, 0, 800, 500);
+    const r = createRenderer(c, W, H, BOUNDARY);
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
+    let prev = soloTankWorld(path[0].x, path[0].y);
+    for (const p of path) {
+      const curr = soloTankWorld(p.x, p.y);
+      r.render(prev, curr, 1, [], 1 / 60); // alpha=1: renders exactly at curr's own pose
+      prev = curr;
+    }
+    const px = grab(gl, c.width, c.height);
+    r.dispose();
+    c.remove();
+    return px;
+  }
+
+  const stillPath = Array.from({ length: STEPS }, () => FINAL);
+  const drivenPath = Array.from({ length: STEPS }, (_, i) => {
+    const t = (i + 1) / STEPS;
+    return { x: START.x + (FINAL.x - START.x) * t, y: START.y + (FINAL.y - START.y) * t };
+  });
+
+  const stillFrame = frameFor(stillPath);
+  const drivenFrame = frameFor(drivenPath);
+  const moved = bytesDiffering(stillFrame, drivenFrame);
+  if (moved === 0) {
+    return 'a driven tank and a stationary tank at the SAME final pose rendered IDENTICAL frames -- tread-trails did not reach the framebuffer through renderer.ts';
+  }
+  return null;
 });
 
 check('resize forwards to the scene camera', () => {
