@@ -3214,7 +3214,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(true);
   });
 
-  it("the corpse-window closure, end to end: a versus win/lose returning to title (Task 5's own return-to-setup flow) keeps Continue hidden -- the one title affordance that reaches sm.startPlaying() without rebuilding the frozen world", () => {
+  it("the corpse-window closure holds under a second call order: setContinueAvailable(true) before win/lose/title (not just after title, as the case above covers) still keeps Continue hidden -- order-independence, not a trace of loop.ts's actual runtime call order", () => {
     // Mirrors the reachable sequence Task 5's own report traced but could not exercise
     // through its loop.test.ts fake (which only records calls, not real DOM/close-all
     // interactions): versus win/lose -> the setup pane's Back button (setState('title'))

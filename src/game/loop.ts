@@ -714,10 +714,6 @@ export function versusAwareDeps(
   return applyVersusToDeps(createBrowserDeps(), versus, requestVersusSession, requestCampaignSession);
 }
 
-export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): GameHandle {
-  return startGameWith(canvas, uiRoot, createBrowserDeps());
-}
-
 export function startGameWith(
   canvas: HTMLCanvasElement,
   uiRoot: HTMLElement,
@@ -1112,8 +1108,13 @@ export function startGameWith(
   // `mode` is fixed to `'campaign-coop'`, so onSimulated's own `isVersusFrame` branch
   // below never fires for it, all session long). For the dev-flag-versus case, this
   // `null` is simply the FIRST call -- onSimulated's very next 'playing' frame
-  // overwrites it with real entries, exactly like a setup-pane-driven versus session
-  // does, since `world.mode` is what that branch actually keys off, not this flag.
+  // overwrites the DATA with real entries the same way a setup-pane-driven versus
+  // session's does, since `world.mode` is what that branch actually keys off, not
+  // this flag. The STRIP stays hidden regardless, though: this session has no
+  // `initialVersusConfig`, so the `hud.setSessionKind` call above passed `'campaign'`,
+  // and hud.ts's visibility gate is `sessionKind === 'versus'` (not "does setVersusStocks
+  // carry entries") -- see hud.test.ts's "a campaign session never shows the strip,
+  // even with entries set" case for the proof.
   if (!deps.initialVersusConfig) hud.setVersusStocks(null);
 
   /**

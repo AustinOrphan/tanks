@@ -839,7 +839,7 @@ export function createHud(root: HTMLElement): Hud {
   const controllersOpenBtn = el.querySelector('.hud-controllers-open') as HTMLButtonElement;
   const controllersView = el.querySelector('.hud-controllers') as HTMLElement;
   const controllersTitleEl = el.querySelector('.hud-controllers-title') as HTMLElement;
-  const controllerRowsEl = el.querySelector('.hud-controller-rows') as HTMLElement;
+  const controllerRowsEl = el.querySelector('.hud-controllers .hud-controller-rows') as HTMLElement;
   const controllersBackBtn = el.querySelector('.hud-controllers-back') as HTMLButtonElement;
   const versusOpenBtn = el.querySelector('.hud-versus-open') as HTMLButtonElement;
   const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
