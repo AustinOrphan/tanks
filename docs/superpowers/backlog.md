@@ -918,7 +918,9 @@ FFA/teams spawn cells from arena geometry but deliberately stops at initial plac
 Originally six questions; the first three are answered and closed by
 `docs/superpowers/plans/2026-08-17-versus-stock.md` (a directive settled match-format
 order -- stock first -- and the spawn-protection/respawn-placement shapes), struck below
-rather than deleted so the record of what was open, and when it closed, survives.
+rather than deleted so the record of what was open, and when it closed, survives. A
+fourth (spawn animation) has since closed too, separately, by #203/#205 rather than by
+the stock PR -- also struck below, same idiom.
 
 1. ~~**Stock/lives.**~~ -- CLOSED by the stock PR. `VERSUS_STOCK` (`constants.ts`,
    `data/balance.json`), default 3, per-tank (`Tank.stockRemaining`), sharing
@@ -933,12 +935,12 @@ rather than deleted so the record of what was open, and when it closed, survives
    locked, movement and aim unrestricted) -- no visual cue was in scope; that remains
    render-layer work, not named as its own open question since nothing here depends on
    it.
-4. **Spawn animation.** Named as deferred for the base game already (`## Unbuilt by
-   design`: "Spawn and victory animations. #61"); versus respawns would want the same
-   treatment, decided together rather than twice. Newly in scope now that something
-   actually respawns in versus (it did not, before the stock PR), but still not
-   answerable from the tree alone -- a render-layer decision, explicitly out of scope
-   for the stock PR's own brief.
+4. ~~**Spawn animation.**~~ -- CLOSED by #203 (spawn animation core: identity entrance
+   + shield invincibility, three variants shared by round start and respawn,
+   `src/render/spawn-anim.ts`) and #205 (identity death pulse). Versus respawns get the
+   same entrance for free, through the generic dead -> alive edge (`entities.ts`'s
+   `enteredRespawn = !!prevT && !prevT.alive && t.alive`) that `stepRespawns` already
+   flips for any tank, versus included -- no versus-specific treatment was needed.
 5. **A versus setup menu.** Mode, player count and (once maps exist as a choice, see
    below) map selection are all dev-flag-only today (`?dev=1&mode=ffa&players=4`).
    Shipping versus to a real player needs UI, which is real product surface no directive
@@ -978,13 +980,18 @@ each other, independent of what closed. Spawn animation (4) and a setup menu (5)
 each real product surface no directive has scoped. A setup menu (5) that only offers 2
 shipped arenas is premature before map selection (6) has an answer. None of the three is
 "can a PR close it" on its own -- each needs a decision this file's own "Issues or
-backlog?" test names as the spike criterion.
+backlog?" test names as the spike criterion. Spawn animation (4) has since closed (see
+item 4 above, #203/#205), independently of 5 and 6 -- the "still belong together" framing
+above was about all three jointly and is now stale for 4 specifically; 5 and 6 remain
+gated on each other exactly as described. Kept as-is, not renumbered to "5-6", for the
+historical record of why they were grouped.
 
 **What would answer it:** a product decision on whether versus ships with dev-flag-only
-access or a real menu (5), and a decision on spawn animation's shape (4); and either a
-decision to keep versus scoped to the existing 5 arenas indefinitely, or the
-procedural-generation spike above (`## Spike: pathfinding and risk-aversion weights in
-the movement AI`'s neighbour sections) reaching its own answer first (6).
+access or a real menu (5), and ~~a decision on spawn animation's shape (4)~~ (answered
+above -- #203's three variants); and either a decision to keep versus scoped to the
+existing 5 arenas indefinitely, or the procedural-generation spike above (`## Spike:
+pathfinding and risk-aversion weights in the movement AI`'s neighbour sections) reaching
+its own answer first (6).
 
 **Not scheduled.** Recorded so the remaining half of versus mode is not mistaken for
 finished, and is not rediscovered from scratch by the next person who reads
@@ -1095,7 +1102,8 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - Per-chassis turret turn rate — still the two globals, with no per-kind field in `tank-defs.json`. #46
 - Skins are all free; unlock criteria were never designed, and the achievements set is never consulted by the customization store. #61
 - Every enemy kind's two-tone skin uses the SAME split geometry (one 50/50 v-band), differing only in the two tones -- both still derived from that kind's own hull hue. #137's dichromacy measurement (grey/teal collapse to dE 4.1 under deuteranopia) is therefore only partly answered: under that same collapse, grey's two-tone `[grey, lighter-grey]` and teal's `[teal, lighter-teal]` also read as the same texture, because the shape carries no per-kind information. A pattern that varies by kind -- a distinct split axis, band count or offset per kind -- would add a real non-colour channel; this is a design decision (which split maps to which kind, and whether it still reads as "two-tone" once it does), not a mechanical follow-up. #137
-- Spawn and victory animations. #61
+- ~~Spawn and~~ victory animations. #61 -- spawn animations shipped in #203/#205 (see
+  the versus spike's item 4, above); victory animations remain unbuilt.
 - Emotes. #61
 - A bold-speed Flow skin variant (the per-skin `scroll` machinery already exists). #61
 - Nothing is gated on achievements — `earned()` feeds display only. #62

@@ -24,7 +24,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { parseArgs, safeLabel, gridShape } from './args.mjs';
+import { parseArgs, safeLabel, gridShape, DEFAULTS } from './args.mjs';
 
 const PORT = 5599;
 const ROOT = new URL('../../', import.meta.url).pathname;
@@ -151,6 +151,16 @@ async function run(browser) {
     if (args.hull) p.set('hull', args.hull);
     if (args.accent) p.set('accent', args.accent);
     if (args.frames !== null) p.set('frames', String(args.frames));
+    // Only when non-default, mirroring skin/hull/accent above: DEFAULTS.spawnAnim is
+    // always defined, so an UNCONDITIONAL emit would set ?spawn-anim= on every gallery
+    // invocation and fire setPlayerStyle through subjects.ts's widened guard even when
+    // nothing else asked to be styled -- the exact regression this guard is against.
+    if (args.spawnAnim !== DEFAULTS.spawnAnim) p.set('spawn-anim', args.spawnAnim);
+    // q() is only ever reached once captureGame's own `args.scene === 'game'` branch
+    // (above, in capture()) has already returned -- so 'game' can never land here, and
+    // the only scene ids left are 'gallery' (the default; omitted, same as skin='solid')
+    // and a moment id.
+    if (args.scene !== 'gallery') p.set('scene', args.scene);
     return `http://localhost:${PORT}/tools/gallery/index.html?${p}`;
   };
 

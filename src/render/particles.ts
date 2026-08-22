@@ -19,7 +19,14 @@ const MAX_PARTICLES = 500;
 const GRAVITY = -6;
 const EVENT_Y = 0.5;
 
-export function createParticleSystem(scene: THREE.Scene): ParticleSystem {
+/**
+ * `rng` defaults to `Math.random` so every shipped call site (renderer.ts) is
+ * unchanged -- the seam exists for callers that need repeatable bursts (the gallery's
+ * moment-scene.ts, which renders the same timeline twice and needs the two renders to
+ * be byte-identical) without perturbing the game's own visuals, which were never
+ * required to replay identically and should keep looking exactly as they always have.
+ */
+export function createParticleSystem(scene: THREE.Scene, rng: () => number = Math.random): ParticleSystem {
   const geo = new THREE.SphereGeometry(0.08, 6, 6);
   const pool: Particle[] = [];
   const active: Particle[] = [];
@@ -65,11 +72,11 @@ export function createParticleSystem(scene: THREE.Scene): ParticleSystem {
     for (let i = 0; i < count; i++) {
       const p = acquire();
       if (!p) return;
-      const theta = Math.random() * Math.PI * 2;
-      const up = Math.random() * 0.8 + 0.2;
-      const s = speed * (0.5 + Math.random() * 0.5);
+      const theta = rng() * Math.PI * 2;
+      const up = rng() * 0.8 + 0.2;
+      const s = speed * (0.5 + rng() * 0.5);
       p.vel.set(Math.cos(theta) * s, up * s, Math.sin(theta) * s);
-      p.life = life * (0.7 + Math.random() * 0.6);
+      p.life = life * (0.7 + rng() * 0.6);
       p.maxLife = p.life;
       p.baseScale = scale;
       p.mesh.material.color.setHex(color);

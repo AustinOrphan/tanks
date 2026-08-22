@@ -14,9 +14,38 @@ function activeMeshes(scene: THREE.Scene): THREE.Mesh[] {
   return scene.children.filter((c): c is THREE.Mesh => (c as THREE.Mesh).isMesh && c.visible);
 }
 
-function setup(): { scene: THREE.Scene; ps: ReturnType<typeof createParticleSystem> } {
+function setup(rng?: () => number): { scene: THREE.Scene; ps: ReturnType<typeof createParticleSystem> } {
   const scene = new THREE.Scene();
-  return { scene, ps: createParticleSystem(scene) };
+  return { scene, ps: rng ? createParticleSystem(scene, rng) : createParticleSystem(scene) };
+}
+
+/**
+ * A tiny deterministic generator for the injected-rng tests below -- NOT a spy on
+ * `Math.random` (the negative control needs that to be the real, unmocked thing), and
+ * not mulberry32 either: the specific algorithm is irrelevant, only that re-creating it
+ * from the same seed replays the exact same sequence.
+ */
+function seededRng(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1103515245 + 12345) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
+/** A snapshot of every active particle's observable state, order-independent so pool
+ * hand-out order (which can vary run to run for reasons unrelated to the rng seam)
+ * cannot make two otherwise-identical runs look different. */
+function snapshotParticles(scene: THREE.Scene): Array<[number, number, number, number, number]> {
+  return activeMeshes(scene)
+    .map((m): [number, number, number, number, number] => [
+      m.position.x,
+      m.position.y,
+      m.position.z,
+      m.scale.x,
+      (m as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>).material.opacity,
+    ])
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
 }
 
 /** burst() draws four randoms per particle: theta, up, speed, life. */
@@ -186,6 +215,42 @@ describe('particles: update', () => {
     expect(activeMeshes(scene).length).toBe(24);
     ps.update(0.02);
     expect(activeMeshes(scene).length).toBe(0);
+  });
+});
+
+describe('particles: injected rng seam', () => {
+  // The gallery's moment-scene.ts needs two independent renders of the same moment to
+  // come back byte-identical; burst()'s direction/speed/lifetime draws are the only
+  // source of cross-render variance in this file (see particles.ts's own doc comment
+  // on createParticleSystem's second parameter).
+  const run = (rng?: () => number) => {
+    const { scene, ps } = setup(rng);
+    ps.spawn([
+      { type: 'explosion', pos: { x: 2, y: -3 } },
+      { type: 'mine-detonate', mineId: 1, ownerId: 1, pos: { x: 5, y: 1 } },
+    ]);
+    ps.update(0.1);
+    ps.update(0.05);
+    return snapshotParticles(scene);
+  };
+
+  it('an injected deterministic rng makes two identical spawn+update sequences produce identical particle states', () => {
+    // Mutation that reds this (verified live, then reverted -- see this task's report):
+    // reverting burst()'s four `rng()` calls back to `Math.random()` breaks this, since
+    // the injected generator would then be constructed but never consulted.
+    const a = run(seededRng(12345));
+    const b = run(seededRng(12345));
+    expect(a).toEqual(b);
+  });
+
+  it('NEGATIVE CONTROL: with the default Math.random, the same sequences differ', () => {
+    // Proves the positive test above is not vacuously true (e.g. from a snapshot bug
+    // that always compares equal). Would fail if burst() stopped drawing per-particle
+    // randomness at all (e.g. a fixed direction/speed/life) -- unmocked Math.random,
+    // no rng argument passed, matching every shipped game call site's default.
+    const a = run();
+    const b = run();
+    expect(a).not.toEqual(b);
   });
 });
 

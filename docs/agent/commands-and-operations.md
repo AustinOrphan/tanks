@@ -23,7 +23,15 @@ element declares its own span, so any view frames any scene. `--sweep A,B --valu
 "1|2; 3|4"` patches constants in `src/` between passes and restores them in a `finally`;
 it refuses to start if the target file is already dirty. `--scene game --slowmo 0.05
 --burst 150` records a slow-motion timeline of REAL gameplay, one frame per rAF — the way
-to catch a sub-second moment (a shell leaving the muzzle) that a still would miss. See
+to catch a sub-second moment (a shell leaving the muzzle) that a still would miss.
+`--spawn-anim <warp|rise|beacon>` dresses the entrance variant a spawn/respawn plays,
+through the same `setPlayerStyle` call `--skin`/`--hull`/`--accent` use. `--scene
+<moment>` swaps the posed gallery for one of `tools/gallery/moments.ts`'s scripted
+timelines (`fire`, `destroyed`, `respawn`, `ricochet`, `wall-break`, `mine-cycle`,
+`drive`, `pivot`, `traverse`) — a moment is deterministic and scripted end to end, so its
+frame count comes from the moment itself; `--frames` is rejected outright for it.
+`--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a moment scene
+does not consume either, but they are dropped silently rather than rejected. See
 `tools/gallery/`.
 
 `npm run mutate` (`tools/mutate/`) is the "prove the gap before writing the test" rule,

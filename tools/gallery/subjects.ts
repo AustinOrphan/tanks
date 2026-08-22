@@ -6,7 +6,7 @@ import { createMineDebug } from '../../src/render/minedebug';
 import {
   DT, MINE_TIMER, NORMAL_SPEED, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS,
 } from '../../src/sim/constants';
-import type { SkinId } from '../../src/game/customization';
+import type { SkinId, SpawnAnimId } from '../../src/game/customization';
 
 export const BLAST_LIFE = MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS;
 
@@ -66,6 +66,26 @@ export const ELEMENTS: Record<string, ElementDef> = {
       w.tanks.push({
         id: 1 + w.tanks.length, kind: w.tanks.length % 2 ? 'brown' : 'player',
         pos: { x, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+        desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+        aiState: 'idle', aiTimer: 0,
+      });
+    },
+  },
+  /**
+   * A player tank that is DEAD before age 0 and alive from age 0 on -- the one dead->alive
+   * edge entities.ts's respawn entrance actually triggers on. `tank` above is always
+   * `alive: true` and deliberately stays that way: tools/gl/harness.ts's skin checks
+   * assert a static skin comes back byte-IDENTICAL across 600 ticks of `tank`, which an
+   * entrance ring appearing/fading on the first draw would break. This element exists so
+   * the GL harness's --spawn-anim proof (buildGallery -> setPlayerStyle -> entities) has
+   * a world shape that actually exercises the trigger, without touching `tank`'s contract.
+   */
+  entrant: {
+    width: 1.4, frames: 1, focusY: 0.3,
+    place: (w, x, age) => {
+      w.tanks.push({
+        id: 1 + w.tanks.length, kind: 'player',
+        pos: { x, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: age >= 0,
         desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
         aiState: 'idle', aiTimer: 0,
       });
@@ -243,6 +263,14 @@ export interface GalleryOptions {
   hull: string | null;
   accent: string | null;
   /**
+   * Which spawn-entrance/invincibility animator the player tank plays, passed through to
+   * `setPlayerStyle`'s 5th argument (the render seam #201 adds). Optional -- callers built
+   * before #201 (main.ts's URL parsing, tools/gl/harness.ts's fixtures) do not set it, and
+   * `setPlayerStyle`'s own default parameter resolves `undefined` to `DEFAULT_SPAWN_ANIM`
+   * the same way it always has for the 4-arg call shape.
+   */
+  spawnAnim?: SpawnAnimId;
+  /**
    * Override how many animation steps the subject wants. Null keeps what the elements
    * declare. It exists for skins: every shipped element is static (`frames: 1`) or a
    * few ticks long, so `--anim` on a tank had nothing to step and a scrolling skin had
@@ -284,8 +312,15 @@ export function buildGallery(canvas: HTMLCanvasElement, w: number, h: number, op
   const views = createEntityViews(scene);
   // Same call the game makes (renderer.ts's setPlayerStyle) and the Customize preview
   // makes -- the gallery has no skin machinery of its own to drift from it.
-  if (opts.skin !== 'solid' || opts.hull || opts.accent) {
-    views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null);
+  //
+  // `opts.spawnAnim` belongs in this guard too: without it, `--spawn-anim rise` with no
+  // `--skin`/`--hull`/`--accent` (the CLI's actual default-ish invocation) never calls
+  // setPlayerStyle at all, so the 5th argument never reaches entities.ts and the option
+  // silently does nothing -- the exact failure mode #201's own deferral was about, one
+  // layer up. `opts.spawnAnim` is a string when set, so this stays falsy when callers
+  // (main.ts, and every pre-#201 harness fixture) never pass it.
+  if (opts.skin !== 'solid' || opts.hull || opts.accent || opts.spawnAnim) {
+    views.setPlayerStyle(opts.hull ?? null, opts.skin, opts.accent ?? null, 0, opts.spawnAnim);
   }
   const debug = createMineDebug(scene, { reach: opts.reach, timer: opts.timer });
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
