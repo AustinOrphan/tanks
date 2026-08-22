@@ -1374,6 +1374,25 @@ export function startGameWith(
       const next = sm.state === 'win' ? nextInSession(level) : null;
       if (next !== null) {
         switchTo(next, driver.world.lives);
+        sm.restart();
+      } else if (deps.initialVersusConfig) {
+        // A versus match's own win/lose has nothing to advance to -- the versus
+        // level system is always a single synthetic level (levels.ts), so `next`
+        // above is null here exactly as it is for a campaign game-over. But unlike
+        // campaign, "Play Again" on a FINISHED versus match must not silently
+        // rebuild the same match: the versus-setup-menu plan's rematch flow returns
+        // to the setup pane, prefilled with the match just played, so players/map/
+        // stock can change before the next round. The actual reboot -- a new world,
+        // new bots, the lot -- happens only through `requestVersusSession`, wired
+        // below off the pane's OWN Start button; this click must not touch `world`.
+        //
+        // sm.toTitle() BEFORE showVersusSetup, not after: setState's close-all
+        // discipline (hud.ts) unconditionally re-hides the versus pane on every
+        // state change, so opening the pane first would just have that work undone
+        // a moment later by this very call. loop.test.ts pins the order with a case
+        // that fails if the two calls are swapped.
+        sm.toTitle();
+        hud.showVersusSetup(true, deps.initialVersusConfig);
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
@@ -1381,9 +1400,26 @@ export function startGameWith(
         // ended (sm.onChange's 'lose'/final-'win' branch already ran endRun()) is
         // gone, and playing on needs somewhere to persist the next death/clear.
         landOnCampaignBoard(campaignActive());
+        sm.restart();
       }
-      sm.restart();
     }
+  });
+
+  // The versus setup pane's own entry points -- both bare passthroughs, per the Hud
+  // interface's own doc comments on onVersusOpen/onVersusStart: the pane owns its
+  // config state and its own Back button, so loop.ts's only two jobs are handing it
+  // the retained config to prefill from (`?? null` for "no prior match this session",
+  // the same fallback applyVersusToDeps/versusAwareDeps use for a fresh campaign boot)
+  // and, on Start, forwarding the pane's chosen config to the reboot seam.
+  hud.onVersusOpen(() => {
+    hud.showVersusSetup(true, deps.initialVersusConfig ?? null);
+  });
+  // `?.`: `requestVersusSession` is optional (GameDeps' own doc comment) so every
+  // existing test/caller that builds a GameDeps with no reboot seam at all keeps
+  // compiling AND keeps working -- a Start click reaching here with nothing wired to
+  // receive it must not throw.
+  hud.onVersusStart((config) => {
+    deps.requestVersusSession?.(config);
   });
 
   /**
