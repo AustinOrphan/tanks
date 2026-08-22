@@ -1,7 +1,7 @@
 // Same reasoning as particles.test.ts/death-pulse.test.ts: Three builds meshes,
 // materials and vector maths on the CPU, so a Scene needs no GL context and this is
 // jsdom-testable.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn } from '../sim/types';
@@ -347,5 +347,42 @@ describe('tread trails: dispose', () => {
 
     tt.dispose();
     expect(scene.children.length).toBe(0);
+  });
+
+  it('calls material.dispose() on every decal ever created (pooled AND active) and geometry.dispose() exactly once', () => {
+    // scene.children.length===0 alone does not catch this: `scene.remove(mesh)`
+    // drops a mesh from the scene graph regardless of whether its material or
+    // geometry were ever disposed, so a mutation that deletes BOTH
+    // `d.mesh.material.dispose()` calls and the trailing `geo.dispose()` still
+    // leaves every mesh removed and the prior test green. Spying on the shared
+    // prototype methods counts actual dispose() INVOCATIONS, which a `remove()`
+    // cannot fake.
+    const materialDispose = vi.spyOn(THREE.MeshBasicMaterial.prototype, 'dispose');
+    const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose');
+    try {
+      const { tt } = setup();
+      const start = makeTank(1, 0, 0, 0);
+      tt.sync(worldWith(start), worldWith(start));
+      // Four EMIT_SPACINGs -> 4 pairs -> 8 DISTINCT decal objects, all active.
+      tt.sync(worldWith(start), worldWith(makeTank(1, EMIT_SPACING * 4, 0, 0)));
+      // Fully fade all 8: every one recycles into the pool (0 active, 8 pooled).
+      tt.update(LIFETIME_SECONDS * 2);
+      // One more EMIT_SPACING -> exactly 1 more pair -> acquire() pops 2 of the 8
+      // pooled decals back into `active`. No NEW decal objects are created (the
+      // pool already had spares) -- still exactly 8 unique objects in existence,
+      // now split 2 active / 6 pooled, exercising both arrays `dispose()` walks.
+      tt.sync(
+        worldWith(makeTank(1, EMIT_SPACING * 4, 0, 0)),
+        worldWith(makeTank(1, EMIT_SPACING * 5, 0, 0)),
+      );
+
+      tt.dispose();
+
+      expect(materialDispose).toHaveBeenCalledTimes(8);
+      expect(geometryDispose).toHaveBeenCalledTimes(1);
+    } finally {
+      materialDispose.mockRestore();
+      geometryDispose.mockRestore();
+    }
   });
 });
