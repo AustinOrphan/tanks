@@ -599,8 +599,14 @@ export const MOMENTS: Record<string, MomentDef> = {
     expect: [],
     // Both paths' combined bounding box is x: [0, 2.0], y: [-1.05, 0.95] -- a ~2 unit
     // square. Centred on it (not on the crossing point alone) so both full trails, not
-    // just their intersection, are in frame.
-    focus: [1.0, 0.3, -0.05], span: 4,
+    // just their intersection, are in frame. span 3, not the wider 4 an earlier draft
+    // used: at a peak decal opacity of 0.5 (TREAD_OPACITY, tread-trails.ts) already
+    // faded further by age (see the ticks comment above), a tighter shot is what keeps
+    // an individual decal enough SCREEN pixels to actually read in a still --
+    // MEASURED (rendered PNG, cropped and contrast-boosted): span 4 left the far ends
+    // of both trails imperceptible even after a 2x contrast boost; span 3 keeps the
+    // whole ~2-unit bounding box in frame with less margin but visibly larger decals.
+    focus: [1.0, 0.3, -0.05], span: 3,
     build: () => {
       const BX = 0.75;
       const BY0 = -1.05;
