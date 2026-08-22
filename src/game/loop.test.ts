@@ -22,6 +22,7 @@ import {
 import { COUNTDOWN_TICKS, LIVES } from '../sim/constants';
 import { createRunStore, DEFAULT_CAMPAIGN_ID, RUN_KEY, type ActiveRun } from './run';
 import type { World } from '../sim/world';
+import { countPlayerTanks } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import type { GameState } from './state';
@@ -40,11 +41,14 @@ import {
   isPauseHotkey,
   DEV_CONSOLE_KEY,
   createBrowserDeps,
+  applyVersusToDeps,
+  versusAwareDeps,
   type GameDeps,
   type HostWindow,
   type DevConsole,
   type DevConsoleTarget,
 } from './loop';
+import type { VersusConfig } from './versus-config';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeTick, replayTrace, checkTrace } from './replay';
@@ -4923,6 +4927,76 @@ describe('createBrowserDeps', () => {
     } finally {
       globalThis.localStorage.clear();
     }
+  });
+});
+
+describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
+  // A concrete (non-'random') arenaId suitable at players:3 -- see versus-config.test.ts
+  // and levels.test.ts's own fixtures, reused here rather than hand-rolled -- so `world()`
+  // below needs no seed-driven map pick to reason about.
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+  const noop = (_config: VersusConfig): void => {};
+
+  /**
+   * `createBrowserDeps()` with `run` swapped for a fresh in-memory store (so a real
+   * run on this machine's actual localStorage cannot leak in -- `createVersusLevelSystem`
+   * never reads it anyway, per its own doc comment) and `devFlags` overridable, so H1's
+   * `corpseBlock` fixture does not have to round-trip through a real `location.search`.
+   */
+  function baseDeps(devFlags: Partial<DevFlags> = {}): GameDeps {
+    const deps = createBrowserDeps();
+    return { ...deps, run: createRunStore(createMemoryStorage()), devFlags: { ...deps.devFlags, ...devFlags } };
+  }
+
+  it('with no versus config: threads requestVersusSession and nulls initialVersusConfig, leaving levels/devFlags untouched', () => {
+    // The H2 widening's own negative control: fails if the widening runs unconditionally
+    // (e.g. `mode: config?.mode ?? null`), which would corrupt a plain campaign boot.
+    const base = baseDeps();
+    const result = applyVersusToDeps(base, null, noop);
+    expect(result.levels).toBe(base.levels);
+    expect(result.devFlags).toEqual(base.devFlags);
+    expect(result.requestVersusSession).toBe(noop);
+    expect(result.initialVersusConfig).toBeNull();
+  });
+
+  it('versusAwareDeps composes createBrowserDeps with the override, threading requestVersusSession through', () => {
+    // Fails if versusAwareDeps drops `versus`/`requestVersusSession` on the floor instead
+    // of forwarding to applyVersusToDeps -- otherwise nothing below exercises the composition.
+    const fn = (_c: VersusConfig): void => {};
+    const result = versusAwareDeps(null, fn);
+    expect(result.requestVersusSession).toBe(fn);
+    expect(result.initialVersusConfig).toBeNull();
+  });
+
+  describe('H1 (carried from Task 2): the real devFlags reach the versus world, not DEV_FLAGS_OFF', () => {
+    it('devFlags.corpseBlock=true reaches the built world as corpseBlocksShells', () => {
+      // Fails if applyVersusToDeps calls createVersusLevelSystem with only 2 args (its
+      // own DEV_FLAGS_OFF default), or with a fresh DevFlags object instead of deps.devFlags.
+      const result = applyVersusToDeps(baseDeps({ corpseBlock: true }), { config: CONFIG }, noop);
+      const world = result.levels.world(result.levels.start, 7, undefined, 3);
+      expect(world.corpseBlocksShells).toBe(true);
+    });
+
+    it('negative control: corpseBlock=false (the default) keeps corpseBlocksShells false', () => {
+      // Without this, the positive case above would also pass a mutant that hard-codes
+      // `true` regardless of deps.devFlags.
+      const result = applyVersusToDeps(baseDeps({ corpseBlock: false }), { config: CONFIG }, noop);
+      const world = result.levels.world(result.levels.start, 7, undefined, 3);
+      expect(world.corpseBlocksShells).toBe(false);
+    });
+  });
+
+  describe('H2 (carried from Task 2): devFlags.players agrees with config.players', () => {
+    it('config.players widens devFlags.players, and the built world spawns that many player tanks', () => {
+      // Both halves, per the brief: the devFlags field startGameWith's own playerCount
+      // derivation reads (loop.ts's `deps.devFlags.players`), AND the world outcome --
+      // fails if only one side is wired (e.g. devFlags widened but createVersusLevelSystem
+      // still reads a stale config, or vice versa).
+      const result = applyVersusToDeps(baseDeps(), { config: CONFIG }, noop);
+      expect(result.devFlags.players).toBe(3);
+      const world = result.levels.world(result.levels.start, 7, undefined, 3);
+      expect(countPlayerTanks(world)).toBe(3);
+    });
   });
 });
 

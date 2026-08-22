@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import type { GameHandle } from './game/loop';
+import type { VersusConfig } from './game/versus-config';
 import { boot, NO_WEBGL_MESSAGE, type BootDeps } from './boot';
+
+type StartArgs = [
+  HTMLCanvasElement,
+  HTMLElement,
+  { config: VersusConfig } | null,
+  (config: VersusConfig) => void,
+];
 
 function harness(
   opts: { throwOnStart?: unknown } = {},
@@ -9,33 +17,52 @@ function harness(
   deps: BootDeps;
   root: HTMLElement;
   disposals: number;
+  /**
+   * Which fake handle (by construction order, 0-based) each `dispose()` call
+   * belongs to -- a stale `const`-captured handle disposes the SAME id twice
+   * instead of advancing to the next one, which a bare count (`disposals`) cannot
+   * tell apart from correct behavior. See the "versus session reboot" suite below.
+   */
+  disposedIds: number[];
   pagehide: Array<(e: { persisted: boolean }) => void>;
   removed: Array<(e: { persisted: boolean }) => void>;
   errors: unknown[];
-  startArgs: Array<[HTMLCanvasElement, HTMLElement]>;
+  startArgs: StartArgs[];
   canvasRoots: HTMLElement[];
+  canvases: HTMLCanvasElement[];
   firePagehide(persisted?: boolean): void;
 } {
   const root = document.createElement('div');
   const pagehide: Array<(e: { persisted: boolean }) => void> = [];
   const removed: Array<(e: { persisted: boolean }) => void> = [];
   const errors: unknown[] = [];
-  const startArgs: Array<[HTMLCanvasElement, HTMLElement]> = [];
+  const startArgs: StartArgs[] = [];
   const canvasRoots: HTMLElement[] = [];
+  const canvases: HTMLCanvasElement[] = [];
+  const disposedIds: number[] = [];
+  let nextId = 0;
   const box = { disposals: 0 };
 
   const deps: BootDeps = {
     root,
     bootCanvas: (r) => {
       canvasRoots.push(r);
-      return document.createElement('canvas');
+      // Mirrors render/canvas.ts's real bootCanvas: appended into the root, not just
+      // handed back -- so a reboot's "the dead canvas was removed" assertion has a
+      // real DOM relationship to check.
+      const canvas = document.createElement('canvas');
+      r.appendChild(canvas);
+      canvases.push(canvas);
+      return canvas;
     },
-    startGame: (canvas, uiRoot): GameHandle => {
-      startArgs.push([canvas, uiRoot]);
+    startGame: (canvas, uiRoot, versus, requestVersusSession): GameHandle => {
+      startArgs.push([canvas, uiRoot, versus, requestVersusSession]);
       if ('throwOnStart' in opts) throw opts.throwOnStart;
+      const id = nextId++;
       return {
         dispose(): void {
           box.disposals += 1;
+          disposedIds.push(id);
         },
       };
     },
@@ -56,11 +83,13 @@ function harness(
     get disposals(): number {
       return box.disposals;
     },
+    disposedIds,
     pagehide,
     removed,
     errors,
     startArgs,
     canvasRoots,
+    canvases,
     firePagehide(persisted = false): void {
       for (const p of pagehide) p({ persisted });
     },
@@ -205,5 +234,86 @@ describe('boot: does not touch the global window', () => {
     boot(h.deps);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe('boot: versus session reboot', () => {
+  const CONFIG_A: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'random', stock: 3, friendlyFire: false };
+  const CONFIG_B: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-01', stock: 5, friendlyFire: true };
+
+  it('boots the first session with no versus config, and hands it a requestVersusSession', () => {
+    const h = harness();
+    boot(h.deps);
+    const [, , versus, requestVersusSession] = h.startArgs[0];
+    expect(versus).toBeNull();
+    expect(typeof requestVersusSession).toBe('function');
+  });
+
+  it('requesting a versus session disposes the old handle exactly once and starts a new one with the config', () => {
+    // Fails if: requestVersusSession forgets to dispose the outgoing handle
+    // (disposedIds would stay []) or disposes it twice (disposedIds would read
+    // [0, 0]). Fails on a rebuilt lookalike config too, since `.config` is checked
+    // by IDENTITY (toBe), not deep equality.
+    const h = harness();
+    boot(h.deps);
+    const requestVersusSession = h.startArgs[0][3];
+    requestVersusSession(CONFIG_A);
+    expect(h.disposedIds).toEqual([0]);
+    expect(h.startArgs).toHaveLength(2);
+    expect(h.startArgs[1][2]).not.toBeNull();
+    expect(h.startArgs[1][2]!.config).toBe(CONFIG_A);
+  });
+
+  it('a second request disposes the SECOND handle, not the first -- the stale-capture control', () => {
+    // The bug this whole suite exists to catch: a `const game = deps.startGame(...)`
+    // capture (this module's shape before this task) would dispose handle #0 again
+    // here instead of handle #1, so disposedIds would read [0, 0], not [0, 1].
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG_A);
+    h.startArgs[1][3](CONFIG_B);
+    expect(h.disposedIds).toEqual([0, 1]);
+    expect(h.startArgs).toHaveLength(3);
+    expect(h.startArgs[2][2]!.config).toBe(CONFIG_B);
+  });
+
+  it('pagehide after a reboot disposes the CURRENT handle, not the original one', () => {
+    // Same stale-capture bug, seen from the pagehide path instead of a second
+    // request: a pagehide closure over the ORIGINAL handle would read disposedIds
+    // as [0, 0] here (handle #0 disposed twice) instead of [0, 1].
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG_A);
+    expect(h.disposedIds).toEqual([0]); // the reboot's own dispose of handle #0
+    h.firePagehide(false);
+    expect(h.disposedIds).toEqual([0, 1]);
+  });
+
+  it('does not dispose the rebooted session when the page only goes into the bfcache', () => {
+    // The bfcache guard (this module's original reason to exist) must still hold
+    // after a reboot, not just for the first session.
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][3](CONFIG_A);
+    h.firePagehide(true);
+    expect(h.disposedIds).toEqual([0]); // only the reboot's own dispose, not pagehide's
+  });
+
+  it('builds a fresh canvas for the rebooted session and removes the dead one', () => {
+    // startGameWith's teardown forces WebGL context loss on its canvas
+    // (render/scene.ts); reusing that element for a second session would silently
+    // render nothing, forever, in a real browser -- invisible to this whole test
+    // file, which never constructs a real WebGLRenderer. A fresh element is
+    // required, and the outgoing one must not linger in the DOM.
+    const h = harness();
+    boot(h.deps);
+    const firstCanvas = h.canvases[0];
+    expect(h.root.contains(firstCanvas)).toBe(true);
+    h.startArgs[0][3](CONFIG_A);
+    expect(h.canvases).toHaveLength(2);
+    expect(h.canvases[1]).not.toBe(firstCanvas);
+    expect(h.root.contains(firstCanvas)).toBe(false);
+    expect(h.root.contains(h.canvases[1])).toBe(true);
+    expect(h.startArgs[1][0]).toBe(h.canvases[1]);
   });
 });

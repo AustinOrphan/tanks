@@ -9,7 +9,8 @@ import {
   type PlayerAiState,
 } from '../sim/ai/player-profile';
 import type { CampaignLevel } from '../sim/arena';
-import { createLevelSystem, type LevelSystem } from './levels';
+import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
+import type { VersusConfig } from './versus-config';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
@@ -224,6 +225,21 @@ export interface GameDeps {
   /** Opt-in switches for unshipped work. Off unless the URL says otherwise. */
   /** Opt-in diagnostics. Off unless the URL says otherwise. */
   readonly devFlags: DevFlags;
+  /**
+   * Reboots the running session into a versus match with this config -- the versus
+   * setup pane's "Start" (a later task) calls it. Boot-provided (boot.ts's
+   * `requestVersusSession`, threaded through `versusAwareDeps`): the campaign path
+   * never calls it, and OPTIONAL so every existing test/caller in this file, which
+   * builds a `GameDeps` with no reboot seam at all, keeps compiling unchanged.
+   */
+  readonly requestVersusSession?: (config: VersusConfig) => void;
+  /**
+   * Set when THIS session is itself a versus reboot, to the config it was rebooted
+   * with -- so the setup pane can reopen pre-filled with the match just played
+   * instead of its own defaults. `null`/absent for a fresh campaign boot, which has
+   * no prior versus match to prefill from.
+   */
+  readonly initialVersusConfig?: VersusConfig | null;
 }
 
 export interface GameHandle {
@@ -603,6 +619,72 @@ export function createBrowserDeps(): GameDeps {
     host: globalThis.window as unknown as HostWindow,
     devFlags,
   };
+}
+
+/**
+ * The OVERRIDE step `versusAwareDeps` applies on top of a base `GameDeps`, factored out
+ * as its own PURE function so it is testable without `createBrowserDeps`'s real
+ * `location`/`localStorage` reads. `createBrowserDeps` itself IS callable under jsdom
+ * (see its own describe block below) -- but proving that `corpseBlock`/`muzzleInside`
+ * dev flags keep reaching the world in a versus session (Task 2's carried hazard H1)
+ * would otherwise mean driving them through a real `location.search`, which conflates
+ * THIS function's own job with `parseDevFlags`'s, already proven in devflags.test.ts.
+ * A fake `GameDeps` with `devFlags.corpseBlock` set directly is the more honest fixture.
+ *
+ * When `versus` is present:
+ * - Swaps `levels` for `createVersusLevelSystem(config, deps.run, deps.devFlags)` --
+ *   the session's REAL parsed dev flags, not the `DEV_FLAGS_OFF` `createVersusLevelSystem`
+ *   defaults to, so `corpseBlock`/`muzzleInside` keep working during a versus playtest
+ *   (H1). Dropping this argument would silently lose that dev-flag support.
+ * - Widens `devFlags` with `{ mode, players, friendlyFire }` from `config` so
+ *   `startGameWith`'s own `playerCount` derivation (`deps.devFlags.players`, see
+ *   `startGameWith` below) AGREES with the world `createVersusLevelSystem` builds from
+ *   `config.players` directly (H2) -- otherwise the two disagree and the spawned tank
+ *   count does not match the config the player chose.
+ * - Threads `requestVersusSession` and stamps `initialVersusConfig: config` so the
+ *   setup pane (a later task) can reopen pre-filled.
+ *
+ * When `versus` is absent (a fresh campaign boot): returns `deps` unchanged except for
+ * `requestVersusSession` (still threaded, so a campaign session can reboot INTO
+ * versus) and `initialVersusConfig: null` (no prior match to prefill from). `levels`
+ * and `devFlags` are NOT touched here -- widening them unconditionally would corrupt a
+ * plain campaign boot that no test below would otherwise catch.
+ */
+export function applyVersusToDeps(
+  deps: GameDeps,
+  versus: { config: VersusConfig } | null | undefined,
+  requestVersusSession: (config: VersusConfig) => void,
+): GameDeps {
+  if (!versus) {
+    return { ...deps, requestVersusSession, initialVersusConfig: null };
+  }
+  const { config } = versus;
+  return {
+    ...deps,
+    levels: createVersusLevelSystem(config, deps.run, deps.devFlags),
+    devFlags: {
+      ...deps.devFlags,
+      mode: config.mode,
+      players: config.players,
+      friendlyFire: config.friendlyFire,
+    },
+    requestVersusSession,
+    initialVersusConfig: config,
+  };
+}
+
+/**
+ * `createBrowserDeps()` plus `applyVersusToDeps`'s override step -- the one thing
+ * `main.ts`'s wiring-only wrapper calls (CLAUDE.md: `main.ts` stays wiring, behavior
+ * lives behind an injected seam). Exported so that seam is itself testable; see
+ * `applyVersusToDeps`'s own doc comment for why the override logic is a separate pure
+ * function rather than inlined here.
+ */
+export function versusAwareDeps(
+  versus: { config: VersusConfig } | null | undefined,
+  requestVersusSession: (config: VersusConfig) => void,
+): GameDeps {
+  return applyVersusToDeps(createBrowserDeps(), versus, requestVersusSession);
 }
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): GameHandle {
