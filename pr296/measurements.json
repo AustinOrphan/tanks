@@ -1,0 +1,128 @@
+{
+  "before-versus": {
+    "mode": "versus",
+    "label": "before",
+    "campaignStats": [
+      {
+        "className": "hud-stat hud-campaign-stat",
+        "textContent": "Lives: 3",
+        "display": "block"
+      },
+      {
+        "className": "hud-stat hud-campaign-stat",
+        "textContent": "Enemies: 0",
+        "display": "block"
+      }
+    ],
+    "versusStocks": {
+      "present": true,
+      "className": "hud-versus-stocks",
+      "textContent": "P1 3P2 3",
+      "display": "flex"
+    },
+    "fullShotDims": {
+      "width": 1280,
+      "height": 800
+    },
+    "topbarShotDims": {
+      "width": 1280,
+      "height": 63
+    },
+    "topbarClip": {
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 63
+    },
+    "pageErrors": [],
+    "consoleErrors": [],
+    "distPath": "/home/dev/src/tanks/.claude/worktrees/bridge-cse_01Xn6xaS53UMa1AUMVFw8jb6/dist",
+    "assetFiles": [
+      "index-BWqflx9_.js"
+    ],
+    "assetsSha256": "26702a297329b1f9629163bb4a2cb4a8c4be2d9d2a191d8a75a8b63fc0a1e1c8"
+  },
+  "after-versus": {
+    "mode": "versus",
+    "label": "after",
+    "campaignStats": [
+      {
+        "className": "hud-stat hud-campaign-stat hud-campaign-stat--hidden",
+        "textContent": "Lives: 3",
+        "display": "none"
+      },
+      {
+        "className": "hud-stat hud-campaign-stat hud-campaign-stat--hidden",
+        "textContent": "Enemies: 0",
+        "display": "none"
+      }
+    ],
+    "versusStocks": {
+      "present": true,
+      "className": "hud-versus-stocks",
+      "textContent": "P1 3P2 3",
+      "display": "flex"
+    },
+    "fullShotDims": {
+      "width": 1280,
+      "height": 800
+    },
+    "topbarShotDims": {
+      "width": 1280,
+      "height": 63
+    },
+    "topbarClip": {
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 63
+    },
+    "pageErrors": [],
+    "consoleErrors": [],
+    "distPath": "/home/dev/src/tanks/.claude/worktrees/bridge-cse_01Xn6xaS53UMa1AUMVFw8jb6/dist",
+    "assetFiles": [
+      "index-ODvw9K0t.js"
+    ],
+    "assetsSha256": "c38095b6df8ea19624516ada882c21bc9977820a2b634cdc38f123d82793870e"
+  },
+  "after-campaign": {
+    "mode": "campaign",
+    "label": "after",
+    "clickPath": "title -> click .hud-new-game -> not-needed (play started directly)",
+    "campaignStats": [
+      {
+        "className": "hud-stat hud-campaign-stat",
+        "textContent": "Lives: 2",
+        "display": "block"
+      },
+      {
+        "className": "hud-stat hud-campaign-stat",
+        "textContent": "Enemies: 3",
+        "display": "block"
+      }
+    ],
+    "livesText": "2",
+    "enemiesText": "3",
+    "fullShotDims": {
+      "width": 1280,
+      "height": 800
+    },
+    "topbarShotDims": {
+      "width": 1280,
+      "height": 63
+    },
+    "topbarClip": {
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 63
+    },
+    "pageErrors": [],
+    "consoleErrors": [],
+    "distPath": "/home/dev/src/tanks/.claude/worktrees/bridge-cse_01Xn6xaS53UMa1AUMVFw8jb6/dist",
+    "assetFiles": [
+      "index-ODvw9K0t.js"
+    ],
+    "assetsSha256": "c38095b6df8ea19624516ada882c21bc9977820a2b634cdc38f123d82793870e"
+  }
+}
