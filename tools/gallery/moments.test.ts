@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from './moments';
 import type { World } from '../../src/sim/world';
-import { RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ } from '../../src/sim/constants';
+import {
+  RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
+} from '../../src/sim/constants';
+import { EMIT_SPACING } from '../../src/render/tread-trails';
 
 describe('every moment pins its events to exact ticks', () => {
   for (const [name, def] of Object.entries(MOMENTS)) {
@@ -183,5 +186,92 @@ describe('traverse moment specifics', () => {
       expect(cur.pos.y).toBe(0);
       expect(cur.bodyAngle).toBe(0);
     }
+  });
+});
+
+describe('trail-stop moment specifics', () => {
+  it('crosses EMIT_SPACING several times while driving, then holds EXACTLY still once stopped', () => {
+    // Literal, matching the moment's own scripted stop point (moments.ts), not derived
+    // from MOMENTS['trail-stop'].ticks -- this is the thing under test, not a restated
+    // constant.
+    const DRIVE_TICKS = 30;
+    const tl = simulateMoment(MOMENTS['trail-stop']);
+    for (let t = 1; t <= DRIVE_TICKS; t++) {
+      const prev = tl.worlds[t - 1].tanks[0];
+      const cur = tl.worlds[t].tanks[0];
+      expect(cur.pos.x).toBeGreaterThan(prev.pos.x);
+      expect(cur.pos.y).toBe(0);
+      expect(cur.bodyAngle).toBe(0);
+    }
+    const stopPos = tl.worlds[DRIVE_TICKS].tanks[0].pos;
+    // Several EMIT_SPACING crossings before the stop: the acceptance criterion's
+    // "stopping" capture needs more than one decal pair already printed when the tank
+    // parks. Negative control: cutting DRIVE_TICKS to, say, 3 ticks (0.15 world units,
+    // under one EMIT_SPACING) reds this line -- verified live and reverted (see this
+    // task's report).
+    expect(stopPos.x - tl.worlds[0].tanks[0].pos.x).toBeGreaterThan(EMIT_SPACING * 5);
+    // Frozen, not merely unchanged tick to tick: every stopped-phase world compares
+    // EXACTLY equal to the position at the moment of stopping, not just to its
+    // immediate predecessor -- a slow residual drift would still pass a
+    // tick-to-tick-only check but fail this. Negative control: a stray nonzero `move`
+    // in the post-stop input branch (e.g. leaving `{x: 1, y: 0}` past DRIVE_TICKS)
+    // reds this immediately -- verified live and reverted (see this task's report).
+    for (let t = DRIVE_TICKS + 1; t <= MOMENTS['trail-stop'].ticks; t++) {
+      const cur = tl.worlds[t].tanks[0];
+      expect(cur.pos).toEqual(stopPos);
+      expect(cur.bodyAngle).toBe(0);
+    }
+  });
+});
+
+describe('trail-cross moment specifics', () => {
+  it('the two tanks never come within the tank-tank collision radius, so neither path is collision-nudged', () => {
+    const tl = simulateMoment(MOMENTS['trail-cross']);
+    for (let t = 0; t <= MOMENTS['trail-cross'].ticks; t++) {
+      const a = tl.worlds[t].tanks[0].pos;
+      const b = tl.worlds[t].tanks[1].pos;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      // TANK_RADIUS * 2 -- separateTanks' (collision.ts) own push-apart threshold; a
+      // world.tanks entry within it gets shoved off its scripted line. Negative
+      // control: moving B's idle row from BY0 = -1.05 to -0.75 in moments.ts pulls this
+      // under 1.0 at tick 15 (MEASURED via probe) and reds this line -- verified live
+      // and reverted (see this task's report).
+      expect(dist).toBeGreaterThan(TANK_RADIUS * 2);
+    }
+  });
+  it('the paths actually cross: A parks on the line B drives, B drives across the line A parks on', () => {
+    const tl = simulateMoment(MOMENTS['trail-cross']);
+    const final = tl.worlds[MOMENTS['trail-cross'].ticks].tanks;
+    // A: stopped (same "holds exactly still once stopped" shape as trail-stop) on
+    // x = 0.75 -- the line B's entire path sits on.
+    expect(final[0].pos.x).toBeCloseTo(2.0, 6);
+    expect(final[0].pos.y).toBe(0);
+    // B: has crossed y = 0 -- A's own path line -- and kept driving past it, so the
+    // capture's final frame shows trail on both sides of the crossing.
+    expect(final[1].pos.x).toBeCloseTo(0.75, 6);
+    expect(final[1].pos.y).toBeGreaterThan(0);
+  });
+});
+
+describe('trail-skins moment specifics', () => {
+  it('both tanks drive level in parallel lanes, crossing EMIT_SPACING several times, never within collision range', () => {
+    const tl = simulateMoment(MOMENTS['trail-skins']);
+    for (let t = 0; t <= MOMENTS['trail-skins'].ticks; t++) {
+      const a = tl.worlds[t].tanks[0];
+      const b = tl.worlds[t].tanks[1];
+      // Same start x, same speed, same heading every tick -> always level; a and b's
+      // own x therefore stay equal for the whole clip.
+      expect(a.pos.x).toBe(b.pos.x);
+      expect(a.pos.y).toBe(0.75);
+      expect(b.pos.y).toBe(-0.75);
+      const dist = Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y);
+      expect(dist).toBeGreaterThan(TANK_RADIUS * 2);
+    }
+    const finalX = tl.worlds[MOMENTS['trail-skins'].ticks].tanks[0].pos.x;
+    // Several EMIT_SPACING crossings for EACH tank's own trail. Negative control: a
+    // shorter `ticks` (e.g. 3, 0.15 world units) reds this line -- same shape as
+    // trail-stop's own EMIT_SPACING assertion, verified live and reverted (see this
+    // task's report).
+    expect(finalX).toBeGreaterThan(EMIT_SPACING * 5);
   });
 });

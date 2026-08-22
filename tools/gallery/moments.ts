@@ -1,4 +1,4 @@
-import { createWorld, step } from '../../src/sim/world';
+import { createWorld, step, stepInputs } from '../../src/sim/world';
 import type { World } from '../../src/sim/world';
 import type { SimEvent } from '../../src/sim/events';
 import type { ArenaGeometry, InputState, Wall } from '../../src/sim/types';
@@ -36,6 +36,21 @@ export interface MomentDef {
   build(): World;
   /** Player input for a given tick (0-based). Pure function of tick. */
   input(tick: number): InputState;
+  /**
+   * OPTIONAL second player's input, for a moment that stages TWO moving tanks (issue
+   * #231's overlapping-paths and multi-skin captures both need a second tank actually
+   * driven, unlike `destroyed`/`respawn`'s stationary victim). Absent for every
+   * single-player moment -- `simulateMoment` falls back to the one-input `step()`
+   * adapter exactly as before, so this is additive and every existing moment is
+   * untouched. When present, `simulateMoment` goes through `stepInputs(w, [input(t),
+   * input2(t)])` instead -- the SAME multiplayer entry point `stepInputs` (world.ts)
+   * is everywhere else in the tree, not a second bespoke driver. `applyPlayerInputs`
+   * (world.ts) maps `inputs[i]` to the i-th `kind === 'player'` tank in `world.tanks`
+   * ARRAY ORDER, not `Tank.controlledBy` (that field is a RENDER seam only -- see
+   * `entities.ts`'s `styleFor`) -- so a moment using `input2` must build its second
+   * tank second in `world.tanks` for this to drive the tank it means to.
+   */
+  input2?(tick: number): InputState;
   /** Camera focus point and span, same meaning as subjects.ts's Composed. */
   focus: [number, number, number];
   span: number;
@@ -44,19 +59,21 @@ export interface MomentDef {
 export interface MomentTimeline { worlds: World[]; events: SimEvent[][]; }
 
 /**
- * Replays a MomentDef tick by tick with the pure sim `step`.
+ * Replays a MomentDef tick by tick with the pure sim `step` (or, for a two-tank
+ * moment, `stepInputs` -- see `MomentDef.input2`'s own doc comment).
  *
  * `worlds[t]` and `events[t]` line up so `events[t]` is what firing `input(t - 1)`
  * produced: `worlds[0]`/`events[0]` are the tick-0 world and no events (nothing has
- * stepped yet), and each following `step(w, def.input(t))` call appends its result at
- * index `t + 1`. An input pressed at tick 9 therefore lands its event at `events[10]`.
+ * stepped yet), and each following step call appends its result at index `t + 1`. An
+ * input pressed at tick 9 therefore lands its event at `events[10]`.
  */
 export function simulateMoment(def: MomentDef): MomentTimeline {
   let w = def.build();
   const worlds: World[] = [w];
   const events: SimEvent[][] = [[]];
   for (let t = 0; t < def.ticks; t++) {
-    const r = step(w, def.input(t)); // step() does not mutate its input world
+    // step() does not mutate its input world; neither does stepInputs().
+    const r = def.input2 ? stepInputs(w, [def.input(t), def.input2(t)]) : step(w, def.input(t));
     w = r.world;
     worlds.push(w);
     events.push(r.events);
@@ -503,6 +520,193 @@ export const MOMENTS: Record<string, MomentDef> = {
       const theta = (170 * Math.PI) / 180;
       return { move: { x: 0, y: 0 }, aim: { x: Math.cos(theta) * 1000, y: Math.sin(theta) * 1000 }, fire: false, mine: false };
     },
+  },
+
+  /**
+   * Issue #231's `stopping` capture: a tank drives far enough to print several
+   * tread-decal pairs, then stops, so the gif shows the trail PERSISTING and FADING
+   * behind a now-stationary tank with no new decals after the stop.
+   *
+   * The first `TRAIL_STOP_DRIVE_TICKS` ticks are exactly `drive`'s own input/build
+   * (bodyAngle already aligned with due-east at spawn, so -- same reasoning as
+   * `drive`'s own doc comment -- position.x's growth is exact, not the bounded
+   * approximation `pivot` needs). At `movementSpeed` `TANK_SPEED` = 3.0 world
+   * units/second (balance.json), that covers 30 * 3.0 / 60 = 1.5 world units --
+   * 1.5 / EMIT_SPACING (0.25, tread-trails.ts) = 6 decal PAIRS before the tank ever
+   * stops, comfortably "several".
+   */
+  'trail-stop': {
+    // MEASURED (throwaway vite-node probe): with the drive phase ending at tick 30,
+    // position is IDENTICAL (bit-for-bit, not just close) at every tick from 30 through
+    // 90 -- once `move` drops to zero, `moveTank` (collision.ts) never enters its
+    // `mlen > 0` branch again, so there is nothing left to accumulate. LIFETIME_SECONDS
+    // (tread-trails.ts) is 2.0s = 120 ticks at TICK_HZ, so a 90-tick clip (drive 30 +
+    // stopped 60) deliberately stops well short of full decay: the runner's own draw
+    // loop only ever reaches age `ticks - 1` (see `buildMomentScene`'s own comment on
+    // why `frames: def.ticks` -- not `+1` -- is correct), so the LAST drawn frame here
+    // sits at age 89, putting the freshest decal (printed at tick 30) at 59 ticks old
+    // (opacity ~0.25 of peak) and the oldest (tick 5) at 84 (~0.15) -- both still
+    // plainly visible against the ground, not faded to invisibility the way a window
+    // that ran the stopped phase out past LIFETIME_SECONDS would leave the last frame.
+    ticks: 90,
+    expect: [],
+    // Same framing `drive` itself uses: the whole path (x: 0 -> 1.5) and the parked
+    // tank both sit inside it already, and the trail never extends past where the tank
+    // itself was driven, so nothing new needs to fit.
+    focus: [0.75, 0.3, 0], span: 4,
+    build: buildSoloWorld,
+    input: (t) => (t < 30
+      ? { move: { x: 1, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false }
+      : { move: { x: 0, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false }),
+  },
+
+  /**
+   * Issue #231's `overlapping paths` capture: two tanks whose driven paths cross, so
+   * the gif shows both trails including the region where they overlap.
+   *
+   * Tank A (world.tanks[0], id 1, slot 0) drives due east from (0, 0) for 40 ticks
+   * (2.0 world units -- 8 EMIT_SPACING crossings) then stops, exactly `trail-stop`'s
+   * own shape. Tank B (world.tanks[1], id 2, slot 1, `controlledBy: 1`) sits idle at
+   * (0.75, -1.05) -- ON the x = 0.75 line A's own path crosses at tick 15 -- until tick
+   * 30, then drives due north (bodyAngle already Ο€/2, aligned with its own move, same
+   * "no turn cost" reasoning `drive`'s doc comment gives the east-facing case) for the
+   * rest of the clip, crossing y = 0 (A's path) partway through.
+   *
+   * The staggering -- B idle through A's own closest approach, only starting once A is
+   * either past it or fully parked -- exists to clear `separateTanks` (collision.ts)'s
+   * `TANK_RADIUS * 2` = 1.0 unit push-apart radius, not for the trail itself: two tank
+   * BODIES within that range get shoved apart mid-tick, which would silently bend both
+   * paths off their scripted lines. MEASURED (throwaway vite-node probe) over the whole
+   * clip: minimum centre-to-centre distance is 1.05 world units, at tick 15 (A passing
+   * B's still-idle x = 0.75 row, 1.05 world units of clearance in y alone) -- above 1.0
+   * throughout (a tighter margin than an earlier draft's 1.3, traded deliberately for a
+   * SHORTER clip -- see the ticks comment below -- so the two tanks still never touch
+   * and every position below is the exact, uninterrupted kinematic path, not a
+   * collision-nudged approximation of it).
+   */
+  'trail-cross': {
+    // MEASURED (throwaway vite-node probe): B crosses y = 0 -- A's path -- at tick 51,
+    // by which point A has been parked at (2.0, 0) for 11 ticks. 70, not longer: the
+    // runner's draw loop only ever reaches age `ticks - 1` (69 here), so keeping the
+    // clip SHORT is what keeps A's own crossing-region decal (printed at tick 15, when
+    // A itself passed x = 0.75) recognisable in the last drawn frame -- at age 69 it is
+    // 54 ticks old (opacity ~0.28 of peak, against LIFETIME_SECONDS' 120-tick full
+    // decay), not the ~0.15 an earlier draft's longer (100-tick) window left it at.
+    // B's own crossing decal (tick 51) is fresher still, 18 ticks old (~0.43), and the
+    // clip still gives it 19 ticks (0.32s) to extend past the crossing before the last
+    // frame. MEASURED (throwaway vite-node probe): exact alphas 0.275 / 0.425.
+    ticks: 70,
+    expect: [],
+    // Both paths' combined bounding box is x: [0, 2.0], y: [-1.05, 0.95] -- a ~2 unit
+    // square. Centred on it (not on the crossing point alone) so both full trails, not
+    // just their intersection, are in frame.
+    focus: [1.0, 0.3, -0.05], span: 4,
+    build: () => {
+      const BX = 0.75;
+      const BY0 = -1.05;
+      const BANGLE = Math.PI / 2;
+      const w = createWorld({
+        walls: [],
+        spawns: [{ pos: { x: 0, y: 0 }, angle: 0 }, { pos: { x: BX, y: BY0 }, angle: BANGLE }],
+        lives: 3,
+        tanks: [
+          {
+            id: 1, kind: 'player',
+            pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+            desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+            aiState: 'idle', aiTimer: 0, controlledBy: 0,
+          },
+          {
+            id: 2, kind: 'player',
+            pos: { x: BX, y: BY0 }, bodyAngle: BANGLE, turretAngle: BANGLE, alive: true,
+            desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+            aiState: 'idle', aiTimer: 0, controlledBy: 1,
+          },
+        ],
+        seed: 7,
+      });
+      // Same landmine every other moment in this file documents: a fresh world's
+      // roundStartTick locks fire/mine through the round-start countdown, irrelevant
+      // here (neither tank ever fires or mines) but kept for consistency with every
+      // other build() in this file, in case a later edit adds one.
+      w.roundStartTick = -600;
+      return w;
+    },
+    input: (t) => (t < 40
+      ? { move: { x: 1, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false }
+      : { move: { x: 0, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false }),
+    // aim.x pins B's OWN fixed x (0.75, the BX literal above) with a huge y: since B
+    // only ever moves along that same vertical line, dx stays exactly 0 the whole
+    // clip, keeping aimDir exactly north -- already matching BANGLE at spawn, so
+    // turretAngle never slews, the same "aim is a world-space point" treatment every
+    // other moment here gives a tank whose own path is known in advance.
+    //
+    // Idle through tick 30, not all the way to 40: A's own closest approach to B's row
+    // is tick 15 (MEASURED above), and by tick 30 A is 0.75 world units clear of it
+    // (dx = |1.5 - 0.75|) even while still driving -- enough clearance, combined with
+    // B's own dy, to stay outside TANK_RADIUS * 2 for the rest of A's approach to its
+    // tick-40 park (MEASURED via the same probe, minimum 1.05 throughout).
+    input2: (t) => (t < 30
+      ? { move: { x: 0, y: 0 }, aim: { x: 0.75, y: 1e6 }, fire: false, mine: false }
+      : { move: { x: 0, y: 1 }, aim: { x: 0.75, y: 1e6 }, fire: false, mine: false }),
+  },
+
+  /**
+   * Issue #231's `multiple tank skins/colors` capture: trails under two visibly
+   * different hull paints, proving the decal colour (TREAD_COLOR, tread-trails.ts) is
+   * paint-independent rather than sampled from the tank that printed it.
+   *
+   * Both tanks drive due east in parallel lanes (no crossing -- that is `trail-cross`'s
+   * job) so both trails read clearly side by side. The colour contrast itself needs no
+   * code here: `buildMomentScene` (moment-scene.ts) already dresses `world.tanks[0]`
+   * (`controlledBy: 0`, slot 0) with whatever `--skin`/`--hull`/`--accent` the CLI
+   * passes, and hardcodes every OTHER slot -- `world.tanks[1]` here, `controlledBy: 1`,
+   * slot 1 -- to `('solid', hull: null)`, which resolves to the same roster default
+   * blue slot 0 itself would be without CLI overrides (see that file's own "VISIBLE
+   * SIDE EFFECT" comment). So rendering this moment with any non-default `--skin`/
+   * `--hull` already puts two DIFFERENT paints on screen with no per-slot styling knob
+   * needed in this file.
+   */
+  'trail-skins': {
+    // 40 ticks: 2.0 world units (3.0 * 40 / 60) -- 2.0 / EMIT_SPACING (0.25) = 8 decal
+    // pairs per tank, comfortably "several", without a stop (unlike `trail-stop`,
+    // this capture is about paint, not the stopped state).
+    ticks: 40,
+    expect: [],
+    // Path x: [0, 2.0], lanes at y = +-0.75 (1.5 apart -- clear of the TANK_RADIUS * 2
+    // = 1.0 collision radius the whole clip, with margin, since the two tanks never
+    // close that gap: same y offset from tick 0, identical east-facing speed).
+    focus: [1.0, 0.3, 0], span: 4.5,
+    build: () => {
+      const LANE = 0.75;
+      const w = createWorld({
+        walls: [],
+        spawns: [{ pos: { x: 0, y: LANE }, angle: 0 }, { pos: { x: 0, y: -LANE }, angle: 0 }],
+        lives: 3,
+        tanks: [
+          {
+            id: 1, kind: 'player',
+            pos: { x: 0, y: LANE }, bodyAngle: 0, turretAngle: 0, alive: true,
+            desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+            aiState: 'idle', aiTimer: 0, controlledBy: 0,
+          },
+          {
+            id: 2, kind: 'player',
+            pos: { x: 0, y: -LANE }, bodyAngle: 0, turretAngle: 0, alive: true,
+            desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+            aiState: 'idle', aiTimer: 0, controlledBy: 1,
+          },
+        ],
+        seed: 7,
+      });
+      w.roundStartTick = -600;
+      return w;
+    },
+    // aim.y matches each tank's OWN lane (not 0) so aimDir stays exactly horizontal --
+    // the same "aim is a world-space point, not a direction" landmine every other
+    // moment here documents -- keeping turretAngle exactly 0 for both, the whole clip.
+    input: () => ({ move: { x: 1, y: 0 }, aim: { x: 1000, y: 0.75 }, fire: false, mine: false }),
+    input2: () => ({ move: { x: 1, y: 0 }, aim: { x: 1000, y: -0.75 }, fire: false, mine: false }),
   },
 };
 
