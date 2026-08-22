@@ -196,6 +196,14 @@ describe('trail-stop moment specifics', () => {
     // constant.
     const DRIVE_TICKS = 30;
     const tl = simulateMoment(MOMENTS['trail-stop']);
+    // Negative control: cutting the moment's own drive cutoff (moments.ts) from 30 to
+    // 3 ticks reds THIS loop, at t = 4 -- "expected 0.15000000000000002 to be greater
+    // than 0.15000000000000002" (cur.pos.x stalls the tick after the mutated moment
+    // stops driving) -- verified live and reverted (see this task's report). It fails
+    // here, not at the EMIT_SPACING line below: DRIVE_TICKS stays a literal 30 in this
+    // test regardless of what the moment itself does, so this loop walks ticks 4-30
+    // expecting motion the mutated moment no longer produces, and reds before
+    // execution ever reaches that later line.
     for (let t = 1; t <= DRIVE_TICKS; t++) {
       const prev = tl.worlds[t - 1].tanks[0];
       const cur = tl.worlds[t].tanks[0];
@@ -206,9 +214,13 @@ describe('trail-stop moment specifics', () => {
     const stopPos = tl.worlds[DRIVE_TICKS].tanks[0].pos;
     // Several EMIT_SPACING crossings before the stop: the acceptance criterion's
     // "stopping" capture needs more than one decal pair already printed when the tank
-    // parks. Negative control: cutting DRIVE_TICKS to, say, 3 ticks (0.15 world units,
-    // under one EMIT_SPACING) reds this line -- verified live and reverted (see this
-    // task's report).
+    // parks. This line has its OWN dedicated negative control, distinct from the loop
+    // above's: halving the moment's drive input to `{x: 0.5, y: 0}` for all 30 ticks
+    // (moments.ts) keeps every tick's position still strictly increasing -- so the
+    // loop above stays green -- but halves the total distance covered to 0.75, under
+    // EMIT_SPACING * 5 = 1.25, and reds exactly this line: "expected
+    // 0.7500000000000003 to be greater than 1.25" -- verified live and reverted (see
+    // this task's report).
     expect(stopPos.x - tl.worlds[0].tanks[0].pos.x).toBeGreaterThan(EMIT_SPACING * 5);
     // Frozen, not merely unchanged tick to tick: every stopped-phase world compares
     // EXACTLY equal to the position at the moment of stopping, not just to its
@@ -243,13 +255,23 @@ describe('trail-cross moment specifics', () => {
     const tl = simulateMoment(MOMENTS['trail-cross']);
     const final = tl.worlds[MOMENTS['trail-cross'].ticks].tanks;
     // A: stopped (same "holds exactly still once stopped" shape as trail-stop) on
-    // x = 0.75 -- the line B's entire path sits on.
+    // x = 0.75 -- the line B's entire path sits on. Negative control: the SAME BY0
+    // mutation the sibling collision-radius test above documents (-1.05 to -0.75 in
+    // moments.ts) also reds this line -- "expected 1.9366393318012565 to be close to
+    // 2, received difference is 0.06336066819874353, but expected 5e-7" -- proving
+    // separateTanks really did nudge A's own parked position once the margin was
+    // removed, not just B's. Verified live and reverted (see this task's report).
     expect(final[0].pos.x).toBeCloseTo(2.0, 6);
     expect(final[0].pos.y).toBe(0);
-    // B: has crossed y = 0 -- A's own path line -- and kept driving past it, so the
-    // capture's final frame shows trail on both sides of the crossing.
+    // B: has crossed y = 0 -- A's own path line -- by more than one EMIT_SPACING, and
+    // kept driving past it, so the capture's final frame shows trail on both sides of
+    // the crossing (not just a hair over the line with nothing printed beyond it).
+    // Negative control: cutting the moment's own `ticks` (moments.ts) from 70 to 52 --
+    // just past B's own tick-51 crossing -- leaves B at y = 0.05, still `> 0` but under
+    // EMIT_SPACING, and reds this line: "expected 0.05000000000000032 to be greater
+    // than 0.25". Verified live and reverted (see this task's report).
     expect(final[1].pos.x).toBeCloseTo(0.75, 6);
-    expect(final[1].pos.y).toBeGreaterThan(0);
+    expect(final[1].pos.y).toBeGreaterThan(EMIT_SPACING);
   });
 });
 
