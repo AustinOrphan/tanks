@@ -65,6 +65,26 @@ button count moved deliberately):
 - Match end in versus: the existing results line (`setVersusResults`) shows as today;
   Continue/Back from the end state returns to the setup pane (ruling 4), not the title.
 
+## 3a. In-match stock display (owner addition, 2026-08-21)
+
+Per-player stock counts must be visible **during** a versus match without blocking the
+view of play:
+
+- A compact per-slot readout (one entry per active slot: slot identity + remaining
+  stock), rendered in the HUD's existing top-bar region — the screen edge the layout
+  already reserves — never as an overlay on the arena.
+- Identity is carried the same way the rest of the identity system carries it: each
+  entry is tinted with its slot's `IDENTITY_RING_COLORS` entry (teams: `TEAM_COLORS`),
+  so the readout matches the rings players already watch.
+- It is a one-way projection: driven from loop state (`Tank.stockRemaining` per
+  player-kind tank), updated when stocks change — a new `setVersusStocks(stocks |
+  null)` HUD setter in the mold of `setVersusResults`; `null` hides it entirely, so
+  campaign sessions never show it. Visible only in the `playing`/`paused` states of a
+  versus session.
+- Size/placement is a feel call made against a real render (gallery/screenshot
+  evidence in the PR), with the constraint stated by the owner as binding: it must not
+  block the screen.
+
 ## 4. Testing
 
 - Panel behavior: copy the controller-panel test shapes (`hud.test.ts:1221` block) —
