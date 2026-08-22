@@ -22,8 +22,9 @@ The figures are approximate measurements/bands from a warm Node 24 Linux checkou
 2026-08-21; hardware, cache state, mutation selection, audit networking, and browser
 startup move them substantially. The command contract matters more than the exact timing.
 
-`npm test` remains a compatibility alias for `npm run verify:quick`. For a focused test,
-use `npm run test:unit -- <Vitest arguments>` without an implicit typecheck.
+`npm test` remains a compatibility alias for `npm run verify:quick`; both package scripts
+retain a trailing `--` boundary so `npm test -- <Vitest arguments>` reaches Vitest. For a
+focused test without an implicit typecheck, use `npm run test:unit -- <Vitest arguments>`.
 
 `verify:full` is the complete core, non-browser merge gate. It deliberately does not
 silently skip or install browser prerequisites. Run `verify:visual` in addition when a
@@ -31,6 +32,11 @@ change affects user-visible rendering or renderer/WebGL infrastructure. Playwrig
 a repository dependency: install the version pinned in `.github/workflows/ci.yml` and its
 Chromium browser before running the visual composite locally. Safari and the cross-OS/
 architecture engine matrix remain separate because Linux cannot reproduce them.
+
+The mutation phase also refuses to run when a file named by its manifest has uncommitted
+changes. Run `verify:full` against the clean candidate commit in a clean worktree. While
+editing, run the applicable quick, build, and subsystem checks first; do not discard or
+stash unrelated work merely to satisfy the mutation preflight.
 
 Risk tiers map to the minimum command set as follows:
 

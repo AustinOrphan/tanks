@@ -203,7 +203,8 @@ or cross subsystem boundaries:
 
 Minimum evidence:
 
-- run `npm run verify:full`, the complete core non-browser gate
+- from a clean candidate worktree, run `npm run verify:full`, the complete core
+  non-browser gate; its mutation phase refuses uncommitted changes to manifest targets
 - run every affected subsystem-specific check, such as the golden trace for simulation,
   persistence compatibility tests, WebGL/visual checks, or built-output portability
 - adversarially review invariants, failure modes, compatibility, and expected absences

@@ -80,12 +80,15 @@ const ATOMIC = {
 } as const;
 
 const COMPOSITES = {
-  test: ['verify:quick'],
-  'verify:quick': ['typecheck', 'test:unit'],
-  'verify:build': ['build', 'portability'],
-  'verify:visual': ['verify:build', 'test:gl', 'trace:browser', 'visual'],
-  'verify:full': ['verify:quick', 'mutate', 'verify:build', 'audit:prod'],
+  test: 'npm run verify:quick --',
+  'verify:quick': 'npm run typecheck && npm run test:unit --',
+  'verify:build': 'npm run build && npm run portability',
+  'verify:visual': 'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual',
+  'verify:full': 'npm run verify:quick && npm run mutate && npm run verify:build && npm run audit:prod',
 } as const;
+
+const BROWSER_LEAVES = ['test:gl', 'trace:browser', 'visual'] as const;
+const DIRECT_BEACON_COMMAND = 'node tools/baseline/run.mjs --beacon --timeout 300000';
 
 const referencedScripts = (command: string): string[] =>
   [...command.matchAll(/\bnpm run ([a-zA-Z0-9:_-]+)/g)].map((match) => match[1]);
@@ -107,6 +110,9 @@ function expandScript(name: string, scripts: ScriptTable, stack: string[] = []):
 const duplicates = (names: string[]): string[] =>
   [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
 
+const browserLeaks = (names: string[]): string[] =>
+  names.filter((name) => BROWSER_LEAVES.some((browserLeaf) => browserLeaf === name));
+
 const namedStep = (workflow: string, name: string): string => {
   const marker = `      - name: ${name}\n`;
   const start = workflow.indexOf(marker);
@@ -116,17 +122,51 @@ const namedStep = (workflow: string, name: string): string => {
 };
 
 const jobBlock = (workflow: string, name: string): string => {
-  const marker = `  ${name}:\n`;
-  const start = workflow.indexOf(marker);
-  if (start < 0) return '';
-  const next = /^  [a-zA-Z0-9_-]+:\s*$/gm;
-  next.lastIndex = start + marker.length;
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const marker = new RegExp(`^  ${escapedName}:[ \\t]*(?:#.*)?$`, 'm');
+  const current = marker.exec(workflow);
+  if (current === null) return '';
+  const start = current.index;
+  const next = /^  [a-zA-Z0-9_-]+:[ \t]*(?:#.*)?$/gm;
+  next.lastIndex = start + current[0].length;
   const match = next.exec(workflow);
   return workflow.slice(start, match?.index ?? workflow.length);
 };
 
-const executableRunCommands = (workflow: string): string[] =>
-  [...workflow.matchAll(/^\s+(?:-\s*)?run:\s*(.+)$/gm)].map((match) => match[1].trim());
+const executableRunCommands = (workflow: string): string[] => {
+  const lines = workflow.split('\n');
+  const commands: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s*)(?:-\s*)?run:\s*(.*?)\s*$/.exec(lines[index]);
+    if (match === null) continue;
+
+    const [, indentation, value] = match;
+    if (!value.startsWith('|') && !value.startsWith('>')) {
+      commands.push(value);
+      continue;
+    }
+
+    const body: string[] = [];
+    for (index += 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (line.trim() === '') {
+        body.push('');
+        continue;
+      }
+      const bodyIndent = /^\s*/.exec(line)?.[0].length ?? 0;
+      if (bodyIndent <= indentation.length) {
+        index -= 1;
+        break;
+      }
+      const commandLine = line.trimStart();
+      if (!commandLine.trimStart().startsWith('#')) body.push(commandLine);
+    }
+    commands.push(body.join('\n').trim());
+  }
+
+  return commands;
+};
 
 describe('the canonical verification scripts', () => {
   it('loads a substantive script table', () => {
@@ -141,11 +181,18 @@ describe('the canonical verification scripts', () => {
   });
 
   it('keeps the compatibility alias and composites explicit and ordered', () => {
-    for (const [name, references] of Object.entries(COMPOSITES)) {
-      expect(SCRIPTS[name], name).toBe(
-        references.map((reference) => `npm run ${reference}`).join(' && '),
-      );
+    for (const [name, command] of Object.entries(COMPOSITES)) {
+      expect(SCRIPTS[name], name).toBe(command);
     }
+  });
+
+  it('preserves dash-prefixed Vitest arguments across both npm alias boundaries', () => {
+    expect(SCRIPTS.test).toMatch(/npm run verify:quick --$/);
+    expect(SCRIPTS['verify:quick']).toMatch(/npm run test:unit --$/);
+
+    // These are the pre-fix forms: npm consumes appended flags at the nested boundary.
+    expect('npm run verify:quick').not.toMatch(/ --$/);
+    expect('npm run typecheck && npm run test:unit').not.toMatch(/ --$/);
   });
 
   it('resolves every package-script graph without missing references or cycles', () => {
@@ -180,9 +227,9 @@ describe('the canonical verification scripts', () => {
       'trace:browser',
       'visual',
     ]);
-    expect(expandScript('verify:full', SCRIPTS)).not.toEqual(
-      expect.arrayContaining(['test:gl', 'trace:browser', 'visual']),
-    );
+    expect(browserLeaks(expandScript('verify:full', SCRIPTS))).toEqual([]);
+    expect(browserLeaks(['typecheck', 'visual'])).toEqual(['visual']);
+    expect(browserLeaks(['test:gl', 'audit:prod'])).toEqual(['test:gl']);
     expect(COMMAND_REFERENCE).toMatch(/`verify:full` is the complete core, non-browser merge gate/);
   });
 
@@ -199,6 +246,7 @@ describe('the canonical verification scripts', () => {
       expect(COMMAND_REFERENCE, name).toContain(`npm run ${name}`);
     }
     expect(COMMAND_REFERENCE).toContain('Typical warm local runtime');
+    expect(COMMAND_REFERENCE).toMatch(/Run `verify:full` against the clean candidate commit/);
   });
 
   it('proves the graph guard detects its duplicate, missing-reference, and cycle failures', () => {
@@ -338,28 +386,69 @@ describe('canonical verification commands in workflows', () => {
     }
   });
 
-  it('does not duplicate atomic tool commands in executable CI or Pages run lines', () => {
-    const commands = [...executableRunCommands(CI), ...executableRunCommands(PAGES)];
+  it('does not duplicate atomic tool commands in executable workflow run bodies', () => {
+    expect(CI).not.toContain(DIRECT_BEACON_COMMAND);
+    expect(PAGES).not.toContain(DIRECT_BEACON_COMMAND);
+    expect(ENGINES.split(DIRECT_BEACON_COMMAND)).toHaveLength(2);
+
+    const commands = [
+      ...executableRunCommands(CI),
+      ...executableRunCommands(PAGES),
+      ...executableRunCommands(ENGINES),
+    ].map((command) => command.replace(DIRECT_BEACON_COMMAND, ''));
     for (const forbidden of [
       'npx tsc --noEmit',
       'npx vitest run',
       'npx vite build',
       'node tools/gl/run.mjs',
       'node tools/baseline/run.mjs',
+      'node tools/baseline/safari.mjs',
       'node tools/visual/verify.mjs',
       'npm audit --omit=dev --audit-level=high',
     ]) {
-      expect(commands, forbidden).not.toContain(forbidden);
+      expect(commands.some((command) => command.includes(forbidden)), forbidden).toBe(false);
     }
+
+    expect(namedStep(ENGINES, 'Run the golden trace + angle probe (Safari)')).toContain(
+      'run: npm run trace:safari 2>&1 | tee trace-safari.log',
+    );
   });
 
-  it('proves the executable-line extractor ignores comments and catches a raw command', () => {
+  it('proves the run extractor catches composite, flagged, and block-scalar raw commands', () => {
     const knownBad = [
       '# run: npm run typecheck',
       'steps:',
-      '  - run: npx tsc --noEmit',
+      '  - run: npx tsc --noEmit && npx vitest run --reporter=dot',
+      '  - run: |',
+      '      # npx vite build in a shell comment is not executable',
+      '      npm ci',
+      '      npx vite build --debug',
     ].join('\n');
-    expect(executableRunCommands(knownBad)).toEqual(['npx tsc --noEmit']);
+    const commands = executableRunCommands(knownBad);
+    expect(commands).toEqual([
+      'npx tsc --noEmit && npx vitest run --reporter=dot',
+      'npm ci\nnpx vite build --debug',
+    ]);
+    expect(commands.some((command) => command.includes('npx tsc --noEmit'))).toBe(true);
+    expect(commands.some((command) => command.includes('npx vitest run'))).toBe(true);
+    expect(commands.some((command) => command.includes('npx vite build'))).toBe(true);
+  });
+
+  it('keeps job blocks bounded when the following job key has a comment', () => {
+    const knownBad = [
+      'jobs:',
+      '  verify:',
+      '    steps:',
+      '      - name: Verify only',
+      '        run: npm run typecheck',
+      '  visual: # independent required job',
+      '    steps:',
+      '      - name: Visual only',
+      '        run: npm run visual',
+    ].join('\n');
+    expect(jobBlock(knownBad, 'verify')).toContain('Verify only');
+    expect(jobBlock(knownBad, 'verify')).not.toContain('Visual only');
+    expect(jobBlock(knownBad, 'visual')).toContain('Visual only');
   });
 });
 
@@ -443,7 +532,9 @@ describe('the Engines Matrix iOS Simulator beacon', () => {
 
   it('gives beacon-mode Vite startup and the Mobile Safari report real headroom', () => {
     const step = namedStep(ENGINES, 'Open the beacon URL in the Simulator and wait for its report');
-    expect(step).toContain('run.mjs --beacon --timeout 300000');
+    // This stays direct: the cleanup trap must own run.mjs's PID and its Vite child,
+    // rather than an npm wrapper process that can orphan the actual runner on failure.
+    expect(step).toContain(DIRECT_BEACON_COMMAND);
     expect(BASELINE_RUN).toContain('waitForVite(BASE, vite, { timeoutMs: 90_000 })');
   });
 

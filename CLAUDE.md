@@ -18,7 +18,7 @@ layer. Specifications, plans, and deferred work live under `docs/superpowers/`.
 ```sh
 npm run verify:quick  # typecheck + unit tests; `npm test` is an alias
 npm run verify:build  # production build + subpath-portability check
-npm run verify:full   # quick + mutation + build + production audit; no browser
+npm run verify:full   # clean candidate tree: quick + mutation + build + audit; no browser
 npm run dev           # Vite development server
 ```
 
@@ -71,9 +71,9 @@ Command behavior and CI/deployment details are in
   tooling: run `npm run verify:quick`, add `npm run verify:build` if production output can
   change, and review the affected subsystem.
 - High risk covers simulation, persistence/campaign compatibility, renderer/WebGL
-  infrastructure, CI/release behavior, and cross-cutting contracts: run
-  `npm run verify:full` plus applicable subsystem checks, and adversarially review
-  invariants and failure modes.
+  infrastructure, CI/release behavior, and cross-cutting contracts: from a clean candidate
+  worktree, run `npm run verify:full` plus applicable subsystem checks, and adversarially
+  review invariants and failure modes.
 - User-visible visual changes require visual evidence. Build/deploy, entry-point, PWA, and
   asset-path changes require a built-output portability check.
 - Delegate only a concrete, bounded, independent investigation whose isolation or parallelism
