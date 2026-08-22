@@ -48,7 +48,7 @@ import {
   type DevConsole,
   type DevConsoleTarget,
 } from './loop';
-import type { VersusConfig } from './versus-config';
+import { versusMapChoices, type VersusConfig } from './versus-config';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import { decodeTick, replayTrace, checkTrace } from './replay';
@@ -5461,6 +5461,75 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // present -- exactly what a later task's setup-pane prefill would read.
       expect(result.initialVersusConfig).toBe(CONFIG);
       expect(result.requestVersusSession).toBe(noop);
+    });
+  });
+
+  describe('issue #278: the VS floor/camera are sized to the rolled arena, not the largest candidate', () => {
+    // players:3, all 5 shipped arenas offerable (versus-config.test.ts) -- pinned wallMs
+    // values, not swept at runtime, matched to the SAME measured deriveSeed/pickVersusArena
+    // table versus-config.test.ts's own "distributes" case pins: deriveSeed is a no-op
+    // for inputs under 512 (`wallMs ^ (wallMs >>> 9)` clears no bits), so wallMs 1/6 here
+    // resolve through pickVersusArena exactly like seeds 1/6 do there.
+    const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+
+    it("random resolves to a member of versusMapChoices(players), and levels.bounds matches THAT arena exactly -- the defect's direct oracle", () => {
+      // wallMs 6 -> arena-03 (cols 33, the 22x18 class) -- deliberately NOT wallMs 1
+      // (-> arena-04, the 30x22 "largest candidate" class the pre-#278 bounds() always
+      // returned for 'random' regardless of what was actually rolled): a seed that
+      // happens to land on the largest class would pass this assertion under the
+      // UNFIXED code too, and prove nothing. arena-03 is the discriminating case.
+      const deps = { ...baseDeps(), wallMs: () => 6 };
+      const result = applyVersusToDeps(deps, { config: random3 }, noop);
+      const resolvedId = result.levels.start.arenaId;
+      expect(resolvedId).toBe('arena-03');
+      expect(versusMapChoices(3)).toContain(resolvedId);
+      const arena = arenaById(resolvedId);
+      // Fails if bounds() ever falls back to a largest-candidate guess (the pre-#278
+      // behavior) instead of the actually-resolved arena's own bounds.
+      expect(result.levels.bounds(result.levels.start)).toEqual({
+        ...arenaBounds(arena),
+        cellSize: arena.cellSize,
+      });
+      // Spec ruling 4 (selections intact for rematch): the pane-facing config must
+      // still say 'random', not whatever concrete arena this session actually rolled
+      // -- fails if applyVersusToDeps ever stamps the RESOLVED config onto
+      // initialVersusConfig instead of the original `random3` reference.
+      expect(result.initialVersusConfig?.arenaId).toBe('random');
+    });
+
+    it('a rematch through Start (a fresh applyVersusToDeps call) CAN land on a different arena', () => {
+      // Two independent Start-boundary resolutions, wallMs 1 and 6 -- measured to
+      // differ (versus-config.test.ts's own "distributes" case). Proves the fix does
+      // NOT collapse 'random' into a single fixed pick across sessions.
+      const first = applyVersusToDeps({ ...baseDeps(), wallMs: () => 1 }, { config: random3 }, noop);
+      const second = applyVersusToDeps({ ...baseDeps(), wallMs: () => 6 }, { config: random3 }, noop);
+      expect(first.levels.start.arenaId).toBe('arena-04');
+      expect(second.levels.start.arenaId).toBe('arena-03');
+      expect(first.levels.bounds(first.levels.start)).not.toEqual(second.levels.bounds(second.levels.start));
+    });
+
+    it('quit/match-end inside ONE session cannot re-roll the arena: world() ignores its own seed once resolved', () => {
+      // The unit-level half of acceptance criterion 3 ("Quit/match-end cannot
+      // silently re-roll"): `landOnCampaignBoard` (loop.ts) rebuilds the world on
+      // Quit/game-over/completion via `switchTo(deps.levels.start, lives)` ->
+      // `buildWorld` -> `deps.levels.world(level, nextSeed())`, a FRESH seed every
+      // time (loop.test.ts's own "starts a fresh attempt tally at boot and on every
+      // level switch" pins that this chain really runs a rebuild on quit, for a
+      // campaign session). This does not click through that full chain (see this
+      // describe block's own note below) -- it proves the narrower, load-bearing half
+      // directly: ONE resolved session's `levels.world()` must return the SAME arena
+      // no matter what seed a later rebuild call passes it, which is exactly what
+      // makes a Quit-triggered `nextSeed()` harmless.
+      const result = applyVersusToDeps({ ...baseDeps(), wallMs: () => 6 }, { config: random3 }, noop);
+      const initial = result.levels.world(result.levels.start, 6, undefined, 3);
+      // Seed 1 is `pickVersusArena`'s own 'arena-04' pick (versus-config.test.ts) --
+      // under the pre-#278 code, world() re-resolved 'random' from THIS seed on every
+      // call, so a quit rebuild landing on seed 1 would have silently swapped the
+      // arena from arena-03 to arena-04. Fails (build throws or returns arena-04) if
+      // world() ever goes back to reading `config.arenaId === 'random'` per call.
+      const quitRebuilt = result.levels.world(result.levels.start, 1, undefined, 3);
+      expect(initial.arenaGeometry?.cols).toBe(33); // arena-03
+      expect(quitRebuilt.arenaGeometry?.cols).toBe(33); // still arena-03, not arena-04
     });
   });
 });

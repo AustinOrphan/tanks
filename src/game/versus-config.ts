@@ -21,9 +21,21 @@ import { mulberry32 } from '../sim/ai/player-profile';
 export interface VersusConfig {
   mode: 'ffa' | 'teams';
   players: 2 | 3 | 4;
-  /** A shipped arena id, or `'random'` -- resolved per match BUILD (see
-   *  `pickVersusArena`), not once per pane session. A rematch with the same
-   *  `VersusConfig` object can therefore land on a different board. */
+  /**
+   * A shipped arena id, or `'random'`. `'random'` is resolved to a concrete id
+   * exactly ONCE per session, at the Start boundary (`applyVersusToDeps`'s call to
+   * `resolveVersusConfig`, loop.ts) -- not once per pane session (the pane's own
+   * `versusConfigState`, hud.ts, keeps `'random'` selected across a whole run of
+   * rematches) and not once per `world()`/`bounds()` call (the historical bug this
+   * field's `'random'` handling used to invite -- issue #278). A rematch THROUGH
+   * Start re-resolves fresh, from that Start's own seed, and can land on a
+   * different board; quitting or a match ending mid-session cannot, because the
+   * running session's own `LevelSystem` (levels.ts) is built from the
+   * already-resolved id and never reads `'random'` again for the rest of that
+   * session's life. See `resolveVersusConfig`'s own doc comment for the resolver,
+   * and `GameDeps.initialVersusConfig` (loop.ts) for why the UNRESOLVED config
+   * (the one still carrying `'random'`) is what the pane reopens with.
+   */
   arenaId: string | 'random';
   /** 1..5; the setup pane's own default is `VERSUS_STOCK` (constants.ts). Not
    *  re-defaulted here -- an omitted field is a caller bug, not this module's to paper
@@ -37,20 +49,21 @@ export interface VersusConfig {
 
 // Measured (vite-node, this tree): one `versusBoardCatalog()` call -- 15 `loadArena`
 // calls plus their pairwise `lineOfSight` sweeps -- costs ~240-370ms. `versus-board.ts`'s
-// own module doc states nothing in the shipped path calls it; `createVersusLevelSystem`
-// (levels.ts) is the first shipped caller, and it reaches `versusMapChoices` with no
-// `rows` override from THREE places per match build (`pickVersusArena` inside `world()`,
-// the 'random' branch of `bounds()`, and once at construction for the synthetic level's
-// placeholder id) -- so an unmemoized default would re-run the full 15-row sweep 3+
-// times before the first frame of every 'random' versus match, and twice more on every
-// retry (loop.ts's `switchTo` re-checks `bounds()`). Memoized lazily -- computed on the
-// FIRST call that omits `rows`, cached for the life of the module -- rather than at
-// module load (a top-level `versusBoardCatalog()` call here would tax every CAMPAIGN
-// boot too, since loop.ts -> levels.ts imports this module regardless of mode; a
-// campaign session never calls `versusMapChoices`/`pickVersusArena` at all, so it must
-// never pay this cost). Safe to cache: `ARENA_DEFS` is validated, static data loaded
-// once at import (config/arenas.ts) and never mutated, so the catalog is a pure
-// function of unchanging input for the process's whole lifetime.
+// own module doc states nothing in the shipped path calls it; the shipped callers are
+// this module's own `versusMapChoices` (hud.ts's map-picker row reads it directly, on
+// every pane render) and `pickVersusArena` (read exactly ONCE per session, by
+// `resolveVersusConfig` below -- see its own doc comment). `createVersusLevelSystem`'s
+// `world()`/`bounds()` (levels.ts) do NOT call either any more (issue #278 fixed this:
+// both now require an already-resolved id and never touch `'random'` in the shipped
+// path), so a 'random' versus match no longer re-runs this sweep on every build or
+// retry the way it once did. Memoized lazily -- computed on the FIRST call that omits
+// `rows`, cached for the life of the module -- rather than at module load (a top-level
+// `versusBoardCatalog()` call here would tax every CAMPAIGN boot too, since loop.ts ->
+// levels.ts imports this module regardless of mode; a campaign session never calls
+// `versusMapChoices`/`pickVersusArena` at all, so it must never pay this cost). Safe to
+// cache: `ARENA_DEFS` is validated, static data loaded once at import (config/arenas.ts)
+// and never mutated, so the catalog is a pure function of unchanging input for the
+// process's whole lifetime.
 let cachedDefaultRows: VersusBoardCatalogRow[] | null = null;
 function defaultCatalogRows(): VersusBoardCatalogRow[] {
   if (cachedDefaultRows === null) cachedDefaultRows = versusBoardCatalog();
@@ -87,14 +100,20 @@ export function versusMapChoices(
  * passes straight through unchanged (untouched by `players`/`seed` -- a deliberate
  * choice picked by name is never second-guessed). `'random'` draws deterministically
  * from `versusMapChoices(config.players)` using `mulberry32(seed)`'s first value: same
- * seed, same pick, forever -- no `Math.random`, so a recorded replay's own seed
- * reproduces the exact board a `'random'` match was played on, with no extra stored
- * field (the same argument `createWorldFor`'s doc comment makes for reusing `seed`
- * itself as the versus-variant picker).
+ * seed, same pick, forever -- no `Math.random`. Since issue #278 the seed handed in is
+ * the START-BOUNDARY resolution seed (see `resolveVersusConfig`'s caller in loop.ts),
+ * which in general is NOT the world's own `trace.meta.seed` -- a recorded replay does
+ * not re-derive a `'random'` board from its seed; it reads the concrete
+ * `ReplayMeta.arenaId` stamped from the resolved config. Do not "restore" the old
+ * property by calling this per world() build with the world seed: that per-call,
+ * seed-blind resolution is exactly the #278 coupling the single-call contract removed.
  *
- * Deliberately called ONCE PER MATCH BUILD (from the seed `LevelSystem.world` is
- * handed), not once per pane session -- see `createVersusLevelSystem` (levels.ts) for
- * the call site and its own doc comment on the consequence for `bounds()`.
+ * A pure function of `(config, seed)` with no opinion on how often it is called --
+ * `resolveVersusConfig` below is the one shipped caller (issue #278: exactly ONCE per
+ * session, at Start), and `createVersusLevelSystem`'s `world()`/`bounds()` (levels.ts)
+ * do NOT call this any more, having already been handed a resolved config. Direct
+ * callers (this module's own tests) can still call it per-seed to characterize the
+ * distribution itself.
  */
 export function pickVersusArena(config: VersusConfig, seed: number): string {
   if (config.arenaId !== 'random') return config.arenaId;
@@ -102,4 +121,25 @@ export function pickVersusArena(config: VersusConfig, seed: number): string {
   const rnd = mulberry32(seed);
   const idx = Math.min(Math.floor(rnd() * choices.length), choices.length - 1);
   return choices[idx];
+}
+
+/**
+ * The Start-boundary fix for issue #278: resolves `config.arenaId` to a concrete id
+ * ONCE, up front, rather than leaving `'random'` in the `VersusConfig` a `LevelSystem`
+ * is built from. A concrete `config` passes through BY IDENTITY (not a copy) --
+ * `applyVersusToDeps`'s own H1/H2 tests (loop.test.ts) rely on this to prove a
+ * concrete-arena session is untouched by this call. For `'random'`, returns a NEW
+ * `VersusConfig` (a shallow copy with `arenaId` replaced) via `pickVersusArena(config,
+ * seed)` -- the SAME resolver `'random'` always went through, just called once instead
+ * of once per `world()`/`bounds()` call.
+ *
+ * The ORIGINAL `config` (still carrying `'random'`) is never this function's business
+ * to discard: its one caller, `applyVersusToDeps` (loop.ts), keeps a reference to it
+ * for `GameDeps.initialVersusConfig` -- see that field's own doc comment for why the
+ * setup pane must reopen showing `'random'` selected, not whatever concrete arena this
+ * session actually rolled.
+ */
+export function resolveVersusConfig(config: VersusConfig, seed: number): VersusConfig {
+  if (config.arenaId !== 'random') return config;
+  return { ...config, arenaId: pickVersusArena(config, seed) };
 }

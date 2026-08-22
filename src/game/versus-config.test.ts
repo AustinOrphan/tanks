@@ -2,7 +2,7 @@
 // Both are consumed by createVersusLevelSystem (levels.test.ts), but are pure and
 // node-testable on their own -- no World, no RunStore.
 import { describe, it, expect } from 'vitest';
-import { versusMapChoices, pickVersusArena, type VersusConfig } from './versus-config';
+import { versusMapChoices, pickVersusArena, resolveVersusConfig, type VersusConfig } from './versus-config';
 import { versusBoardCatalog } from '../sim/versus-board';
 import type { Arena } from '../sim/arena';
 import type { WallKind } from '../sim/types';
@@ -70,5 +70,50 @@ describe('pickVersusArena', () => {
     // choices[0]) or stops reading `seed`.
     expect(pickVersusArena(base, 1)).toBe('arena-04');
     expect(pickVersusArena(base, 6)).toBe('arena-03');
+  });
+});
+
+describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => {
+  const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+
+  it('a concrete config passes through BY IDENTITY, not a copy', () => {
+    // `toBe`, not `toEqual`: `applyVersusToDeps` (loop.ts) relies on this exact
+    // identity to keep a concrete-arena session's `levels` built from the SAME config
+    // object the pane produced. Fails if this always spreads (`{ ...config }`)
+    // instead of returning `config` unchanged for a non-'random' id.
+    const concrete: VersusConfig = { ...random3, arenaId: 'arena-02' };
+    expect(resolveVersusConfig(concrete, 1)).toBe(concrete);
+  });
+
+  it("'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument", () => {
+    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 6 ->
+    // 'arena-03' at players:3. Two seeds, not one: a single-seed assertion here would
+    // not catch a mutation that hardcodes the seed it forwards to `pickVersusArena`
+    // (e.g. always `pickVersusArena(config, 1)`) -- this negative control was found
+    // empirically while mutating this function for issue #278's PR (a seed-1-only
+    // version of this test stayed green under exactly that mutation).
+    expect(resolveVersusConfig(random3, 1).arenaId).toBe('arena-04');
+    expect(resolveVersusConfig(random3, 6).arenaId).toBe('arena-03');
+  });
+
+  it("'random' resolution preserves every other field unchanged", () => {
+    // Fails if resolution drops or mutates mode/players/stock/friendlyFire while
+    // replacing arenaId (e.g. spreads from a fresh default object instead of `config`).
+    const cfg: VersusConfig = { mode: 'teams', players: 4, arenaId: 'random', stock: 5, friendlyFire: true };
+    const resolved = resolveVersusConfig(cfg, 1);
+    expect(resolved.mode).toBe('teams');
+    expect(resolved.players).toBe(4);
+    expect(resolved.stock).toBe(5);
+    expect(resolved.friendlyFire).toBe(true);
+  });
+
+  it('does not mutate the original config object', () => {
+    // Fails if resolution writes `config.arenaId = ...` in place instead of
+    // returning a new object -- which would corrupt the pane's own retained
+    // selection (hud.ts's versusConfigState) if it were ever handed the same
+    // reference resolveVersusConfig reads from.
+    const original: VersusConfig = { ...random3 };
+    resolveVersusConfig(random3, 1);
+    expect(random3).toEqual(original);
   });
 });
