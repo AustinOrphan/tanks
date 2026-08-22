@@ -9,8 +9,9 @@ import {
   type CampaignLevel,
 } from '../sim/arena';
 import { createSandboxWorld } from '../sim/sandbox';
-import type { DevFlags } from './devflags';
+import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import type { RunStore } from './run';
+import { pickVersusArena, versusMapChoices, type VersusConfig } from './versus-config';
 
 /**
  * The one object that knows how many levels exist, where a session starts, and how to
@@ -158,5 +159,120 @@ export function createLevelSystem(
       ...arenaBounds(arenaById(level.arenaId)),
       cellSize: arenaById(level.arenaId).cellSize,
     }),
+  };
+}
+
+/**
+ * A `LevelSystem` for one versus match: a single synthetic level (never a member of
+ * `CAMPAIGN_LEVELS`, same posture as `createLevelSystem`'s own sandbox branch above),
+ * built from a `VersusConfig` rather than dev flags. `tracksProgress`/`isDevJump` are
+ * both `false` -- a versus session is exactly as far outside campaign-run bookkeeping
+ * as the sandbox, and by the same CLAUDE.md rule ("Practice/level-select state must
+ * not create or mutate a campaign run"): this function never calls a single method on
+ * `run`. It is accepted anyway (unread, hence the `_` prefix -- same treatment
+ * `createLevelSystem`'s own sandbox `world` gives its unused `_level`) purely so
+ * `createVersusLevelSystem(config, run)` has the identical two-argument shape
+ * `createLevelSystem(flags, run)` already has; the versus-setup-menu plan's boot
+ * wiring (`versusAwareDeps`, a later task) picks between the two LevelSystem builders
+ * uniformly rather than special-casing arity. `versus-config.test.ts`'s "never reads
+ * or writes the run it is handed" case is the negative control that would catch an
+ * accidental future call creeping in here.
+ *
+ * `flags` is a trailing, DEFAULTED third parameter -- not in the versus-setup-menu
+ * plan's own "Produces" signature, but Step 3's own implementation instructions call
+ * for the exact `corpseBlock`/`muzzleInside` dev-flag sourcing `createLevelSystem`'s
+ * campaign branch already does (so `?dev=1&corpseBlock=1` keeps working during a
+ * versus playtest session, orthogonal to `VersusConfig`, which has no field for
+ * either). Defaulting to `DEV_FLAGS_OFF` keeps the plan's literal 2-arg call sites
+ * (`createVersusLevelSystem(config, run)`) compiling unchanged, on the shipped
+ * defaults (`corpseBlocksShells` false, `muzzleClearsTanks` true -- `createWorld`'s
+ * own defaults, see the campaign branch's identical comment above) -- so a caller that
+ * does not thread real dev flags through (as today's brief's own Task 2 tests do not)
+ * gets exactly what an undecorated versus match should.
+ */
+export function createVersusLevelSystem(
+  config: VersusConfig,
+  _run: RunStore,
+  flags: DevFlags = DEV_FLAGS_OFF,
+): LevelSystem {
+  // A stable, decorative arena id for the synthetic level's own `arenaId` field --
+  // read by loop.ts (replayMetaFor) and nothing this task's tests exercise, but
+  // `arenaById` THROWS on an unresolvable id, and `'random'` is not a real arena --
+  // see this module's `createLevelSystem` sandbox branch, which stamps a real
+  // `arenaId` on its own synthetic level for the identical reason. For a concrete
+  // config this is just `config.arenaId`; for `'random'` it is `versusMapChoices`'s
+  // first offerable id at this player count -- NEVER read by `world()` below, which
+  // re-resolves `'random'` fresh, per call, from the real match seed (see
+  // `pickVersusArena`'s own doc comment) -- so this placeholder cannot drift the
+  // actually-built board, only the label loop.ts stamps into replay metadata for a
+  // 'random' config (a residual named in this task's own report, not fixed here: no
+  // consumer in this tree reads that label back to reconstruct a board).
+  const placeholderArenaId =
+    config.arenaId !== 'random' ? config.arenaId : versusMapChoices(config.players)[0];
+  const versusLevel: CampaignLevel = { id: 'versus', arenaId: placeholderArenaId };
+
+  return {
+    levels: [versusLevel],
+    start: versusLevel,
+    // Neither campaign progress nor a dev-flag jump -- see this function's own doc
+    // comment above.
+    tracksProgress: false,
+    isDevJump: false,
+    world: (_level, seed, unarmedTrigger, lives) =>
+      createWorldFor(
+        // Resolved HERE, from the seed THIS call was handed -- not from
+        // `placeholderArenaId` above and not once per `LevelSystem` -- so a rematch
+        // (a fresh seed, same `VersusConfig` object) can re-roll a `'random'` pick.
+        // See `bounds` below for the one place this per-call resolution cannot be
+        // mirrored, and this task's own report for the named consequence.
+        arenaById(pickVersusArena(config, seed)), seed, unarmedTrigger, lives,
+        flags.corpseBlock, !flags.muzzleInside,
+        // `config.players`, not the positional `playerCount` this method's own
+        // interface accepts -- a versus session's player count is authoritative from
+        // its OWN config, closed over here, the same treatment `createLevelSystem`'s
+        // campaign branch gives `flags.mode`/`flags.friendlyFire` above rather than
+        // trusting a call-site argument that (today) always agrees with it anyway.
+        config.players, undefined, config.mode, config.friendlyFire, config.stock,
+      ),
+    /**
+     * DOCUMENTED COUPLING (the versus-setup-menu plan flags this by name): `bounds`
+     * takes no `seed`, but for `arenaId: 'random'` the actual board `world()` builds
+     * above is a function of the seed IT receives -- one `bounds` never sees. Read
+     * concretely off loop.ts: `startGameWith` calls `deps.levels.bounds(deps.levels
+     * .start)` at BOOT, before `nextSeed()` (its `deriveSeed(wallMs())`/dev-flag-seed
+     * source) is ever invoked for the first `buildWorld` -- so there is no seed here
+     * to resolve 'random' WITH, in general, not merely as an implementation gap.
+     *
+     * For a concrete `config.arenaId` this is exact: that arena's own bounds, same as
+     * the campaign branch above. For `'random'`, this returns the LARGEST bounds
+     * among `versusMapChoices(config.players)`'s own candidates (today, at every N in
+     * 2..4: arena-04/05, 30x22 world units, dominating arena-01/02/03's 22x18 in BOTH
+     * dimensions under the shared cellSize -- so "largest" is one real candidate
+     * arena's own {width,height,cellSize} triple, never a synthesized box mixing
+     * dimensions from two different arenas). Consequence, named plainly rather than
+     * assumed to self-correct: `switchTo` (loop.ts) re-checks `bounds(level)` on
+     * every retry/advance/quit and refits the renderer on a mismatch -- but it calls
+     * this SAME seed-blind function again, so if the actual resolved arena is ever
+     * the smaller class, the mismatch never resolves for the rest of that match
+     * (every subsequent call returns the identical largest-candidate answer). The
+     * board itself is never clipped -- the tradeoff is a possibly-oversized ground
+     * plane with empty margin outside the boundary walls, not a board rendered too
+     * small to see. See this task's report for the measured candidate set.
+     */
+    bounds: (level) => {
+      if (config.arenaId !== 'random') {
+        const arena = arenaById(config.arenaId);
+        return { ...arenaBounds(arena), cellSize: arena.cellSize };
+      }
+      const candidates = versusMapChoices(config.players).map((id) => arenaById(id));
+      const area = (a: ReturnType<typeof arenaById>) => arenaBounds(a).width * arenaBounds(a).height;
+      // Falls back to `level`'s own placeholder arena if the catalog somehow offered
+      // nothing at this player count (guards `reduce` on an empty array; not reached
+      // by any shipped arena/playerCount combination -- versusMapChoices's own
+      // non-empty invariant, see versus-config.test.ts).
+      const fallback = arenaById(level.arenaId);
+      const largest = candidates.reduce((best, a) => (area(a) > area(best) ? a : best), candidates[0] ?? fallback);
+      return { ...arenaBounds(largest), cellSize: largest.cellSize };
+    },
   };
 }
