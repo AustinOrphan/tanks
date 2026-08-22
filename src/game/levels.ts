@@ -11,7 +11,7 @@ import {
 import { createSandboxWorld } from '../sim/sandbox';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import type { RunStore } from './run';
-import { pickVersusArena, versusMapChoices, type VersusConfig } from './versus-config';
+import type { VersusConfig } from './versus-config';
 
 /**
  * The one object that knows how many levels exist, where a session starts, and how to
@@ -189,27 +189,36 @@ export function createLevelSystem(
  * own defaults, see the campaign branch's identical comment above) -- so a caller that
  * does not thread real dev flags through (as today's brief's own Task 2 tests do not)
  * gets exactly what an undecorated versus match should.
+ *
+ * REQUIRES a resolved `config.arenaId` (issue #278): the one shipped caller
+ * (`applyVersusToDeps`, loop.ts) resolves `'random'` to a concrete id exactly once,
+ * before ever constructing this `LevelSystem` (`resolveVersusConfig`,
+ * versus-config.ts), which is what lets `bounds()`/`world()`/the replay-meta arena id
+ * below all read `config.arenaId` directly and agree with each other for this
+ * session's whole life. `'random'` was previously handled HERE, per call, on all three
+ * -- the exact seed-blind coupling issue #278 is named for (`bounds` has no seed to
+ * resolve `'random'` with, so it fell back to guessing the largest candidate, which
+ * could disagree with whatever `world()` actually built). That defensive handling is
+ * deliberately NOT kept: a `config.arenaId` that is still `'random'` here is a caller
+ * bug, not a case to paper over, and `arenaById` (below, all three sites) already
+ * throws a clear `Unknown arena id: random` for it -- fail loud, so a future change
+ * that drops the Start-boundary resolution breaks LOUDLY here, in the constructor,
+ * rather than reintroducing #278's silent mismatch. See `versus-config.test.ts`'s and
+ * this file's own tests for the throw as the documented, deliberate contract.
  */
 export function createVersusLevelSystem(
   config: VersusConfig,
   _run: RunStore,
   flags: DevFlags = DEV_FLAGS_OFF,
 ): LevelSystem {
-  // A stable, decorative arena id for the synthetic level's own `arenaId` field --
-  // read by loop.ts (replayMetaFor) and nothing this task's tests exercise, but
-  // `arenaById` THROWS on an unresolvable id, and `'random'` is not a real arena --
-  // see this module's `createLevelSystem` sandbox branch, which stamps a real
-  // `arenaId` on its own synthetic level for the identical reason. For a concrete
-  // config this is just `config.arenaId`; for `'random'` it is `versusMapChoices`'s
-  // first offerable id at this player count -- NEVER read by `world()` below, which
-  // re-resolves `'random'` fresh, per call, from the real match seed (see
-  // `pickVersusArena`'s own doc comment) -- so this placeholder cannot drift the
-  // actually-built board, only the label loop.ts stamps into replay metadata for a
-  // 'random' config (a residual named in this task's own report, not fixed here: no
-  // consumer in this tree reads that label back to reconstruct a board).
-  const placeholderArenaId =
-    config.arenaId !== 'random' ? config.arenaId : versusMapChoices(config.players)[0];
-  const versusLevel: CampaignLevel = { id: 'versus', arenaId: placeholderArenaId };
+  // The synthetic level's own `arenaId` -- read by loop.ts's `replayMetaFor` for
+  // replay metadata, and now (issue #278) always the SAME id `world()` below actually
+  // builds on, since `config.arenaId` is required to already be concrete. Previously
+  // this was a placeholder ("first offerable choice at this player count") for
+  // `'random'`, which could disagree with the real per-call pick `world()` made --
+  // that mismatch is fixed as a byproduct of requiring resolution up front, not
+  // separately patched here.
+  const versusLevel: CampaignLevel = { id: 'versus', arenaId: config.arenaId };
 
   return {
     levels: [versusLevel],
@@ -220,12 +229,12 @@ export function createVersusLevelSystem(
     isDevJump: false,
     world: (_level, seed, unarmedTrigger, lives) =>
       createWorldFor(
-        // Resolved HERE, from the seed THIS call was handed -- not from
-        // `placeholderArenaId` above and not once per `LevelSystem` -- so a rematch
-        // (a fresh seed, same `VersusConfig` object) can re-roll a `'random'` pick.
-        // See `bounds` below for the one place this per-call resolution cannot be
-        // mirrored, and this task's own report for the named consequence.
-        arenaById(pickVersusArena(config, seed)), seed, unarmedTrigger, lives,
+        // `config.arenaId` directly -- no `pickVersusArena` call, and so no seed
+        // dependence: this function's own doc comment above is the fail-loud contract
+        // that makes that safe. `arenaById` throws if `config.arenaId` is still
+        // `'random'` (a caller bug), rather than silently re-rolling per call the way
+        // the pre-#278 code did.
+        arenaById(config.arenaId), seed, unarmedTrigger, lives,
         flags.corpseBlock, !flags.muzzleInside,
         // `config.players`, not the positional `playerCount` this method's own
         // interface accepts -- a versus session's player count is authoritative from
@@ -234,45 +243,13 @@ export function createVersusLevelSystem(
         // trusting a call-site argument that (today) always agrees with it anyway.
         config.players, undefined, config.mode, config.friendlyFire, config.stock,
       ),
-    /**
-     * DOCUMENTED COUPLING (the versus-setup-menu plan flags this by name): `bounds`
-     * takes no `seed`, but for `arenaId: 'random'` the actual board `world()` builds
-     * above is a function of the seed IT receives -- one `bounds` never sees. Read
-     * concretely off loop.ts: `startGameWith` calls `deps.levels.bounds(deps.levels
-     * .start)` at BOOT, before `nextSeed()` (its `deriveSeed(wallMs())`/dev-flag-seed
-     * source) is ever invoked for the first `buildWorld` -- so there is no seed here
-     * to resolve 'random' WITH, in general, not merely as an implementation gap.
-     *
-     * For a concrete `config.arenaId` this is exact: that arena's own bounds, same as
-     * the campaign branch above. For `'random'`, this returns the LARGEST bounds
-     * among `versusMapChoices(config.players)`'s own candidates (today, at every N in
-     * 2..4: arena-04/05, 30x22 world units, dominating arena-01/02/03's 22x18 in BOTH
-     * dimensions under the shared cellSize -- so "largest" is one real candidate
-     * arena's own {width,height,cellSize} triple, never a synthesized box mixing
-     * dimensions from two different arenas). Consequence, named plainly rather than
-     * assumed to self-correct: `switchTo` (loop.ts) re-checks `bounds(level)` on
-     * every retry/advance/quit and refits the renderer on a mismatch -- but it calls
-     * this SAME seed-blind function again, so if the actual resolved arena is ever
-     * the smaller class, the mismatch never resolves for the rest of that match
-     * (every subsequent call returns the identical largest-candidate answer). The
-     * board itself is never clipped -- the tradeoff is a possibly-oversized ground
-     * plane with empty margin outside the boundary walls, not a board rendered too
-     * small to see. See this task's report for the measured candidate set.
-     */
-    bounds: (level) => {
-      if (config.arenaId !== 'random') {
-        const arena = arenaById(config.arenaId);
-        return { ...arenaBounds(arena), cellSize: arena.cellSize };
-      }
-      const candidates = versusMapChoices(config.players).map((id) => arenaById(id));
-      const area = (a: ReturnType<typeof arenaById>) => arenaBounds(a).width * arenaBounds(a).height;
-      // Falls back to `level`'s own placeholder arena if the catalog somehow offered
-      // nothing at this player count (guards `reduce` on an empty array; not reached
-      // by any shipped arena/playerCount combination -- versusMapChoices's own
-      // non-empty invariant, see versus-config.test.ts).
-      const fallback = arenaById(level.arenaId);
-      const largest = candidates.reduce((best, a) => (area(a) > area(best) ? a : best), candidates[0] ?? fallback);
-      return { ...arenaBounds(largest), cellSize: largest.cellSize };
+    // That arena's own bounds -- same shape as the campaign branch above. Requires a
+    // resolved `config.arenaId` for the same reason `world()` above does; see this
+    // function's own doc comment for why the pre-#278 seed-blind "largest candidate"
+    // fallback for `'random'` was removed rather than kept as a silent default.
+    bounds: (_level) => {
+      const arena = arenaById(config.arenaId);
+      return { ...arenaBounds(arena), cellSize: arena.cellSize };
     },
   };
 }

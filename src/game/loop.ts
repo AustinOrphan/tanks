@@ -10,7 +10,7 @@ import {
 } from '../sim/ai/player-profile';
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
-import type { VersusConfig } from './versus-config';
+import { resolveVersusConfig, type VersusConfig } from './versus-config';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
@@ -257,6 +257,16 @@ export interface GameDeps {
    * with -- so the setup pane can reopen pre-filled with the match just played
    * instead of its own defaults. `null`/absent for a fresh campaign boot, which has
    * no prior versus match to prefill from.
+   *
+   * Deliberately the UNRESOLVED config the pane handed to `requestVersusSession` --
+   * NOT the config `levels` below was actually built from. `applyVersusToDeps` resolves
+   * a `'random'` `arenaId` to a concrete one exactly once, for `levels`
+   * (`resolveVersusConfig`, versus-config.ts -- issue #278), but stamps the ORIGINAL
+   * `config` here unchanged, so a pane reopened mid-session (match end, or a future
+   * Back) still shows `'random'` selected rather than whatever concrete arena this
+   * session happened to roll. The two can therefore disagree on `arenaId` for the
+   * whole life of a 'random' session; nothing here is stale, that disagreement IS the
+   * point.
    */
   readonly initialVersusConfig?: VersusConfig | null;
 }
@@ -651,17 +661,36 @@ export function createBrowserDeps(): GameDeps {
  * A fake `GameDeps` with `devFlags.corpseBlock` set directly is the more honest fixture.
  *
  * When `versus` is present:
- * - Swaps `levels` for `createVersusLevelSystem(config, deps.run, deps.devFlags)` --
- *   the session's REAL parsed dev flags, not the `DEV_FLAGS_OFF` `createVersusLevelSystem`
- *   defaults to, so `corpseBlock`/`muzzleInside` keep working during a versus playtest
- *   (H1). Dropping this argument would silently lose that dev-flag support.
- * - Widens `devFlags` with `{ mode, players, friendlyFire }` from `config` so
+ * - Resolves `config.arenaId` to a concrete id ONCE, right here, before `levels` is
+ *   built (`resolveVersusConfig`, versus-config.ts -- issue #278's fix): a `'random'`
+ *   pick is drawn from `deps.devFlags.seed ?? deriveSeed(deps.wallMs())`, the SAME
+ *   seed-derivation formula `startGameWith`'s own `nextSeed()` uses for its first world
+ *   build (versus-setup-menu spec §2: "the seed derivation that already feeds
+ *   `nextSeed()` is the source", not `Math.random`). This session's `resolvedConfig`
+ *   is a NEW object only when a resolution actually happened -- a concrete `arenaId`
+ *   passes through by identity (`resolveVersusConfig`'s own doc comment).
+ * - Swaps `levels` for `createVersusLevelSystem(resolvedConfig, deps.run, deps.devFlags)`
+ *   -- the RESOLVED config, not the pane's own `config` -- the session's REAL parsed dev
+ *   flags, not the `DEV_FLAGS_OFF` `createVersusLevelSystem` defaults to, so
+ *   `corpseBlock`/`muzzleInside` keep working during a versus playtest (H1). Building
+ *   `levels` from a concrete `arenaId` is exactly what fixes #278: `bounds()`/`world()`
+ *   now agree for the rest of this session's life, on every quit/retry/advance
+ *   (`switchTo` in `startGameWith` re-checks `bounds()` but never re-resolves
+ *   `'random'`, because there is no `'random'` left in `resolvedConfig` to re-resolve --
+ *   this also neutralizes the re-roll-on-quit mechanism issue #261 names, though #261's
+ *   own Quit-routing defect is untouched here). Dropping the dev-flags argument would
+ *   silently lose that dev-flag support.
+ * - Widens `devFlags` with `{ mode, players, friendlyFire }` from `config` (the pane's
+ *   own, unresolved config -- these three fields are untouched by resolution) so
  *   `startGameWith`'s own `playerCount` derivation (`deps.devFlags.players`, see
  *   `startGameWith` below) AGREES with the world `createVersusLevelSystem` builds from
  *   `config.players` directly (H2) -- otherwise the two disagree and the spawned tank
  *   count does not match the config the player chose.
- * - Threads `requestVersusSession` and stamps `initialVersusConfig: config` so the
- *   setup pane (a later task) can reopen pre-filled.
+ * - Threads `requestVersusSession` and stamps `initialVersusConfig: config` -- the
+ *   ORIGINAL, UNRESOLVED config, not `resolvedConfig` -- so the setup pane reopens
+ *   pre-filled with `'random'` still selected when that is what was actually chosen
+ *   (spec ruling 4; see `initialVersusConfig`'s own doc comment for why `levels` and
+ *   this field can name different arenas for one session and that is not a bug).
  * - Threads `requestCampaignSession` (Task 5b) so the versus-kind title screen's
  *   Campaign button has a reboot seam to call -- see `GameDeps.requestCampaignSession`'s
  *   own doc comment for why this is versus-only, same as `initialVersusConfig`.
@@ -684,9 +713,10 @@ export function applyVersusToDeps(
     return { ...deps, requestVersusSession, initialVersusConfig: null };
   }
   const { config } = versus;
+  const resolvedConfig = resolveVersusConfig(config, deps.devFlags.seed ?? deriveSeed(deps.wallMs()));
   return {
     ...deps,
-    levels: createVersusLevelSystem(config, deps.run, deps.devFlags),
+    levels: createVersusLevelSystem(resolvedConfig, deps.run, deps.devFlags),
     devFlags: {
       ...deps.devFlags,
       mode: config.mode,

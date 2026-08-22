@@ -393,26 +393,21 @@ describe('createVersusLevelSystem', () => {
     expect(off.world(off.start, 1, undefined, 3).friendlyFire).toBe(false);
   });
 
-  describe('arenaId: \'random\' resolves per world() call, not once per session', () => {
-    // Measured (players: 3, all 5 shipped arenas offerable -- see versus-config.test.ts):
-    // seed 1 picks arena-04 (cols 45), seed 6 picks arena-03 (cols 33). Pinned literals,
-    // not swept at runtime -- fails if 'random' is resolved once at construction instead
-    // of fresh per `world()` call (a rematch would then be stuck on one arena forever).
+  describe('arenaId: \'random\' is a caller bug post-#278 -- world() fails loud rather than re-resolving per call', () => {
+    // Pre-#278, `world()` called `pickVersusArena(config, seed)` itself, per call --
+    // this is the exact seed-blind mechanism `bounds` (below) could never mirror. Now
+    // the ONE shipped caller (`applyVersusToDeps`, loop.ts) resolves `'random'` to a
+    // concrete id before this `LevelSystem` is even constructed (`resolveVersusConfig`,
+    // versus-config.test.ts), so a `config.arenaId` still `'random'` HERE is a
+    // contract violation this function no longer papers over.
     const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
 
-    it('two different seeds on the SAME system build different arenas', () => {
+    it('throws (arenaById\'s own "Unknown arena id" error), not a silent per-call re-roll', () => {
+      // Fails if `world()` reintroduces per-call `'random'` handling (the pre-#278
+      // behavior): that version RESOLVES here instead of throwing, so this assertion
+      // would see a World, not an error.
       const sys = createVersusLevelSystem(random3, noRun());
-      const w1 = sys.world(sys.start, 1, undefined, 3);
-      const w6 = sys.world(sys.start, 6, undefined, 3);
-      expect(w1.arenaGeometry?.cols).toBe(45); // arena-04
-      expect(w6.arenaGeometry?.cols).toBe(33); // arena-03
-      expect(w1.arenaGeometry?.grid).not.toEqual(w6.arenaGeometry?.grid);
-    });
-
-    it('the same seed always re-picks the same arena (determinism, not just "differs")', () => {
-      const sys = createVersusLevelSystem(random3, noRun());
-      expect(sys.world(sys.start, 1, undefined, 3).arenaGeometry?.cols).toBe(45);
-      expect(sys.world(sys.start, 1, undefined, 3).arenaGeometry?.cols).toBe(45);
+      expect(() => sys.world(sys.start, 1, undefined, 3)).toThrow('Unknown arena id: random');
     });
   });
 
@@ -423,18 +418,14 @@ describe('createVersusLevelSystem', () => {
       expect(sys.bounds(sys.start)).toEqual({ ...arenaBounds(arena), cellSize: arena.cellSize });
     });
 
-    it('\'random\' reports the LARGEST candidate\'s bounds -- the documented seed-blind coupling', () => {
-      // Measured: at players 2/3/4 every shipped arena is offerable (versus-config.test.ts),
-      // and arena-04/arena-05 (30x22 world units, area 660) dominate arena-01/02/03
-      // (22x18, area 396) in BOTH dimensions under the shared cellSize -- so the
-      // largest candidate is a real arena's own bounds triple, not a synthesized box.
-      // Fails if this ever returns a smaller candidate's bounds (which would clip the
-      // ground plane on a first-build 'random' pick of the larger class) or a
-      // synthesized width/height pairing that does not match any real arena's cellSize.
+    it('\'random\' throws -- the seed-blind "largest candidate" fallback (issue #278) was removed, not silenced', () => {
+      // Pre-#278 this returned the LARGEST candidate's bounds (a guess `bounds` had no
+      // seed to make correctly -- the exact defect issue #278 is named for), which
+      // could disagree with whatever `world()` actually built. Fails if that guessing
+      // fallback is reintroduced: this would see a bounds object instead of a throw.
       const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
       const sys = createVersusLevelSystem(random3, noRun());
-      const arena04 = arenaById('arena-04');
-      expect(sys.bounds(sys.start)).toEqual({ ...arenaBounds(arena04), cellSize: arena04.cellSize });
+      expect(() => sys.bounds(sys.start)).toThrow('Unknown arena id: random');
     });
   });
 
