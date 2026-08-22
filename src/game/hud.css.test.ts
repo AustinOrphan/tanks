@@ -264,6 +264,10 @@ describe('hud.css is syntactically whole', () => {
       // every panel, not just playing/paused) and its per-entry layout, the row's only
       // rule (without it the entries stack vertically like a bare <div>'s children).
       '.hud-versus-stocks', '.hud-versus-stocks--hidden', '.hud-versus-stock-entry',
+      // issue #282: the campaign Lives/Enemies stats' hidden rule -- without it, both
+      // show through on every versus-session state, not just the ones this file's own
+      // hud.test.ts happens to construct a fixture for.
+      '.hud-campaign-stat--hidden',
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
