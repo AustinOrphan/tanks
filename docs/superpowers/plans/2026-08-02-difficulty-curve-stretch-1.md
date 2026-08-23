@@ -1,4 +1,20 @@
+---
+status: superseded
+date: 2026-08-02
+last-reviewed: 2026-08-22
+scope: Historical first stretch for the superseded fixed eleven-level arena sequence
+implementation-issues: [298]
+implementation-prs: []
+supersedes: []
+superseded-by: ["docs/superpowers/specs/2026-08-22-project-direction.md"]
+---
 # Difficulty Curve, Stretch 1 — Implementation Plan
+
+> [!NOTE]
+> Superseded by [Public prototype and campaign
+> direction](../specs/2026-08-22-project-direction.md). This plan depends on the retired
+> fixed-placement decision and contains pre-upscale arena geometry; preserve it as design
+> and implementation history, not as executable current work.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -1,8 +1,21 @@
+---
+status: active
+date: 2026-08-11
+last-reviewed: 2026-08-22
+scope: Campaign, run, attempt, practice, persistence, and campaign-growth semantics
+implementation-issues: [152, 153, 154, 298]
+implementation-prs: []
+supersedes: []
+superseded-by: []
+---
 # Campaign, run, attempt, and practice model
 
 Approved 2026-08-11.
 
 This document establishes the game-state vocabulary and persistence boundaries for campaign play. It is intentionally about the **model**, not the final campaign length or final authored level list.
+
+The high-level public/commercial boundary and authority of earlier campaign documents are
+defined by [Public prototype and campaign direction](./2026-08-22-project-direction.md).
 
 ## Canonical terminology
 
@@ -199,6 +212,8 @@ Existing code or achievement wording that calls a level-sized bucket a `run` sho
 
 ## Related work
 
+- [Public prototype and campaign direction](./2026-08-22-project-direction.md) records the
+  binding public-prototype boundary and high-level campaign direction.
 - Issue #152 tracks the visible bug where lives can currently be restored by refresh/menu exit.
 - Issue #153 tracks implementing a first-class persisted campaign-run model.
 - The completed Level Select / Continue / New Game work from #135 predates this model; its UI remains useful, but Continue/New Run/Level Select behavior should follow the semantics above.

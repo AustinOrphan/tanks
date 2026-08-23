@@ -816,6 +816,13 @@ so the decision has to precede the PR rather than be discovered inside it.
 
 ## Spike: the campaign's levels — the approved arc says "renumbered", the owner says "rewritten"
 
+**Resolved 2026-08-22 by issue #298.**
+[Public prototype and campaign direction](specs/2026-08-22-project-direction.md) makes the
+eleven-level sequence a non-binding opening-teaching reference, allows current arenas to be
+revised, reordered, replaced, or reused, and establishes Public Prototype 1.0 as the
+public-repository boundary. The old spec and stretch plan remain preserved with explicit
+supersession metadata.
+
 **Raised 2026-08-10.** The prompt for this spike was "the campaign's levels need
 rewriting, and there is documentation for it somewhere". Both halves check out, and they
 disagree with each other. That disagreement is the spike.
@@ -847,13 +854,13 @@ shipped arenas are 33x27 at `cellSize` 0.667. Its grids cannot be pasted in as w
 **The disagreement, stated plainly.** The spec's decision line is "the four existing levels
 are **renumbered, not rewritten**", and its Out of scope section forbids "any change to the
 four existing boards' geometry". If the campaign's levels now need *rewriting*, the
-approved spec is the thing being overruled. **Nobody should author a board until that is
-settled**, because the two readings produce different work: renumbering is additive and the
-plan (once re-based onto the current cell size) still describes it, while rewriting
+approved spec is the thing being overruled. **At the time, nobody should author a board until
+that was settled**, because the two readings produce different work: renumbering is additive
+and the plan (once re-based onto the current cell size) still describes it, while rewriting
 invalidates the four arenas' `notes`, their `claims`, the cover-ratio table in
 `arena-validation.test.ts`, and the difficulty scores #98 derived for them.
 
-**What would answer it:**
+**What the spike originally required (now answered):**
 
 - **An owner decision on one question: are arena-01..04 kept?** Everything else follows.
   This is not a measurement and no amount of reading settles it.
@@ -871,8 +878,8 @@ invalidates the four arenas' `notes`, their `claims`, the cover-ratio table in
 machine-checked `claims`. Rewriting a board is not editing a grid — it is re-deriving every
 claim attached to it, and `sightlineAfterBreach` is **all-or-nothing per arena** (declaring
 one commits the arena to declaring one for every enemy spawn). Related: issue #119 asks for
-arena-05 and a measured per-level cost; that number is worth having **before** this decision
-is made, not after, because it prices both branches.
+arena-05 and a measured per-level cost. That measurement still prices future arena revisions,
+but it no longer blocks the high-level direction recorded by #298.
 
 ---
 

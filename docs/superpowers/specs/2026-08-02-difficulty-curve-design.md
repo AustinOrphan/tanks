@@ -1,4 +1,20 @@
+---
+status: superseded
+date: 2026-08-02
+last-reviewed: 2026-08-22
+scope: Historical eleven-level opening-teaching arc and provisional arena placements
+implementation-issues: [298]
+implementation-prs: []
+supersedes: []
+superseded-by: ["docs/superpowers/specs/2026-08-22-project-direction.md"]
+---
 # A taught difficulty curve: eleven levels, one idea at a time
+
+> [!NOTE]
+> Superseded as binding project direction by [Public prototype and campaign
+> direction](./2026-08-22-project-direction.md). The eleven-level sequence remains a useful
+> opening teaching reference, but it is not the full campaign; current arenas are not fixed
+> to these positions and may be revised, reordered, replaced, or reused.
 
 Approved 2026-08-02. The game currently opens with three tank types at once — brown, grey
 and teal — two of them ahead of their own authored `firstMission`. A player who has never
