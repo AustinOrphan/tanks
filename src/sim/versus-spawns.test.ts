@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickVersusSpawnCell, pickVersusSpawnSet, wallsForQuery, type Cell } from './versus-spawns';
+import { pickVersusSpawnCell, pickVersusSpawnSet, versusSpawnClearanceFailures, wallsForQuery, type Cell } from './versus-spawns';
 import { lineOfSight } from './ai/targeting';
 import { loadArena, ARENAS, ARENA_DEFS } from './arena';
 import type { WallKind } from './types';
@@ -447,5 +447,64 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
         expect(coopPos.slice(1)).not.toEqual(ffaPos.slice(1));
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HULL CLEARANCE (issue #225). All discriminating fixtures run at cellSize 1: an open
+// cell's centre sits 0.5 from an adjacent wall face -- under the 0.65 requirement
+// (TANK_RADIUS 0.5 + VERSUS_SPAWN_CLEARANCE_MARGIN 0.15) -- which is the regime no
+// shipped board (cellSize 2, centres >= 1.0 from every face) ever enters. That is why
+// the parity sweep in the next block can demand byte-identical shipped behaviour while
+// these fixtures prove the rule really measures something.
+// ---------------------------------------------------------------------------
+
+describe('versusSpawnClearanceFailures', () => {
+  // 5x3 room at cellSize 1, one solid cell at (col 2, row 1) dead centre.
+  const legend = { x: 'solid' as WallKind, d: 'destructible' as WallKind };
+  const walledGrid = ['.....', '..x..', '.....'];
+
+  it('a position 0.5 from a wall AABB fails naming the wall distance; without the wall it passes', () => {
+    // (1.5, 1.5) is the centre of the cell LEFT of the solid block: 0.5 from its
+    // west face, well clear (1.5) of every boundary of the 5x3 world.
+    const pos = { x: 1.5, y: 1.5 };
+    const failures = versusSpawnClearanceFailures(walledGrid, 5, 3, 1, legend, [pos]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/^spawn\[0\] at \(1\.50, 1\.50\): wall clearance 0\.500 < 0\.650$/);
+    // Negative control: same position, wall removed -- boundary is now the nearest
+    // hazard at 1.5, comfortably clear.
+    expect(versusSpawnClearanceFailures(['.....', '.....', '.....'], 5, 3, 1, legend, [pos])).toEqual([]);
+  });
+
+  it('a centre 0.5 from the arena edge fails as boundary; 0.65 or more in passes', () => {
+    const openGrid = ['.....', '.....', '.....'];
+    const edge = { x: 0.5, y: 1.5 }; // 0.5 from the west boundary
+    const failures = versusSpawnClearanceFailures(openGrid, 5, 3, 1, legend, [edge]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/^spawn\[0\] at \(0\.50, 1\.50\): boundary clearance 0\.500 < 0\.650$/);
+    expect(versusSpawnClearanceFailures(openGrid, 5, 3, 1, legend, [{ x: 0.65, y: 1.5 }])).toEqual([]);
+  });
+
+  it('an intact destructible fails a hull beside it; the match-start variant grid with it removed passes', () => {
+    const destructibleGrid = ['.....', '..d..', '.....'];
+    const pos = { x: 1.5, y: 1.5 };
+    expect(versusSpawnClearanceFailures(destructibleGrid, 5, 3, 1, legend, [pos])).toHaveLength(1);
+    // The variant grid (that cell drawn by the seeded removal) is what real callers
+    // pass -- clearance is a match-start question, so the removed wall costs nothing.
+    expect(versusSpawnClearanceFailures(['.....', '.....', '.....'], 5, 3, 1, legend, [pos])).toEqual([]);
+  });
+
+  it('two positions 1.0 apart fail as a pair (< 1.15); 1.2 apart pass', () => {
+    const openGrid = ['.....', '.....', '.....'];
+    const a = { x: 1.5, y: 1.5 };
+    const failures = versusSpawnClearanceFailures(openGrid, 5, 3, 1, legend, [a, { x: 2.5, y: 1.5 }]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatch(/^spawn\[0\]\.\.spawn\[1\]: pairwise distance 1\.000 < 1\.150$/);
+    expect(versusSpawnClearanceFailures(openGrid, 5, 3, 1, legend, [a, { x: 2.7, y: 1.5 }])).toEqual([]);
+  });
+
+  it('is deterministic: same inputs twice give deep-equal failure lists', () => {
+    const args = [walledGrid, 5, 3, 1, legend, [{ x: 1.5, y: 1.5 }, { x: 2.2, y: 1.5 }]] as const;
+    expect(versusSpawnClearanceFailures(...args)).toEqual(versusSpawnClearanceFailures(...args));
   });
 });

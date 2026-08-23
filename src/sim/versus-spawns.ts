@@ -1,6 +1,7 @@
 import type { Vec2, Wall, WallKind } from './types';
 import { lineOfSight } from './ai/targeting';
 import { mergeSolidRuns } from './wall-merge';
+import { TANK_RADIUS } from './constants';
 
 /**
  * Well-separated versus spawn cells, derived from the arena's OWN geometry rather than
@@ -438,4 +439,72 @@ export function pickVersusSpawnSet(
     if (!changed) break;
   }
   return cells;
+}
+
+/**
+ * The hull-clearance safety margin (issue #225): a spawn centre must clear every
+ * intact wall AABB and the arena boundary by `TANK_RADIUS + this`, and every other
+ * spawn by `2 * TANK_RADIUS + this`. 0.15 is DERIVED, not taste: the arena-geometry
+ * spec's traversability rule calls a point free at >= 0.65 world units from every
+ * wall (half the 1.3 corridor minimum), and 0.65 - TANK_RADIUS (0.5) = 0.15 -- so
+ * spawn-eligible points are exactly free points, and a tank never spawns anywhere
+ * the traversability check would not let it drive. Shipped boards cannot feel this
+ * bound: at cellSize 2 an open cell's centre is >= 1.0 from every wall face and
+ * boundary (slack 0.5) and distinct centres are >= 2.0 apart (slack 0.85) -- the
+ * parity sweep in versus-spawns.test.ts pins that as byte-identical behaviour
+ * rather than leaving it as this comment's word.
+ */
+export const VERSUS_SPAWN_CLEARANCE_MARGIN = 0.15;
+
+/** Point-to-AABB surface distance: 0 inside, the usual per-axis clamp outside. */
+function wallDistance(p: Vec2, w: Wall): number {
+  const dx = Math.max(w.aabb.minX - p.x, p.x - w.aabb.maxX, 0);
+  const dy = Math.max(w.aabb.minY - p.y, p.y - w.aabb.maxY, 0);
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * Every hull-clearance violation for already-picked spawn positions, one line per
+ * violation (empty = clean) -- the loud half of issue #225, and the function
+ * versus-catalog-rules.ts's `spawn-clearance` seam (issue #270) consumes once both
+ * changes land. Callers pass the MATCH-START grid (the variant-applied one --
+ * every real caller already holds exactly that), so "validate clearance against
+ * destructible-wall variants as they exist at match start" costs nothing extra:
+ * `wallsForQuery` builds intact solids AND intact destructibles, and a destructible
+ * really does block a hull at the instant of spawning.
+ *
+ * Deterministic and total: a pure function of its arguments; no throw on any input.
+ */
+export function versusSpawnClearanceFailures(
+  grid: string[],
+  cols: number,
+  rows: number,
+  cellSize: number,
+  legend: Record<string, WallKind>,
+  positions: readonly Vec2[],
+  margin: number = VERSUS_SPAWN_CLEARANCE_MARGIN,
+): string[] {
+  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);
+  const wallRequired = TANK_RADIUS + margin;
+  const pairRequired = 2 * TANK_RADIUS + margin;
+  const failures: string[] = [];
+  positions.forEach((p, i) => {
+    const at = `spawn[${i}] at (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
+    let nearestWall = Infinity;
+    for (const w of walls) nearestWall = Math.min(nearestWall, wallDistance(p, w));
+    if (nearestWall < wallRequired) {
+      failures.push(`${at}: wall clearance ${nearestWall.toFixed(3)} < ${wallRequired.toFixed(3)}`);
+    }
+    const boundary = Math.min(p.x, p.y, cols * cellSize - p.x, rows * cellSize - p.y);
+    if (boundary < wallRequired) {
+      failures.push(`${at}: boundary clearance ${boundary.toFixed(3)} < ${wallRequired.toFixed(3)}`);
+    }
+    for (let j = i + 1; j < positions.length; j++) {
+      const d = Math.hypot(positions[j].x - p.x, positions[j].y - p.y);
+      if (d < pairRequired) {
+        failures.push(`spawn[${i}]..spawn[${j}]: pairwise distance ${d.toFixed(3)} < ${pairRequired.toFixed(3)}`);
+      }
+    }
+  });
+  return failures;
 }
