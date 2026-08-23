@@ -1,10 +1,10 @@
 ---
-status: active
+status: completed
 date: 2026-08-23
 last-reviewed: 2026-08-23
 scope: Dedicated VS arena catalog contract (validated data family) plus deterministic per-entry suitability validators
 implementation-issues: [270]
-implementation-prs: []
+implementation-prs: [309]
 supersedes: []
 superseded-by: []
 ---
