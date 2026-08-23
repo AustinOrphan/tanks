@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-31
+last-reviewed: 2026-08-23
+scope: Linear level progression, a second hand-authored arena, a parameterized dev sandbox, disarm-as-sim-data, and arena registry validation.
+implementation-issues: []
+implementation-prs: [43]
+supersedes: []
+superseded-by: []
+---
 # Maps pass 1: linear progression, a second level, and a parameterized dev sandbox
 
 Approved 2026-07-31. Decisions taken with the user: linear progression now (level-select

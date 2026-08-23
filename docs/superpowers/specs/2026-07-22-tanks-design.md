@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-22
+last-reviewed: 2026-08-23
+scope: Original vertical-slice design: sim/render/audio split, one-hit-kill mechanics, three enemy AI archetypes, and the initial playable arena.
+implementation-issues: []
+implementation-prs: [1]
+supersedes: []
+superseded-by: []
+---
 # Design: *Tanks!* Spiritual Successor — Vertical Slice
 
 **Date:** 2026-07-22

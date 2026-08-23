@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-28
+last-reviewed: 2026-08-23
+scope: Mutation-tested design splitting src/game/loop.ts into frame.ts, driver.ts, and loop.ts for testable timestep, lifecycle, and wiring.
+implementation-issues: []
+implementation-prs: [6]
+supersedes: []
+superseded-by: []
+---
 # Making `src/game/loop.ts` testable
 
 **Status:** design, awaiting approval. Not yet implemented.

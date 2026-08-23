@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-01
+last-reviewed: 2026-08-23
+scope: Latched achievements: cumulative and per-run feats, a menu page, and HUD unlock toasts.
+implementation-issues: []
+implementation-prs: [62]
+supersedes: []
+superseded-by: []
+---
 # Achievements (approved 2026-08-01)
 
 The design feedback: "achievements might be a good idea / and eventually we can tie some of these

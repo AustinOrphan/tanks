@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-02
+last-reviewed: 2026-08-23
+scope: Two-level suite/track music model with tempo-ramped transitions between suites; dominant strategy shipped.
+implementation-issues: []
+implementation-prs: [71]
+supersedes: []
+superseded-by: []
+---
 # Music suites: sets of interchangeable tracks, and the joins between sets
 
 The design feedback, 2026-08-02: *"the tracks … may need to be longer or at least be categorized
