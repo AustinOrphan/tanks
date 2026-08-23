@@ -4774,7 +4774,12 @@ describe('startGameWith: achievements wiring', () => {
       roundStartTick: -100000,
       tanks: [player, enemy],
       mines: [
-        { id: 700, ownerId: player.id, pos: { ...enemy.pos }, timer: 0.001, armed: true, detonated: false },
+        // warningLeft: 1 -- the mine is ALREADY at the end of its triggered-warning
+        // phase (issue #275), so it detonates on the first stepMines call and the
+        // killing blow still rides one step() batch, which is this fixture's whole
+        // subject. Without the stamp the fuse would only OPEN the warning here and
+        // the win would arrive MINE_WARNING_TICKS frames later.
+        { id: 700, ownerId: player.id, pos: { ...enemy.pos }, timer: 0.001, armed: true, detonated: false, warningLeft: 1 },
       ],
       ...over,
     };

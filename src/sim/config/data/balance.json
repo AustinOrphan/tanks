@@ -15,7 +15,8 @@
     "timerSeconds": 3.0,
     "proximityRadius": 1.5,
     "blastRadius": 2.0,
-    "triggerRadius": 0.35
+    "triggerRadius": 0.35,
+    "warningTicks": 30
   },
   "ai": { "aimSpread": 0.08, "hazardSpread": 0.4 },
   "lives": 3,

@@ -270,6 +270,20 @@ export interface Mine {
   timer: number;
   armed: boolean;
   detonated: boolean;
+  /**
+   * Ticks left in the triggered-warning phase (issue #275); absent = not
+   * triggered (optional like Tank's flags, so the dozens of existing mine
+   * fixtures stay valid). Stamped once by `triggerMine` (mines.ts) and only
+   * ever counted DOWN -- re-triggers are no-ops, so the countdown cannot
+   * restart or shorten.
+   */
+  warningLeft?: number;
+  /**
+   * The blast credit the FIRST trigger carried (a shell trigger's shooter).
+   * Read once by the scheduled detonation; absent = the mine's own logic
+   * (fuse/proximity), which credits the owner via `detonateMine`'s default.
+   */
+  pendingCredit?: { source: 'blast' | 'shell'; ownerId: number };
 }
 
 // move components in [-1,1] (not normalized); aim is a world-space ground point;

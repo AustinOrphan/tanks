@@ -1,7 +1,7 @@
 import type { Tank, Bullet, BulletType, Vec2 } from './types'
 import { fromAngle, vscale, vadd, vlen, vsub, vdot, isDamageImmune } from './types'
 import { circleVsAABB, reflectSweep, circleVsCircle } from './collision'
-import { detonateMine, shellMayDetonate } from './mines'
+import { shellMayDetonate, triggerMine } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
 import { bulletConfig, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
@@ -190,7 +190,7 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
       b.alive = false
       // The SHOOTER gets credit for whatever this blast destroys: detonating a mine
       // with a shell is a skill shot, whoever owns the mine.
-      detonateMine(world, m, events, { source: 'shell', ownerId: b.ownerId })
+      triggerMine(m, events, { source: 'shell', ownerId: b.ownerId })
       break
     }
   }

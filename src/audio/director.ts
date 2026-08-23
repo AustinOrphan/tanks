@@ -67,6 +67,10 @@ export function createAudioDirector(
       case 'lose':
         engine.play('defeat');
         break;
+      case 'mine-triggered':
+        // Issue #275 lands the deterministic phase only; the synchronized warning
+        // cue is #276's deliberate work, so the event is explicitly silent here.
+        break;
       default: {
         // Exhaustiveness guard: if a new SimEvent kind is added, this fails to compile.
         const _exhaustive: never = e;

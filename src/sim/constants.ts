@@ -71,6 +71,23 @@ export const MINE_COOLDOWN_TICKS = Math.round(MINE_COOLDOWN * TICK_HZ);
 
 // ---- Mines ----
 export const MINE_TIMER = data.mines.timerSeconds;
+/**
+ * The triggered-warning window (issue #275): this many countdown decrements
+ * between ANY trigger (proximity entry, fuse expiry, shell hit) and the blast.
+ * 30 ticks = 500 ms at 60 Hz -- a provisional, documented reaction window; #277
+ * owns tuning it. Simulation ticks, never wall clock: the countdown decrements
+ * once per stepMines call, so pause/frame-rate cannot stretch or shrink it.
+ *
+ * EXACT event spacing, documented rather than papered over: fuse and proximity
+ * triggers fire INSIDE stepMines, so their trigger tick takes no decrement and
+ * `mine-detonate` lands exactly 30 ticks after `mine-triggered`. A SHELL trigger
+ * fires in resolveBulletHits, an earlier pipeline stage, so the trigger tick
+ * itself takes the first decrement and the spacing is 29 -- the trigger tick is
+ * warning tick #1. One named duration either way; presentation (#276) keys off
+ * the two EVENTS, which are exact for every source. Pinned empirically at
+ * tools/gallery/moments.ts (wall-break 26 -> 55 vs mine-cycle 190 -> 220).
+ */
+export const MINE_WARNING_TICKS = data.mines.warningTicks;
 export const MINE_PROXIMITY_RADIUS = data.mines.proximityRadius;
 export const MINE_BLAST_RADIUS = data.mines.blastRadius;
 

@@ -65,7 +65,13 @@ existing `mine-armed`/`mine-detonate` events are untouched.
 - [ ] **Step 3:** Write the findings into this plan (below) and into the eventual PR
   body. Findings decide Task 4's re-pin step.
 
-**Findings (filled during execution):** _pending_
+**Findings (measured 2026-08-23, this tree):** the trace hashes sampled tank
+positions/turret/alive plus final status:tick — `Mine` fields are NOT serialized, so
+additive fields alone cannot move the hash. But the traced population (5 arenas × 6
+seeds × 2500 ticks; driven player lays a mine every 311 ticks) contains **166 mines
+laid, 150 armed, 88 `mine-detonate` events and 27 blast kills** — detonation timing
+shifts by the warning duration, kills and post-blast trajectories move, so
+BASELINE_HASH WILL move and Task 4's re-pin is required, justified by these counts.
 
 ### Task 2: The phase machine in `mines.ts` (TDD)
 

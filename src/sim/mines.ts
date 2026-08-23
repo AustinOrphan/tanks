@@ -9,6 +9,7 @@ import {
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
   MINE_BLAST_EXPAND_TICKS,
+  MINE_WARNING_TICKS,
   MINE_BLAST_HOLD_TICKS,
   MINE_BLAST_RADIUS,
   TANK_RADIUS,
@@ -178,6 +179,28 @@ export function stepBlasts(world: World, events: SimEvent[]): void {
 }
 
 /**
+ * Enter the triggered-warning phase (issue #275): the single entry point for every
+ * lethal trigger -- proximity entry, fuse expiry, and a shell hit (bullets.ts) all
+ * come through here, and `stepMines` detonates exactly `MINE_WARNING_TICKS` calls
+ * later. IDEMPOTENT by the `warningLeft !== null` guard: a re-trigger of any kind
+ * cannot restart, shorten, or re-credit the countdown -- the FIRST trigger's
+ * `credit` is what the eventual blast carries (a shell trigger keeps its shooter
+ * through the warning, preserving the skill-shot kill attribution `Blast.credit`'s
+ * own doc comment describes). Emits `mine-triggered` once; `mine-detonate` still
+ * marks the actual detonation, unchanged.
+ */
+export function triggerMine(
+  mine: Mine,
+  events: SimEvent[],
+  credit?: Blast['credit'],
+): void {
+  if (mine.detonated || mine.warningLeft !== undefined) return
+  mine.warningLeft = MINE_WARNING_TICKS
+  if (credit) mine.pendingCredit = credit
+  events.push({ type: 'mine-triggered', mineId: mine.id, ownerId: mine.ownerId, pos: { x: mine.pos.x, y: mine.pos.y } })
+}
+
+/**
  * Set a mine off. The kill is no longer instantaneous: this applies the blast at
  * its smallest radius and leaves a Blast behind for stepBlasts to grow.
  */
@@ -222,6 +245,14 @@ export function shellMayDetonate(world: World, mine: Mine): boolean {
 export function stepMines(world: World, dt: number, events: SimEvent[]): void {
   for (const mine of [...world.mines]) {
     if (mine.detonated) continue
+    // A triggered mine is COMMITTED: arming, fuse, and proximity no longer apply
+    // (idempotency is the phase's contract -- see triggerMine). The countdown
+    // decrements once per stepMines call; simulation ticks own the transition.
+    if (mine.warningLeft !== undefined) {
+      mine.warningLeft -= 1
+      if (mine.warningLeft <= 0) detonateMine(world, mine, events, mine.pendingCredit)
+      continue
+    }
     mine.timer -= dt
     const owner = world.tanks.find((t) => t.id === mine.ownerId)
     // A dead owner counts as absent. Corpses stay in world.tanks, so an owner
@@ -236,9 +267,9 @@ export function stepMines(world: World, dt: number, events: SimEvent[]): void {
       events.push({ type: 'mine-armed', mineId: mine.id, ownerId: mine.ownerId, pos: { x: mine.pos.x, y: mine.pos.y } })
     }
     if (mine.timer <= 0) {
-      // Fuse expiry detonates regardless of arming, so camping on your own mine
-      // is not a free bomb.
-      detonateMine(world, mine, events)
+      // Fuse expiry triggers regardless of arming, so camping on your own mine
+      // is not a free bomb -- it now enters the warning first (issue #275).
+      triggerMine(mine, events)
       continue
     }
     // An UNARMED mine cannot be triggered by anyone. Arming is what makes a
@@ -260,7 +291,7 @@ export function stepMines(world: World, dt: number, events: SimEvent[]): void {
     for (const t of world.tanks) {
       if (!t.alive) continue
       if (vdist(t.pos, mine.pos) > MINE_PROXIMITY_RADIUS) continue
-      detonateMine(world, mine, events)
+      triggerMine(mine, events)
       break
     }
   }

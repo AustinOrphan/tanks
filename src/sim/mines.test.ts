@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createWorld } from './world'
 import type { World } from './world'
-import { dropMine, stepMines, detonateMine, blastReaches, stepBlasts, blastRadiusAt, BLAST_LIFETIME_TICKS } from './mines'
+import { dropMine, stepMines, detonateMine, triggerMine, blastReaches, stepBlasts, blastRadiusAt, BLAST_LIFETIME_TICKS } from './mines'
 import { resolveBulletHits } from './bullets'
 import type { SimEvent } from './events'
 import type { Tank, TankKind, Vec2, AABB, Wall, WallKind, Mine, Bullet, UnarmedTrigger } from './types'
@@ -9,6 +9,7 @@ import {
   MINE_CAP,
   MINE_TIMER,
   MINE_PROXIMITY_RADIUS,
+  MINE_WARNING_TICKS,
   MINE_BLAST_EXPAND_TICKS,
   MINE_BLAST_HOLD_TICKS,
   MINE_BLAST_RADIUS,
@@ -153,6 +154,10 @@ describe('stepMines', () => {
     enemy.pos = { x: MINE_PROXIMITY_RADIUS - 0.5, y: 0 } // 1.0, inside proximity 1.5
     const events: SimEvent[] = []
     stepMines(world, DT, events)
+    // Proximity entry now opens the warning (issue #275); the enemy stays inside
+    // through it (static fixture), and the detonation lands on schedule.
+    expect(events.some((e) => e.type === 'mine-triggered')).toBe(true)
+    for (let i = 0; i < MINE_WARNING_TICKS; i++) stepMines(world, DT, events)
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
     settleBlasts(world, events)
     expect(enemy.alive).toBe(false) // 1.0 <= blast radius 2.0
@@ -201,6 +206,9 @@ describe('stepMines', () => {
     stepMines(world, DT, events)
 
     expect(events.some((e) => e.type === 'mine-armed')).toBe(true)
+    // Arming and the proximity trigger land on the same call; the blast follows
+    // the warning (issue #275).
+    for (let i = 0; i < MINE_WARNING_TICKS; i++) stepMines(world, DT, events)
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
     // At 1.1 he is inside the age-0 radius now that the ramp eases out (0.72 + TANK_RADIUS
     // = 1.22 reach on the detonation tick), so he dies immediately. Settle anyway: the
@@ -218,7 +226,8 @@ describe('stepMines', () => {
     dropMine(world, 1, [])
 
     const events: SimEvent[] = []
-    for (let i = 0; i < Math.ceil(MINE_TIMER / DT) + 2; i++) stepMines(world, DT, events)
+    // + the warning (issue #275): fuse expiry commits, the blast lands 30 calls on.
+    for (let i = 0; i < Math.ceil(MINE_TIMER / DT) + MINE_WARNING_TICKS + 2; i++) stepMines(world, DT, events)
 
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
     expect(player.alive).toBe(false)
@@ -236,6 +245,7 @@ describe('stepMines', () => {
     player.pos = { x: 0.2, y: 0 } // walk back onto it
     const events: SimEvent[] = []
     stepMines(world, DT, events)
+    for (let i = 0; i < MINE_WARNING_TICKS; i++) stepMines(world, DT, events) // the warning (issue #275)
 
     expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
     expect(player.alive).toBe(false)
@@ -426,7 +436,10 @@ describe('what may set off an UNARMED mine', () => {
     world.mines.push(laid(armed));
     world.bullets.push(shell(0.1, 0));
     resolveBulletHits(world, []);
-    return world.mines.length === 0; // detonated mines are filtered out
+    // "Set off" now means ENTERED THE WARNING (issue #275): the mine commits on
+    // the hit and detonates MINE_WARNING_TICKS later, so the observable here is
+    // the stamped countdown, not same-call removal.
+    return world.mines.length === 0 || world.mines[0].warningLeft !== undefined;
   }
 
   function walked(policy: UnarmedTrigger, armed: boolean): boolean {
@@ -439,7 +452,8 @@ describe('what may set off an UNARMED mine', () => {
     const world = createWorld({ walls: [], tanks: [owner, walker], spawns: [], lives: 3, unarmedTrigger: policy });
     world.mines.push(laid(armed));
     stepMines(world, 1 / 60, []);
-    return world.mines.length === 0;
+    // Same warning-phase reading as shot() above.
+    return world.mines.length === 0 || world.mines[0].warningLeft !== undefined;
   }
 
   it('an ARMED mine goes off either way, whatever the policy', () => {
@@ -694,6 +708,7 @@ describe('blast credit: who set it off, not just whose mine it was', () => {
     world.bullets.push({ id: 60, ownerId: 1, type: 'normal', pos: { x: 0, y: 0 }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true })
     const events: SimEvent[] = []
     resolveBulletHits(world, events) // the shell overlaps the mine's trigger radius
+    for (let i = 0; i < MINE_WARNING_TICKS; i++) stepMines(world, DT, events) // the warning (issue #275)
     for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
     const death = events.find((e) => e.type === 'tank-destroyed')
     expect(death).toMatchObject({ tankId: 2, by: { source: 'shell', ownerId: 1 } })
@@ -710,5 +725,105 @@ describe('blast credit: who set it off, not just whose mine it was', () => {
     for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) stepBlasts(world, events)
     const death = events.find((e) => e.type === 'tank-destroyed')
     expect(death).toMatchObject({ tankId: 2, by: { source: 'blast', ownerId: 9 } })
+  })
+})
+
+describe('triggered-warning phase (issue #275)', () => {
+  // Every trigger source enters a warning of exactly MINE_WARNING_TICKS stepMines
+  // calls before the blast exists. Fixtures follow this file's own idiom: armed
+  // mines built by dropMine + walking the owner clear, ticked with the real DT.
+
+  function armedFixture(): { world: World; owner: Tank; events: SimEvent[] } {
+    const owner = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [owner], spawns: [], lives: 3 })
+    dropMine(world, 1, [])
+    owner.pos = { x: 10, y: 10 }
+    const events: SimEvent[] = []
+    stepMines(world, DT, events) // arms: owner is clear
+    expect(events.some((e) => e.type === 'mine-armed')).toBe(true)
+    return { world, owner, events }
+  }
+
+  it('pins the named duration: MINE_WARNING_TICKS is exactly 30 (500 ms at 60 Hz), from balance.json', () => {
+    // The documented reaction window (#275); #277 owns tuning it. Fails if the
+    // balance entry or the constant wiring drifts.
+    expect(MINE_WARNING_TICKS).toBe(30)
+  })
+
+  it('proximity entry emits mine-triggered on that call and defers mine-detonate by exactly MINE_WARNING_TICKS calls', () => {
+    const { world, events } = armedFixture()
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.0, y: 0 } }) // inside 1.5
+    world.tanks.push(enemy)
+    stepMines(world, DT, events) // the trigger call
+    expect(events.filter((e) => e.type === 'mine-triggered')).toHaveLength(1)
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(false)
+    expect(world.mines).toHaveLength(1) // still present through the warning
+    // Exactly 30 further calls: no detonation through call 29, detonation on call 30.
+    for (let i = 1; i <= MINE_WARNING_TICKS - 1; i++) {
+      stepMines(world, DT, events)
+      expect(events.some((e) => e.type === 'mine-detonate'), `call ${i}`).toBe(false)
+    }
+    stepMines(world, DT, events)
+    expect(events.filter((e) => e.type === 'mine-detonate')).toHaveLength(1)
+    expect(world.blasts).toHaveLength(1)
+  })
+
+  it('fuse expiry enters the warning instead of detonating instantly', () => {
+    const { world, events } = armedFixture()
+    world.mines[0].timer = 0.0001
+    stepMines(world, DT, events) // fuse expires on this call
+    expect(events.filter((e) => e.type === 'mine-triggered')).toHaveLength(1)
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(false)
+    for (let i = 1; i <= MINE_WARNING_TICKS; i++) stepMines(world, DT, events)
+    expect(events.filter((e) => e.type === 'mine-detonate')).toHaveLength(1)
+  })
+
+  it('a shell trigger carries its credit through the warning to the blast itself', () => {
+    const { world, events } = armedFixture()
+    triggerMine(world.mines[0], events, { source: 'shell', ownerId: 9 })
+    expect(events.filter((e) => e.type === 'mine-triggered')).toHaveLength(1)
+    for (let i = 1; i <= MINE_WARNING_TICKS; i++) stepMines(world, DT, events)
+    expect(world.blasts).toHaveLength(1)
+    // The blast's credit is what stats/kill attribution read: the SHOOTER, not the
+    // mine's owner -- asserted on the Blast object, not only the event stream.
+    expect(world.blasts[0].credit).toEqual({ source: 'shell', ownerId: 9 })
+  })
+
+  it('re-triggers are idempotent: one warning, the FIRST credit, and no countdown reset', () => {
+    const { world, events } = armedFixture()
+    const mine = world.mines[0]
+    triggerMine(mine, events, { source: 'shell', ownerId: 9 })
+    // Adverse re-triggers mid-warning: proximity entry, fuse expiry, a second shell.
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.0, y: 0 } })
+    world.tanks.push(enemy)
+    mine.timer = 0.0001
+    for (let i = 1; i <= 10; i++) stepMines(world, DT, events)
+    triggerMine(mine, events, { source: 'shell', ownerId: 4 })
+    for (let i = 11; i <= MINE_WARNING_TICKS - 1; i++) stepMines(world, DT, events)
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(false) // not shortened
+    stepMines(world, DT, events) // call 30 after the FIRST trigger
+    expect(events.filter((e) => e.type === 'mine-triggered')).toHaveLength(1)
+    expect(events.filter((e) => e.type === 'mine-detonate')).toHaveLength(1)
+    expect(world.blasts[0].credit).toEqual({ source: 'shell', ownerId: 9 })
+  })
+
+  it('an owner dying mid-warning does not stop the scheduled detonation', () => {
+    const { world, owner, events } = armedFixture()
+    triggerMine(world.mines[0], events)
+    for (let i = 1; i <= 10; i++) stepMines(world, DT, events)
+    owner.alive = false
+    for (let i = 11; i <= MINE_WARNING_TICKS; i++) stepMines(world, DT, events)
+    expect(events.filter((e) => e.type === 'mine-detonate')).toHaveLength(1)
+  })
+
+  it('unarmed mines under the default policy still enter no warning on proximity', () => {
+    const owner = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [owner, enemy], spawns: [], lives: 3 })
+    dropMine(world, 1, []) // owner stays on it: never arms
+    const events: SimEvent[] = []
+    for (let i = 0; i < 5; i++) stepMines(world, DT, events)
+    expect(events.some((e) => e.type === 'mine-triggered')).toBe(false)
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(false)
   })
 })

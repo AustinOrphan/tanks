@@ -363,17 +363,23 @@ export const MOMENTS: Record<string, MomentDef> = {
     const WALLBREAK_IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
     return {
       // MEASURED (throwaway vite-node probe): fire at events[10]; the shell reaches the
-      // mine's trigger radius (MINE_TRIGGER_RADIUS + BULLET_RADIUS = 0.45) and detonates
-      // it at events[26], and the age-0 blast (already ~0.72 radius, comfortably past
-      // the wall's 0.3-unit gap from the mine) destroys the wall on that SAME tick --
-      // `mine-detonate` and `wall-destroyed` both land at events[26], not two ticks.
-      // 66, not 36 (final-review finding I2): the wall-destroyed particle burst
-      // (particles.ts's `burst()`) needs room past tick 26 to decay, same reasoning as
+      // mine's trigger radius (MINE_TRIGGER_RADIUS + BULLET_RADIUS = 0.45) and TRIGGERS
+      // it at events[26] -- since issue #275 the hit opens the warning. The shell
+      // stage runs BEFORE that tick's stepMines, so the trigger tick itself takes the
+      // first countdown decrement and the detonation lands at events[55] (26 + 29),
+      // one tick EARLIER than the fuse path's spacing (contrast mine-cycle, whose
+      // fuse triggers INSIDE stepMines and detonates a full 30 ticks on). The age-0
+      // blast (already ~0.72 radius, comfortably past the wall's 0.3-unit gap from
+      // the mine) destroys the wall on that SAME tick -- `mine-detonate` and
+      // `wall-destroyed` both land at events[55], not two ticks.
+      // 95 = 55 + 40 decay margin: the wall-destroyed particle burst (particles.ts's
+      // `burst()`) needs room past the detonation to decay, same reasoning as
       // `destroyed` above -- see MomentDef.ticks's doc comment.
-      ticks: 66,
+      ticks: 95,
       expect: [
-        { type: 'mine-detonate', tick: 26 },
-        { type: 'wall-destroyed', tick: 26 },
+        { type: 'mine-triggered', tick: 26 },
+        { type: 'mine-detonate', tick: 55 },
+        { type: 'wall-destroyed', tick: 55 },
       ],
       focus: [2, 0.3, 0], span: 5,
       build: () => {
@@ -412,20 +418,22 @@ export const MOMENTS: Record<string, MomentDef> = {
       // the rest of the clip; only the owner walks. Starting tick 10 the owner walks
       // east and clears MINE_PROXIMITY_RADIUS (stepMines' arming distance) at
       // events[40]. No shell, no proximity re-trigger (the owner keeps walking away,
-      // never re-entering blast range) -- the fuse alone ends it, at events[190]. No
-      // 'explosion'/'tank-destroyed' anywhere in the 230-tick window: by tick 190 the
-      // owner is 9 units clear, well outside MINE_BLAST_RADIUS + TANK_RADIUS (2.5), and
-      // only keeps walking further away through tick 230.
-      // 230, not 200 (final-review finding I2): the mine-detonate particle burst
-      // (particles.ts's `burst()`) needs room past tick 190 to decay, same reasoning as
-      // `destroyed`/`wall-break` above -- see MomentDef.ticks's doc comment. The fuse
-      // itself still ends at 190; the extra 40 ticks are decay margin only, walked
-      // through by the same MINE_CYCLE_WALK input the fuse-running portion already uses.
-      ticks: 230,
+      // never re-entering blast range) -- the fuse alone TRIGGERS it, at events[190];
+      // since issue #275 that opens the warning, and the detonation lands exactly
+      // MINE_WARNING_TICKS (30) later, at events[220]. No 'explosion'/'tank-destroyed'
+      // anywhere in the window: by tick 220 the owner is 10+ units clear, well outside
+      // MINE_BLAST_RADIUS + TANK_RADIUS (2.5), and only keeps walking further away.
+      // 260 = 220 + 40 decay margin: the mine-detonate particle burst (particles.ts's
+      // `burst()`) needs room past the detonation to decay, same reasoning as
+      // `destroyed`/`wall-break` above -- see MomentDef.ticks's doc comment; the margin
+      // is walked through by the same MINE_CYCLE_WALK input the fuse-running portion
+      // already uses.
+      ticks: 260,
       expect: [
         { type: 'mine-dropped', tick: 10 },
         { type: 'mine-armed', tick: 40 },
-        { type: 'mine-detonate', tick: 190 },
+        { type: 'mine-triggered', tick: 190 },
+        { type: 'mine-detonate', tick: 220 },
       ],
       // Tight on the mine's own (fixed) position rather than the walking owner, same
       // choice `respawn` makes for its frozen shooter: the mine is the subject.
