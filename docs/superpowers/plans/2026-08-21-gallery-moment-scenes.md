@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-21
+last-reviewed: 2026-08-23
+scope: Deterministic gallery moment scenes and spawn-animation media capture support
+implementation-issues: [201, 208]
+implementation-prs: [221]
+supersedes: []
+superseded-by: []
+---
 # Gallery Moment Scenes Implementation Plan (issue #208, closes #201)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-01
+last-reviewed: 2026-08-23
+scope: Validated JSON arena catalog, declarative design claims, and data-driven arena loading
+implementation-issues: []
+implementation-prs: [65]
+supersedes: []
+superseded-by: []
+---
 # Arenas as Data Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

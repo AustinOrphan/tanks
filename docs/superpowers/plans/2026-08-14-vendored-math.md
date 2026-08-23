@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-14
+last-reviewed: 2026-08-23
+scope: Vendored deterministic trigonometry and hypot across supported JavaScript engines
+implementation-issues: [133]
+implementation-prs: [165]
+supersedes: []
+superseded-by: []
+---
 # Plan — Issue #133: vendored deterministic math
 
 Status: adopted 2026-08-14, implemented in the PR that carries this file.

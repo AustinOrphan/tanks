@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Session-only controller assignment UI, disconnect reservation, and reassignment
+implementation-issues: []
+implementation-prs: [187]
+supersedes: []
+superseded-by: []
+---
 # Plan — Controller Assignment UI
 
 Status: adopted 2026-08-17, implemented on branch `controller-assignment`.

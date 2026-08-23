@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Four-controller slot routing, including controller support for player one
+implementation-issues: []
+implementation-prs: [183]
+supersedes: []
+superseded-by: []
+---
 # Plan — Controllers 1-4: `pad[i] -> slot[i]`, including slot 0
 
 Status: adopted 2026-08-17, implemented on branch `controllers-4`.

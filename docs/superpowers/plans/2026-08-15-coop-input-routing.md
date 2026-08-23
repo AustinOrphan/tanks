@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-15
+last-reviewed: 2026-08-23
+scope: Independent co-op input routing, gamepad source abstraction, and replay tick encoding
+implementation-issues: []
+implementation-prs: [173]
+supersedes: []
+superseded-by: []
+---
 # Plan — couch co-op input routing: a second input, the `coop` devflag, and replay's `EncodedTick`
 
 Status: adopted 2026-08-15, implemented on branch `coop-input`.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-02
+last-reviewed: 2026-08-23
+scope: Geometry-invariant wall loading, collision resolution, tank IDs, and bank-shot selection
+implementation-issues: []
+implementation-prs: [75]
+supersedes: []
+superseded-by: []
+---
 # Walls as Geometry, Not Cells — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-15
+last-reviewed: 2026-08-23
+scope: Multiplayer player identity, spawn derivation, rendering, and attribution foundations
+implementation-issues: []
+implementation-prs: [172]
+supersedes: []
+superseded-by: []
+---
 # Plan — couch co-op foundation: `controlledBy`, spawn derivation, render/attribution seam
 
 Status: adopted 2026-08-15, implemented on branch `coop-foundation`.

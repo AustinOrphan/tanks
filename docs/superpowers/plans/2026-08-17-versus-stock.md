@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Versus stock lives, safe respawning, and movement-only spawn protection
+implementation-issues: []
+implementation-prs: [191]
+supersedes: []
+superseded-by: []
+---
 # Plan — Versus stock, safe respawn, and spawn protection (movement only)
 
 Status: adopted 2026-08-17, implemented on branch `versus-stock`.
