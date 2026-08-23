@@ -494,5 +494,41 @@
       "src/sim/versus-catalog-rules.test.ts"
     ],
     "why": "Issue #312 wires #225's real versusSpawnClearanceFailures as the catalog sweep's DEFAULT clearance rule; silently reverting the default to an empty rule makes every declared combination validate clearance-blind again -- the exact gap the wiring closes. Killed by the cramped-corridor fixture, whose fallback spawns really are hull-clipped and must surface as spawn-clearance diagnostics with no opt-in."
+  },
+  {
+    "id": "mine-warning-retrigger-resets-countdown",
+    "file": "src/sim/mines.ts",
+    "find": "  if (mine.detonated || mine.warningLeft !== undefined) return",
+    "replace": "  if (mine.detonated) return",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "why": "triggerMine's idempotency guard is the warning phase's contract (issue #275): a re-trigger of any kind must not restart, shorten, or re-credit the countdown. Dropping the warningLeft check lets a mid-warning proximity/fuse/shell re-trigger re-stamp the countdown and overwrite the credit. Killed by the re-trigger fixture, which pins ONE mine-triggered event, the FIRST credit, and the original detonation call."
+  },
+  {
+    "id": "mine-warning-consumed-as-one-tick",
+    "file": "src/sim/mines.ts",
+    "find": "  mine.warningLeft = MINE_WARNING_TICKS",
+    "replace": "  mine.warningLeft = 1",
+    "expect": "killed",
+    "expectFailures": 6,
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "why": "The warning must last the named MINE_WARNING_TICKS, not a token single tick -- the reaction window IS the feature. Stamping 1 collapses trigger-to-blast to one stepMines call. Killed by the exact tick-boundary pins (no detonation through call 29, detonation on call 30) and every drain-length fixture."
+  },
+  {
+    "id": "mine-warning-fuse-bypasses-warning",
+    "file": "src/sim/mines.ts",
+    "find": "      // Fuse expiry triggers regardless of arming, so camping on your own mine\n      // is not a free bomb -- it now enters the warning first (issue #275).\n      triggerMine(mine, events)",
+    "replace": "      // Fuse expiry triggers regardless of arming, so camping on your own mine\n      // is not a free bomb -- it now enters the warning first (issue #275).\n      detonateMine(world, mine, events)",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/mines.test.ts"
+    ],
+    "why": "Every trigger source must route through the warning (issue #275's first acceptance criterion); the fuse path silently reverting to instant detonation is exactly the regression the phase exists to prevent. Killed by the fuse-expiry-enters-the-warning fixture, which asserts mine-triggered with NO mine-detonate on the expiry call."
   }
 ]
