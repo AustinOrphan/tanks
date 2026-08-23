@@ -255,6 +255,10 @@ describe('hud.css is syntactically whole', () => {
       '.hud-versus-map-row', '.hud-versus-stock-row', '.hud-versus-option-btn',
       '.hud-versus-option-btn--selected', '.hud-versus-friendlyfire-btn',
       '.hud-versus-assignment-note', '.hud-versus-assignment-note--hidden',
+      // issue #280: the who's-playing preview's own side-by-side override of the
+      // controller-assignment selectors just above -- without these two, the preview
+      // falls back to their vertical list, unchanged from before the issue.
+      '.hud-versus-setup .hud-controller-rows', '.hud-versus-setup .hud-controller-row',
       // Task 5b (a versus session's title screen): the Campaign button's hidden rule
       // -- without it every versus session would show it permanently, even at
       // non-title states.
@@ -453,6 +457,104 @@ describe('hud.css is syntactically whole', () => {
     expect(getComputedStyle(row).display).toBe('none');
 
     document.body.innerHTML = '';
+  });
+
+  it("lays the versus setup's who's-playing preview out side by side, distinct from the standalone Controllers panel's own vertical list (issue #280)", () => {
+    // The versus pane's who's-playing preview reuses .hud-controller-rows/
+    // .hud-controller-row VERBATIM from the standalone Controllers panel
+    // (renderControllerRowsInto, hud.ts) -- same classes, same DOM shape, scoped only
+    // by the .hud-versus-setup ancestor (renderVersusControllerRows' own doc
+    // comment). The presence-only sweep above cannot tell "the versus pane inherited
+    // the base vertical list" from "the versus pane got its own side-by-side
+    // override" -- both make '.hud-versus-setup .hud-controller-rows' match
+    // `toContain`. This asserts the RESOLVED style actually differs between the two
+    // contexts, and differs in the specific way issue #280 asked for.
+    const controllers = document.createElement('div');
+    controllers.className = 'hud-controllers';
+    const controllersRows = document.createElement('div');
+    controllersRows.className = 'hud-controller-rows';
+    controllers.appendChild(controllersRows);
+
+    const versus = document.createElement('div');
+    versus.className = 'hud-versus-setup';
+    const versusRows = document.createElement('div');
+    versusRows.className = 'hud-controller-rows';
+    versus.appendChild(versusRows);
+
+    document.body.append(controllers, versus);
+
+    const controllersStyle = getComputedStyle(controllersRows);
+    const versusStyle = getComputedStyle(versusRows);
+
+    // The standalone panel keeps the base rule's vertical, capped-and-scrolling list
+    // -- "completely unaffected" is issue #280's own bar for this panel.
+    expect(controllersStyle.flexDirection).toBe('column');
+    expect(controllersStyle.flexWrap).toBe('nowrap');
+    // Deliberately "some cap", not the literal 58vh: what issue #280 needs to hold is
+    // that the standalone panel still caps and scrolls its own list, not what the base
+    // rule happens to cap it AT. Pinning the value would make an unrelated retune of
+    // .hud-controller-rows fail an issue-#280 test. It still discriminates: the versus
+    // pane's override sets `none`, which this rejects.
+    expect(controllersStyle.maxHeight).not.toBe('none');
+    expect(controllersStyle.maxHeight).not.toBe('');
+    expect(controllersStyle.overflowY).toBe('auto');
+
+    // The versus pane's own preview goes side by side, wrapping, instead.
+    expect(versusStyle.flexDirection).toBe('row');
+    expect(versusStyle.flexWrap).toBe('wrap');
+    // Neutralized, not inherited -- a SECOND, nested scroll region a few rows tall
+    // inside .hud-versus-setup, which already scrolls the whole pane end to end,
+    // would be two overlapping scrollbars for what is at most a 2x2 grid. See the
+    // scoped rule's own comment in hud.css.
+    expect(versusStyle.maxHeight).toBe('none');
+    expect(versusStyle.overflowY).toBe('visible');
+    // jsdom's cssstyle does not resolve `vw` to a pixel value (same limitation this
+    // file's own doc comment already names for `max()`/`env()`), but it DOES keep the
+    // specified value verbatim, which is enough to tell "a definite width is set" from
+    // "none is" -- the standalone panel's row has no width rule at all and reports the
+    // browser default `auto`. Without this container's own definite width, the row
+    // rule below folds unevenly well above the 760px breakpoint -- measured directly
+    // in Chromium at 700px with 2 slots, before this existed: fit-content resolved the
+    // container narrower than the viewport and the pair stacked into ONE column
+    // instead of sitting side by side. See the scoped rule's own comment in hud.css.
+    expect(controllersStyle.width).toBe('auto');
+    expect(versusStyle.width).toBe('92vw');
+
+    document.body.innerHTML = '';
+  });
+
+  it('forces the who\'s-playing preview to two definite-width columns below the phone breakpoint (issue #280)', () => {
+    // jsdom's window is a fixed 1024px wide, so `@media (max-width: 760px)` never
+    // matches here -- this can only be a TEXT assertion, the same reasoning (and the
+    // same limitation) as `keeps the narrow-viewport rules the phone layout needs`
+    // below. The geometry this rule actually produces -- a clean 2x2 at 375px and
+    // 320px, no clipping or overlap even with a long gamepad-id candidate label, and
+    // one row for 2/3/4 players at 1280px and other desktop widths -- was verified
+    // directly in Chromium against the real running app (not jsdom), including the
+    // `700px` fit-content trap the scoped rows rule's own comment documents.
+    const src = stripComments(css);
+    const idx = src.indexOf('.hud-versus-setup .hud-controller-row {');
+    expect(idx, 'the narrow-viewport row rule is gone').toBeGreaterThan(-1);
+    // Anchored on the SELECTOR's own index, not a positional split on the media query
+    // text: the topbar block (line ~170) opens the SAME `@media (max-width: 760px)`
+    // query first, and `src.split(...)​[1]` -- the pattern the narrow-viewport test
+    // below uses -- would silently resolve to THAT block instead of this one.
+    const mediaIdx = src.lastIndexOf('@media (max-width: 760px)', idx);
+    expect(mediaIdx, 'the row rule is not inside a 760px query').toBeGreaterThan(-1);
+    expect(
+      idx - mediaIdx,
+      'the nearest preceding 760px query is too far away to be the one wrapping this rule',
+    ).toBeLessThan(400);
+
+    const block = src.slice(idx, src.indexOf('}', idx));
+    expect(block, 'lost the explicit two-column width').toContain('flex: 0 1 40vw');
+    expect(block, 'lost the shrink override a long pad-id label needs').toContain(
+      'min-width: 0',
+    );
+    expect(
+      block,
+      "lost border-box, so the 40vw budget stops accounting for the row's own padding/border",
+    ).toContain('box-sizing: border-box');
   });
 
   it('centres the win/lose/pause/title panel text, so a wrapped heading does not read as left-shifted (issue #151)', () => {
