@@ -55,6 +55,9 @@ not necessarily replaced by one specific document.
 Relationship targets must exist, cannot reference the document itself, and cannot appear in
 both relationship fields.
 
+Supersession links are also validated as one graph: both ends of every link must be
+classified, reciprocal, and the `supersedes` relation must stay acyclic.
+
 ## Incremental migration
 
 `tools/docs/legacy-document-baseline.json` is the immutable SHA-256 snapshot of the 46 plan
