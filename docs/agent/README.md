@@ -17,6 +17,6 @@ heading and read only the required section.
 | `task-sizing.md` | issue size, risk, decomposition, and agent-readiness criteria |
 | `known-holes.md` | untested seams, deferred-work policy, rejected collision fixes |
 | `context-budget.md` | exact global instruction-size measurement and enforced budget |
-| `document-metadata.md` | plan/spec status fields, relationships, and validation workflow |
+| `document-metadata.md` | plan/spec metadata, the research inventory, and validation workflow |
 
 For product plans, specifications, and deferred investigations, use `docs/superpowers/`.
