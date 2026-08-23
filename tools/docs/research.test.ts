@@ -157,6 +157,20 @@ describe('research inventory contract', () => {
   it('fails the shared CLI runner on research drift and logs counts on success', () => {
     const root = tempRoot();
     write(root, DOC, '# Example\n');
+    write(
+      root,
+      'docs/superpowers/plans/example.md',
+      '---\nstatus: active\ndate: 2026-08-22\nscope: Runner fixture\n---\n# Plan\n',
+    );
+    write(
+      root,
+      'tools/docs/legacy-document-baseline.json',
+      JSON.stringify({
+        version: 1,
+        algorithm: 'sha256',
+        documents: { 'docs/superpowers/plans/example.md': '0'.repeat(64) },
+      }),
+    );
     const errors: string[] = [];
     const logs: string[] = [];
     const io = {
