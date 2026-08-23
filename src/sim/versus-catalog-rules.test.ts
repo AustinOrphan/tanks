@@ -119,3 +119,104 @@ describe('connectivity rule: a spawn placed across a solid divider is named', ()
     expect(versusCatalogEntryFailures(entry, { arenaFor: arenaFor(open) })).toEqual([]);
   });
 });
+
+describe('variant-coverage rule: a vacuous seeded declaration is named', () => {
+  // No destructible cell anywhere: advertising seeded-destructible promises a
+  // variant generator with nothing to draw from. The pillar room's geometry keeps
+  // every other rule quiet at N=2.
+  const arena: Arena = {
+    cols: 7, rows: 7, cellSize: 1,
+    legend: { x: 'solid' as WallKind },
+    grid: ['P......', '.x.x.x.', '.......', '.x.x.x.', '.......', '.x.x.x.', '.......'],
+  };
+
+  it('declaring seeded-destructible with 0 destructible cells fails at entry level', () => {
+    const entry = fixtureEntry({ players: [2], modes: ['ffa'], variants: ['seeded-destructible'] });
+    const failures = versusCatalogEntryFailures(entry, { arenaFor: arenaFor(arena) });
+    expect(failures).toEqual([
+      'vs-fixture (fixture-arena) N=any mode=any variant=seeded-destructible: variant-coverage: arena has 0 destructible cells; the declaration is vacuous',
+    ]);
+  });
+
+  it('negative control: the same declaration with destructible pillars draws real variants and validates clean', () => {
+    const withDestructibles: Arena = { ...arena, legend: { x: 'destructible' as WallKind } };
+    const entry = fixtureEntry({ players: [2], modes: ['ffa'], variants: ['seeded-destructible'] });
+    expect(versusCatalogEntryFailures(entry, { arenaFor: arenaFor(withDestructibles) })).toEqual([]);
+  });
+});
+
+describe('seeded variant sweep: a draw that regresses a criterion names its seed', () => {
+  // A corridor where the ONLY concealment between the two spawn ends is a single
+  // destructible block: the authored board conceals, and any seeded draw at
+  // fraction 1.0-equivalent... instead we pin the real fraction: with exactly one
+  // destructible cell, round(1 * 0.4) = 0 removals -- so to make a draw actually
+  // remove the block, the fixture carries three destructible cells in the sight
+  // column (round(3 * 0.4) = 1 removed). Which of the three goes varies by seed;
+  // seeds where the removed cell reopens no spawn pair line stay clean, so the
+  // assertion sweeps ALL five pinned seeds and requires at least one named
+  // failure rather than pinning a specific seed's draw order.
+  const arena: Arena = {
+    cols: 9, rows: 3, cellSize: 1,
+    legend: { x: 'solid' as WallKind, d: 'destructible' as WallKind },
+    grid: ['xxxxxxxxx', 'P...d...x', 'xxxxxxxxx'].map((r) => r),
+  };
+
+  it('the authored corridor conceals its two spawns behind the destructible block', () => {
+    const entry = fixtureEntry({ players: [2], modes: ['ffa'], variants: [] });
+    const failures = versusCatalogEntryFailures(entry, { arenaFor: arenaFor(arena) })
+      .filter((f) => !f.includes(': room:'));
+    expect(failures).toEqual([]);
+  });
+
+  it('with seeded-destructible declared, the sight-blocker removal surfaces as variant-coverage naming a seed', () => {
+    // One destructible cell alone never draws (round(1 * 0.4) = 0 removals), so the
+    // fixture carries TWO: the corridor's sight blocker at (4, 1) plus a decoy
+    // embedded in the bottom wall at (3, 2) that no corridor sightline crosses.
+    // round(2 * 0.4) = 1: every seed removes exactly one of the two; a draw taking
+    // the corridor blocker opens the P-to-spawn line (0 of 1 pairs concealed), a
+    // draw taking the decoy leaves the corridor concealed. MEASURED on the pinned
+    // sample (probe, this tree): all 5 of the 5 default seeds happen to draw the
+    // corridor blocker, so today every pinned seed fails -- the assertion still
+    // requires only >= 1 named failure, so a future seed-list change that lets
+    // decoy draws through stays green without weakening the rule under test.
+    const twoDraws: Arena = { ...arena, grid: ['xxxxxxxxx', 'P...d...x', 'xxxdxxxxx'] };
+    const entry = fixtureEntry({ players: [2], modes: ['ffa'], variants: ['seeded-destructible'] });
+    const failures = versusCatalogEntryFailures(entry, { arenaFor: arenaFor(twoDraws) })
+      .filter((f) => f.includes('variant-coverage'));
+    expect(failures.length).toBeGreaterThanOrEqual(1);
+    for (const f of failures) {
+      expect(f).toMatch(/variant=seeded-destructible seed=\d+: variant-coverage: 0 of 1 spawn pairs concealed$/);
+    }
+  });
+});
+
+describe('spawn-clearance seam: an injected rule surfaces with full identification', () => {
+  const grid: string[] = [];
+  for (let r = 0; r < 10; r++) grid.push(r === 0 ? 'P.........' : '..........');
+  const openRoom: Arena = { cols: 10, rows: 10, cellSize: 1, legend: {}, grid };
+
+  it('absent by default: no spawn-clearance line without an injected rule', () => {
+    const entry = fixtureEntry({ players: [4] });
+    const failures = versusCatalogEntryFailures(entry, { arenaFor: arenaFor(openRoom) });
+    expect(failures.some((f) => f.includes('spawn-clearance'))).toBe(false);
+  });
+
+  it('an injected rule sees the real positions and its findings carry (entry, N, mode)', () => {
+    const entry = fixtureEntry({ players: [2], modes: ['teams'] });
+    const failures = versusCatalogEntryFailures(entry, {
+      arenaFor: arenaFor(openRoom),
+      clearanceRule: (ctx) => [`probe saw ${ctx.positions.length} positions at N=${ctx.playerCount}`],
+    });
+    const clearance = failures.filter((f) => f.includes('spawn-clearance'));
+    expect(clearance).toEqual([
+      'vs-fixture (fixture-arena) N=2 mode=teams variant=authored: spawn-clearance: probe saw 2 positions at N=2',
+    ]);
+  });
+});
+
+describe('determinism: two runs on the same entry are deep-equal', () => {
+  it('the shipped arena-02 entry (most destructibles) yields identical failure lists twice', () => {
+    const entry = VERSUS_CATALOG[1];
+    expect(versusCatalogEntryFailures(entry)).toEqual(versusCatalogEntryFailures(entry));
+  });
+});
