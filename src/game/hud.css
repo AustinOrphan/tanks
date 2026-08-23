@@ -1623,3 +1623,86 @@
 .hud-versus-assignment-note--hidden {
   display: none;
 }
+
+/* Issue #280: the who's-playing preview reuses .hud-controller-rows/.hud-controller-row
+ * verbatim from the standalone Controllers panel above (renderControllerRowsInto,
+ * hud.ts) -- see that panel's own base rule for the vertical list this inherits by
+ * default. A vertical list reads fine as the STANDALONE panel's own scrollable list,
+ * but wastes this pane's width: even 4 slots would sit one under another below five
+ * other rows. Row + wrap here is what puts them side by side; centered, not
+ * space-between, so 2 or 3 slots do not stretch across the pane's full width.
+ *
+ * Scoped under .hud-versus-setup so the standalone Controllers panel keeps its own
+ * vertical list untouched -- this rule never matches there (issue #280's own bar:
+ * "completely unaffected"). */
+.hud-versus-setup .hud-controller-rows {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  /* The base rule's max-height:58vh + overflow-y:auto exists so the STANDALONE list
+   * (nothing else on its own panel scrolls) can cap itself independently. Here it
+   * would be a SECOND, nested scroll region a few rows tall sitting inside
+   * .hud-versus-setup, which already scrolls the whole pane end to end (see
+   * .hud-versus-setup above) -- two overlapping scrollbars for what is at most a 2x2
+   * grid. Neutralized rather than kept: this grid never needs to scroll on its own,
+   * and the pane's own scroll is what gives it room when the pane's total content
+   * (six rows plus this grid) is what does not fit. */
+  max-height: none;
+  overflow-y: visible;
+  /* A DEFINITE width, not the auto/fit-content this box would otherwise resolve to:
+   * neither .hud-versus-setup's own flex column (align-items:center) nor
+   * .hud-versus-row's (same) stretches its children, so with no width set here this
+   * container's size is a fit-content computation nested two auto-sized boxes deep.
+   * Measured in real Chromium: that circularity does not merely round differently --
+   * at a 700px window with 2 slots (2 x 40vw + the 10px gap = 570px, well under 700)
+   * it folded to ONE column instead of two, because the fit-content box the wrap
+   * calculation ran against had already resolved narrower than the viewport. `vw` is
+   * definite regardless of ancestor sizing (unlike `%`, which would resolve against
+   * that same fit-content chain), so this ends the circularity outright rather than
+   * trying to out-guess it. 92vw comfortably clears two 40vw columns plus their gap
+   * (90vw) with room for the row's own border/padding, AND stays wide enough on a
+   * desktop window (above 760px, where the media query below leaves each row's own
+   * width unconstrained -- content-sized, same as the base rule) that this container
+   * is never itself the thing forcing a wrap there; four content-sized rows are what
+   * decide when a desktop window wraps, not this number. */
+  width: 92vw;
+}
+
+/* .hud-controller-row is already narrow at its default size (a label, a
+ * current-source line, and a column of single buttons -- .hud-controller-row's own
+ * flex-direction: column above, unchanged here), so unconstrained content width
+ * already lets 2, 3 or 4 sit side by side at any desktop window this pane opens in --
+ * no rule needed above this breakpoint. Between that and 760px, sizing stays
+ * content-based too: a wide window still fits every slot on one line, and a narrowing
+ * one folds on natural content width alone, same as below, which can be uneven (e.g.
+ * 3 then 1) until the rule below takes over.
+ *
+ * Below 760px (this file's own narrow-viewport breakpoint -- phones and a portrait
+ * tablet) two things change together: the pane has much less width to offer, and a
+ * connected gamepad candidate is a full pad-id button (candidateLabel/slotSourceLabel,
+ * hud.ts) rather than "Keyboard"/"Bot"/"None", so row content width varies slot to
+ * slot. Left to content-based wrapping alone that variance folds unevenly instead of
+ * the clean 2x2 the acceptance bar wants, so it is forced explicitly here.
+ *
+ * `flex-basis: 40vw`, NOT a percentage: even against the container above's own
+ * definite 92vw, a percentage here would still resolve against that container's
+ * CONTENT box (92vw minus its own 4px/8px padding), one more layer of arithmetic a
+ * reader has to redo to see that two columns fit. `vw` is definite against the
+ * viewport alone: two rows at 40vw plus the row gap (10px, inherited from the base
+ * rule) is at most 80vw + 10px, comfortably under both 92vw and 100vw; a third could
+ * not also fit beside them (120vw + 20px), which is what forces the wrap to a new
+ * line.
+ *
+ * `min-width: 0` overrides the flex item default (`auto`, which refuses to shrink
+ * below the longest word) -- a long pad-id candidate button's text wraps inside the
+ * 40vw column instead of forcing the row wider than its share and breaking the 2x2.
+ * Verified in Chromium at 375px with a synthetic long pad id: the label wraps across
+ * several lines inside the button; the row stays in its column and does not clip or
+ * push into its neighbour. */
+@media (max-width: 760px) {
+  .hud-versus-setup .hud-controller-row {
+    flex: 0 1 40vw;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
