@@ -1,4 +1,5 @@
-import { versusBoardCatalog, type VersusBoardCatalogRow } from '../sim/versus-board';
+import { VERSUS_CATALOG } from '../sim/config/versus-catalog';
+import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalog-types';
 // Reused, not re-hand-rolled: `mulberry32` is already the sim's deterministic PRNG
 // (src/sim/ai/player-profile.ts), exported precisely so callers outside that file --
 // pacifist.test.ts's own local copy is the thing this avoids repeating a third time --
@@ -22,7 +23,10 @@ export interface VersusConfig {
   mode: 'ffa' | 'teams';
   players: 2 | 3 | 4;
   /**
-   * A shipped arena id, or `'random'`. `'random'` is resolved to a concrete id
+   * A stable VS catalog id (`versus-catalog.json` -- issue #270; the five migrated
+   * entries' ids equal their arena ids), or `'random'`. After Start resolution the
+   * field carries the entry's underlying ARENA id -- see `resolveVersusConfig`'s
+   * doc comment for the namespace boundary. `'random'` is resolved to a concrete id
    * exactly ONCE per session, at the Start boundary (`applyVersusToDeps`'s call to
    * `resolveVersusConfig`, loop.ts) -- not once per pane session (the pane's own
    * `versusConfigState`, hud.ts, keeps `'random'` selected across a whole run of
@@ -47,52 +51,33 @@ export interface VersusConfig {
   friendlyFire: boolean;
 }
 
-// Measured (vite-node, this tree): one `versusBoardCatalog()` call -- 15 `loadArena`
-// calls plus their pairwise `lineOfSight` sweeps -- costs ~240-370ms. `versus-board.ts`'s
-// own module doc states nothing in the shipped path calls it; the shipped callers are
-// this module's own `versusMapChoices` (hud.ts's map-picker row reads it directly, on
-// every pane render) and `pickVersusArena` (read exactly ONCE per session, by
-// `resolveVersusConfig` below -- see its own doc comment). `createVersusLevelSystem`'s
-// `world()`/`bounds()` (levels.ts) do NOT call either any more (issue #278 fixed this:
-// both now require an already-resolved id and never touch `'random'` in the shipped
-// path), so a 'random' versus match no longer re-runs this sweep on every build or
-// retry the way it once did. Memoized lazily -- computed on the FIRST call that omits
-// `rows`, cached for the life of the module -- rather than at module load (a top-level
-// `versusBoardCatalog()` call here would tax every CAMPAIGN boot too, since loop.ts ->
-// levels.ts imports this module regardless of mode; a campaign session never calls
-// `versusMapChoices`/`pickVersusArena` at all, so it must never pay this cost). Safe to
-// cache: `ARENA_DEFS` is validated, static data loaded once at import (config/arenas.ts)
-// and never mutated, so the catalog is a pure function of unchanging input for the
-// process's whole lifetime.
-let cachedDefaultRows: VersusBoardCatalogRow[] | null = null;
-function defaultCatalogRows(): VersusBoardCatalogRow[] {
-  if (cachedDefaultRows === null) cachedDefaultRows = versusBoardCatalog();
-  return cachedDefaultRows;
-}
-
 /**
- * Arena ids offerable at `players`: the `versusBoardCatalog` rows for that player count
- * whose `suitable` flag holds (every one of the three versus-board criteria -- distinct
- * spawns, full mutual concealment, room). Order follows the catalog's own arena order
- * (`ARENA_DEFS`'s), not alphabetical or measured-quality order -- nothing downstream
- * needs the second thing yet.
+ * Stable VS ids offerable at (`players`, `mode`): the dedicated catalog entries
+ * (issue #270) whose DECLARED support covers the combination. Order follows the
+ * catalog's own entry order -- the setup pane's offer order.
  *
- * `rows` is an injected seam, exactly like `versusBoardCatalog`'s own `arenas`/
- * `playerCounts` parameters -- so a synthetic fixture with a MIX of suitable/unsuitable
- * rows at one player count can prove this actually filters, rather than only ever
- * seeing the shipped catalog where all 15 (arena, N) rows already pass (a
- * `rows.map(...)` with no filter at all would look identical on that data). See
- * versus-config.test.ts's synthetic-fixture case -- passing `rows` explicitly bypasses
- * `defaultCatalogRows()`'s cache entirely, so that test exercises the real filter, not
- * a memoized value from an earlier test.  Omitting `rows` uses the memoized real
- * catalog -- see `defaultCatalogRows`'s own comment for why that is NOT simply
- * `= versusBoardCatalog()` as a default expression.
+ * A data read, not a measurement: before #270 this ran `versusBoardCatalog()` --
+ * 15 `loadArena` calls plus pairwise `lineOfSight` sweeps, measured 240-370ms,
+ * memoized behind a module cache the pane paid on first render. The declarations
+ * are trustworthy at runtime precisely because versus-catalog-rules.test.ts's
+ * sweep proves every one of them against that same real machinery in CI (plus a
+ * cross-check in versus-config.test.ts tying this function's shipped output to
+ * the live `versusBoardCatalog` measurement), so the cache and the lazy-init
+ * dance went away with the sweep cost.
+ *
+ * `entries` is an injected seam, same idiom as the `rows` parameter it replaces:
+ * every shipped entry declares all of {2,3,4} x both modes, so only a synthetic
+ * narrower entry can prove the two predicates actually filter (see
+ * versus-config.test.ts's fails-if-a-predicate-is-dropped cases).
  */
 export function versusMapChoices(
   players: number,
-  rows: readonly VersusBoardCatalogRow[] = defaultCatalogRows(),
+  mode: VersusMode,
+  entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
 ): string[] {
-  return rows.filter((r) => r.playerCount === players && r.suitable).map((r) => r.arenaId);
+  return entries
+    .filter((e) => e.players.includes(players) && e.modes.includes(mode))
+    .map((e) => e.id);
 }
 
 /**
@@ -115,9 +100,13 @@ export function versusMapChoices(
  * callers (this module's own tests) can still call it per-seed to characterize the
  * distribution itself.
  */
-export function pickVersusArena(config: VersusConfig, seed: number): string {
+export function pickVersusArena(
+  config: VersusConfig,
+  seed: number,
+  entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+): string {
   if (config.arenaId !== 'random') return config.arenaId;
-  const choices = versusMapChoices(config.players);
+  const choices = versusMapChoices(config.players, config.mode, entries);
   const rnd = mulberry32(seed);
   const idx = Math.min(Math.floor(rnd() * choices.length), choices.length - 1);
   return choices[idx];
@@ -138,8 +127,33 @@ export function pickVersusArena(config: VersusConfig, seed: number): string {
  * for `GameDeps.initialVersusConfig` -- see that field's own doc comment for why the
  * setup pane must reopen showing `'random'` selected, not whatever concrete arena this
  * session actually rolled.
+ *
+ * Since issue #270 this is ALSO the launch gate and the namespace boundary:
+ *
+ * - The resolved id must name a `VERSUS_CATALOG` entry whose DECLARED support covers
+ *   the config's (players, mode), or this throws. Unreachable from the shipped pane
+ *   (its offer list is already filtered by the same declarations), so the throw is
+ *   the loud backstop for a future narrower entry (#271-#273) meeting a stale
+ *   retained selection -- fail at Start, never launch an unsupported combination.
+ * - `config.arenaId` holds a STABLE VS id (the selection namespace) before this
+ *   call, and the entry's underlying ARENA id after it -- what `arenaById`
+ *   (levels.ts) and `replayMetaFor` actually need. The five migrated entries have
+ *   id === arenaId, so identity pass-through still holds for every shipped concrete
+ *   config; a purpose-built entry whose ids differ gets a translated copy.
  */
-export function resolveVersusConfig(config: VersusConfig, seed: number): VersusConfig {
-  if (config.arenaId !== 'random') return config;
-  return { ...config, arenaId: pickVersusArena(config, seed) };
+export function resolveVersusConfig(
+  config: VersusConfig,
+  seed: number,
+  entries: readonly VersusCatalogEntry[] = VERSUS_CATALOG,
+): VersusConfig {
+  const id = pickVersusArena(config, seed, entries);
+  const entry = entries.find((e) => e.id === id);
+  if (!entry) throw new Error(`versus-config: '${id}' names no versus catalog entry`);
+  if (!entry.players.includes(config.players) || !entry.modes.includes(config.mode)) {
+    throw new Error(
+      `versus-config: map '${id}' does not support N=${config.players} mode=${config.mode}`,
+    );
+  }
+  if (config.arenaId === entry.arenaId) return config;
+  return { ...config, arenaId: entry.arenaId };
 }
