@@ -5482,7 +5482,7 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       const result = applyVersusToDeps(deps, { config: random3 }, noop);
       const resolvedId = result.levels.start.arenaId;
       expect(resolvedId).toBe('arena-03');
-      expect(versusMapChoices(3)).toContain(resolvedId);
+      expect(versusMapChoices(3, 'ffa')).toContain(resolvedId);
       const arena = arenaById(resolvedId);
       // Fails if bounds() ever falls back to a largest-candidate guess (the pre-#278
       // behavior) instead of the actually-resolved arena's own bounds.

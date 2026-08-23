@@ -1962,14 +1962,22 @@ export function createHud(root: HTMLElement): Hud {
   }
 
   /**
-   * REPLACE, never append -- rebuilt whenever `players` changes (the arena list is
-   * filtered by it -- `versusMapChoices`, versus-config.ts) and whenever the pane is
-   * (re)seeded, same convention `renderControllerRows` already uses for its own
-   * per-slot rows.
+   * REPLACE, never append -- rebuilt whenever `players` OR `mode` changes (the map
+   * list is filtered by both declared dimensions -- `versusMapChoices`,
+   * versus-config.ts, issue #270) and whenever the pane is (re)seeded, same
+   * convention `renderControllerRows` already uses for its own per-slot rows.
+   * A retained selection dropping out of the rebuilt list has no reset branch for
+   * the same reason the 'random' default comment above gives: every shipped entry
+   * declares all of {2,3,4} x both modes, so nothing can reach it --
+   * `resolveVersusConfig`'s launch gate is the loud backstop, and the reset ships
+   * with the first narrower entry (#271-#273).
    */
   function renderVersusMapRow(): void {
     versusMapRow.replaceChildren();
-    const choices: string[] = [...versusMapChoices(versusConfigState.players), 'random'];
+    const choices: string[] = [
+      ...versusMapChoices(versusConfigState.players, versusConfigState.mode),
+      'random',
+    ];
     for (const choice of choices) {
       const b = document.createElement('button');
       b.type = 'button';
@@ -2060,6 +2068,7 @@ export function createHud(root: HTMLElement): Hud {
       versusConfigState = { ...versusConfigState, mode: opt.id };
       renderVersusModeSelection();
       renderVersusFriendlyFireRow(); // absent <-> present follows mode directly
+      renderVersusMapRow(); // REPLACE -- Mode filters the map list too (issue #270)
     });
     b.addEventListener('click', blurIfPointer);
     versusModeRow.appendChild(b);

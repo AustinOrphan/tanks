@@ -1463,7 +1463,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.showVersusSetup(true);
     modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
     playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
-    const choices = versusMapChoices(3);
+    const choices = versusMapChoices(3, 'teams');
     mapBtn(root, choices[1]).dispatchEvent(new MouseEvent('click')); // the SECOND map entry
     stockBtn(root, 5).dispatchEvent(new MouseEvent('click'));
     (friendlyFireBtn(root) as HTMLButtonElement).dispatchEvent(new MouseEvent('click')); // off -> on
@@ -1523,11 +1523,11 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     const { hud: h, root } = mount();
     h.setState('title');
     h.showVersusSetup(true);
-    expect(mapButtons(root)).toHaveLength(versusMapChoices(2).length + 1); // + Random
+    expect(mapButtons(root)).toHaveLength(versusMapChoices(2, 'ffa').length + 1); // + Random
     playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
-    expect(mapButtons(root)).toHaveLength(versusMapChoices(3).length + 1);
+    expect(mapButtons(root)).toHaveLength(versusMapChoices(3, 'ffa').length + 1);
     playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
-    expect(mapButtons(root)).toHaveLength(versusMapChoices(4).length + 1);
+    expect(mapButtons(root)).toHaveLength(versusMapChoices(4, 'ffa').length + 1);
   });
 
   it('showVersusSetup(true, initial) pre-fills every field', () => {
@@ -1536,7 +1536,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     const initial: VersusConfig = {
       mode: 'teams',
       players: 4,
-      arenaId: versusMapChoices(4)[2],
+      arenaId: versusMapChoices(4, 'teams')[2],
       stock: 2,
       friendlyFire: true,
     };
