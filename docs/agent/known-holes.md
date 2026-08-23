@@ -38,10 +38,13 @@ The one module genuinely without coverage is `main.ts`: it runs at module scope 
 `document.getElementById('app')`, so importing it starts the game and no test can reach it.
 Its logic lives in `src/boot.ts`, which is tested; keep `main.ts` free of anything else.
 
-**Deferred work goes in `docs/superpowers/backlog.md`** — spikes carry what the question is
-and what would answer it; the ledger below them carries one-line pointers. A PR that defers
-something adds its entry in the same PR, **and a PR that closes something deletes its entry
-in the same PR.**
+**Deferred work goes in the backlog** — `docs/superpowers/backlog.md` is the compact
+index, one line per topic; each topic lives in its own file under
+`docs/superpowers/backlog/` (issue #265's split), and the ledger topic
+(`backlog/ledger.md`) carries the one-line pointers. Spikes carry what the question is
+and what would answer it. A PR that defers something adds its entry (and, for a new
+topic, its index line) in the same PR, **and a PR that closes something deletes its
+entry in the same PR.**
 
 **Issues or backlog?** One question: **can a PR close it?** If yes it is an issue — file it,
 and `Fixes #N` closes it on merge, which is upkeep you do not have to remember. If it needs a
@@ -55,7 +58,8 @@ move the measurement with it. An earlier draft of this paragraph tried a three-p
 the owner limb rejected every example that motivated the rule.
 
 **What is binding today**, whatever should happen eventually: the ledger exists, the
-delete-when-you-close rule above applies to it, and `tools/backlog.test.ts` gates its counts.
+delete-when-you-close rule above applies to it, and `tools/backlog.test.ts` gates its
+counts (reading `backlog/ledger.md` since the split) plus the index's completeness.
 If it migrates to issues that is a deliberate change, not attrition — "it should have been an
 issue" is not a reason to leave a closed line sitting in the file.
 

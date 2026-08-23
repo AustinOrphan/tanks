@@ -12,12 +12,18 @@
 // The repository rule is "quote a measurement and you owe it a recomputing test". This is
 // that debt for backlog.md.
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import tracks from '../src/audio/data/music-tracks.json';
 import suitesJson from '../src/audio/data/music-suites.json';
 
-const BACKLOG = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url)), 'utf8');
+// Issue #265 split the monolithic backlog into per-topic files under backlog/ with
+// backlog.md as their compact index. Every quoted measurement this suite recomputes
+// lives in the LEDGER topic, so the assertions read that file; the index gets its own
+// completeness check below (a split that silently drops or duplicates a topic fails).
+const INDEX = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url)), 'utf8');
+const BACKLOG_DIR = fileURLToPath(new URL('../docs/superpowers/backlog/', import.meta.url));
+const BACKLOG = readFileSync(fileURLToPath(new URL('../docs/superpowers/backlog/ledger.md', import.meta.url)), 'utf8');
 const KNOWN_HOLES = readFileSync(fileURLToPath(new URL('../docs/agent/known-holes.md', import.meta.url)), 'utf8');
 /**
  * Both files hard-wrap, so any sentence-level match must ignore where the lines break.
@@ -30,7 +36,7 @@ const FLAT_KNOWN_HOLES = KNOWN_HOLES.replace(/\s+/g, ' ');
 
 /** Bullet counts per `###` subsection of the Ledger, in document order. */
 function ledgerSections(): { title: string; bullets: number; prose: number }[] {
-  const ledger = BACKLOG.slice(BACKLOG.indexOf('## Ledger'));
+  const ledger = BACKLOG; // the whole ledger.md file is the ledger since the #265 split
   const out: { title: string; bullets: number; prose: number }[] = [];
   for (const line of ledger.split('\n')) {
     if (line.startsWith('### ')) out.push({ title: line.slice(4), bullets: 0, prose: 0 });
@@ -53,7 +59,7 @@ describe('backlog.md quotes numbers it can still justify', () => {
     // that reference, so it owes its own non-vacuity check.
     expect(BACKLOG.length).toBeGreaterThan(2000);
     expect(KNOWN_HOLES.length).toBeGreaterThan(2000);
-    expect(BACKLOG).toContain('## Ledger');
+    expect(BACKLOG).toContain('# Ledger');
   });
 
   // These two cases deliberately pin NO absolute number. The section counts are the file
@@ -126,7 +132,7 @@ describe('backlog.md quotes numbers it can still justify', () => {
     // The text names which out-of-scope PRs were spot-checked. It said "four (#31, #45,
     // #50, #74)" while the marked lines cite six -- #9 and #14 were never in the list.
     // Recompute the set from the lines rather than trusting the sentence.
-    const ledger = BACKLOG.slice(BACKLOG.indexOf('## Ledger'));
+    const ledger = BACKLOG; // whole-file: see ledgerSections (issue #265 split)
     const cited = new Set<number>();
     for (const l of ledger.split('\n')) {
       if (l.startsWith('- ') && l.includes('prose-only PR')) {
@@ -196,5 +202,25 @@ describe('backlog.md quotes numbers it can still justify', () => {
     const orphans = ids.filter((id) => !named.has(id)).sort();
     expect(orphans).toEqual(['blitz', 'dread', 'hunt', 'siege', 'standoff', 'triumph']);
     for (const o of orphans) expect(BACKLOG).toContain(o);
+  });
+});
+
+describe('the backlog index is complete (issue #265)', () => {
+  it('every topic file is indexed exactly once, and every index link resolves', () => {
+    const files = readdirSync(BACKLOG_DIR).filter((f) => f.endsWith('.md')).sort();
+    expect(files.length).toBeGreaterThan(0); // non-vacuity: an empty dir passes nothing
+    const linked = [...INDEX.matchAll(/\(backlog\/([a-z0-9-]+\.md)\)/g)].map((m) => m[1]).sort();
+    // Set equality in both directions, and no duplicates: a topic dropped from the
+    // index is undiscoverable, an indexed file that does not exist is a dead link,
+    // and a file indexed twice is two competing entry points to one authority.
+    expect(linked).toEqual(files);
+    expect(new Set(linked).size).toBe(linked.length);
+  });
+
+  it('the index stays compact: no topic bodies, only one line per topic', () => {
+    // The whole point of the split (issue #265's first acceptance criterion): loading
+    // the index must not load the corpus. 40 lines comfortably holds ~16 entries plus
+    // preamble; a body pasted back in blows through it immediately.
+    expect(INDEX.split('\n').length).toBeLessThan(40);
   });
 });

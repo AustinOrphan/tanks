@@ -12,6 +12,9 @@ import path from 'node:path';
 export const DOCUMENT_DIRS = [
   'docs/superpowers/plans',
   'docs/superpowers/specs',
+  // Backlog topics (issue #265): split from the monolithic backlog.md, same
+  // header contract so #266's central index can classify them uniformly.
+  'docs/superpowers/backlog',
 ];
 export const DOCUMENT_STATUSES = [
   'proposed',
