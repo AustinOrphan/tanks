@@ -12,6 +12,8 @@ import type { AIProfileBalance, TankDefinition } from './types';
 import type { ArenaClaim, ArenaDefinition, ArenaShape } from './arena-types';
 import { SPAWN_LETTERS } from './arena-types';
 import type { CampaignDefinition, CampaignLevel } from './campaign-types';
+import type { VersusCatalogEntry } from './versus-catalog-types';
+import { VERSUS_MODES, VERSUS_PLAYER_COUNTS, VERSUS_SPAWN_POLICIES, VERSUS_VARIANT_KINDS } from './versus-catalog-types';
 
 // ---------------------------------------------------------------------------
 // Runtime validation for the JSON entity data (data/tank-defs.json,
@@ -385,4 +387,89 @@ export function validateCampaign(
   });
 
   return { id, levels };
+}
+
+const VERSUS_CATALOG_FIELDS = [
+  'id', 'arenaId', 'displayName', 'intent', 'preview',
+  'players', 'modes', 'spawnPolicy', 'variants',
+] as const;
+
+/**
+ * The dedicated VS arena catalog (issue #270) -- see versus-catalog-types.ts for
+ * the contract's semantics. Schema-only here, the same posture as every other
+ * family: geometry promises (declared support, connectivity, variants) are proven
+ * separately by `versus-catalog-rules.ts`, because they need `loadArena` and this
+ * module deliberately imports no sim machinery.
+ *
+ * `id: 'random'` is rejected because the setup pane uses the literal string
+ * `'random'` as its draw-for-me sentinel (`VersusConfig.arenaId`,
+ * game/versus-config.ts) -- an entry with that id would be unselectable and would
+ * shadow the sentinel's meaning in every diagnostic.
+ */
+export function validateVersusCatalog(
+  raw: unknown,
+  knownArenaIds: ReadonlySet<string>,
+  file = 'versus-catalog.json',
+): VersusCatalogEntry[] {
+  if (!isRecord(raw)) fail(file, 'root', 'must be an object');
+  exactKeys(file, 'root', raw, ['entries']);
+  if (!Array.isArray(raw.entries)) fail(file, 'root.entries', 'must be an array');
+  if (raw.entries.length === 0) fail(file, 'root.entries', 'must hold at least one entry');
+
+  const seen = new Set<string>();
+  return raw.entries.map((entry, i) => {
+    const path = `entries[${i}]`;
+    if (!isRecord(entry)) fail(file, path, 'must be an object');
+    exactKeys(file, path, entry, VERSUS_CATALOG_FIELDS);
+
+    const id = str(file, `${path}.id`, entry.id);
+    if (id.trim() === '') fail(file, `${path}.id`, 'must not be empty');
+    if (id === 'random') fail(file, `${path}.id`, `'random' is reserved for the menu sentinel`);
+    if (seen.has(id)) fail(file, path, `duplicate id ${JSON.stringify(id)}`);
+    seen.add(id);
+
+    const arenaId = str(file, `${path}.arenaId`, entry.arenaId);
+    if (!knownArenaIds.has(arenaId)) {
+      fail(file, `${path}.arenaId`, `${JSON.stringify(arenaId)} does not name a known arena`);
+    }
+
+    const text: Record<'displayName' | 'intent' | 'preview', string> = {
+      displayName: '', intent: '', preview: '',
+    };
+    for (const field of ['displayName', 'intent', 'preview'] as const) {
+      const v = str(file, `${path}.${field}`, entry[field]);
+      if (v.trim() === '') fail(file, `${path}.${field}`, 'must not be empty');
+      text[field] = v;
+    }
+
+    if (!Array.isArray(entry.players)) fail(file, `${path}.players`, 'must be an array');
+    if (entry.players.length === 0) fail(file, `${path}.players`, 'must hold at least one player count');
+    const players = entry.players.map((p, j) => {
+      const n = posInt(file, `${path}.players[${j}]`, p);
+      if (!VERSUS_PLAYER_COUNTS.includes(n)) {
+        fail(file, `${path}.players[${j}]`, `must be one of ${VERSUS_PLAYER_COUNTS.join(', ')}`);
+      }
+      return n;
+    });
+    for (let j = 1; j < players.length; j++) {
+      if (players[j] <= players[j - 1]) fail(file, `${path}.players`, 'must be strictly increasing');
+    }
+
+    if (!Array.isArray(entry.modes)) fail(file, `${path}.modes`, 'must be an array');
+    if (entry.modes.length === 0) fail(file, `${path}.modes`, 'must hold at least one mode');
+    const modes = entry.modes.map((m, j) => oneOf(file, `${path}.modes[${j}]`, m, VERSUS_MODES, 'mode'));
+    if (new Set(modes).size !== modes.length) fail(file, `${path}.modes`, 'must not hold duplicate modes');
+
+    const spawnPolicy = oneOf(file, `${path}.spawnPolicy`, entry.spawnPolicy, VERSUS_SPAWN_POLICIES, 'spawn policy');
+
+    if (!Array.isArray(entry.variants)) fail(file, `${path}.variants`, 'must be an array');
+    const variants = entry.variants.map((v, j) => oneOf(file, `${path}.variants[${j}]`, v, VERSUS_VARIANT_KINDS, 'variant kind'));
+    if (new Set(variants).size !== variants.length) fail(file, `${path}.variants`, 'must not hold duplicate variant kinds');
+
+    return {
+      id, arenaId,
+      displayName: text.displayName, intent: text.intent, preview: text.preview,
+      players, modes, spawnPolicy, variants,
+    };
+  });
 }

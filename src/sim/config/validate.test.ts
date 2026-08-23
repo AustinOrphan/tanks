@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TANK_KINDS, validateAiProfiles, validateArenaShape, validateArenas, validateCampaign, validateTankDefinitions } from './validate';
+import { TANK_KINDS, validateAiProfiles, validateArenaShape, validateArenas, validateCampaign, validateTankDefinitions, validateVersusCatalog } from './validate';
 import tankDefsJson from './data/tank-defs.json';
 import aiProfilesJson from './data/ai-profiles.json';
 import { AIProfile } from './enums';
@@ -623,5 +623,97 @@ describe('validateCampaign', () => {
       ],
     };
     expect(validateCampaign(reordered, KNOWN_ARENA_IDS)).toEqual(reordered);
+  });
+});
+
+describe('validateVersusCatalog', () => {
+  /**
+   * One valid entry, mutated one field at a time by the negative controls below --
+   * the same single-defect discipline the arena and campaign blocks use. Ids and
+   * players/modes mirror the shipped arena-01 entry.
+   */
+  function validEntry(): Record<string, unknown> {
+    return {
+      id: 'arena-01',
+      arenaId: 'arena-01',
+      displayName: 'Arena 1',
+      intent: 'Mostly permanent cover; lanes stay stable all match.',
+      preview: 'arena-01',
+      players: [2, 3, 4],
+      modes: ['ffa', 'teams'],
+      spawnPolicy: 'maximin',
+      variants: ['seeded-destructible'],
+    };
+  }
+  const KNOWN = new Set(['arena-01', 'arena-02']);
+  function run(entries: unknown[]): unknown {
+    return validateVersusCatalog({ entries }, KNOWN);
+  }
+
+  it('accepts a valid catalog and returns its entries in order', () => {
+    const second = { ...validEntry(), id: 'arena-02', arenaId: 'arena-02', displayName: 'Arena 2' };
+    const out = validateVersusCatalog({ entries: [validEntry(), second] }, KNOWN);
+    expect(out.map((e) => e.id)).toEqual(['arena-01', 'arena-02']);
+    expect(out[0]).toEqual(validEntry());
+  });
+
+  it('rejects a non-object root and a missing entries key', () => {
+    expect(() => validateVersusCatalog(null, KNOWN)).toThrow(/root must be an object/);
+    expect(() => validateVersusCatalog({}, KNOWN)).toThrow(/entries/);
+  });
+
+  it('rejects an unknown top-level key', () => {
+    expect(() => validateVersusCatalog({ entries: [validEntry()], extra: 1 }, KNOWN)).toThrow(/unknown entry "extra"/);
+  });
+
+  it('rejects an incomplete entry (missing key) naming the entry path', () => {
+    const e = validEntry();
+    delete e.intent;
+    expect(() => run([e])).toThrow(/entries\[0\].*missing required entry "intent"/);
+  });
+
+  it('rejects an entry with an unknown key', () => {
+    expect(() => run([{ ...validEntry(), campaignOrder: 1 }])).toThrow(/unknown entry "campaignOrder"/);
+  });
+
+  it('rejects empty id, displayName, intent, and preview', () => {
+    for (const field of ['id', 'displayName', 'intent', 'preview'] as const) {
+      expect(() => run([{ ...validEntry(), [field]: '' }]), field).toThrow(/must not be empty/);
+    }
+  });
+
+  it("rejects id 'random' -- the menu's reserved sentinel", () => {
+    expect(() => run([{ ...validEntry(), id: 'random' }])).toThrow(/reserved/);
+  });
+
+  it('rejects duplicate ids', () => {
+    expect(() => run([validEntry(), { ...validEntry(), arenaId: 'arena-02' }])).toThrow(/duplicate id/);
+  });
+
+  it('rejects an arenaId that names no known arena', () => {
+    expect(() => run([{ ...validEntry(), arenaId: 'arena-99' }])).toThrow(/does not name a known arena/);
+  });
+
+  it('rejects empty, out-of-range, unordered, and duplicated players lists', () => {
+    expect(() => run([{ ...validEntry(), players: [] }])).toThrow(/at least one/);
+    expect(() => run([{ ...validEntry(), players: [5] }])).toThrow(/players\[0\]/);
+    expect(() => run([{ ...validEntry(), players: [3, 2] }])).toThrow(/strictly increasing/);
+    expect(() => run([{ ...validEntry(), players: [2, 2] }])).toThrow(/strictly increasing/);
+  });
+
+  it('rejects empty, unknown, and duplicated modes lists', () => {
+    expect(() => run([{ ...validEntry(), modes: [] }])).toThrow(/at least one/);
+    expect(() => run([{ ...validEntry(), modes: ['solo'] }])).toThrow(/modes\[0\]/);
+    expect(() => run([{ ...validEntry(), modes: ['ffa', 'ffa'] }])).toThrow(/duplicate/);
+  });
+
+  it('rejects an unknown spawn policy', () => {
+    expect(() => run([{ ...validEntry(), spawnPolicy: 'grid' }])).toThrow(/spawnPolicy/);
+  });
+
+  it('rejects unknown and duplicated variant kinds, and accepts an empty list', () => {
+    expect(() => run([{ ...validEntry(), variants: ['procedural'] }])).toThrow(/variants\[0\]/);
+    expect(() => run([{ ...validEntry(), variants: ['seeded-destructible', 'seeded-destructible'] }])).toThrow(/duplicate/);
+    expect(run([{ ...validEntry(), variants: [] }])).toHaveLength(1);
   });
 });
