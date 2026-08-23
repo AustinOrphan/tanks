@@ -1,10 +1,10 @@
 ---
-status: active
+status: completed
 date: 2026-08-23
 last-reviewed: 2026-08-23
 scope: Continuous hull clearance for VS spawn candidates (walls, boundaries, pairwise), with diagnostics and shipped-behaviour parity
 implementation-issues: [225]
-implementation-prs: []
+implementation-prs: [310]
 supersedes: []
 superseded-by: []
 ---
