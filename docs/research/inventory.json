@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "documents": [
+    {
+      "path": "docs/research/animated-skins.md",
+      "date": "2026-08-09",
+      "last-reviewed": "2026-08-23",
+      "scope": "How animated skins ship today: texture-offset scroll mechanism, measured cost of adding a skin, frozen Customize preview, and the shader/gallery gaps.",
+      "tags": ["rendering", "customization", "skins", "testing"],
+      "classification": "public-prototype",
+      "relevance": "Documents the shipped public skin mechanism; measurements pinned to commit 3522c0a and re-verified 2026-08-10.",
+      "related-issues": [],
+      "related-prs": [61],
+      "related-docs": ["docs/superpowers/specs/2026-08-01-customization-design.md"]
+    },
+    {
+      "path": "docs/research/console-release.md",
+      "date": "2026-08-09",
+      "last-reviewed": "2026-08-23",
+      "scope": "Feasibility of shipping on Steam, Switch, or PlayStation: store fees and Deck criteria, NDA-gated console toolchains, and the tree's gaps at the time (shell, Steamworks, content depth).",
+      "tags": ["release", "platforms", "steam", "console"],
+      "classification": "commercial-direction",
+      "relevance": "Store/platform shipping is post-cutover commercial scope under the Public Prototype 1.0 boundary; external fees and policies dated 2026-08-10, re-check before acting.",
+      "related-issues": [109],
+      "related-prs": [],
+      "related-docs": ["docs/superpowers/specs/2026-08-22-project-direction.md"]
+    },
+    {
+      "path": "docs/research/mobile-release.md",
+      "date": "2026-08-09",
+      "last-reviewed": "2026-08-23",
+      "scope": "Feasibility of wrapping the game as an Android/iOS app: offline bundle, touch controls, storage keys, safe-area and WebGL2 gaps, store policies, and the unmeasured phone frame time.",
+      "tags": ["release", "mobile", "platforms", "performance"],
+      "classification": "mixed",
+      "relevance": "Store wrapping is post-cutover commercial scope, but the unmeasured phone frame time and safe-area findings feed open public-prototype work (#288, #290); policies dated 2026-08-10.",
+      "related-issues": [109, 110, 118, 288],
+      "related-prs": [94, 96, 99],
+      "related-docs": ["docs/superpowers/specs/2026-08-22-project-direction.md"]
+    },
+    {
+      "path": "docs/research/multiplayer.md",
+      "date": "2026-08-09",
+      "last-reviewed": "2026-08-23",
+      "scope": "Multiplayer feasibility: the immutable deterministic sim as a netcode foundation, the game layer's then single-player assumptions, cross-engine float determinism, and the couch-first ordering.",
+      "tags": ["multiplayer", "netcode", "determinism", "simulation"],
+      "classification": "mixed",
+      "relevance": "Local co-op/versus recommendations have since shipped and sim math is cross-engine bit-identical (PR #165); online netcode and infrastructure sections remain future commercial context.",
+      "related-issues": [121, 133],
+      "related-prs": [160, 164, 165],
+      "related-docs": [
+        "docs/superpowers/plans/2026-08-14-vendored-math.md",
+        "docs/superpowers/plans/2026-08-15-mp-determinism-frontier.md",
+        "docs/superpowers/plans/2026-08-16-players-n.md"
+      ]
+    }
+  ]
+}

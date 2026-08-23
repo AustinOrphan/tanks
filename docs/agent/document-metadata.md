@@ -65,6 +65,16 @@ valid header; never update a baseline hash to exempt new work.
 Issue #264 will classify the remaining corpus. This contract does not move, delete, index,
 or make current-direction judgments about those documents.
 
+## Research inventory
+
+Documents under `docs/research/` do not carry frontmatter. Instead,
+`docs/research/inventory.json` records one entry per research document: `path`, `date`,
+optional `last-reviewed`, a `scope` line, lowercase kebab-case `tags`, a `classification`
+(`public-prototype`, `commercial-direction`, or `mixed` against the Public Prototype 1.0
+boundary), a one-line `relevance` statement, and evidence-backed `related-issues`,
+`related-prs`, and `related-docs`. The same `npm run docs:check` guard fails when a
+research document is added, moved, or removed without updating the inventory.
+
 ## Author workflow
 
 Run `npm run docs:check` after adding or editing a plan or specification. The complete unit
