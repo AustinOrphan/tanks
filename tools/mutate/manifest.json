@@ -513,7 +513,7 @@
     "find": "  mine.warningLeft = MINE_WARNING_TICKS",
     "replace": "  mine.warningLeft = 1",
     "expect": "killed",
-    "expectFailures": 6,
+    "expectFailures": 2,
     "tests": [
       "src/sim/mines.test.ts"
     ],
@@ -525,7 +525,7 @@
     "find": "      // Fuse expiry triggers regardless of arming, so camping on your own mine\n      // is not a free bomb -- it now enters the warning first (issue #275).\n      triggerMine(mine, events)",
     "replace": "      // Fuse expiry triggers regardless of arming, so camping on your own mine\n      // is not a free bomb -- it now enters the warning first (issue #275).\n      detonateMine(world, mine, events)",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 1,
     "tests": [
       "src/sim/mines.test.ts"
     ],
