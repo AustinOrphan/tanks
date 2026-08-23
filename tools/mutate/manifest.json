@@ -164,7 +164,7 @@
     "find": "  const pool = invisible.length > 0 ? invisible : eligible;",
     "replace": "  const pool = eligible;",
     "expect": "killed",
-    "expectFailures": 5,
+    "expectFailures": 4,
     "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
     "tests": [
       "src/sim/versus-spawns.test.ts"
@@ -176,7 +176,7 @@
     "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize)), opts));",
     "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)], opts));",
     "expect": "killed",
-    "expectFailures": 5,
+    "expectFailures": 7,
     "why": "Greedy farthest-point sampling must place each spawn against EVERY spawn already chosen, not just the most recent one. Avoiding only the last one lets the chain walk back and forth between two ends of the board, putting spawn 3 on top of spawn 1. This entry replaces `versus-spawns-wiring-drops-accumulation`, which targeted a `chosen.push(pos)` accumulator in arena.ts's versus branch; that variable became dead when pickVersusSpawnSet took over the picking, and the old entry silently degraded to SURVIVES because it was mutating code nothing read -- which is how the dead variable was found at all. The accumulation now lives here. Caught by 5 of 17 in versus-spawns.test.ts.",
     "tests": [
       "src/sim/versus-spawns.test.ts"
@@ -369,7 +369,7 @@
     "find": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else if (euclid !== bestEuclid) wins = euclid > bestEuclid;\n    else wins = isEarlier(cand, best);",
     "replace": "    if (geo !== bestGeo) wins = geo > bestGeo;\n    else wins = isEarlier(cand, best);",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 3,
     "why": "Geodesic distance saturates at Infinity for every cell in a component the avoid set cannot reach, so on a partitioned board EVERY unreachable candidate ties and, without the Euclidean key, (row, col) order decides -- which picks the cell hard against the far side of the dividing wall. This mutation SURVIVED when first run (the gap was proved before the test was written, per this repo's rule); the dedicated tie-break fixture and the pickVersusSpawnSet pin were added because of it. Caught by 2 of 17 in versus-spawns.test.ts: the partitioned-board fixture returns {row:0,col:6} instead of {row:0,col:11}, and arena-04's 3-player set moves to (0,0) (32,44) (13,25).",
     "tests": [
       "src/sim/versus-spawns.test.ts"
@@ -439,6 +439,42 @@
     "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by 1 of 149 in hud.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead.",
     "tests": [
       "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "vs-clearance-wall-requirement-drops-radius",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);\n  const wallRequired = TANK_RADIUS + margin;",
+    "replace": "  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);\n  const wallRequired = margin;",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "versusSpawnClearanceFailures must require TANK_RADIUS + margin (0.65) of wall and boundary clearance, not the bare margin (0.15): a hull is 0.5 wide before any safety margin exists. Dropping the radius lets a centre 0.5 from a wall face -- a hull TOUCHING the wall -- validate clean. Killed by the clearance suite's wall fixture, whose position sits at exactly 0.5 and must fail with the 0.650 requirement named.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "vs-clearance-picker-drops-pairwise",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "      for (const a of avoid) if (Math.hypot(a.x - p.x, a.y - p.y) < pairRequired) return false;\n      return true;",
+    "replace": "      return true;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "pickVersusSpawnCell's candidate eligibility must include pairwise clearance against every already-placed spawn, not only wall/boundary clearance. Without it, the 5x5 cellSize-0.6 fixture keeps an 8-cell eligible pool (all within 1.15 of avoid) and picks an eligible diagonal, where the real filter empties the pool and falls back to the unfiltered ranking's far-corner pick -- the fixture asserts that fallback equality.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
+  },
+  {
+    "id": "vs-clearance-set-anchor-unfiltered",
+    "file": "src/sim/versus-spawns.ts",
+    "find": "    if (clear.length > 0) anchorCands = clear;",
+    "replace": "    // mutation: anchor ignores clearance",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "pickVersusSpawnSet's ANCHOR must honour the same wall/boundary clearance as every later pick -- it is the first spawn placed and the greedy chain never revisits it. Leaving the anchor unfiltered puts P1 back on arena-01's corner cell, 0.333 from two boundaries at cellSize 2/3, a hull overlapping the wall by 0.167 -- exactly the shipped clipping issue #225 exists to close. Killed by the shipped clearance sweep (0-violations pin) and the relax-convergence pin.",
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
     ]
   }
 ]

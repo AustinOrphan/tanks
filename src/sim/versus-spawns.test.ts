@@ -172,14 +172,26 @@ describe('pickVersusSpawnSet: the relaxation pass runs to convergence, not one r
     const arena = ARENA_DEFS.find((a) => a.id === 'arena-04')!;
     // Re-measured 2026-08-23 after the hull-clearance filter (issue #225) made the
     // boundary ring ineligible: the converged set moved off the board edges (was
-    // (0,26) (32,44) (24,0)). The cap-1 alternates in the comment above were measured
-    // PRE-filter; versus-relax-rounds-one in the mutation manifest is what currently
-    // proves the cap still discriminates.
+    // (0,26) (32,44) (24,0)) -- and this combination STOPPED discriminating the cap:
+    // post-filter, arena-04 at N=3 converges in a single round, and the
+    // versus-relax-rounds-one manifest mutation SURVIVED against it (a dead target,
+    // caught by re-running the manifest after the filter landed). Cap-1 vs cap-8 was
+    // then swept across all 15 shipped (arena, N) combinations: three still differ,
+    // all at N=3 -- arena-01 ((1,1) (25,8) (9,31) under cap 1), arena-02, arena-03.
+    // The arena-01 pin below is what kills the manifest mutation now; arena-04 keeps
+    // its converged pin as plain behaviour coverage.
     const cells = pickVersusSpawnSet(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 3);
     expect(cells).toEqual<Cell[]>([
       { row: 1, col: 1 },
       { row: 31, col: 43 },
       { row: 16, col: 22 },
+    ]);
+    const a1 = ARENA_DEFS.find((a) => a.id === 'arena-01')!;
+    const cells1 = pickVersusSpawnSet(a1.grid, a1.cols, a1.rows, a1.cellSize, a1.legend, 3);
+    expect(cells1).toEqual<Cell[]>([
+      { row: 1, col: 1 },
+      { row: 25, col: 13 },
+      { row: 7, col: 31 },
     ]);
   });
 
