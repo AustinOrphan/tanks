@@ -994,7 +994,12 @@ the stock PR -- also struck below, same idiom.
    player count -- plus a Random option added on top, which draws uniformly from the
    catalog's passing entries via the session's own seed derivation (no `Math.random`).
    The gap this paragraph named is closed for the UI half; the underlying measurement is
-   unchanged (still only the 5 shipped arenas). **Further answered, on the map-supply
+   unchanged (still only the 5 shipped arenas). **Superseded mechanism, #270 (2026-08-23):
+   the offer now reads the DEDICATED declared catalog** (`versus-catalog.json` +
+   `versusMapChoices(players, mode)`, stable VS ids, declarations proven against the same
+   `evaluateVersusBoard` machinery by `versus-catalog-rules.test.ts`'s sweep);
+   `versusBoardCatalog` remains the measurement tool, no longer the runtime offer list.
+   The purpose-built maps themselves are #271-#273, the selector previews #274. **Further answered, on the map-supply
    side, by the map-variants PR** (`docs/superpowers/plans/2026-08-17-versus-map-variants.md`):
    `src/sim/versus-variants.ts` builds the directive's named middle step between "one
    fixed board per arena" and full procedural generation -- a seeded, deterministic
