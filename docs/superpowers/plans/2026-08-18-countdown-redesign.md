@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-18
+last-reviewed: 2026-08-23
+scope: Centered transient numeric round-start countdown replacing the HUD banner
+implementation-issues: []
+implementation-prs: [196]
+supersedes: []
+superseded-by: []
+---
 # Plan — round-start countdown redesign: bare number, centred and transient
 
 Status: adopted 2026-08-18, implemented on branch `countdown-redesign`.

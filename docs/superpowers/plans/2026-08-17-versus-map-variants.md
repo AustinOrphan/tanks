@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Seeded destructible-wall variants with preserved reachability and suitability gating
+implementation-issues: []
+implementation-prs: [194]
+supersedes: []
+superseded-by: []
+---
 # Plan — Versus map variants: randomized subsets before procedural generation
 
 Status: adopted 2026-08-17, implemented on branch `versus-map-variants`.

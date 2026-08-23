@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-12
+last-reviewed: 2026-08-23
+scope: Stable campaign-level identities and campaign-owned ordering independent of arena catalog order
+implementation-issues: [154]
+implementation-prs: [157]
+supersedes: []
+superseded-by: []
+---
 # Plan — Issue #154: campaign data owns level identity and ordering
 
 Status: adopted 2026-08-12, implemented in the PR that carries this file.

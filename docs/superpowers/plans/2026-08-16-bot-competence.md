@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-16
+last-reviewed: 2026-08-23
+scope: Whole-board bot perception and evidence-based wall interaction behavior
+implementation-issues: []
+implementation-prs: [180]
+supersedes: []
+superseded-by: []
+---
 # Plan — Walls + whole-map competence, player brain only (PR 2b)
 
 Status: adopted 2026-08-16, implemented on branch `bot-competence`.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-18
+last-reviewed: 2026-08-23
+scope: Identity-colored death pulse, vignette, and enemy death-animation development flag
+implementation-issues: [200]
+implementation-prs: [205]
+supersedes: []
+superseded-by: []
+---
 # Death Pulse Implementation Plan (issue #200)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development

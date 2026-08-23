@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-15
+last-reviewed: 2026-08-23
+scope: Shared co-op lives, per-player respawn and shields, kill attribution, and run exclusion
+implementation-issues: []
+implementation-prs: [175]
+supersedes: []
+superseded-by: []
+---
 # Plan — couch co-op semantics + attribution: shared lives, per-tank respawn, kill tally
 
 Status: adopted 2026-08-15, implemented on branch `coop-semantics`.

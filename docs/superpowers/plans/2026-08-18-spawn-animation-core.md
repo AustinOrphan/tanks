@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-18
+last-reviewed: 2026-08-23
+scope: Identity-colored player spawn entrance and shield animations with selectable variants
+implementation-issues: [199]
+implementation-prs: [203]
+supersedes: []
+superseded-by: []
+---
 # Spawn Animation Core Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-16
+last-reviewed: 2026-08-23
+scope: Tank-profile-scaled hazard estimation error for AI shell and mine avoidance
+implementation-issues: []
+implementation-prs: [181]
+supersedes: []
+superseded-by: []
+---
 # Plan — Estimation error, both populations (PR 2c)
 
 Status: adopted 2026-08-16, implemented on branch `estimation-error`.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-15
+last-reviewed: 2026-08-23
+scope: Quantized multiplayer aim input and tick identity for simulation events
+implementation-issues: []
+implementation-prs: [171]
+supersedes: []
+superseded-by: []
+---
 # Plan — multiplayer-determinism frontier: `InputState.aim` quantization and `SimEvent` tick identity
 
 Status: adopted 2026-08-15, implemented on branch `mp-frontier`.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-16
+last-reviewed: 2026-08-23
+scope: Shared-attempt co-op win and loss semantics replacing pooled individual-life loss
+implementation-issues: []
+implementation-prs: [178]
+supersedes: []
+superseded-by: []
+---
 # Plan — shared attempts: co-op's default win/lose model, replacing the shared pool
 
 Status: adopted 2026-08-16, implemented on branch `coop-attempts`.

@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Geometry-derived separated versus spawn placement for additional players
+implementation-issues: []
+implementation-prs: [188]
+supersedes: []
+superseded-by: []
+---
 # Plan — Versus spawn separation
 
 Status: adopted 2026-08-17, implemented on branch `versus-spawns`.

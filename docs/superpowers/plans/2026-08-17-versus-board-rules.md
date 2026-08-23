@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Machine-checkable versus-board suitability rules for two to four players
+implementation-issues: []
+implementation-prs: [193]
+supersedes: []
+superseded-by: []
+---
 # Plan — Versus board rules: a checkable suitability definition
 
 Status: adopted 2026-08-17, implemented on branch `versus-board-rules`.

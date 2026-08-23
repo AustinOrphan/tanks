@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-18
+last-reviewed: 2026-08-23
+scope: Maximin versus spawn placement for every player, including player one
+implementation-issues: []
+implementation-prs: [195]
+supersedes: []
+superseded-by: []
+---
 # Versus spawns: every player maximin-placed, P1 included
 
 **Status:** implemented. Supersedes the open question left by

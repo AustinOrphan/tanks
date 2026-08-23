@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-22
+last-reviewed: 2026-08-23
+scope: Initial deterministic vertical slice spanning simulation, AI, rendering, audio, input, and HUD
+implementation-issues: []
+implementation-prs: [1]
+supersedes: []
+superseded-by: []
+---
 # Tanks! Vertical Slice — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

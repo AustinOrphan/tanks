@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-17
+last-reviewed: 2026-08-23
+scope: Free-for-all and teams mode plumbing, player placement, targeting, and friendly fire
+implementation-issues: []
+implementation-prs: [186]
+supersedes: []
+superseded-by: []
+---
 # Plan — Modes: FFA and teams
 
 Status: adopted 2026-08-17, implemented on branch `versus-modes`.
