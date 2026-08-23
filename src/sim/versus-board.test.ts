@@ -177,8 +177,15 @@ describe('evaluateVersusBoard: room can fail, isolated from the other two', () =
   // and concealment hold at every N while total open floor (39 cells: 49 minus 9
   // pillars minus the P1 letter cell) is small enough that the per-player ratio drops
   // below MIN_OPEN_FLOOR_PER_PLAYER once N reaches 3.
+  // cellSize 2, not 1 (changed with issue #225): at cellSize 1 the hull-clearance
+  // filter leaves only the four room-centre cells eligible, and those see each other
+  // down the open lanes -- concealment stops holding and the fixture no longer
+  // isolates room. At cellSize 2 every open centre clears walls by >= 1.0 and
+  // distinct centres sit >= 2.0 apart, so the filter passes everything and the
+  // original premise (room is the ONLY failing criterion) is restored; the room
+  // ratios themselves count CELLS, so they are cellSize-independent.
   const arena: Arena = {
-    cols: 7, rows: 7, cellSize: 1,
+    cols: 7, rows: 7, cellSize: 2,
     legend: { x: 'solid' as WallKind },
     grid: [
       'P......',

@@ -1,6 +1,7 @@
 import type { Vec2, Wall, WallKind } from './types';
 import { lineOfSight } from './ai/targeting';
 import { mergeSolidRuns } from './wall-merge';
+import { TANK_RADIUS } from './constants';
 
 /**
  * Well-separated versus spawn cells, derived from the arena's OWN geometry rather than
@@ -189,6 +190,15 @@ function isEarlier(a: Cell, b: Cell): boolean {
 }
 
 /**
+ * Options shared by both pickers. `clearanceMargin` defaults to
+ * `VERSUS_SPAWN_CLEARANCE_MARGIN`; `null` disables the hull-clearance filter
+ * entirely -- a seam for the parity/negative-control tests and nothing shipped.
+ */
+export interface SpawnPickOptions {
+  readonly clearanceMargin?: number | null;
+}
+
+/**
  * Picks ONE well-separated versus spawn cell, scoring every open-floor candidate
  * (`isOpenFloor`, same predicate `findCoPlayerSpawnCell` uses) in priority order:
  *
@@ -240,6 +250,7 @@ export function pickVersusSpawnCell(
   cellSize: number,
   legend: Record<string, WallKind>,
   avoid: Vec2[],
+  opts: SpawnPickOptions = {},
 ): Cell {
   const avoidCells = avoid.map((p) => cellOfPos(p, cellSize));
   const walkable: boolean[][] = [];
@@ -263,11 +274,33 @@ export function pickVersusSpawnCell(
   const walls = wallsForQuery(grid, cols, rows, cellSize, legend);
   const avoidDist = avoidCells.map((a) => geodesicDistances(a, walkable, cols, rows));
 
-  const invisible = candidates.filter((cand) => {
+  // HULL CLEARANCE FILTER (issue #225), ahead of the LOS filter and the maximin
+  // ranking exactly as the issue's own ordering asks ("preserve the existing
+  // line-of-sight and geodesic/maximin quality rules after invalid candidates are
+  // removed"). An emptied pool falls back to the FULL candidate list -- the same
+  // total-degradation posture as the zero-candidate and no-concealment fallbacks
+  // (never throw mid-match-start); versusSpawnClearanceFailures is the loud half,
+  // and CI-time validation is what keeps advertised combinations off this path.
+  const margin = opts.clearanceMargin === undefined ? VERSUS_SPAWN_CLEARANCE_MARGIN : opts.clearanceMargin;
+  let eligible = candidates;
+  if (margin !== null) {
+    const wallRequired = TANK_RADIUS + margin;
+    const pairRequired = 2 * TANK_RADIUS + margin;
+    const clear = candidates.filter((cand) => {
+      const p = cellCentre(cand, cellSize);
+      if (Math.min(p.x, p.y, cols * cellSize - p.x, rows * cellSize - p.y) < wallRequired) return false;
+      for (const w of walls) if (wallDistance(p, w) < wallRequired) return false;
+      for (const a of avoid) if (Math.hypot(a.x - p.x, a.y - p.y) < pairRequired) return false;
+      return true;
+    });
+    if (clear.length > 0) eligible = clear;
+  }
+
+  const invisible = eligible.filter((cand) => {
     const candPos = cellCentre(cand, cellSize);
     return avoid.every((a) => !lineOfSight(candPos, a, walls));
   });
-  const pool = invisible.length > 0 ? invisible : candidates;
+  const pool = invisible.length > 0 ? invisible : eligible;
 
   let best = pool[0];
   let bestGeo = -Infinity;
@@ -394,6 +427,7 @@ export function pickVersusSpawnSet(
   cellSize: number,
   legend: Record<string, WallKind>,
   count: number,
+  opts: SpawnPickOptions = {},
 ): Cell[] {
   const walkable: boolean[][] = [];
   const cands: Cell[] = [];
@@ -412,9 +446,26 @@ export function pickVersusSpawnSet(
   // shared reference, and callers treat these as their own to keep.
   if (cands.length === 0) return Array.from({ length: count }, () => ({ row: 0, col: 0 }));
 
-  let cells: Cell[] = [anchorCell(cands, walkable, cols, rows)];
+  // The anchor honours the same wall/boundary clearance as every later pick (no
+  // pairwise term -- nothing is placed yet), with the same fall-back-to-unfiltered
+  // degradation when a cramped board leaves nothing eligible.
+  const margin = opts.clearanceMargin === undefined ? VERSUS_SPAWN_CLEARANCE_MARGIN : opts.clearanceMargin;
+  let anchorCands = cands;
+  if (margin !== null) {
+    const wallRequired = TANK_RADIUS + margin;
+    const walls = wallsForQuery(grid, cols, rows, cellSize, legend);
+    const clear = cands.filter((cand) => {
+      const p = cellCentre(cand, cellSize);
+      if (Math.min(p.x, p.y, cols * cellSize - p.x, rows * cellSize - p.y) < wallRequired) return false;
+      for (const w of walls) if (wallDistance(p, w) < wallRequired) return false;
+      return true;
+    });
+    if (clear.length > 0) anchorCands = clear;
+  }
+
+  let cells: Cell[] = [anchorCell(anchorCands, walkable, cols, rows)];
   for (let i = 1; i < count; i++) {
-    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize))));
+    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize)), opts));
   }
 
   let score = setSeparation(cells, walkable, cols, rows, cellSize);
@@ -423,7 +474,7 @@ export function pickVersusSpawnSet(
     for (let i = 0; i < cells.length; i++) {
       const others = cells.filter((_, j) => j !== i);
       if (others.length === 0) break; // a 1-player set has nothing to be separated from
-      const cand = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, others.map((c) => cellCentre(c, cellSize)));
+      const cand = pickVersusSpawnCell(grid, cols, rows, cellSize, legend, others.map((c) => cellCentre(c, cellSize)), opts);
       const next = cells.slice();
       next[i] = cand;
       const nextScore = setSeparation(next, walkable, cols, rows, cellSize);
@@ -438,4 +489,72 @@ export function pickVersusSpawnSet(
     if (!changed) break;
   }
   return cells;
+}
+
+/**
+ * The hull-clearance safety margin (issue #225): a spawn centre must clear every
+ * intact wall AABB and the arena boundary by `TANK_RADIUS + this`, and every other
+ * spawn by `2 * TANK_RADIUS + this`. 0.15 is DERIVED, not taste: the arena-geometry
+ * spec's traversability rule calls a point free at >= 0.65 world units from every
+ * wall (half the 1.3 corridor minimum), and 0.65 - TANK_RADIUS (0.5) = 0.15 -- so
+ * spawn-eligible points are exactly free points, and a tank never spawns anywhere
+ * the traversability check would not let it drive. Shipped boards cannot feel this
+ * bound: at cellSize 2 an open cell's centre is >= 1.0 from every wall face and
+ * boundary (slack 0.5) and distinct centres are >= 2.0 apart (slack 0.85) -- the
+ * parity sweep in versus-spawns.test.ts pins that as byte-identical behaviour
+ * rather than leaving it as this comment's word.
+ */
+export const VERSUS_SPAWN_CLEARANCE_MARGIN = 0.15;
+
+/** Point-to-AABB surface distance: 0 inside, the usual per-axis clamp outside. */
+function wallDistance(p: Vec2, w: Wall): number {
+  const dx = Math.max(w.aabb.minX - p.x, p.x - w.aabb.maxX, 0);
+  const dy = Math.max(w.aabb.minY - p.y, p.y - w.aabb.maxY, 0);
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * Every hull-clearance violation for already-picked spawn positions, one line per
+ * violation (empty = clean) -- the loud half of issue #225, and the function
+ * versus-catalog-rules.ts's `spawn-clearance` seam (issue #270) consumes once both
+ * changes land. Callers pass the MATCH-START grid (the variant-applied one --
+ * every real caller already holds exactly that), so "validate clearance against
+ * destructible-wall variants as they exist at match start" costs nothing extra:
+ * `wallsForQuery` builds intact solids AND intact destructibles, and a destructible
+ * really does block a hull at the instant of spawning.
+ *
+ * Deterministic and total: a pure function of its arguments; no throw on any input.
+ */
+export function versusSpawnClearanceFailures(
+  grid: string[],
+  cols: number,
+  rows: number,
+  cellSize: number,
+  legend: Record<string, WallKind>,
+  positions: readonly Vec2[],
+  margin: number = VERSUS_SPAWN_CLEARANCE_MARGIN,
+): string[] {
+  const walls = wallsForQuery(grid, cols, rows, cellSize, legend);
+  const wallRequired = TANK_RADIUS + margin;
+  const pairRequired = 2 * TANK_RADIUS + margin;
+  const failures: string[] = [];
+  positions.forEach((p, i) => {
+    const at = `spawn[${i}] at (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
+    let nearestWall = Infinity;
+    for (const w of walls) nearestWall = Math.min(nearestWall, wallDistance(p, w));
+    if (nearestWall < wallRequired) {
+      failures.push(`${at}: wall clearance ${nearestWall.toFixed(3)} < ${wallRequired.toFixed(3)}`);
+    }
+    const boundary = Math.min(p.x, p.y, cols * cellSize - p.x, rows * cellSize - p.y);
+    if (boundary < wallRequired) {
+      failures.push(`${at}: boundary clearance ${boundary.toFixed(3)} < ${wallRequired.toFixed(3)}`);
+    }
+    for (let j = i + 1; j < positions.length; j++) {
+      const d = Math.hypot(positions[j].x - p.x, positions[j].y - p.y);
+      if (d < pairRequired) {
+        failures.push(`spawn[${i}]..spawn[${j}]: pairwise distance ${d.toFixed(3)} < ${pairRequired.toFixed(3)}`);
+      }
+    }
+  });
+  return failures;
 }

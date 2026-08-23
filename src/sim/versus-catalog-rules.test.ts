@@ -77,9 +77,12 @@ describe('opening-sightlines rule: an open room fails with the exact diagnostic 
 describe('room rule: the pillar room fails at N=3, passes at N=2', () => {
   // The 7x7 pillar room from versus-board.test.ts: 39 open-floor cells, so the
   // per-player ratio crosses MIN_OPEN_FLOOR_PER_PLAYER (18) between N=2 and N=3,
-  // while separation and concealment hold throughout.
+  // while separation and concealment hold throughout. cellSize 2, not 1: room
+  // ratios count CELLS (cellSize-independent), and at cellSize 1 the #225
+  // hull-clearance filter leaves only mutually-visible room-centre cells eligible,
+  // which would break this fixture's room-only isolation once both changes land.
   const arena: Arena = {
-    cols: 7, rows: 7, cellSize: 1,
+    cols: 7, rows: 7, cellSize: 2,
     legend: { x: 'solid' as WallKind },
     grid: ['P......', '.x.x.x.', '.......', '.x.x.x.', '.......', '.x.x.x.', '.......'],
   };
@@ -123,9 +126,11 @@ describe('connectivity rule: a spawn placed across a solid divider is named', ()
 describe('variant-coverage rule: a vacuous seeded declaration is named', () => {
   // No destructible cell anywhere: advertising seeded-destructible promises a
   // variant generator with nothing to draw from. The pillar room's geometry keeps
-  // every other rule quiet at N=2.
+  // every other rule quiet at N=2. cellSize 2 for the same #225-proofing reason as
+  // the room fixture above: at cellSize 1 the hull-clearance filter would push the
+  // destructible-pillar negative control's variant draws into visible cells.
   const arena: Arena = {
-    cols: 7, rows: 7, cellSize: 1,
+    cols: 7, rows: 7, cellSize: 2,
     legend: { x: 'solid' as WallKind },
     grid: ['P......', '.x.x.x.', '.......', '.x.x.x.', '.......', '.x.x.x.', '.......'],
   };
