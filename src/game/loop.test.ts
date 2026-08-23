@@ -3069,6 +3069,21 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     // calls it.
     it('firing (an event, but no stock change) across several frames does not re-invoke the setter beyond the one triggering call', () => {
       const h = boot(makeDeps({ devFlags: { players: 2, mode: 'ffa' } }));
+      // Teleport P1 into arena-01's fully-open top band before play starts (the same
+      // reach-into-the-initial-world idiom the kill test above uses for its bullet).
+      // The harness's fixed aim POINT (1, 0) sat directly above the hull-clearance
+      // spawn cell (issue #225 moved P1 to world (1, 1)), so every shot went straight
+      // up, bounced off the top boundary one unit away, and came back down through
+      // the shooter -- a real self-kill that changed stocks and broke this test's
+      // nothing-dies premise. From (11, 1) the same aim point is ~10 units away at a
+      // shallow angle: a speed-6 shell cannot even REACH a wall inside this test's
+      // ~1.3 simulated seconds, so no shot can hit anything -- which is exactly the
+      // premise this test needs, now pinned structurally instead of inherited from
+      // wherever the spawn picker happens to put P1.
+      const w0 = h.rec.builtWorlds[0];
+      const p1 = w0.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 0)!;
+      p1.pos.x = 11;
+      p1.pos.y = 1;
       h.setState('playing');
       h.firePlayerShot();
       h.fireFrame(20); // the first shot: an event lands, the setter fires once

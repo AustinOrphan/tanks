@@ -7,7 +7,9 @@
     "expect": "killed",
     "expectFailures": 4,
     "why": "MIN_ACCENT_DELTA is the luma gap an explicit accent is nudged to keep from the hull colour (skins.ts's own comment above the constant). Raising it to 200 pushes the nudge past what a single HSL pole (pure black/white) can deliver, so accents lose their hue and slide toward grey -- exactly the defect skins.test.ts's hue-preservation tests exist to catch. expectFailures pins the count itself, not just the killed/survives outcome: a test added later that also breaks under this mutation should move this number, and a stale number here is what the harness's exit code exists to catch. Re-verified via the harness itself against skins.test.ts as it stands after PR #101 (which added Clouds and grew the file to 19 tests): 4 failures, down from 5 at this entry's original count.",
-    "tests": ["src/render/skins.test.ts"]
+    "tests": [
+      "src/render/skins.test.ts"
+    ]
   },
   {
     "id": "skins-ensure-contrast-iteration-budget-1",
@@ -18,7 +20,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "ensureContrast steps lightness toward whichever pole increases the luma gap, up to 20 times, until it clears its delta parameter (MIN_ACCENT_DELTA by default). Capping the budget at 1 step leaves most pairs under-separated -- caught by the 33,696-pair sweep that asserts every pair reaches the required separation. `delta` was `MIN_ACCENT_DELTA` directly until PR #101 parameterised it (autoAccent/stepLightness now share the same loop shape) -- this same loop text now occurs TWICE in skins.ts (ensureContrast and stepLightness), so `occurrence: 1` picks ensureContrast specifically, which is the one the sweep above measures.",
-    "tests": ["src/render/skins.test.ts"]
+    "tests": [
+      "src/render/skins.test.ts"
+    ]
   },
   {
     "id": "skins-luma-rec601",
@@ -28,7 +32,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "luma() is documented as Rec. 709 on purpose -- swapping in Rec. 601's channel weights changes which hull/accent pairings MIN_ACCENT_DELTA actually fires for. skins.ts's own comment records that this exact swap once passed the WHOLE suite (82 files, 1535 tests) before the weights test below was written. expectFailures is verified against the SCOPED run (src/render/skins.test.ts) only -- not re-verified repo-wide here. Re-verified via the harness itself after PR #101 (which added Clouds and reworked the auto-accent derivation): now 2 failures against skins.test.ts, up from 1 at this entry's original count -- the count moved because the suite gained coverage, not because this stayed stale. Kept as a manifest entry specifically to guard the guard: if this ever survives the scoped run again, the weights test regressed.",
-    "tests": ["src/render/skins.test.ts"]
+    "tests": [
+      "src/render/skins.test.ts"
+    ]
   },
   {
     "id": "skins-ensure-contrast-pole-clamp",
@@ -39,7 +45,9 @@
     "expectFailures": 0,
     "equivalent": true,
     "why": "EQUIVALENT, not a coverage gap: skins.ts's own comment on the loop states this branch is measured unreachable at the shipped MIN_ACCENT_DELTA (43) -- an instrumented 909,792-pair probe hit the l===0 clamp 0 times (vs 34,835 times at MIN_ACCENT_DELTA 127), so dropping the redundant Math.max(0, ...) floor changes no output any test can observe. Included so a future retune of MIN_ACCENT_DELTA that makes the branch reachable is the thing that flips this from survives to killed, not a silent behaviour change.",
-    "tests": ["src/render/skins.test.ts"]
+    "tests": [
+      "src/render/skins.test.ts"
+    ]
   },
   {
     "id": "preview-drops-the-rotate-buttons",
@@ -49,7 +57,10 @@
     "expect": "survives",
     "expectFailures": 0,
     "why": "A DISCLOSED SURVIVOR, and not an equivalent mutant -- the shipped behaviour it removes is real: the Customize pane's four rotate buttons stop working entirely. It survives because nothing vitest can run reaches it. createTankPreview builds a WebGLRenderer, which jsdom cannot provide (preview.test.ts exercises only the null-return branch for exactly that reason), so no vitest case can observe whether the buttons were forwarded to createPreviewControls; preview-controls.test.ts constructs the controls itself and so never goes through this line at all. What DOES kill it is tools/gl/harness.ts's 'a rotate button turns the tank in the rendered image', in a real browser, measured at both ends: 11828 of 197600 bytes differ with the argument wired and EXACTLY 0 with it dropped. Recorded here rather than left as a number in a PR body so the claim is re-derivable -- and so that if someone ever finds a way to cover this under vitest, the harness flips it to a mismatch instead of letting the entry go quietly stale. The replacement keeps the parameter read so the mutation compiles: a tsc failure would prove nothing about test coverage.",
-    "tests": ["src/render/preview.test.ts", "src/render/preview-controls.test.ts"]
+    "tests": [
+      "src/render/preview.test.ts",
+      "src/render/preview-controls.test.ts"
+    ]
   },
   {
     "id": "framing-bounds-multiplier-3",
@@ -59,7 +70,9 @@
     "expect": "killed",
     "expectFailures": 3,
     "why": "framedBounds must widen by exactly 2x the boundary ring (one cell radius on each side) to match the wall geometry loadArena actually builds -- widening by 3x instead is caught by the test that pins framedBounds(10, 8, 3) against a literal, boundary-argument-only expectation.",
-    "tests": ["src/render/framing.test.ts"]
+    "tests": [
+      "src/render/framing.test.ts"
+    ]
   },
   {
     "id": "framing-frame-margin-doubled",
@@ -69,7 +82,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "HISTORY, not the current story: when this entry was first written (against an earlier commit, FRAME_MARGIN 0.06), it was a documented SURVIVING gap -- framing.test.ts imported FRAME_MARGIN and used the same constant on both sides of its own assertion (to drive fitCameraToArea AND to compute the test's expected screen-space bound), so doubling it moved both sides together and passed regardless of value. PR #103 ('give the board the screen back') independently added a coverage-ratio floor (`covers at least 48% of the frame...`) that does NOT reference FRAME_MARGIN at all -- it measures the framed rect's actual projected area against a hardcoded 0.48 threshold. Re-verifying this entry against current main (as this manifest's own re-verification process requires) found the gap CLOSED: doubling FRAME_MARGIN now fails that coverage floor (46.5% < 48% at 'phone landscape' on 3 of 4 arenas), one test, moved from SURVIVES to KILLED by a change that never touched this mutation. Left in the manifest as a killed entry rather than dropped, specifically because the reversal is itself the lesson: a stale 'known gap' claim in a comment or a PR body would have been WRONG here had it not been re-run.",
-    "tests": ["src/render/framing.test.ts"]
+    "tests": [
+      "src/render/framing.test.ts"
+    ]
   },
   {
     "id": "framing-fit-bracket-4.5",
@@ -79,7 +94,9 @@
     "expect": "killed",
     "expectFailures": 11,
     "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here.",
-    "tests": ["src/render/framing.test.ts"]
+    "tests": [
+      "src/render/framing.test.ts"
+    ]
   },
   {
     "id": "hud-topbar-safe-area-dropped",
@@ -89,7 +106,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "The topbar's top inset is what keeps the score row out from under a portrait status bar / Dynamic Island. CSS is typechecked by nothing and read by no other test, so dropping this is invisible everywhere else -- the same class of silent loss that killed the losing-a-life vignette. Two tests fail: the presence check and the single-source-of-padding check, which reads the same declaration.",
-    "tests": ["src/game/hud.css.test.ts"]
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   },
   {
     "id": "hud-narrow-block-overrides-padding",
@@ -99,7 +118,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The trap the custom properties exist to remove, and the one a presence-only assertion cannot see: the base rule still carries every env(safe-area-inset-*) it ever did, so 'the topbar insets itself' still reads as true -- but a padding SHORTHAND in a later @media wins outright, and this one matches at 360px, which is a phone. Exactly one test fails, and it is the one written for this: 'lets no later rule quietly override the safe-area insets'.",
-    "tests": ["src/game/hud.css.test.ts"]
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   },
   {
     "id": "storage-resolver-ignores-the-host",
@@ -109,7 +130,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "resolveStorage must hand back the host's REAL localStorage when there is one; returning the in-memory shim instead means the shipped game silently persists nothing, and every round-trip assertion still passes on the shim. Only an IDENTITY assertion can see it, which is what storage.test.ts's 'returns the host storage ITSELF' case is. Verified through this harness at the commit that added the entry.",
-    "tests": ["src/game/storage.test.ts"]
+    "tests": [
+      "src/game/storage.test.ts"
+    ]
   },
   {
     "id": "save-import-drops-the-allow-list",
@@ -119,7 +142,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "importSave writes only keys on SAVE_KEYS. That is a security property, not tidiness: austinorphan.com's localStorage namespace is shared with every other project page on the origin (CLAUDE.md), so a blob a player was talked into pasting must not be able to set a neighbour's key. Dropping the allow-list leaves every round-trip test green -- the keys a real export carries are all on the list -- and is caught only by the case that imports a blob carrying a foreign key. Verified through this harness at the commit that added the entry.",
-    "tests": ["src/game/save.test.ts"]
+    "tests": [
+      "src/game/save.test.ts"
+    ]
   },
   {
     "id": "replay-recorder-wraps-the-raw-controller",
@@ -129,27 +154,33 @@
     "expect": "killed",
     "expectFailures": 4,
     "why": "The recorder must decorate `effectiveInput` -- what the driver is actually handed -- and not the raw input controller, or an autoplay session records an empty stream while a normal session looks perfect. RE-MEASURED after the couch co-op input-routing PR, which the PR's own plan flagged as load-bearing: `effectiveInput` now yields `InputState[]` (list-shaped, one entry per active slot) while `input` (slot 0's raw controller alone) still yields a bare `InputState`. This tool does not run tsc, so that type mismatch is not caught structurally -- at runtime the mutated recorder's `sample()` calls `encodeTick` on a bare `InputState`, which has no `.map`, and throws `TypeError: inputs.map is not a function` inside driver.ts's frame() the first time a simulating frame samples input with `replay` on. The crash cascades past the one designed discriminating case (the autoplay-stream test) to every case in the 'startGameWith: the input recorder' block that reaches a simulating, replay-recording frame: 4 in loop.test.ts fail (the count's denominator moves with the file -- 205 when this was re-measured, 245 at the controllers-1-4 PR; `expectFailures` pins the 4, not the denominator) ('records exactly one tick per simulated tick...', 'captures the AUTOPLAY stream...', 'stamps the world it is recording against...', 'produces a trace that replays the recorded run exactly'). The two cases in that same block that never reach such a frame ('records nothing while the game is not simulating', 'does not record at all with the flag off') still pass, so the killed outcome remains driven by input reaching the sim, exactly as before -- only the count and mechanism (a thrown error, not a silently-empty trace) moved. Re-verified through this harness (`npm run mutate -- --only replay-recorder-wraps-the-raw-controller`) at the commit that landed the list-shaped input change; the 1-failure figure predates that PR.",
-    "tests": ["src/game/loop.test.ts"]
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
   },
   {
     "id": "versus-spawns-drop-los-hard-filter",
     "file": "src/sim/versus-spawns.ts",
-    "find": "  const pool = invisible.length > 0 ? invisible : candidates;",
-    "replace": "  const pool = candidates;",
+    "find": "  const pool = invisible.length > 0 ? invisible : eligible;",
+    "replace": "  const pool = eligible;",
     "expect": "killed",
     "expectFailures": 5,
     "why": "pickVersusSpawnCell's whole design is hard-filter-then-maximin: no line of sight to any already-chosen spawn beats every distance score, where achievable. Dropping the filter falls straight through to plain geodesic maximin over every candidate, which is a DIFFERENT function (it can and does pick a farther cell that is still in plain sight, whenever the farthest reachable cell happens to be visible). Caught by 3 of the 14 cases in versus-spawns.test.ts: the dedicated fixture built to make a visible cell strictly farther than any invisible one (picks (row0,col19) instead of the invisible (row2,col11)); the brute-force-gap fixture, whose own walls also gate LOS, so the greedy result it measures shifts too; and the real-shipped-arena sweep asserting 0 of 100 player pairs share mutual line of sight, which the mutation raises to 28.",
-    "tests": ["src/sim/versus-spawns.test.ts"]
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
   },
   {
     "id": "versus-spawns-chain-drops-accumulation",
     "file": "src/sim/versus-spawns.ts",
-    "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize))));",
-    "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)]));",
+    "find": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, cells.map((c) => cellCentre(c, cellSize)), opts));",
+    "replace": "    cells.push(pickVersusSpawnCell(grid, cols, rows, cellSize, legend, [cellCentre(cells[cells.length - 1], cellSize)], opts));",
     "expect": "killed",
     "expectFailures": 5,
     "why": "Greedy farthest-point sampling must place each spawn against EVERY spawn already chosen, not just the most recent one. Avoiding only the last one lets the chain walk back and forth between two ends of the board, putting spawn 3 on top of spawn 1. This entry replaces `versus-spawns-wiring-drops-accumulation`, which targeted a `chosen.push(pos)` accumulator in arena.ts's versus branch; that variable became dead when pickVersusSpawnSet took over the picking, and the old entry silently degraded to SURVIVES because it was mutating code nothing read -- which is how the dead variable was found at all. The accumulation now lives here. Caught by 5 of 17 in versus-spawns.test.ts.",
-    "tests": ["src/sim/versus-spawns.test.ts"]
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
   },
   {
     "id": "campaign-bot-boundary-drops-reassign-guard",
@@ -159,7 +190,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "A directive draws a boundary: bots must not control player tanks in the campaign unless campaign bot players are enabled by a dev flag. The rule is enforced TWICE on purpose -- hud.ts decides whether to OFFER the 'bot' candidate, loop.ts decides whether to PERFORM the reassignment -- so neither half's mutation proves the other, and this entry covers the loop half specifically. That is the half that matters if a caller ever reaches reassignSlot without going through the panel (a stale DOM node, or new wiring): a rule enforced only by the code that draws the buttons is one caller away from not being a rule. Caught by 2 of the 270 cases in loop.test.ts -- the refusal test (a fresh setControllers push appears where none should) and the previous-source test, which distinguishes 'refused' from 'bounced to none': `reassign` sends a displaced slot to 'none', so a guard placed AFTER the reassign call would still corrupt the slot instead of leaving it alone.",
-    "tests": ["src/game/loop.test.ts"]
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
   },
   {
     "id": "versus-stock-ffa-counts-alive-not-eliminated",
@@ -169,7 +202,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "resolveStatusFfa's win/lose decision must count players who are NOT ELIMINATED (dead AND out of stock), not players who are merely alive -- a player awaiting a scheduled respawn is dead this instant but still in the match. Reverting to a bare `alive` filter is exactly the pre-stock rule the FFA branch shipped with, and is the specific regression the task brief asked to be reviewed hardest for: it ends a stock match on the very first death. Caught by 2 of the 25 cases in versus-modes.test.ts: the N=2 regression test built specifically to discriminate the two rules (a 3+-player death leaves 2+ ALIVE tanks either way, so a larger N cannot tell them apart -- verified directly, an earlier N=3 draft of this same test passed under this mutation) and the mutual-kill-with-stock-remaining test, which this mutation reads as an immediate 'lose' instead of 'playing'.",
-    "tests": ["src/sim/versus-modes.test.ts"]
+    "tests": [
+      "src/sim/versus-modes.test.ts"
+    ]
   },
   {
     "id": "versus-stock-teams-counts-alive-not-eliminated",
@@ -179,7 +214,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The teams analogue of versus-stock-ffa-counts-alive-not-eliminated, and a SEPARATE function with its own filter -- resolveStatusFfa's own fix does not cover this one, which is why it is a second entry rather than folded into the first. A 4-player teams fixture with one death per team does not discriminate the two rules either (2+ ALIVE members remain on the losing side's team regardless), which is why this is caught by only 1 of 25: the one-player-per-team (N=2) regression test built to force the same first-death-ends-it failure the FFA entry names.",
-    "tests": ["src/sim/versus-modes.test.ts"]
+    "tests": [
+      "src/sim/versus-modes.test.ts"
+    ]
   },
   {
     "id": "versus-respawn-clone-drops-arena-geometry",
@@ -189,7 +226,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "cloneWorld must carry World.arenaGeometry across every tick's clone, or a versus respawn silently falls back to the tank's own authored spawn from the very first stepInputs call onward -- exactly the near-miss this file's own test-writing notes describe finding while authoring versus-respawn.test.ts. Caught by only 1 of the 6 cases there: the direct-stepRespawns tests bypass cloneWorld entirely (by design -- see that file's own doc comment on why position-exactness is checked before stepMovement's physics can touch it) and so cannot see this mutation; only the end-to-end test that goes through the real stepInputs pipeline does.",
-    "tests": ["src/sim/versus-respawn.test.ts"]
+    "tests": [
+      "src/sim/versus-respawn.test.ts"
+    ]
   },
   {
     "id": "versus-respawn-always-falls-back-to-authored-spawn",
@@ -199,7 +238,9 @@
     "expect": "killed",
     "expectFailures": 5,
     "why": "respawnPos must actually reach pickVersusSpawnCell for ffa/teams -- forcing the fallback branch unconditionally (as if arenaGeometry were always absent) restores the campaign-coop-only behaviour for every mode. Caught by 5 of the 6 cases in versus-respawn.test.ts: every test that asserts a revived tank lands on the PICKED cell rather than its authored spawn. The one survivor is the dedicated fallback test itself (arenaGeometry genuinely absent), which asserts exactly the behaviour this mutation makes universal and so cannot tell the difference -- it is not blind to this mutation by accident, it is testing the state this mutation forces on every other case too.",
-    "tests": ["src/sim/versus-respawn.test.ts"]
+    "tests": [
+      "src/sim/versus-respawn.test.ts"
+    ]
   },
   {
     "id": "spawn-protection-drops-action-lock-gate",
@@ -209,7 +250,9 @@
     "expect": "killed",
     "expectFailures": 5,
     "why": "driveTank is the ONE site every kind==='player' tank's fire/mine input is consumed, human or bot (a bot-claimed slot's InputState, from ai/player-profile.ts's decidePlayerInput, is fed through this exact same applyPlayerInputs path in game/loop.ts) -- so dropping the isActionLocked half of canAct here reopens fire/mine for every shielded tank regardless of input source. Caught by 5 of the 12 cases in spawn-protection.test.ts: both human-path refusal tests (fire, mine), both bot-path refusal tests (fire, mine -- each paired with its own 'control' test proving the SAME decision fires when unshielded, so the fixture is not merely inert), and the coop-POOL-mode reachability test, which shows the gate was never mode-specific to begin with. The movement/aim/invincible/no-shield/shield-expired tests all survive unchanged, which is the point: this mutation should touch fire/mine only.",
-    "tests": ["src/sim/spawn-protection.test.ts"]
+    "tests": [
+      "src/sim/spawn-protection.test.ts"
+    ]
   },
   {
     "id": "versus-board-drops-concealment-requirement",
@@ -219,7 +262,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "suitable must require every spawn pair to lack mutual line of sight, not just distinct cells and enough floor -- dropping allPairsConcealed from the conjunction leaves a fully-visible board reading as suitable. Caught by 1 of the 12 cases in versus-board.test.ts: the 10x10-open-room fixture built specifically to isolate concealment (no interior walls, so separation and room both measure true while every spawn pair stays mutually visible at every N in {2,3,4}) asserts suitable=false at N=2 and fails immediately once the mutation makes it true. The 15-shipped-arena sweep does not catch this: every shipped arena already measures 0 of its pairs visible (pickVersusSpawnCell's own hard LOS filter succeeds on all of them), so allPairsConcealed is true regardless of whether the mutation is applied, and suitable's value is unchanged for every shipped (arena, N) combination.",
-    "tests": ["src/sim/versus-board.test.ts"]
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ]
   },
   {
     "id": "versus-board-drops-room-requirement",
@@ -229,7 +274,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "suitable must also require the open-floor-per-player ratio to clear MIN_OPEN_FLOOR_PER_PLAYER -- dropping roomOk from the conjunction leaves a board with plenty of separation and concealment but almost no floor space reading as suitable. Caught by 2 of the 12 cases in versus-board.test.ts: the 7x7 pillar-room fixture (39 open-floor cells, separation and concealment measuring true at every N while the ratio drops below the bound at N=3 and N=4) and the versusBoardCatalog test built against the same fixture at N=4. Equivalent to the concealment entry above in shape but not in effect -- this one changes a different conjunct and is caught by a different, deliberately non-overlapping fixture, so the two mutations cannot silently cover for each other.",
-    "tests": ["src/sim/versus-board.test.ts"]
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ]
   },
   {
     "id": "versus-board-distinct-count-ignores-duplicates",
@@ -239,7 +286,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "spawnCount must count DISTINCT positions, not merely how many players were placed -- using positions.length instead of a Set's size makes every co-located spawn look like a unique one. This mutates the field's own computation, deliberately not its participation in the suitable conjunction: dropping distinctSpawns from suitable is EQUIVALENT (not in this manifest -- see docs/superpowers/plans/2026-08-17-versus-board-rules.md for the analytic argument and the by-hand verification that all 12 cases in versus-board.test.ts stay green under that specific mutation), because MIN_OPEN_FLOOR_PER_PLAYER >= 1 already forces roomOk false on every fixture where distinctSpawns is false. This entry is caught instead by the pathological zero-open-floor fixture's DIRECT assertion on the spawnCount field (expected 1, the co-located fallback cell, at every N): the mutation reports spawnCount = playerCount regardless of the collision, so the field assertion fails 1 of 12 cases before suitable is ever consulted.",
-    "tests": ["src/sim/versus-board.test.ts"]
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ]
   },
   {
     "id": "versus-variants-guard-drops-mode-check",
@@ -249,7 +298,10 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "loadArena must only ever pick a versus variant for mode 'ffa'/'teams' -- dropping the mode half of the guard means ANY call that passes a real seed gets a variant, including every campaign-coop load (which always passes a seed in real play and in the golden trace). Caught by 2 of 32 across the two scoped files: versus-variants.test.ts's own 'campaign-coop is BYTE-IDENTICAL... even when a real seed is passed' test, and tools/baseline/trace.test.ts's BASELINE_HASH, which moved from a5458ede... to 70dd6777... under this mutation -- verified by hand before this entry was written, then restored and re-verified clean.",
-    "tests": ["src/sim/versus-variants.test.ts", "tools/baseline/trace.test.ts"]
+    "tests": [
+      "src/sim/versus-variants.test.ts",
+      "tools/baseline/trace.test.ts"
+    ]
   },
   {
     "id": "versus-variants-concealment-check-dropped",
@@ -259,7 +311,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "isVariantSuitable must reject a candidate where any spawn pair keeps mutual line of sight -- discarding the lineOfSight result instead of gating on it makes every candidate read as concealment-clean regardless of the real geometry, so pickVersusVariantGrid never retries and never falls back. Caught by 2 of 25 in versus-variants.test.ts: the seed-7920/arena-03/fraction-0.7 retry test (the first, unsuitable draw is now accepted immediately, so the picked grid never diverges from it) and the full-exhaustion fallback test (the always-unsuitable synthetic fixture is now accepted on attempt 0, so the result is no longer reference-equal to the authored grid).",
-    "tests": ["src/sim/versus-variants.test.ts"]
+    "tests": [
+      "src/sim/versus-variants.test.ts"
+    ]
   },
   {
     "id": "versus-variants-retry-bound-forced-to-one",
@@ -269,7 +323,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "pickVersusVariantGrid must actually RETRY, not just fall back on the first unsuitable draw -- forcing a single attempt removes the retry entirely. A first, weaker version of this entry's test (asserting only that the picked grid differs from the failed first draw, and is itself suitable) SURVIVED this mutation: arena-03's own authored board is suitable at N=4, so an immediate fallback to it satisfies both assertions for the wrong reason, which is exactly the kind of accidental pass this file's testing conventions warn about. The test was strengthened to also assert the picked grid is neither reference-equal to the authored grid nor free of removed cells, which is what a genuine second-attempt success looks like and a same-arena fallback does not. Caught by 1 of 25 in versus-variants.test.ts under the strengthened version.",
-    "tests": ["src/sim/versus-variants.test.ts"]
+    "tests": [
+      "src/sim/versus-variants.test.ts"
+    ]
   },
   {
     "id": "versus-variants-includes-solid-cells",
@@ -279,7 +335,9 @@
     "expect": "killed",
     "expectFailures": 3,
     "why": "buildVariantGrid must only ever draw from DESTRUCTIBLE cells -- solid geometry defines the arena's shape and must never vary between playthroughs of the same board. Including solid cells in the draw pool means a variant can turn a load-bearing wall into open floor, changing the board's identity rather than varying it. Caught by 3 of 25 in versus-variants.test.ts: the 'every character that differs... was a destructible cell' invariant (a changed cell's authored legend entry is now 'solid', not 'destructible'), the 'removes exactly round(destructibleCount * fraction)' count (47 removed on arena-01 instead of 7, since the pool nearly quadruples), and the seed-7920/arena-03 retry test's own premise check (the much larger removal pool changes what that specific seed draws). Solid-versus geometry is otherwise unreachable from any test in this file at the ungated buildVariantGrid layer, which is why the wired-through-loadArena describe block exists separately.",
-    "tests": ["src/sim/versus-variants.test.ts"]
+    "tests": [
+      "src/sim/versus-variants.test.ts"
+    ]
   },
   {
     "id": "versus-p1-not-relocated",
@@ -289,7 +347,9 @@
     "expect": "killed",
     "expectFailures": 3,
     "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee.",
-    "tests": ["src/sim/versus-spawns.test.ts"]
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
   },
   {
     "id": "versus-spawns-intact-graph",
@@ -299,7 +359,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The geodesic graph spawn separation is measured on must treat a DESTRUCTIBLE cell as traversable -- the breached phase, the same both-wall-phases discipline spawnBlockRobust already applies in arena-claims.ts. A destructible wall is temporary by construction, so two spawns separated only by one are not separated for the length of a match. Reverting to the intact graph is not merely a different-but-equivalent reading: measured over all 5 shipped arenas x counts 2/3/4, it puts arena-02's 4-player spawns 2.67 world units apart either side of the centre barrier that level is designed to blow open. Caught by 1 of 17 in versus-spawns.test.ts -- the separation floor collapses from 11.6619... to 2.67, failing both the exact pin and the greater-than-5-world-units guarantee. Note the LOS filter deliberately does NOT follow this rule and stays on intact geometry; see isWalkable's own doc comment for why the two questions differ.",
-    "tests": ["src/sim/versus-spawns.test.ts"]
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
   },
   {
     "id": "versus-spawns-drop-euclid-tiebreak",
@@ -309,7 +371,9 @@
     "expect": "killed",
     "expectFailures": 2,
     "why": "Geodesic distance saturates at Infinity for every cell in a component the avoid set cannot reach, so on a partitioned board EVERY unreachable candidate ties and, without the Euclidean key, (row, col) order decides -- which picks the cell hard against the far side of the dividing wall. This mutation SURVIVED when first run (the gap was proved before the test was written, per this repo's rule); the dedicated tie-break fixture and the pickVersusSpawnSet pin were added because of it. Caught by 2 of 17 in versus-spawns.test.ts: the partitioned-board fixture returns {row:0,col:6} instead of {row:0,col:11}, and arena-04's 3-player set moves to (0,0) (32,44) (13,25).",
-    "tests": ["src/sim/versus-spawns.test.ts"]
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
   },
   {
     "id": "versus-relax-rounds-one",
@@ -319,7 +383,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The coordinate-ascent pass must be allowed to run to convergence. Greedy farthest-point sampling alone is anchor-sensitive and, measured over all 5 shipped arenas x counts 2/3/4, is WORSE than the pre-ruling placement on 2 of those 15 pairs; the relaxation is what turns that into 15 of 15 improved with no regressions. A cap of 1 stops it after a single sweep. This mutation also SURVIVED when first run, which is why the arena-04 N=3 exact-set pin exists at all. Caught by 1 of 17 in versus-spawns.test.ts: arena-04 at N=3 returns (0,30) (32,44) (23,0) instead of (0,26) (32,44) (24,0). Three further pairs move under the same mutation -- arena-01 and arena-03 at N=3, arena-05 at N=4 -- but only the arena-04 one is pinned, so the numerator is 1, not 4.",
-    "tests": ["src/sim/versus-spawns.test.ts"]
+    "tests": [
+      "src/sim/versus-spawns.test.ts"
+    ]
   },
   {
     "id": "versus-config-choices-drop-mode-predicate",
@@ -359,7 +425,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The countdown redesign's pop animation must restart on EVERY new second, not just the first -- setRoundPhase calls this every simulated tick, so most calls repeat the same secondsLeft and must NOT restart (guarded above by the lastCountShown check), but a genuinely new second must. Dropping the remove+reflow half of the restart trick (the same one signalPlayerDeath uses) leaves only the add, which is a no-op once the class is already present -- a real browser would not replay the CSS animation for the second and third numbers, only the first. Caught by 1 of 149 in hud.test.ts: 'restarts the pop animation on each new second, not on every call' spies on classList.remove and asserts it is called once per new second: with the restart deleted, classList.remove('hud-count--pop') is never called at all, so the first assertion (expecting exactly 1 call after the first setRoundPhase) already fails.",
-    "tests": ["src/game/hud.test.ts"]
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
   },
   {
     "id": "hud-count-live-shows",
@@ -369,6 +437,8 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "setRoundPhase must hide the countdown once the round goes live -- the whole point of the number is announcing the phases where movement is blocked, and it must not linger over gameplay. Dropping the phase==='live' arm of the guard leaves only the null check, so a live update with a non-null RoundPhaseInfo (which is exactly what loop.ts's refreshRoundPhase would send if ITS OWN live short-circuit were ever bypassed, and what a caller error would send directly) falls through to the show/pop branch instead of hiding. Caught by 1 of 149 in hud.test.ts: 'hides on null and on live' sends {phase:'live', secondsLeft:0} after a countdown value and asserts the element carries hud-count--hidden; under this mutation it carries hud-count--pop and a freshly popped '0' instead.",
-    "tests": ["src/game/hud.test.ts"]
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
   }
 ]

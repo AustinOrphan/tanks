@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pickVersusSpawnCell, pickVersusSpawnSet, versusSpawnClearanceFailures, wallsForQuery, type Cell } from './versus-spawns';
 import { lineOfSight } from './ai/targeting';
+import { pickVersusVariantGrid } from './versus-variants';
 import { loadArena, ARENAS, ARENA_DEFS } from './arena';
 import type { WallKind } from './types';
 
@@ -72,7 +73,9 @@ describe('pickVersusSpawnCell: greedy maximin on GEODESIC distance, not Euclidea
     // over the whole grid: reaching col 9 from row 2 costs a detour around the block
     // (up or down to a gap row, across, back), which the straight-line distance does
     // not see at all.
-    const cell = pickVersusSpawnCell(grid, cols, rows, 1, legend, [p1]);
+    // clearanceMargin null: this fixture isolates the RANKING layer (geodesic
+    // maximin); the clearance filter has its own suite below.
+    const cell = pickVersusSpawnCell(grid, cols, rows, 1, legend, [p1], { clearanceMargin: null });
     expect(cell).toEqual<Cell>({ row: 2, col: 9 });
   });
 });
@@ -99,7 +102,8 @@ describe('pickVersusSpawnCell: hard LOS filter overrides raw distance', () => {
     // -- would pick the visible one (19 > 13). The hard filter restricts the pool to
     // LOS-invisible candidates whenever at least one exists, so this picks the smaller,
     // invisible score instead.
-    const cell = pickVersusSpawnCell(grid, cols, rows, 1, legend, [p1]);
+    // clearanceMargin null: isolates the LOS-filter layer, not clearance.
+    const cell = pickVersusSpawnCell(grid, cols, rows, 1, legend, [p1], { clearanceMargin: null });
     expect(cell).toEqual<Cell>({ row: 2, col: 11 });
 
     // And that pick really is invisible, really is beaten on raw distance by a visible
@@ -118,7 +122,7 @@ describe('pickVersusSpawnCell: hard LOS filter overrides raw distance', () => {
     const p1 = { x: 0.5, y: 1.5 }; // row1 col0, left edge
     // Manhattan distance to col 6 (the far edge) is 7 from both (row0,col6) and
     // (row2,col6) -- a tie, (row,col)-ascending picks the row0 one.
-    const cell = pickVersusSpawnCell(grid, 7, 3, 1, legend, [p1]);
+    const cell = pickVersusSpawnCell(grid, 7, 3, 1, legend, [p1], { clearanceMargin: null });
     expect(cell).toEqual<Cell>({ row: 0, col: 6 });
   });
 });
@@ -142,7 +146,7 @@ describe('pickVersusSpawnCell: EUCLIDEAN breaks a geodesic tie', () => {
     const grid = ['.....x......', '.....x......', '.....x......', '.....x......', '.....x......'];
     const p1 = { x: 0.5, y: 2.5 }; // row 2, col 0
 
-    const cell = pickVersusSpawnCell(grid, 12, 5, 1, legend, [p1]);
+    const cell = pickVersusSpawnCell(grid, 12, 5, 1, legend, [p1], { clearanceMargin: null });
     expect(cell).toEqual<Cell>({ row: 0, col: 11 });
 
     // Pins the PREMISE the conclusion rests on, so this cannot quietly become a test
@@ -166,11 +170,16 @@ describe('pickVersusSpawnSet: the relaxation pass runs to convergence, not one r
     // instead, and 3 other (arena, count) pairs move as well -- arena-01 and arena-03 at
     // N=3, and arena-05 at N=4. So a cap of 1 is caught here, on the first of those.
     const arena = ARENA_DEFS.find((a) => a.id === 'arena-04')!;
+    // Re-measured 2026-08-23 after the hull-clearance filter (issue #225) made the
+    // boundary ring ineligible: the converged set moved off the board edges (was
+    // (0,26) (32,44) (24,0)). The cap-1 alternates in the comment above were measured
+    // PRE-filter; versus-relax-rounds-one in the mutation manifest is what currently
+    // proves the cap still discriminates.
     const cells = pickVersusSpawnSet(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 3);
     expect(cells).toEqual<Cell[]>([
-      { row: 0, col: 26 },
-      { row: 32, col: 44 },
-      { row: 24, col: 0 },
+      { row: 1, col: 1 },
+      { row: 31, col: 43 },
+      { row: 16, col: 22 },
     ]);
   });
 
@@ -194,7 +203,7 @@ describe('pickVersusSpawnCell: deterministic (row, col)-ascending tie-break', ()
     // exactly 4 (1 row + 3 cols), the unique maximum on this grid -- verified by
     // exhaustive scan in the scratch probe this test was written from. (row, col)
     // ascending among the 4 ties (0,0).
-    const cell = pickVersusSpawnCell(grid, 7, 3, 1, legend, [p1]);
+    const cell = pickVersusSpawnCell(grid, 7, 3, 1, legend, [p1], { clearanceMargin: null });
     expect(cell).toEqual<Cell>({ row: 0, col: 0 });
   });
 
@@ -402,12 +411,13 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
       }
     }
     expect(globalMin).toBeGreaterThan(5);
-    // Exact, and deliberately a two-place edit if placement is ever retuned: this is
-    // arena-03 / ffa / N=4, the tightest of the 100 pairs in the sweep. It was 9.0738…
-    // while P1 sat on the authored `P` cell and 11.6619… once P1 joined the maximin set
-    // (pickVersusSpawnSet) -- so this line is also the record that the ruling moved the
-    // WORST case, not just the average.
-    expect(globalMin).toBeCloseTo(11.6619037896906, 9);
+    // Exact, and deliberately a two-place edit if placement is ever retuned: now
+    // arena-02 / ffa / N=4, the tightest of the 100 pairs in the sweep. History of the
+    // worst case: 9.0738… with P1 on the authored `P` cell, 11.6619… (at arena-03/N=4)
+    // once P1 joined the maximin set, and 9.6148… after the hull-clearance filter
+    // (issue #225) shrank the eligible pool off walls and boundaries -- still well
+    // clear of the 5-unit floor, with every spawn now hull-clear.
+    expect(globalMin).toBeCloseTo(9.614803401237305, 9);
   });
 
   it('every player spawn is a distinct cell (never co-located), across the full sweep', () => {
@@ -506,5 +516,93 @@ describe('versusSpawnClearanceFailures', () => {
   it('is deterministic: same inputs twice give deep-equal failure lists', () => {
     const args = [walledGrid, 5, 3, 1, legend, [{ x: 1.5, y: 1.5 }, { x: 2.2, y: 1.5 }]] as const;
     expect(versusSpawnClearanceFailures(...args)).toEqual(versusSpawnClearanceFailures(...args));
+  });
+});
+
+describe('clearance-filtered candidate pools (issue #225)', () => {
+  const legend = { x: 'solid' as WallKind };
+
+  it('cramped corridor at cellSize 2/3: pool empties, picker degrades to the unfiltered pick, diagnostics stay loud', () => {
+    // Every open centre in a 1-cell corridor at cellSize 2/3 sits 0.333 from the
+    // wall faces -- under the 0.65 requirement, so the clearance-eligible pool is
+    // EMPTY and the fallback must return exactly what the unfiltered ranking
+    // returns (total, no throw). The diagnostic function is the loud half: the
+    // returned cell still fails clearance, and CI-time validation (not the picker)
+    // is what keeps advertised combinations away from this path.
+    const grid = ['xxxxx', 'x...x', 'xxxxx'];
+    const avoid = [{ x: 1.0, y: 1.0 }]; // centre of open cell (col 1, row 1)
+    const filtered = pickVersusSpawnCell(grid, 5, 3, 2 / 3, legend, avoid);
+    const unfiltered = pickVersusSpawnCell(grid, 5, 3, 2 / 3, legend, avoid, { clearanceMargin: null });
+    expect(filtered).toEqual(unfiltered);
+    const pos = { x: (filtered.col + 0.5) * (2 / 3), y: (filtered.row + 0.5) * (2 / 3) };
+    expect(versusSpawnClearanceFailures(grid, 5, 3, 2 / 3, legend, [pos]).length).toBeGreaterThan(0);
+  });
+
+  it('boundary ring at cellSize 1 is ineligible: the pick moves inward off the maximin-best corner', () => {
+    // 7x5 all-open board, avoid at cell (1,1)'s centre. Unfiltered geodesic maximin
+    // picks the far corner cell (6,4) (Manhattan 8). Every boundary-ring centre is
+    // 0.5 from the arena edge -- under 0.65 -- so with clearance on, the best
+    // ELIGIBLE cell is the interior maximum (5,3) (Manhattan 6, unique).
+    const grid = ['P......', '.......', '.......', '.......', '.......'];
+    const avoid = [{ x: 1.5, y: 1.5 }];
+    expect(pickVersusSpawnCell(grid, 7, 5, 1, legend, avoid, { clearanceMargin: null }))
+      .toEqual({ row: 4, col: 6 });
+    expect(pickVersusSpawnCell(grid, 7, 5, 1, legend, avoid)).toEqual({ row: 3, col: 5 });
+  });
+
+  it('pairwise clearance can empty the pool: every eligible cell sits within 1.15 of avoid, so the fallback engages', () => {
+    // 5x5 all-open at cellSize 0.6: the wall/boundary-eligible centres are the
+    // 3x3 second ring (0.9 from the nearest edges). With avoid at that ring's
+    // CENTRE cell, every other eligible centre is 0.6 (adjacent) or 0.849
+    // (diagonal) away -- all under 1.15 -- so pairwise empties the pool and the
+    // fallback returns the unfiltered ranking's pick (total, no throw). The
+    // discriminating control for the pairwise term lives in the mutation manifest:
+    // dropping it keeps an 8-cell pool and picks an eligible diagonal instead.
+    const grid = ['.....', '.....', '.....', '.....', '.....'];
+    const avoid = [{ x: 1.5, y: 1.5 }]; // centre of cell (2,2) at cellSize 0.6
+    const filtered = pickVersusSpawnCell(grid, 5, 5, 0.6, legend, avoid);
+    const unfiltered = pickVersusSpawnCell(grid, 5, 5, 0.6, legend, avoid, { clearanceMargin: null });
+    expect(filtered).toEqual(unfiltered);
+    // The premise, pinned: an eligible diagonal cell is wall/boundary-clean alone
+    // and pairwise-dirty once avoid joins it.
+    const diag = { x: 0.9, y: 0.9 }; // centre of eligible cell (1,1)
+    expect(versusSpawnClearanceFailures(grid, 5, 5, 0.6, legend, [diag])).toEqual([]);
+    expect(versusSpawnClearanceFailures(grid, 5, 5, 0.6, legend, [diag, ...avoid]).length).toBeGreaterThan(0);
+  });
+
+  it('shipped sweep: every spawn on all 15 (arena, N) combinations is hull-clear -- 0 violations measured', () => {
+    // Population: 5 shipped arenas x N in {2,3,4} = 15 combinations, real loadArena
+    // placement. Before the filter (issue #225) this measured 2 violations on
+    // arena-01 at N=2 alone -- P1 anchored at the corner cell, 0.333 from two
+    // boundaries at cellSize 2/3, a 0.5-radius hull overlapping the wall by 0.167.
+    // The filter is exactly what makes this sweep clean; it is the acceptance
+    // criterion, not a parity statement.
+    expect(ARENA_DEFS.length).toBe(5);
+    for (const arena of ARENA_DEFS) {
+      for (const n of [2, 3, 4] as const) {
+        const { tanks } = loadArena(arena, n, 'ffa');
+        const positions = tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
+        expect(
+          versusSpawnClearanceFailures(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, positions),
+          `${arena.id} N=${n}`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it('variant sweep: the gated match-start draw measures 0 violations over 25 (arena, seed) draws at N=4', () => {
+    // Population: 5 shipped arenas x pinned seeds 1..5, N=4 (the tightest count),
+    // through the SAME gated pickVersusVariantGrid the runtime uses.
+    for (const arena of ARENA_DEFS) {
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const grid = pickVersusVariantGrid(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, 4, seed);
+        const { tanks } = loadArena({ ...arena, grid }, 4, 'ffa');
+        const positions = tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
+        expect(
+          versusSpawnClearanceFailures(grid, arena.cols, arena.rows, arena.cellSize, arena.legend, positions),
+          `${arena.id} seed=${seed}`,
+        ).toEqual([]);
+      }
+    }
   });
 });

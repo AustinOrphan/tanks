@@ -14,8 +14,19 @@ superseded-by: []
 
 **Goal:** VS spawn candidates guarantee continuous hull clearance — from every intact
 wall AABB, from the arena boundary, and pairwise from already-placed spawns — with a
-diagnostic function naming any violation, zero behaviour change on shipped boards, and
-total (no-throw) degradation when a board cannot satisfy the rule (issue #225).
+diagnostic function naming any violation and total (no-throw) degradation when a board
+cannot satisfy the rule (issue #225).
+
+> **CORRECTED DURING EXECUTION (2026-08-23).** The original plan claimed shipped boards
+> could not feel the bound and demanded byte-identical parity, derived from "shipped
+> arenas are `cellSize 2`". Measured: shipped arenas are **`cellSize 2/3`** (the
+> arena-geometry spec's 3x upscale landed in PR #75), and the pre-fix picker really does
+> anchor arena-01's 2-player P1 at (0.333, 0.333) — a 0.5-radius hull overlapping the
+> boundary by 0.167. The issue's clipping premise is live on shipped boards, spawns are
+> SUPPOSED to move, and the parity constraint below is replaced by: (a) the shipped
+> sweep measures 0 clearance violations post-filter, and (b) `versus-board`'s
+> 15-of-15 suitability sweep (separation, full concealment, room) still passes on the
+> moved spawns — both re-measured live by the suites, not asserted here.
 
 **Architecture:** A clearance predicate inside `versus-spawns.ts` filters the candidate
 pools of `pickVersusSpawnCell` and `pickVersusSpawnSet` before the existing LOS/maximin
@@ -37,10 +48,10 @@ posture), `docs/superpowers/plans/2026-08-18-versus-p1-maximin.md` (P1 in the ma
 ## Global Constraints
 
 - `src/sim/` purity; no throw on any picker path (total functions, graceful degradation).
-- Shipped behaviour must not move: all 15 (arena, N) spawn sets byte-identical with the
-  filter on. Derivation of why that holds by construction: at `cellSize 2`, an open cell's
-  centre is ≥ 1.0 from every wall face and boundary (slack 0.5 over the 0.65 requirement),
-  and distinct cell centres are ≥ 2.0 apart (slack 0.85 over 1.15).
+- REPLACED (see correction above): shipped spawns MOVE off walls and boundaries — that is
+  the fix. The binding constraints are 0 measured violations on all 15 shipped
+  combinations post-filter, `versus-board` suitability still 15 of 15, and every moved
+  test pin updated deliberately with its re-measured value named in the change.
 - Margin: `VERSUS_SPAWN_CLEARANCE_MARGIN = 0.15`, derived as the geometry spec's 0.65
   free-point threshold minus `TANK_RADIUS` (0.5). Configurable as a parameter with this
   default — not a balance.json field (no caller needs runtime configuration; a data field
