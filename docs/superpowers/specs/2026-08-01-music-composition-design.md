@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-01
+last-reviewed: 2026-08-23
+scope: Composed music as validated JSON note tracks, playable alongside the generative bed fallback.
+implementation-issues: []
+implementation-prs: [68]
+supersedes: []
+superseded-by: []
+---
 # Composed music (approved 2026-08-01)
 
 The design feedback: "I'm probably going to want to orchestrate/compose some concepts or tunes

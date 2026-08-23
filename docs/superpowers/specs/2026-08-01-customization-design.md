@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-01
+last-reviewed: 2026-08-23
+scope: Tank paint shop v1 (curated hull colours) and v2 (procedural skins), render-layer only.
+implementation-issues: []
+implementation-prs: [59, 61]
+supersedes: []
+superseded-by: []
+---
 # Tank customization v1: the paint shop
 
 Approved 2026-08-01. A Customize pane off the main menu: a CURATED palette of hull

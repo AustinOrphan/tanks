@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-18
+last-reviewed: 2026-08-23
+scope: Identity-coloured render-layer spawn entrance and death pulse, keyed to player slot colour, driven from the world diff.
+implementation-issues: [199, 200]
+implementation-prs: [203, 205]
+supersedes: []
+superseded-by: []
+---
 # Spec — identity spawn & death animations
 
 Status: approved 2026-08-18. Design phase; implementation plan to follow (`writing-plans`).

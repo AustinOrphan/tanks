@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-08-01
+last-reviewed: 2026-08-23
+scope: Arenas as validated JSON grids with a declarative claim vocabulary, replacing hand-written per-level TypeScript.
+implementation-issues: []
+implementation-prs: [65]
+supersedes: []
+superseded-by: []
+---
 # Arenas as data: validated JSON grids with declarative design claims
 
 Approved 2026-08-01. The successor to the 2026-07-31 maps pass, which deferred variable

@@ -1,3 +1,13 @@
+---
+status: active
+date: 2026-08-02
+last-reviewed: 2026-08-23
+scope: Tank-width wall/corridor/killability rules for arena authoring, plus a fire-through barrier wall kind and one-way ledges.
+implementation-issues: []
+implementation-prs: [75]
+supersedes: []
+superseded-by: []
+---
 # Arena geometry: tank-width walls and fire-through barriers
 
 Approved 2026-08-02. Two changes to what an arena is made of, both driven by the same
