@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-31
+last-reviewed: 2026-08-23
+scope: Title panel becomes the main menu: Start/Level Select/Settings, localStorage level-unlock progress, and a dev-only sandbox.
+implementation-issues: []
+implementation-prs: [47]
+supersedes: []
+superseded-by: []
+---
 # Main menu: level select with saved progress, and settings on the title panel
 
 Approved 2026-07-31 (all three decisions taken with the user): Start + Level Select +

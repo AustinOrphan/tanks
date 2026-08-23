@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-31
+last-reviewed: 2026-08-23
+scope: Stats design: event attribution, lifetime/per-run stat tracking and persistence, and the stats page with two-click resets.
+implementation-issues: []
+implementation-prs: [56]
+supersedes: []
+superseded-by: []
+---
 # Stats: attribution in the event stream, a lifetime tally, and a stats page
 
 Approved 2026-07-31: the full July stat list (kills split shell/mine, deaths, shots +

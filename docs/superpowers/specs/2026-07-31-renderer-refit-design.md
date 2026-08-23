@@ -1,3 +1,13 @@
+---
+status: completed
+date: 2026-07-31
+last-reviewed: 2026-08-23
+scope: Renderer refit-in-place design letting arenas use different board sizes without rebuilding the GL renderer or scene graph.
+implementation-issues: []
+implementation-prs: [53]
+supersedes: []
+superseded-by: []
+---
 # Renderer refit: arenas stop being locked to one board size
 
 The standing constraint (maps pass 1, 2026-07-31): the renderer sizes its ground
