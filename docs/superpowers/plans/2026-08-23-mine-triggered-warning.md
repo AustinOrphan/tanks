@@ -1,10 +1,10 @@
 ---
-status: active
+status: completed
 date: 2026-08-23
 last-reviewed: 2026-08-23
 scope: Deterministic triggered-warning phase between any mine trigger and blast expansion, tick-owned, with idempotent triggers
 implementation-issues: [275]
-implementation-prs: []
+implementation-prs: [311]
 supersedes: []
 superseded-by: []
 ---
