@@ -395,7 +395,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "versusMapChoices is the setup pane's offer list, and #270's contract is that the offer honors BOTH declared axes of an entry's support: player counts AND modes. Forcing the mode conjunct to true offers a map in a mode it never declared -- exactly the defect the declared catalog exists to prevent, and invisible on shipped data: all 5 shipped entries declare both modes, so the parity pin (6 (N, mode) combinations) and the versusBoardCatalog cross-check read identically under this mutation. Caught by 1 of 13 in versus-config.test.ts: the fails-if-a-predicate-is-dropped fixture, whose ffa-only entry makes versusMapChoices(2, 'teams') return ['vs-both', 'vs-ffa-duo'] instead of ['vs-both']. The players conjunct of the same filter is NOT separately mutated here; the same fixture test pins it (the (3,'ffa') and (4,'ffa') cases), and this entry's kill already proves the fixture reaches the real filter.",
-    "tests": ["src/game/versus-config.test.ts"]
+    "tests": [
+      "src/game/versus-config.test.ts"
+    ]
   },
   {
     "id": "versus-catalog-rules-variant-sweep-drops-concealment",
@@ -405,7 +407,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "The seeded variant sweep must check BOTH criteria destructible removal can regress -- distinct spawn cells and opening concealment (the map-variants plan's proof covers why room cannot regress). Dropping the concealment arm lets a seeded draw that removes the one block hiding two spawns from each other validate clean, so a catalog entry could advertise seeded-destructible variants whose actual draws reopen opening sightlines. Invisible on the shipped catalog either way: its full sweep (75 draws: 5 entries x N in {2,3,4} x 5 pinned seeds) already measures 0 failures, so only a fixture whose sight blocker is itself destructible can discriminate. Caught by 1 of 13 in versus-catalog-rules.test.ts: the corridor fixture built for exactly this (two destructible cells, every removal of the corridor blocker reopens the P-to-spawn line) expects >= 1 variant-coverage failure naming a seed and gets 0 under this mutation.",
-    "tests": ["src/sim/versus-catalog-rules.test.ts"]
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
   },
   {
     "id": "versus-config-resolve-drops-support-check",
@@ -415,7 +419,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "resolveVersusConfig is #270's launch gate at the Start boundary: the resolved id must name a catalog entry whose DECLARED support covers the config's (players, mode), or the session must fail loudly rather than launch an unsupported combination. The gate is deliberately unreachable from the shipped pane (its offer list is filtered by the same declarations and every shipped entry declares all Ns and both modes), so no shipped-path test can see this mutation -- it exists for a future narrower entry (#271-#273) meeting a stale retained selection. Caught by 1 of 13 in versus-config.test.ts: the rejection test hands a synthetic ffa-only, N=2-only entry a teams config and an N=3 config and expects both to throw the exact support message; under this mutation both resolve silently. The entry-exists check above the mutated line is untouched, so the names-no-entry rejection test still passes and cannot mask this kill.",
-    "tests": ["src/game/versus-config.test.ts"]
+    "tests": [
+      "src/game/versus-config.test.ts"
+    ]
   },
   {
     "id": "hud-count-drop-restart",
@@ -476,5 +482,17 @@
     "tests": [
       "src/sim/versus-spawns.test.ts"
     ]
+  },
+  {
+    "id": "vs-catalog-clearance-default-dropped",
+    "file": "src/sim/versus-catalog-rules.ts",
+    "find": "    const clearance = (opts.clearanceRule ?? defaultClearanceRule)({",
+    "replace": "    const clearance = (opts.clearanceRule ?? (() => []))({",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ],
+    "why": "Issue #312 wires #225's real versusSpawnClearanceFailures as the catalog sweep's DEFAULT clearance rule; silently reverting the default to an empty rule makes every declared combination validate clearance-blind again -- the exact gap the wiring closes. Killed by the cramped-corridor fixture, whose fallback spawns really are hull-clipped and must surface as spawn-clearance diagnostics with no opt-in."
   }
 ]

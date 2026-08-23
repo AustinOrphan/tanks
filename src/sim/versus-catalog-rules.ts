@@ -2,6 +2,7 @@ import type { Arena } from './arena';
 import { arenaById, loadArena } from './arena';
 import { evaluateVersusBoard, MIN_OPEN_FLOOR_PER_PLAYER } from './versus-board';
 import { buildVariantGrid, DESTRUCTIBLE_REMOVAL_FRACTION } from './versus-variants';
+import { versusSpawnClearanceFailures } from './versus-spawns';
 import type { VersusCatalogEntry } from './config/versus-catalog-types';
 import { VERSUS_CATALOG } from './config/versus-catalog';
 
@@ -37,12 +38,24 @@ export interface SpawnClearanceContext {
 /**
  * The #225 consumption seam: an injectable rule receiving the real picked spawn
  * positions for one declared player count on the authored grid, returning
- * human-readable violations (empty = clean). ABSENT BY DEFAULT -- the catalog
- * contract lands first (issue #270's dependency note), and wiring #225's rule in
- * is a one-line `clearanceRule:` argument at the sweep's call site, not a new
- * plumbing job.
+ * human-readable violations (empty = clean). Defaults to the REAL rule
+ * (`defaultClearanceRule` below, issue #312); inject to override.
  */
 export type SpawnClearanceRule = (ctx: SpawnClearanceContext) => string[];
+
+/**
+ * The DEFAULT clearance rule (issue #312): #225's real
+ * `versusSpawnClearanceFailures`, wired now that both halves are merged. Spawn
+ * positions are already clearance-filtered at pick time (#225), so on healthy
+ * boards this re-verifies to zero lines; a board whose eligible pool empties
+ * (the picker's documented fallback) is exactly what it surfaces in the sweep.
+ * Still injectable: tests and future policies override via
+ * `VersusCatalogRuleOptions.clearanceRule`.
+ */
+const defaultClearanceRule: SpawnClearanceRule = (ctx) =>
+  versusSpawnClearanceFailures(
+    ctx.grid, ctx.arena.cols, ctx.arena.rows, ctx.arena.cellSize, ctx.arena.legend, ctx.positions,
+  );
 
 /**
  * The pinned seed sample behind every `seeded-destructible` declaration: 5 seeds
@@ -191,9 +204,9 @@ export function versusCatalogEntryFailures(
       }
     }
 
-    const clearance = opts.clearanceRule
-      ? opts.clearanceRule({ arena, grid: arena.grid, playerCount: n, positions: playerPositions(arena, n) })
-      : [];
+    const clearance = (opts.clearanceRule ?? defaultClearanceRule)({
+      arena, grid: arena.grid, playerCount: n, positions: playerPositions(arena, n),
+    });
 
     for (const mode of entry.modes) {
       if (!authored.distinctSpawns) {
