@@ -1,10 +1,10 @@
 ---
-status: active
+status: completed
 date: 2026-08-23
 last-reviewed: 2026-08-23
 scope: Split the monolithic backlog into per-topic files under a compact index, with metadata and a reworked count guard
 implementation-issues: [265]
-implementation-prs: []
+implementation-prs: [314]
 supersedes: []
 superseded-by: []
 ---
