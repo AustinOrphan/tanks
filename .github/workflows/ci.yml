@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets the required gate (verify (floor), verify (current), visual -- the ruleset's
+  # required status checks) be run against a branch without opening a PR. Adds no new
+  # trigger surface beyond that: push and pull_request are unchanged, and this path
+  # has no fork-PR or workflow_run ambiguity to guard against, unlike pages.yml's.
+  workflow_dispatch:
 
 permissions:
   contents: read
