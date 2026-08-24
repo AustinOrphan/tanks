@@ -1,13 +1,13 @@
 import type { World } from '../world';
 import type { InputState, Tank, Vec2 } from '../types';
 import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
-import { lineOfSight, aimLead, dangerAvoidMove, incomingThreats, profileAimSpread, profileHazardSpread } from './targeting';
+import { lineOfSight, aimLead, dangerAvoidMove, incomingThreats, profileAimSpread, profileHazardSpread, wallBlocksPath } from './targeting';
 import { commitHeading } from './commitment';
-import { driveVelocity, circleVsAABB } from '../collision';
+import { driveVelocity } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
 import {
-  TANK_RADIUS, DT, TICK_HZ, WANDER_TICKS, SEEK_APPROACH_BIAS, VEC_EPS,
-  AI_MINE_TACTICAL_RADIUS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR,
+  TICK_HZ, WANDER_TICKS, SEEK_APPROACH_BIAS, VEC_EPS,
+  AI_MINE_TACTICAL_RADIUS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_PATH_HORIZON_TICKS,
 } from '../constants';
 
 /**
@@ -234,19 +234,6 @@ function assessThreats(world: World, subject: Tank): ThreatSummary {
   };
 }
 
-/** True if stepping one tick along `dir` at `speed` would put the tank's hull inside a
- *  wall. Mirrors targeting.ts's private wallBlocksStep (not exported there), so a seek
- *  direction that would net zero displacement falls back to wander here exactly as it
- *  does for the enemy AI. */
-function wallBlocksStep(world: World, tank: Tank, dir: Vec2, speed: number): boolean {
-  const probe = { x: tank.pos.x + dir.x * speed * DT, y: tank.pos.y + dir.y * speed * DT };
-  for (const w of world.walls) {
-    if (w.destroyed) continue;
-    if (circleVsAABB(probe, TANK_RADIUS, w.aabb).hit) return true;
-  }
-  return false;
-}
-
 function blend(toward: Vec2, wander: Vec2): Vec2 {
   return vnorm({
     x: toward.x * SEEK_APPROACH_BIAS + wander.x * (1 - SEEK_APPROACH_BIAS),
@@ -299,7 +286,11 @@ function seekLikeMove(world: World, player: Tank, rnd: () => number, state: Play
   }
 
   if (dir === null || vlen(dir) < VEC_EPS) return wander;
-  return wallBlocksStep(world, player, dir, speed) ? wander : dir;
+  // Issue #224: the SHARED horizon probe, not a private one-tick copy. This file used to
+  // carry its own `wallBlocksStep` because targeting.ts's was not exported; it is now, so
+  // the bot player and the enemy AI vet a seek heading against identical geometry over an
+  // identical horizon rather than two implementations that could drift apart.
+  return wallBlocksPath(world, player, dir, AI_PATH_HORIZON_TICKS, speed) ? wander : dir;
 }
 
 /**

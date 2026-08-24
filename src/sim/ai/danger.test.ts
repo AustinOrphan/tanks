@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { incomingThreats, dangerAvoidMove } from './targeting';
-import { AI_MINE_FLEE_RADIUS } from '../constants';
+import { incomingThreats, dangerAvoidMove, wallBlocksPath } from './targeting';
+import { AI_MINE_FLEE_RADIUS, AI_PATH_HORIZON_TICKS } from '../constants';
 import type { Tank, Bullet, Mine, Vec2, Wall } from '../types';
 import type { World } from '../world';
 
@@ -279,5 +279,83 @@ describe('dangerAvoidMove', () => {
     const move = dangerAvoidMove(world({ tanks: [t], bullets: [b], mines: [m] }), t);
     expect(move).not.toBeNull();
     expect(move!.y).toBeCloseTo(-1, 6);
+  });
+});
+
+// Issue #224: evasive movement must establish that the short escape PATH is navigable, not
+// merely that the next single step is. Geometry for these fixtures: TANK_RADIUS 0.5, base
+// speed 3 units/s, DT 1/60 -> 0.05 units per tick, AI_PATH_HORIZON_TICKS 12 -> the probe
+// reaches 0.6 units, so the hull sweeps out to 1.1 units from the tank's centre.
+describe('dodging near walls (issue #224)', () => {
+  // A bullet flying +x at a tank on the origin. dangerAvoidMove's preferred side is the
+  // perpendicular the tank already sits on, which for rel=(3,0) is +y (the dot is 0 and the
+  // test is `>= 0`), so +y is what the old one-tick probe would hand back.
+  const incoming = () => bullet(50, 99, { x: -3, y: 0 }, { x: 6, y: 0 });
+
+  it('rejects a preferred side that is clear for one tick but walled within the horizon', () => {
+    // minY 0.6: at tick 1 the hull reaches y=0.55 and misses it, so a single-step probe
+    // calls this side clear. By tick 12 the hull reaches 1.1 and is well inside it.
+    const t = tank(1, { x: 0, y: 0 });
+    const w = world({ tanks: [t], bullets: [incoming()], walls: [wall(1, -5, 0.6, 5, 5)] });
+    const dir = dangerAvoidMove(w, t);
+    expect(dir).not.toBeNull();
+    expect(dir!.y).toBeLessThan(0); // took the open side instead of the walled one
+  });
+
+  it('still takes the preferred side when the wall is beyond the horizon', () => {
+    // The negative control for the case above: push the same wall out past where the probe
+    // reaches and the preferred side must come back, or the test above would also pass an
+    // implementation that simply always flips sides.
+    const t = tank(1, { x: 0, y: 0 });
+    const w = world({ tanks: [t], bullets: [incoming()], walls: [wall(1, -5, 3, 5, 8)] });
+    const dir = dangerAvoidMove(w, t);
+    expect(dir).not.toBeNull();
+    expect(dir!.y).toBeGreaterThan(0);
+  });
+
+  it('sidesteps onto a navigable heading when BOTH perpendiculars are walled', () => {
+    // A corridor running along the shell's own axis: north and south are both closed inside
+    // the horizon, east and west are open. The old code returned `preferred` here -- a
+    // heading it had just proven walks into a wall. AC3 rules that out.
+    const t = tank(1, { x: 0, y: 0 });
+    const w = world({
+      tanks: [t],
+      bullets: [incoming()],
+      walls: [wall(1, -5, 0.6, 5, 5), wall(2, -5, -5, 5, -0.6)],
+    });
+    const dir = dangerAvoidMove(w, t);
+    expect(dir).not.toBeNull();
+    // Whatever it picked must itself be navigable over the horizon -- that is the property,
+    // not any particular compass direction.
+    expect(wallBlocksPath(w, t, dir!, AI_PATH_HORIZON_TICKS)).toBe(false);
+  });
+
+  it('falls back explicitly and stably when every heading is blocked', () => {
+    // A dead end: a box with inner faces at +/-0.85 puts a wall inside the swept hull for
+    // every wheel direction, diagonals included (a diagonal probe reaches 0.424 + 0.5 =
+    // 0.924 > 0.85). There is no navigable answer, so the documented fallback applies --
+    // and the point of the criterion is that it is a CHOSEN one and the same one twice,
+    // not whatever the loop happened to leave behind.
+    const t = tank(1, { x: 0, y: 0 });
+    const box = [
+      wall(1, -5, 0.85, 5, 5), wall(2, -5, -5, 5, -0.85),
+      wall(3, 0.85, -5, 5, 5), wall(4, -5, -5, -0.85, 5),
+    ];
+    const w = world({ tanks: [t], bullets: [incoming()], walls: box });
+    const first = dangerAvoidMove(w, t);
+    const second = dangerAvoidMove(w, t);
+    expect(first).not.toBeNull();
+    expect(second).toEqual(first);
+    expect(first!.y).toBeGreaterThan(0); // the documented preferred perpendicular
+  });
+
+  it('a mine dodge also respects the horizon', () => {
+    // The mine branch reaches bestEscapeDirection, whose wheel now probes the same horizon.
+    const t = tank(1, { x: 0, y: 0 });
+    const m = mine(7, 99, { x: -1.5, y: 0 }, true); // inside flee range, so fleeing is +x
+    const w = world({ tanks: [t], mines: [m], walls: [wall(1, 0.6, -5, 5, 5)] });
+    const dir = dangerAvoidMove(w, t);
+    expect(dir).not.toBeNull();
+    expect(wallBlocksPath(w, t, dir!, AI_PATH_HORIZON_TICKS)).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import {
   AIM_EPS, AI_AIM_SPREAD, AI_HAZARD_SPREAD, TANK_RADIUS, DT, THREAT_HORIZON, DANGER_CORRIDOR, SEEK_APPROACH_BIAS,
   VEC_EPS, WANDER_TICKS, AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, AI_HULL_CLEARANCE,
   AI_SHOT_LOOKAHEAD, ESCAPE_SAMPLES, AI_MINE_TACTICAL_RADIUS, bulletConfig, SWEEP_EPS,
+  AI_PATH_HORIZON_TICKS,
 } from '../constants';
 import type { World } from '../world';
 import { detHypot } from '../math/hypot';
@@ -585,7 +586,10 @@ export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec
   if (dir === null || vlen(dir) < VEC_EPS) return wander;
   // The probe must test the INJECTED cfg's speed, not the kind's -- the two can
   // differ under test injection, and the probe exists to predict moveTank's step.
-  return wallBlocksStep(world, tank, dir, cfg.movementSpeed) ? wander : dir;
+  // Horizon probe, not a single step (issue #224): a seek heading that is legal for one
+  // tick but runs into a wall a fifth of a second later used to be accepted, and the tank
+  // then ground along that wall for the rest of the window.
+  return wallBlocksPath(world, tank, dir, AI_PATH_HORIZON_TICKS, cfg.movementSpeed) ? wander : dir;
 }
 
 /**
@@ -648,6 +652,42 @@ export function aimJitter(world: World, tank: Tank, spread: number): number {
  * the tank's own resolved config, the same source moveTank uses -- so this asks precisely
  * the question that matters.
  */
+/**
+ * True if travelling along `dir` for `ticks` ticks would put the tank's hull inside a wall at
+ * any point along the way -- the short-horizon navigability test issue #224 asks for, where
+ * `wallBlocksStep` below answers only "is the very next step legal".
+ *
+ * One probe per tick, so consecutive samples sit `speed * DT` apart (0.05 units at the base
+ * speed of 3) against a TANK_RADIUS of 0.5: the swept hull is covered many times over and a
+ * wall cannot slip between two samples.
+ *
+ * APPROXIMATE, deliberately, and in the conservative direction. `moveTank` turns the hull
+ * toward the request and drives along the HULL at a speed scaled by how far it still has to
+ * swing, so a tank facing away from `dir` covers less ground than this straight-line probe
+ * assumes and covers it in a different direction. Simulating that per candidate would mean
+ * replaying the hull slew for each of ESCAPE_SAMPLES directions every tick. This over-states
+ * forward progress instead, which makes the test reject some headings the tank could in fact
+ * have taken -- never the reverse. Callers therefore need a real fallback for "everything is
+ * blocked", which is exactly what issue #224's third acceptance criterion is about.
+ */
+export function wallBlocksPath(
+  world: World,
+  tank: Tank,
+  dir: Vec2,
+  ticks: number,
+  speed = configFor(tank.kind).movementSpeed,
+): boolean {
+  const perTick = speed * DT;
+  for (let i = 1; i <= ticks; i++) {
+    const probe = { x: tank.pos.x + dir.x * perTick * i, y: tank.pos.y + dir.y * perTick * i };
+    for (const w of world.walls) {
+      if (w.destroyed) continue;
+      if (circleVsAABB(probe, TANK_RADIUS, w.aabb).hit) return true;
+    }
+  }
+  return false;
+}
+
 export function wallBlocksStep(world: World, tank: Tank, dir: Vec2, speed = configFor(tank.kind).movementSpeed): boolean {
   const probe = {
     x: tank.pos.x + dir.x * speed * DT,
@@ -741,7 +781,7 @@ function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | nu
       if (dot < score) score = dot;
     }
     if (score === Infinity) score = 0;
-    if (wallBlocksStep(world, tank, cand)) {
+    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) {
       if (score > bestBlockedScore) { bestBlockedScore = score; bestBlocked = cand; }
       continue;
     }
@@ -750,6 +790,41 @@ function bestEscapeDirection(world: World, tank: Tank, mines: Mine[]): Vec2 | nu
   // Every heading walks into a wall: still move, taking the least-bad one, because a tank
   // pinned in the blast is worse off than one sliding along the wall out of it.
   return best ?? bestBlocked;
+}
+
+/**
+ * The deterministic way out when BOTH dodge perpendiculars are blocked (issue #224 AC3).
+ *
+ * Sweeps the same fixed ESCAPE_SAMPLES wheel `bestEscapeDirection` uses -- deterministic,
+ * includes the exact axis directions, and cannot divide by a near-zero resultant -- and keeps
+ * the navigable candidate that wins the most lateral clearance from the shell's line.
+ * `1 - |dot(cand, bulletDir)|` scores 1 for a true perpendicular and 0 for running along the
+ * shell's own path, so a heading that merely flees down the corridor never beats one that
+ * actually leaves it.
+ *
+ * Candidates that step toward an armed mine already in flee range are refused, the same
+ * constraint the two perpendicular passes apply -- a dodge that solves the shell by walking
+ * onto a mine is not a dodge.
+ *
+ * Returns null when the whole wheel is blocked, which is a real state in a dead end: the
+ * caller then falls back to its preferred perpendicular, and that IS the explicit, stable
+ * choice the criterion asks for rather than an accident. The wheel contains both
+ * perpendiculars, so this can only ever match or improve on that fallback.
+ */
+function sidestepAroundBlockage(world: World, tank: Tank, bulletDir: Vec2, mines: Mine[]): Vec2 | null {
+  let best: Vec2 | null = null;
+  let bestScore = -Infinity;
+  for (let i = 0; i < ESCAPE_SAMPLES; i++) {
+    const a = (i * 2 * Math.PI) / ESCAPE_SAMPLES;
+    // Snapped exactly as bestEscapeDirection snaps, so the axis directions stay exact rather
+    // than 1e-16 off and a fixture comparing to {1,0} still matches.
+    const cand = { x: Math.round(detCos(a) * 1e12) / 1e12, y: Math.round(detSin(a) * 1e12) / 1e12 };
+    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;
+    if (mines.some((m) => vdot(cand, vsub(m.pos, tank.pos)) > 0)) continue;
+    const score = 1 - Math.abs(vdot(cand, bulletDir));
+    if (score > bestScore) { bestScore = score; best = cand; }
+  }
+  return best;
 }
 
 /**
@@ -798,16 +873,23 @@ export function dangerAvoidMove(world: World, tank: Tank, fleeRadius = AI_MINE_F
     // Vetted against EVERY mine in flee range, not just the nearest: a dodge cleared by
     // the nearest mine could still step onto the second one.
     for (const cand of [preferred, other]) {
-      if (wallBlocksStep(world, tank, cand)) continue;
+      if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;
       if (mines.some((m) => vdot(cand, vsub(m.pos, tank.pos)) > 0)) continue;
       return cand;
     }
     // Both sides compromised: a wall-free dodge still moves the tank out of the corridor,
     // whereas a wall-pinned one moves it nowhere at all, so that is the better tie-break.
     for (const cand of [preferred, other]) {
-      if (!wallBlocksStep(world, tank, cand)) return cand;
+      if (!wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) return cand;
     }
-    return preferred;
+    // BOTH perpendiculars are blocked. This used to `return preferred` -- a heading the two
+    // loops above had just proven walks into a wall, i.e. exactly the "accidental blocked
+    // heading" issue #224's third acceptance criterion rules out. Search the same fixed wheel
+    // bestEscapeDirection uses instead, scoring by how much lateral clearance a candidate
+    // wins from the shell's line: `1 - |dot(cand, bulletDir)|` is 1 for a true perpendicular
+    // and 0 for running along the shell's own path. The wheel includes both perpendiculars,
+    // so this can never be worse than what it replaces.
+    return sidestepAroundBlockage(world, tank, dir, mines) ?? preferred;
   }
 
   if (mines.length > 0) {

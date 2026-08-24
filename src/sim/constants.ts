@@ -240,6 +240,41 @@ export const AI_MINE_TACTICAL_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS + TANK_SP
 // still yields precisely "straight away".
 export const ESCAPE_SAMPLES = 16;
 
+/**
+ * How many ticks ahead a candidate movement direction is checked against wall geometry
+ * (issue #224). The old check probed exactly ONE tick, which establishes only that the very
+ * next step is legal -- not that the short evasive path is navigable, which is the thing the
+ * issue reports as missing.
+ *
+ * Sampling is one probe per tick along the candidate. At the base speed of 3 units/s that is
+ * 0.05 units between probes against a TANK_RADIUS of 0.5, so the swept hull is covered ten
+ * times over and no probe can tunnel through a wall between samples.
+ *
+ * The value is a genuine trade-off and was picked by SWEEP, not by taste: a longer horizon
+ * rejects more candidates, and in tight geometry a long enough horizon rejects every one of
+ * them and drives the AI onto its fallback permanently -- which is worse than the defect.
+ *
+ * Swept 1,2,4,6,8,10,12,16 with everything else held fixed (horizon 1 is arithmetically the
+ * old single-step probe, so it is the within-branch control). Two columns: the scripted-bot
+ * win rate from player-profile.test.ts's 125-game population, and wall-pinned ticks from
+ * evasion.measure.test.ts.
+ *
+ *   horizon:            1      2      4      6      8     10     12     16
+ *   wins/125:          31     33     31     29     31     25     27     30
+ *   pinned a1/pac grey 3.41%  3.40%  3.21%  3.37%  3.16%  3.05%  2.88%  3.10%
+ *   pinned a3/sht grey 6.09%  5.80%  5.23%  4.88%  4.37%  4.60%  4.70%  3.43%
+ *
+ * 8 captures 81-83% of the full 1->16 pinning improvement on the arena1 rows and 58-65% on
+ * arena3, at a win rate identical to the control. Two things the sweep says that a tidier
+ * table would hide: the win rate does NOT discriminate between horizons at N=125 (it spans
+ * 25-33 with no monotone trend), and pinning is not monotonic either -- arena3/shooter dips
+ * at 8, rises at 10-12, then falls again at 16. 10 is avoided because it lands on exactly
+ * 25/125 = 0.200 and fails that test's `> 0.2` bound; 12 clears it by only 1.6 points. The
+ * pinned denominators shift between rows because game length itself changes with the
+ * horizon, so each rate is over its own population rather than a fixed N.
+ */
+export const AI_PATH_HORIZON_TICKS = 8;
+
 // ---- AI shot vetting (friendlyBlocksShot, bankShot's return-leg check) ----
 // How close a shell may pass to a tank the AI did NOT aim at before the shot is refused:
 // a teammate standing on the firing line (friendlyBlocksShot) or the shooter's own hull
