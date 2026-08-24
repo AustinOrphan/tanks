@@ -4,6 +4,8 @@ import { step, createWorld } from '../world';
 import type { Tank, Vec2 } from '../types';
 import { fromAngle, vnorm, vsub, vdist } from '../types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from './player-profile';
+import { configFor } from '../config';
+import { TICK_HZ } from '../constants';
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number, team?: number): Tank {
   return {
@@ -554,5 +556,47 @@ describe('the scripted player cannot perturb what it measures', () => {
     const a = decidePlayerInput(world, playerId, mulberry32(99), createPlayerAiState(mulberry32(99)));
     const b = decidePlayerInput(world, playerId, mulberry32(99), createPlayerAiState(mulberry32(99)));
     expect(a).toEqual(b);
+  });
+});
+
+// Issue #222: the same commitment layer the enemy AI got, reaching the bot that drives a
+// PLAYER slot. Without it a VS bot would keep reversing its heading tick to tick while
+// every campaign enemy had stopped -- the visible inconsistency an owner playtest catches.
+describe('the bot player commits to a movement heading', () => {
+  const PLAYER_ID = 1;
+
+  it('returns the heading held in PlayerAiState instead of re-deciding, while the commitment lasts', () => {
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const foe = makeTank('brown', 2, 8, 0);
+    const world = createWorld({ walls: [], tanks: [player, foe], spawns: [], lives: 3 });
+    const rnd = mulberry32(11);
+    const state = createPlayerAiState(rnd);
+    const held: Vec2 = { x: 0, y: 1 };
+    state.intent = held;
+    state.intentTicks = 5;
+
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+    expect(input.move).toEqual(held);
+    // and the commitment is counted down through the caller's own state object
+    expect(state.intentTicks).toBe(4);
+    expect(state.intent).toEqual(held);
+  });
+
+  it('re-decides once the commitment has run out (the negative control)', () => {
+    // Without this, the case above would also pass an implementation that returned
+    // `state.intent` unconditionally and never adopted anything new again.
+    const player = makeTank('player', PLAYER_ID, 0, 0);
+    const foe = makeTank('brown', 2, 8, 0);
+    const world = createWorld({ walls: [], tanks: [player, foe], spawns: [], lives: 3 });
+    const rnd = mulberry32(11);
+    const state = createPlayerAiState(rnd);
+    const stale: Vec2 = { x: 0, y: 1 };
+    state.intent = stale;
+    state.intentTicks = 0;
+
+    const input = decidePlayerInput(world, PLAYER_ID, rnd, state);
+    expect(input.move).not.toEqual(stale);
+    // a fresh commitment is armed from the player profile's own commitmentTime
+    expect(state.intentTicks).toBe(Math.round(configFor('player').ai.commitmentTime * TICK_HZ));
   });
 });

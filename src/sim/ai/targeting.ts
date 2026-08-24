@@ -648,7 +648,7 @@ export function aimJitter(world: World, tank: Tank, spread: number): number {
  * the tank's own resolved config, the same source moveTank uses -- so this asks precisely
  * the question that matters.
  */
-function wallBlocksStep(world: World, tank: Tank, dir: Vec2, speed = configFor(tank.kind).movementSpeed): boolean {
+export function wallBlocksStep(world: World, tank: Tank, dir: Vec2, speed = configFor(tank.kind).movementSpeed): boolean {
   const probe = {
     x: tank.pos.x + dir.x * speed * DT,
     y: tank.pos.y + dir.y * speed * DT,

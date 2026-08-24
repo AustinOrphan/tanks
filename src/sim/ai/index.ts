@@ -9,13 +9,14 @@ import { tealDecision } from './teal';
 import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread } from './targeting';
+import { commitMove } from './commitment';
 import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, TICK_HZ, AI_MINE_FLEE_RADIUS } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
 /** An inert decision: hold position, hold aim, do nothing. */
 function idleDecision(tank: Tank): AiDecision {
-  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0 };
+  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0 };
 }
 
 export function decideAi(world: World, tank: Tank): AiDecision {
@@ -36,22 +37,42 @@ export function decideAi(world: World, tank: Tank): AiDecision {
   // silently inert enemy. The exhaustiveness check below now covers AIBehavior:
   // a new behaviour class must be routed here or fail to compile.
   const cfg = configFor(tank.kind);
-  switch (cfg.behavior) {
-    case AIBehavior.STATIONARY: return brownDecision(world, tank, cfg);
-    case AIBehavior.DEFENSIVE: return greyDecision(world, tank, cfg);
-    // The three mobile-aggressive behaviours share the mobile implementation
-    // today; OFFENSIVE/BERSERKER are vocabulary for future rosters, routed to
-    // the nearest real implementation rather than left silently inert.
-    case AIBehavior.TACTICAL:
-    case AIBehavior.OFFENSIVE:
-    case AIBehavior.BERSERKER:
-      return tealDecision(world, tank, cfg);
-    default: {
-      const unreachable: never = cfg.behavior;
-      void unreachable;
-      return idleDecision(tank);
+  const decision = ((): AiDecision => {
+    switch (cfg.behavior) {
+      case AIBehavior.STATIONARY: return brownDecision(world, tank, cfg);
+      case AIBehavior.DEFENSIVE: return greyDecision(world, tank, cfg);
+      // The three mobile-aggressive behaviours share the mobile implementation
+      // today; OFFENSIVE/BERSERKER are vocabulary for future rosters, routed to
+      // the nearest real implementation rather than left silently inert.
+      case AIBehavior.TACTICAL:
+      case AIBehavior.OFFENSIVE:
+      case AIBehavior.BERSERKER:
+        return tealDecision(world, tank, cfg);
+      default: {
+        const unreachable: never = cfg.behavior;
+        void unreachable;
+        return idleDecision(tank);
+      }
     }
-  }
+  })();
+
+  // THE COMMITMENT LAYER (issue #222), applied centrally here rather than inside each
+  // behaviour: one implementation, one set of tests, and a new behaviour class gets it
+  // for free. See ai/commitment.ts for the measured defect it closes and for why it
+  // cannot live inside dangerAvoidMove (that helper is shared with decidePlayerInput and
+  // must stay stateless).
+  //
+  // Only `desiredMove` and the write-back pair are replaced. The turret, the firing
+  // solution and `hasSolution` are deliberately untouched: aiming is not committed, only
+  // MOVEMENT is, so an enemy that has committed to a heading still tracks and shoots you
+  // the instant it can -- the reaction clock in stepAi below keeps its existing meaning.
+  const committed = commitMove(world, tank, cfg, decision.desiredMove, decision.avoid, decision.avoidKind);
+  return {
+    ...decision,
+    desiredMove: committed.move,
+    nextIntent: committed.nextIntent,
+    nextIntentTicks: committed.nextIntentTicks,
+  };
 }
 
 export function stepAi(world: World, events: SimEvent[]): void {
@@ -87,6 +108,13 @@ export function stepAi(world: World, events: SimEvent[]): void {
     tank.turretAngle = slewAngle(tank.turretAngle, decision.turretAngle, AI_TURRET_TURN_RATE * DT);
     tank.aiState = decision.nextState;
     tank.aiTimer = decision.nextTimer;
+    // The committed movement heading and its countdown, written back beside the other two
+    // pieces of per-tank AI state so decisions stay pure and the dispatcher owns the write
+    // (issue #222). Cleared to undefined rather than left stale when nothing is held, so
+    // "no commitment" is genuinely absent rather than a zero vector that reads as a real
+    // heading of due-east.
+    tank.aiIntent = decision.nextIntent ?? undefined;
+    tank.aiIntentTicks = decision.nextIntentTicks;
 
     // Friendly fire is vetted TWICE, and it has to be. The decision functions check their
     // own firing solution, but the shot below leaves along the post-slew turret angle,

@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
 import { BANK_PREFER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
@@ -20,6 +20,13 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   const fleeRadius = AI_MINE_FLEE_RADIUS + hazardOffset;
   const dangerCorridor = DANGER_CORRIDOR + hazardOffset;
   const avoid = dangerAvoidMove(world, tank, fleeRadius, dangerCorridor);
+  // Which hazard `avoid` escapes, for the commitment layer's sign rule (see AiDecision's
+  // avoidKind). Unlike grey, teal has no `underFire` of its own to reuse, so this is a
+  // second incomingThreats pass over the same perceived corridor -- bullets only, no wall
+  // geometry, and skipped entirely when there is nothing to escape.
+  const avoidKind = avoid === null
+    ? null
+    : incomingThreats(world, tank, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
   // Mobile (spec §7): wander is the baseline move whenever there's nothing more specific
   // to do; dodging overrides it when a threat is present. This lets Teal keep roaming
   // (and reposition itself into new bank opportunities) instead of standing still as a
@@ -42,7 +49,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary
     // target for the whole of every countdown and every player respawn -- a hardcoded
     // zero, not a decision. `move` already folds in the dodge when one is present.
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
   }
 
   const speed = weapon.speed;
@@ -110,10 +117,10 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     && mineThreatensPlayer(world, tank, AI_MINE_TACTICAL_RADIUS + hazardOffset);
 
   if (turretAngle !== null) {
-    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0 };
+    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
   }
 
 
   // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
-  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0 };
+  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
 }

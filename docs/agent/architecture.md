@@ -211,7 +211,23 @@ the perceived mine-flee radius, danger corridor and mine-tactical radius `danger
 the per-bucket mine-proposal probability (`mineInclination`) — and
 `reactionTime`: the dispatcher holds every AI shot until the solution has been
 HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
-span; cover resets the clock. **Every profile field is consumed by the
+span; cover resets the clock — and `commitmentTime` (issue #222): the movement
+COMMITMENT span, `Math.round(commitmentTime · TICK_HZ)`, applied centrally by
+`decideAi` through `commitMove` (`ai/commitment.ts`) over whatever the behaviour
+returned, never inside `dangerAvoidMove` (that helper is shared with
+`decidePlayerInput` and must stay stateless). While a commitment is live the tank
+moves on its held heading; it ends early only on a genuine emergency (the heading
+now walks into a wall, or a required escape disagrees with it), and at expiry a
+candidate inside `AI_COMMIT_HYSTERESIS_DOT` counts as the same decision. A BULLET
+escape is compared sign-blind (`AI_COMMIT_DODGE_ALIGN_DOT`) because
+`dangerAvoidMove` returns one of two exact opposite perpendiculars and both leave
+the corridor; a mine escape keeps the signed test. The same layer reaches
+bot-driven PLAYER tanks via `commitHeading`, with the state in the caller-owned
+`PlayerAiState` rather than on the tank. `commitmentTime` is authored as a
+personality axis and is deliberately NOT scored by `tankDifficultyBreakdown`
+(committing longer is both more decisive and more predictable, so it is not
+monotonic in threat); like `estimationAccuracy`, it is inert for STATIONARY
+profiles, whose `desiredMove` is hardcoded zero so they never acquire an intent. **Every profile field is consumed by the
 implementations it applies to** — a scoped claim since 2026-08-16, not a universal
 one: `estimationAccuracy` is read only where hazard estimation happens, so
 STATIONARY's two profiles (STATIC_BASIC, RICOCHET_SNIPER) carry a value nothing

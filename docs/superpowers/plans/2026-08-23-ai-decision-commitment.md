@@ -129,6 +129,75 @@ free wins toward that bound, so this is the gate most likely to break. Note its 
 differs from the engagement harness (5-minute cap there, 3-minute here), so the
 harness's `freeWins=1/60` is NOT this gate's headroom — run the gate itself.
 
+## Measured result (final tree)
+
+Both harnesses re-run on the final tree by the same method as the baseline above.
+
+| row | kind | reversals before → after | turnP95 before → after |
+| --- | --- | --- | --- |
+| a1/pacifist | grey | 5.82% → 1.71% | 113.9° → 0.0° |
+| a1/pacifist | teal | 4.34% → 1.55% | 81.5° → 0.0° |
+| a1/shooter | grey | 12.05% → 1.67% | 176.2° → 0.0° |
+| a1/shooter | teal | 7.35% → 1.39% | 150.1° → 0.0° |
+| a3/pacifist | grey | 4.15% → 1.94% | 83.8° → 0.0° |
+| a3/pacifist | olive | 1.85% → 1.36% | 61.1° → 0.0° |
+| a3/shooter | grey | 13.93% → 1.78% | 180.0° → 0.0° |
+| a3/shooter | olive | 4.95% → 1.42% | 89.5° → 0.0° |
+
+`bullet->bullet` falls from 40.6% (a1/shooter) and 48.2% (a3/shooter) to 1.0-5.6% of a much
+smaller total; the remainder is overwhelmingly `seek->seek` (74.7-88.5%), which is a genuine
+re-decision at window expiry rather than an oscillation. Aim: `aimStepMed` 4.0-5.4° → 0.12-0.17°,
+at or below the within-bucket median of 0.23-0.32°.
+
+**One aim residual is NOT closed, and it is not jitter.** Teal's `aimStepP95` stays at
+9.85-19.96° while every other kind falls to 0.39-0.82°. Teal is the only measured kind routed
+to `tealDecision`, the one implementation that ALTERNATES preferred shot type, on a
+`BANK_PREFER_TICKS` (120) cycle that is an exact multiple of `AI_JITTER_TICKS` (20) -- so every
+bank/direct switch lands on a boundary tick and is counted in the aim-step column. Verified
+against the roster: of the four measured kinds only teal (MOBILE_MINE_LAYER) both carries
+`bankShotWeight > 0` AND routes to the alternating implementation; grey's DEFENSIVE_BASIC
+carries 0.1 but `greyDecision` never reads it, and brown prefers direct with a fallback rather
+than alternating. That is a different firing SOLUTION, not aim error -- an un-held AIM intent,
+where this work holds movement only. Issue #222's direction does say "hold aim and movement
+intents", so AC2 is partially, not fully, closed.
+
+Balance (60-seed engagement harness, the pinned method): losses and free wins unchanged
+(a1 59/60 & 1; a3 60/60 & 0). `medianTicks` 1705 → 1561 (a1, -8.4%) and 1837 → 1937 (a3, +5.4%).
+`minesPerGame` 2.67 → 2.88 and 1.45 → 1.85 (+8%/+28%) -- NOT isolated to a single cause; the
+`mine` gate's meaning was deliberately left unchanged, and coherent movement both keeps tanks
+near the player longer and lets a held dodge continue past the tick `avoid` goes null.
+
+## MID-EXECUTION CORRECTION (2026-08-23): the bullet dodge is sign-blind
+
+The first implementation of Task 3 shipped the emergency rule exactly as this plan
+specified it — break the hold when `vdot(held, avoid) < AI_COMMIT_EMERGENCY_DOT`. Measuring
+showed that rule defeating the very thing it sits inside.
+
+`dangerAvoidMove`'s bullet branch returns one of two EXACT OPPOSITE perpendiculars, choosing
+by the side the tank currently sits on. That choice flips the instant the tank crosses the
+shell's axis — while both perpendiculars remain equally good ways out of the corridor. With
+a signed comparison, every such flip scored `dot = -1` and read as an emergency, so the hold
+broke on precisely the oscillation it exists to stop. A second path did the same at every
+window expiry, where hysteresis compared the flipped perpendicular against the held one and
+saw a 180-degree difference rather than the same decision.
+
+Measured with the hold in but the sign still significant: overall reversals did fall
+(grey a3/shooter 13.93% -> 9.46%), but `bullet->bullet` ROSE from 40.6% to 68.5% of all
+reversals under a shooting player, and grey's 95th-percentile turn stayed pinned at exactly
+180.0 degrees — the hold was working everywhere except the largest single bucket.
+
+The correction, in both the emergency test and the hysteresis test: for a BULLET escape
+compare `|dot|`, not `dot`, against `AI_COMMIT_DODGE_ALIGN_DOT` (0.5, i.e. within 60 degrees
+of the perpendicular axis). A mine escape keeps the signed test, because there the opposite
+direction is into the blast rather than an equally good way out. That distinction needs the
+escape's KIND at the commitment layer, which is why `AiDecision` carries `avoidKind`
+alongside `avoid`.
+
+After the correction, `turnP95` is 0.0 degrees in every measured row and `bullet->bullet`
+falls to 1.0-5.6% of a much smaller total. The plan's original Task 3 test list could not
+have caught this: its bullet cases only ever exercised `dot = +1` or `dot = -1` against a
+threshold of 0, where signed and absolute comparisons agree on the answer.
+
 ## Global Constraints
 
 - `src/sim/` stays pure and deterministic: no DOM, Three.js, wall clock, or runtime

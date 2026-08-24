@@ -1,7 +1,8 @@
 import type { World } from '../world';
 import type { InputState, Tank, Vec2 } from '../types';
 import { vsub, vdist, vnorm, vlen, fromAngle } from '../types';
-import { lineOfSight, aimLead, dangerAvoidMove, profileAimSpread, profileHazardSpread } from './targeting';
+import { lineOfSight, aimLead, dangerAvoidMove, incomingThreats, profileAimSpread, profileHazardSpread } from './targeting';
+import { commitHeading } from './commitment';
 import { driveVelocity, circleVsAABB } from '../collision';
 import { configFor, hasAbility, TankAbility } from '../config';
 import {
@@ -69,10 +70,23 @@ export interface PlayerAiState {
   wanderTicksLeft: number;
   /** This window's mine inclination -- drawn once per WANDER_TICKS window, like the AI. */
   mineInclined: boolean;
+  /**
+   * The committed movement heading and its remaining ticks (issue #222), the bot-player
+   * mirror of `Tank.aiIntent`/`aiIntentTicks`. It lives HERE rather than on the tank
+   * because this module is forbidden from writing to the world at all -- see this file's
+   * "never writes to the world on ANY branch it can reach" test -- while `stepAi` writes
+   * the enemy AI's copy straight onto the tank. Same `commitHeading` implementation,
+   * different owner of the state.
+   */
+  intent: Vec2 | null;
+  intentTicks: number;
 }
 
 export function createPlayerAiState(rnd: () => number): PlayerAiState {
-  return { aimTicks: 0, wanderHeading: rnd() * Math.PI * 2, wanderTicksLeft: 0, mineInclined: false };
+  return {
+    aimTicks: 0, wanderHeading: rnd() * Math.PI * 2, wanderTicksLeft: 0, mineInclined: false,
+    intent: null, intentTicks: 0,
+  };
 }
 
 // Movement-band tuning. The player's own resolved profile (STATIC_BASIC, shared with
@@ -354,7 +368,22 @@ export function decidePlayerInput(
 
   // ---- Movement: dodge overrides the band/wander baseline, never the reverse. ----
   const avoid = dangerAvoidMove(world, player, fleeRadius, dangerCorridor);
-  const move = avoid ?? seekLikeMove(world, player, rnd, state, threats);
+  const candidate = avoid ?? seekLikeMove(world, player, rnd, state, threats);
+  // The commitment layer (issue #222), shared with the enemy AI via `commitHeading`. A bot
+  // driving a player slot reaches the same `dangerAvoidMove` geometry and so exhibited the
+  // same tick-to-tick reversal; holding it here keeps a VS bot from jittering while every
+  // campaign enemy has stopped. The held state is this caller's `PlayerAiState`, never the
+  // world (see that field's own comment).
+  const avoidKind = avoid === null
+    ? null
+    : incomingThreats(world, player, dangerCorridor).length > 0 ? 'bullet' as const : 'mine' as const;
+  const committed = commitHeading(
+    world, player, state.intent, state.intentTicks,
+    Math.round(cfg.ai.commitmentTime * TICK_HZ), candidate, avoid, avoidKind,
+  );
+  state.intent = committed.nextIntent;
+  state.intentTicks = committed.nextIntentTicks;
+  const move = committed.move;
 
   // ---- Targeting: the nearest enemy the player can actually SEE. ----
   let target: Tank | null = null;

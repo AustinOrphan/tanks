@@ -262,6 +262,51 @@ export const AI_SHOT_LOOKAHEAD = 1.5;
 // ---- AI wander (wanderMove) ----
 export const WANDER_TICKS = 30; // how many ticks a wander heading is held (~0.5s at 60Hz)
 
+/**
+ * How close a fresh movement candidate must sit to the one already committed for the two
+ * to count as THE SAME decision -- a dot product between unit headings, so 0.866 is 30
+ * degrees. Inside this cone the committed heading is kept even at window expiry, which is
+ * what stops an AI oscillating between choices no player could tell apart.
+ *
+ * Measured before the commitment layer existed (commitment.measure.test.ts, 60 seeds x 2
+ * arenas x 2 player policies): 40.6% of all movement reversals under a shooting player
+ * were `bullet->bullet` -- dangerAvoidMove's dodge perpendicular swapping sides as the
+ * tank crossed the shell's axis, an exact 180-degree flip between two equally good
+ * dodges. That single bucket rose to 48.2% on arena 3.
+ */
+export const AI_COMMIT_HYSTERESIS_DOT = 0.866;
+/**
+ * How badly a newly-required escape must disagree with the committed heading before it
+ * counts as an EMERGENCY and interrupts the commitment mid-window (again a dot between
+ * unit headings; 0 is 90 degrees).
+ *
+ * Deliberately NOT "any escape breaks the hold": that restores the per-tick re-decision
+ * this whole mechanism removes, which is issue #222's "allow genuine emergencies to
+ * interrupt a held decision without making every shell or wall contact an immediate full
+ * reversal". A held heading that still carries the tank broadly out of the corridor rides
+ * out its window.
+ */
+export const AI_COMMIT_EMERGENCY_DOT = 0.0;
+/**
+ * For a BULLET dodge only: the minimum |dot| a committed heading must keep with the
+ * escape perpendicular to still count as dodging. Absolute value, because
+ * `dangerAvoidMove` returns one of two EXACT OPPOSITE perpendiculars and both leave the
+ * danger corridor equally well -- which of the two it names is a tie-break made at dodge
+ * onset (the side the tank already sits on), not a fact about safety.
+ *
+ * This distinction was not in the first version of the commitment layer, and measuring
+ * showed why it had to be. Comparing the signed dot against AI_COMMIT_EMERGENCY_DOT made
+ * every side-flip read as an emergency -- so the hold broke on exactly the oscillation it
+ * exists to stop. With the hold in place but the sign still significant, `bullet->bullet`
+ * ROSE from 40.6% to 68.5% of all reversals under a shooting player, and grey's 95th
+ * percentile turn stayed pinned at 180.0 degrees.
+ *
+ * 0.5 is 60 degrees off the perpendicular axis: a heading still carrying the tank
+ * substantially sideways out of the corridor rides out its commitment; one that has
+ * fallen to running along the shell's own line has stopped being a dodge and breaks it.
+ */
+export const AI_COMMIT_DODGE_ALIGN_DOT = 0.5;
+
 // ---- AI distance-band seeking (seekMove) ----
 // How strongly an out-of-band tank's heading points along the seek direction
 // (toward the player when too far, away when pressed), with the remainder taken

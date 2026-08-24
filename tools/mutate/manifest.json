@@ -530,5 +530,77 @@
       "src/sim/mines.test.ts"
     ],
     "why": "The fuse's final-window warning is the whole fuse half of issue #275 (owner-revised): `mine-fuse-warning` must fire once as `timer` crosses into the last MINE_FUSE_WARNING_TICKS, with expiry timing untouched -- it is the event #276's time-is-running-out cue keys off. Suppressing the crossing is killed by the final-window fixture, which pins the event's exact call and its once-only count."
+  },
+  {
+    "id": "ai-commit-no-hold",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "    return { move: held, nextIntent: held, nextIntentTicks: ticks - 1 };",
+    "replace": "    return { move: candidate, nextIntent: held, nextIntentTicks: ticks - 1 };",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "The hold IS issue #222's mechanism: while a commitment is live and no emergency has broken it, the tank moves on its committed heading and ignores the fresh candidate. Letting the candidate through restores exactly the per-tick re-decision the issue reports -- measured before the layer existed, grey's movement intent reversed by more than 90 degrees on 13.93% of adjacent live ticks under a shooting player (8712/62529 pairs, arena3), with a 95th-percentile turn of 180.0 degrees against a MEDIAN of 0.0."
+  },
+  {
+    "id": "ai-commit-any-threat-breaks",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "  return vdot(held, avoid) < AI_COMMIT_EMERGENCY_DOT;",
+    "replace": "  return true;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "Issue #222 asks that emergencies interrupt a held decision 'without making every shell or wall contact an immediate full reversal'. Treating ANY required escape as an emergency is the plausible-looking version of the rule that silently reinstates per-tick re-deciding for the whole time a tank is near a hazard -- which is where most reversals were measured. This mutates the MINE branch (the one that keeps a signed test); it is killed by the mine-shaped 'mildly off' fixture, which is deliberately not a bullet fixture, because the bullet branch returns exact opposite perpendiculars whose dot is only ever ~+1 or ~-1 and could never exercise that middle band."
+  },
+  {
+    "id": "ai-commit-no-hysteresis",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "    && (avoidKind === 'bullet' ? Math.abs(alignment) : alignment) >= AI_COMMIT_HYSTERESIS_DOT;",
+    "replace": "    && false;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "Hysteresis is the half of the fix aimed at the largest measured bucket: 40.6% of reversals under a shooting player (48.2% on arena3) were `bullet->bullet`, dangerAvoidMove's dodge perpendicular swapping sides as the tank crossed the shell's axis -- two equally good dodges 180 degrees apart. Without the cone the AI re-adopts the flipped candidate at every window expiry. Killed by the pair of cone tests, which assert both that an inside-cone candidate is refused AND that an outside-cone one is adopted."
+  },
+  {
+    "id": "ai-aim-jitter-step",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const eased = t * t * (3 - 2 * t);",
+    "replace": "  const eased = 0;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Pins issue #222 AC2. Forcing the easing factor to 0 holds each bucket's own draw for the whole bucket and teleports at the boundary -- byte-for-byte the pre-fix behaviour, whose measured signature was a median 4.0-5.4 degree aim-target move on boundary ticks against 0.11-0.18 degrees elsewhere (P95 boundary step 23.19 degrees, ~10 ticks of AI_TURRET_TURN_RATE slew to absorb). Killed by the adjacent-tick continuity bound."
+  },
+  {
+    "id": "ai-aim-jitter-overshoot",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const eased = t * t * (3 - 2 * t);",
+    "replace": "  const eased = t * 3;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "The negative control for the smoothing: an easing curve that leaves [0, 1] sends the interpolated offset outside the interval spanned by the two bucket draws, so the aim error exceeds the +/-spread envelope its profile's aimAccuracy is tuned for -- a silent difficulty change wearing a smoothing fix's clothes. Killed by the no-overshoot case, which without this mutation is the one assertion in that block the stepping implementation also satisfied."
+  },
+  {
+    "id": "ai-commit-dodge-signed",
+    "file": "src/sim/ai/commitment.ts",
+    "find": "  if (avoidKind === 'bullet') return Math.abs(vdot(held, avoid)) < AI_COMMIT_DODGE_ALIGN_DOT;",
+    "replace": "  if (avoidKind === 'bullet') return vdot(held, avoid) < AI_COMMIT_DODGE_ALIGN_DOT;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/commitment.test.ts"
+    ],
+    "why": "Pins the mid-execution correction, and it is the single most valuable entry here because the bug it restores already shipped once in this branch and measured as a partial fix. dangerAvoidMove's bullet branch names one of two EXACT OPPOSITE perpendiculars, chosen by the side the tank sits on, so the name flips the instant the tank crosses the shell's axis while both remain equally good escapes. A SIGNED comparison scores that flip -1 and breaks the hold on precisely the oscillation the hold exists to stop: measured in that state, overall reversals fell but `bullet->bullet` ROSE from 40.6% to 68.5% of all reversals under a shooting player and grey's P95 turn stayed pinned at exactly 180.0 degrees. Killed by the flipped-perpendicular fixture."
   }
 ]

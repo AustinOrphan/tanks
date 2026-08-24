@@ -163,7 +163,7 @@ describe('validateAiProfiles', () => {
     expect(() => validateAiProfiles(bad)).toThrow(/STATIC_BASIC\.estimationAccuracy.*strictly positive/);
   });
 
-  it('rejects a negative commitmentTime (a negative window disables the hold silently)', () => {
+  it('rejects a negative commitmentTime (a negative span disables the hold silently)', () => {
     // Not pedantry: commitMove re-arms to Math.round(commitmentTime * TICK_HZ), and a
     // negative countdown never satisfies its `ticks > 0` test -- so a typo'd minus sign
     // would turn the commitment off for that one profile while every test that reads the

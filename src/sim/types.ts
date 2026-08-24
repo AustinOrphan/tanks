@@ -96,6 +96,22 @@ export interface Tank {
   aiState: AiState;
   aiTimer: number;
   /**
+   * The movement heading this AI tank has COMMITTED to, and how many ticks of that
+   * commitment remain (issue #222). Absent means nothing is held -- a fresh tank, a
+   * stationary one that never acquires an intent, or the tick after an emergency broke
+   * the hold.
+   *
+   * Optional for the same reason `aimTicks` below is: every existing fixture that builds
+   * a Tank by hand keeps compiling, and "no commitment yet" is genuinely the absence of a
+   * value rather than a sentinel. Written back by `stepAi` from `AiDecision`, exactly like
+   * `aiState`/`aiTimer` -- decisions stay pure, the dispatcher owns the write.
+   *
+   * NOT part of the golden trace's fingerprint: `traceText` samples pos/turretAngle/alive
+   * per tank, so these fields move `BASELINE_HASH` only through the behaviour they cause.
+   */
+  aiIntent?: Vec2;
+  aiIntentTicks?: number;
+  /**
    * Consecutive ticks the AI has HELD a firing solution (decision.hasSolution),
    * reset the tick it loses one. The dispatcher's reaction gate compares this
    * against the profile's reactionTime before letting a shot off -- an enemy
