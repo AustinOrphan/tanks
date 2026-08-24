@@ -1,10 +1,10 @@
 ---
-status: active
+status: completed
 date: 2026-08-23
 last-reviewed: 2026-08-23
 scope: Separate AI perception/decision cadence from execution — held movement intent with profile-driven commitment, dodge-side hysteresis, emergency interruption, and continuous aim-error drift
 implementation-issues: [222]
-implementation-prs: []
+implementation-prs: [328]
 supersedes: []
 superseded-by: []
 ---
