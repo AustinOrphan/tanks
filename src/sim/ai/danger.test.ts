@@ -330,16 +330,46 @@ describe('dodging near walls (issue #224)', () => {
     expect(wallBlocksPath(w, t, dir!, AI_PATH_HORIZON_TICKS)).toBe(false);
   });
 
+  it('refuses a sidestep candidate that steps toward an armed mine', () => {
+    // Same corridor as above (north/south walled, east/west open), so the wheel's only two
+    // navigable candidates are due east and due west, tied at the worst possible lateral-
+    // clearance score (both run exactly along the shell's own axis) -- confirmed directly:
+    // with no mine present, dangerAvoidMove picks due east here, the first of the tied pair
+    // in wheel-sample order. `sidestepAroundBlockage`'s own doc comment claims a mine-ward
+    // candidate is refused "the same constraint the two perpendicular passes apply", but
+    // nothing exercised that refusal for the WHEEL specifically -- the earlier "picks the
+    // dodge side that does not step toward a nearby armed mine" test only ever reaches the
+    // two-perpendicular loop, never this function. Placing an armed mine due east forces the
+    // guard to reject the tied-best candidate and fall through to due west; if the guard were
+    // dropped the mine would be ignored and east would still win.
+    const t = tank(1, { x: 0, y: 0 });
+    const walls = [wall(1, -5, 0.6, 5, 5), wall(2, -5, -5, 5, -0.6)];
+    const m = mine(70, 99, { x: 3, y: 0 }, true); // due east, within AI_MINE_FLEE_RADIUS
+    const w = world({ tanks: [t], bullets: [incoming()], walls, mines: [m] });
+    const dir = dangerAvoidMove(w, t);
+    expect(dir).not.toBeNull();
+    expect(wallBlocksPath(w, t, dir!, AI_PATH_HORIZON_TICKS)).toBe(false);
+    expect(dir!.x).toBeLessThan(0); // west, not the mine-ward east the wheel would tie-break to
+  });
+
   it('falls back explicitly and stably when every heading is blocked', () => {
-    // A dead end: a box with inner faces at +/-0.85 puts a wall inside the swept hull for
-    // every wheel direction, diagonals included (a diagonal probe reaches 0.424 + 0.5 =
-    // 0.924 > 0.85). There is no navigable answer, so the documented fallback applies --
-    // and the point of the criterion is that it is a CHOSEN one and the same one twice,
-    // not whatever the loop happened to leave behind.
+    // A dead end: a box with inner faces at +/-0.75 puts a wall inside the swept hull for
+    // every wheel direction, diagonals included. At the shipped AI_PATH_HORIZON_TICKS of 8
+    // the axis reach is 0.4 + 0.5 = 0.9 (gap to a 0.75 face: 0.5, i.e. exactly on the
+    // TANK_RADIUS boundary counted as blocked by circleVsAABB's <=) and the diagonal reach's
+    // per-axis component is 0.4 * cos(45deg) = 0.283, gap 0.75 - 0.283 = 0.467 < 0.5 -- also
+    // blocked. (A box at +/-0.85, this test's value before the horizon retune from 12 to 8,
+    // leaves that same diagonal gap at 0.567 > 0.5: OPEN. Verified directly -- swapping the
+    // production fallback's sentinel from `preferred` to an arbitrary other vector left this
+    // test green at 0.85, proving it was silently exercising the wheel's real diagonal
+    // escape rather than the documented `?? preferred` fallback the comment claims.) There
+    // is no navigable answer at 0.75, so the documented fallback applies -- and the point of
+    // the criterion is that it is a CHOSEN one and the same one twice, not whatever the loop
+    // happened to leave behind.
     const t = tank(1, { x: 0, y: 0 });
     const box = [
-      wall(1, -5, 0.85, 5, 5), wall(2, -5, -5, 5, -0.85),
-      wall(3, 0.85, -5, 5, 5), wall(4, -5, -5, -0.85, 5),
+      wall(1, -5, 0.75, 5, 5), wall(2, -5, -5, 5, -0.75),
+      wall(3, 0.75, -5, 5, 5), wall(4, -5, -5, -0.75, 5),
     ];
     const w = world({ tanks: [t], bullets: [incoming()], walls: box });
     const first = dangerAvoidMove(w, t);
