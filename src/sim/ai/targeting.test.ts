@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   lineOfSight, aimLead, mirrorAcrossAABB, bankShot, wanderMove, aimJitter, shotHitsOwnSide,
   friendlyInMineBlast, mineThreatensPlayer, incomingThreats, dangerAvoidMove,
-  profileHazardSpread, estimationError,
+  profileHazardSpread, estimationError, wallBlocksPath, wallBlocksStep,
 } from './targeting';
 import {
   AI_AIM_SPREAD, AI_JITTER_TICKS, TANK_RADIUS, BULLET_RADIUS, AI_HULL_CLEARANCE,
   AI_MINE_FLEE_RADIUS, AI_MINE_TACTICAL_RADIUS, AI_HAZARD_SPREAD, WANDER_TICKS, DANGER_CORRIDOR,
+  AI_PATH_HORIZON_TICKS, DT,
 } from '../constants';
 import { configFor } from '../config';
 import { raySegmentVsAABB } from '../collision';
@@ -1035,5 +1036,66 @@ describe('aimJitter drift across a bucket (issue #222)', () => {
       expect(v).toBeGreaterThanOrEqual(lo);
       expect(v).toBeLessThanOrEqual(hi);
     }
+  });
+});
+
+// Issue #224: the one-tick probe establishes only that the NEXT step is legal, never that
+// the short escape path is navigable. Geometry: TANK_RADIUS 0.5, base speed 3 units/s,
+// DT 1/60 -> 0.05 units per tick.
+describe('wallBlocksPath (issue #224)', () => {
+  const at = (x: number, y: number): Tank => ({ ...wanderTank(1), pos: { x, y } });
+  const EAST: Vec2 = { x: 1, y: 0 };
+
+  it('is identical to the single-step probe when asked for exactly one tick', () => {
+    // Pins the generalisation: the horizon version must not change what the existing
+    // one-tick callers (the commitment layer's emergency check) already saw.
+    const t = at(0, 0);
+    for (const minX of [0.5, 0.54, 0.56, 0.6, 1.0, 2.0]) {
+      const w = { ...wanderWorld(1, 0), walls: [wall(1, minX, -5, 5, 5)] };
+      expect(wallBlocksPath(w, t, EAST, 1)).toBe(wallBlocksStep(w, t, EAST));
+    }
+  });
+
+  it('rejects a heading that is clear for one tick but walled a few ticks later', () => {
+    // The defect itself. At tick 1 the hull reaches x=0.55, clearing a wall at minX 0.6;
+    // by tick 12 it reaches 1.1 and is well inside it.
+    const t = at(0, 0);
+    const w = { ...wanderWorld(1, 0), walls: [wall(1, 0.6, -5, 5, 5)] };
+    expect(wallBlocksStep(w, t, EAST)).toBe(false);
+    expect(wallBlocksPath(w, t, EAST, AI_PATH_HORIZON_TICKS)).toBe(true);
+  });
+
+  it('accepts a heading whose wall sits beyond the horizon', () => {
+    // The negative control: without it the case above would also pass an implementation
+    // that simply always reports blocked.
+    const t = at(0, 0);
+    const w = { ...wanderWorld(1, 0), walls: [wall(1, 3, -5, 5, 5)] };
+    expect(wallBlocksPath(w, t, EAST, AI_PATH_HORIZON_TICKS)).toBe(false);
+  });
+
+  it('ignores destroyed walls, exactly as the single-step probe does', () => {
+    const t = at(0, 0);
+    const w = { ...wanderWorld(1, 0), walls: [wall(1, 0.6, -5, 5, 5, 'destructible', true)] };
+    expect(wallBlocksPath(w, t, EAST, AI_PATH_HORIZON_TICKS)).toBe(false);
+  });
+
+  it('scales its reach with the speed it is handed, not with a hardcoded one', () => {
+    // A slower tank covers less ground in the same ticks, so the same wall is out of reach
+    // for it. Kills a mutation that drops the `speed` parameter for a constant.
+    //
+    // Deliberately passes an EXPLICIT tick count rather than AI_PATH_HORIZON_TICKS, and
+    // derives the wall position from it. An earlier version hardcoded a wall at x=1.0 that
+    // only the then-current horizon of 12 could reach, so retuning that constant to 8 broke
+    // a test about the SPEED parameter -- a tuning knob must not be able to fail an
+    // assertion that is not about it.
+    const ticks = 10;
+    const fast = 3;
+    const slow = 0.2;
+    // Sits just inside the fast tank's swept hull at `ticks`, and far outside the slow one's.
+    const wallX = fast * DT * ticks + TANK_RADIUS - 0.05;
+    const t = at(0, 0);
+    const w = { ...wanderWorld(1, 0), walls: [wall(1, wallX, -5, 5, 5)] };
+    expect(wallBlocksPath(w, t, EAST, ticks, fast)).toBe(true);
+    expect(wallBlocksPath(w, t, EAST, ticks, slow)).toBe(false);
   });
 });

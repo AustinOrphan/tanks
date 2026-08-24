@@ -602,5 +602,57 @@
       "src/sim/ai/commitment.test.ts"
     ],
     "why": "Pins the mid-execution correction, and it is the single most valuable entry here because the bug it restores already shipped once in this branch and measured as a partial fix. dangerAvoidMove's bullet branch names one of two EXACT OPPOSITE perpendiculars, chosen by the side the tank sits on, so the name flips the instant the tank crosses the shell's axis while both remain equally good escapes. A SIGNED comparison scores that flip -1 and breaks the hold on precisely the oscillation the hold exists to stop: measured in that state, overall reversals fell but `bullet->bullet` ROSE from 40.6% to 68.5% of all reversals under a shooting player and grey's P95 turn stayed pinned at exactly 180.0 degrees. Killed by the flipped-perpendicular fixture."
+  },
+  {
+    "id": "ai-wall-blocks-path-single-tick",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  for (let i = 1; i <= ticks; i++) {",
+    "replace": "  for (let i = 1; i <= 1; i++) {",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Collapses wallBlocksPath's horizon loop to a single iteration REGARDLESS of the `ticks` argument any caller passes -- the actual pre-#224 defect (the probe establishes only that the very next step is legal), and a stricter target than mutating the AI_PATH_HORIZON_TICKS constant, which a caller passing an explicit tick count (targeting.test.ts's speed-scaling case) would launder. Measured at 4 of 107 scoped tests failing: targeting.test.ts's 'rejects a heading that is clear for one tick but walled a few ticks later' (the tick-8 hull position is never probed once i is capped at 1) and 'scales its reach with the speed it is handed, not with a hardcoded one' (its wall sits at the tick-10 position, unreachable once the loop stops after tick 1, regardless of speed), plus danger.test.ts's 'rejects a preferred side that is clear for one tick but walled within the horizon' and 'refuses a sidestep candidate that steps toward an armed mine' (both call wallBlocksPath directly in their own assertions, so the collapse also corrupts what those tests use to check the production result)."
+  },
+  {
+    "id": "ai-wall-blocks-path-ignores-speed",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  const perTick = speed * DT;",
+    "replace": "  const perTick = 3 * DT;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Hardcodes the base movement speed (3 units/s) in place of the `speed` parameter, so a slower tank's probe over-states how far it actually travels in `ticks` ticks -- the exact silent-difficulty-change shape a dropped parameter takes. Killed by targeting.test.ts's 'scales its reach with the speed it is handed, not with a hardcoded one', whose slow-tank (0.2 units/s) case is built specifically so the hardcoded fast-tank reach (3 units/s) reports a wall in reach that the real, slower tank could never touch within the same tick count."
+  },
+  {
+    "id": "ai-sidestep-always-null",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "  return best;",
+    "replace": "  return null;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Makes sidestepAroundBlockage always report 'the whole wheel is blocked', so dangerAvoidMove's `?? preferred` fallback fires even when a navigable heading exists -- issue #224 AC3's exact defect, reintroduced. Measured at 2 of 107 scoped tests failing, both in the same corridor shape (north/south walled inside the horizon, east/west open): 'sidesteps onto a navigable heading when BOTH perpendiculars are walled' and 'refuses a sidestep candidate that steps toward an armed mine'. Both fixtures have a real navigable answer that this mutation discards, so the returned direction becomes the wall-blocked `preferred` heading in each case, failing their wallBlocksPath(..., dir!, AI_PATH_HORIZON_TICKS) === false assertions."
+  },
+  {
+    "id": "ai-sidestep-drops-mine-guard",
+    "file": "src/sim/ai/targeting.ts",
+    "find": "    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;\n    if (mines.some((m) => vdot(cand, vsub(m.pos, tank.pos)) > 0)) continue;\n    const score = 1 - Math.abs(vdot(cand, bulletDir));",
+    "replace": "    if (wallBlocksPath(world, tank, cand, AI_PATH_HORIZON_TICKS)) continue;\n    if (false) continue;\n    const score = 1 - Math.abs(vdot(cand, bulletDir));",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/danger.test.ts",
+      "src/sim/ai/targeting.test.ts"
+    ],
+    "why": "Drops sidestepAroundBlockage's own mine-refusal guard, the constraint its doc comment claims mirrors dangerAvoidMove's two-perpendicular passes -- a dodge that solves the shell by walking onto a mine. No existing test reached this specific line before this PR's re-pin work: the two-perpendicular tests (danger.test.ts's 'picks the dodge side that does not step toward a nearby armed mine') never reach sidestepAroundBlockage at all (a wall-clear perpendicular returns before it is called), and the pre-existing 'sidesteps onto a navigable heading' fixture carries no mine. Closed here by 'refuses a sidestep candidate that steps toward an armed mine': a corridor where the wheel's only two navigable candidates (due east/west) tie at the worst possible lateral-clearance score, with an armed mine placed on the tie-winning (east) side. Measured directly by disambiguating this line's two occurrences with the full three-line context above (the guard also appears verbatim in dangerAvoidMove's own two-perpendicular loop) -- the `find` string is unique to this function because only here is it immediately followed by the lateral-clearance score line."
   }
 ]

@@ -116,7 +116,49 @@ import { step } from '../../src/sim/world';
  * History: bbce5709... (issue #275 as owner-revised) -> the hash below, confirmed by
  * actually running trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = '1ae1d739f4fda997d0796e127e899219d197bfeb2f0f1d39463a5b86659cc2b6';
+/*
+ * MOVED (2026-08-24, issue #224): wall navigability checks now look AI_PATH_HORIZON_TICKS
+ * (8) ticks ahead instead of one, at four call sites: bestEscapeDirection's mine-flee
+ * wheel, both perpendicular passes in dangerAvoidMove's bullet branch, seekMove's blocked-
+ * heading fallback, and player-profile.ts's seekLikeMove (now sharing targeting.ts's
+ * wallBlocksPath instead of a private one-tick copy). A new deterministic fallback,
+ * sidestepAroundBlockage, also engages when dangerAvoidMove's both dodge perpendiculars
+ * are wall-blocked. wallBlocksStep stays at one tick, unchanged, for commitment.ts's
+ * emergency check, which is not in the trace's AI path.
+ *
+ * NOT a coincidence of some other change: this PR's only `src/sim/` edits are
+ * ai/targeting.ts (wallBlocksPath's horizon parameter, sidestepAroundBlockage),
+ * constants.ts (the new AI_PATH_HORIZON_TICKS constant), and ai/player-profile.ts
+ * (seekLikeMove switched onto the shared wallBlocksPath and its now-redundant private
+ * wallBlocksStep copy deleted) -- confirmed via `git diff main...HEAD --stat -- src/sim/`.
+ *
+ * traceText samples only pos.x/pos.y/turretAngle/alive per tank plus a per-run
+ * status/tick line; it never serializes a Tank's or a Wall's struct, so no field addition
+ * could have moved this hash by itself -- only a changed trajectory could, and a changed
+ * navigability check is exactly that.
+ *
+ * Exposure MEASURED on this tree, over exactly the traced population (5 arenas x 6 seeds x
+ * 2500 ticks): a throwaway probe (written for this measurement, run via `npx tsx`, then
+ * deleted) replayed the trace and, at every enemy decision-tick (204272 of them -- every
+ * alive non-player tank, every tick, the same population ai/index.ts's stepAi iterates),
+ * evaluated the fixed 16-sample ESCAPE_SAMPLES wheel bestEscapeDirection/
+ * sidestepAroundBlockage both use against that tank's actual position and the real wall
+ * geometry, comparing wallBlocksPath(..., AI_PATH_HORIZON_TICKS) to wallBlocksStep (the old
+ * one-tick probe) for each of the 16 fixed directions. 14655 of 204272 decision-ticks
+ * (7.17%) had at least one wheel candidate flip from clear-at-one-tick to blocked-at-the-
+ * horizon; 63039 of 3268352 individual candidate evaluations (1.93%) flipped. This measures
+ * only the wheel mechanism (data-independent, so cheap to re-derive exactly outside the
+ * sim) and is a real, specific LOWER BOUND, not a claim of exhaustive coverage: it does not
+ * replay dangerAvoidMove's state-dependent bullet-perpendicular candidates or seekMove's
+ * single seek-heading candidate, both of which also call wallBlocksPath and can only add to
+ * this figure, never subtract from it. Ample coupling either way -- this is not a hash
+ * moved by a rounding difference.
+ *
+ * History: 1ae1d739f4fda997d0796e127e899219d197bfeb2f0f1d39463a5b86659cc2b6 (issue #222 on
+ * PR for feat/ai-decision-commitment) -> the hash below, confirmed by actually running
+ * trace.test.ts rather than by computing it a second way.
+ */
+export const BASELINE_HASH = '42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
