@@ -71,6 +71,28 @@ export const MINE_COOLDOWN_TICKS = Math.round(MINE_COOLDOWN * TICK_HZ);
 
 // ---- Mines ----
 export const MINE_TIMER = data.mines.timerSeconds;
+/**
+ * Source-specific mine warning timings (issue #275, owner-revised on PR #311):
+ * the three trigger sources deliberately do NOT share one post-trigger delay.
+ *
+ * - `MINE_FUSE_WARNING_TICKS`: the final portion of the EXISTING fuse -- when
+ *   `timer` enters this window a one-shot `mine-fuse-warning` event fires ("time
+ *   is running out", #276's cue), and expiry still detonates exactly when it
+ *   always did. No time is added after the fuse.
+ * - `MINE_PROXIMITY_DELAY_TICKS`: the short deterministic reaction window between
+ *   tripping an armed mine (proximity entry -- `mine-triggered`, "you tripped
+ *   this") and its blast. The one place a post-trigger delay exists.
+ * - A SHELL hit detonates an armed mine immediately (bullets.ts) -- shooting a
+ *   mine is deliberately setting it off, and the skill-shot credit rides the
+ *   blast with no delay.
+ *
+ * Both values are 30 ticks (500 ms at 60 Hz) initially -- separately named and
+ * separately configured because the SEMANTICS differ; #277 owns tuning each.
+ * Simulation ticks, never wall clock: the proximity countdown decrements once
+ * per stepMines call and the fuse window is measured on the sim's own dt timer.
+ */
+export const MINE_FUSE_WARNING_TICKS = data.mines.fuseWarningTicks;
+export const MINE_PROXIMITY_DELAY_TICKS = data.mines.proximityDelayTicks;
 export const MINE_PROXIMITY_RADIUS = data.mines.proximityRadius;
 export const MINE_BLAST_RADIUS = data.mines.blastRadius;
 

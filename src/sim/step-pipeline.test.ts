@@ -12,6 +12,7 @@ import {
   TANK_SPEED,
   BULLET_RADIUS,
   MINE_PROXIMITY_RADIUS,
+  MINE_PROXIMITY_DELAY_TICKS,
   MINE_TIMER,
   bulletConfig,
 } from './constants';
@@ -227,12 +228,15 @@ describe('step() calls stepMines', () => {
 
     expect(armTick.events).toContainEqual({ type: 'mine-armed', mineId: mine.id, ownerId: PLAYER_ID, pos: minePos });
     // Brown is static and stands inside MINE_PROXIMITY_RADIUS of the drop point, so the
-    // mine triggers on the same tick it arms. The blast then has to GROW out to him: at
-    // 1.4 away he survives the detonation tick and dies once the edge arrives.
+    // mine is TRIPPED on the same tick it arms (issue #275, owner-revised: proximity
+    // opens a short reaction delay); it stays in the world through the delay, then the
+    // blast has to GROW out to him: at 1.4 away he survives the detonation tick and
+    // dies once the edge arrives.
+    expect(armTick.events).toContainEqual({ type: 'mine-triggered', mineId: mine.id, ownerId: PLAYER_ID, pos: minePos });
     expect(tankById(armTick.world, BROWN_ID).alive).toBe(true);
-    expect(armTick.world.mines.find((m) => m.id === mine.id)).toBeUndefined();
+    expect(armTick.world.mines.find((m) => m.id === mine.id)).toBeDefined();
     let w2 = armTick.world;
-    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) w2 = step(w2, idleInput).world;
+    for (let i = 0; i < MINE_PROXIMITY_DELAY_TICKS + BLAST_LIFETIME_TICKS; i++) w2 = step(w2, idleInput).world;
     expect(tankById(w2, BROWN_ID).alive).toBe(false);
   });
 });
@@ -381,7 +385,10 @@ describe('step() stage ORDER', () => {
 
     const r = step(w, { ...idleInput, move: { x: 1, y: 0 } });
 
-    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: mineX, y: 5 } });
+    // The TRIGGER is the order witness now (issue #275): stepMines moved before
+    // stepMovement leaves the player outside the radius and no warning opens this
+    // tick. The detonation follows the warning below.
+    expect(r.events).toContainEqual({ type: 'mine-triggered', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: mineX, y: 5 } });
     // ...and the ORDER is the whole subject: the detonation above is what fails if
     // stepMines is moved before stepMovement.
     //
@@ -392,7 +399,7 @@ describe('step() stage ORDER', () => {
     // makes this fail if stepBlasts is dropped from the pipeline.
     let w2 = r.world;
     const deaths: SimEvent[] = [];
-    for (let i = 0; i < BLAST_LIFETIME_TICKS; i++) {
+    for (let i = 0; i < MINE_PROXIMITY_DELAY_TICKS + BLAST_LIFETIME_TICKS; i++) {
       const rr = step(w2, idleInput);
       w2 = rr.world;
       deaths.push(...rr.events.filter((e) => e.type === 'tank-destroyed'));

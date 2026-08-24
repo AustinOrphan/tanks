@@ -190,6 +190,9 @@ export function resolveBulletHits(world: World, events: SimEvent[]): void {
       b.alive = false
       // The SHOOTER gets credit for whatever this blast destroys: detonating a mine
       // with a shell is a skill shot, whoever owns the mine.
+      // Immediate, by owner direction (PR #311): shooting a mine is deliberately
+      // setting it off -- no reaction window, and the SHOOTER's credit rides the
+      // blast (the skill-shot attribution Blast.credit's doc comment describes).
       detonateMine(world, m, events, { source: 'shell', ownerId: b.ownerId })
       break
     }

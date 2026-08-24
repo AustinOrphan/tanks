@@ -123,6 +123,11 @@ export function createHapticsDirector(
       case 'win':
       case 'lose':
         break;
+      case 'mine-triggered':
+      case 'mine-fuse-warning':
+        // No pulse in this child -- the two distinct warning presentations are
+        // #276's deliberate work (same posture as audio/director.ts).
+        break;
       default: {
         // Exhaustiveness guard: a new SimEvent kind fails to compile here, the
         // same discipline audio/director.ts uses.

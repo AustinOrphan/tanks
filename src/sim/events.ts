@@ -19,6 +19,8 @@ export type SimEvent =
   | { type: 'explosion'; pos: Vec2 }
   | { type: 'mine-dropped'; mineId: number; ownerId: number; pos: Vec2 }
   | { type: 'mine-armed'; mineId: number; ownerId: number; pos: Vec2 }
+  | { type: 'mine-triggered'; mineId: number; ownerId: number; pos: Vec2 }
+  | { type: 'mine-fuse-warning'; mineId: number; ownerId: number; pos: Vec2 }
   | { type: 'mine-detonate'; mineId: number; ownerId: number; pos: Vec2 }
   | { type: 'tank-destroyed'; tankId: number; kind: TankKind; by: DestroyedBy; pos: Vec2 }
   /**

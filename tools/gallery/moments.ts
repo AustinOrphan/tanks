@@ -364,9 +364,11 @@ export const MOMENTS: Record<string, MomentDef> = {
     return {
       // MEASURED (throwaway vite-node probe): fire at events[10]; the shell reaches the
       // mine's trigger radius (MINE_TRIGGER_RADIUS + BULLET_RADIUS = 0.45) and detonates
-      // it at events[26], and the age-0 blast (already ~0.72 radius, comfortably past
-      // the wall's 0.3-unit gap from the mine) destroys the wall on that SAME tick --
-      // `mine-detonate` and `wall-destroyed` both land at events[26], not two ticks.
+      // it at events[26] -- IMMEDIATELY, by owner direction on PR #311 (shooting a mine
+      // is deliberately setting it off; no reaction window) -- and the age-0 blast
+      // (already ~0.72 radius, comfortably past the wall's 0.3-unit gap from the mine)
+      // destroys the wall on that SAME tick -- `mine-detonate` and `wall-destroyed`
+      // both land at events[26], not two ticks.
       // 66, not 36 (final-review finding I2): the wall-destroyed particle burst
       // (particles.ts's `burst()`) needs room past tick 26 to decay, same reasoning as
       // `destroyed` above -- see MomentDef.ticks's doc comment.
@@ -412,19 +414,22 @@ export const MOMENTS: Record<string, MomentDef> = {
       // the rest of the clip; only the owner walks. Starting tick 10 the owner walks
       // east and clears MINE_PROXIMITY_RADIUS (stepMines' arming distance) at
       // events[40]. No shell, no proximity re-trigger (the owner keeps walking away,
-      // never re-entering blast range) -- the fuse alone ends it, at events[190]. No
-      // 'explosion'/'tank-destroyed' anywhere in the 230-tick window: by tick 190 the
-      // owner is 9 units clear, well outside MINE_BLAST_RADIUS + TANK_RADIUS (2.5), and
-      // only keeps walking further away through tick 230.
+      // never re-entering blast range) -- the fuse alone ends it, at events[190],
+      // exactly as before issue #275: the fuse warning is the fuse's FINAL window
+      // (owner direction on PR #311), so `mine-fuse-warning` fires at events[160]
+      // (exactly 30 ticks before expiry -- measured, this alignment carries no
+      // accumulated-DT drift) and expiry timing is untouched. No 'explosion'/'tank-destroyed' anywhere in the
+      // 230-tick window: by tick 190 the owner is 9 units clear, well outside
+      // MINE_BLAST_RADIUS + TANK_RADIUS (2.5), and only keeps walking further away.
       // 230, not 200 (final-review finding I2): the mine-detonate particle burst
-      // (particles.ts's `burst()`) needs room past tick 190 to decay, same reasoning as
-      // `destroyed`/`wall-break` above -- see MomentDef.ticks's doc comment. The fuse
-      // itself still ends at 190; the extra 40 ticks are decay margin only, walked
-      // through by the same MINE_CYCLE_WALK input the fuse-running portion already uses.
+      // (particles.ts's `burst()`) needs room past tick 190 to decay, same
+      // reasoning as `destroyed`/`wall-break` above -- see MomentDef.ticks's doc
+      // comment.
       ticks: 230,
       expect: [
         { type: 'mine-dropped', tick: 10 },
         { type: 'mine-armed', tick: 40 },
+        { type: 'mine-fuse-warning', tick: 160 },
         { type: 'mine-detonate', tick: 190 },
       ],
       // Tight on the mine's own (fixed) position rather than the walking owner, same

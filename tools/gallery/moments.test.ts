@@ -122,6 +122,8 @@ describe('mine-cycle moment specifics', () => {
   });
 
   it('detonates on fuse expiry, MINE_TIMER seconds after the drop, not a proximity re-trigger', () => {
+    // Owner-revised issue #275: the fuse warning occupies the fuse's FINAL window,
+    // so expiry timing is exactly what it always was -- the warning added no time.
     expect(detonate() - drop()).toBe(Math.round(MINE_TIMER * TICK_HZ));
   });
 

@@ -270,6 +270,21 @@ export interface Mine {
   timer: number;
   armed: boolean;
   detonated: boolean;
+  /**
+   * Ticks left in the PROXIMITY reaction delay (issue #275, owner-revised):
+   * absent = not tripped (optional like Tank's flags, so existing mine fixtures
+   * stay valid). Stamped once on proximity entry and only ever counted DOWN --
+   * re-entry is a no-op, so the countdown cannot restart or shorten. Fuse and
+   * shell triggers never touch it: fuse expiry detonates on its own schedule
+   * (`timer`), a shell detonates immediately.
+   */
+  proximityDelayLeft?: number;
+  /**
+   * One-shot latch for the `mine-fuse-warning` event, fired when `timer` first
+   * enters the final MINE_FUSE_WARNING_TICKS of the fuse. Event data only -- the
+   * fuse's own expiry, not this flag, is what detonates.
+   */
+  fuseWarned?: boolean;
 }
 
 // move components in [-1,1] (not normalized); aim is a world-space ground point;
