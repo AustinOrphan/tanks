@@ -299,3 +299,39 @@ describe('trail-skins moment specifics', () => {
     expect(finalX).toBeGreaterThan(EMIT_SPACING * 5);
   });
 });
+
+describe('ai-tracking moment specifics', () => {
+  it('the stationary AI holds position and bodyAngle exactly still while its turret sweeps then reverses', () => {
+    // PEAK_TICK is MEASURED (throwaway vite-node probe, moments.ts's own comment):
+    // turretAngle climbs every tick through tick 28 (the player's closest approach to
+    // x = 0) and falls every tick after. Negative control: shortening the moment's
+    // own AI_TRACKING_PLAYER_X0 offset toward 0 (e.g. -0.2) moves the closest approach
+    // -- and so this pivot tick -- earlier, reddening this exact loop at the tick
+    // where the two phases no longer agree with 28 -- verified live and reverted (see
+    // this task's report).
+    const PEAK_TICK = 28;
+    const tl = simulateMoment(MOMENTS['ai-tracking']);
+    for (let t = 1; t <= MOMENTS['ai-tracking'].ticks; t++) {
+      const prev = tl.worlds[t - 1].tanks[0];
+      const cur = tl.worlds[t].tanks[0];
+      // Brown hardcodes desiredMove {0, 0} on every path (brown.ts) -- the hull never
+      // drives. Negative control: swapping tanks[0] for the PLAYER (tanks[1], which
+      // does drive) fails this immediately at t = 1 -- verified live and reverted
+      // (see this task's report).
+      expect(cur.pos.x).toBe(0);
+      expect(cur.pos.y).toBe(0);
+      expect(cur.bodyAngle).toBe(0);
+      if (t <= PEAK_TICK) expect(cur.turretAngle).toBeGreaterThan(prev.turretAngle);
+      else expect(cur.turretAngle).toBeLessThan(prev.turretAngle);
+    }
+  });
+
+  it('never fires: the 48-tick reaction gate (STATIC_BASIC reactionTime * TICK_HZ) is never reached in 47 ticks', () => {
+    // Negative control: MEASURED (throwaway vite-node probe) -- extending this exact
+    // fixture to 55 ticks fires a 'fire' event at tick 50, reddening this assertion.
+    // moments.ts's own ticks comment documents the same probe. Verified live and
+    // reverted (see this task's report).
+    const tl = simulateMoment(MOMENTS['ai-tracking']);
+    expect(tl.events.flat()).toEqual([]);
+  });
+});

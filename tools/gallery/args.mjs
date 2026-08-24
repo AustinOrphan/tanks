@@ -117,6 +117,8 @@ export const MOMENT_IDS = [
   // cover. Deliberately moving this two-way pin -- see args.test.ts's own comment on
   // why it exists.
   'trail-stop', 'trail-cross', 'trail-skins',
+  // Issue #330's artefact capture: a stationary AI's turret tracking a moving player.
+  'ai-tracking',
 ];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
