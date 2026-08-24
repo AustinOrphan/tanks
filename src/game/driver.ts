@@ -1,7 +1,6 @@
 import { stepInputs, type World } from '../sim/world';
 import type { InputState } from '../sim/types';
 import type { SimEvent } from '../sim/events';
-import type { GameState } from './state';
 import { animationDt, planFrame, renderAlpha } from './frame';
 
 /**
@@ -27,11 +26,26 @@ export interface RafScheduler {
 /**
  * The slice of GameStateMachine the driver uses.
  *
- * `state` is read LIVE, twice per frame, and the two reads are deliberately
- * not hoisted -- see the frame body.
+ * `isSimulating` and `isPaused` are read LIVE, and the reads are deliberately
+ * not hoisted into a single const -- see the frame body. `onEvents` can flip
+ * `playing` -> `outcome` in between, and the frame that ends the game must
+ * render the final pose whole rather than a fraction of a tick past it.
+ *
+ * Two booleans rather than the whole AppLocation: the driver has no
+ * legitimate business with routes or descriptors, and taking a bare enum
+ * kept its `state === 'title'` foot-gun that CLAUDE.md's "keep both reads"
+ * rule already exists to warn about. See `src/game/state.ts` for the
+ * canonical model.
  */
 export interface DriverStateMachine {
-  readonly state: GameState;
+  /** True while the sim should step this frame. */
+  readonly isSimulating: boolean;
+  /**
+   * True while cosmetics should freeze (pause is a phase of a live session).
+   * All other non-simulating locations (launch, main-menu, outcome...) leave
+   * the animation clock running -- see `animationDt`.
+   */
+  readonly isPaused: boolean;
   onEvents(events: SimEvent[]): void;
 }
 
@@ -119,10 +133,10 @@ export function createDriver(deps: DriverDeps): Driver {
     const frameEvents: FrameEvent[] = [];
 
     // Read LIVE, and deliberately not hoisted into a const shared with the
-    // alpha read below: onEvents can flip 'playing' -> 'win'/'lose' in between,
+    // alpha read below: onEvents can flip `playing` -> `outcome` in between,
     // and the frame that ends the game must render the final pose whole rather
     // than interpolating a fraction of a tick past it.
-    if (deps.stateMachine.state === 'playing') {
+    if (deps.stateMachine.isSimulating) {
       for (let i = 0; i < plan.ticks; i++) {
         prev = curr;
         const result = stepInputs(curr, deps.input.sample());
@@ -141,19 +155,21 @@ export function createDriver(deps: DriverDeps): Driver {
       deps.onSimulated(curr);
     } else {
       // Not simulating: hold a static pose, and drop any debt so that resuming
-      // does not immediately repay time that passed on the title screen.
+      // does not immediately repay time that passed on a menu.
       acc = 0;
       prev = curr;
     }
 
-    // Second, deliberate read. See above. Hoisted into a const only HERE, below the
-    // branch -- the two uses on this line must agree with each other, and both must
-    // see the state as it is AFTER onEvents, not before.
-    const state = deps.stateMachine.state;
-    const alpha = renderAlpha(acc, state === 'playing');
+    // Second, deliberate reads. See above. Both must see the state as it is
+    // AFTER onEvents, not before -- the flip from `playing` to `outcome` in
+    // this same frame is precisely why they are not hoisted with the first
+    // simulating check above.
+    const simulatingAfter = deps.stateMachine.isSimulating;
+    const pausedAfter = deps.stateMachine.isPaused;
+    const alpha = renderAlpha(acc, simulatingAfter);
     // Not plan.dt: the render animation clock is its own decision, and it stops while
     // the game is paused. See animationDt.
-    deps.renderer.render(prev, curr, alpha, frameEvents, animationDt(plan.dt, state));
+    deps.renderer.render(prev, curr, alpha, frameEvents, animationDt(plan.dt, pausedAfter));
   };
 
   return {

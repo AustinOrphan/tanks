@@ -10,9 +10,21 @@ import { createArenaWorld, createWorldFor, arenaById } from '../sim/arena';
 import { step, type World } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { InputState } from '../sim/types';
-import type { GameState } from './state';
 import { createDriver, type Driver, type RafScheduler, type FrameEvent } from './driver';
 import { MAX_FRAME_DT } from './frame';
+
+/**
+ * The fixture's canonical driver-facing session state -- the six positions the
+ * production state machine can end up in that this driver cares about, mapped
+ * to the two bools the driver reads (`isSimulating`, `isPaused`).
+ *
+ * `launch` was `'splash'`, `main-menu` was `'title'`, and `outcome` was
+ * `'win'`/`'lose'` in the retired GameState union.
+ */
+type DriverState = 'launch' | 'main-menu' | 'playing' | 'paused' | 'outcome';
+
+const isSimulatingFor = (s: DriverState): boolean => s === 'playing';
+const isPausedFor = (s: DriverState): boolean => s === 'paused';
 
 const IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
 
@@ -73,7 +85,7 @@ function fakeRaf(): {
 
 function harness(
   opts: {
-    state?: GameState;
+    state?: DriverState;
     input?: InputState;
     /**
      * The FULL per-slot list `sample()` returns, for a co-op fixture. Takes priority
@@ -82,8 +94,8 @@ function harness(
      */
     inputs?: InputState[];
     world?: World;
-    /** Mirrors the real machine: onEvents can flip 'playing' -> 'win'/'lose'. */
-    endOnEvents?: GameState;
+    /** Mirrors the real machine: onEvents can flip `playing` -> `outcome`. */
+    endOnEvents?: DriverState;
   } = {},
 ): {
   driver: Driver;
@@ -95,8 +107,8 @@ function harness(
   simulated: World[];
   framed: SimEvent[][];
   samples: number;
-  setState(s: GameState): void;
-  state(): GameState;
+  setState(s: DriverState): void;
+  state(): DriverState;
 } {
   const raf = fakeRaf();
   const renders: RenderCall[] = [];
@@ -105,7 +117,7 @@ function harness(
   const machineSaw: SimEvent[][] = [];
   const simulated: World[] = [];
   const framed: SimEvent[][] = [];
-  let state: GameState = opts.state ?? 'playing';
+  let state: DriverState = opts.state ?? 'playing';
   const box = { samples: 0 };
 
   const driver = createDriver({
@@ -133,13 +145,16 @@ function harness(
       },
     },
     stateMachine: {
-      get state(): GameState {
-        return state;
+      get isSimulating(): boolean {
+        return isSimulatingFor(state);
+      },
+      get isPaused(): boolean {
+        return isPausedFor(state);
       },
       onEvents(events): void {
         machineSaw.push(events);
         // The real machine transitions HERE, inside the frame, between the
-        // driver's two reads of `state`.
+        // driver's two reads of `isSimulating`/`isPaused`.
         if (opts.endOnEvents) state = opts.endOnEvents;
       },
     },
@@ -189,10 +204,10 @@ describe('driver: simulation', () => {
     expect(h.driver.world.tick).toBe(6);
   });
 
-  it.each(['title', 'paused'] as const)(
+  it.each(['main-menu', 'paused'] as const)(
     'does not step while %s, but still renders the frozen pose',
     (state) => {
-      // 'paused' deliberately rides the same hold-pose path as the title screen:
+      // `paused` deliberately rides the same hold-pose path as the Main Menu route:
       // sim frozen, renderer live, accumulator dropped so resume repays nothing.
       const h = harness({ state });
       h.driver.start();
@@ -220,7 +235,7 @@ describe('driver: simulation', () => {
   });
 
   it('does not report a non-simulating frame', () => {
-    const h = harness({ state: 'title' });
+    const h = harness({ state: 'main-menu' });
     h.driver.start();
     h.raf.fire(100);
     expect(h.simulated).toHaveLength(0);
@@ -430,28 +445,28 @@ describe('driver: interpolation', () => {
   });
 
   it('renders a non-simulating frame at a full alpha', () => {
-    const h = harness({ state: 'title' });
+    const h = harness({ state: 'main-menu' });
     h.driver.start();
     h.raf.fire(25);
     expect(h.renders[0].alpha).toBe(1);
   });
 
   it('renders the frame that ENDS the game at a full alpha', () => {
-    // The machine flips to 'win' inside onEvents -- DURING this frame, between
-    // the driver's two reads of sm.state. The frame that ends the game must
-    // show the final pose whole, not a fraction of a tick short of it.
-    // Hoisting both reads into one const renders it at the carried 0.5 instead;
-    // hoisting only the second read is harmless and must keep passing.
+    // The machine flips to `outcome` inside onEvents -- DURING this frame,
+    // between the driver's two reads of the state machine. The frame that ends
+    // the game must show the final pose whole, not a fraction of a tick short
+    // of it. Hoisting both reads into one const renders it at the carried 0.5
+    // instead; hoisting only the second read is harmless and must keep passing.
     const world = { ...createArenaWorld(1), roundStartTick: -1000 };
     const h = harness({
       world,
       input: { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: true, mine: false },
-      endOnEvents: 'win',
+      endOnEvents: 'outcome',
     });
     h.driver.start();
     h.raf.fire(25); // 1.5 ticks: one runs and fires, half a tick is carried
     expect(h.machineSaw.length).toBeGreaterThan(0); // the flip really happened
-    expect(h.state()).toBe('win');
+    expect(h.state()).toBe('outcome');
     const r = h.renders[0];
     expect(r.alpha).toBe(1);
     // and it really did simulate this frame, so this is not the idle branch
@@ -460,14 +475,14 @@ describe('driver: interpolation', () => {
 
   it("renders curr's pose on the frames after a game ends mid-run", () => {
     // The frame AFTER the end takes the idle branch: prev collapses onto curr
-    // so nothing lerps, and alpha is full. Scoping this to a title frame from
+    // so nothing lerps, and alpha is full. Scoping this to a menu frame from
     // boot would make the prev === curr half unfalsifiable, since they are
     // already identical before any tick runs.
     const world = { ...createArenaWorld(1), roundStartTick: -1000 };
     const h = harness({
       world,
       input: { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: true, mine: false },
-      endOnEvents: 'win',
+      endOnEvents: 'outcome',
     });
     h.driver.start();
     h.raf.fire(25);
@@ -512,7 +527,7 @@ describe('driver: the render animation clock', () => {
     expect(h.renders[0].dt).toBe(0);
   });
 
-  it.each(['splash', 'title', 'win', 'lose'] as const)(
+  it.each(['launch', 'main-menu', 'outcome'] as const)(
     'keeps running while %s, which does NOT simulate either',
     (state) => {
       // The opposite production change, and the reason the paused case above is not

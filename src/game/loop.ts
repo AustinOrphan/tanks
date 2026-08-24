@@ -46,11 +46,20 @@ import { createTankPreview, type TankPreview } from '../render/preview';
 import { createAudioEngine, type AudioEngine } from '../audio/engine';
 import { AUDIO_MANIFEST } from '../audio/manifest';
 import type { SuiteContext } from '../audio/suites';
-import type { GameState } from './state';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
 import { createGameStateMachine, type GameStateMachine } from './state';
-import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import {
+  type AppLocation,
+  type ResolvedSession,
+  type SessionDescriptor,
+  campaignDescriptor,
+  outcomeIsVictory,
+  practiceDescriptor,
+  resolveSession,
+  versusDescriptor,
+} from './app-state';
+import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
@@ -559,38 +568,66 @@ export function musicIntensity(remaining: number, total: number): number {
 }
 
 /**
- * Which musical world a game state belongs to.
+ * Which musical world an AppLocation belongs to.
  *
  * Pause deliberately keeps the ARENA context: the round is still in progress
  * behind the panel, and moving the music elsewhere would make a pause feel like
  * leaving the level. It is ducked instead.
+ *
+ * The launch route shares the Main Menu's suite rather than taking one of its
+ * own -- it is the same world musically, and the screen on which nothing can be
+ * heard yet anyway. The context is set here so that the gesture which
+ * dismisses launch starts the menu bed already in the right suite, with no
+ * switch on arrival.
+ *
+ * Typed outcomes (issue #316) rather than a generic win/lose string mean the
+ * mapping consults `outcomeIsVictory` directly -- a victory-shaped outcome
+ * (mission-clear, campaign-complete, cleared practice, local-player VS win)
+ * plays victory music; every other outcome plays defeat music.
  */
-export function musicContextFor(state: GameState): SuiteContext {
-  switch (state) {
-    // The splash screen shares the menu's suite rather than taking one of its own. It
-    // is the same world musically, and it is the screen on which nothing can be heard
-    // yet anyway -- the context is set here so that the gesture which dismisses it
-    // starts the menu bed already in the right suite, with no switch on arrival.
-    case 'splash':
-    case 'title':
-      return 'menu';
-    case 'win':
-      return 'victory';
-    case 'lose':
-      return 'defeat';
+export function musicContextFor(location: AppLocation): SuiteContext {
+  if (location.kind === 'route') {
+    // Every application route -- launch, main-menu, settings, records,
+    // versus-setup, practice-select, customize, developer-tools, campaign --
+    // shares the menu suite. Screens that later dependent issues carve out
+    // (Records, Settings...) may choose their own context; today's target
+    // preserves the shipped rule that "not in gameplay = menu".
+    return 'menu';
+  }
+  switch (location.phase.kind) {
     case 'playing':
     case 'paused':
       return 'arena';
+    case 'outcome':
+      return outcomeIsVictory(location.phase.outcome) ? 'victory' : 'defeat';
     default: {
-      // Exhaustive by construction, the way TANK_KINDS forces a JSON entry: a
-      // new GameState is a COMPILE error here rather than silently inheriting
-      // arena's music. A `default: return 'arena'` compiled clean when a state
-      // was added, which is how a screen ends up scored as though it were a
-      // round in progress.
-      const unreachable: never = state;
+      const unreachable: never = location.phase;
       return unreachable;
     }
   }
+}
+
+/**
+ * Project an `AppLocation` onto the HUD surface. The HUD does not receive the
+ * canonical model directly (see `HudSurface`'s own doc comment); this is the
+ * boundary where the projection happens. The mapping preserves every visible
+ * behavior: Launch → 'launch' hides the topbar and shows the splash panel;
+ * Main Menu → 'main-menu' shows the title panel; playing/paused pass through;
+ * an outcome projects to `outcome-win`/`outcome-lose` based on
+ * `outcomeIsVictory`, since the HUD's intermediate-clear vs final-win branches
+ * still need to distinguish which side the outcome fell on. Non-primary
+ * routes (settings/records/customize/etc) that today do not have dedicated
+ * screens land at 'main-menu' -- the Main Menu is the current shipped host
+ * for those tabs.
+ */
+export function locationToHudSurface(location: AppLocation): HudSurface {
+  if (location.kind === 'route') {
+    return location.route.kind === 'launch' ? 'launch' : 'main-menu';
+  }
+  const phase = location.phase;
+  if (phase.kind === 'playing') return 'playing';
+  if (phase.kind === 'paused') return 'paused';
+  return outcomeIsVictory(phase.outcome) ? 'outcome-win' : 'outcome-lose';
 }
 
 function countEnemies(world: World): number {
@@ -891,6 +928,40 @@ export function startGameWith(
     : undefined;
   let world = buildWorld(level, bootLives);
   /**
+   * The canonical retained descriptor for THIS session (issue #316).
+   *
+   * A versus reboot session carries the pane's original UNRESOLVED config here
+   * -- deliberately the same object `deps.initialVersusConfig` is stamped with
+   * on boot (see that field's doc comment: rematches must reopen the pane with
+   * `'random'` still selected if that was what was chosen, even when the
+   * session's own resolved arena is concrete). Campaign and dev-flag-driven
+   * campaign boots hold the plain `campaignDescriptor()`; the practice branch
+   * below reassigns to a practice descriptor at the moment the player picks a
+   * level from the Levels pane. Developer metadata is orthogonal -- see
+   * `DeveloperMetadata` in `app-state.ts`; this file does not embed dev-flag
+   * provenance in the descriptor itself.
+   */
+  let currentDescriptor: SessionDescriptor = deps.initialVersusConfig
+    ? versusDescriptor(deps.initialVersusConfig)
+    : campaignDescriptor();
+  /**
+   * The canonical resolved session for the CURRENT world (issue #316) -- owns
+   * this launch's seed and concrete arena. Distinct from `currentDescriptor`
+   * above, which retains the pane's selection (may still name `'random'` for
+   * a VS session's arena). Reassigned on every `switchTo`, so a level advance
+   * or retry gets a fresh resolved instance while the retained descriptor
+   * stays untouched -- exactly the boundary #316 draws for rematch/next-level.
+   *
+   * The state machine's `enterGameplay` is the authoritative "we are now in
+   * gameplay on this instance" call; callers pass `currentSession` at every
+   * entry point below.
+   */
+  let currentSession: ResolvedSession = resolveSession(
+    currentDescriptor,
+    world.seed,
+    level.arenaId,
+  );
+  /**
    * Reseeded from the CURRENT world's own resolved seed on every world switch (see
    * `switchTo`'s matching reassignment below) -- unlike `autoplayRnd`/`autoplayState`
    * further down, which are session-scoped. Bots exist specifically to simulate a
@@ -1124,7 +1195,11 @@ export function startGameWith(
   // setSessionKind's own doc comment) -- set once, here, before any setState/
   // setContinueAvailable/setLevelSelect call below so the very first render already
   // reflects it.
-  hud.setSessionKind(deps.initialVersusConfig ? 'versus' : 'campaign');
+  // Derived from the canonical descriptor kind (issue #316: HUD session
+  // identity must come from the descriptor, not from `initialVersusConfig`
+  // presence or URL provenance -- see `currentDescriptor` above for the pane's
+  // retained-config posture that still names 'random' when the pane picked it).
+  hud.setSessionKind(currentDescriptor.kind === 'versus' ? 'versus' : 'campaign');
   // Task 6 (spec §3a): the in-match stock readout is versus-only for this session's
   // whole life, the same fixed-for-the-session posture as sessionKind just above.
   // The gate is `!deps.initialVersusConfig`, NOT "is this a campaign session" --
@@ -1506,9 +1581,13 @@ export function startGameWith(
     // will not open an AudioContext resumed from anywhere else. Sounds are
     // emitted from the frame loop, which never qualifies.
     audio.unlock();
-    if (sm.state === 'title') {
-      sm.startPlaying();
-    } else if (sm.state === 'paused') {
+    if (sm.atMainMenu) {
+      // Continue from the Main Menu enters gameplay on the CURRENT resolved
+      // session -- the world was already built at boot/quit/landOnCampaignBoard,
+      // so this is the pure "start play" gesture. See `currentSession` for the
+      // instance being entered.
+      sm.enterGameplay(currentSession);
+    } else if (sm.isPaused) {
       // Resume shares the action button with Play Again/Retry, whose branch below
       // REBUILDS the world. Resuming must keep the game exactly as frozen.
       sm.resume();
@@ -1518,10 +1597,10 @@ export function startGameWith(
       // game-over/completion is already persisted reactively in sm.onChange, the
       // instant the state flipped -- not deferred to this click, so a refresh at the
       // win/lose screen cannot lose it. This click only decides which WORLD to build.
-      const next = sm.state === 'win' ? nextInSession(level) : null;
+      const next = sm.wasWin ? nextInSession(level) : null;
       if (next !== null) {
         switchTo(next, driver.world.lives);
-        sm.restart();
+        sm.enterGameplay(currentSession);
       } else if (deps.initialVersusConfig) {
         // A versus match's own win/lose has nothing to advance to -- the versus
         // level system is always a single synthetic level (levels.ts), so `next`
@@ -1533,21 +1612,21 @@ export function startGameWith(
         // new bots, the lot -- happens only through `requestVersusSession`, wired
         // below off the pane's OWN Start button; this click must not touch `world`.
         //
-        // sm.toTitle() BEFORE showVersusSetup, not after: setState's close-all
+        // sm.toMainMenu() BEFORE showVersusSetup, not after: setState's close-all
         // discipline (hud.ts) unconditionally re-hides the versus pane on every
         // state change, so opening the pane first would just have that work undone
         // a moment later by this very call. loop.test.ts pins the order with a case
         // that fails if the two calls are swapped.
-        sm.toTitle();
+        sm.toMainMenu();
         hud.showVersusSetup(true, deps.initialVersusConfig);
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
         // Only a real campaign session may CREATE a new run here: the one that just
-        // ended (sm.onChange's 'lose'/final-'win' branch already ran endRun()) is
-        // gone, and playing on needs somewhere to persist the next death/clear.
+        // ended (sm.onChange's outcome branch already ran endRun()) is gone, and
+        // playing on needs somewhere to persist the next death/clear.
         landOnCampaignBoard(campaignActive());
-        sm.restart();
+        sm.enterGameplay(currentSession);
       }
     }
   });
@@ -1586,6 +1665,11 @@ export function startGameWith(
   function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
+    // Every switchTo is a new resolved-session instance (issue #316) -- fresh
+    // seed and, potentially, fresh arena. The retained descriptor is preserved
+    // so a VS session's `'random'` selection survives across rematches, and
+    // Campaign runs keep their descriptor identity across level advances.
+    currentSession = resolveSession(currentDescriptor, world.seed, level.arenaId);
     // Reseeded here too -- see botSources' own doc comment above for why bots are
     // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
     // `botSlots` set: a mid-session reassignment can have moved a slot to or from
@@ -1634,7 +1718,7 @@ export function startGameWith(
    * sites instead of one.
    *
    * `mayCreateRun` is true only for a real campaign game-over/completion restart:
-   * the run that just ended is already gone (sm.onChange's 'lose'/final-'win'
+   * the run that just ended is already gone (sm.onChange's outcome (`campaign-over` or final `campaign-complete`)
    * branch calls endRun() the instant the state flips, not deferred to this call),
    * and playing on needs somewhere to persist the next death/clear -- created AT
    * `deps.levels.start`. Every caller passes `campaignActive()` (or a hardcoded
@@ -1674,17 +1758,24 @@ export function startGameWith(
     // and neither is the HUD's button rendering, for the index. `deps.levels.levels[7]`
     // is undefined on a shorter sequence, and a handler that rebuilds the world does
     // not get to crash on it.
-    if (sm.state !== 'title') return;
+    if (!sm.atMainMenu) return;
     if (!Number.isInteger(picked) || picked < 0 || picked >= deps.levels.levels.length) return;
     // Practice: independent fresh lives (switchTo's `lives` is left undefined, so
     // buildWorld defaults to full LIVES), and the active campaign run is never read
     // or written from here on out -- see campaignActive.
     inPractice = true;
+    // Retain a Practice descriptor for THIS click (issue #316): the pane's
+    // 1-based level ordinal is the picked 0-based index + 1. switchTo below
+    // then resolves that descriptor into a fresh session instance for the world
+    // it builds. Prior boot descriptors (campaign/versus) are replaced here --
+    // practice owns the retained descriptor for as long as the player stays in
+    // this session.
+    currentDescriptor = practiceDescriptor(picked + 1);
     switchTo(deps.levels.levels[picked]);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.
     audio.unlock();
-    sm.startPlaying();
+    sm.enterGameplay(currentSession);
   });
 
   // New Run (spec: docs/superpowers/specs/2026-08-11-campaign-run-model.md): the one
@@ -1711,13 +1802,21 @@ export function startGameWith(
   // `inPractice = false` is set FIRST, unconditionally, same as landOnCampaignBoard:
   // New Game from title always leaves practice, campaign-owning or not. Today every
   // path back to 'title' already runs through landOnCampaignBoard (quit-to-title) or
-  // starts with `inPractice` false from construction, so `sm.state === 'title'` with
+  // starts with `inPractice` false from construction, so `sm.atMainMenu` with
   // `inPractice === true` cannot currently happen -- this ordering is defensive, not
   // covering a reachable gap, so a future path to title that skips
   // landOnCampaignBoard cannot leave campaignActive() reading a stale practice flag.
   hud.onNewGame(() => {
-    if (sm.state !== 'title') return;
+    if (!sm.atMainMenu) return;
     inPractice = false;
+    // Restore the boot-configured retained descriptor (issue #316) -- a Practice
+    // pick above may have swapped `currentDescriptor` to a practice descriptor,
+    // and New Game is the one deliberate gesture that leaves practice for good.
+    // A versus reboot keeps its versus descriptor from boot; a campaign session
+    // is (re)established as a plain campaign descriptor here.
+    currentDescriptor = deps.initialVersusConfig
+      ? versusDescriptor(deps.initialVersusConfig)
+      : campaignDescriptor();
     if (campaignActive()) {
       const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
       switchTo(deps.levels.levels[0], fresh.livesRemaining);
@@ -1733,7 +1832,7 @@ export function startGameWith(
     // Same convention as onLevelSelect just above: a real gesture that starts play
     // must unlock the audio context here, since Safari accepts no later opportunity.
     audio.unlock();
-    sm.startPlaying();
+    sm.enterGameplay(currentSession);
   });
 
   // The touch-only pause button. Routed through the SAME guarded transitions as the
@@ -1744,7 +1843,7 @@ export function startGameWith(
   // and the bed ducks instead of stopping, on the reasoning that moving the music
   // elsewhere would make a pause feel like leaving the level.
   hud.onPauseTap(() => {
-    if (sm.state === 'paused') sm.resume();
+    if (sm.isPaused) sm.resume();
     else sm.pause();
   });
 
@@ -1804,14 +1903,21 @@ export function startGameWith(
     // Next Level is pressed, so the run is already sitting on the NEXT level by the time
     // this panel is on screen. Leaving from here resumes there, not on the level just
     // beaten.
-    if (sm.state !== 'paused' && sm.state !== 'win') return;
+    if (!sm.isPaused && !sm.wasWin) return;
     // Quit suspends presentation of the run; it must not create or replenish one
     // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
     // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
-    // lazily on Continue, so the title screen renders over the campaign's own
-    // board, not the abandoned (possibly practice) one.
+    // lazily on Continue, so the Main Menu renders over the campaign's own
+    // board, not the abandoned (possibly practice) one. `landOnCampaignBoard`
+    // resets `inPractice` and rebuilds the campaign descriptor via the same
+    // path New Game takes, so a post-quit Continue enters gameplay on a real
+    // campaign board.
+    inPractice = false;
+    currentDescriptor = deps.initialVersusConfig
+      ? versusDescriptor(deps.initialVersusConfig)
+      : campaignDescriptor();
     landOnCampaignBoard(false);
-    sm.toTitle();
+    sm.toMainMenu();
   });
 
   // The paint shop's live preview: a SECOND WebGL context. Built on onCustomizeOpen,
@@ -1920,90 +2026,101 @@ export function startGameWith(
    * which is the very gap this change exists to close, and the browser probe
    * caught it.
    */
-  function followMusic(s: GameState): void {
-    // startMusic is idempotent, so a resume passing back through 'playing' does
+  function followMusic(location: AppLocation): void {
+    // startMusic is idempotent, so a resume passing back through `playing` does
     // not double-start anything -- but NOT via the `music.playing()` check,
     // which guards the Howl branch the game never reaches. On the generated-bed
     // path that actually runs, `if (!bed)` builds the bed once (engine.ts) and
     // `bed.start()` returns early when its timer already exists (music.ts).
-    // It runs for EVERY state now: title, endings and pause all have music, and
-    // each is a context the director moves to through the same handled join a
-    // suite change uses.
+    // It runs for EVERY location: routes (launch/main-menu/settings/...),
+    // gameplay phases (playing/paused/outcome) all have music, and each is a
+    // context the director moves to through the same handled join a suite
+    // change uses.
     audio.startMusic();
-    audio.setMusicContext(musicContextFor(s));
+    audio.setMusicContext(musicContextFor(location));
     // Pause DUCKS rather than stops. Stopping discards the playlist's committed
     // decisions and leaves the scheduler at an ambiguous position -- exactly
     // what produced both blockers in the suite-wiring review -- while ducking
     // touches only the gain, so resuming is seamless.
-    audio.duckMusic(s === 'paused');
+    audio.duckMusic(location.kind === 'gameplay' && location.phase.kind === 'paused');
   }
 
-  sm.onChange((s) => {
-    hud.setState(s);
+  sm.onChange((location) => {
+    hud.setState(locationToHudSurface(location));
+    const nowPlaying = location.kind === 'gameplay' && location.phase.kind === 'playing';
+    const nowAtMainMenu =
+      location.kind === 'route' && location.route.kind === 'main-menu';
+    const nowWon = location.kind === 'gameplay'
+      && location.phase.kind === 'outcome'
+      && outcomeIsVictory(location.phase.outcome);
+    const nowLost = location.kind === 'gameplay'
+      && location.phase.kind === 'outcome'
+      && !outcomeIsVictory(location.phase.outcome);
     // The round indicator is pushed ONLY from onSimulated, which the driver runs
     // only while playing. Without this, pausing or blurring during the 3s
-    // countdown freezes the chip on screen -- and quitting to title strands it
-    // there indefinitely, since switchTo rebuilds the world without simulating.
-    // The chip sits in the topbar (z-index 1), so it paints over the panel.
-    if (s !== 'playing') hud.setRoundPhase(null);
+    // countdown freezes the chip on screen -- and quitting to Main Menu strands
+    // it there indefinitely, since switchTo rebuilds the world without
+    // simulating. The chip sits in the topbar (z-index 1), so it paints over
+    // the panel.
+    if (!nowPlaying) hud.setRoundPhase(null);
     // Same reasoning as the round chip above: the marks are pushed ONLY from
     // onSimulated, which the driver runs only while playing, so pausing mid-drag would
     // strand a thumb on screen with no thumb under it.
-    if (s !== 'playing') {
+    if (!nowPlaying) {
       hud.setTouchIndicator({ ...input.touchIndicator(), stick: null, aim: null });
     }
-    followMusic(s);
+    followMusic(location);
     // Progress is recorded AT the win, not at the Next Level click: quitting after a
     // win keeps the unlock. The sandbox records nothing -- a test rig must not
     // unlock real levels.
-    if (s === 'win' && deps.levels.tracksProgress) {
+    if (nowWon && deps.levels.tracksProgress) {
       deps.progress.recordCleared(level);
       hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
     }
     // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
     // guard on purpose: the sandbox unlocks no levels but a feat performed there is
     // still a feat. recordCleared has already run, so level milestones see the clear.
-    if (s === 'win') pendingClear = ordinalOf(level);
+    if (nowWon) pendingClear = ordinalOf(level);
     // The active RUN's own transitions (issue #153/#152) -- separate from permanent
     // progress just above, and gated on campaignActive() so practice and the sandbox
     // can never reach them. Reactive, not deferred to the Next Level/Retry click: a
-    // refresh sitting at the win/lose screen must already see the persisted result.
+    // refresh sitting at the outcome screen must already see the persisted result.
     if (campaignActive()) {
-      if (s === 'win') {
+      if (nowWon) {
         const next = nextInSession(level);
         if (next === null) {
           deps.run.endRun(); // campaign completion
         } else {
           deps.run.advanceLevel(next.id, driver.world.lives); // level clear, lives carried
         }
-      } else if (s === 'lose') {
+      } else if (nowLost) {
         deps.run.endRun(); // game over: no lives remain
       }
     }
-    // Refreshed on every arrival at the title screen -- covers boot (the initial call
-    // below), quitting, and a game-over/completion restart's later return to title --
-    // rather than only at the moments above, so this can never go stale relative to
-    // whatever landOnCampaignBoard/onNewGame most recently decided.
-    if (s === 'title') hud.setContinueAvailable(deps.run.active() !== null);
+    // Refreshed on every arrival at the Main Menu -- covers boot (the initial
+    // call below), quitting, and a game-over/completion restart's later return
+    // to Main Menu -- rather than only at the moments above, so this can never
+    // go stale relative to whatever landOnCampaignBoard/onNewGame most recently
+    // decided.
+    if (nowAtMainMenu) hud.setContinueAvailable(deps.run.active() !== null);
     // The driver stops sampling while paused and only sample() resets the fire/mine
     // latches, so a Space pressed around or during a pause would mine on the first
     // resumed tick. At the state change, so hotkey, blur and any future pause trigger
     // all pass through the same clear. (input.ts clears itself on window blur too;
     // that covers alt-tab, this covers Esc/P.)
     // EVERY exit from play, not just pause. The driver stops calling sample() for any
-    // state that is not 'playing' (driver.ts), while the window-level pointer and key
-    // listeners keep running -- so a press completed on a win, lose or title screen
-    // latches and fires on the first sample() of the NEXT round. Review found this
-    // after the 'paused' instance was fixed: same mechanism, one call site short.
-    if (s !== 'playing') input.clearQueuedPresses();
+    // location that is not `playing` (driver.ts), while the window-level pointer and
+    // key listeners keep running -- so a press completed on an outcome or Main Menu
+    // screen latches and fires on the first sample() of the NEXT round.
+    if (!nowPlaying) input.clearQueuedPresses();
   });
 
-  hud.setState(sm.state); // initial title panel
-  followMusic(sm.state); // ...and its music: this path bypasses sm.onChange
+  hud.setState(locationToHudSurface(sm.location)); // initial launch panel
+  followMusic(sm.location); // ...and its music: this path bypasses sm.onChange
   hud.setLevel(ordinalOf(level), deps.levels.levels.length);
   hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
   // Boot is an arrival at the title screen too (splash precedes it, but the button
-  // states must already be right underneath) -- see the matching sm.onChange('title')
+  // states must already be right underneath) -- see the matching sm.onChange main-menu
   // refresh above, which covers every LATER arrival.
   hud.setContinueAvailable(deps.run.active() !== null);
   deps.stats.startAttempt();
@@ -2022,15 +2139,15 @@ export function startGameWith(
   refreshStats(world);
 
   // The title screen leaves on ANY gesture. Both listeners are unconditional and the
-  // state machine does the guarding -- `dismissSplash` acts only from 'splash' -- so a
+  // state machine does the guarding -- `dismissLaunch` acts only from `launch` -- so a
   // keypress or click during play falls through to the handlers below unchanged.
   //
-  // The audio half of this is ORDERING, not unlocking -- see dismissSplash in state.ts.
+  // The audio half of this is ORDERING, not unlocking -- see dismissLaunch in state.ts.
   // `audio/engine.ts` already resumes the context from its own document-level gesture
   // handler, and did before this screen existed. What changes is that the gesture is
   // now guaranteed to have happened before the menu is on screen.
   const onSplashGesture = (): void => {
-    sm.dismissSplash();
+    sm.dismissLaunch();
   };
   deps.host.addEventListener('pointerdown', onSplashGesture);
 
@@ -2043,15 +2160,16 @@ export function startGameWith(
     // the Mute button's label left to explain why. Escape and P were harmless by luck
     // alone -- pause() no-ops from 'title' -- which is not a property to rely on as
     // more hotkeys arrive.
-    if (sm.state === 'splash') {
-      sm.dismissSplash();
+    if (sm.atLaunch) {
+      sm.dismissLaunch();
       return;
     }
     if (isMuteHotkey(e)) hud.setMuted(audio.toggleMute());
     if (isPauseHotkey(e)) {
-      // Toggle, guarded by the state machine: pause() acts only from 'playing' and
-      // resume() only from 'paused', so title/win/lose ignore the key entirely.
-      if (sm.state === 'paused') sm.resume();
+      // Toggle, guarded by the state machine: pause() acts only from `playing`
+      // and resume() only from `paused`, so main-menu/outcome ignore the key
+      // entirely.
+      if (sm.isPaused) sm.resume();
       else sm.pause();
     }
   };
