@@ -1,4 +1,19 @@
-import type { GameState } from './state';
+/**
+ * The HUD-visible surfaces the state machine's canonical AppLocation projects
+ * down to. Renamed from the retired GameState union so no discriminant named
+ * `title` still means Main Menu, and `win`/`lose` are split so the branch
+ * between "intermediate clear" and "final win" copy no longer hides behind
+ * one shared literal. `loop.ts` maps `AppLocation` -> `HudSurface` at the
+ * boundary; the HUD itself does not import the state module (which now depends
+ * on the pure `app-state.ts` model).
+ */
+export type HudSurface =
+  | 'launch'
+  | 'main-menu'
+  | 'playing'
+  | 'paused'
+  | 'outcome-win'
+  | 'outcome-lose';
 import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
@@ -81,7 +96,7 @@ export interface Hud {
    * split they were the literal same event.
    */
   onNewGame(cb: () => void): void;
-  setState(s: GameState): void;
+  setState(s: HudSurface): void;
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
   /**
@@ -577,7 +592,7 @@ export function createHud(root: HTMLElement): Hud {
          assignment.md): ONE panel, TWO entry points -- the title screen's own open
          button below, and .hud-panel-settings' presence at 'paused' too (in case a
          controller disconnects mid-round). Unlike its four siblings above/below, this
-         one is NOT title-only, so its Back button cannot hardcode setState('title') --
+         one is NOT title-only, so its Back button cannot hardcode setState('main-menu') --
          see handleControllersBack, which routes to shownState instead. The heading
          text itself branches on shownState too, in showControllers. -->
     <div class="hud-controllers hud-controllers--hidden" tabindex="-1" aria-labelledby="hud-controllers-title">
@@ -705,7 +720,8 @@ export function createHud(root: HTMLElement): Hud {
       </div>
     </div>
     <!-- tabindex="-1" so the menu can RECEIVE focus on every panel-open transition
-         (setState('title'/'paused'/'win'/'lose')) without joining the tab order. It must
+         (setState('main-menu'/'paused'/'outcome-win'/'outcome-lose')) without joining the
+         tab order. It must
          be this container and not a button inside it (Start, Resume, ...):
          isMuteHotkey/isPauseHotkey both ignore a key whose target is inside input,
          button, select or textarea, so focusing a button leaves M and Escape dead the
@@ -1694,19 +1710,19 @@ export function createHud(root: HTMLElement): Hud {
   const handleStatsOpen = (): void => showStats(true);
   const handleStatsBack = (): void => {
     showStats(false);
-    setState('title'); // re-render the title panel it covered
+    setState('main-menu'); // re-render the title panel it covered
   };
   const handleResetStats = (): void => handleDangerClick(resetStatsBtn, resetStatsCbs);
   const handleResetProgress = (): void => handleDangerClick(resetProgressBtn, resetProgressCbs);
   const handleCustomizeOpen = (): void => showCustomize(true);
   const handleCustomizeBack = (): void => {
     showCustomize(false);
-    setState('title');
+    setState('main-menu');
   };
   const handleAchOpen = (): void => showAchievements(true);
   const handleAchBack = (): void => {
     showAchievements(false);
-    setState('title');
+    setState('main-menu');
   };
   achOpenBtn.addEventListener('click', handleAchOpen);
   achOpenBtn.addEventListener('click', blurIfPointer);
@@ -1832,7 +1848,7 @@ export function createHud(root: HTMLElement): Hud {
   let hasProgress = false;
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
-  let shownState: GameState = 'splash';
+  let shownState: HudSurface = 'launch';
   // Task 5b: which kind of session this is -- see setSessionKind's own doc comment on
   // the Hud interface. Defaults to 'campaign' so a HUD that never calls setSessionKind
   // (every caller before this task, including the css/gallery fixtures) renders
@@ -1855,10 +1871,10 @@ export function createHud(root: HTMLElement): Hud {
    * `versusAwareDeps`), so this fires whenever a real campaign run is ALSO active --
    * true for most returning players, not an edge case. Calling this from
    * `setSessionKind` too makes the kind itself order-independent: a caller may set it
-   * before OR after `setState('title')` and land on the same DOM either way.
+   * before OR after `setState('main-menu')` and land on the same DOM either way.
    */
   function applyTitleAffordances(): void {
-    const atTitle = shownState === 'title';
+    const atTitle = shownState === 'main-menu';
     const versusKind = sessionKind === 'versus';
     continueBtn.classList.toggle('hud-continue--hidden', !atTitle || !hasProgress || versusKind);
     // New Game stays VISIBLE for a versus session, unlike Continue and Levels-open --
@@ -1879,7 +1895,7 @@ export function createHud(root: HTMLElement): Hud {
   const handleLevelSelectOpen = (): void => showLevelSelect(true);
   const handleLevelSelectBack = (): void => {
     showLevelSelect(false);
-    setState('title'); // re-render the title panel it covered
+    setState('main-menu'); // re-render the title panel it covered
   };
   levelSelectOpenBtn.addEventListener('click', handleLevelSelectOpen);
   levelSelectOpenBtn.addEventListener('click', blurIfPointer);
@@ -2135,7 +2151,7 @@ export function createHud(root: HTMLElement): Hud {
   // handleLevelSelectBack just above, not handleControllersBack's shownState routing.
   const handleVersusBack = (): void => {
     showVersusSetup(false);
-    setState('title');
+    setState('main-menu');
   };
   versusOpenBtn.addEventListener('click', handleVersusOpen);
   versusOpenBtn.addEventListener('click', blurIfPointer);
@@ -2198,10 +2214,10 @@ export function createHud(root: HTMLElement): Hud {
   newGameBtn.addEventListener('click', handleNewGame);
   newGameBtn.addEventListener('click', blurIfPointer);
 
-  function setState(s: GameState): void {
+  function setState(s: HudSurface): void {
     // Any state change closes the stats and customize pages FIRST -- including the
-    // playing early-return below, or an overlay opened on the title screen would
-    // sit over the live game. They are title-screen affairs.
+    // playing early-return below, or an overlay opened on the Main Menu would
+    // sit over the live game. They are Main-Menu affairs.
     statsView.classList.add('hud-stats--hidden');
     // Routed through showCustomize (not a bare class add, unlike its stats/achievements
     // siblings above/below) so this path fires onCustomizeClose too -- the common exit
@@ -2221,16 +2237,19 @@ export function createHud(root: HTMLElement): Hud {
     // plain toggle does not already give the stats/achievements/level-select siblings.
     versusSetupView.classList.add('hud-versus-setup--hidden');
     disarmReset();
-    splashEl.classList.toggle('hud-splash--hidden', s !== 'splash');
+    const atLaunch = s === 'launch';
+    const atMainMenu = s === 'main-menu';
+    const isOutcome = s === 'outcome-win' || s === 'outcome-lose';
+    splashEl.classList.toggle('hud-splash--hidden', !atLaunch);
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
     // and a Mine button on the menu lays nothing.
     touchRow.classList.toggle('hud-touch--hidden', s !== 'playing');
     // The topbar is the only chrome that outranks the menu panel, so it is also the
-    // only thing that would show through on the title screen.
-    topbarEl.classList.toggle('hud-topbar--hidden', s === 'splash');
+    // only thing that would show through on the Launch route.
+    topbarEl.classList.toggle('hud-topbar--hidden', atLaunch);
     // The in-match stock readout (spec §3a): visible ONLY while a versus session is
-    // actually being played -- `playing` OR `paused` -- never at title/win/lose/splash.
-    // Placed here, BEFORE the playing/splash early return just below, specifically so
+    // actually being played -- `playing` OR `paused` -- never at main-menu/outcome/launch.
+    // Placed here, BEFORE the playing/launch early return just below, specifically so
     // 'playing' itself is covered; `paused` is covered too since it falls through this
     // far (its own early return is further down). `sessionKind` is fixed for a
     // session's whole life (setSessionKind's own doc comment), so this cannot flip
@@ -2248,12 +2267,12 @@ export function createHud(root: HTMLElement): Hud {
     versusStocksVisible = sessionKind === 'versus' && (s === 'playing' || s === 'paused');
     versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
     if (versusStocksVisible) renderVersusStocks();
-    // Splash and playing both want the menu panel gone. Splash returns BEFORE the
+    // Launch and playing both want the menu panel gone. Launch returns BEFORE the
     // branches below for the same reason `paused` returns early: the final `else`
     // renders a Game Over corpse screen, so any state that falls through to it gets
     // "Out of lives." written into the panel -- on a fresh page load, that is the
     // first thing a player would see.
-    if (s === 'playing' || s === 'splash') {
+    if (s === 'playing' || atLaunch) {
       panel.classList.add('hud-panel--hidden');
       return;
     }
@@ -2270,39 +2289,46 @@ export function createHud(root: HTMLElement): Hud {
     // there is no run to return to and the panel is genuinely verdict-only there. Lose
     // stays verdict-only for the same reason. Level select is a menu affair -- and only
     // when there is a choice to make (see setLevelSelect).
-    const clearedIntermediate = s === 'win' && !!levelPos && levelPos.current < levelPos.total;
+    const clearedIntermediate =
+      s === 'outcome-win' && !!levelPos && levelPos.current < levelPos.total;
     shownState = s;
-    statsOpenBtn.classList.toggle('hud-stats-open--hidden', s !== 'title');
-    customizeOpenBtn.classList.toggle('hud-customize-open--hidden', s !== 'title');
-    achOpenBtn.classList.toggle('hud-achievements-open--hidden', s !== 'title');
+    statsOpenBtn.classList.toggle('hud-stats-open--hidden', !atMainMenu);
+    customizeOpenBtn.classList.toggle('hud-customize-open--hidden', !atMainMenu);
+    achOpenBtn.classList.toggle('hud-achievements-open--hidden', !atMainMenu);
     quitBtn.classList.toggle('hud-quit--hidden', s !== 'paused' && !clearedIntermediate);
     // "Quit" is the wrong word for leaving a level you just WON -- the run is preserved
     // either way, but the copy should not imply abandoning it.
     quitBtn.textContent = clearedIntermediate ? 'Main Menu' : 'Quit to Title';
-    panelSettings.classList.toggle('hud-panel-settings--hidden', s !== 'paused' && s !== 'title');
-    // Visible at title AND paused -- the one new variant of this per-button visibility
+    panelSettings.classList.toggle(
+      'hud-panel-settings--hidden',
+      s !== 'paused' && !atMainMenu,
+    );
+    // Visible at Main Menu AND paused -- the one new variant of this per-button visibility
     // pattern, precedented by panelSettings itself just above.
-    controllersOpenBtn.classList.toggle('hud-controllers-open--hidden', s !== 'paused' && s !== 'title');
-    // TITLE ONLY, unlike Controllers just above -- see this button's own markup
+    controllersOpenBtn.classList.toggle(
+      'hud-controllers-open--hidden',
+      s !== 'paused' && !atMainMenu,
+    );
+    // MAIN-MENU ONLY, unlike Controllers just above -- see this button's own markup
     // comment for why a live round has nothing this could offer.
-    versusOpenBtn.classList.toggle('hud-versus-open--hidden', s !== 'title');
-    // Continue/New Game replace the single action button AT TITLE ONLY -- Resume, Next
+    versusOpenBtn.classList.toggle('hud-versus-open--hidden', !atMainMenu);
+    // Continue/New Game replace the single action button AT MAIN-MENU ONLY -- Resume, Next
     // Level, Play Again and Retry all still route through actionBtn below, which is why
-    // this toggles on `s === 'title'` alone rather than joining the group above.
+    // this toggles on the Main Menu alone rather than joining the group above.
     // Continue, New Game (its label), Levels-open, and Campaign-open all also depend on
     // `sessionKind` -- see applyTitleAffordances' own doc comment for why they are one
     // function rather than four inline toggles here.
     applyTitleAffordances();
-    actionBtn.classList.toggle('hud-action--hidden', s === 'title');
+    actionBtn.classList.toggle('hud-action--hidden', atMainMenu);
     // The attempt summary belongs to the END screens alone.
-    attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', s !== 'win' && s !== 'lose');
-    if (s === 'win' || s === 'lose') renderAttemptSummary();
+    attemptSummaryEl.classList.toggle('hud-attempt-summary--hidden', !isOutcome);
+    if (isOutcome) renderAttemptSummary();
     // Twin toggle for coop's kill line -- renderCoopKillLine re-hides it if
-    // coopKillsData is null (1P, or coop that has not started), even at win/lose.
-    coopKillsEl.classList.toggle('hud-coop-kills--hidden', s !== 'win' && s !== 'lose');
-    versusResultsEl.classList.toggle('hud-versus-results--hidden', s !== 'win' && s !== 'lose');
-    if (s === 'win' || s === 'lose') renderCoopKillLine();
-    if (s === 'win' || s === 'lose') renderVersusResultsLine();
+    // coopKillsData is null (1P, or coop that has not started), even at outcome.
+    coopKillsEl.classList.toggle('hud-coop-kills--hidden', !isOutcome);
+    versusResultsEl.classList.toggle('hud-versus-results--hidden', !isOutcome);
+    if (isOutcome) renderCoopKillLine();
+    if (isOutcome) renderVersusResultsLine();
     if (s === 'paused') {
       titleEl.textContent = 'Paused';
       setSubtitle('The arena waits.');
@@ -2318,16 +2344,16 @@ export function createHud(root: HTMLElement): Hud {
     }
     // The panel, NOT actionBtn/Continue/New Game -- see the tabindex note on the element
     // and the roving-focus doc comment above `activePanelContainer`. Without this,
-    // `document.activeElement` is still <body> when the menu appears (leaving the splash
-    // screen with nothing focused), or -- on a route back from a subpanel's Back button --
+    // `document.activeElement` is still <body> when the menu appears (leaving the Launch
+    // route with nothing focused), or -- on a route back from a subpanel's Back button --
     // whatever the subpanel's own container last held, in both cases stranding a
     // keyboard-only player with no visible position and a screen reader announcing
     // nothing.
     panel.focus();
-    if (s === 'title') {
+    if (atMainMenu) {
       titleEl.textContent = 'TANKS!';
       setSubtitle('');
-    } else if (s === 'win') {
+    } else if (s === 'outcome-win') {
       // An intermediate win advances; only the LAST level's win is the game's.
       if (levelPos && levelPos.current < levelPos.total) {
         titleEl.textContent = `Level ${levelPos.current} cleared!`;
@@ -2336,13 +2362,13 @@ export function createHud(root: HTMLElement): Hud {
       } else {
         titleEl.textContent = 'You Win!';
         setSubtitle('Arena cleared.');
-        // Task 5b: a versus session's FINAL win never has a next level to advance to
-        // (its single synthetic level always lands here, not the `levelPos` branch
-        // above), and this click no longer restarts a match -- loop.ts's own
-        // `onStartRestart` reopens the setup pane instead (Task 5). "Play Again" would
-        // be a lie about what the click does; "Versus Setup" says it. Paused's "Resume"
-        // and the intermediate "Next Level" above are both left alone -- neither click
-        // opens the pane, so relabeling either would be the same lie in reverse.
+        // A versus session's FINAL win never has a next level to advance to (its single
+        // synthetic level always lands here, not the `levelPos` branch above), and this
+        // click no longer restarts a match -- loop.ts's own `onStartRestart` reopens the
+        // setup pane instead. "Play Again" would be a lie about what the click does;
+        // "Versus Setup" says it. Paused's "Resume" and the intermediate "Next Level"
+        // above are both left alone -- neither click opens the pane, so relabeling
+        // either would be the same lie in reverse.
         actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Play Again';
       }
     } else {
@@ -2356,7 +2382,7 @@ export function createHud(root: HTMLElement): Hud {
   // (`state.ts`), which is now the splash screen rather than the menu. `loop.ts` also
   // pushes `hud.setState(sm.state)` at boot precisely because that path bypasses
   // `sm.onChange`; this call is what the HUD looks like before it arrives.
-  setState('splash');
+  setState('launch');
 
   // The button is the only indication of mute state, and there is genuinely no
   // music shipped, so "silent" is the normal condition -- without this a muted

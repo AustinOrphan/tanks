@@ -1,5 +1,4 @@
 import { DT } from '../sim/constants';
-import type { GameState } from './state';
 
 /**
  * Fixed-timestep bookkeeping, kept OUT of the loop on purpose.
@@ -93,19 +92,23 @@ export function renderAlpha(acc: number, simulating: boolean): number {
  * skin that keeps scrolling makes the freeze read as half-applied. So `paused`
  * freezes the cosmetics too.
  *
- * The other non-simulating states keep it running, and each for its own reason.
- * `splash`/`title` render the arena behind the menu, and a dead-still board there
- * reads as a broken game rather than a stopped one. `win`/`lose` arrive DURING the
- * explosion that ended the round: freezing on that frame hangs the debris in mid
- * air permanently, where letting it run lets the round settle under the game-over
- * panel.
+ * The other non-simulating locations keep it running, and each for its own reason.
+ * The launch and main-menu routes render the arena behind the menu, and a
+ * dead-still board there reads as a broken game rather than a stopped one. An
+ * outcome phase arrives DURING the explosion that ended the round: freezing on
+ * that frame hangs the debris in mid air permanently, where letting it run lets
+ * the round settle under the outcome panel.
  *
  * Before this existed the answer was "always, silently" -- an unstated consequence
  * of the non-playing branch dropping the accumulator but still forwarding
  * `plan.dt`. Nothing asserted it either way. `frame.test.ts` pins the rule and
  * `driver.test.ts` pins that the driver applies it, which is the same split
  * `renderAlpha` already has.
+ *
+ * The `paused` argument is a pure boolean carried from the state machine's
+ * canonical AppLocation (`sm.isPaused`). This module stays free of the state
+ * union so the rule can be asserted without importing session semantics.
  */
-export function animationDt(dt: number, state: GameState): number {
-  return state === 'paused' ? 0 : dt;
+export function animationDt(dt: number, paused: boolean): number {
+  return paused ? 0 : dt;
 }

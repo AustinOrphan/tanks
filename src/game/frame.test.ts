@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest';
 import { DT } from '../sim/constants';
 import { animationDt, planFrame, renderAlpha, MAX_FRAME_DT } from './frame';
-import type { GameState } from './state';
 
 describe('planFrame', () => {
   it('banks a short frame instead of ticking', () => {
@@ -109,31 +108,26 @@ describe('renderAlpha', () => {
 describe('animationDt: the render animation clock', () => {
   // The rule this pins is a DECISION, so both halves have to be able to fail, and they
   // fail to different mutations: dropping the carve-out (`return dt`) kills the paused
-  // case, and widening it to every non-simulating state (`state === 'playing' ? dt : 0`)
-  // kills the splash/title/win/lose cases.
-  const STATES: GameState[] = ['splash', 'title', 'playing', 'win', 'lose', 'paused'];
+  // case, and widening it to every non-simulating location (`paused ? dt : 0` or
+  // `!simulating ? 0 : dt`) kills the non-paused-but-not-simulating cases (launch,
+  // main-menu, outcome).
 
   it('stops dead while the game is PAUSED -- particles as well as skins', () => {
-    expect(animationDt(0.02, 'paused')).toBe(0);
-    expect(animationDt(MAX_FRAME_DT, 'paused')).toBe(0);
+    expect(animationDt(0.02, true)).toBe(0);
+    expect(animationDt(MAX_FRAME_DT, true)).toBe(0);
   });
 
-  it.each(STATES.filter((s) => s !== 'paused'))('runs at the real delta while %s', (state) => {
-    expect(animationDt(0.02, state)).toBeCloseTo(0.02, 12);
+  it('runs at the real delta when not paused', () => {
+    // The one falsy value covers every non-paused location -- launch route, main-menu
+    // route, playing phase, outcome phase. animationDt does not distinguish between
+    // them (that is the driver/state-machine's job); this is the whole of the rule.
+    expect(animationDt(0.02, false)).toBeCloseTo(0.02, 12);
   });
 
-  it('is exactly ONE state of the six that stops it', () => {
-    // Enumerated from the union rather than sampled: STATES is typed `GameState[]`, so
-    // a seventh state added to state.ts is a decision to make here, not a silent gap --
-    // though only if someone adds it to this list, which tsc cannot force.
-    const stopped = STATES.filter((s) => animationDt(0.02, s) === 0);
-    expect(stopped).toEqual(['paused']);
-  });
-
-  it('passes the frame plan\'s delta through rather than substituting a step of its own', () => {
+  it("passes the frame plan's delta through rather than substituting a step of its own", () => {
     // Catches a clock that ignores its argument and returns a fixed 1/60 -- which would
     // look right on a 60Hz monitor and be wrong on every other refresh rate.
-    expect(animationDt(0.007, 'playing')).toBeCloseTo(0.007, 12);
-    expect(animationDt(0.1, 'title')).toBeCloseTo(0.1, 12);
+    expect(animationDt(0.007, false)).toBeCloseTo(0.007, 12);
+    expect(animationDt(0.1, false)).toBeCloseTo(0.1, 12);
   });
 });

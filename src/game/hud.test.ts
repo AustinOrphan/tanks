@@ -149,7 +149,7 @@ describe('createHud panel', () => {
 
   it('shows the title panel once the splash screen is dismissed', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     expect(splash.classList.contains('hud-splash--hidden')).toBe(true);
     const topbar = root.querySelector('.hud-topbar') as HTMLElement;
@@ -173,7 +173,7 @@ describe('createHud panel', () => {
     // Asserted through the real predicates rather than by checking the tag name, so
     // this keeps meaning what it says if that guard's selector ever changes.
     const { hud: h } = mount();
-    h.setState('title'); // splash -> title: the focus handoff
+    h.setState('main-menu'); // splash -> title: the focus handoff
     const active = document.activeElement as HTMLElement;
     expect(active.className, 'focus went somewhere unexpected').toContain('hud-panel');
     const ev = (key: string): KeyboardEvent =>
@@ -210,7 +210,7 @@ describe('createHud panel', () => {
     // pointerdown, and the browser then completes the click on the button beneath.
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-    h.setState('title');
+    h.setState('main-menu');
     const action = root.querySelector('.hud-continue') as HTMLButtonElement;
 
     action.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -235,7 +235,7 @@ describe('createHud panel', () => {
     h.setContinueAvailable(true); // an active run exists, so Continue is the visible button
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-    h.setState('title');
+    h.setState('main-menu');
 
     // The click never comes; the player instead touches the button deliberately.
     const action = root.querySelector('.hud-continue') as HTMLButtonElement;
@@ -319,7 +319,7 @@ describe('createHud panel', () => {
     h.setContinueAvailable(true); // an active run exists, so Continue (not the retired action button) is visible
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-    h.setState('title'); // armed, and the drag's click never lands in the panel
+    h.setState('main-menu'); // armed, and the drag's click never lands in the panel
 
     const hudEl = root.querySelector('.hud') as HTMLElement;
     hudEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
@@ -343,7 +343,7 @@ describe('createHud panel', () => {
     });
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     splash.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-    h.setState('title'); // armed, and the drag's click never lands in the panel
+    h.setState('main-menu'); // armed, and the drag's click never lands in the panel
 
     // Arrow navigation instead of Tab -- the roving-focus path this file adds.
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
@@ -360,7 +360,7 @@ describe('createHud panel', () => {
     // A second window-bound BUBBLE listener stands in for input.ts's own: it must not
     // see a claimed key while a panel is open, and must see the same key while playing.
     const { hud: h } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const seen: string[] = [];
     const probe = (e: KeyboardEvent): void => {
       seen.push(e.key);
@@ -541,7 +541,7 @@ describe('createHud panel', () => {
 
     h.setState('playing');
     expect(hidden(), 'the touch controls are missing during play').toBe(false);
-    for (const s of ['splash', 'title', 'paused', 'win', 'lose'] as const) {
+    for (const s of ['launch', 'main-menu', 'paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(hidden(), `the touch controls are showing on ${s}`).toBe(true);
     }
@@ -568,12 +568,12 @@ describe('createHud panel', () => {
     h.setState('playing');
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
 
-    h.setState('win');
+    h.setState('outcome-win');
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(false);
     expect(title(root)).toBe('You Win!');
     expect(action(root).textContent).toBe('Play Again');
 
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(title(root)).toBe('Game Over');
     expect(action(root).textContent).toBe('Retry');
   });
@@ -854,12 +854,12 @@ describe('hud: level progression', () => {
     const button = (): string => (root.querySelector('.hud-action') as HTMLElement).textContent ?? '';
 
     h.setLevel(1, 2);
-    h.setState('win');
+    h.setState('outcome-win');
     expect(title()).toContain('cleared');
     expect(button()).toBe('Next Level');
 
     h.setLevel(2, 2);
-    h.setState('win'); // re-renders unconditionally; the equal-state guard lives in state.ts, not here
+    h.setState('outcome-win'); // re-renders unconditionally; the equal-state guard lives in state.ts, not here
     expect(title()).toBe('You Win!');
     expect(button()).toBe('Play Again');
   });
@@ -867,7 +867,7 @@ describe('hud: level progression', () => {
   it('never says cleared before setLevel has been called at all', () => {
     // A HUD that has not been told about levels behaves exactly as it always did.
     const { hud: h, root } = mount();
-    h.setState('win');
+    h.setState('outcome-win');
     expect((root.querySelector('.hud-title') as HTMLElement).textContent).toBe('You Win!');
   });
 });
@@ -896,15 +896,15 @@ describe('hud: pause panel', () => {
     // case has its own describe block below; without it this loop would keep passing
     // for the wrong reason, since a null level position hides the button regardless.
     const { hud: h, root } = mount();
-    for (const s of ['title', 'win', 'lose'] as const) {
+    for (const s of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(quit(root).classList.contains('hud-quit--hidden'), s).toBe(true);
     }
-    for (const s of ['win', 'lose'] as const) {
+    for (const s of ['outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(settings(root).classList.contains('hud-panel-settings--hidden'), s).toBe(true);
     }
-    h.setState('title');
+    h.setState('main-menu');
     expect(settings(root).classList.contains('hud-panel-settings--hidden')).toBe(false);
     h.setState('playing'); // panel hidden entirely
     expect(panel(root).classList.contains('hud-panel--hidden')).toBe(true);
@@ -1002,7 +1002,7 @@ describe('hud: pause panel', () => {
     // since a row-level class check cannot tell "the row is visible" from "the row is
     // visible AND still has every control in it".
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const toggle = root.querySelector('.hud-scheme-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
     const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
@@ -1061,7 +1061,7 @@ describe('hud: the fire-mode toggle', () => {
 
   it('is reachable from the title screen too, not just pause', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const toggle = root.querySelector('.hud-firemode-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
     const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
@@ -1113,7 +1113,7 @@ describe('hud: the haptics toggle', () => {
 
   it('is reachable from the title screen too, not just pause', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const toggle = root.querySelector('.hud-haptics-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
     const settingsRow = root.querySelector('.hud-panel-settings') as HTMLElement;
@@ -1151,7 +1151,7 @@ describe('hud: level select panel', () => {
     const picks: number[] = [];
     h.onLevelSelect((i) => picks.push(i));
     h.setLevelSelect(2, 3);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     buttons(root)[1].dispatchEvent(new MouseEvent('click'));
     buttons(root)[2].dispatchEvent(new MouseEvent('click')); // locked: disabled anyway
@@ -1161,7 +1161,7 @@ describe('hud: level select panel', () => {
   it('the Levels button opens the panel, and Back returns to the menu', () => {
     const { hud: h, root } = mount();
     h.setLevelSelect(1, 2);
-    h.setState('title');
+    h.setState('main-menu');
     expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(false);
@@ -1174,9 +1174,9 @@ describe('hud: level select panel', () => {
   it('the Levels button lives on the title panel only', () => {
     const { hud: h, root } = mount();
     h.setLevelSelect(1, 2);
-    h.setState('title');
+    h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(false);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-levelselect-open--hidden'), s).toBe(true);
     }
@@ -1185,7 +1185,7 @@ describe('hud: level select panel', () => {
   it('hides the Levels button entirely for a one-level sequence (the sandbox)', () => {
     const { hud: h, root } = mount();
     h.setLevelSelect(1, 1);
-    h.setState('title');
+    h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(true);
   });
 
@@ -1195,7 +1195,7 @@ describe('hud: level select panel', () => {
     // one sitting over a live game.
     const { hud: h, root } = mount();
     h.setLevelSelect(1, 2);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing');
     expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
@@ -1205,10 +1205,10 @@ describe('hud: level select panel', () => {
     // The natural call order: the loop records an unlock AT the win event and
     // refreshes the select -- while the WIN panel is showing.
     const { hud: h, root } = mount();
-    h.setState('win');
+    h.setState('outcome-win');
     h.setLevelSelect(2, 2);
     expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(true);
-    h.setState('title');
+    h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-levelselect-open--hidden')).toBe(false);
   });
 
@@ -1249,11 +1249,11 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     // toggling each button's own class, so the button's OWN class is not the right
     // oracle there.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-controllers-open--hidden')).toBe(false);
     h.setState('paused');
     expect(openBtn(root).classList.contains('hud-controllers-open--hidden')).toBe(false);
-    for (const s of ['win', 'lose'] as const) {
+    for (const s of ['outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-controllers-open--hidden'), s).toBe(true);
     }
@@ -1269,7 +1269,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
       { kind: 'bot' },
       { kind: 'none' },
     ]);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     const rs = rows(root);
     expect(rs).toHaveLength(5);
@@ -1289,7 +1289,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     h.setBotAssignmentAllowed(true);
     h.setDetectedPads([{ padIndex: 0, id: 'Pad A' }, { padIndex: 1, id: 'Pad B' }]);
     h.setControllers([{ kind: 'gamepad', padIndex: 1 }]);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     const btns = candidateButtons(rows(root)[0]);
     // 3 fixed (Keyboard/Bot/None) + 2 detected pads = 5.
@@ -1304,7 +1304,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     h.setBotAssignmentAllowed(true);
     h.setDetectedPads([{ padIndex: 3, id: 'Pad' }]);
     h.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 3 }]);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     const calls: Array<[number, unknown]> = [];
     h.onReassignSlot((slot, source) => calls.push([slot, source]));
@@ -1319,7 +1319,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
   it('re-rendering (setControllers/setDetectedPads) REPLACES rows, never appends', () => {
     const { hud: h, root } = mount();
     h.setControllers([{ kind: 'keyboard' }]);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(rows(root)).toHaveLength(1);
     h.setControllers([{ kind: 'keyboard' }, { kind: 'bot' }, { kind: 'none' }]);
@@ -1330,7 +1330,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
 
   it('the heading branches on which screen opened it: "Choose who\'s playing" at title, "Controllers" at pause', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(heading(root)).toBe("Choose who's playing");
     backBtn(root).dispatchEvent(new MouseEvent('click'));
@@ -1343,7 +1343,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
   it('Back routes to shownState, not a hardcoded \'title\' -- opening from PAUSED and clicking ' +
     'Back must return to the live round, not abandon it', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('playing');
     h.setState('paused');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
@@ -1361,7 +1361,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     let closes = 0;
     h.onControllersOpen(() => { opens += 1; });
     h.onControllersClose(() => { closes += 1; });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(opens).toBe(1);
     expect(closes).toBe(0);
@@ -1378,7 +1378,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     const { hud: h, root } = mount();
     let closes = 0;
     h.onControllersClose(() => { closes += 1; });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing'); // NOT via Back -- e.g. Resume from the pause-opened panel
     expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
@@ -1424,7 +1424,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // wrong: only the caller (loop.ts) knows which VersusConfig to retain across a
     // rematch, so the button cannot decide to open the pane on its own.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     let opens = 0;
     h.onVersusOpen(() => {
       opens += 1;
@@ -1446,9 +1446,9 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // .hud-panel wrapper rather than toggling each button's own class, so the
     // button's OWN class is not the right oracle there.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-versus-open--hidden')).toBe(false);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-versus-open--hidden'), s).toBe(true);
     }
@@ -1459,7 +1459,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // hardcoded default object" -- every field below is changed from its default
     // before Start is clicked.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
     playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
@@ -1478,7 +1478,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
 
   it('stock defaults to VERSUS_STOCK, the same constant the sim boundary uses (constants.ts)', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     expect(stockBtn(root, VERSUS_STOCK).classList.contains('hud-versus-option-btn--selected')).toBe(true);
   });
@@ -1490,7 +1490,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // not tell apart from a genuinely broken hidden rule (see hud.css.test.ts's own
     // `.hud-accents` precedent for exactly that failure mode).
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     expect(friendlyFireBtn(root), 'present under the FFA default').toBeNull();
     modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
@@ -1505,7 +1505,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // 'teams', so carrying it unconditionally is harmless -- resetting it here would
     // be an active regression against ruling 4's "selections persist" contract.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
     (friendlyFireBtn(root) as HTMLButtonElement).dispatchEvent(new MouseEvent('click')); // off -> on
@@ -1521,7 +1521,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // not arena identity, is what proves REPLACE here: an APPEND mutation would
     // grow the row count on every click below rather than holding steady.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     expect(mapButtons(root)).toHaveLength(versusMapChoices(2, 'ffa').length + 1); // + Random
     playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
@@ -1532,7 +1532,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
 
   it('showVersusSetup(true, initial) pre-fills every field', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const initial: VersusConfig = {
       mode: 'teams',
       players: 4,
@@ -1553,12 +1553,12 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // Kills the mutation "reset versusConfigState to defaults whenever the pane
     // closes or reopens".
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
     stockBtn(root, 5).dispatchEvent(new MouseEvent('click'));
     h.setState('playing'); // setState's close-all discipline hides the pane
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true); // no `initial` argument at all
     expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
     expect(stockBtn(root, 5).classList.contains('hud-versus-option-btn--selected')).toBe(true);
@@ -1569,12 +1569,12 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // wipe a returning player's own selections on precisely this call -- the one
     // Task 5's own wiring line makes on every FIRST open of a session.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     modeBtn(root, 'teams').dispatchEvent(new MouseEvent('click'));
     playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
     h.setState('playing');
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true, null);
     expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
     expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
@@ -1586,7 +1586,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // slot here IS reassigning the running session.
     const { hud: h, root } = mount();
     h.setControllers([{ kind: 'keyboard' }, { kind: 'none' }]); // 2 slots == pane's default 2 players
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     const rs = rows(root);
     expect(rs).toHaveLength(2);
@@ -1607,7 +1607,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // not fire onReassignSlot.
     const { hud: h, root } = mount();
     h.setControllers([{ kind: 'keyboard' }]); // 1 slot != pane's default 2 players
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     const rs = rows(root);
     expect(rs, "preview row COUNT follows the PANE's player count, not the session's").toHaveLength(2);
@@ -1636,7 +1636,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // refresh or it goes stale the instant a hotplug or reassignment happens while
     // this pane -- not the Controllers panel -- is the one on screen.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true); // opened BEFORE setControllers -- mismatch, disabled preview
     const initialCandidates = candidateButtons(rows(root)[0]);
     expect(initialCandidates.length, 'the assertion below must not vacuously pass on an empty list').toBeGreaterThan(0);
@@ -1657,7 +1657,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
 
   it("Players change REPLACES the who's-playing preview rows across two successive re-renders -- row COUNT follows the new player count, never appended", () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     expect(rows(root)).toHaveLength(2);
     playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
@@ -1670,10 +1670,10 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     // The Versus button itself is visible only at 'title' (see its own test above),
     // so Back has exactly one place to return to. Opened from 'paused' on purpose --
     // a real user cannot (the open button is hidden there), but the point is to
-    // prove Back calls setState('title') REGARDLESS of what state was current when
+    // prove Back calls setState('main-menu') REGARDLESS of what state was current when
     // the pane opened, not merely that it happens to already look right: starting
     // from 'title' would leave every title-only marker already correct before Back
-    // ever ran, so dropping the setState('title') call would go unnoticed -- verified
+    // ever ran, so dropping the setState('main-menu') call would go unnoticed -- verified
     // by mutation (removing it from handleVersusBack) survived that shape of the test.
     const { hud: h, root } = mount();
     h.setState('paused');
@@ -1681,7 +1681,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     backBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
     // Landed on TITLE, not back on 'paused': the pause panel's own action button
-    // (Resume) is exactly what would still be showing if setState('title') were
+    // (Resume) is exactly what would still be showing if setState('main-menu') were
     // never called -- showVersusSetup(false) alone only un-hides .hud-panel, it does
     // not touch which of actionBtn/Continue/New Game is visible.
     expect(
@@ -1696,7 +1696,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
 
   it('is closed unconditionally by ANY state change, same as every sibling subpanel', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     h.setState('playing');
     expect(view(root).classList.contains('hud-versus-setup--hidden')).toBe(true);
@@ -1704,7 +1704,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
 
   it('roving tabindex reaches Start, then Back -- the two controls the task brief names explicitly', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.showVersusSetup(true);
     expect(document.activeElement, 'opening the pane did not focus its CONTAINER').toBe(view(root));
     let steps = 0;
@@ -1734,7 +1734,7 @@ describe('hud: continue vs new game', () => {
     // Driven by setContinueAvailable, NOT setLevelSelect's `unlocked` -- issue #153
     // separates "an active run exists" from "levels are permanently unlocked".
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.setLevelSelect(1, 4); // unlocked levels exist, but that says nothing about a run
     expect(continueBtn(root).classList.contains('hud-continue--hidden'), 'Continue must not show with no active run').toBe(true);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
@@ -1750,7 +1750,7 @@ describe('hud: continue vs new game', () => {
     const { hud: h, root } = mount();
     let starts = 0;
     h.onStartRestart(() => starts++);
-    h.setState('title');
+    h.setState('main-menu');
     h.setContinueAvailable(true);
     continueBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(starts).toBe(1);
@@ -1766,7 +1766,7 @@ describe('hud: continue vs new game', () => {
     const picks: number[] = [];
     h.onNewGame(() => newGames++);
     h.onLevelSelect((i) => picks.push(i));
-    h.setState('title');
+    h.setState('main-menu');
     h.setContinueAvailable(true); // a run exists, but New Game must still fire
     newGameBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(newGames).toBe(1);
@@ -1775,7 +1775,7 @@ describe('hud: continue vs new game', () => {
 
   it('New Game is always offered at title, with or without an active run', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
     h.setContinueAvailable(true);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
@@ -1784,10 +1784,10 @@ describe('hud: continue vs new game', () => {
   it('both buttons are a title-screen affair, and the retired action button stays hidden there', () => {
     const { hud: h, root } = mount();
     h.setContinueAvailable(true);
-    h.setState('title');
+    h.setState('main-menu');
     expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(false);
     expect(newGameBtn(root).classList.contains('hud-new-game--hidden')).toBe(false);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(continueBtn(root).classList.contains('hud-continue--hidden'), s).toBe(true);
       expect(newGameBtn(root).classList.contains('hud-new-game--hidden'), s).toBe(true);
@@ -1822,7 +1822,7 @@ describe('hud: the stats page', () => {
   it('opens from the title, shows both columns, and Back returns to the menu', () => {
     const { hud: h, root } = mount();
     h.setStats({ lifetime: SOME, attempt: NONE });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(false);
     expect(cell(root, 'Shell kills', 0)).toBe('4'); // lifetime column
@@ -1834,7 +1834,7 @@ describe('hud: the stats page', () => {
   it('derives both accuracies, and shows -- when the denominator is zero', () => {
     const { hud: h, root } = mount();
     h.setStats({ lifetime: SOME, attempt: NONE });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(cell(root, 'Accuracy', 0)).toBe('40%'); // 4 shell kills / 10 shots
     expect(cell(root, 'Mine accuracy', 0)).toBe('50%'); // 1 mine kill / 2 laid
@@ -1843,11 +1843,11 @@ describe('hud: the stats page', () => {
 
   it('the Stats button lives on the title panel only', () => {
     const { hud: h, root } = mount();
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-stats-open--hidden'), s).toBe(true);
     }
-    h.setState('title');
+    h.setState('main-menu');
     expect(openBtn(root).classList.contains('hud-stats-open--hidden')).toBe(false);
   });
 
@@ -1858,7 +1858,7 @@ describe('hud: the stats page', () => {
     h.onResetStats(() => statResets++);
     h.onResetProgress(() => progResets++);
     h.setStats({ lifetime: SOME, attempt: NONE });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
 
     const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
@@ -1878,7 +1878,7 @@ describe('hud: the stats page', () => {
   it('arming one reset does not arm the other, and leaving the page disarms', () => {
     const { hud: h, root } = mount();
     h.setStats({ lifetime: SOME, attempt: NONE });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     const reset = root.querySelector('.hud-reset-stats') as HTMLButtonElement;
     const prog = root.querySelector('.hud-reset-progress') as HTMLButtonElement;
@@ -1892,7 +1892,7 @@ describe('hud: the stats page', () => {
   it('win panel carries the run summary line', () => {
     const { hud: h, root } = mount();
     h.setStats({ lifetime: SOME, attempt: { ...NONE, shellKills: 3, shotsFired: 6, deaths: 1 } });
-    h.setState('win');
+    h.setState('outcome-win');
     const line = (root.querySelector('.hud-attempt-summary') as HTMLElement).textContent ?? '';
     expect(line).toContain('3 kills');
     expect(line).toContain('50%');
@@ -1905,7 +1905,7 @@ describe('hud: the stats page', () => {
   it('win panel carries the coop kill line, twin of the attempt summary', () => {
     const { hud: h, root } = mount();
     h.setCoopKills([3, 5]);
-    h.setState('win');
+    h.setState('outcome-win');
     const line = (root.querySelector('.hud-coop-kills') as HTMLElement).textContent ?? '';
     expect(line).toBe('P1: 3 · P2: 5');
     expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(false);
@@ -1914,9 +1914,9 @@ describe('hud: the stats page', () => {
   it('setCoopKills(null) keeps the line hidden even at win/lose -- a 1P session', () => {
     const { hud: h, root } = mount();
     h.setCoopKills(null);
-    h.setState('win');
+    h.setState('outcome-win');
     expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(root.querySelector('.hud-coop-kills')!.classList.contains('hud-coop-kills--hidden')).toBe(true);
   });
 
@@ -1930,7 +1930,7 @@ describe('hud: the stats page', () => {
   it('updates live while the win panel is already open, same as the attempt summary', () => {
     const { hud: h, root } = mount();
     h.setCoopKills([1, 0]);
-    h.setState('win');
+    h.setState('outcome-win');
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 0');
     h.setCoopKills([1, 1]);
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 1');
@@ -1941,7 +1941,7 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
   it('win panel carries the ffa results line, per-slot kills/deaths', () => {
     const { hud: h, root } = mount();
     h.setVersusResults({ mode: 'ffa', kills: [2, 0, 1], deaths: [1, 3, 0] });
-    h.setState('win');
+    h.setState('outcome-win');
     const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
     expect(line).toBe('P1: 2/1 · P2: 0/3 · P3: 1/0');
     expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(false);
@@ -1951,7 +1951,7 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
     const { hud: h, root } = mount();
     // slots 0,2 -> team 0; slot 1 -> team 1 (teamOf(slot) = slot % 2).
     h.setVersusResults({ mode: 'teams', kills: [2, 1, 3], deaths: [1, 4, 0] });
-    h.setState('win');
+    h.setState('outcome-win');
     const line = (root.querySelector('.hud-versus-results') as HTMLElement).textContent ?? '';
     expect(line).toBe('Team 1: 5/1 · Team 2: 1/4');
   });
@@ -1959,9 +1959,9 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
   it('setVersusResults(null) keeps the line hidden even at win/lose', () => {
     const { hud: h, root } = mount();
     h.setVersusResults(null);
-    h.setState('win');
+    h.setState('outcome-win');
     expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(root.querySelector('.hud-versus-results')!.classList.contains('hud-versus-results--hidden')).toBe(true);
   });
 
@@ -1975,7 +1975,7 @@ describe('hud: versus results (n-player arc PR 4 -- FFA + teams, .hud-coop-kills
   it('updates live while the win panel is already open, same as the coop kill line', () => {
     const { hud: h, root } = mount();
     h.setVersusResults({ mode: 'ffa', kills: [1, 0], deaths: [0, 1] });
-    h.setState('win');
+    h.setState('outcome-win');
     expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/0 · P2: 0/1');
     h.setVersusResults({ mode: 'ffa', kills: [1, 1], deaths: [1, 1] });
     expect((root.querySelector('.hud-versus-results') as HTMLElement).textContent).toBe('P1: 1/1 · P2: 1/1');
@@ -2068,7 +2068,7 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
     h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
-    for (const s of ['title', 'win', 'lose'] as const) {
+    for (const s of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(strip(root).classList.contains('hud-versus-stocks--hidden'), s).toBe(true);
     }
@@ -2155,7 +2155,7 @@ describe('hud: achievements', () => {
   it('lists every catalog entry, marking only the earned ones', () => {
     const { hud: h, root } = mount();
     h.setAchievements(new Set(['first-blood', 'flawless'] as const));
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(page(root).classList.contains('hud-achievements--hidden')).toBe(false);
     // Population: the whole catalog -- locked entries stay visible with criteria.
@@ -2175,7 +2175,7 @@ describe('hud: achievements', () => {
 
   it('re-renders live while open: an achievement earned behind the page appears', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(rows(root).filter((r) => r.classList.contains('hud-achievement--earned'))).toHaveLength(0);
     h.setAchievements(new Set(['petard'] as const));
@@ -2187,11 +2187,11 @@ describe('hud: achievements', () => {
 
   it('is a title-screen affair, closed by any state change', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing');
     expect(page(root).classList.contains('hud-achievements--hidden')).toBe(true);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-achievements-open--hidden'), s).toBe(true);
     }
@@ -2283,7 +2283,7 @@ describe('hud: the paint shop', () => {
   it('opens from the title with one swatch per palette entry, current one marked', () => {
     const { hud: h, root } = mount();
     h.setHullColor('red');
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(pane(root).classList.contains('hud-customize--hidden')).toBe(false);
     expect(swatches(root).length).toBeGreaterThanOrEqual(6);
@@ -2296,7 +2296,7 @@ describe('hud: the paint shop', () => {
     const { hud: h, root } = mount();
     const picks: string[] = [];
     h.onPickHullColor((id) => picks.push(id));
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     const purple = swatches(root).find((b) => b.dataset.hull === 'purple')!;
     purple.dispatchEvent(new MouseEvent('click'));
@@ -2311,7 +2311,7 @@ describe('hud: the paint shop', () => {
     const picks: string[] = [];
     h.onPickSkin((id) => picks.push(id));
     h.setSkin('camo');
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     // One button per entry in the REAL skin list, labelled from it.
     expect(skins().map((b) => b.dataset.skin)).toEqual(SKINS.map((sk) => sk.id));
@@ -2333,7 +2333,7 @@ describe('hud: the paint shop', () => {
     const picks: string[] = [];
     h.onPickAccentColor((id) => picks.push(id));
     h.setAccentColor('black');
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     // One button per entry in the REAL accent list, `auto` first.
     expect(accentSwatches(root).map((b) => b.dataset.accent)).toEqual(
@@ -2357,11 +2357,11 @@ describe('hud: the paint shop', () => {
 
   it('is a title-screen affair: hidden everywhere else, closed by any state change', () => {
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing');
     expect(pane(root).classList.contains('hud-customize--hidden')).toBe(true);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(openBtn(root).classList.contains('hud-customize-open--hidden'), s).toBe(true);
     }
@@ -2499,7 +2499,7 @@ describe('hud: the paint shop', () => {
     const closes: number[] = [];
     h.onCustomizeOpen(() => opens.push(1));
     h.onCustomizeClose(() => closes.push(1));
-    h.setState('title');
+    h.setState('main-menu');
     expect(opens).toHaveLength(0);
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(opens).toHaveLength(1);
@@ -2523,7 +2523,7 @@ describe('hud: the paint shop', () => {
     h.onCustomizeOpen(() => {
       hiddenWhenCallbackFired = pane(root).classList.contains('hud-customize--hidden');
     });
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(hiddenWhenCallbackFired).toBe(false);
   });
@@ -2535,7 +2535,7 @@ describe('hud: the paint shop', () => {
     const { hud: h, root } = mount();
     const closes: number[] = [];
     h.onCustomizeClose(() => closes.push(1));
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(closes).toHaveLength(0);
     h.setState('playing');
@@ -2550,10 +2550,10 @@ describe('hud: the paint shop', () => {
     const { hud: h, root } = mount();
     const closes: number[] = [];
     h.onCustomizeClose(() => closes.push(1));
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     h.setState('playing'); // closes it -- one close
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('paused');
     expect(closes).toHaveLength(1);
   });
@@ -2657,7 +2657,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // `walk` below enter this pane exactly like every other one, by an ACTUAL open
     // transition rather than a special case.
     h.onVersusOpen(() => h.showVersusSetup(true));
-    h.setState('title'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
+    h.setState('main-menu'); // splash -> title: focuses the .hud-panel CONTAINER, index -1
 
     let totalControls = 0;
     const visited = new Set<HTMLElement>();
@@ -2752,7 +2752,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
   it('skips locked level buttons when stepping through the Levels panel', () => {
     const { hud: h, root } = mount();
     h.setLevelSelect(2, 4); // levels 3 and 4 locked
-    h.setState('title');
+    h.setState('main-menu');
 
     let active = document.activeElement as HTMLElement;
     while (!(active instanceof HTMLElement && active.classList.contains('hud-levelselect-open'))) {
@@ -2786,7 +2786,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // key reverses the step, not the full sweep that test performs.
     const { hud: h } = mount();
     h.setLevelSelect(3, 5);
-    h.setState('title');
+    h.setState('main-menu');
     pressActive('ArrowDown');
     const first = document.activeElement;
     pressActive('ArrowDown');
@@ -2798,7 +2798,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
 
   it('treats S/W as Down/Up, the same production call ArrowDown/ArrowUp reach', () => {
     const { hud: h } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     pressActive('s');
     const afterS = document.activeElement;
     pressActive('ArrowDown');
@@ -2820,7 +2820,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // title, not pause. This constructs the SAME kind of event those guards read,
     // exactly as that test does, rather than trusting the class name alone.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('playing');
     h.setState('paused');
     const panel = root.querySelector('.hud-panel') as HTMLElement;
@@ -2839,7 +2839,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // too (owner ruling: "in case controllers disconnect"), so it is a real, reachable
     // stop, not a skip.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('playing');
     h.setState('paused');
     pressActive('ArrowDown');
@@ -2859,11 +2859,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
   it('keeps the menu hotkeys alive returning to title via a subpanel\'s Back button too', () => {
     // The existing 'leaves the menu hotkeys alive after the title screen is dismissed'
     // test (createHud panel) covers splash -> title only. Back -> title is a SEPARATE
-    // code path (setState('title') called from handleCustomizeBack, not from
+    // code path (setState('main-menu') called from handleCustomizeBack, not from
     // dismissSplash), and nothing else in this file proves it lands on the container
     // rather than on Continue/New Game.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
       new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
     );
@@ -2883,16 +2883,16 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     const { hud: h, root } = mount();
     const panel = root.querySelector('.hud-panel') as HTMLElement;
     const action = root.querySelector('.hud-action') as HTMLButtonElement;
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('playing');
-    h.setState('win');
+    h.setState('outcome-win');
     expect(document.activeElement, 'win focused something other than the panel container').toBe(
       panel,
     );
     pressActive('ArrowDown');
     expect(document.activeElement).toBe(action);
     h.setState('playing');
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(document.activeElement, 'lose focused something other than the panel container').toBe(
       panel,
     );
@@ -2908,9 +2908,9 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // check that only looked at the control itself would have included all three and
     // walked the roving order onto invisible buttons on every win/lose screen.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('playing');
-    h.setState('win'); // controls: the action button ALONE
+    h.setState('outcome-win'); // controls: the action button ALONE
     const settings = root.querySelector('.hud-panel-settings') as HTMLElement;
     expect(getComputedStyle(settings).display, 'test invalid: the wrapper is not actually hidden').toBe(
       'none',
@@ -2934,7 +2934,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // which registers AFTER this one in a real boot and so runs strictly later, would
     // never see the key at all.
     const { hud: h } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     h.setState('playing');
     document.body.focus();
     const ev = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true });
@@ -2951,7 +2951,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // change that would break this: dropping the `e.target instanceof HTMLInputElement`
     // early return in `onNavKeyDown`.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     const slider = root.querySelector('.hud-panel-volume') as HTMLInputElement;
     slider.focus();
     for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
@@ -2970,7 +2970,7 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // does not for the axis the canvas never claims. Production change that would break
     // this: dropping the `e.target === previewCanvasEl` carve-out for lateral keys.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     (root.querySelector('.hud-customize-open') as HTMLButtonElement).dispatchEvent(
       new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }),
     );
@@ -3035,7 +3035,7 @@ describe('hud: the Bot candidate is gated (bots may not drive a player tank in t
 
   function openPanel(h: Hud, root: HTMLElement): void {
     h.setControllers([{ kind: 'keyboard' }]);
-    h.setState('title');
+    h.setState('main-menu');
     openBtn(root).dispatchEvent(new MouseEvent('click'));
   }
 
@@ -3077,7 +3077,7 @@ describe('hud: the title screen carries no tagline', () => {
     // is a gapped flex column, so an emptied element still costs its 14px gap. Fails if
     // the string comes back, or if setSubtitle stops toggling the hidden class.
     const { hud: h, root } = mount();
-    h.setState('title');
+    h.setState('main-menu');
     expect(subtitle(root).textContent).toBe('');
     expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(true);
   });
@@ -3086,7 +3086,7 @@ describe('hud: the title screen carries no tagline', () => {
     // The negative control: without it, deleting setSubtitle's write entirely -- or
     // hiding the element permanently -- would satisfy the test above.
     const { hud: h, root } = mount();
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(subtitle(root).textContent).toBe('Out of lives.');
     expect(subtitle(root).classList.contains('hud-subtitle--hidden')).toBe(false);
   });
@@ -3103,7 +3103,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     // "Quit to Title" -- wrong copy for leaving a level you just won.
     const { hud: h, root } = mount();
     h.setLevel(2, 5);
-    h.setState('win');
+    h.setState('outcome-win');
     expect(hidden(root)).toBe(false);
     expect(quitBtn(root).textContent).toBe('Main Menu');
   });
@@ -3113,7 +3113,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     // endRun has run by then, so there is no run to return to.
     const { hud: h, root } = mount();
     h.setLevel(5, 5);
-    h.setState('win');
+    h.setState('outcome-win');
     expect(hidden(root)).toBe(true);
   });
 
@@ -3122,7 +3122,7 @@ describe('hud: the level-cleared panel offers the main menu', () => {
     // condition widens from `s === 'win'` to "any end screen with levels left".
     const { hud: h, root } = mount();
     h.setLevel(2, 5);
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(hidden(root)).toBe(true);
   });
 
@@ -3178,7 +3178,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     const { hud: h, root } = mount();
     h.setContinueAvailable(true);
     h.setLevelSelect(2, 4);
-    h.setState('title');
+    h.setState('main-menu');
     expect(titleAffordances(root)).toEqual({
       continueVisible: true,
       newGameVisible: true,
@@ -3194,7 +3194,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     h.setSessionKind('campaign');
     h.setContinueAvailable(true);
     h.setLevelSelect(2, 4);
-    h.setState('title');
+    h.setState('main-menu');
     expect(titleAffordances(root)).toEqual({
       continueVisible: true,
       newGameVisible: true,
@@ -3218,7 +3218,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     h.setSessionKind('versus');
     h.setContinueAvailable(true); // a real campaign run is ALSO active -- see below
     h.setLevelSelect(2, 4); // a hypothetical multi-level versus system
-    h.setState('title');
+    h.setState('main-menu');
     expect(titleAffordances(root)).toEqual({
       continueVisible: false,
       newGameVisible: true,
@@ -3237,11 +3237,11 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     const before = mount();
     before.hud.setSessionKind('versus');
     before.hud.setContinueAvailable(true);
-    before.hud.setState('title');
+    before.hud.setState('main-menu');
 
     const after = mount();
     after.hud.setContinueAvailable(true);
-    after.hud.setState('title');
+    after.hud.setState('main-menu');
     after.hud.setSessionKind('versus');
 
     expect(titleAffordances(before.root)).toEqual(titleAffordances(after.root));
@@ -3251,7 +3251,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     before.hud.dispose();
   });
 
-  it("closes the corpse-world window: setContinueAvailable(true) pushed AFTER setState('title') on a versus session still keeps Continue hidden", () => {
+  it("closes the corpse-world window: setContinueAvailable(true) pushed AFTER setState('main-menu') on a versus session still keeps Continue hidden", () => {
     // The discriminating case gating only inside setState would miss: loop.ts pushes
     // setContinueAvailable(deps.run.active() !== null) unconditionally on every
     // 'title' transition (not gated on tracksProgress), and `deps.run` is the SAME
@@ -3260,7 +3260,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     // not an edge case.
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
-    h.setState('title');
+    h.setState('main-menu');
     h.setContinueAvailable(true);
     expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(true);
   });
@@ -3268,14 +3268,14 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
   it("the corpse-window closure holds under a second call order: setContinueAvailable(true) before win/lose/title (not just after title, as the case above covers) still keeps Continue hidden -- order-independence, not a trace of loop.ts's actual runtime call order", () => {
     // Mirrors the reachable sequence Task 5's own report traced but could not exercise
     // through its loop.test.ts fake (which only records calls, not real DOM/close-all
-    // interactions): versus win/lose -> the setup pane's Back button (setState('title'))
+    // interactions): versus win/lose -> the setup pane's Back button (setState('main-menu'))
     // -> title, with Continue otherwise reachable via a concurrently active campaign
     // run. Fails if Continue's hide is gated on anything narrower than sessionKind alone.
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
     h.setContinueAvailable(true); // the shared run store says a campaign run is active
-    h.setState('lose'); // the match just ended
-    h.setState('title'); // the pane's own Back button (Task 4) lands here
+    h.setState('outcome-lose'); // the match just ended
+    h.setState('main-menu'); // the pane's own Back button (Task 4) lands here
     expect(continueBtn(root).classList.contains('hud-continue--hidden')).toBe(true);
   });
 
@@ -3286,9 +3286,9 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
     h.setLevel(1, 1); // versus's single synthetic level -- always the FINAL win
-    h.setState('win');
+    h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Versus Setup');
-    h.setState('lose');
+    h.setState('outcome-lose');
     expect(actionBtn(root).textContent).toBe('Versus Setup');
   });
 
@@ -3299,14 +3299,14 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     expect(actionBtn(root).textContent).toBe('Resume');
     h.setLevel(1, 2); // an intermediate win -- not reachable for a real versus session
     // (single synthetic level), but the label branch must not fire on it regardless
-    h.setState('win');
+    h.setState('outcome-win');
     expect(actionBtn(root).textContent).toBe('Next Level');
   });
 
   it('onCampaignOpen fires once per Campaign button click', () => {
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
-    h.setState('title');
+    h.setState('main-menu');
     let opens = 0;
     h.onCampaignOpen(() => opens++);
     campaignOpenBtn(root).dispatchEvent(new MouseEvent('click'));
@@ -3316,9 +3316,9 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
   it('Campaign is a title-only affordance, even for a versus session', () => {
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
-    h.setState('title');
+    h.setState('main-menu');
     expect(campaignOpenBtn(root).classList.contains('hud-campaign-open--hidden')).toBe(false);
-    for (const s of ['paused', 'win', 'lose'] as const) {
+    for (const s of ['paused', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       expect(campaignOpenBtn(root).classList.contains('hud-campaign-open--hidden'), s).toBe(true);
     }
@@ -3334,7 +3334,7 @@ describe('hud: session kind (Task 5b -- campaign return from a versus session)',
     // this task's own mutation testing).
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
-    h.setState('title');
+    h.setState('main-menu');
     expect(document.activeElement, 'opening the title panel did not focus its CONTAINER').toBe(
       root.querySelector('.hud-panel'),
     );

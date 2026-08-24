@@ -25,7 +25,51 @@ import type { World } from '../sim/world';
 import { countPlayerTanks } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
-import type { GameState } from './state';
+import {
+  type AppLocation,
+  type ResolvedSession,
+  campaignDescriptor,
+  campaignOverOutcome,
+  launchRoute,
+  locationAtRoute,
+  locationInGameplay,
+  mainMenuRoute,
+  missionClearOutcome,
+  outcomePhase,
+  pausedPhase,
+  playingPhase,
+  resolveSession,
+} from './app-state';
+import type { HudSurface } from './hud';
+
+/**
+ * The HUD-visible surface the harness sets by name. Mirrors the exhaustive
+ * `HudSurface` union the loop passes to `hud.setState` -- see loop.ts's
+ * `locationToHudSurface`. Tests that ask "what state was the HUD in?" read
+ * `rec.hudStates`, and tests that force the state machine call `h.setState`.
+ */
+type HarnessSurface = HudSurface;
+
+/**
+ * Translate a `HarnessSurface` name into a canonical AppLocation the fake
+ * state machine below can hold. `playing`/`paused`/`outcome-*` need a
+ * resolved session to be well-formed; the harness holds a synthetic session
+ * for that purpose (see `harnessSession`).
+ */
+function locationForSurface(surface: HarnessSurface, session: ResolvedSession): AppLocation {
+  switch (surface) {
+    case 'launch': return locationAtRoute(launchRoute());
+    case 'main-menu': return locationAtRoute(mainMenuRoute());
+    case 'playing': return locationInGameplay(session, playingPhase());
+    case 'paused': return locationInGameplay(session, pausedPhase());
+    case 'outcome-win': return locationInGameplay(session, outcomePhase(missionClearOutcome()));
+    case 'outcome-lose': return locationInGameplay(session, outcomePhase(campaignOverOutcome()));
+    default: {
+      const unreachable: never = surface;
+      return unreachable;
+    }
+  }
+}
 import {
   isPlayerDeath,
   deathVignetteColor,
@@ -80,7 +124,7 @@ interface Recorder {
   machineSaw: SimEvent[][];
   lives: number[];
   enemies: number[];
-  hudStates: GameState[];
+  hudStates: HarnessSurface[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
   roundPhases: Array<{ phase: string; secondsLeft: number } | null>;
@@ -256,7 +300,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     startVersus(config: VersusConfig): void;
     openCampaign(): void;
   };
-  setState(s: GameState): void;
+  setState(s: HarnessSurface): void;
   setTouch(t: TouchIndicator): void;
   firePlayerShot(): void;
   setGamepadConnected(v: boolean): void;
@@ -265,7 +309,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   /** What `deps.readDetectedPads()` returns next -- the controller assignment panel's
    *  live candidate-pad list. */
   setDetectedPadsFixture(pads: DetectedPad[]): void;
-  getState(): GameState;
+  getState(): HarnessSurface;
   keydown(e: Partial<KeyboardEvent>): void;
   blur(): void;
   /** Fires the host pointerdown listener -- the splash screen's dismissal path. */
@@ -379,8 +423,15 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 
   let pending: ((now: number) => void) | null = null;
-  let state: GameState = 'splash'; // faithful to state.ts's initial state
-  const changeCbs: Array<(s: GameState) => void> = [];
+  // The harness's synthetic resolved session -- the state machine's canonical
+  // ResolvedSession slot needs to be well-formed on `playing`/`paused`/`outcome`
+  // (issue #316), and this fake session provides that without loop.ts's real
+  // world/level machinery. Tests that assert on `session` see this exact value.
+  const harnessSession: ResolvedSession = resolveSession(campaignDescriptor(), 1, 'test-arena');
+  // Faithful to state.ts's initial state -- launch route.
+  let currentSurface: HarnessSurface = 'launch';
+  let location: AppLocation = locationForSurface(currentSurface, harnessSession);
+  const changeCbs: Array<(location: AppLocation) => void> = [];
   let onMute = (): void => {};
   let onVolume = (_v: number): void => {};
   let onStartRestart = (): void => {};
@@ -460,7 +511,22 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   }));
 
   function emit(): void {
-    for (const cb of changeCbs) cb(state);
+    for (const cb of changeCbs) cb(location);
+  }
+
+  /**
+   * Force the harness's fake state machine into a new HudSurface state
+   * without going through the real transition guards. Tests use this to
+   * simulate arbitrary state transitions (via `h.setState('...')`); the
+   * loop's real code path also uses `sm.enterGameplay`/`sm.dismissLaunch`/
+   * `sm.pause`/etc. through the same fake, and those methods below share
+   * this setter.
+   */
+  function setSurface(next: HarnessSurface): void {
+    if (currentSurface === next) return;
+    currentSurface = next;
+    location = locationForSurface(next, harnessSession);
+    emit();
   }
 
   const host: HostWindow = {
@@ -655,57 +721,74 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       };
     },
     createStateMachine: () => ({
-      get state(): GameState {
-        return state;
+      get location(): AppLocation { return location; },
+      get route() {
+        return location.kind === 'route' ? location.route : null;
       },
-      set state(s: GameState) {
-        state = s;
+      get session() {
+        return location.kind === 'gameplay' ? location.session : null;
       },
+      get descriptor() {
+        return location.kind === 'gameplay' ? location.session.descriptor : null;
+      },
+      get phase() {
+        return location.kind === 'gameplay' ? location.phase : null;
+      },
+      get outcome() {
+        if (location.kind !== 'gameplay') return null;
+        return location.phase.kind === 'outcome' ? location.phase.outcome : null;
+      },
+      get atLaunch(): boolean { return currentSurface === 'launch'; },
+      get atMainMenu(): boolean { return currentSurface === 'main-menu'; },
+      get atRoute(): boolean { return location.kind === 'route'; },
+      get inGameplay(): boolean { return location.kind === 'gameplay'; },
+      get isPlaying(): boolean { return currentSurface === 'playing'; },
+      get isPaused(): boolean { return currentSurface === 'paused'; },
+      get isSimulating(): boolean { return currentSurface === 'playing'; },
+      get hasOutcome(): boolean {
+        return currentSurface === 'outcome-win' || currentSurface === 'outcome-lose';
+      },
+      get wasWin(): boolean { return currentSurface === 'outcome-win'; },
+      get wasLose(): boolean { return currentSurface === 'outcome-lose'; },
       onEvents(events: SimEvent[]): void {
         rec.machineSaw.push(events);
-        // Faithful to state.ts: a win event flips the state SYNCHRONOUSLY inside
-        // this call, so every onChange subscriber runs BEFORE the driver reaches
-        // onFrameEvents. The fake used to only record, and that divergence hid a
-        // real ordering defect -- the win-time achievement check ran before the
-        // winning frame's stats were recorded.
-        if (state === 'playing' && events.some((e) => e.type === 'win')) {
-          state = 'win';
-          emit();
+        // Faithful to state.ts: a win event flips the state SYNCHRONOUSLY
+        // inside this call, so every onChange subscriber runs BEFORE the
+        // driver reaches onFrameEvents. The fake used to only record, and
+        // that divergence hid a real ordering defect -- the win-time
+        // achievement check ran before the winning frame's stats were
+        // recorded.
+        if (currentSurface === 'playing' && events.some((e) => e.type === 'win')) {
+          setSurface('outcome-win');
+        } else if (currentSurface === 'playing' && events.some((e) => e.type === 'lose')) {
+          setSurface('outcome-lose');
         }
       },
-      toTitle(): void {
-        state = 'title';
-        emit();
+      toMainMenu(): void { setSurface('main-menu'); },
+      toRoute(kind): void {
+        // Every non-primary route folds to `main-menu` in the harness's
+        // surface projection (loop.ts's `locationToHudSurface` does the same).
+        if (kind === 'launch') setSurface('launch');
+        else setSurface('main-menu');
       },
-      // Guarded exactly as state.ts guards it: acts only from 'splash'. An unguarded
-      // fake would let a keypress during play "dismiss" a splash that is not showing
-      // and emit a spurious change, which is the divergence this file has been bitten
-      // by before.
-      dismissSplash(): void {
-        if (state === 'splash') {
-          state = 'title';
-          emit();
-        }
+      // Guarded exactly as state.ts guards it: acts only from the launch route.
+      // An unguarded fake would let a keypress during play "dismiss" a launch
+      // handoff that is not showing and emit a spurious change, which is the
+      // divergence this file has been bitten by before.
+      dismissLaunch(): void {
+        if (currentSurface === 'launch') setSurface('main-menu');
       },
-      startPlaying(): void {
-        state = 'playing';
-        emit();
-      },
+      enterGameplay(_session): void { setSurface('playing'); },
       restart(): void {
-        state = 'playing';
-        emit();
+        if (currentSurface === 'outcome-win' || currentSurface === 'outcome-lose') {
+          setSurface('playing');
+        }
       },
       pause(): void {
-        if (state === 'playing') {
-          state = 'paused';
-          emit();
-        }
+        if (currentSurface === 'playing') setSurface('paused');
       },
       resume(): void {
-        if (state === 'paused') {
-          state = 'playing';
-          emit();
-        }
+        if (currentSurface === 'paused') setSurface('playing');
       },
       onChange(cb): void {
         changeCbs.push(cb);
@@ -1201,10 +1284,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       startVersus: (config: VersusConfig) => onVersusStartCb(config),
       openCampaign: () => onCampaignOpenCb(),
     },
-    setState: (s) => {
-      state = s;
-      emit();
-    },
+    setState: (s) => { setSurface(s); },
     setTouch: (t: TouchIndicator) => {
       touchState = t;
     },
@@ -1220,7 +1300,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     setDetectedPadsFixture: (pads: DetectedPad[]) => {
       detectedPadsFixture = pads;
     },
-    getState: () => state,
+    getState: () => currentSurface,
     blur(): void {
       const entry = rec.listeners.find(([t]) => t === 'blur');
       if (!entry) throw new Error('no blur listener');
@@ -1449,7 +1529,7 @@ describe('startGameWith: HUD wiring', () => {
 
   it('rebuilds a fresh world when restarting from a finished game', () => {
     const h = boot();
-    h.setState('win');
+    h.setState('outcome-win');
     const seedsBefore = h.rec.seeds.length;
     h.hud.startRestart();
     expect(h.rec.seeds.length).toBe(seedsBefore + 1);
@@ -1530,7 +1610,7 @@ describe('startGameWith: HUD wiring', () => {
     h.fireFrame(20);
     expect(h.rec.musicIntensities.at(-1), 'level 1 starts sparse').toBe(musicIntensity(3, 3));
 
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // advance to level 2, which has 2 enemies
     h.setState('playing');
     h.fireFrame(60);
@@ -1557,17 +1637,17 @@ describe('startGameWith: HUD wiring', () => {
   });
 
   it('MOVES the music to the world each state belongs to', () => {
-    // The title screen was silent before this: music played only while playing,
+    // The Main Menu was silent before this: music played only while playing,
     // so the menu piece existed and was never heard in the game.
     const h = boot(makeDeps());
-    const seen = (s: GameState): string => {
+    const seen = (s: HarnessSurface): string => {
       h.setState(s);
       return h.rec.musicContexts.at(-1)!;
     };
-    expect(seen('title')).toBe('menu');
+    expect(seen('main-menu')).toBe('menu');
     expect(seen('playing')).toBe('arena');
-    expect(seen('win')).toBe('victory');
-    expect(seen('lose')).toBe('defeat');
+    expect(seen('outcome-win')).toBe('victory');
+    expect(seen('outcome-lose')).toBe('defeat');
     // Pause stays in the ARENA world: the round is still there behind the
     // panel, and moving the music would make a pause feel like leaving.
     h.setState('playing');
@@ -1593,7 +1673,7 @@ describe('startGameWith: HUD wiring', () => {
 
   it('keeps the music running on every screen, not only while playing', () => {
     const h = boot(makeDeps());
-    for (const s of ['title', 'playing', 'paused', 'win', 'lose'] as const) h.setState(s);
+    for (const s of ['main-menu', 'playing', 'paused', 'outcome-win', 'outcome-lose'] as const) h.setState(s);
     expect(h.rec.musicStops).toBe(0);
     expect(h.rec.musicStarts).toBeGreaterThan(0);
     h.handle.dispose();
@@ -1608,7 +1688,7 @@ describe('startGameWith: HUD wiring', () => {
     const h = boot(makeDeps());
     h.setState('playing');
     h.setState('paused');
-    h.setState('title');
+    h.setState('main-menu');
     expect(h.rec.musicStops, 'a state change stopped the music').toBe(0);
     h.handle.dispose();
     expect(h.rec.disposed, 'dispose did not tear down the audio engine').toContain('audio');
@@ -1619,7 +1699,7 @@ describe('startGameWith: HUD wiring', () => {
     // The splash screen, not the menu: the HUD's first push must match the state
     // machine's initial state, and loop.ts pushes it explicitly because that path
     // bypasses sm.onChange.
-    expect(h.rec.hudStates[0]).toBe('splash');
+    expect(h.rec.hudStates[0]).toBe('launch');
     expect(h.rec.lives.length).toBeGreaterThan(0);
     h.handle.dispose();
   });
@@ -1631,16 +1711,16 @@ describe('startGameWith: leaving the title screen', () => {
     // path had a helper and the keyboard path had nothing, while the on-screen text
     // promises both.
     const h = bootAtSplash();
-    expect(h.getState()).toBe('splash');
+    expect(h.getState()).toBe('launch');
     h.keydown({ key: 'x', repeat: false, target: null } as Partial<KeyboardEvent>);
-    expect(h.getState()).toBe('title');
+    expect(h.getState()).toBe('main-menu');
     h.handle.dispose();
   });
 
   it('a pointer press dismisses it', () => {
     const h = bootAtSplash();
     h.pointerdown();
-    expect(h.getState()).toBe('title');
+    expect(h.getState()).toBe('main-menu');
     h.handle.dispose();
   });
 
@@ -1650,7 +1730,7 @@ describe('startGameWith: leaving the title screen', () => {
     // the game has sound silenced the menu bed this screen exists to make audible.
     const h = bootAtSplash();
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
-    expect(h.getState()).toBe('title');
+    expect(h.getState()).toBe('main-menu');
     expect(h.rec.muted, 'the key that began the game also muted it').toEqual([]);
     h.handle.dispose();
   });
@@ -1675,7 +1755,7 @@ describe('startGameWith: the touch controls', () => {
     // Review found this after the 'paused' instance was fixed: same mechanism, same
     // file, one call site short. Your aim thumb is routinely down at the moment you
     // die, so it is not an edge case.
-    for (const stopped of ['paused', 'win', 'lose', 'title'] as const) {
+    for (const stopped of ['paused', 'outcome-win', 'outcome-lose', 'main-menu'] as const) {
       const h = boot();
       h.setState('playing');
       const before = h.rec.inputClears;
@@ -1709,7 +1789,7 @@ describe('startGameWith: the touch controls', () => {
     const held = h.rec.touchPushes.at(-1);
     expect(held?.stick, 'the thumb was not drawn while playing').not.toBeNull();
 
-    for (const stopped of ['paused', 'title', 'win', 'lose'] as const) {
+    for (const stopped of ['paused', 'main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(stopped);
       const last = h.rec.touchPushes.at(-1);
       expect(last?.stick, `a driving thumb was stranded on ${stopped}`).toBeNull();
@@ -1780,7 +1860,7 @@ describe('startGameWith: the touch controls', () => {
     // It routes through sm.pause()/resume(), which act only from 'playing'/'paused'.
     // A second path out of a finished game is exactly what this must not become.
     const h = boot();
-    for (const state of ['title', 'win', 'lose'] as const) {
+    for (const state of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(state);
       h.hud.pauseTap();
       expect(h.getState(), `pauseTap moved the game out of ${state}`).toBe(state);
@@ -2518,7 +2598,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const before = h.deps.run.active();
       h.hud.pickLevel(1); // practice on the LAST level -- nowhere for it to advance to
       h.setState('playing');
-      h.setState('win'); // a practice "clear"
+      h.setState('outcome-win'); // a practice "clear"
       expect(h.rec.runAdvances).toEqual([]);
       expect(h.rec.runEnds).toBe(0);
       expect(h.deps.run.active()).toEqual(before); // byte-for-byte unchanged
@@ -2530,7 +2610,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const before = h.deps.run.active();
       h.hud.pickLevel(1); // practice
       h.setState('playing');
-      h.setState('lose'); // a practice "game over"
+      h.setState('outcome-lose'); // a practice "game over"
       expect(h.rec.runEnds).toBe(0);
       expect(h.deps.run.active()).toEqual(before);
       h.handle.dispose();
@@ -2598,7 +2678,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const won = { ...createArenaWorld(1), lives: 2 };
       const h = boot(makeDeps({ levelCount: 3, world: won, savedRun: { level: 0, lives: LIVES } }));
       expect(h.rec.runAdvances).toEqual([]); // nothing yet
-      h.setState('win'); // level 1 cleared, not final (levelCount 3)
+      h.setState('outcome-win'); // level 1 cleared, not final (levelCount 3)
       expect(h.rec.runAdvances).toEqual([{ level: 1, lives: 2 }]);
       expect(h.deps.run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
@@ -2615,7 +2695,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     it('game over ends the active run; Retry starts a brand-new one at level 1', () => {
       const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 1, lives: 1 } })); // mid-campaign, level 2
       h.setState('playing');
-      h.setState('lose');
+      h.setState('outcome-lose');
       expect(h.rec.runEnds).toBe(1);
       expect(h.deps.run.active()).toBeNull();
       h.hud.startRestart(); // Retry
@@ -2636,7 +2716,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // was.
       const h = boot(makeDeps({ levelCount: 3, levelStart: 1, isDevJump: true, savedRun: { level: 2, lives: 1 } }));
       h.setState('playing');
-      h.setState('lose');
+      h.setState('outcome-lose');
       expect(h.rec.runEnds).toBe(0);
       h.hud.startRestart();
       expect(h.rec.runNewRuns).toEqual([]);
@@ -2654,7 +2734,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // One level: any win is the final one.
       const h = boot(makeDeps({ levelCount: 1, savedRun: { level: 0, lives: LIVES } }));
       h.setState('playing');
-      h.setState('win');
+      h.setState('outcome-win');
       expect(h.rec.runEnds).toBe(1);
       expect(h.rec.runAdvances).toEqual([]); // not a mid-campaign advance
       expect(h.deps.run.active()).toBeNull();
@@ -2665,11 +2745,11 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       // A real campaign run exists from earlier (non-sandbox) play.
       const h = boot(makeDeps({ levelCount: 1, tracksProgress: false, savedRun: { level: 0, lives: 2 } }));
       h.setState('playing');
-      h.setState('win');
+      h.setState('outcome-win');
       expect(h.rec.runAdvances).toEqual([]);
       expect(h.rec.runEnds).toBe(0);
       expect(h.deps.run.active()?.livesRemaining, 'untouched by the sandbox').toBe(2);
-      h.setState('lose');
+      h.setState('outcome-lose');
       expect(h.rec.runEnds).toBe(0);
       h.handle.dispose();
     });
@@ -2697,8 +2777,8 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(h.rec.continueAvailable.at(-1), 'boot: no run yet').toBe(false);
       h.hud.newGame();
       expect(h.rec.continueAvailable.at(-1), 'New Game just created one').toBe(true);
-      h.setState('lose'); // game over ends the run
-      h.setState('title'); // arriving at the title screen refreshes the signal
+      h.setState('outcome-lose'); // game over ends the run
+      h.setState('main-menu'); // arriving at the title screen refreshes the signal
       expect(h.rec.continueAvailable.at(-1), 'the run that just ended is gone').toBe(false);
       h.handle.dispose();
     });
@@ -2721,7 +2801,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
         world: won,
         savedRun: { level: 3, lives: LIVES },
       }));
-      h.setState('win'); // the jumped level's own win, not the run's level 4
+      h.setState('outcome-win'); // the jumped level's own win, not the run's level 4
       expect(h.rec.runAdvances).toEqual([]);
       expect(h.rec.runEnds).toBe(0);
       expect(h.deps.run.active()).toEqual({
@@ -2744,7 +2824,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
         savedRun: { level: 3, lives: LIVES },
       }));
       h.setState('playing');
-      h.setState('lose'); // the jumped level's own game over
+      h.setState('outcome-lose'); // the jumped level's own game over
       expect(h.rec.runEnds).toBe(0);
       expect(h.deps.run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
@@ -2817,7 +2897,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
     it('a win at the jumped level leaves a real run at level 4 byte-for-byte unchanged', () => {
       const { deps, run, base } = realJumpDeps();
       const h = boot({ ...base, deps });
-      h.setState('win');
+      h.setState('outcome-win');
       expect(run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
         currentLevelId: CAMPAIGN_LEVELS[3].id,
@@ -2831,7 +2911,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const { deps, run, base } = realJumpDeps();
       const h = boot({ ...base, deps });
       h.setState('playing');
-      h.setState('lose');
+      h.setState('outcome-lose');
       expect(run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
         currentLevelId: CAMPAIGN_LEVELS[3].id,
@@ -3140,7 +3220,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       expect(world.coopAttempts).toBe(true); // the default -- nothing opted into coopPool
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       p2.alive = false; // P2 died mid-level; the survivor (P1) carried the level per the ruling
-      h.setState('win'); // level 1 cleared, not final (levelCount 2)
+      h.setState('outcome-win'); // level 1 cleared, not final (levelCount 2)
       h.hud.startRestart(); // Next Level click -- the real switchTo/buildWorld path
 
       const next = h.rec.builtWorlds.at(-1)!; // level 2's real coop world
@@ -3162,7 +3242,7 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       const p2 = world.tanks.find((t: Tank) => t.kind === 'player' && t.controlledBy === 1)!;
       p2.alive = false;
       p2.respawnAtTick = 99999; // a pool-mode corpse mid-respawn-wait when the level cleared
-      h.setState('win');
+      h.setState('outcome-win');
       h.hud.startRestart();
 
       const next = h.rec.builtWorlds.at(-1)!;
@@ -3335,7 +3415,7 @@ describe('startGameWith: a pinned dev seed', () => {
     // The whole point: without this a restart re-derives from the clock and
     // the comparison is against a different arena.
     const h = boot(makeDeps({ devFlags: { seed: 4242 } }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart();
     expect(h.rec.seeds).toEqual([4242, 4242]);
     h.handle.dispose();
@@ -3430,7 +3510,7 @@ describe('startGameWith: round-phase HUD', () => {
     h.setState('paused');
     expect(h.rec.roundPhases.at(-1)).toBeNull(); // ... and stops when play does
 
-    h.setState('title');
+    h.setState('main-menu');
     expect(h.rec.roundPhases.at(-1)).toBeNull();
     h.handle.dispose();
   });
@@ -3469,7 +3549,7 @@ describe('startGameWith: level progression', () => {
     // fresh set" -- the mutation `carried = LIVES` passed it.
     const won = { ...createArenaWorld(1), lives: 2 };
     const h = boot(makeDeps({ levelCount: 2, world: won }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart();
     expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: 2 });
     expect(h.rec.hudLevels[1]).toEqual([2, 2]);
@@ -3488,7 +3568,7 @@ describe('startGameWith: level progression', () => {
     // differs from level 0's by exactly 71, so a loop that forgets to re-read the id
     // from the new world rebinds the STALE one and fails here.
     const h = boot(makeDeps({ levelCount: 2 }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart();
     expect(h.rec.directorRebinds).toHaveLength(1);
     expect(h.rec.directorRebinds[0]).toBe(h.rec.directorPlayerIds[0] + 71);
@@ -3497,7 +3577,7 @@ describe('startGameWith: level progression', () => {
 
   it('rebinds haptics to the NEW world\'s player too, on the same switch', () => {
     const h = boot(makeDeps({ levelCount: 2 }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart();
     expect(h.rec.hapticsRebinds).toHaveLength(1);
     expect(h.rec.hapticsRebinds[0]).toBe(h.rec.hapticsPlayerIds[0] + 71);
@@ -3506,7 +3586,7 @@ describe('startGameWith: level progression', () => {
 
   it('resets to the starting level with fresh lives on a game over', () => {
     const h = boot(makeDeps({ levelCount: 2, levelStart: 1 }));
-    h.setState('lose');
+    h.setState('outcome-lose');
     h.hud.startRestart();
     // levels.start, not 0: a dev who jumped to level 2 retries level 2. Game over
     // ends the active run (issue #153), and no run existed here (this test never
@@ -3521,9 +3601,9 @@ describe('startGameWith: level progression', () => {
     // the LIVE furthest-unlocked level (user decision 2026-07-31). Having cleared
     // the whole two-level game, that is the last level; the level row goes back.
     const h = boot(makeDeps({ levelCount: 2 }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // -> level 1, the last
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // final win -> furthest unlocked, which is now level 2
     // Campaign completion ends the run (issue #153); no run was ever explicitly
     // started here, so the restart's landOnCampaignBoard(true) creates a fresh one.
@@ -3557,7 +3637,7 @@ describe('startGameWith: pause', () => {
   it('does nothing on the title or a finished game', () => {
     // Population: the three non-playing, non-paused states.
     const h = boot(makeDeps());
-    for (const s of ['title', 'win', 'lose'] as const) {
+    for (const s of ['main-menu', 'outcome-win', 'outcome-lose'] as const) {
       h.setState(s);
       h.keydown({ key: 'Escape' });
       expect(h.getState()).toBe(s);
@@ -3571,9 +3651,9 @@ describe('startGameWith: pause', () => {
     h.setState('playing');
     h.blur();
     expect(h.getState()).toBe('paused');
-    h.setState('title');
+    h.setState('main-menu');
     h.blur();
-    expect(h.getState()).toBe('title'); // and focus never auto-resumes
+    expect(h.getState()).toBe('main-menu'); // and focus never auto-resumes
     h.handle.dispose();
   });
 
@@ -3594,7 +3674,7 @@ describe('startGameWith: pause', () => {
     h.setState('playing');
     h.keydown({ key: 'Escape' });
     h.hud.quitToTitle();
-    expect(h.getState()).toBe('title');
+    expect(h.getState()).toBe('main-menu');
     // Rebuilt at levels.start; no active RUN was ever started here (see
     // 'startGameWith: New Run' below for that), so lives stay undefined -- quit must
     // never CREATE a run, only read one if it already exists.
@@ -3666,7 +3746,7 @@ describe('startGameWith: the main menu', () => {
     // unlock.
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('playing');
-    h.setState('win');
+    h.setState('outcome-win');
     expect(h.rec.cleared).toEqual([1]);
     expect(h.rec.levelSelects.at(-1)).toEqual([2, 2]);
     h.handle.dispose();
@@ -3675,7 +3755,7 @@ describe('startGameWith: the main menu', () => {
   it('records nothing for a sequence that does not track progress (the sandbox)', () => {
     const h = boot(makeDeps({ levelCount: 1, tracksProgress: false }));
     h.setState('playing');
-    h.setState('win');
+    h.setState('outcome-win');
     expect(h.rec.cleared).toEqual([]);
     h.handle.dispose();
   });
@@ -3724,7 +3804,7 @@ describe('startGameWith: a level pick is bounds-checked', () => {
     h.hud.pickLevel(7);
     h.hud.pickLevel(-1);
     expect(h.rec.levelBuilds).toHaveLength(1); // only the boot build
-    expect(h.getState()).toBe('title');
+    expect(h.getState()).toBe('main-menu');
     h.handle.dispose();
   });
 });
@@ -3736,7 +3816,7 @@ describe('startGameWith: quit and retry follow LIVE progress', () => {
     // was a boot-time snapshot of saved progress.
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('playing');
-    h.setState('win'); // clears level 1 -> level 2 unlocked
+    h.setState('outcome-win'); // clears level 1 -> level 2 unlocked
     h.hud.startRestart(); // advance to level 2
     h.keydown({ key: 'Escape' });
     h.hud.quitToTitle();
@@ -3747,9 +3827,9 @@ describe('startGameWith: quit and retry follow LIVE progress', () => {
   it('game over after a mid-session unlock retries at the furthest level too', () => {
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('playing');
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // now on level 2
-    h.setState('lose');
+    h.setState('outcome-lose');
     h.hud.startRestart(); // retry
     // No run was ever explicitly started (New Game) here, so game over's endRun() is
     // a no-op and Retry's landOnCampaignBoard(true) creates a fresh one at the same
@@ -3764,7 +3844,7 @@ describe('startGameWith: invincibility (dev playtest mode)', () => {
 
   it('marks the PLAYER invincible in every world it builds, and only the player', () => {
     const h = boot(makeDeps({ levelCount: 2, devFlags: { invincible: true } }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // the advance rebuild must apply it too, not just boot
     // Population: both worlds built so far (boot + advance).
     expect(h.rec.builtWorlds).toHaveLength(2);
@@ -3791,7 +3871,7 @@ describe('startGameWith: per-level renderer refit', () => {
         { width: 30, height: 18, cellSize: 2 },
       ],
     }));
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // advance to the wider level 2
     expect(h.rec.refits).toEqual([[30, 18, 2]]);
     h.handle.dispose();
@@ -3799,7 +3879,7 @@ describe('startGameWith: per-level renderer refit', () => {
 
   it('does NOT refit for a same-size rebuild: a respawn-restart is not a new board', () => {
     const h = boot(makeDeps({ levelCount: 1 }));
-    h.setState('lose');
+    h.setState('outcome-lose');
     h.hud.startRestart(); // retry the same level
     expect(h.rec.refits).toEqual([]);
     h.handle.dispose();
@@ -3826,7 +3906,7 @@ describe('startGameWith: stats wiring', () => {
   it('starts a fresh attempt tally at boot and on every level switch', () => {
     const h = boot(makeDeps({ levelCount: 2 }));
     expect(h.rec.statAttemptStarts).toBe(1); // boot
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // advance
     expect(h.rec.statAttemptStarts).toBe(2);
     h.setState('playing');
@@ -4436,7 +4516,7 @@ describe('startGameWith: bots (createBotInputSource, bots=K)', () => {
           h.fireFrame(elapsed);
         }
       }
-      h.setState('win');
+      h.setState('outcome-win');
       h.hud.startRestart(); // switchTo(next level) + sm.restart() -> 'playing' again
       const snapshots: Array<Array<{ id: number; pos: Vec2; turretAngle: number; bodyAngle: number }>> = [];
       for (let i = 1; i <= 40; i++) {
@@ -4869,7 +4949,7 @@ describe('startGameWith: achievements wiring', () => {
     h.setState('playing');
     h.fireFrame(100);
     expect(h.rec.achChecks.length).toBeGreaterThan(0); // evaluations really happened
-    h.setState('win');
+    h.setState('outcome-win');
     expect(h.rec.toasts).toEqual([]); // a toast per evaluation would spam every frame
     h.handle.dispose();
   });
@@ -5191,11 +5271,11 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       const base = makeDeps();
       const h = boot({ ...base, deps: versusDeps(base, CONFIG, (c) => calls.push(c)) });
       const levelBuildsBeforeClick = h.rec.levelBuilds.length;
-      h.setState('win');
+      h.setState('outcome-win');
       h.hud.startRestart(); // the win screen's ONLY affordance for a single-level session
       // Fails if the versus branch is missing entirely (falls through to the campaign
       // else-branch): state would land on 'playing', not 'title'.
-      expect(h.getState()).toBe('title');
+      expect(h.getState()).toBe('main-menu');
       // Fails if showVersusSetup is never called, or called with the wrong `show`/
       // `initial` -- e.g. `null` instead of the match just played.
       expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
@@ -5212,9 +5292,9 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       const base = makeDeps();
       const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
       const levelBuildsBeforeClick = h.rec.levelBuilds.length;
-      h.setState('lose');
+      h.setState('outcome-lose');
       h.hud.startRestart();
-      expect(h.getState()).toBe('title');
+      expect(h.getState()).toBe('main-menu');
       expect(h.rec.versusSetupPushes.at(-1)).toEqual({ show: true, initial: CONFIG });
       expect(h.rec.levelBuilds.length).toBe(levelBuildsBeforeClick);
       h.handle.dispose();
@@ -5230,10 +5310,10 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       // even though every OTHER assertion in this describe block would keep passing.
       const base = makeDeps();
       const h = boot({ ...base, deps: versusDeps(base, CONFIG) });
-      h.setState('win');
+      h.setState('outcome-win');
       h.rec.hudCallLog.length = 0; // isolate this one click's own call order
       h.hud.startRestart();
-      expect(h.rec.hudCallLog).toEqual(['state:title', 'versusSetup:true']);
+      expect(h.rec.hudCallLog).toEqual(['state:main-menu', 'versusSetup:true']);
       h.handle.dispose();
     });
   });
@@ -5248,7 +5328,7 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       const calls: VersusConfig[] = [];
       const base = makeDeps();
       const h = boot({ ...base, deps: { ...base.deps, requestVersusSession: (c) => calls.push(c) } });
-      h.setState('win');
+      h.setState('outcome-win');
       h.hud.startRestart();
       expect(h.getState()).toBe('playing'); // today's exact behavior: Play Again restarts directly
       expect(h.rec.versusSetupPushes).toEqual([]);
@@ -5258,7 +5338,7 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
 
     it('a campaign session with no reboot seam at all (no requestVersusSession, no initialVersusConfig) is untouched', () => {
       const h = boot(makeDeps());
-      h.setState('lose');
+      h.setState('outcome-lose');
       h.hud.startRestart();
       expect(h.getState()).toBe('playing');
       expect(h.rec.versusSetupPushes).toEqual([]);
@@ -5271,7 +5351,7 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
       // calls them, so a passing suite above cannot be explained by these firing as a
       // side effect of boot/win/restart.
       const h = boot(makeDeps());
-      h.setState('win');
+      h.setState('outcome-win');
       h.hud.startRestart();
       expect(h.rec.versusSetupPushes).toEqual([]);
       h.handle.dispose();
@@ -5358,7 +5438,7 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     // never invokes the harness's own openCampaign trigger unprompted, mirroring Task
     // 5's identical-shaped control for openVersus/startVersus.
     const h = boot(makeDeps());
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart();
     expect(h.rec.sessionKinds).toEqual(['campaign']);
     h.handle.dispose();
@@ -5683,7 +5763,7 @@ describe('startGameWith: the input recorder', () => {
     expect(trace(h).ticks).toHaveLength(6);
     expect(trace(h).meta.seed).toBe(h.rec.seeds[0]);
 
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.startRestart(); // advance to level 2
     const after = trace(h);
     expect(after.meta.arenaId).toBe(ARENA_DEFS[1].id);
@@ -5803,9 +5883,9 @@ describe('startGameWith: leaving a CLEARED level for the main menu keeps the run
     const h = boot(
       makeDeps({ tracksProgress: true, levelCount: 5, levelStart: 2, savedRun: { level: 2, lives: 3 } }),
     );
-    h.setState('win');
+    h.setState('outcome-win');
     h.hud.quitToTitle();
-    expect(h.getState()).toBe('title');
+    expect(h.getState()).toBe('main-menu');
     expect(h.rec.continueAvailable.at(-1)).toBe(true);
     h.handle.dispose();
   });
