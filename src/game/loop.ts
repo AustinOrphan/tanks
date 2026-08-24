@@ -66,12 +66,13 @@ import {
   versusWinnerTeam,
 } from './app-state';
 import {
+  type RelaunchTarget,
   type SessionContext,
   type SessionIdentity,
   descriptorFor,
-  practiceLevelIdentity,
+  identityForLevelPick,
+  relaunchTargetFor,
   resolveBootSessionContext,
-  usesVersusTitleAffordances,
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { resolveOwnerColor } from '../render/entities';
@@ -1056,6 +1057,19 @@ export function startGameWith(
    */
   let sessionIdentity: SessionIdentity = bootContext.identity;
 
+  /**
+   * WHAT THE MENU AND OUTCOME BUTTONS DO -- decided once, from the canonical
+   * model, and read by BOTH consumers: the HUD's title/outcome affordances and
+   * `onStartRestart`'s own branch. One source of truth on purpose; the branch
+   * used to re-derive the same policy by testing `deps.initialVersusConfig`
+   * directly, which is one of the provenance reads issue #316 removes.
+   *
+   * Genuinely fixed for the session's life, unlike `sessionIdentity`: which
+   * `LevelSystem` and which reboot seam are installed is settled at boot
+   * (levels.ts's one-value-per-session rule), and no menu gesture can change it.
+   */
+  const relaunchTarget: RelaunchTarget = relaunchTargetFor(bootContext);
+
 
   // `&& playerCount === 1`: a multiplayer boot gets fresh LIVES from balance.json, the
   // same as a dev jump -- see campaignActive's doc comment for why a multiplayer
@@ -1338,41 +1352,32 @@ export function startGameWith(
     }),
   });
   const hud = deps.createHud(uiRoot);
-  // Task 5b: fixed for this session's whole life, same posture as `playerCount` below --
-  // a versus session's `deps.levels` never becomes a campaign level system mid-session
-  // (levels.ts's own one-value-per-session comment), so the title screen's affordances
-  // never need to change kind either. Drives which title buttons hud.ts shows (see
-  // setSessionKind's own doc comment) -- set once, here, before any setState/
-  // setContinueAvailable/setLevelSelect call below so the very first render already
-  // reflects it.
-  // Derived from the canonical model -- session identity plus its developer
-  // provenance -- never from `initialVersusConfig`, a URL read, or a
-  // `world.mode` check (issue #316's HUD-identity criterion). See
-  // `usesVersusTitleAffordances` for why a DEVELOPER-flag versus session keeps
-  // campaign-shaped title affordances: it still runs the campaign LevelSystem,
-  // so Continue and Levels there rebuild correct FFA/teams worlds.
-  hud.setSessionKind(usesVersusTitleAffordances(bootContext) ? 'versus' : 'campaign');
-  // Task 6 (spec §3a): the in-match stock readout is versus-only for this session's
-  // whole life, the same fixed-for-the-session posture as sessionKind just above.
-  // The gate is `!deps.initialVersusConfig`, NOT "is this a campaign session" --
-  // those are not the same test. `initialVersusConfig` is only ever set from a REAL
-  // `VersusConfig` the setup pane handed to `requestVersusSession` (`applyVersusToDeps`);
-  // a dev-flag-driven versus world (`?dev=1&mode=ffa`, no setup pane involved) has
-  // `world.mode === 'ffa'`/`'teams'` but NO `initialVersusConfig`, and so ALSO takes
-  // this branch -- see the "a versus fixture with NO players flag still gets a REAL
-  // versus world" test below for that exact shape. For a genuine campaign session this
-  // `null` really is the only call this session will ever make (a campaign world's
-  // `mode` is fixed to `'campaign-coop'`, so onSimulated's own `isVersusFrame` branch
-  // below never fires for it, all session long). For the dev-flag-versus case, this
-  // `null` is simply the FIRST call -- onSimulated's very next 'playing' frame
-  // overwrites the DATA with real entries the same way a setup-pane-driven versus
-  // session's does, since `world.mode` is what that branch actually keys off, not
-  // this flag. The STRIP stays hidden regardless, though: this session has no
-  // `initialVersusConfig`, so the `hud.setSessionKind` call above passed `'campaign'`,
-  // and hud.ts's visibility gate is `sessionKind === 'versus'` (not "does setVersusStocks
-  // carry entries") -- see hud.test.ts's "a campaign session never shows the strip,
-  // even with entries set" case for the proof.
-  if (!deps.initialVersusConfig) hud.setVersusStocks(null);
+  // THE TWO SEPARATE HUD PROJECTIONS (issue #316 review, finding 1), both
+  // derived from the canonical model -- never from `deps.initialVersusConfig`,
+  // a URL read, or a `world.mode` check.
+  //
+  // `setRelaunchTarget` is WHAT THE BUTTONS DO, and is fixed for the session
+  // (see `relaunchTarget` above). `setSessionKind` is WHAT IS BEING PLAYED, and
+  // is re-pushed from `switchTo` on every world build, because a Levels pick
+  // really does change it. Both are set here, before any setState/
+  // setContinueAvailable/setLevelSelect call below, so the very first render
+  // already reflects them.
+  //
+  // These were ONE call before this fix, and the collapse was a lie in the
+  // direction of the buttons: `?dev=1&mode=ffa` builds a genuine FFA world on
+  // the campaign level system, so the single call passed 'campaign' to keep
+  // Continue and Levels working -- and with it hid the versus stock strip and
+  // showed campaign Lives/Enemies for a match that has neither.
+  hud.setRelaunchTarget(relaunchTarget);
+  hud.setSessionKind(currentDescriptor.kind);
+  // The stock strip's DATA, cleared once for a session that will never produce
+  // any. Keyed on the descriptor, like the strip's own visibility gate: a
+  // versus session -- setup-pane OR developer-flag -- skips this and lets
+  // `onSimulated`'s first 'playing' frame push real entries instead, exactly as
+  // a setup-pane match already did. For a campaign or practice session
+  // `world.mode` is `'campaign-coop'`, so `onSimulated`'s `isVersusFrame`
+  // branch never fires and this null really is the only call it will ever make.
+  if (currentDescriptor.kind !== 'versus') hud.setVersusStocks(null);
 
   /**
    * The two evaluation moments live here. `clearedLevel` is non-null ONLY when a win
@@ -1753,11 +1758,11 @@ export function startGameWith(
       if (next !== null) {
         switchTo(next, driver.world.lives);
         sm.enterGameplay(currentSession);
-      } else if (deps.initialVersusConfig) {
-        // A versus match's own win/lose has nothing to advance to -- the versus
-        // level system is always a single synthetic level (levels.ts), so `next`
-        // above is null here exactly as it is for a campaign game-over. But unlike
-        // campaign, "Play Again" on a FINISHED versus match must not silently
+      } else if (relaunchTarget === 'versus-setup') {
+        // A setup-pane versus match's own win/lose has nothing to advance to -- the
+        // versus level system is always a single synthetic level (levels.ts), so
+        // `next` above is null here exactly as it is for a campaign game-over. But
+        // unlike campaign, "Play Again" on a FINISHED versus match must not silently
         // rebuild the same match: the versus-setup-menu plan's rematch flow returns
         // to the setup pane, prefilled with the match just played, so players/map/
         // stock can change before the next round. The actual reboot -- a new world,
@@ -1770,7 +1775,7 @@ export function startGameWith(
         // a moment later by this very call. loop.test.ts pins the order with a case
         // that fails if the two calls are swapped.
         sm.toMainMenu();
-        hud.showVersusSetup(true, deps.initialVersusConfig);
+        hud.showVersusSetup(true, deps.initialVersusConfig ?? null);
       } else {
         // Final win, game over, or a practice session ending either way -- land back
         // on the campaign's own board (never a fresh one; see landOnCampaignBoard).
@@ -1799,11 +1804,12 @@ export function startGameWith(
   hud.onVersusStart((config) => {
     deps.requestVersusSession?.(config);
   });
-  // Task 5b's Campaign button -- a bare passthrough, same shape as the two above:
-  // `deps.requestCampaignSession` is only ever wired on a VERSUS session's own deps
-  // (applyVersusToDeps), so a campaign session's own click here (unreachable, since
-  // hud.ts hides the button there -- see setSessionKind) would no-op via `?.` exactly
-  // like a Start click with no requestVersusSession wired does above.
+  // The Campaign button -- a bare passthrough, same shape as the two above:
+  // `deps.requestCampaignSession` is only ever wired on a setup-pane versus session's
+  // own deps (applyVersusToDeps), so a campaign session's own click here (unreachable,
+  // since hud.ts hides the button for the 'campaign-levels' relaunch target -- see
+  // setRelaunchTarget) would no-op via `?.` exactly like a Start click with no
+  // requestVersusSession wired does above.
   hud.onCampaignOpen(() => {
     deps.requestCampaignSession?.();
   });
@@ -1826,6 +1832,13 @@ export function startGameWith(
     // silently would not.
     currentDescriptor = descriptorFor(sessionIdentity, ordinalOf(level));
     currentSession = resolveSession(currentDescriptor, world.seed, level.arenaId);
+    // The gameplay HUD's identity, re-pushed from THE SAME LINE the descriptor is
+    // derived on, so the two cannot fall out of step. This is what makes "a Levels
+    // pick makes this session Practice" and "landing back on the home board makes
+    // it Campaign again" visible to the HUD without any transition having to
+    // remember to say so. `relaunchTarget` is deliberately NOT re-pushed: it is a
+    // boot-time fact and no world build changes it.
+    hud.setSessionKind(currentDescriptor.kind);
     // Reseeded here too -- see botSources' own doc comment above for why bots are
     // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
     // `botSlots` set: a mid-session reassignment can have moved a slot to or from
@@ -1931,12 +1944,20 @@ export function startGameWith(
     // Practice: independent fresh lives (switchTo's `lives` is left undefined, so
     // buildWorld defaults to full LIVES), and the active campaign run is never read
     // or written from here on out -- see campaignActive.
-    // Identity transition 1 of 2 (issue #316): this session is Practice from
-    // here until New Game or a landing on its home board resets it. The
+    // Identity transition 1 of 2 (issue #316): a CAMPAIGN session is Practice
+    // from here until New Game or a landing on its home board resets it. The
     // ORDINAL is not stored -- `switchTo` derives the descriptor from this
     // identity and whichever level it actually builds, so the descriptor
     // cannot fall out of step with the board.
-    sessionIdentity = practiceLevelIdentity();
+    //
+    // `identityForLevelPick`, not an unconditional Practice: this button is
+    // genuinely reachable on a DEVELOPER-FLAG versus session (`?dev=1&mode=ffa`
+    // keeps the campaign level system, so `levelChoice` is true and the
+    // campaign-shaped title affordances leave the button on screen), and that
+    // system's `world()` stamps `flags.mode` on every level it builds. Calling
+    // the resulting FFA match Practice would drop its stock strip and report
+    // `practice-result` for a match the sim decided by last-slot-standing.
+    sessionIdentity = identityForLevelPick(bootContext.identity);
     switchTo(deps.levels.levels[picked]);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.

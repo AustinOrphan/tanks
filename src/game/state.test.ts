@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  APP_ROUTE_KINDS,
   campaignDescriptor,
   launchRoute,
   locationAtRoute,
@@ -419,6 +420,49 @@ describe('onChange -- subscription', () => {
       'main-menu',
       'settings',
     ]);
+  });
+});
+
+describe('Navigation-only transitions are pure state (issue #316 acceptance)', () => {
+  it('toMainMenu and toRoute never invoke the outcome classifier -- the machine\'s only injected collaborator', () => {
+    // The state model owns no seed source, no level system and no store, so the
+    // only way a transition here could reach outside itself is the one function
+    // it is constructed with. Watching that call count is what makes "state
+    // only" a MEASURED claim rather than a structural assertion about code a
+    // reader has to take on trust.
+    //
+    // Fails if any route transition is ever wired to classify, resolve or
+    // otherwise consult caller context on the way past.
+    const classify = vi.fn(() => null);
+    const sm = createGameStateMachine({ classifyOutcome: classify });
+    sm.dismissLaunch();
+    sm.toMainMenu();
+    for (const kind of APP_ROUTE_KINDS) sm.toRoute(kind);
+    expect(classify).not.toHaveBeenCalled();
+
+    // ...including on the way OUT of live gameplay, which is how Quit navigates.
+    sm.enterGameplay(buildCampaignSession());
+    expect(classify).not.toHaveBeenCalled();
+    sm.toMainMenu();
+    sm.toRoute('settings');
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it('a route transition retains no part of the session it left', () => {
+    // The other half of "creates no resolved instance": not just that nothing NEW
+    // was resolved, but that the abandoned instance is not still owned as the
+    // primary surface. Disposing anything world-side is the caller's job (see
+    // toRoute's own doc comment); the MODEL keeps nothing.
+    const sm = makeMachine();
+    sm.toMainMenu();
+    const session = buildCampaignSession();
+    sm.enterGameplay(session);
+    expect(sm.session).toBe(session);
+    sm.toRoute('records');
+    expect(sm.session).toBe(null);
+    expect(sm.descriptor).toBe(null);
+    expect(sm.phase).toBe(null);
+    expect(sm.outcome).toBe(null);
   });
 });
 

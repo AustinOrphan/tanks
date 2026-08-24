@@ -220,24 +220,84 @@ export function resolveBootSessionContext(input: BootSessionInput): SessionConte
   };
 }
 
+// ---------------------------------------------------------------------------
+// Relaunch policy -- NOT session identity
+// ---------------------------------------------------------------------------
+
 /**
- * Whether a session's title screen should offer VERSUS-shaped affordances
- * ("Start Match", a Campaign button) instead of campaign ones (Continue,
- * Levels).
+ * Which system this session's menu and outcome ACTIONS relaunch play through.
  *
- * Derived from the canonical model -- the session identity plus its developer
- * provenance -- rather than from `initialVersusConfig`, a URL read, or a
- * `world.mode` check, which is issue #316's acceptance criterion for HUD
- * session identity.
+ * A SEPARATE CONCEPT FROM SESSION IDENTITY, and the whole point of this type.
+ * Identity answers "what is being played" (it is the descriptor's own kind, and
+ * it drives the gameplay HUD: campaign stats, the versus stock strip).
+ * This answers "what does the button DO", which is a question about the
+ * installed `LevelSystem` and the reboot seam, not about the world:
  *
- * A DEVELOPER-FLAG versus session is deliberately excluded: it keeps the
- * CAMPAIGN `LevelSystem` (see `resolveBootSessionContext` branch 3), so Continue
- * and Levels still rebuild correct FFA/teams worlds there and hiding them would
- * remove working affordances. The affordance gate is a question about which
- * `LevelSystem` is installed; the descriptor is a question about what is being
- * played. Both are answered from the model here, and this is the one place the
- * distinction is drawn.
+ *  - `'campaign-levels'`: Continue/Levels/New Game rebuild through the campaign
+ *    `LevelSystem` that is actually installed, and a finished session's action
+ *    button lands back on this session's own board ("Play Again"/"Retry").
+ *  - `'versus-setup'`: there is no campaign level system to continue into --
+ *    `createVersusLevelSystem` installed one synthetic level -- so Continue and
+ *    Levels are hidden, New Game reads "Start Match", the Campaign button is
+ *    offered, and a finished match's action button reopens the setup pane
+ *    ("Versus Setup").
+ *
+ * The two genuinely disagree for exactly one boot, which is why they cannot be
+ * one value: `?dev=1&mode=ffa|teams` has VERSUS identity (it really does build
+ * an FFA/teams world -- see `resolveBootSessionContext` branch 3) while keeping
+ * the CAMPAIGN level system, so its buttons must stay campaign-shaped. Folding
+ * that boot's identity down to Campaign to get the buttons right is the defect
+ * this split removes; folding its buttons up to Versus would relabel a click
+ * that lands on a campaign board as "Versus Setup", which `loop.ts`'s
+ * `onStartRestart` shows is not what the click does.
+ *
+ * TEMPORARY, in the sense the UI/UX direction gives it: #317's persistent shell
+ * and #323's outcome redesign replace these legacy title/outcome affordances
+ * outright. Until then this is the one place the policy is decided.
  */
-export function usesVersusTitleAffordances(context: SessionContext): boolean {
-  return context.identity.kind === 'versus' && context.developer.sessionOrigin !== 'versus-flags';
+export type RelaunchTarget = 'campaign-levels' | 'versus-setup';
+
+/**
+ * Decide a session's relaunch target from the canonical model -- the session
+ * identity plus its developer provenance -- never from `initialVersusConfig`,
+ * a URL read, or a `world.mode` check (issue #316's HUD-identity criterion).
+ *
+ * `'versus-setup'` iff the SETUP PANE booted this session, which is exactly
+ * `resolveBootSessionContext` branch 1 and exactly when
+ * `createVersusLevelSystem` is installed.
+ */
+export function relaunchTargetFor(context: SessionContext): RelaunchTarget {
+  return context.identity.kind === 'versus' && context.developer.sessionOrigin !== 'versus-flags'
+    ? 'versus-setup'
+    : 'campaign-levels';
+}
+
+// ---------------------------------------------------------------------------
+// Menu-gesture identity transitions
+// ---------------------------------------------------------------------------
+
+/**
+ * The identity a Levels-panel pick switches a session to, given the identity
+ * that session BOOTED with.
+ *
+ * A level pick changes which LEVEL is played, not which GAME is played. It is
+ * only a kind change for a real campaign boot, where picking a level is the
+ * gesture that isolates play from the active run (issue #153's Practice/
+ * Campaign split). Every other boot is already run-neutral and its own level
+ * system keeps building its own kind of world:
+ *
+ *  - a developer-flag versus boot (`?dev=1&mode=ffa`) runs the CAMPAIGN level
+ *    system, whose `world()` closure stamps `flags.mode` on EVERY world it
+ *    builds (`levels.ts`) -- and the Levels button is genuinely reachable
+ *    there, since that system reports the full campaign sequence. Returning
+ *    Practice here would report `practice-result` for a match the sim decided
+ *    by last-slot-standing, and would drop the stock strip mid-session;
+ *  - the sandbox (`?dev=1&level=sandbox`) has one synthetic level that is not
+ *    in any campaign sequence, so `practice-level`'s ordinal would be a
+ *    fabrication;
+ *  - a setup-pane versus boot has one synthetic level too;
+ *  - a developer level jump is already `practice-level`.
+ */
+export function identityForLevelPick(bootIdentity: SessionIdentity): SessionIdentity {
+  return bootIdentity.kind === 'campaign' ? practiceLevelIdentity() : bootIdentity;
 }

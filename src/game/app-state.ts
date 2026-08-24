@@ -500,8 +500,36 @@ export function versusRulesFromDeveloperFlags(input: {
   });
 }
 
+/**
+ * Wrap retained versus rules into a descriptor, SNAPSHOTTING the rules on the
+ * way in.
+ *
+ * The snapshot is the point, not the freeze on the wrapper. This is an exported
+ * boundary: a caller can hand-build a structurally valid but MUTABLE
+ * `VersusRules` (it is an interface, not a branded type, and
+ * `versusRulesFromConfig` is not the only way to produce one), pass it here,
+ * and then keep editing their own object -- silently rewriting the retained
+ * intent of a session already in progress. That is the same defect holding the
+ * setup pane's live `versusConfigState` by reference was; freezing only the
+ * wrapper left the exported door open.
+ *
+ * Field-by-field rather than a spread so an extra property on a caller's object
+ * cannot ride along, and so adding a field to `VersusRules` is a COMPILE error
+ * here rather than a silently dropped one. Every field is a primitive or
+ * `null`, so this shallow copy is a complete snapshot; a future object-valued
+ * field must deep-copy here and the type error above is what will say so.
+ */
 export function versusDescriptor(rules: VersusRules): VersusSessionDescriptor {
-  return Object.freeze({ kind: 'versus' as const, rules });
+  return Object.freeze({
+    kind: 'versus' as const,
+    rules: Object.freeze({
+      mode: rules.mode,
+      players: rules.players,
+      friendlyFire: rules.friendlyFire,
+      stock: rules.stock,
+      arenaSelection: rules.arenaSelection,
+    }),
+  });
 }
 
 /**

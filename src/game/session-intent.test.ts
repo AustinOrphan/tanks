@@ -4,8 +4,9 @@ import type { VersusConfig } from './versus-config';
 import {
   descriptorFor,
   practiceLevelIdentity,
+  identityForLevelPick,
+  relaunchTargetFor,
   resolveBootSessionContext,
-  usesVersusTitleAffordances,
   type SessionIdentity,
 } from './session-intent';
 
@@ -182,23 +183,60 @@ describe('descriptorFor: identity + level -> descriptor', () => {
   });
 });
 
-describe('usesVersusTitleAffordances', () => {
-  it('is true for a setup-pane versus session', () => {
-    expect(usesVersusTitleAffordances(boot({ versusConfig: paneConfig() }))).toBe(true);
+describe('relaunchTargetFor -- what the buttons do, NOT what is being played', () => {
+  it("is 'versus-setup' for a setup-pane versus session", () => {
+    expect(relaunchTargetFor(boot({ versusConfig: paneConfig() }))).toBe('versus-setup');
   });
 
-  it('is FALSE for a developer-flag versus session, which keeps the campaign LevelSystem', () => {
-    // Continue and Levels still rebuild correct FFA/teams worlds there, so
-    // hiding them would remove working affordances. The descriptor still
-    // reports Versus -- these two questions are deliberately separate.
+  it("is 'campaign-levels' for a developer-flag versus session, which keeps the campaign LevelSystem", () => {
+    // THE DISCRIMINATING CASE, and the whole reason these are two values: the
+    // session's IDENTITY is Versus (it builds a genuine FFA world, so its stock
+    // strip and typed outcome must say so) while its BUTTONS stay campaign-shaped
+    // -- Continue and Levels there still rebuild correct FFA/teams worlds through
+    // the campaign level system, and loop.ts's onStartRestart lands this session's
+    // finished-match click on a campaign board, so "Versus Setup" would name a pane
+    // the click never opens.
     const ctx = boot({ devFlags: { mode: 'ffa' }, developerMode: true });
     expect(ctx.identity.kind).toBe('versus');
-    expect(usesVersusTitleAffordances(ctx)).toBe(false);
+    expect(relaunchTargetFor(ctx)).toBe('campaign-levels');
   });
 
-  it('is false for campaign, practice and sandbox sessions', () => {
-    expect(usesVersusTitleAffordances(boot())).toBe(false);
-    expect(usesVersusTitleAffordances(boot({ devFlags: { level: 2 } }))).toBe(false);
-    expect(usesVersusTitleAffordances(boot({ devFlags: { level: 'sandbox' } }))).toBe(false);
+  it("is 'campaign-levels' for campaign, practice and sandbox sessions", () => {
+    expect(relaunchTargetFor(boot())).toBe('campaign-levels');
+    expect(relaunchTargetFor(boot({ devFlags: { level: 2 } }))).toBe('campaign-levels');
+    expect(relaunchTargetFor(boot({ devFlags: { level: 'sandbox' } }))).toBe('campaign-levels');
+  });
+});
+
+describe('identityForLevelPick', () => {
+  it('turns a CAMPAIGN boot into practice-level -- the run-isolating gesture', () => {
+    expect(identityForLevelPick(boot().identity)).toEqual(practiceLevelIdentity());
+  });
+
+  it('leaves a developer-flag VERSUS boot as versus, rules and all', () => {
+    // The Levels button is genuinely reachable here: `?dev=1&mode=ffa` keeps the
+    // campaign level system (so `levelChoice` is true and the campaign-shaped title
+    // affordances leave the button on screen), and that system's `world()` stamps
+    // `flags.mode` on EVERY level it builds. A pick therefore starts another FFA
+    // match on a different arena -- not practice on a campaign level.
+    const versus = boot({ devFlags: { mode: 'teams', players: 4 }, developerMode: true }).identity;
+    expect(versus.kind).toBe('versus');
+    expect(identityForLevelPick(versus)).toBe(versus);
+  });
+
+  it('leaves the sandbox as practice-sandbox, which has no truthful ordinal', () => {
+    const sandbox = boot({ devFlags: { level: 'sandbox' }, developerMode: true }).identity;
+    expect(sandbox).toEqual({ kind: 'practice-sandbox' });
+    expect(identityForLevelPick(sandbox)).toBe(sandbox);
+  });
+
+  it('leaves a developer level jump as practice-level, which it already is', () => {
+    const jumped = boot({ devFlags: { level: 3 }, developerMode: true }).identity;
+    expect(identityForLevelPick(jumped)).toEqual(practiceLevelIdentity());
+  });
+
+  it('leaves a setup-pane versus boot as versus', () => {
+    const pane = boot({ versusConfig: paneConfig() }).identity;
+    expect(identityForLevelPick(pane)).toBe(pane);
   });
 });

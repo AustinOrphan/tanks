@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { VersusConfig } from './versus-config';
+import type { VersusRules } from './app-state';
 import {
   campaignCompleteOutcome,
   campaignDescriptor,
@@ -167,6 +168,67 @@ describe('SessionDescriptor construction', () => {
       const rules = versusRulesFromConfig(versusConfigFixture());
       expect(Object.isFrozen(rules)).toBe(true);
       expect(Object.isFrozen(versusDescriptor(rules))).toBe(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // The PUBLIC descriptor boundary (issue #316 review, finding 4).
+    //
+    // `versusRulesFromConfig` is not the only way to obtain a `VersusRules`:
+    // the type is a plain interface, and `versusDescriptor` is exported, so a
+    // caller can hand-build a structurally valid MUTABLE object and pass it in.
+    // Freezing only the wrapper left that door open -- the caller kept a live
+    // handle on the retained intent of a session already in progress, which is
+    // the same defect the pane-config case above covers from the other side.
+    // -----------------------------------------------------------------------
+    it('SNAPSHOTS an unvalidated mutable rules object -- the caller cannot alter it afterwards', () => {
+      // Deliberately hand-built, not via versusRulesFromConfig: that constructor
+      // already freezes, so routing through it would make this assertion unable
+      // to fail regardless of what versusDescriptor does.
+      const mutable: { -readonly [K in keyof VersusRules]: VersusRules[K] } = {
+        mode: 'ffa',
+        players: 2,
+        friendlyFire: false,
+        stock: 3,
+        arenaSelection: 'random',
+      };
+      expect(Object.isFrozen(mutable)).toBe(false); // the fixture really is mutable
+      const d = versusDescriptor(mutable);
+
+      mutable.mode = 'teams';
+      mutable.players = 4;
+      mutable.friendlyFire = true;
+      mutable.stock = 9;
+      mutable.arenaSelection = 'plaza';
+
+      expect(d.rules).toEqual({
+        mode: 'ffa',
+        players: 2,
+        friendlyFire: false,
+        stock: 3,
+        arenaSelection: 'random',
+      });
+      // ...and the descriptor does not simply hold the caller's object.
+      expect(d.rules).not.toBe(mutable);
+      // Both levels frozen, so a caller reaching through the descriptor cannot
+      // write either.
+      expect(Object.isFrozen(d)).toBe(true);
+      expect(Object.isFrozen(d.rules)).toBe(true);
+    });
+
+    it('preserves an UNRESOLVED arena selection through the snapshot', () => {
+      // The snapshot must not "helpfully" resolve or drop `'random'`: one retained
+      // 'random' descriptor producing distinct rematch instances is the behaviour
+      // ResolvedSession.arenaId exists for.
+      const d = versusDescriptor({
+        mode: 'teams', players: 4, friendlyFire: true, stock: null, arenaSelection: 'random',
+      });
+      expect(d.rules.arenaSelection).toBe('random');
+      // ...and a developer-flag session's absent selection stays null, not ''.
+      expect(
+        versusDescriptor({
+          mode: 'ffa', players: 1, friendlyFire: false, stock: null, arenaSelection: null,
+        }).rules.arenaSelection,
+      ).toBe(null);
     });
 
     it('accepts a concrete arena selection too', () => {
