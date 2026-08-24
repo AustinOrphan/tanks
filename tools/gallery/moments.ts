@@ -757,15 +757,18 @@ export const MOMENTS: Record<string, MomentDef> = {
       //
       // 47, not longer: brownDecision's firing GATE (stepAi, ai/index.ts) requires
       // `aimTicks >= round(reactionTime * TICK_HZ)` -- STATIC_BASIC's reactionTime is
-      // 0.8s, so 48 ticks -- before it will fire, and aimTicks climbs by exactly 1
-      // every tick once line of sight holds (which it does from tick 1 here). MEASURED:
-      // extending this same fixture to 55 ticks fires a shell at tick 50, two ticks past
-      // the 48-tick gate -- that exact offset was not traced further (a plausible source
-      // is the `>= reactionTicks` comparison landing mid-tick against an already-`aim`
-      // state, but this comment does not claim that as checked). Stopping at 47 keeps
-      // this moment PURE turret-tracking, with nothing else to pin -- see the
-      // never-fires test in moments.test.ts, whose own negative control is exactly this
-      // 55-tick extension.
+      // 0.8s, so 48 ticks -- before an actual shot leaves, and aimTicks climbs by
+      // exactly 1 every tick once line of sight holds (which it does from tick 1
+      // here). But `decision.fire` (brown.ts's state machine) only goes true on an
+      // 'aim'-state tick, and tank.aiState cycles idle -> aim -> fire -> reposition ->
+      // idle every 4 ticks REGARDLESS of whether the reaction gate actually let a shot
+      // through (stepAi writes `tank.aiState = decision.nextState` unconditionally) --
+      // so a firing OPPORTUNITY exists only on ticks 2, 6, 10, ..., 4k + 2. The first
+      // one at or past the 48-tick gate is tick 50 (4*12 + 2), not 48. MEASURED:
+      // extending this same fixture to 55 ticks does fire at tick 50, confirming the
+      // derivation. Stopping at 47 keeps this moment PURE turret-tracking, with
+      // nothing else to pin -- see the never-fires test in moments.test.ts, whose own
+      // negative control is exactly this 55-tick extension.
       ticks: 47,
       expect: [],
       // Framed on the midpoint of the AI (0, 0) and the player's path's closest
