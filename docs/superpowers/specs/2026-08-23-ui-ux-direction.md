@@ -4,7 +4,7 @@ date: 2026-08-23
 last-reviewed: 2026-08-23
 scope: Authoritative Public Prototype 1.0 UI architecture, navigation, interaction, responsive, accessibility, and visual-system direction
 implementation-issues: [117, 226, 227, 228, 230, 234, 238, 240, 258, 260, 261, 267, 268, 269, 274, 276, 279, 281, 289, 290, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327]
-implementation-prs: []
+implementation-prs: [329]
 supersedes: ["docs/superpowers/specs/2026-07-31-main-menu-design.md", "docs/superpowers/specs/2026-07-31-pause-design.md", "docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md"]
 superseded-by: []
 ---
