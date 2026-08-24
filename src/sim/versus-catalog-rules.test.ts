@@ -160,8 +160,12 @@ describe('seeded variant sweep: a draw that regresses a criterion names its seed
   // seeds where the removed cell reopens no spawn pair line stay clean, so the
   // assertion sweeps ALL five pinned seeds and requires at least one named
   // failure rather than pinning a specific seed's draw order.
+  // cellSize 2 (issue #312): at cellSize 1 every corridor cell is wall-adjacent, the
+  // clearance filter's pool empties, and the DEFAULT spawn-clearance rule (real since
+  // #312) reports the fallback spawns -- noise this fixture's concealment subject does
+  // not want. Concealment and variant semantics are scale-invariant.
   const arena: Arena = {
-    cols: 9, rows: 3, cellSize: 1,
+    cols: 9, rows: 3, cellSize: 2,
     legend: { x: 'solid' as WallKind, d: 'destructible' as WallKind },
     grid: ['xxxxxxxxx', 'P...d...x', 'xxxxxxxxx'].map((r) => r),
   };
@@ -200,10 +204,32 @@ describe('spawn-clearance seam: an injected rule surfaces with full identificati
   for (let r = 0; r < 10; r++) grid.push(r === 0 ? 'P.........' : '..........');
   const openRoom: Arena = { cols: 10, rows: 10, cellSize: 1, legend: {}, grid };
 
-  it('absent by default: no spawn-clearance line without an injected rule', () => {
+  it('the DEFAULT rule is the real versusSpawnClearanceFailures: clean on a roomy fixture (issue #312)', () => {
+    // Spawn positions are already clearance-filtered since #225, so the default rule
+    // re-verifies rather than newly constrains: the open room's picked spawns are
+    // hull-clear and no spawn-clearance line appears -- while the cramped fixture
+    // below proves the default is genuinely wired, not absent.
     const entry = fixtureEntry({ players: [4] });
     const failures = versusCatalogEntryFailures(entry, { arenaFor: arenaFor(openRoom) });
     expect(failures.some((f) => f.includes('spawn-clearance'))).toBe(false);
+  });
+
+  it('a cramped board fails the DEFAULT rule with full identification (issue #312)', () => {
+    // A 1-cell corridor at cellSize 2/3: every open centre is 0.333 from the walls,
+    // the picker's eligible pool empties, and the fallback spawns really are
+    // hull-clipped -- exactly what the default rule must surface in the sweep.
+    const cramped: Arena = {
+      cols: 7, rows: 3, cellSize: 2 / 3,
+      legend: { x: 'solid' as WallKind },
+      grid: ['xxxxxxx', 'P.....x', 'xxxxxxx'],
+    };
+    const entry = fixtureEntry({ players: [2], modes: ['ffa'] });
+    const failures = versusCatalogEntryFailures(entry, { arenaFor: arenaFor(cramped) })
+      .filter((f) => f.includes('spawn-clearance'));
+    expect(failures.length).toBeGreaterThanOrEqual(1);
+    for (const f of failures) {
+      expect(f).toMatch(/^vs-fixture \(fixture-arena\) N=2 mode=ffa variant=authored: spawn-clearance: /);
+    }
   });
 
   it('an injected rule sees the real positions and its findings carry (entry, N, mode)', () => {
