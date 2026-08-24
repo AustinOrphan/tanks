@@ -654,5 +654,127 @@
       "src/sim/ai/targeting.test.ts"
     ],
     "why": "Drops sidestepAroundBlockage's own mine-refusal guard, the constraint its doc comment claims mirrors dangerAvoidMove's two-perpendicular passes -- a dodge that solves the shell by walking onto a mine. No existing test reached this specific line before this PR's re-pin work: the two-perpendicular tests (danger.test.ts's 'picks the dodge side that does not step toward a nearby armed mine') never reach sidestepAroundBlockage at all (a wall-clear perpendicular returns before it is called), and the pre-existing 'sidesteps onto a navigable heading' fixture carries no mine. Closed here by 'refuses a sidestep candidate that steps toward an armed mine': a corridor where the wheel's only two navigable candidates (due east/west) tie at the worst possible lateral-clearance score, with an armed mine placed on the tie-winning (east) side. Measured directly by disambiguating this line's two occurrences with the full three-line context above (the guard also appears verbatim in dangerAvoidMove's own two-perpendicular loop) -- the `find` string is unique to this function because only here is it immediately followed by the lateral-clearance score line."
+  },
+  {
+    "id": "session-dev-flag-versus-reported-as-campaign",
+    "file": "src/game/loop.ts",
+    "find": "    hud.setSessionKind(currentDescriptor.kind);\n    // Reseeded here too",
+    "replace": "    hud.setSessionKind('campaign');\n    // Reseeded here too",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "The gameplay HUD's identity must come from the canonical descriptor, not from a boot-time guess. Pinning switchTo's push to 'campaign' is the shape issue #316's review found shipped: a developer-flag versus session (?dev=1&mode=ffa) built a genuine FFA world while telling the HUD it was Campaign, which hid the versus stock strip and left the campaign Lives/Enemies stats on screen. It also reintroduces the Practice/Campaign divergence on the menu Level-Select path. Scoped to loop.test.ts, whose 'Gameplay HUD identity comes from the descriptor' block asserts the kind at the production composition boundary; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "session-title-policy-reused-as-identity",
+    "file": "src/game/loop.ts",
+    "find": "  hud.setSessionKind(currentDescriptor.kind);\n  // The stock strip's DATA",
+    "replace": "  hud.setSessionKind(relaunchTarget === 'versus-setup' ? 'versus' : 'campaign');\n  // The stock strip's DATA",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The other direction of the same collapse: deriving the gameplay HUD's identity from the title/outcome affordance POLICY instead of from the descriptor. Structurally this is the pre-fix code, re-expressed through the new type, and it is exactly what makes a developer-flag versus session report Campaign to gameplay while a Levels pick stops reporting Practice at all. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "session-level-pick-always-practice",
+    "file": "src/game/session-intent.ts",
+    "find": "  return bootIdentity.kind === 'campaign' ? practiceLevelIdentity() : bootIdentity;",
+    "replace": "  return practiceLevelIdentity();",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "identityForLevelPick must only convert a CAMPAIGN boot into Practice. The Levels button is genuinely reachable on ?dev=1&mode=ffa (that boot keeps the campaign LevelSystem, so levelChoice is true and the campaign-shaped title affordances leave it on screen) and createLevelSystem's world() closure stamps flags.mode on every level it builds -- so an unconditional Practice here reports practice-result for a match the sim decided by last-slot-standing, and drops the stock strip mid-session. Scoped to the two suites that enter this from both sides. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/session-intent.test.ts",
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "session-practice-hides-campaign-stats",
+    "file": "src/game/hud.ts",
+    "find": "    const versusSession = sessionKind === 'versus';",
+    "replace": "    const versusSession = sessionKind !== 'campaign';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The tempting widening once setSessionKind takes three kinds. Practice is a campaign board played in isolation and its Lives/Enemies are as real there as in a run, so hiding them is a shipped-behaviour regression on the non-developer Level-Select path -- and it would also surface the versus stock strip for practice. Kept as a permanent entry because nothing about the code's shape argues against the wider predicate; only the test does. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "session-outcome-label-keyed-on-identity",
+    "file": "src/game/hud.ts",
+    "find": "      actionBtn.textContent = relaunchTarget === 'versus-setup' ? 'Versus Setup' : 'Retry';",
+    "replace": "      actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Retry';",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The outcome action button names the click's DESTINATION, and loop.ts's onStartRestart branches on the relaunch target, not on the session kind -- a developer-flag versus session's click lands on a campaign board via landOnCampaignBoard. Keying the label on identity relabels that click 'Versus Setup', naming a pane it never opens: the same class of untruth as the retired localPlayerWon payload, in the presentation layer. Scoped to hud.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "devflags-developer-mode-gate-always-off",
+    "file": "src/game/devflags.ts",
+    "find": "  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);\n  return isOn(params, 'dev');",
+    "replace": "  return false;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "parseDeveloperMode is the real ?dev=1 boot gate and is production-only wiring: every session-intent and loop test injects an already-decided developerMode boolean, so before devflags.test.ts's own parseDeveloperMode block this mutation left the whole suite green while DeveloperMetadata.active went permanently false for the actual browser. Scoped to devflags.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/devflags.test.ts"
+    ]
+  },
+  {
+    "id": "browser-deps-drops-the-developer-gate",
+    "file": "src/game/loop.ts",
+    "find": "    developerMode: parseDeveloperMode(search),",
+    "replace": "    developerMode: false,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The composition half of the entry above: the parser can be correct and still never reach GameDeps. Only a test that enters through createBrowserDeps with a real location.search can see this, which is what loop.test.ts's 'carries the parsed browser query state into GameDeps' block does. Scoped to loop.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "versus-descriptor-retains-callers-rules",
+    "file": "src/game/app-state.ts",
+    "find": "  return Object.freeze({\n    kind: 'versus' as const,\n    rules: Object.freeze({\n      mode: rules.mode,\n      players: rules.players,\n      friendlyFire: rules.friendlyFire,\n      stock: rules.stock,\n      arenaSelection: rules.arenaSelection,\n    }),\n  });",
+    "replace": "  return Object.freeze({ kind: 'versus' as const, rules });",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The pre-fix exported boundary. VersusRules is a plain interface and versusDescriptor is exported, so a caller can hand-build a structurally valid MUTABLE rules object, pass it in, and then keep editing it -- silently rewriting the retained intent of a session already in progress. Freezing only the wrapper does not close that; snapshotting the fields does. Note the mutation still freezes the DESCRIPTOR, so a test asserting only Object.isFrozen(d) cannot kill it: the killing assertion is the post-hoc mutation of the caller's own object. Scoped to app-state.test.ts. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/app-state.test.ts"
+    ]
+  },
+  {
+    "id": "outcome-classifier-ignores-final-campaign-level",
+    "file": "src/game/state.ts",
+    "find": "      return context.isFinalCampaignLevel() ? campaignCompleteOutcome() : missionClearOutcome();",
+    "replace": "      return missionClearOutcome();",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Issue #316's finding 1: production used to construct its state machine with no completion context at all, so a campaign's FINAL win reported Mission Clear exactly like an intermediate one and Campaign Complete was unreachable in the shipped game. Scoped to both the unit suite (state.test.ts) and the production composition suite (loop.test.ts), because the callback being correct and the callback being WIRED are different claims. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/state.test.ts",
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "versus-result-always-first-slot",
+    "file": "src/game/loop.ts",
+    "find": "export function versusResultFromWorld(world: World): VersusResult {",
+    "replace": "export function versusResultFromWorld(world: World): VersusResult {\n  if (world.tanks.length > 0) return versusWinnerSlot(0);",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "The retired localPlayerWon payload, reconstructed: every decided couch match reported as a P1 victory, and every simultaneous-elimination draw as one too. The sim's win event in ffa/teams means 'exactly one player (or team) is not eliminated' and says nothing about WHICH seat, so this is the defect the typed VersusResult exists to make unrepresentable. Scoped to loop.test.ts, whose versusResultFromWorld block drives real FFA/teams worlds into each terminal shape. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
   }
 ]
