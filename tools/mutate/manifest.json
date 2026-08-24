@@ -501,7 +501,7 @@
     "find": "  if (mine.detonated || mine.proximityDelayLeft !== undefined) return",
     "replace": "  if (mine.detonated) return",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 5,
     "tests": [
       "src/sim/mines.test.ts"
     ],
@@ -513,7 +513,7 @@
     "find": "  mine.proximityDelayLeft = MINE_PROXIMITY_DELAY_TICKS",
     "replace": "  mine.proximityDelayLeft = 1",
     "expect": "killed",
-    "expectFailures": 4,
+    "expectFailures": 2,
     "tests": [
       "src/sim/mines.test.ts"
     ],

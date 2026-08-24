@@ -12,6 +12,19 @@ superseded-by: []
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **OWNER-REVISED (2026-08-24, PR #311 review).** The universal post-trigger delay this
+> plan originally specified was rejected before merge: trigger sources deliberately do
+> NOT share one delay. Revised contract, as shipped: a SHELL hit detonates an armed mine
+> immediately (skill-shot credit intact); the FUSE warning (`mine-fuse-warning`, a new
+> event) occupies the final `MINE_FUSE_WARNING_TICKS` of the existing fuse with expiry
+> timing untouched; PROXIMITY entry (`mine-triggered`) opens a
+> `MINE_PROXIMITY_DELAY_TICKS` reaction window, the one post-trigger delay that exists,
+> with fuse expiry mid-window still detonating (earliest clock wins). Both timings are
+> separate named `balance.json` values (`mines.fuseWarningTicks`,
+> `mines.proximityDelayTicks`, both provisionally 30); #276 distinguishes the two cues,
+> #277 tunes each. The task breakdown below describes the ORIGINAL design and is kept as
+> the execution record; the revised semantics supersede its universal-delay contract.
+
 **Goal:** Armed mines get an explicit deterministic warning phase between ANY lethal
 trigger (proximity entry, fuse expiry, shell hit) and blast expansion, lasting a named
 exact number of simulation ticks, with idempotent triggers and first-credit preserved
