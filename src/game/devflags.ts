@@ -401,6 +401,28 @@ function isOn(params: URLSearchParams, name: string): boolean {
 }
 
 /**
+ * Whether the `dev` GATE itself is on, independent of which individual flags
+ * follow it.
+ *
+ * Deliberately a separate read rather than a `DevFlags` field: `dev` is not a
+ * feature switch, it is the gate every feature switch requires, and
+ * `FLAG_REGISTRY`'s `Record<keyof DevFlags, FlagSpec>` completeness contract
+ * explicitly excludes it (see that table's own header comment -- adding `dev`
+ * there is a type error on purpose).
+ *
+ * Needed because a bare `?dev=1` parses to exactly `DEV_FLAGS_OFF`, so the
+ * parsed flags alone cannot tell "developer mode on, nothing enabled" apart
+ * from "no developer mode at all". `DeveloperMetadata.active`
+ * (`app-state.ts`) is the consumer.
+ *
+ * @param search a `location.search`, with or without the leading `?`.
+ */
+export function parseDeveloperMode(search: string): boolean {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  return isOn(params, 'dev');
+}
+
+/**
  * @param search a `location.search`, with or without the leading `?`.
  */
 export function parseDevFlags(search: string): DevFlags {
