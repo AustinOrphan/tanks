@@ -79,11 +79,17 @@ jobs:
           HARNESS_PATH: ${{ steps.harness.outputs.path }}
           TEST_TIMEOUT: ${{ inputs.testTimeout }}
         run: |
+          # `|| status=$?`, not a bare call followed by `status=$?`: a `run:` block's
+          # default shell is `bash -e {0}`, so a bare failing call exits the step on the
+          # spot and the `cat` below never runs -- on the very failure you most want to
+          # read, the log would reach the uploaded artifact but never the step's console.
+          # A command on the left of `||` is exempt from errexit, so this keeps both the
+          # console output and the exit code. Verified against `bash -e` directly: the
+          # bare form skips the `cat` and exits 1, this form prints and exits 1.
           npx vitest run "$HARNESS_PATH" --testTimeout="$TEST_TIMEOUT" \
-            > measure-output.log 2>&1
-          status=$?
+            > measure-output.log 2>&1 || status=$?
           cat measure-output.log
-          exit $status
+          exit "${status:-0}"
 
       - name: Upload console output
         if: always()
