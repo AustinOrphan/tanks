@@ -746,7 +746,7 @@ describe('source-specific mine warnings (issue #275, owner-revised on PR #311)',
     return { world, owner, events }
   }
 
-  it('pins BOTH named durations separately: fuse warning window 30, proximity delay 30, from balance.json', () => {
+  it('pins BOTH named durations separately: fuse warning 30 ticks, proximity delay 30 ticks, from balance.json', () => {
     // Separately named and configured because the semantics differ (owner
     // direction on PR #311); both provisional, #277 owns tuning each independently.
     expect(MINE_FUSE_WARNING_TICKS).toBe(30)
@@ -770,7 +770,7 @@ describe('source-specific mine warnings (issue #275, owner-revised on PR #311)',
     expect(world.blasts).toHaveLength(1)
   })
 
-  it("the fuse warning is the fuse's FINAL window: one event when timer crosses in, detonation exactly when it always was", () => {
+  it("the fuse warning occupies the fuse's FINAL stretch: one event when timer crosses in, detonation exactly when it always was", () => {
     const { world, events } = armedFixture()
     // One call already ran (arming). The warning must fire when `timer` first
     // reaches MINE_FUSE_WARNING_TICKS * DT remaining, and expiry must land at the
