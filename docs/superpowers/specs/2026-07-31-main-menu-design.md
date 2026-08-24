@@ -1,12 +1,12 @@
 ---
-status: completed
+status: superseded
 date: 2026-07-31
 last-reviewed: 2026-08-23
 scope: Title panel becomes the main menu: Start/Level Select/Settings, localStorage level-unlock progress, and a dev-only sandbox.
 implementation-issues: []
 implementation-prs: [47]
 supersedes: []
-superseded-by: []
+superseded-by: ["docs/superpowers/specs/2026-08-23-ui-ux-direction.md"]
 ---
 # Main menu: level select with saved progress, and settings on the title panel
 

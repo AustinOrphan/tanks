@@ -1,12 +1,12 @@
 ---
-status: completed
+status: superseded
 date: 2026-07-31
 last-reviewed: 2026-08-23
 scope: Pause state design: Esc/P and blur triggers, frozen-scene overlay, and the settings-pane seed shared with the title panel.
 implementation-issues: []
 implementation-prs: [45]
 supersedes: []
-superseded-by: []
+superseded-by: ["docs/superpowers/specs/2026-08-23-ui-ux-direction.md"]
 ---
 # Pause: a frozen scene, a panel over it, and the seed of the settings pane
 

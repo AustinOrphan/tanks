@@ -1,12 +1,12 @@
 ---
-status: active
+status: superseded
 date: 2026-08-21
-last-reviewed: 2026-08-22
+last-reviewed: 2026-08-23
 scope: Authoritative VS setup, session configuration, match exit, and stock-readout decisions
 implementation-issues: [228]
 implementation-prs: [262]
 supersedes: []
-superseded-by: []
+superseded-by: ["docs/superpowers/specs/2026-08-23-ui-ux-direction.md"]
 ---
 
 # Spec — versus setup menu
