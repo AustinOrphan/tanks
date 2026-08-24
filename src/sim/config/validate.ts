@@ -60,6 +60,13 @@ function nonNegInt(file: string, path: string, v: unknown): number {
   return n;
 }
 
+/** Durations in seconds: finite and never negative, but genuinely unbounded above. */
+function nonNegative(file: string, path: string, v: unknown): number {
+  const n = num(file, path, v);
+  if (n < 0) fail(file, path, `must be non-negative, got ${n}`);
+  return n;
+}
+
 /** Chances, accuracies and weights: the sim reasons about these as [0, 1]. */
 function unitInterval(file: string, path: string, v: unknown): number {
   const n = num(file, path, v);
@@ -152,7 +159,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
 }
 
 const PROFILE_FIELDS = [
-  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'aggression', 'preferredDistance',
+  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aggression', 'preferredDistance',
   'minimumDistance', 'retreatChance', 'directShotWeight', 'bankShotWeight',
 ] as const;
 const PROFILE_OPTIONAL_FIELDS = ['minePlacementChance'] as const;
@@ -188,6 +195,11 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // by it (targeting.ts), and 0 would make the spread Infinity.
       estimationAccuracy: positiveUnitInterval(file, `${profile}.estimationAccuracy`, p.estimationAccuracy),
       reactionTime: num(file, `${profile}.reactionTime`, p.reactionTime),
+      // Non-negative, not merely numeric: commitMove re-arms its window to
+      // Math.round(commitmentTime * TICK_HZ), and a negative value would re-arm to a
+      // negative countdown -- which never satisfies `ticks > 0`, silently disabling the
+      // commitment for that profile instead of failing loudly at load.
+      commitmentTime: nonNegative(file, `${profile}.commitmentTime`, p.commitmentTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
       minimumDistance: num(file, `${profile}.minimumDistance`, p.minimumDistance),
