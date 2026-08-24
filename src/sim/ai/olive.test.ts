@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
 import { greyDecision } from './grey';
+import type { AiDecision } from './decision';
 import { bulletConfig } from '../constants';
 import type { Bullet, Tank, Vec2 } from '../types';
 import { vlen } from '../types';
@@ -93,7 +94,15 @@ describe('olive, driven end-to-end by its resolved config', () => {
       { bullets: [threat] },
     );
     const d = decideAi(w, w.tanks[0]);
-    expect(d).toEqual(greyDecision(w, w.tanks[0]));
+    // Compared WITHOUT the commitment write-back pair, because those two fields are the
+    // one part of the decision `decideAi` does not take from the behaviour function: it
+    // layers commitMove (ai/commitment.ts) over whatever grey/teal/brown returned, so
+    // `nextIntent`/`nextIntentTicks` are populated on the dispatcher's result and null/0
+    // on the bare behaviour's. Every other field must still match grey byte for byte --
+    // which is what makes this fixture discriminate DEFENSIVE routing from TACTICAL, the
+    // property this test exists for.
+    const withoutCommitment = ({ nextIntent: _i, nextIntentTicks: _t, ...rest }: AiDecision) => rest;
+    expect(withoutCommitment(d)).toEqual(withoutCommitment(greyDecision(w, w.tanks[0])));
     expect(d.fire).toBe(false); // teal-routing fires here
     expect(d.nextTimer).toBe(1); // the DEFENSIVE patience counter, running
     expect(vlen(d.desiredMove)).toBeGreaterThan(0.9); // brown-routing sits still

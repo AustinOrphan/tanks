@@ -52,6 +52,10 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // threatened, then stands inside its own flee radius with a clear shot and holds fire.
   // The patience mechanism is about bullets and nothing else.
   const underFire = incomingThreats(world, tank, dangerCorridor).length > 0;
+  // Which hazard `avoid` is escaping, for the commitment layer's sign rule (AiDecision's
+  // own doc comment on avoidKind). Free here: `underFire` is already computed just above
+  // from the same perceived corridor dangerAvoidMove was handed.
+  const avoidKind = avoid === null ? null : underFire ? 'bullet' as const : 'mine' as const;
   const dodgeTicks = underFire ? tank.aiTimer + 1 : 0;
   // `sees` is computed BEFORE the patience early-return: a dodging grey still
   // SEES the player, and the reaction clock (dispatcher, aimTicks) must keep
@@ -62,7 +66,7 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   const sees = player !== undefined && lineOfSight(tank.pos, player.pos, world.walls);
   if (underFire && dodgeTicks < patienceTicks) {
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
   }
 
   let turretAngle = tank.turretAngle;
@@ -107,5 +111,8 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // dodgeTicks back via the early return while suppressed; this path (dodging has ended
   // or never started) resets it to 0, which is what lets a fresh dodge start counting
   // from 1 again next time.
-  return { desiredMove: move, turretAngle, fire, hasSolution: sees, fireType: weapon.bulletType, mine, nextState, nextTimer: 0 };
+  // `avoid` is threaded, not recomputed downstream: decideAi's commitment layer needs the
+  // dodge direction derived from THIS tank's perceived radii (see AiDecision.avoid).
+  // nextIntent/nextIntentTicks are placeholders -- decideAi overwrites both.
+  return { desiredMove: move, turretAngle, fire, hasSolution: sees, fireType: weapon.bulletType, mine, nextState, nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
 }

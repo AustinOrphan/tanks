@@ -163,6 +163,28 @@ describe('validateAiProfiles', () => {
     expect(() => validateAiProfiles(bad)).toThrow(/STATIC_BASIC\.estimationAccuracy.*strictly positive/);
   });
 
+  it('rejects a negative commitmentTime (a negative span disables the hold silently)', () => {
+    // Not pedantry: commitMove re-arms to Math.round(commitmentTime * TICK_HZ), and a
+    // negative countdown never satisfies its `ticks > 0` test -- so a typo'd minus sign
+    // would turn the commitment off for that one profile while every test that reads the
+    // shipped data kept passing. Failing at load is the whole point.
+    const bad = corrupt(aiProfilesJson, (c) => { (c.BERSERKER_ROCKET as Mutable).commitmentTime = -0.5; });
+    expect(() => validateAiProfiles(bad)).toThrow(/BERSERKER_ROCKET\.commitmentTime.*non-negative/);
+  });
+
+  it('rejects a profile missing commitmentTime', () => {
+    const bad = corrupt(aiProfilesJson, (c) => { delete (c.MOBILE_MINE_LAYER as Mutable).commitmentTime; });
+    expect(() => validateAiProfiles(bad)).toThrow(/MOBILE_MINE_LAYER.*commitmentTime/);
+  });
+
+  it('accepts commitmentTime 0 -- an explicit "never commits" is a legal authoring choice', () => {
+    // The negative control for the rejection above: the bound is on the SIGN, not on
+    // usefulness, so a deliberate zero must still load rather than being swept up by a
+    // stricter-than-stated check.
+    const ok = corrupt(aiProfilesJson, (c) => { (c.STATIC_BASIC as Mutable).commitmentTime = 0; });
+    expect(() => validateAiProfiles(ok)).not.toThrow();
+  });
+
   it('rejects a profile missing estimationAccuracy -- it is required, not optional like minePlacementChance', () => {
     const bad = corrupt(aiProfilesJson, (c) => { delete (c.RICOCHET_SNIPER as Mutable).estimationAccuracy; });
     expect(() => validateAiProfiles(bad)).toThrow(/RICOCHET_SNIPER.*missing required entry "estimationAccuracy"/);

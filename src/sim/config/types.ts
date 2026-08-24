@@ -76,6 +76,23 @@ export interface AIProfileBalance {
    */
   estimationAccuracy: number;
   reactionTime: number;
+  /**
+   * Seconds this profile COMMITS to a movement decision before re-deciding (issue #222).
+   * Consumed by `commitMove` (ai/commitment.ts) as `Math.round(commitmentTime * TICK_HZ)`.
+   *
+   * A PERSONALITY axis, not a difficulty one: it deliberately does not track the other
+   * fields' ordering. A jumpy defensive profile re-evaluates often and a berserker never
+   * second-guesses itself, and neither is straightforwardly "harder" -- committing longer
+   * makes a tank more decisive AND more predictable at once. That is also why
+   * `tankDifficultyBreakdown` does not score it; see its own doc comment on scoring only
+   * fields whose magnitude maps monotonically onto threat.
+   *
+   * Inert for STATIONARY behaviours: brown's `desiredMove` is hardcoded zero on every
+   * path, so it never acquires an intent to hold. The value is still required rather
+   * than optional -- an omitted field on a profile that later becomes mobile would
+   * silently default to "no commitment", which is the defect this closes.
+   */
+  commitmentTime: number;
   aggression: number;
   preferredDistance: number;
   minimumDistance: number;

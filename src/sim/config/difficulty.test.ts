@@ -27,6 +27,7 @@ function aiProfile(over: Partial<AIProfileBalance> = {}): AIProfileBalance {
     aimAccuracy: 0.5,
     estimationAccuracy: 0.5,
     reactionTime: 0.5,
+    commitmentTime: 0.3,
     aggression: 0.5,
     preferredDistance: 5,
     minimumDistance: 3,

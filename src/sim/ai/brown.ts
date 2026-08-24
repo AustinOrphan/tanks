@@ -17,7 +17,7 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
   // when two humans are on the board is balance work, deferred.
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   if (!player) {
-    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0 };
+    return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0 };
   }
 
   const speed = weapon.speed;
@@ -87,5 +87,7 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
       break;
   }
 
-  return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, hasSolution, fireType: weapon.bulletType, mine: false, nextState, nextTimer: 0 };
+  // avoid: null on every path -- a STATIONARY behaviour never calls dangerAvoidMove, and
+  // its zero desiredMove means the commitment layer holds nothing for it (commitment.ts).
+  return { desiredMove: { x: 0, y: 0 }, turretAngle, fire, hasSolution, fireType: weapon.bulletType, mine: false, nextState, nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0 };
 }

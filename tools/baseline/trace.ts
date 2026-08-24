@@ -88,7 +88,35 @@ import { step } from '../../src/sim/world';
  * field additions alone could not have moved it; the proximity timing shift is
  * what did.
  */
-export const BASELINE_HASH = 'bbce570946e5049e3b7589c3f029ea283e5d1d48a1391980c49691e1107c08d5';
+/*
+ * MOVED (2026-08-23, issue #222 on PR for feat/ai-decision-commitment): AI movement is now
+ * COMMITTED for a profile-driven span (ai/commitment.ts, applied centrally in decideAi)
+ * instead of re-decided every tick, and aim jitter DRIFTS across its AI_JITTER_TICKS bucket
+ * (smoothstep between adjacent draws) instead of holding one value and stepping at the
+ * boundary. Both change enemy trajectories and aim, and everything downstream of a
+ * differently-aimed shell or a differently-steered tank shifts with them.
+ *
+ * NOT a coincidence of some other change: this PR's only `src/sim/` edits are
+ * ai/commitment.ts (new), aimJitter in ai/targeting.ts, the avoid/avoidKind/intent fields
+ * threaded through ai/decision.ts + brown/grey/teal + index.ts, the commitmentTime profile
+ * field (config/types.ts, config/validate.ts, data/ai-profiles.json), three new constants,
+ * and the shared hold reaching decidePlayerInput.
+ *
+ * The two new Tank fields could NOT have moved this by themselves: traceText below samples
+ * only pos.x/pos.y/turretAngle/alive per tank plus a per-run status/tick line -- it never
+ * serializes the Tank struct -- so the move is attributable entirely to changed behaviour.
+ *
+ * Exposure MEASURED on this tree, over exactly the traced population (5 arenas x 6 seeds x
+ * 2500 ticks): 203238 enemy decision-ticks, of which 123003 (60.5%) ran with a live
+ * commitment being HELD rather than re-decided, and 193137 (95.0%) read an aim offset from
+ * somewhere other than a jitter-bucket boundary -- i.e. a drifted value where the old code
+ * returned that bucket's flat draw. Ample coupling in both mechanisms; this is not a hash
+ * moved by a rounding difference.
+ *
+ * History: bbce5709... (issue #275 as owner-revised) -> the hash below, confirmed by
+ * actually running trace.test.ts rather than by computing it a second way.
+ */
+export const BASELINE_HASH = '1ae1d739f4fda997d0796e127e899219d197bfeb2f0f1d39463a5b86659cc2b6';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
