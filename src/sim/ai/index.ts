@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { slewAngle } from '../types';
+import { slewAngle, angleDelta } from '../types';
 import type { SimEvent } from '../events';
 import type { AiDecision } from './decision';
 import { brownDecision } from './brown';
@@ -10,9 +10,34 @@ import { spawnBullet } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread } from './targeting';
 import { commitMove } from './commitment';
-import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, TICK_HZ, AI_MINE_FLEE_RADIUS } from '../constants';
+import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_DEADBAND, TICK_HZ, AI_MINE_FLEE_RADIUS } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
+
+/**
+ * AI-only turret slew with a deadband (issue #330): if the signed angular error between
+ * `current` and `target` is smaller than `deadband`, the tick does not move the turret at
+ * all, instead of falling through to slewAngle's usual "move toward target" behaviour.
+ * Otherwise this is exactly slewAngle -- deadband is checked, not incorporated into the
+ * slewed distance.
+ *
+ * Why this exists: AiDecision.turretAngle is recomputed from scratch every tick (aimLead
+ * against a moving target, plus the profile's aim jitter) with no memory of the last
+ * target, so a plain slewAngle chased every fractional recompute -- most of them well
+ * under one degree -- and read as continuous shimmer at 60Hz rather than tracking. See
+ * AI_TURRET_DEADBAND's comment in constants.ts for the measurement.
+ *
+ * At deadband=0 this is byte-identical to slewAngle: angleDelta's magnitude is never
+ * negative, so `< 0` can never be true and the skip branch can never fire (proven in
+ * dispatch.test.ts's negative-control case).
+ *
+ * NOT used by the player's turret (world.ts's driveTank calls slewAngle directly) --
+ * a deadband on live player input would read as input lag, not polish.
+ */
+export function turretSlew(current: number, target: number, maxDelta: number, deadband: number): number {
+  if (Math.abs(angleDelta(current, target)) < deadband) return current;
+  return slewAngle(current, target, maxDelta);
+}
 
 /** An inert decision: hold position, hold aim, do nothing. */
 function idleDecision(tank: Tank): AiDecision {
@@ -104,8 +129,10 @@ export function stepAi(world: World, events: SimEvent[]): void {
     tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
     // Turret turns at a finite rate rather than snapping instantly (slewAngle, types.ts)
-    // -- see AI_TURRET_TURN_RATE's comment in constants.ts (a primary difficulty knob).
-    tank.turretAngle = slewAngle(tank.turretAngle, decision.turretAngle, AI_TURRET_TURN_RATE * DT);
+    // -- see AI_TURRET_TURN_RATE's comment in constants.ts (a primary difficulty knob) --
+    // and does not move at all for an error under AI_TURRET_DEADBAND (issue #330; see
+    // turretSlew above and AI_TURRET_DEADBAND's comment in constants.ts).
+    tank.turretAngle = turretSlew(tank.turretAngle, decision.turretAngle, AI_TURRET_TURN_RATE * DT, AI_TURRET_DEADBAND);
     tank.aiState = decision.nextState;
     tank.aiTimer = decision.nextTimer;
     // The committed movement heading and its countdown, written back beside the other two

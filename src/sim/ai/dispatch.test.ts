@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { decideAi, stepAi } from './index';
-import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, DT } from '../constants';
+import { decideAi, stepAi, turretSlew } from './index';
+import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, AI_TURRET_DEADBAND, DT } from '../constants';
+import { slewAngle } from '../types';
 import type { Tank, Vec2 } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
@@ -360,6 +361,84 @@ describe('stepAi', () => {
       expect(bulletAngle).toBeCloseTo(maxDelta, 10);
       // ...NOT the ~150deg (2.618 rad) the decision function actually wanted.
       expect(Math.abs(bulletAngle - (5 * Math.PI) / 6)).toBeGreaterThan(1);
+    });
+  });
+
+  // --- I2: turret deadband (issue #330) -- eliminates the sub-perceptible shimmer a
+  // zero-deadband slew produces on every tick whose target moved a fraction of a degree.
+  // AI ONLY: see world.test.ts for the companion proof the player's turret slew (world.ts)
+  // still uses plain slewAngle and is untouched. ---
+  describe('turret deadband (issue #330)', () => {
+    // Unit-level coverage of the pure helper first: it is the one place the deadband
+    // decision is made, and testing it directly (rather than only through full AI
+    // fixtures) pins the exact boundary behaviour without needing to reverse-engineer
+    // aimLead/jitter geometry for a specific tiny error.
+    describe('turretSlew (pure helper)', () => {
+      it('does not move at all when the error is smaller than the deadband', () => {
+        expect(turretSlew(0, 0.01, 0.1, 0.02)).toBe(0);
+      });
+
+      it('slews at exactly the ordinary rate when the error is outside the deadband and the gap exceeds one tick\'s budget', () => {
+        // error 3.0 rad >> maxDelta 0.0417 (AI_TURRET_TURN_RATE*DT-sized budget): the
+        // helper must step by exactly maxDelta, identically to slewAngle, not jump.
+        const maxDelta = AI_TURRET_TURN_RATE * DT;
+        expect(turretSlew(0, 3.0, maxDelta, 0.02)).toBe(slewAngle(0, 3.0, maxDelta));
+        expect(turretSlew(0, 3.0, maxDelta, 0.02)).toBeCloseTo(maxDelta, 12);
+      });
+
+      it('closes the gap in one tick when the error is outside the deadband but inside the tick budget', () => {
+        expect(turretSlew(0, 0.05, 0.1, 0.02)).toBe(0.05);
+      });
+
+      it('negative control: with deadband 0, behaviour is byte-identical to slewAngle for every case above', () => {
+        // abs(delta) < 0 is never true, so the skip branch can never fire: deadband=0
+        // must fall through to slewAngle on every call, matching pre-#330 behaviour
+        // exactly rather than approximately.
+        const cases: Array<[number, number, number]> = [
+          [0, 0.01, 0.1], [0, 3.0, AI_TURRET_TURN_RATE * DT], [0, 0.05, 0.1],
+          [1.2345, 1.2345, 0.1], [3.1, -3.1, 0.05], [-0.02, 0.02, 0.01],
+        ];
+        for (const [current, target, maxDelta] of cases) {
+          expect(turretSlew(current, target, maxDelta, 0)).toBe(slewAngle(current, target, maxDelta));
+        }
+      });
+    });
+
+    // Full-stack integration: prove stepAi actually wires AI_TURRET_DEADBAND in for a
+    // real AI tank, using the production constant rather than an arbitrary test value.
+    describe('wired into stepAi', () => {
+      it('a stationary AI target: an error inside AI_TURRET_DEADBAND produces no rotation at all', () => {
+        // Learn the exact desired angle from a real decision first (grey's aimLead
+        // geometry, deterministic for this fixture), then place the tank's CURRENT
+        // angle just inside the deadband of it.
+        const probe = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
+        const player = tank(2, 'player', { x: 5, y: 0 });
+        const decision = decideAi(world([probe, player]), probe);
+
+        const grey = tank(1, 'grey', { x: 0, y: 0 }, {
+          ...HELD, turretAngle: decision.turretAngle - AI_TURRET_DEADBAND / 2,
+        });
+        const w = world([grey, tank(2, 'player', { x: 5, y: 0 })]);
+        const before = w.tanks[0].turretAngle;
+        stepAi(w, []);
+        expect(w.tanks[0].turretAngle).toBe(before); // did not move at all
+      });
+
+      it('the same target just outside AI_TURRET_DEADBAND still slews normally', () => {
+        const probe = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
+        const player = tank(2, 'player', { x: 5, y: 0 });
+        const decision = decideAi(world([probe, player]), probe);
+
+        const startAngle = decision.turretAngle - AI_TURRET_DEADBAND * 1.5;
+        const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: startAngle });
+        const w = world([grey, tank(2, 'player', { x: 5, y: 0 })]);
+        stepAi(w, []);
+        // Error (deadband*1.5) is comfortably inside one tick's slew budget
+        // (AI_TURRET_TURN_RATE*DT), so the ordinary slewAngle path closes it exactly,
+        // reaching the decision's angle in this single tick.
+        expect(w.tanks[0].turretAngle).toBeCloseTo(decision.turretAngle, 10);
+        expect(w.tanks[0].turretAngle).not.toBe(startAngle);
+      });
     });
   });
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   bulletConfig, DT, TICK_HZ, COUNTDOWN_TICKS, RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS, SHELL_CAP, MINE_CAP,
   NORMAL_BOUNCES, FAST_BOUNCES, RICOCHET_BOUNCES, LIVES, VERSUS_STOCK,
-  PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE,
+  PLAYER_TURRET_TURN_RATE, AI_TURRET_TURN_RATE, AI_TURRET_DEADBAND,
   TANK_RADIUS, TANK_SPEED, TANK_TURN_RATE, BULLET_RADIUS, MINE_TRIGGER_RADIUS,
   NORMAL_SPEED, FAST_SPEED, RICOCHET_SPEED,
   FIRE_COOLDOWN, MINE_COOLDOWN,
@@ -155,6 +155,15 @@ describe('constants', () => {
     expect(PLAYER_TURRET_TURN_RATE).toBe(8.0);
     expect(AI_TURRET_TURN_RATE).toBe(2.5);
     expect(PLAYER_TURRET_TURN_RATE).toBeGreaterThan(AI_TURRET_TURN_RATE);
+  });
+
+  it('AI_TURRET_DEADBAND (issue #330): 0.25 degrees in radians, well under one tick\'s slew budget', () => {
+    expect(AI_TURRET_DEADBAND).toBeCloseTo((0.25 * Math.PI) / 180, 12);
+    // Sanity bound on the choice itself, not just the arithmetic: a deadband at or above
+    // one tick's turn budget would freeze real tracking, not just shimmer.
+    expect(AI_TURRET_DEADBAND).toBeLessThan(AI_TURRET_TURN_RATE * DT);
+    // And it must stay AI-only: PLAYER_TURRET_TURN_RATE's slew (world.ts) takes no
+    // deadband parameter at all -- see world.test.ts's companion proof.
   });
 
   it('hull turn rate stays below the turrets it carries (feel, constants.ts)', () => {

@@ -3,7 +3,7 @@ import { createWorld, cloneWorld, step } from './world';
 import type { World } from './world';
 import type { Tank, Wall, Spawn, InputState } from './types';
 import { angleOf, vsub, slewAngle } from './types';
-import { PLAYER_TURRET_TURN_RATE, DT } from './constants';
+import { PLAYER_TURRET_TURN_RATE, AI_TURRET_DEADBAND, DT } from './constants';
 
 function makeTank(id: number, x: number, y: number): Tank {
   return {
@@ -148,5 +148,23 @@ describe('driveTank: a literal {0,0} aim is not a neutral', () => {
     const targetAngle = angleOf(vsub({ x: 0, y: 0 }, { x: 2, y: 3 }));
     const expectedAngle = slewAngle(0, targetAngle, PLAYER_TURRET_TURN_RATE * DT);
     expect(tank.turretAngle).toBeCloseTo(expectedAngle, 12);
+  });
+
+  // Issue #330 added a deadband to the AI turret slew (ai/index.ts's stepAi) on purpose,
+  // and just as deliberately did NOT add one here: a deadband on live player input reads
+  // as input lag, not polish. This proves the player path still uses plain slewAngle by
+  // placing the tank's current angle just inside AI_TURRET_DEADBAND of the target -- if the
+  // player path had somehow gained the same deadband, this would freeze instead of moving.
+  it('the player turret is NOT deadbanded (issue #330 is AI-only): a sub-deadband error still slews', () => {
+    const w = makeWorld(); // tank at (2, 3)
+    const targetAngle = angleOf(vsub({ x: 0, y: 0 }, { x: 2, y: 3 }));
+    const before = targetAngle - AI_TURRET_DEADBAND / 2; // inside the AI deadband, if it applied here
+    w.tanks[0].turretAngle = before;
+    const result = step(w, noInput);
+    const tank = result.world.tanks[0];
+    // A deadbanded player would have stayed at `before`. Plain slewAngle instead closes
+    // the (sub-tick-budget) gap exactly, reaching targetAngle in this one tick.
+    expect(tank.turretAngle).not.toBe(before);
+    expect(tank.turretAngle).toBeCloseTo(targetAngle, 10);
   });
 });

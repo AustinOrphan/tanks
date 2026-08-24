@@ -452,6 +452,50 @@ export const TANK_TURN_RATE = data.tank.turnRate;
 // Lowering it makes enemies more readable/telegraphed.
 export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 
+// ---- AI turret deadband (issue #330) ----
+// Below this angular error (radians), stepAi (ai/index.ts) does not slew the AI turret
+// at all this tick, instead of chasing every fractional recompute of AiDecision.turretAngle
+// (aimLead against a moving target, plus the profile's aim jitter, redone from scratch
+// every tick with no memory of the last target). Without a deadband, ANY nonzero error --
+// however small -- produced a rotation, and at 60Hz that reads as continuous shimmer
+// rather than tracking. Measured on the pre-#330 code, 20 seeds x 2 arenas x 2 simulated
+// minutes: turret rotations under 1.15 degrees on 22.4% (brown) / 19.0% (grey) / 38.9%
+// (teal) of live ticks -- brown never moves its HULL at all, so a player watching it sees
+// only a gun twitching on a motionless tank. See turretSlew (ai/index.ts) for the
+// mechanism and src/sim/ai/evasion.measure.test.ts for the sweep this value came from.
+//
+// 0.25 degrees was chosen from a sweep of {0 (control), 0.25, 0.5, 0.75, 1.0, 1.5}, 60
+// seeds x 2 arenas x 2 player policies x 3-minute cap each (evasion.measure.test.ts).
+// The sweep measured a real trade, not a clean win, and 0.25 sits deliberately at the
+// SAFE end of it:
+//   - Residual sub-1.15-degree shimmer the deadband does NOT catch (a closing tick can
+//     land anywhere between the deadband and the full per-tick slew budget) falls
+//     substantially but not to zero: brown/grey/teal roughly 17/21/31% -> 11/14/18% of
+//     live ticks (arena1/pacifist). Diminishing returns above this value.
+//   - Total turret rotation per tick is FLAT across the entire sweep (brown ~0.33-0.38
+//     deg/tick at every value including 0) -- the deadband redistributes motion into
+//     fewer, larger events, it does not reduce it.
+//   - That redistribution is the real risk this sweep was run to catch: a tick that
+//     ends a run of frozen ticks (a "release") is a single jump of roughly the
+//     accumulated error, and its size grows monotonically with the deadband, cutting
+//     across every kind/arena/policy measured -- median release size ~0.37 degrees at
+//     0.25, ~0.7 at 0.5, ~1.0 at 0.75, ~1.3 at 1.0, ~1.8 at 1.5. 0.25 and 0.5 both stay
+//     BELOW the issue's own 1.15-degree perceptibility line; 0.75 sits ON it (~1.0); by
+//     1.0 the release is clearly above it, as visible as the shimmer it replaced.
+//     Recommend against 1.0 and above on this basis. 0.5 is not disqualified by this
+//     argument -- it buys roughly 1.6x 0.25's shimmer reduction at a release size still
+//     under the line -- picking 0.25 over it is a conservatism call the sweep alone
+//     does not force; re-measure before moving to 0.5 if 0.25 reads as insufficient.
+// Lethality does not discriminate between candidates (engagement.measure.test.ts:
+// arena1 losses 57-59/60, freeWins 0-3/60, medianTicks 1390-1535; arena3 60/60,
+// medianTicks 1928-2039, all within seed noise; pacifist.test.ts passes at every value).
+//
+// AI ONLY. PLAYER_TURRET_TURN_RATE's slew (world.ts) has no deadband and must not gain
+// one: a deadband on live player input reads as input lag, not polish.
+//
+// 0.25 degrees, converted to radians (angleDelta and slewAngle both work in radians).
+export const AI_TURRET_DEADBAND = (0.25 * Math.PI) / 180;
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },
