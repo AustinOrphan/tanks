@@ -163,9 +163,14 @@ intents", so AC2 is partially, not fully, closed.
 
 Balance (60-seed engagement harness, the pinned method): losses and free wins unchanged
 (a1 59/60 & 1; a3 60/60 & 0). `medianTicks` 1705 → 1561 (a1, -8.4%) and 1837 → 1937 (a3, +5.4%).
-`minesPerGame` 2.67 → 2.88 and 1.45 → 1.85 (+8%/+28%) -- NOT isolated to a single cause; the
-`mine` gate's meaning was deliberately left unchanged, and coherent movement both keeps tanks
-near the player longer and lets a held dodge continue past the tick `avoid` goes null.
+`minesPerGame` 2.67 → 2.88 and 1.45 → 1.85 (+8%/+28%). PARTLY ATTRIBUTED by a later
+occupancy measurement: the risk this plan flagged before implementing -- a held dodge keeping
+`!avoid` true more of the time and letting mines through -- is RULED OUT, because the fraction
+of moving ticks with a live escape moved only 12.7% → 12.5% (a1/pacifist) and 3.3% → 3.4%
+(a3/pacifist), which cannot produce a 28% rise. The remaining candidate is
+`mineThreatensPlayer` being satisfied more often (committed movement carries a tank around the
+player more effectively); that is named but NOT measured. The `mine` gate's meaning therefore
+stays unchanged on evidence rather than on preference.
 
 ## MID-EXECUTION CORRECTION (2026-08-23): the bullet dodge is sign-blind
 
