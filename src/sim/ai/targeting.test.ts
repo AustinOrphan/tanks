@@ -933,13 +933,24 @@ describe('aimJitter', () => {
     expect(atBucket0).not.toBe(atBucket1);
   });
 
-  it('holds within a bucket (ticks 0 and AI_JITTER_TICKS-1) and changes at the boundary', () => {
+  // CONTRACT CHANGED by issue #222. This case previously asserted the opposite --
+  // `atTickLast === atTick0`, i.e. the offset HELD flat for the whole bucket and then
+  // teleported at the boundary. That hold-then-step shape IS the defect #222 names ("a
+  // stepwise target jump"), so the assertion is inverted rather than deleted: the offset
+  // must now have travelled most of the way toward the next bucket's draw by the last
+  // tick of this one, while tick 0 still reads exactly this bucket's own draw (which is
+  // what keeps the two hand-derived PRNG pins above valid).
+  it('drifts within a bucket, arriving near the next bucket\'s draw by its last tick', () => {
     const t = wanderTank(1);
     const atTick0 = aimJitter(wanderWorld(7, 0), t, AI_AIM_SPREAD);
     const atTickLast = aimJitter(wanderWorld(7, AI_JITTER_TICKS - 1), t, AI_AIM_SPREAD);
     const atTickNext = aimJitter(wanderWorld(7, AI_JITTER_TICKS), t, AI_AIM_SPREAD);
-    expect(atTickLast).toBe(atTick0);
-    expect(atTickNext).not.toBe(atTick0);
+    expect(atTickLast).not.toBe(atTick0);
+    // Most of the way there, but not all the way: the boundary tick itself is where the
+    // next draw is reached exactly.
+    const travelled = Math.abs(atTickLast - atTick0) / Math.abs(atTickNext - atTick0);
+    expect(travelled).toBeGreaterThan(0.9);
+    expect(travelled).toBeLessThan(1);
   });
 
   it('is NOT correlated with that tank\'s wanderMove heading (distinct multiplier from wanderMove\'s tank.id*1000)', () => {
@@ -964,5 +975,65 @@ describe('aimJitter', () => {
   it('scales with the spread parameter (zero spread yields zero offset)', () => {
     const t = wanderTank(1);
     expect(aimJitter(wanderWorld(7, 0), t, 0)).toBeCloseTo(0, 12);
+  });
+});
+
+// Issue #222 AC2: "aim error changes read as a correction over time, not a stepwise
+// target jump". Every test in the `aimJitter` block above samples only at bucket
+// BOUNDARIES (tick 0, tick AI_JITTER_TICKS), where an interpolating implementation
+// returns exactly that bucket's own draw -- which is why all of them, including the two
+// hand-derived PRNG pins, are untouched by the drift change and could not have caught
+// the defect. These are the cases that can.
+describe('aimJitter drift across a bucket (issue #222)', () => {
+  // Per-tick change must stay well under the size of a fresh redraw. Measured before the
+  // change, the median boundary step was ~0.64x the profile's own spread (4.86deg against
+  // grey's 7.63deg envelope), so a half-spread ceiling rejects the stepping implementation
+  // on more than half of all boundaries while leaving generous headroom for the easing's
+  // steepest segment (smoothstep's peak slope is 1.5, i.e. ~0.15x spread per tick here).
+  const MAX_STEP = AI_AIM_SPREAD * 0.5;
+
+  it('never moves the aim offset by half a spread in one tick, across two whole buckets', () => {
+    let worstSeed = -1;
+    let worst = 0;
+    for (let seed = 0; seed < 20; seed++) {
+      let prev = aimJitter(wanderWorld(seed, 0), wanderTank(1), AI_AIM_SPREAD);
+      for (let tick = 1; tick <= AI_JITTER_TICKS * 2; tick++) {
+        const cur = aimJitter(wanderWorld(seed, tick), wanderTank(1), AI_AIM_SPREAD);
+        const step = Math.abs(cur - prev);
+        if (step > worst) { worst = step; worstSeed = seed; }
+        prev = cur;
+      }
+    }
+    expect(worst, `worst adjacent-tick step was at seed ${worstSeed}`).toBeLessThan(MAX_STEP);
+  });
+
+  it('still reaches the full ±spread envelope at bucket endpoints', () => {
+    // The negative control for the test above: an implementation that "smoothed" by
+    // damping toward zero would pass a continuity bound while quietly making every
+    // enemy more accurate than its profile is tuned for. Endpoints are exact draws, so
+    // this pins the marginal distribution the difficulty knob assumes.
+    const ends: number[] = [];
+    for (let seed = 0; seed < 200; seed++) {
+      ends.push(aimJitter(wanderWorld(seed, seed * AI_JITTER_TICKS), wanderTank(1), AI_AIM_SPREAD));
+    }
+    expect(Math.max(...ends)).toBeGreaterThan(AI_AIM_SPREAD * 0.9);
+    expect(Math.min(...ends)).toBeLessThan(-AI_AIM_SPREAD * 0.9);
+  });
+
+  it('travels between the two adjacent bucket draws without overshooting either', () => {
+    // Proves it is an INTERPOLATION between this bucket and the next, not merely some
+    // other continuous function: every mid-bucket value lies within the closed interval
+    // spanned by the two endpoint draws.
+    const seed = 7;
+    const a = aimJitter(wanderWorld(seed, 0), wanderTank(1), AI_AIM_SPREAD);
+    const b = aimJitter(wanderWorld(seed, AI_JITTER_TICKS), wanderTank(1), AI_AIM_SPREAD);
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    expect(hi - lo).toBeGreaterThan(AI_AIM_SPREAD * 0.1); // the fixture must actually move
+    for (let tick = 1; tick < AI_JITTER_TICKS; tick++) {
+      const v = aimJitter(wanderWorld(seed, tick), wanderTank(1), AI_AIM_SPREAD);
+      expect(v).toBeGreaterThanOrEqual(lo);
+      expect(v).toBeLessThanOrEqual(hi);
+    }
   });
 });

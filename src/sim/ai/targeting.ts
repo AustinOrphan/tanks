@@ -606,8 +606,36 @@ export function seekMove(world: World, tank: Tank, cfg: ResolvedTankConfig): Vec
  */
 export function aimJitter(world: World, tank: Tank, spread: number): number {
   const bucket = Math.floor(world.tick / AI_JITTER_TICKS);
-  const rng = nextRng(world.seed + tank.id * 7919 + bucket);
-  return (rng.value * 2 - 1) * spread;
+  const draw = (b: number): number => nextRng(world.seed + tank.id * 7919 + b).value * 2 - 1;
+  // DRIFTS from this bucket's draw toward the next one across the bucket, rather than
+  // holding one value and teleporting to the next at the boundary (issue #222 AC2: "aim
+  // error changes read as a correction over time, not a stepwise target jump").
+  //
+  // Measured before this changed, over 60 seeds x 2 arenas x 2 player policies
+  // (commitment.measure.test.ts): the aim TARGET moved a median 4.0-5.4 degrees on the
+  // one tick in AI_JITTER_TICKS that crossed a boundary, against 0.11-0.18 degrees on
+  // every other tick -- about a 30x step. The tail is what shows: the P95 boundary step
+  // reached 23.19 degrees (teal, arena1, shooting player), and the AI turret slews at
+  // AI_TURRET_TURN_RATE = 2.5 rad/s = 2.39 degrees/tick, so the barrel spent ~10 ticks
+  // visibly chasing a target that had jumped in one.
+  //
+  // SMOOTHSTEP, not a linear ramp, and the reason is the distribution rather than the
+  // look. Its zero slope at both ends makes the value linger near each bucket's own
+  // draw, so the marginal spread stays close to the uniform +/-spread each profile is
+  // tuned for. A linear lerp spends its time mid-blend between two independent draws,
+  // which narrows effective aim error -- i.e. makes every enemy MORE accurate -- and
+  // that would be a silent difficulty change smuggled in as a smoothing fix.
+  // targeting.test.ts's "still reaches the full +/- spread envelope" case is the guard.
+  //
+  // At a boundary tick the eased factor is exactly 0, so the value is exactly that
+  // bucket's own draw: the two hand-derived PRNG pins in targeting.test.ts, and every
+  // other boundary-sampled assertion, are unmoved by this. It adds no new stream either
+  // -- same 7919 multiplier, one extra read of the NEXT bucket's key.
+  const t = (world.tick % AI_JITTER_TICKS) / AI_JITTER_TICKS;
+  const eased = t * t * (3 - 2 * t);
+  const a = draw(bucket);
+  const b = draw(bucket + 1);
+  return (a + (b - a) * eased) * spread;
 }
 
 /**

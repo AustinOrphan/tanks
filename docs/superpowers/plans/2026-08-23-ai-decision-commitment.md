@@ -98,6 +98,37 @@ is genuinely visible. A blended percentile CANNOT show this (boundaries are 1-in
 pairs, so they hide at exactly the P95 an unsplit column reports) — which is why Task 1's
 harness splits the two columns.
 
+## Resolved before implementation (review findings)
+
+Three questions were settled against the code before Task 3 was written, because each
+would otherwise have been decided silently while implementing:
+
+1. **`avoid` is THREADED, not recomputed.** `AiDecision` gains `avoid: Vec2 | null` and the
+   behaviour functions return the value they already hold in a local. The alternative —
+   recomputing `dangerAvoidMove` inside `decideAi` with "the same" perceived radii — would
+   have rested on an assumption that is only true for grey and teal (brown never calls it
+   at all), and would have paid a second O(walls) wheel probe every tick to re-derive a
+   number the caller already had. Threading removes the assumption instead of testing it.
+2. **The `mine` gate keeps its CURRENT meaning and is deliberately not re-pointed at the
+   committed intent.** Both grey and teal gate mine-laying on `!avoid`. That reads as "is
+   there a live hazard near me right now", not "am I dodging this tick", and it stays
+   correct under a hold: a tank riding out a committed heading with a shell inbound still
+   should not be dropping ordnance. The consequence to watch is the converse case — a
+   held dodge continuing after `avoid` goes null now permits a mine — so `minesPerGame`
+   (baseline 2.67 / 1.45) is a REQUIRED comparison in Task 6, and a material move there is
+   a finding to report, not a balance detail to absorb.
+3. **New `Tank` fields do not move `BASELINE_HASH` by themselves.** `traceText`
+   (`tools/baseline/trace.ts`) samples only `pos.x`, `pos.y`, `turretAngle` and `alive`
+   per tank, plus a per-run `status`/`tick` line — not the whole `Tank`. So the re-pin is
+   attributable entirely to changed BEHAVIOUR, which is what the MOVED entry must argue.
+
+Also confirmed: `pacifist.test.ts` asserts `freeWins / SEEDS <= MAX_FREE_WIN_RATE` with
+`MAX_FREE_WIN_RATE = 0.05` and `SEEDS = 60` — an UPPER bound, i.e. at most 3 free wins in
+60. A commitment window makes the AI slower to re-aim at a moving player, which pushes
+free wins toward that bound, so this is the gate most likely to break. Note its method
+differs from the engagement harness (5-minute cap there, 3-minute here), so the
+harness's `freeWins=1/60` is NOT this gate's headroom — run the gate itself.
+
 ## Global Constraints
 
 - `src/sim/` stays pure and deterministic: no DOM, Three.js, wall clock, or runtime
@@ -276,6 +307,10 @@ export function aimJitter(world: World, tank: Tank, spread: number): number {
 //    the threshold) does NOT break the hold -- issue #222's "without making every shell
 //    or wall contact an immediate full reversal". This is the test that fails if the
 //    emergency rule is written as "any avoid direction breaks the hold".
+//    MUST use a MINE escape fixture, not a bullet one: the bullet branch returns one of
+//    two exact opposite perpendiculars, so dot(held, avoid) there is only ever ~+1 or
+//    ~-1 and can never land in the "mildly off" band this case is about. Written against
+//    a bullet fixture, this test would assert on an unreachable state.
 // 7. PROFILE-DRIVEN (AC3): two configs whose commitmentTime differs produce different
 //    re-armed nextIntentTicks, asserted against Math.round(commitmentTime * TICK_HZ),
 //    not against a hardcoded number.
