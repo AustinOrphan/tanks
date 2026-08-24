@@ -98,10 +98,18 @@ interface KindStats {
    * while `seek->bullet`/`bullet->seek` is a dodge starting or ending (a hold).
    */
   transitions: Map<string, number>;
+  /**
+   * Moving-tick OCCUPANCY per source branch -- how much of a tank's moving life is spent
+   * dodging bullets, escaping mines, or seeking. Distinct from `transitions`, which counts
+   * only the flips: occupancy answers "where does the AI spend its time", which is what
+   * attributes a balance shift (e.g. a change in mines laid per game, since the mine gate
+   * keys off whether an escape is live) to a mechanism rather than leaving two candidates.
+   */
+  occupancy: Map<MoveSource, number>;
 }
 
 function emptyStats(): KindStats {
-  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], transitions: new Map() };
+  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], transitions: new Map(), occupancy: new Map() };
 }
 
 type PlayerPolicy = 'pacifist' | 'shooter';
@@ -159,6 +167,7 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
           const pm = prevMove.get(t.id);
           const s = statsFor(t.kind);
           const src = moving ? moveSource(w, t) : null;
+          if (src) s.occupancy.set(src, (s.occupancy.get(src) ?? 0) + 1);
           if (moving && pm) {
             s.pairs++;
             const dot = m.x * pm.x + m.y * pm.y;
@@ -240,12 +249,21 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
     for (const [k, v] of s.transitions) trans.set(k, (trans.get(k) ?? 0) + v);
   }
   const transTotal = [...trans.values()].reduce((a, b) => a + b, 0);
+  const occ = new Map<MoveSource, number>();
+  for (const st of stats.values()) {
+    for (const [k, v] of st.occupancy) occ.set(k, (occ.get(k) ?? 0) + v);
+  }
+  const occTotal = [...occ.values()].reduce((a, b) => a + b, 0);
+  const occRow = (['seek', 'mine', 'bullet'] as MoveSource[])
+    .map((k) => `${k}=${occ.get(k) ?? 0} (${((100 * (occ.get(k) ?? 0)) / occTotal).toFixed(1)}%)`)
+    .join(' ');
   const transRow = [...trans.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([k, v]) => `${k}=${((100 * v) / transTotal).toFixed(1)}%`)
     .join(' ');
   return `arena${arenaIdx + 1}/${policy}: medianGameTicks=${q(gameTicks, 0.5)} games=${gameTicks.length}\n  ${rows.join('\n  ')}`
-    + `\n  reversal sources (all kinds, n=${transTotal}): ${transRow}`;
+    + `\n  reversal sources (all kinds, n=${transTotal}): ${transRow}`
+    + `\n  moving-tick occupancy (all kinds, n=${occTotal}): ${occRow}`;
 }
 
 describe.skip('decision-stability measurement (flip skip off to run locally)', () => {
