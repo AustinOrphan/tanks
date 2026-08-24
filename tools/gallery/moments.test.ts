@@ -3,7 +3,6 @@ import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from 
 import type { World } from '../../src/sim/world';
 import {
   RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
-  MINE_WARNING_TICKS,
 } from '../../src/sim/constants';
 import { EMIT_SPACING } from '../../src/render/tread-trails';
 
@@ -122,12 +121,10 @@ describe('mine-cycle moment specifics', () => {
     expect(arm() - drop()).toBe(ticksToClear);
   });
 
-  it('detonates on fuse expiry plus the warning, MINE_TIMER seconds + MINE_WARNING_TICKS after the drop', () => {
-    // Issue #275: fuse expiry OPENS the triggered warning; the blast follows exactly
-    // MINE_WARNING_TICKS later (the fuse path triggers inside stepMines, so the
-    // trigger tick itself takes no countdown decrement -- contrast wall-break's
-    // shell path, one tick tighter, documented at its pins in moments.ts).
-    expect(detonate() - drop()).toBe(Math.round(MINE_TIMER * TICK_HZ) + MINE_WARNING_TICKS);
+  it('detonates on fuse expiry, MINE_TIMER seconds after the drop, not a proximity re-trigger', () => {
+    // Owner-revised issue #275: the fuse warning occupies the fuse's FINAL window,
+    // so expiry timing is exactly what it always was -- the warning added no time.
+    expect(detonate() - drop()).toBe(Math.round(MINE_TIMER * TICK_HZ));
   });
 
   it('never fires an explosion or kills its own owner: the walk-away clears blast range first', () => {

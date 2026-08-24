@@ -12,7 +12,7 @@ import {
   TANK_SPEED,
   BULLET_RADIUS,
   MINE_PROXIMITY_RADIUS,
-  MINE_WARNING_TICKS,
+  MINE_PROXIMITY_DELAY_TICKS,
   MINE_TIMER,
   bulletConfig,
 } from './constants';
@@ -204,24 +204,13 @@ describe('step() calls stepMines', () => {
 
     const r = step(w, idleInput);
 
-    // Fuse expiry ENTERS THE WARNING on this tick (issue #275); the detonation and
-    // removal land exactly MINE_WARNING_TICKS steps later. Deleting stepMines still
-    // fails this: the fuse never ticks down and no trigger ever fires.
-    expect(r.events).toContainEqual({ type: 'mine-triggered', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: 40, y: 40 } });
-    let wWarn = r.world;
-    let detonation: SimEvent[] = [];
-    for (let i = 0; i < MINE_WARNING_TICKS; i++) {
-      const rr = step(wWarn, idleInput);
-      wWarn = rr.world;
-      detonation.push(...rr.events);
-    }
-    expect(detonation).toContainEqual({ type: 'mine-detonate', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: 40, y: 40 } });
+    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: mine.id, ownerId: PLAYER_ID, pos: { x: 40, y: 40 } });
     // Scoped to THIS mine's id rather than world.mines.length. Grey cannot actually reach
     // a drop in this fixture (it spawns 35 units from the player, well outside
     // AI_MINE_TACTICAL_RADIUS of 8.5), but a length assertion couples the test to that
     // margin for no benefit -- tune the radius and it fails for a reason unrelated to the
     // pipeline.
-    expect(wWarn.mines.find((m) => m.id === mine.id)).toBeUndefined();
+    expect(r.world.mines.find((m) => m.id === mine.id)).toBeUndefined();
   });
 
   it('a mine placed clear of its owner arms, and then kills on proximity', () => {
@@ -239,14 +228,15 @@ describe('step() calls stepMines', () => {
 
     expect(armTick.events).toContainEqual({ type: 'mine-armed', mineId: mine.id, ownerId: PLAYER_ID, pos: minePos });
     // Brown is static and stands inside MINE_PROXIMITY_RADIUS of the drop point, so the
-    // mine ENTERS THE WARNING on the same tick it arms (issue #275); it stays in the
-    // world through the warning, then the blast has to GROW out to him: at 1.4 away he
-    // survives the detonation tick and dies once the edge arrives.
+    // mine is TRIPPED on the same tick it arms (issue #275, owner-revised: proximity
+    // opens a short reaction delay); it stays in the world through the delay, then the
+    // blast has to GROW out to him: at 1.4 away he survives the detonation tick and
+    // dies once the edge arrives.
     expect(armTick.events).toContainEqual({ type: 'mine-triggered', mineId: mine.id, ownerId: PLAYER_ID, pos: minePos });
     expect(tankById(armTick.world, BROWN_ID).alive).toBe(true);
     expect(armTick.world.mines.find((m) => m.id === mine.id)).toBeDefined();
     let w2 = armTick.world;
-    for (let i = 0; i < MINE_WARNING_TICKS + BLAST_LIFETIME_TICKS; i++) w2 = step(w2, idleInput).world;
+    for (let i = 0; i < MINE_PROXIMITY_DELAY_TICKS + BLAST_LIFETIME_TICKS; i++) w2 = step(w2, idleInput).world;
     expect(tankById(w2, BROWN_ID).alive).toBe(false);
   });
 });
@@ -293,14 +283,9 @@ describe('step() stage ORDER', () => {
     tankById(w, GREY_ID).alive = false;
     putMine(w, PLAYER_ID, { x: 20, y: 20 }, DT / 2); // fuse expires on Brown's head this tick
 
-    // The fuse now opens the warning (issue #275); the ORDER property is asserted at
-    // the DETONATION tick: the step whose stepMines detonates the mine is the same
-    // step whose resolveStatus records the win.
-    let r = step(w, idleInput);
-    for (let i = 0; i < MINE_WARNING_TICKS; i++) r = step(r.world, idleInput);
+    const r = step(w, idleInput);
 
     expect(tankById(r.world, BROWN_ID).alive).toBe(false);
-    expect(r.events).toContainEqual({ type: 'mine-detonate', mineId: expect.any(Number), ownerId: PLAYER_ID, pos: { x: 20, y: 20 } });
     expect(r.world.status).toBe('win');
     expect(r.events).toContainEqual({ type: 'win' });
   });
@@ -414,7 +399,7 @@ describe('step() stage ORDER', () => {
     // makes this fail if stepBlasts is dropped from the pipeline.
     let w2 = r.world;
     const deaths: SimEvent[] = [];
-    for (let i = 0; i < MINE_WARNING_TICKS + BLAST_LIFETIME_TICKS; i++) {
+    for (let i = 0; i < MINE_PROXIMITY_DELAY_TICKS + BLAST_LIFETIME_TICKS; i++) {
       const rr = step(w2, idleInput);
       w2 = rr.world;
       deaths.push(...rr.events.filter((e) => e.type === 'tank-destroyed'));

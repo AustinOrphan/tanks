@@ -124,7 +124,8 @@ export function createHapticsDirector(
       case 'lose':
         break;
       case 'mine-triggered':
-        // No pulse in this child -- the synchronized warning presentation is
+      case 'mine-fuse-warning':
+        // No pulse in this child -- the two distinct warning presentations are
         // #276's deliberate work (same posture as audio/director.ts).
         break;
       default: {

@@ -271,19 +271,20 @@ export interface Mine {
   armed: boolean;
   detonated: boolean;
   /**
-   * Ticks left in the triggered-warning phase (issue #275); absent = not
-   * triggered (optional like Tank's flags, so the dozens of existing mine
-   * fixtures stay valid). Stamped once by `triggerMine` (mines.ts) and only
-   * ever counted DOWN -- re-triggers are no-ops, so the countdown cannot
-   * restart or shorten.
+   * Ticks left in the PROXIMITY reaction delay (issue #275, owner-revised):
+   * absent = not tripped (optional like Tank's flags, so existing mine fixtures
+   * stay valid). Stamped once on proximity entry and only ever counted DOWN --
+   * re-entry is a no-op, so the countdown cannot restart or shorten. Fuse and
+   * shell triggers never touch it: fuse expiry detonates on its own schedule
+   * (`timer`), a shell detonates immediately.
    */
-  warningLeft?: number;
+  proximityDelayLeft?: number;
   /**
-   * The blast credit the FIRST trigger carried (a shell trigger's shooter).
-   * Read once by the scheduled detonation; absent = the mine's own logic
-   * (fuse/proximity), which credits the owner via `detonateMine`'s default.
+   * One-shot latch for the `mine-fuse-warning` event, fired when `timer` first
+   * enters the final MINE_FUSE_WARNING_TICKS of the fuse. Event data only -- the
+   * fuse's own expiry, not this flag, is what detonates.
    */
-  pendingCredit?: { source: 'blast' | 'shell'; ownerId: number };
+  fuseWarned?: boolean;
 }
 
 // move components in [-1,1] (not normalized); aim is a world-space ground point;

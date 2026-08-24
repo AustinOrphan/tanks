@@ -68,23 +68,27 @@ import { step } from '../../src/sim/world';
  * trajectories -- re-measure rather than carrying it forward.
  */
 /*
- * MOVED (2026-08-23, issue #275, the mine triggered-warning phase): every lethal
- * mine trigger (proximity, fuse expiry, shell hit) now opens a MINE_WARNING_TICKS
- * (30-tick) warning before the blast exists, so every in-trace detonation lands
- * ~30 ticks later and everything downstream of a blast (kills, wall breaches, AI
- * reactions to the changed board) shifts. NOT a coincidence of some other change:
- * this PR's only `src/sim/` edits are the phase machine (mines.ts/types.ts/
- * events.ts/constants.ts/balance.json's warningTicks) and bullets.ts's trigger
- * call. Exposure MEASURED before implementing (plan doc, Task 1): the traced
+ * MOVED (2026-08-23, issue #275 as owner-revised on PR #311): mine triggers are
+ * now source-specific -- a SHELL hit detonates immediately (unchanged from
+ * pre-#275), FUSE expiry detonates exactly when it always did (its warning is
+ * the fuse's final window, adding no time), and PROXIMITY entry opens a
+ * MINE_PROXIMITY_DELAY_TICKS (30-tick) reaction window before the blast. Only
+ * that proximity delay perturbs trajectories relative to the original tree, and
+ * everything downstream of a delayed blast (kills, wall breaches, AI reactions)
+ * shifts with it. NOT a coincidence of some other change: this PR's only
+ * `src/sim/` edits are the phase machine (mines.ts/types.ts/events.ts/
+ * constants.ts/balance.json's fuseWarningTicks+proximityDelayTicks) and
+ * bullets.ts's immediate-shell call. Exposure MEASURED on this tree: the traced
  * population (5 arenas x 6 seeds x 2500 ticks, a mine laid every 311 ticks)
- * contains 166 mines laid, 150 armed, 88 mine-detonate events and 27 blast
- * kills -- ample coupling for the hash to move, and it did: old hash
- * a5458ede003c173ccc099b708f4b7d43b7537ca8a7846a87274b6376ccc311a9, new hash
- * below, confirmed by actually running trace.test.ts (the Mine struct itself is
- * never serialized here -- only sampled tank poses -- so the field additions
- * alone could not have moved it; the timing shift is what did).
+ * contains 19 proximity trips, 58 fuse warnings and 71 detonations -- ample
+ * coupling. History: a5458ede... (pre-#275) -> cc748a89... (the first,
+ * universal-30-tick-delay implementation, superseded before merge by the owner
+ * direction) -> the hash below, confirmed by actually running trace.test.ts.
+ * The Mine struct is never serialized here -- only sampled tank poses -- so the
+ * field additions alone could not have moved it; the proximity timing shift is
+ * what did.
  */
-export const BASELINE_HASH = 'cc748a89d058c00edc6a7af320d3b3ebc1e6c39d827bb35a82c558335c85c392';
+export const BASELINE_HASH = 'bbce570946e5049e3b7589c3f029ea283e5d1d48a1391980c49691e1107c08d5';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
