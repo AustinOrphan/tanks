@@ -1,5 +1,5 @@
 import type { World } from '../sim/world';
-import { countPlayerTanks } from '../sim/world';
+import { countPlayerTanks, isVersusEliminated } from '../sim/world';
 import type { SimEvent } from '../sim/events';
 import type { Vec2, InputState, Tank } from '../sim/types';
 import {
@@ -48,23 +48,37 @@ import { AUDIO_MANIFEST } from '../audio/manifest';
 import type { SuiteContext } from '../audio/suites';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
-import { createGameStateMachine, type GameStateMachine } from './state';
+import {
+  createGameStateMachine,
+  createOutcomeClassifier,
+  type GameStateMachine,
+  type GameStateMachineConfig,
+} from './state';
 import {
   type AppLocation,
   type ResolvedSession,
   type SessionDescriptor,
-  campaignDescriptor,
-  outcomeIsVictory,
-  practiceDescriptor,
+  type VersusResult,
+  legacyOutcomePresentation,
   resolveSession,
-  versusDescriptor,
+  versusDraw,
+  versusWinnerSlot,
+  versusWinnerTeam,
 } from './app-state';
+import {
+  type SessionContext,
+  type SessionIdentity,
+  descriptorFor,
+  practiceLevelIdentity,
+  resolveBootSessionContext,
+  usesVersusTitleAffordances,
+} from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
 import { TICK_HZ } from '../sim/constants';
-import { parseDevFlags, type DevFlags } from './devflags';
+import { parseDevFlags, parseDeveloperMode, type DevFlags } from './devflags';
 import { configFor } from '../sim/config';
 import { qualityFor, type RenderQuality } from '../render/quality';
 
@@ -185,7 +199,14 @@ export interface GameDeps {
    * to test independently of the director that calls it.
    */
   readonly createHaptics: (playerId: number) => HapticsDirector;
-  readonly createStateMachine: () => GameStateMachine;
+  /**
+   * Takes the outcome classifier its session needs -- see
+   * `GameStateMachineConfig.classifyOutcome`. Not a zero-argument factory:
+   * that shape is what allowed production to construct a machine with no
+   * campaign-completion or versus-attribution context at all (issue #316
+   * review, finding 1).
+   */
+  readonly createStateMachine: (config: GameStateMachineConfig) => GameStateMachine;
   readonly createHud: (root: HTMLElement) => Hud;
   /**
    * The level sequence: how many levels exist, where this session starts, and how
@@ -234,6 +255,13 @@ export interface GameDeps {
   /** Opt-in switches for unshipped work. Off unless the URL says otherwise. */
   /** Opt-in diagnostics. Off unless the URL says otherwise. */
   readonly devFlags: DevFlags;
+  /**
+   * Whether the `dev` GATE itself was on -- `parseDeveloperMode`, not a
+   * `DevFlags` field (a bare `?dev=1` parses to exactly `DEV_FLAGS_OFF`, so
+   * the flags cannot report it). Feeds `DeveloperMetadata.active` through the
+   * session translation.
+   */
+  readonly developerMode: boolean;
   /**
    * Reboots the running session into a versus match with this config -- the versus
    * setup pane's "Start" (a later task) calls it. Boot-provided (boot.ts's
@@ -580,26 +608,49 @@ export function musicIntensity(remaining: number, total: number): number {
  * dismisses launch starts the menu bed already in the right suite, with no
  * switch on arrival.
  *
- * Typed outcomes (issue #316) rather than a generic win/lose string mean the
- * mapping consults `outcomeIsVictory` directly -- a victory-shaped outcome
- * (mission-clear, campaign-complete, cleared practice, local-player VS win)
- * plays victory music; every other outcome plays defeat music.
+ * An outcome routes through `legacyOutcomePresentation` -- the explicitly-named
+ * compatibility projection (`app-state.ts`) that flattens a typed outcome onto
+ * the shipped victory/defeat pair. It is a PRESENTATION decision, not a claim
+ * about which seat won: a decided versus match plays the victory bed whoever
+ * survived, and a versus DRAW plays the defeat bed, exactly as the shipped
+ * `win`/`lose` events did.
+ *
+ * EXHAUSTIVE over routes on purpose. A silent `return 'menu'` for anything
+ * non-gameplay meant a future Records or Settings route would inherit the menu
+ * bed by accident rather than by decision; the switch below makes adding a
+ * route a compile error here.
  */
 export function musicContextFor(location: AppLocation): SuiteContext {
   if (location.kind === 'route') {
-    // Every application route -- launch, main-menu, settings, records,
-    // versus-setup, practice-select, customize, developer-tools, campaign --
-    // shares the menu suite. Screens that later dependent issues carve out
-    // (Records, Settings...) may choose their own context; today's target
-    // preserves the shipped rule that "not in gameplay = menu".
-    return 'menu';
+    switch (location.route.kind) {
+      // Every shipped route shares the menu suite -- including `launch`, which
+      // is the same world musically and is the screen on which nothing can be
+      // heard yet anyway. Setting it here means the gesture that dismisses
+      // launch starts the menu bed already in the right suite, with no switch
+      // on arrival. Routes that later dependent issues carve out may choose
+      // their own context; this preserves today's shipped rule.
+      case 'launch':
+      case 'main-menu':
+      case 'campaign':
+      case 'practice':
+      case 'versus-setup':
+      case 'settings':
+      case 'records':
+      case 'customize':
+      case 'developer-tools':
+        return 'menu';
+      default: {
+        const unreachable: never = location.route;
+        return unreachable;
+      }
+    }
   }
   switch (location.phase.kind) {
     case 'playing':
     case 'paused':
       return 'arena';
     case 'outcome':
-      return outcomeIsVictory(location.phase.outcome) ? 'victory' : 'defeat';
+      return legacyOutcomePresentation(location.phase.outcome) === 'win' ? 'victory' : 'defeat';
     default: {
       const unreachable: never = location.phase;
       return unreachable;
@@ -613,21 +664,74 @@ export function musicContextFor(location: AppLocation): SuiteContext {
  * boundary where the projection happens. The mapping preserves every visible
  * behavior: Launch → 'launch' hides the topbar and shows the splash panel;
  * Main Menu → 'main-menu' shows the title panel; playing/paused pass through;
- * an outcome projects to `outcome-win`/`outcome-lose` based on
- * `outcomeIsVictory`, since the HUD's intermediate-clear vs final-win branches
- * still need to distinguish which side the outcome fell on. Non-primary
- * routes (settings/records/customize/etc) that today do not have dedicated
- * screens land at 'main-menu' -- the Main Menu is the current shipped host
- * for those tabs.
+ * an outcome projects to `outcome-win`/`outcome-lose` through
+ * `legacyOutcomePresentation`, the explicitly-named compatibility projection.
+ *
+ * EXHAUSTIVE over routes on purpose: every non-primary route
+ * (settings/records/customize/...) is listed as landing on 'main-menu' because
+ * the Main Menu is the shipped host for those panels TODAY, and that is a
+ * decision each future route must re-make at compile time rather than inherit
+ * from an `else`.
  */
 export function locationToHudSurface(location: AppLocation): HudSurface {
   if (location.kind === 'route') {
-    return location.route.kind === 'launch' ? 'launch' : 'main-menu';
+    switch (location.route.kind) {
+      case 'launch':
+        return 'launch';
+      case 'main-menu':
+      case 'campaign':
+      case 'practice':
+      case 'versus-setup':
+      case 'settings':
+      case 'records':
+      case 'customize':
+      case 'developer-tools':
+        return 'main-menu';
+      default: {
+        const unreachable: never = location.route;
+        return unreachable;
+      }
+    }
   }
   const phase = location.phase;
   if (phase.kind === 'playing') return 'playing';
   if (phase.kind === 'paused') return 'paused';
-  return outcomeIsVictory(phase.outcome) ? 'outcome-win' : 'outcome-lose';
+  return legacyOutcomePresentation(phase.outcome) === 'win' ? 'outcome-win' : 'outcome-lose';
+}
+
+/**
+ * Who actually survived a versus match, read off the world that emitted the
+ * terminal event.
+ *
+ * This is the honest answer the sim's bare `win`/`lose` events cannot give.
+ * `resolveStatusFfa`/`resolveStatusTeams` (sim/world.ts) emit `win` when
+ * exactly one player -- or exactly one team -- is NOT ELIMINATED, and `lose`
+ * when none are. Neither says which seat, and the previous model turned every
+ * decided match into `localPlayerWon: true`, which in a couch match is not even
+ * a well-formed claim: every participant is local.
+ *
+ * Safe to read at classification time because the sim LATCHES: `stepInputs`
+ * runs its stage block only `if (draft.status === 'playing')`, so once a
+ * terminal status is set no further tick mutates tanks, and the driver's
+ * `world` getter still points at the deciding world when `onEvents` fires.
+ *
+ * Uses the sim's own `isVersusEliminated` predicate rather than a local copy,
+ * so the model cannot drift from the rule that produced the event.
+ */
+export function versusResultFromWorld(world: World): VersusResult {
+  const players = world.tanks.filter((t) => t.kind === 'player');
+  const remaining = players.filter((t) => !isVersusEliminated(t));
+  if (world.mode === 'teams') {
+    const teams = new Set(remaining.map((t) => t.team));
+    // Exactly one side left is that side's win; anything else is a draw --
+    // matching resolveStatusTeams, which resolves a simultaneous double
+    // wipeout to `lose` rather than inventing a third status.
+    const only = [...teams];
+    if (only.length === 1 && only[0] !== undefined) return versusWinnerTeam(only[0]);
+    return versusDraw();
+  }
+  if (remaining.length === 1) return versusWinnerSlot(remaining[0].controlledBy ?? 0);
+  return versusDraw();
 }
 
 function countEnemies(world: World): number {
@@ -649,7 +753,8 @@ function countEnemies(world: World): number {
  * site rather than a ReferenceError at import.
  */
 export function createBrowserDeps(): GameDeps {
-  const devFlags = parseDevFlags(globalThis.location?.search ?? '');
+  const search = globalThis.location?.search ?? '';
+  const devFlags = parseDevFlags(search);
   // Resolved ONCE and shared by all five stores. It used to be resolved per
   // store, which was harmless only because localStorage hands back the same
   // object every time -- with the in-memory fallback it would have given each
@@ -684,6 +789,7 @@ export function createBrowserDeps(): GameDeps {
     },
     host: globalThis.window as unknown as HostWindow,
     devFlags,
+    developerMode: parseDeveloperMode(search),
   };
 }
 
@@ -916,6 +1022,40 @@ export function startGameWith(
     const i = deps.levels.levels.indexOf(l);
     return i >= 0 && i + 1 < deps.levels.levels.length ? deps.levels.levels[i + 1] : null;
   }
+  /**
+   * THE SESSION'S CANONICAL IDENTITY, produced by the one pure translation
+   * boundary (`resolveBootSessionContext`, session-intent.ts) from this boot's
+   * developer flags and its optional setup-pane config.
+   *
+   * Every developer entry point is canonicalized here rather than inferred
+   * downstream: `?dev=1&mode=ffa|teams` is a VERSUS session, `?dev=1&level=N`
+   * and `?dev=1&level=sandbox` are PRACTICE sessions (isolated play that must
+   * not touch the active run), and provenance for all of them lives in
+   * `bootContext.developer`, never as a fourth session kind.
+   */
+  const bootContext: SessionContext = resolveBootSessionContext({
+    devFlags: deps.devFlags,
+    versusConfig: deps.initialVersusConfig ?? null,
+    developerMode: deps.developerMode,
+  });
+
+  /**
+   * The session's CURRENT identity. Starts at the boot identity and is
+   * reassigned by exactly two kinds of transition, both explicit:
+   *
+   *  - a menu Level-Select pick switches it to `practice-level`;
+   *  - New Game and landing on the session's home board reset it to
+   *    `bootContext.identity`.
+   *
+   * Deliberately an IDENTITY, not a descriptor. The descriptor names the level
+   * a Practice session is currently on, which changes on every advance/retry --
+   * storing it is what let a stale Practice descriptor ride onto a campaign
+   * board while run bookkeeping was re-enabled (issue #316 review, finding 4).
+   * `switchTo` re-derives the descriptor from THIS plus the level actually
+   * built, every single time, so that divergence has no place left to occur.
+   */
+  let sessionIdentity: SessionIdentity = bootContext.identity;
+
 
   // `&& playerCount === 1`: a multiplayer boot gets fresh LIVES from balance.json, the
   // same as a dev jump -- see campaignActive's doc comment for why a multiplayer
@@ -923,39 +1063,14 @@ export function startGameWith(
   // multiplayer session opened mid-campaign would silently inherit whatever life count
   // the solo run happened to be sitting on, which has no decided meaning for a shared
   // pool.
-  const bootLives = deps.levels.tracksProgress && !deps.levels.isDevJump && playerCount === 1
+  const bootLives = bootContext.identity.kind === 'campaign'
+      && deps.levels.tracksProgress
+      && !deps.levels.isDevJump
+      && playerCount === 1
     ? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
-  /**
-   * The canonical retained descriptor for THIS session (issue #316).
-   *
-   * A versus reboot session carries the pane's original UNRESOLVED config here
-   * -- deliberately the same object `deps.initialVersusConfig` is stamped with
-   * on boot (see that field's doc comment: rematches must reopen the pane with
-   * `'random'` still selected if that was what was chosen, even when the
-   * session's own resolved arena is concrete). Campaign and dev-flag-driven
-   * campaign boots hold the plain `campaignDescriptor()`; the practice branch
-   * below reassigns to a practice descriptor at the moment the player picks a
-   * level from the Levels pane. Developer metadata is orthogonal -- see
-   * `DeveloperMetadata` in `app-state.ts`; this file does not embed dev-flag
-   * provenance in the descriptor itself.
-   */
-  let currentDescriptor: SessionDescriptor = deps.initialVersusConfig
-    ? versusDescriptor(deps.initialVersusConfig)
-    : campaignDescriptor();
-  /**
-   * The canonical resolved session for the CURRENT world (issue #316) -- owns
-   * this launch's seed and concrete arena. Distinct from `currentDescriptor`
-   * above, which retains the pane's selection (may still name `'random'` for
-   * a VS session's arena). Reassigned on every `switchTo`, so a level advance
-   * or retry gets a fresh resolved instance while the retained descriptor
-   * stays untouched -- exactly the boundary #316 draws for rematch/next-level.
-   *
-   * The state machine's `enterGameplay` is the authoritative "we are now in
-   * gameplay on this instance" call; callers pass `currentSession` at every
-   * entry point below.
-   */
+  let currentDescriptor: SessionDescriptor = descriptorFor(sessionIdentity, ordinalOf(level));
   let currentSession: ResolvedSession = resolveSession(
     currentDescriptor,
     world.seed,
@@ -972,12 +1087,6 @@ export function startGameWith(
    * own seed rather than of how much a previous level's stream had already consumed.
    */
   let botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
-  // Whether the CURRENT session is practice (Level Select), as opposed to the
-  // campaign run. Practice must not consume, restore, replace, advance or complete
-  // the active run (the spec's hard rule) -- this is the flag every run-mutation
-  // below is gated on. Starts false: the board just built above is always the
-  // campaign's own (the sandbox aside, where it is moot -- see campaignActive).
-  let inPractice = false;
   /**
    * Is this session allowed to touch the active run at all? False for practice
    * (see `inPractice`), for any session `deps.levels.tracksProgress` says is not
@@ -1010,7 +1119,25 @@ export function startGameWith(
    * See bootLives above for the matching boot-time half of this exclusion.
    */
   function campaignActive(): boolean {
-    return deps.levels.tracksProgress && !deps.levels.isDevJump && !inPractice && playerCount === 1;
+    // Identity FIRST, and identity is the whole answer to "is this a campaign
+    // session": practice (menu pick, developer jump, sandbox) and versus (setup
+    // pane or developer flags) all report their own kind and are excluded here
+    // by construction. The separate `inPractice` boolean this replaced was the
+    // competing source of truth finding 4 named -- it could disagree with the
+    // descriptor, and did.
+    //
+    // `tracksProgress`/`isDevJump` are retained as belt-and-braces: they are
+    // facts about the installed LevelSystem rather than a second session-kind
+    // flag, and with the translation in place they are already implied by the
+    // identity. `playerCount === 1` is NOT redundant -- a campaign co-op
+    // session (`?dev=1&players=2`) is genuinely Campaign identity, and the run
+    // record has no decided meaning for a shared life pool.
+    return (
+      sessionIdentity.kind === 'campaign' &&
+      deps.levels.tracksProgress &&
+      !deps.levels.isDevJump &&
+      playerCount === 1
+    );
   }
 
   // Constructed EAGERLY and synchronously. main.ts wraps this call in a
@@ -1186,7 +1313,30 @@ export function startGameWith(
   // afterward, the same as the saved scheme/fire-mode reads just above. Re-reading here
   // on every world switch would be redundant with that.
   haptics.setEnabled(deps.touchSettings.haptics());
-  const sm = deps.createStateMachine();
+  /**
+   * THE PRODUCTION CLASSIFIER (issue #316's finding 1).
+   *
+   * Both facts a terminal event must be read against are owned here and
+   * nowhere else, so they are handed in at construction rather than left to a
+   * descriptor-only default:
+   *
+   *  - `isFinalCampaignLevel` is what separates Mission Clear from Campaign
+   *    Complete. It reads the LIVE `level`, so it answers for whichever level
+   *    actually just ended rather than for the boot level.
+   *  - `versusResult` reads the world that emitted the event
+   *    (`versusResultFromWorld`), so a versus match reports the slot or team
+   *    that genuinely survived -- or a draw -- instead of asserting that the
+   *    local player won.
+   *
+   * `driver` is referenced lazily: it is constructed below, and this closure
+   * can only run from inside a driver frame, by which time it is assigned.
+   */
+  const sm = deps.createStateMachine({
+    classifyOutcome: createOutcomeClassifier({
+      isFinalCampaignLevel: () => nextInSession(level) === null,
+      versusResult: () => versusResultFromWorld(driver.world),
+    }),
+  });
   const hud = deps.createHud(uiRoot);
   // Task 5b: fixed for this session's whole life, same posture as `playerCount` below --
   // a versus session's `deps.levels` never becomes a campaign level system mid-session
@@ -1195,11 +1345,13 @@ export function startGameWith(
   // setSessionKind's own doc comment) -- set once, here, before any setState/
   // setContinueAvailable/setLevelSelect call below so the very first render already
   // reflects it.
-  // Derived from the canonical descriptor kind (issue #316: HUD session
-  // identity must come from the descriptor, not from `initialVersusConfig`
-  // presence or URL provenance -- see `currentDescriptor` above for the pane's
-  // retained-config posture that still names 'random' when the pane picked it).
-  hud.setSessionKind(currentDescriptor.kind === 'versus' ? 'versus' : 'campaign');
+  // Derived from the canonical model -- session identity plus its developer
+  // provenance -- never from `initialVersusConfig`, a URL read, or a
+  // `world.mode` check (issue #316's HUD-identity criterion). See
+  // `usesVersusTitleAffordances` for why a DEVELOPER-flag versus session keeps
+  // campaign-shaped title affordances: it still runs the campaign LevelSystem,
+  // so Continue and Levels there rebuild correct FFA/teams worlds.
+  hud.setSessionKind(usesVersusTitleAffordances(bootContext) ? 'versus' : 'campaign');
   // Task 6 (spec §3a): the in-match stock readout is versus-only for this session's
   // whole life, the same fixed-for-the-session posture as sessionKind just above.
   // The gate is `!deps.initialVersusConfig`, NOT "is this a campaign session" --
@@ -1597,7 +1749,7 @@ export function startGameWith(
       // game-over/completion is already persisted reactively in sm.onChange, the
       // instant the state flipped -- not deferred to this click, so a refresh at the
       // win/lose screen cannot lose it. This click only decides which WORLD to build.
-      const next = sm.wasWin ? nextInSession(level) : null;
+      const next = sm.presentsAsWin ? nextInSession(level) : null;
       if (next !== null) {
         switchTo(next, driver.world.lives);
         sm.enterGameplay(currentSession);
@@ -1665,10 +1817,14 @@ export function startGameWith(
   function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
-    // Every switchTo is a new resolved-session instance (issue #316) -- fresh
-    // seed and, potentially, fresh arena. The retained descriptor is preserved
-    // so a VS session's `'random'` selection survives across rematches, and
-    // Campaign runs keep their descriptor identity across level advances.
+    // THE structural fix for issue #316's finding 4. The descriptor is
+    // RE-DERIVED from the session identity and the level actually built, on
+    // every world build -- it is never carried forward from a previous
+    // transition, so a Practice descriptor cannot survive onto a campaign
+    // board no matter which path got here. A Practice session advancing a
+    // level also gets its ordinal updated for free, which a stored descriptor
+    // silently would not.
+    currentDescriptor = descriptorFor(sessionIdentity, ordinalOf(level));
     currentSession = resolveSession(currentDescriptor, world.seed, level.arenaId);
     // Reseeded here too -- see botSources' own doc comment above for why bots are
     // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
@@ -1739,7 +1895,19 @@ export function startGameWith(
    * unrelated level's life count into a board the player did not reach by playing.
    */
   function landOnCampaignBoard(mayCreateRun: boolean): void {
-    inPractice = false;
+    // Reset to the session's own boot identity BEFORE anything below builds a
+    // world. This is the exact site issue #316's finding 4 named: it used to
+    // clear a separate `inPractice` flag while leaving the retained Practice
+    // descriptor in place, so `switchTo` then resolved a Practice session on a
+    // campaign board with campaign run bookkeeping switched back on. Callers
+    // evaluate `mayCreateRun` BEFORE calling, so a practice session still
+    // correctly creates no run here.
+    //
+    // "Campaign board" is the historical name; what it really lands on is
+    // `deps.levels.start`, i.e. THIS session's home level -- the campaign's
+    // resume point, the jumped level, the sandbox, or the versus board. The
+    // boot identity is the right answer for every one of those.
+    sessionIdentity = bootContext.identity;
     const startLevel = deps.levels.start;
     if (deps.levels.tracksProgress && deps.run.active() === null && mayCreateRun) {
       deps.run.startNewRun(startLevel.id);
@@ -1763,14 +1931,12 @@ export function startGameWith(
     // Practice: independent fresh lives (switchTo's `lives` is left undefined, so
     // buildWorld defaults to full LIVES), and the active campaign run is never read
     // or written from here on out -- see campaignActive.
-    inPractice = true;
-    // Retain a Practice descriptor for THIS click (issue #316): the pane's
-    // 1-based level ordinal is the picked 0-based index + 1. switchTo below
-    // then resolves that descriptor into a fresh session instance for the world
-    // it builds. Prior boot descriptors (campaign/versus) are replaced here --
-    // practice owns the retained descriptor for as long as the player stays in
-    // this session.
-    currentDescriptor = practiceDescriptor(picked + 1);
+    // Identity transition 1 of 2 (issue #316): this session is Practice from
+    // here until New Game or a landing on its home board resets it. The
+    // ORDINAL is not stored -- `switchTo` derives the descriptor from this
+    // identity and whichever level it actually builds, so the descriptor
+    // cannot fall out of step with the board.
+    sessionIdentity = practiceLevelIdentity();
     switchTo(deps.levels.levels[picked]);
     // A level click is as real a gesture as the Start button, and it starts play, so
     // it must unlock the audio context too -- Safari accepts no later opportunity.
@@ -1808,15 +1974,13 @@ export function startGameWith(
   // landOnCampaignBoard cannot leave campaignActive() reading a stale practice flag.
   hud.onNewGame(() => {
     if (!sm.atMainMenu) return;
-    inPractice = false;
-    // Restore the boot-configured retained descriptor (issue #316) -- a Practice
-    // pick above may have swapped `currentDescriptor` to a practice descriptor,
-    // and New Game is the one deliberate gesture that leaves practice for good.
-    // A versus reboot keeps its versus descriptor from boot; a campaign session
-    // is (re)established as a plain campaign descriptor here.
-    currentDescriptor = deps.initialVersusConfig
-      ? versusDescriptor(deps.initialVersusConfig)
-      : campaignDescriptor();
+    // Identity transition 2 of 2 (issue #316): New Game is a deliberate return
+    // to whatever this session IS. For a campaign boot that leaves practice for
+    // good; for a versus reboot it stays Versus ("Start Match"); for a
+    // developer jump or the sandbox it stays that session's own kind while
+    // landing on `levels[0]`. Set BEFORE `campaignActive()` is consulted below,
+    // so the guard sees the identity this click establishes.
+    sessionIdentity = bootContext.identity;
     if (campaignActive()) {
       const fresh = deps.run.startNewRun(deps.levels.levels[0].id);
       switchTo(deps.levels.levels[0], fresh.livesRemaining);
@@ -1903,7 +2067,7 @@ export function startGameWith(
     // Next Level is pressed, so the run is already sitting on the NEXT level by the time
     // this panel is on screen. Leaving from here resumes there, not on the level just
     // beaten.
-    if (!sm.isPaused && !sm.wasWin) return;
+    if (!sm.isPaused && !sm.presentsAsWin) return;
     // Quit suspends presentation of the run; it must not create or replenish one
     // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
     // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
@@ -1912,10 +2076,8 @@ export function startGameWith(
     // resets `inPractice` and rebuilds the campaign descriptor via the same
     // path New Game takes, so a post-quit Continue enters gameplay on a real
     // campaign board.
-    inPractice = false;
-    currentDescriptor = deps.initialVersusConfig
-      ? versusDescriptor(deps.initialVersusConfig)
-      : campaignDescriptor();
+    // No descriptor bookkeeping here: `landOnCampaignBoard` resets the session
+    // identity itself, and `switchTo` re-derives the descriptor from it.
     landOnCampaignBoard(false);
     sm.toMainMenu();
   });
@@ -2050,12 +2212,15 @@ export function startGameWith(
     const nowPlaying = location.kind === 'gameplay' && location.phase.kind === 'playing';
     const nowAtMainMenu =
       location.kind === 'route' && location.route.kind === 'main-menu';
-    const nowWon = location.kind === 'gameplay'
-      && location.phase.kind === 'outcome'
-      && outcomeIsVictory(location.phase.outcome);
-    const nowLost = location.kind === 'gameplay'
-      && location.phase.kind === 'outcome'
-      && !outcomeIsVictory(location.phase.outcome);
+    // The shipped screens and the run bookkeeping below still work in terms of
+    // "did this end well", so the typed outcome is flattened through the
+    // explicitly-named compatibility projection rather than by re-deriving a
+    // win/lose guess here. The run-mutation branch further down reads the
+    // OUTCOME KIND directly where the distinction actually matters.
+    const outcome = location.kind === 'gameplay' && location.phase.kind === 'outcome'
+      ? location.phase.outcome
+      : null;
+    const nowWon = outcome !== null && legacyOutcomePresentation(outcome) === 'win';
     // The round indicator is pushed ONLY from onSimulated, which the driver runs
     // only while playing. Without this, pausing or blurring during the 3s
     // countdown freezes the chip on screen -- and quitting to Main Menu strands
@@ -2085,16 +2250,21 @@ export function startGameWith(
     // progress just above, and gated on campaignActive() so practice and the sandbox
     // can never reach them. Reactive, not deferred to the Next Level/Retry click: a
     // refresh sitting at the outcome screen must already see the persisted result.
-    if (campaignActive()) {
-      if (nowWon) {
+    if (campaignActive() && outcome !== null) {
+      // Straight off the TYPED outcome now: `campaign-complete` and
+      // `campaign-over` both end the run, `mission-clear` advances it. This is
+      // the distinction issue #316 exists to make available, and reading it
+      // here removes the old re-derivation of "is this the last level?" at the
+      // point of use -- the classifier already decided that, once, from the
+      // level that actually ended.
+      if (outcome.kind === 'campaign-complete' || outcome.kind === 'campaign-over') {
+        deps.run.endRun();
+      } else if (outcome.kind === 'mission-clear') {
         const next = nextInSession(level);
-        if (next === null) {
-          deps.run.endRun(); // campaign completion
-        } else {
-          deps.run.advanceLevel(next.id, driver.world.lives); // level clear, lives carried
-        }
-      } else if (nowLost) {
-        deps.run.endRun(); // game over: no lives remain
+        // `mission-clear` means a next level exists by construction, but the
+        // lookup stays guarded rather than asserted: a null here must not throw
+        // inside a state-change subscriber.
+        if (next !== null) deps.run.advanceLevel(next.id, driver.world.lives);
       }
     }
     // Refreshed on every arrival at the Main Menu -- covers boot (the initial

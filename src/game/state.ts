@@ -7,18 +7,21 @@ import {
   type ResolvedSession,
   type SessionDescriptor,
   type TypedOutcome,
+  type VersusResult,
   campaignOverOutcome,
   campaignCompleteOutcome,
   missionClearOutcome,
   launchRoute,
+  legacyOutcomePresentation,
   locationAtRoute,
   locationInGameplay,
   mainMenuRoute,
-  outcomeIsVictory,
   outcomePhase,
   pausedPhase,
   playingPhase,
   practiceResultOutcome,
+  routeFor,
+  versusDraw,
   vsMatchEndOutcome,
 } from './app-state';
 
@@ -38,17 +41,18 @@ import {
  * accessors), so screens do not infer session identity from URL provenance,
  * world mode, or a `initialVersusConfig` presence check.
  *
- * The classifyOutcome closure captures caller-side context (level position,
- * campaign completion detection, VS local-player identity) so the state
- * machine can turn a bare `type: 'win'` / `type: 'lose'` event into a typed
- * outcome without inheriting the caller's persistence or level catalogs.
+ * The classifyOutcome closure captures caller-side context -- whether the level
+ * that ended was the last in the sequence, and who actually survived a versus
+ * match -- so the machine can turn a bare `type: 'win'`/`type: 'lose'` event
+ * into a typed outcome without inheriting the caller's persistence, level
+ * catalogs, or world.
  */
 
 /**
  * Classifies the first terminal event of a `SimEvent[]` batch into the
- * session's typed outcome. Returns `null` if the event should be ignored
- * for this session (currently unused; reserved for cross-session filtering
- * later dependent issues may need). See `defaultOutcomeClassifier`.
+ * session's typed outcome. Returns `null` when the batch carries no terminal
+ * event at all, which is the overwhelmingly common case -- most frames end
+ * without ending the session. Build one with `createOutcomeClassifier`.
  */
 export type OutcomeClassifier = (
   events: SimEvent[],
@@ -57,15 +61,17 @@ export type OutcomeClassifier = (
 
 export interface GameStateMachineConfig {
   /**
-   * Classify a terminal event into a typed outcome. Defaults to a
-   * descriptor-only classifier that decides mission-clear/campaign-over/
-   * practice-result/vs-match-end from the descriptor kind alone.
+   * Classify a terminal event into a typed outcome.
    *
-   * Campaign completion (last level cleared) cannot be inferred from the
-   * descriptor alone -- the classifier gets caller-side context through
-   * closure. See loop.ts's wiring.
+   * REQUIRED, with no default. A descriptor-only default existed once and was
+   * exactly what let production ship un-typed outcomes while a context-aware
+   * classifier sat unused in tests (issue #316 review, finding 1). Making this
+   * mandatory means every construction site -- production included -- must
+   * state how Campaign Complete and versus attribution are decided.
+   *
+   * Build one with `createOutcomeClassifier`.
    */
-  readonly classifyOutcome?: OutcomeClassifier;
+  readonly classifyOutcome: OutcomeClassifier;
 }
 
 export interface GameStateMachine {
@@ -90,14 +96,14 @@ export interface GameStateMachine {
   /** Alias of `isPlaying`; the driver reads this to gate simulation. */
   readonly isSimulating: boolean;
   /**
-   * True iff the current phase is an `outcome` whose typed outcome reads as a
-   * victory (`outcomeIsVictory`). Callers that need to distinguish the specific
-   * outcome kind (mission-clear vs campaign-complete vs practice-result vs
-   * vs-match-end) read `outcome` directly.
+   * True iff the current phase is an `outcome` that PRESENTS as a victory --
+   * `legacyOutcomePresentation`, the explicitly-named compatibility projection.
+   * This is a presentation question, never a claim about which seat won: read
+   * `outcome` (and, for versus, its `VersusResult`) for that.
    */
-  readonly wasWin: boolean;
-  /** True iff the outcome reads as a defeat -- the negation of `wasWin` at outcome. */
-  readonly wasLose: boolean;
+  readonly presentsAsWin: boolean;
+  /** True iff the outcome presents as a defeat -- the negation at outcome. */
+  readonly presentsAsLose: boolean;
 
   // --- Navigation-only transitions -- state only, never a world/seed/persist. ---
 
@@ -116,9 +122,19 @@ export interface GameStateMachine {
   toMainMenu(): void;
 
   /**
-   * Reach an arbitrary AppRoute. Explicit variant of `toMainMenu`. Never from
-   * inside gameplay implicitly -- callers must decide navigation first, then
-   * transition here.
+   * Reach an arbitrary AppRoute. Explicit variant of `toMainMenu`.
+   *
+   * LEGAL FROM ACTIVE GAMEPLAY, deliberately -- see the transition matrix on
+   * `createGameStateMachine`. Navigating to a route from `playing`/`paused`/
+   * `outcome` is how Quit works: it ABANDONS the running session, handing the
+   * primary surface back to a route. The state machine drops its reference to
+   * the resolved session; disposing anything world-side (the world itself, the
+   * replay recorder, renderer resources) is the caller's job and always was.
+   *
+   * An earlier draft of this doc claimed callers had to end gameplay first.
+   * That was never enforced and never true of the shipped Quit path, so the
+   * rule is stated correctly here and pinned by tests rather than left as a
+   * comment the code contradicts.
    */
   toRoute(kind: AppRouteKind): void;
 
@@ -145,15 +161,6 @@ export interface GameStateMachine {
   resume(): void;
 
   /**
-   * Same-descriptor restart of the current session. Legal only from an
-   * outcome phase -- a mid-round "restart" is not a state-machine operation
-   * (it belongs to the caller's world/level system). Callers that want to
-   * rebuild the world with new launch-derived data should call
-   * `enterGameplay(newlyResolvedSession)` instead.
-   */
-  restart(): void;
-
-  /**
    * Route terminal `type: 'win'`/`'lose'` events into a typed outcome. Only
    * acts from the `playing` phase; ignored from `paused` (the sim is not
    * stepping) or any route. The first terminal event wins; a batch with
@@ -166,52 +173,65 @@ export interface GameStateMachine {
 }
 
 /**
- * The default outcome classifier -- descriptor-kind alone. Campaign completion
- * (last-level clear) cannot be decided here without caller-side context, so
- * a plain `type: 'win'` on a campaign session defaults to `mission-clear`.
- * Callers that need to distinguish clears from completions provide their own
- * classifier via `GameStateMachineConfig.classifyOutcome`.
+ * The caller-side facts a terminal event must be interpreted against.
+ *
+ * Neither can be answered from a `ResolvedSession` alone, and both are owned by
+ * `loop.ts`: it holds the level sequence, and it holds the driver whose world
+ * emitted the event.
  */
-export function defaultOutcomeClassifier(
-  events: SimEvent[],
-  session: ResolvedSession,
-): TypedOutcome | null {
-  const first = firstTerminalEvent(events);
-  if (first === null) return null;
-  const won = first.type === 'win';
-  const kind = session.descriptor.kind;
-  if (kind === 'campaign') {
-    return won ? missionClearOutcome() : campaignOverOutcome();
-  }
-  if (kind === 'practice') {
-    return practiceResultOutcome(won);
-  }
-  if (kind === 'versus') {
-    return vsMatchEndOutcome(won);
-  }
-  const unreachable: never = kind;
-  return unreachable;
+export interface OutcomeContext {
+  /**
+   * Is the level that just ended the LAST in this session's own sequence?
+   * Decides Mission Clear vs Campaign Complete -- the distinction issue #316
+   * requires and that a descriptor cannot carry.
+   */
+  readonly isFinalCampaignLevel: () => boolean;
+  /**
+   * Who actually survived a versus match, derived from the world that emitted
+   * the event. See `versusResultFromWorld` in `loop.ts`: FFA reports the
+   * surviving slot, teams the surviving team, and a simultaneous elimination
+   * reports a draw. Never a guess.
+   */
+  readonly versusResult: () => VersusResult;
 }
 
 /**
- * Extend the default classifier with campaign-completion detection using a
- * caller-provided "is this the last level?" predicate. loop.ts owns the level
- * catalog, so completion cannot be inferred from the descriptor alone.
+ * Build the production outcome classifier from its caller-side context.
+ *
+ * THIS IS THE ONLY CLASSIFIER. An earlier revision shipped a
+ * `defaultOutcomeClassifier` that decided everything from the descriptor kind
+ * alone, plus a context-aware variant that only tests ever constructed -- so
+ * production silently classified every campaign victory as `mission-clear` and
+ * every versus completion as a local-player win. Both were the review's
+ * findings 1 and 2. Removing the descriptor-only default removes the fallback
+ * that made those defects invisible: there is no longer a classifier that CAN
+ * be constructed without saying how completion and versus attribution are
+ * decided.
  */
-export function classifyWithCampaignCompletion(
-  isFinalCampaignLevel: () => boolean,
-): OutcomeClassifier {
+export function createOutcomeClassifier(context: OutcomeContext): OutcomeClassifier {
   return (events, session) => {
     const first = firstTerminalEvent(events);
     if (first === null) return null;
     const won = first.type === 'win';
     const kind = session.descriptor.kind;
     if (kind === 'campaign') {
-      if (won) return isFinalCampaignLevel() ? campaignCompleteOutcome() : missionClearOutcome();
-      return campaignOverOutcome();
+      // A campaign LOSS is always the end of the run: there are no lives left,
+      // whichever level it happened on.
+      if (!won) return campaignOverOutcome();
+      return context.isFinalCampaignLevel() ? campaignCompleteOutcome() : missionClearOutcome();
     }
-    if (kind === 'practice') return practiceResultOutcome(won);
-    if (kind === 'versus') return vsMatchEndOutcome(won);
+    if (kind === 'practice') {
+      // Practice is isolated by definition: clearing the level or running out
+      // of lives on it are both just "how the attempt ended".
+      return practiceResultOutcome(won);
+    }
+    if (kind === 'versus') {
+      // Derived from the world, never from `won`. The sim's `win` means "one
+      // side remains" (which side is a fact about the world, not about the
+      // event) and its `lose` means "none remain", i.e. a draw -- so a
+      // `won`-shaped boolean cannot express either honestly.
+      return vsMatchEndOutcome(won ? context.versusResult() : versusDraw());
+    }
     const unreachable: never = kind;
     return unreachable;
   };
@@ -224,8 +244,8 @@ function firstTerminalEvent(events: SimEvent[]): { type: 'win' } | { type: 'lose
   return null;
 }
 
-export function createGameStateMachine(config: GameStateMachineConfig = {}): GameStateMachine {
-  const classify = config.classifyOutcome ?? defaultOutcomeClassifier;
+export function createGameStateMachine(config: GameStateMachineConfig): GameStateMachine {
+  const classify = config.classifyOutcome;
   const subscribers: Array<(location: AppLocation) => void> = [];
   let current: AppLocation = locationAtRoute(launchRoute());
 
@@ -237,24 +257,6 @@ export function createGameStateMachine(config: GameStateMachineConfig = {}): Gam
     if (locationsEqual(current, next)) return;
     current = next;
     emit();
-  }
-
-  function transitionToRoute(kind: AppRouteKind): AppRoute {
-    switch (kind) {
-      case 'launch': return launchRoute();
-      case 'main-menu': return mainMenuRoute();
-      case 'campaign': return { kind: 'campaign' };
-      case 'practice': return { kind: 'practice' };
-      case 'versus-setup': return { kind: 'versus-setup' };
-      case 'settings': return { kind: 'settings' };
-      case 'records': return { kind: 'records' };
-      case 'customize': return { kind: 'customize' };
-      case 'developer-tools': return { kind: 'developer-tools' };
-      default: {
-        const unreachable: never = kind;
-        return unreachable;
-      }
-    }
   }
 
   const machine: GameStateMachine = {
@@ -295,15 +297,15 @@ export function createGameStateMachine(config: GameStateMachineConfig = {}): Gam
     get isSimulating(): boolean {
       return current.kind === 'gameplay' && current.phase.kind === 'playing';
     },
-    get wasWin(): boolean {
+    get presentsAsWin(): boolean {
       if (current.kind !== 'gameplay') return false;
       if (current.phase.kind !== 'outcome') return false;
-      return outcomeIsVictory(current.phase.outcome);
+      return legacyOutcomePresentation(current.phase.outcome) === 'win';
     },
-    get wasLose(): boolean {
+    get presentsAsLose(): boolean {
       if (current.kind !== 'gameplay') return false;
       if (current.phase.kind !== 'outcome') return false;
-      return !outcomeIsVictory(current.phase.outcome);
+      return legacyOutcomePresentation(current.phase.outcome) === 'lose';
     },
 
     dismissLaunch(): void {
@@ -319,7 +321,7 @@ export function createGameStateMachine(config: GameStateMachineConfig = {}): Gam
     },
 
     toRoute(kind: AppRouteKind): void {
-      setLocation(locationAtRoute(transitionToRoute(kind)));
+      setLocation(locationAtRoute(routeFor(kind)));
     },
 
     enterGameplay(session: ResolvedSession): void {
@@ -349,15 +351,6 @@ export function createGameStateMachine(config: GameStateMachineConfig = {}): Gam
       setLocation(locationInGameplay(current.session, playingPhase()));
     },
 
-    restart(): void {
-      // Same-descriptor restart of the CURRENT resolved session -- the world
-      // rebuild lives in the caller (loop.ts's `switchTo` / `landOnCampaignBoard`);
-      // this just moves the phase back to `playing`. Legal only from an
-      // outcome phase; a mid-round "restart" is not a state-machine operation.
-      if (current.kind !== 'gameplay') return;
-      if (current.phase.kind !== 'outcome') return;
-      setLocation(locationInGameplay(current.session, playingPhase()));
-    },
 
     onEvents(events: SimEvent[]): void {
       // Only from `playing`. A `paused` or ended session must not flip on a
@@ -408,7 +401,23 @@ function outcomeEqual(a: TypedOutcome, b: TypedOutcome): boolean {
     case 'practice-result':
       return b.kind === 'practice-result' && a.cleared === b.cleared;
     case 'vs-match-end':
-      return b.kind === 'vs-match-end' && a.localPlayerWon === b.localPlayerWon;
+      return b.kind === 'vs-match-end' && versusResultEqual(a.result, b.result);
+    default: {
+      const unreachable: never = a;
+      return unreachable;
+    }
+  }
+}
+
+function versusResultEqual(a: VersusResult, b: VersusResult): boolean {
+  if (a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case 'winner-slot':
+      return b.kind === 'winner-slot' && a.slot === b.slot;
+    case 'winner-team':
+      return b.kind === 'winner-team' && a.team === b.team;
+    case 'draw':
+      return true;
     default: {
       const unreachable: never = a;
       return unreachable;

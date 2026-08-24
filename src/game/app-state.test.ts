@@ -24,17 +24,23 @@ import {
   locationInGameplay,
   mainMenuRoute,
   missionClearOutcome,
-  outcomeIsVictory,
+  legacyOutcomePresentation,
   outcomePhase,
   pausedPhase,
   playingPhase,
-  practiceDescriptor,
+  practiceLevelDescriptor,
+  practiceSandboxDescriptor,
   practiceResultOutcome,
   practiceRoute,
   recordsRoute,
   resolveSession,
   settingsRoute,
   versusDescriptor,
+  versusRulesFromConfig,
+  versusRulesFromDeveloperFlags,
+  versusWinnerSlot,
+  versusWinnerTeam,
+  versusDraw,
   versusSetupRoute,
   vsMatchEndOutcome,
 } from './app-state';
@@ -100,47 +106,123 @@ describe('SessionDescriptor construction', () => {
     expect(campaignDescriptor()).toEqual({ kind: 'campaign' });
   });
 
-  describe('practiceDescriptor', () => {
-    it('accepts a 1-based level ordinal', () => {
-      expect(practiceDescriptor(1)).toEqual({ kind: 'practice', levelOrdinal: 1 });
-      expect(practiceDescriptor(5)).toEqual({ kind: 'practice', levelOrdinal: 5 });
+  describe('practice targets', () => {
+    it('a campaign-level target carries its 1-based ordinal', () => {
+      expect(practiceLevelDescriptor(1)).toEqual({
+        kind: 'practice',
+        target: { kind: 'campaign-level', levelOrdinal: 1 },
+      });
+      expect(practiceLevelDescriptor(5).target).toEqual({
+        kind: 'campaign-level',
+        levelOrdinal: 5,
+      });
     });
 
     it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
       'rejects ordinal %s',
       (ordinal) => {
-        expect(() => practiceDescriptor(ordinal)).toThrow();
+        expect(() => practiceLevelDescriptor(ordinal)).toThrow();
       },
     );
+
+    it('a sandbox target carries NO ordinal -- the sandbox is in no campaign sequence', () => {
+      const d = practiceSandboxDescriptor();
+      expect(d).toEqual({ kind: 'practice', target: { kind: 'sandbox' } });
+      // The specific untruth the old bare-`levelOrdinal` shape forced: the
+      // sandbox's synthetic level is not a member of CAMPAIGN_LEVELS, so ANY
+      // number reported here would be fabricated.
+      expect('levelOrdinal' in d.target).toBe(false);
+    });
+
+    it('sandbox and level practice are the same session KIND, not a fourth one', () => {
+      expect(practiceSandboxDescriptor().kind).toBe('practice');
+      expect(practiceLevelDescriptor(3).kind).toBe('practice');
+    });
   });
 
-  describe('versusDescriptor', () => {
-    it('retains random arenaId as-is (arena resolution is a resolveSession-boundary concern)', () => {
+  describe('versus rules -- retained intent is an immutable snapshot', () => {
+    it('snapshots the pane config, retaining an UNRESOLVED random selection', () => {
       const cfg = versusConfigFixture({ arenaId: 'random' });
-      const d = versusDescriptor(cfg);
-      expect(d).toEqual({ kind: 'versus', config: cfg });
-      expect(d.config.arenaId).toBe('random');
+      const rules = versusRulesFromConfig(cfg);
+      expect(rules.arenaSelection).toBe('random');
+      expect(rules.mode).toBe('ffa');
+      expect(rules.players).toBe(2);
+      expect(rules.stock).toBe(3);
     });
 
-    it('accepts a concrete arenaId too', () => {
-      const cfg = versusConfigFixture({ arenaId: 'plaza' });
-      expect(versusDescriptor(cfg).config.arenaId).toBe('plaza');
+    it('a later mutation of the caller\'s config cannot alter retained intent', () => {
+      // The exact defect this shape exists to prevent: the setup pane keeps a
+      // long-lived mutable `versusConfigState` it edits across rematches, and
+      // holding that object by reference let a later pane edit silently rewrite
+      // the intent of a session already in progress.
+      const cfg = versusConfigFixture({ arenaId: 'random', players: 2 });
+      const d = versusDescriptor(versusRulesFromConfig(cfg));
+      cfg.arenaId = 'plaza';
+      cfg.players = 4;
+      expect(d.rules.arenaSelection).toBe('random');
+      expect(d.rules.players).toBe(2);
     });
 
-    it.each([1, 5, 0, -1, 2.5])('rejects players=%s', (players) => {
+    it('the retained rules object is frozen', () => {
+      const rules = versusRulesFromConfig(versusConfigFixture());
+      expect(Object.isFrozen(rules)).toBe(true);
+      expect(Object.isFrozen(versusDescriptor(rules))).toBe(true);
+    });
+
+    it('accepts a concrete arena selection too', () => {
+      expect(versusRulesFromConfig(versusConfigFixture({ arenaId: 'plaza' })).arenaSelection)
+        .toBe('plaza');
+    });
+
+    it.each([1, 5, 0, -1, 2.5])('rejects pane players=%s', (players) => {
       expect(() =>
-        versusDescriptor(versusConfigFixture({ players: players as 2 | 3 | 4 })),
+        versusRulesFromConfig(versusConfigFixture({ players: players as 2 | 3 | 4 })),
       ).toThrow();
     });
 
     it('rejects an unknown mode', () => {
       expect(() =>
-        versusDescriptor(versusConfigFixture({ mode: 'chaos' as 'ffa' | 'teams' })),
+        versusRulesFromConfig(versusConfigFixture({ mode: 'chaos' as 'ffa' | 'teams' })),
       ).toThrow();
     });
 
     it.each([0, -1, 1.5])('rejects stock=%s', (stock) => {
-      expect(() => versusDescriptor(versusConfigFixture({ stock }))).toThrow();
+      expect(() => versusRulesFromConfig(versusConfigFixture({ stock }))).toThrow();
+    });
+  });
+
+  describe('versus rules from developer flags', () => {
+    it('records null stock and null arena selection rather than fabricating them', () => {
+      // Neither is expressible as a developer flag. Inventing a plausible
+      // default here would be the same class of untruth `localPlayerWon` was.
+      const rules = versusRulesFromDeveloperFlags({
+        mode: 'ffa',
+        players: 1,
+        friendlyFire: false,
+      });
+      expect(rules.stock).toBe(null);
+      expect(rules.arenaSelection).toBe(null);
+    });
+
+    it('permits a ONE-slot versus world, which ?dev=1&mode=ffa really builds', () => {
+      expect(versusRulesFromDeveloperFlags({ mode: 'ffa', players: 1, friendlyFire: false })
+        .players).toBe(1);
+    });
+
+    it.each([0, 5, -1, 2.5])('rejects players=%s', (players) => {
+      expect(() =>
+        versusRulesFromDeveloperFlags({ mode: 'ffa', players, friendlyFire: false }),
+      ).toThrow();
+    });
+
+    it('carries teams + friendly fire through unchanged', () => {
+      const rules = versusRulesFromDeveloperFlags({
+        mode: 'teams',
+        players: 4,
+        friendlyFire: true,
+      });
+      expect(rules.mode).toBe('teams');
+      expect(rules.friendlyFire).toBe(true);
     });
   });
 });
@@ -167,18 +249,17 @@ describe('ResolvedSession -- descriptor-vs-instance boundary', () => {
     expect(() => resolveSession(descriptor, 42, 'random')).toThrow();
   });
 
-  it('a retained descriptor produces distinct resolved instances (rematch)', () => {
-    const descriptor = versusDescriptor(versusConfigFixture({ arenaId: 'random' }));
-    // A rematch reuses the descriptor, but the two resolved sessions are
-    // distinct instances with independent seeds and possibly different resolved
-    // arenas -- issue #316's binding "descriptor stays plain intent, resolved
-    // instance owns launch-generated data" boundary.
+  it('a retained Random descriptor produces distinct resolved instances (rematch)', () => {
+    const descriptor = versusDescriptor(
+      versusRulesFromConfig(versusConfigFixture({ arenaId: 'random' })),
+    );
     const a = resolveSession(descriptor, 7, 'plaza');
     const b = resolveSession(descriptor, 8, 'hollow');
     expect(a).not.toBe(b);
     expect(a.descriptor).toBe(descriptor);
     expect(b.descriptor).toBe(descriptor);
-    expect(descriptor.config.arenaId).toBe('random');
+    // The retained selection is STILL 'random' after both launches.
+    expect(descriptor.rules.arenaSelection).toBe('random');
   });
 });
 
@@ -189,19 +270,62 @@ describe('TypedOutcome variants', () => {
     expect(campaignCompleteOutcome().kind).toBe('campaign-complete');
     expect(practiceResultOutcome(true)).toEqual({ kind: 'practice-result', cleared: true });
     expect(practiceResultOutcome(false)).toEqual({ kind: 'practice-result', cleared: false });
-    expect(vsMatchEndOutcome(true)).toEqual({ kind: 'vs-match-end', localPlayerWon: true });
-    expect(vsMatchEndOutcome(false)).toEqual({ kind: 'vs-match-end', localPlayerWon: false });
   });
 
-  describe('outcomeIsVictory', () => {
-    it('classifies each outcome kind', () => {
-      expect(outcomeIsVictory(missionClearOutcome())).toBe(true);
-      expect(outcomeIsVictory(campaignCompleteOutcome())).toBe(true);
-      expect(outcomeIsVictory(campaignOverOutcome())).toBe(false);
-      expect(outcomeIsVictory(practiceResultOutcome(true))).toBe(true);
-      expect(outcomeIsVictory(practiceResultOutcome(false))).toBe(false);
-      expect(outcomeIsVictory(vsMatchEndOutcome(true))).toBe(true);
-      expect(outcomeIsVictory(vsMatchEndOutcome(false))).toBe(false);
+  describe('versus results are attributed, never a local-player boolean', () => {
+    it('names the surviving SLOT in FFA', () => {
+      expect(vsMatchEndOutcome(versusWinnerSlot(2))).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'winner-slot', slot: 2 },
+      });
+    });
+
+    it('names the surviving TEAM in teams', () => {
+      expect(vsMatchEndOutcome(versusWinnerTeam(1))).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'winner-team', team: 1 },
+      });
+    });
+
+    it('reports a DRAW for a simultaneous elimination', () => {
+      expect(vsMatchEndOutcome(versusDraw())).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'draw' },
+      });
+    });
+
+    it('carries no field asserting that the local player won', () => {
+      // The retired shape was `{ kind: 'vs-match-end', localPlayerWon: boolean }`,
+      // which turned every decided couch match into a P1 victory claim.
+      const outcome = vsMatchEndOutcome(versusWinnerSlot(3));
+      expect('localPlayerWon' in outcome).toBe(false);
+    });
+
+    it.each([-1, 1.5])('rejects slot/team %s', (n) => {
+      expect(() => versusWinnerSlot(n)).toThrow();
+      expect(() => versusWinnerTeam(n)).toThrow();
+    });
+  });
+
+  describe('legacyOutcomePresentation -- the named compatibility projection', () => {
+    it('maps campaign and practice outcomes onto the shipped win/lose pair', () => {
+      expect(legacyOutcomePresentation(missionClearOutcome())).toBe('win');
+      expect(legacyOutcomePresentation(campaignCompleteOutcome())).toBe('win');
+      expect(legacyOutcomePresentation(campaignOverOutcome())).toBe('lose');
+      expect(legacyOutcomePresentation(practiceResultOutcome(true))).toBe('win');
+      expect(legacyOutcomePresentation(practiceResultOutcome(false))).toBe('lose');
+    });
+
+    it('presents ANY decided versus match as a win, whichever seat survived', () => {
+      // Preserves the shipped screen/music behaviour for the sim's `win` event
+      // WITHOUT claiming the local player was the survivor.
+      for (const result of [versusWinnerSlot(0), versusWinnerSlot(3), versusWinnerTeam(1)]) {
+        expect(legacyOutcomePresentation(vsMatchEndOutcome(result))).toBe('win');
+      }
+    });
+
+    it('presents a versus DRAW as a loss, matching the shipped `lose` event', () => {
+      expect(legacyOutcomePresentation(vsMatchEndOutcome(versusDraw()))).toBe('lose');
     });
   });
 });
@@ -264,7 +388,7 @@ describe('Predicates and accessors', () => {
     expect(isPlaying(paused)).toBe(false);
     expect(isPaused(paused)).toBe(true);
 
-    const ended = locationInGameplay(session, outcomePhase(vsMatchEndOutcome(false)));
+    const ended = locationInGameplay(session, outcomePhase(vsMatchEndOutcome(versusDraw())));
     expect(hasOutcome(ended)).toBe(true);
     expect(isPlaying(ended)).toBe(false);
   });
@@ -301,8 +425,8 @@ describe('DeveloperMetadata -- orthogonal to descriptors', () => {
     // metadata separately (issue #316 binding).
     const kinds: Array<'campaign' | 'practice' | 'versus'> = [
       campaignDescriptor().kind,
-      practiceDescriptor(1).kind,
-      versusDescriptor(versusConfigFixture()).kind,
+      practiceLevelDescriptor(1).kind,
+      versusDescriptor(versusRulesFromConfig(versusConfigFixture())).kind,
     ];
     expect(kinds).toEqual(['campaign', 'practice', 'versus']);
   });

@@ -578,7 +578,7 @@ function resolveStatusCoop(world: World, events: SimEvent[]): void {
  * test that does not opt into the field. Real ffa/teams play always sets it (loadArena
  * stamps VERSUS_STOCK on every player-kind tank in those modes).
  */
-function isVersusEliminated(t: Tank): boolean {
+export function isVersusEliminated(t: Tank): boolean {
   return !t.alive && (t.stockRemaining ?? 0) === 0;
 }
 

@@ -3,17 +3,33 @@ import {
   campaignDescriptor,
   launchRoute,
   locationAtRoute,
-  practiceDescriptor,
+  practiceLevelDescriptor,
   resolveSession,
   versusDescriptor,
+  versusDraw,
+  versusRulesFromConfig,
+  versusWinnerSlot,
+  versusWinnerTeam,
 } from './app-state';
-import type { AppLocation } from './app-state';
+import type { AppLocation, VersusResult } from './app-state';
 import type { VersusConfig } from './versus-config';
-import {
-  classifyWithCampaignCompletion,
-  createGameStateMachine,
-  defaultOutcomeClassifier,
-} from './state';
+import { createGameStateMachine, createOutcomeClassifier } from './state';
+
+/**
+ * The classifier every machine in this file is built with unless a case needs
+ * different context. Campaign completion off, and a versus result that is
+ * clearly attributable so a test can tell it apart from a fabricated one.
+ */
+const testClassifier = (
+  opts: { final?: boolean; result?: VersusResult } = {},
+) =>
+  createOutcomeClassifier({
+    isFinalCampaignLevel: () => opts.final ?? false,
+    versusResult: () => opts.result ?? versusWinnerSlot(0),
+  });
+
+const makeMachine = (opts: { final?: boolean; result?: VersusResult } = {}) =>
+  createGameStateMachine({ classifyOutcome: testClassifier(opts) });
 
 const versusConfigFixture = (overrides: Partial<VersusConfig> = {}): VersusConfig => ({
   mode: 'ffa',
@@ -28,14 +44,14 @@ const buildCampaignSession = () =>
   resolveSession(campaignDescriptor(), 42, 'plaza');
 
 const buildPracticeSession = () =>
-  resolveSession(practiceDescriptor(2), 43, 'hollow');
+  resolveSession(practiceLevelDescriptor(2), 43, 'hollow');
 
 const buildVersusSession = () =>
-  resolveSession(versusDescriptor(versusConfigFixture()), 44, 'plaza');
+  resolveSession(versusDescriptor(versusRulesFromConfig(versusConfigFixture())), 44, 'plaza');
 
 describe('createGameStateMachine -- initial location', () => {
   it('starts at the Launch route', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     expect(sm.location).toEqual(locationAtRoute(launchRoute()));
     expect(sm.atLaunch).toBe(true);
     expect(sm.atMainMenu).toBe(false);
@@ -49,7 +65,7 @@ describe('createGameStateMachine -- initial location', () => {
 
 describe('dismissLaunch -- guarded launch -> main menu', () => {
   it('moves launch -> main menu', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.dismissLaunch();
     expect(sm.atMainMenu).toBe(true);
     expect(sm.route?.kind).toBe('main-menu');
@@ -58,34 +74,34 @@ describe('dismissLaunch -- guarded launch -> main menu', () => {
   it('does nothing from anywhere except the Launch route', () => {
     const session = buildCampaignSession();
     for (const drive of [
-      (sm: ReturnType<typeof createGameStateMachine>) => {
+      (sm: ReturnType<typeof makeMachine>) => {
         sm.dismissLaunch();
       },
-      (sm: ReturnType<typeof createGameStateMachine>) => {
+      (sm: ReturnType<typeof makeMachine>) => {
         sm.dismissLaunch();
         sm.enterGameplay(session);
       },
-      (sm: ReturnType<typeof createGameStateMachine>) => {
+      (sm: ReturnType<typeof makeMachine>) => {
         sm.dismissLaunch();
         sm.enterGameplay(session);
         sm.pause();
       },
-      (sm: ReturnType<typeof createGameStateMachine>) => {
+      (sm: ReturnType<typeof makeMachine>) => {
         sm.dismissLaunch();
         sm.enterGameplay(session);
         sm.onEvents([{ type: 'win' }]);
       },
-      (sm: ReturnType<typeof createGameStateMachine>) => {
+      (sm: ReturnType<typeof makeMachine>) => {
         sm.dismissLaunch();
         sm.enterGameplay(session);
         sm.onEvents([{ type: 'lose' }]);
       },
-      (sm: ReturnType<typeof createGameStateMachine>) => {
+      (sm: ReturnType<typeof makeMachine>) => {
         sm.dismissLaunch();
         sm.toRoute('settings');
       },
     ]) {
-      const sm = createGameStateMachine();
+      const sm = makeMachine();
       drive(sm);
       const before = sm.location;
       sm.dismissLaunch();
@@ -96,7 +112,7 @@ describe('dismissLaunch -- guarded launch -> main menu', () => {
 
 describe('Route transitions -- toMainMenu and toRoute', () => {
   it('toMainMenu reaches Main Menu from anywhere (navigation-only)', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     expect(sm.atMainMenu).toBe(true);
 
@@ -106,7 +122,7 @@ describe('Route transitions -- toMainMenu and toRoute', () => {
   });
 
   it('toRoute reaches every AppRoute kind explicitly', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     for (const kind of [
       'launch',
       'main-menu',
@@ -124,7 +140,7 @@ describe('Route transitions -- toMainMenu and toRoute', () => {
   });
 
   it('never produces a route named "title" for Main Menu', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     expect(sm.route?.kind).toBe('main-menu');
     expect(sm.route?.kind).not.toBe('title');
@@ -133,7 +149,7 @@ describe('Route transitions -- toMainMenu and toRoute', () => {
 
 describe('enterGameplay -- descriptor-vs-resolved-instance boundary', () => {
   it('enters gameplay with a resolved session, phase = playing', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     const session = buildCampaignSession();
     sm.enterGameplay(session);
@@ -155,7 +171,7 @@ describe('enterGameplay -- descriptor-vs-resolved-instance boundary', () => {
       'customize',
       'developer-tools',
     ] as const) {
-      const sm = createGameStateMachine();
+      const sm = makeMachine();
       sm.toRoute(kind);
       sm.enterGameplay(buildCampaignSession());
       expect(sm.isPlaying).toBe(true);
@@ -163,9 +179,9 @@ describe('enterGameplay -- descriptor-vs-resolved-instance boundary', () => {
   });
 
   it('legal from an outcome phase -- rematch reuses the descriptor', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
-    const descriptor = versusDescriptor(versusConfigFixture({ arenaId: 'random' }));
+    const descriptor = versusDescriptor(versusRulesFromConfig(versusConfigFixture({ arenaId: 'random' })));
     const first = resolveSession(descriptor, 7, 'plaza');
     sm.enterGameplay(first);
     sm.onEvents([{ type: 'win' }]);
@@ -176,18 +192,18 @@ describe('enterGameplay -- descriptor-vs-resolved-instance boundary', () => {
     // mutated into a mixture of retained intent and launch result.
     expect(sm.session).toBe(second);
     expect(sm.descriptor).toBe(descriptor);
-    expect(descriptor.config.arenaId).toBe('random');
+    expect(descriptor.rules.arenaSelection).toBe('random');
   });
 
   it('illegal from the playing phase -- the running session must be ended first', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     expect(() => sm.enterGameplay(buildPracticeSession())).toThrow();
   });
 
   it('illegal from the paused phase -- same reason', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     sm.pause();
@@ -197,7 +213,7 @@ describe('enterGameplay -- descriptor-vs-resolved-instance boundary', () => {
 
 describe('pause / resume -- phase transitions', () => {
   it('pauses only from playing', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.pause();
     expect(sm.atLaunch).toBe(true); // launch is not pausable
     sm.dismissLaunch();
@@ -209,7 +225,7 @@ describe('pause / resume -- phase transitions', () => {
   });
 
   it('resumes only from paused', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     sm.resume();
@@ -220,7 +236,7 @@ describe('pause / resume -- phase transitions', () => {
   });
 
   it('cannot pause a finished session into a zombie state', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     sm.onEvents([{ type: 'lose' }]);
@@ -230,7 +246,7 @@ describe('pause / resume -- phase transitions', () => {
   });
 
   it('paused ignores win/lose events -- the sim is not stepping', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     sm.pause();
@@ -240,7 +256,7 @@ describe('pause / resume -- phase transitions', () => {
   });
 
   it('preserves the resolved session across pause/resume', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     const session = buildCampaignSession();
     sm.enterGameplay(session);
@@ -251,44 +267,9 @@ describe('pause / resume -- phase transitions', () => {
   });
 });
 
-describe('restart -- outcome -> playing', () => {
-  it('restart from an outcome phase re-enters playing on the same session', () => {
-    const sm = createGameStateMachine();
-    sm.toMainMenu();
-    const session = buildCampaignSession();
-    sm.enterGameplay(session);
-    sm.onEvents([{ type: 'lose' }]);
-    expect(sm.hasOutcome).toBe(true);
-    sm.restart();
-    expect(sm.isPlaying).toBe(true);
-    expect(sm.session).toBe(session);
-  });
-
-  it('restart from playing or paused is a no-op', () => {
-    const sm = createGameStateMachine();
-    sm.toMainMenu();
-    sm.enterGameplay(buildCampaignSession());
-    const before = sm.location;
-    sm.restart();
-    expect(sm.location).toBe(before);
-    sm.pause();
-    const paused = sm.location;
-    sm.restart();
-    expect(sm.location).toBe(paused);
-  });
-
-  it('restart from a route is a no-op', () => {
-    const sm = createGameStateMachine();
-    sm.toMainMenu();
-    const before = sm.location;
-    sm.restart();
-    expect(sm.location).toBe(before);
-  });
-});
-
 describe('onEvents -- typed outcome classification', () => {
   it('reacts only to the first terminal event in a batch', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     sm.onEvents([{ type: 'win' }, { type: 'lose' }]);
@@ -296,7 +277,7 @@ describe('onEvents -- typed outcome classification', () => {
   });
 
   it('ignores win/lose from a route -- no session to end', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.onEvents([{ type: 'win' }]);
     expect(sm.atLaunch).toBe(true);
     sm.toMainMenu();
@@ -304,87 +285,113 @@ describe('onEvents -- typed outcome classification', () => {
     expect(sm.atMainMenu).toBe(true);
   });
 
-  it('default classifier: campaign win -> mission-clear', () => {
-    const session = buildCampaignSession();
-    const outcome = defaultOutcomeClassifier([{ type: 'win' }], session);
-    expect(outcome?.kind).toBe('mission-clear');
-  });
+  describe('campaign: Mission Clear vs Campaign Complete', () => {
+    const drive = (opts: { final: boolean }, ev: 'win' | 'lose') => {
+      const sm = makeMachine({ final: opts.final });
+      sm.toMainMenu();
+      sm.enterGameplay(buildCampaignSession());
+      sm.onEvents([{ type: ev }]);
+      return sm;
+    };
 
-  it('default classifier: campaign lose -> campaign-over', () => {
-    const session = buildCampaignSession();
-    const outcome = defaultOutcomeClassifier([{ type: 'lose' }], session);
-    expect(outcome?.kind).toBe('campaign-over');
-  });
+    it('an intermediate clear is mission-clear', () => {
+      expect(drive({ final: false }, 'win').outcome?.kind).toBe('mission-clear');
+    });
 
-  it('default classifier: practice win -> practice-result cleared', () => {
-    const session = buildPracticeSession();
-    expect(defaultOutcomeClassifier([{ type: 'win' }], session)).toEqual({
-      kind: 'practice-result',
-      cleared: true,
+    it('the FINAL level clear is campaign-complete, not mission-clear', () => {
+      // Issue #316's finding 1: the two must be distinguishable, and the
+      // difference comes from caller-side context, not the descriptor.
+      expect(drive({ final: true }, 'win').outcome?.kind).toBe('campaign-complete');
     });
-    expect(defaultOutcomeClassifier([{ type: 'lose' }], session)).toEqual({
-      kind: 'practice-result',
-      cleared: false,
-    });
-  });
 
-  it('default classifier: versus win/lose -> vs-match-end with localPlayerWon', () => {
-    const session = buildVersusSession();
-    expect(defaultOutcomeClassifier([{ type: 'win' }], session)).toEqual({
-      kind: 'vs-match-end',
-      localPlayerWon: true,
-    });
-    expect(defaultOutcomeClassifier([{ type: 'lose' }], session)).toEqual({
-      kind: 'vs-match-end',
-      localPlayerWon: false,
+    it('a loss is campaign-over regardless of which level it happened on', () => {
+      expect(drive({ final: false }, 'lose').outcome?.kind).toBe('campaign-over');
+      expect(drive({ final: true }, 'lose').outcome?.kind).toBe('campaign-over');
     });
   });
 
-  it('default classifier: no terminal event -> null', () => {
-    const session = buildCampaignSession();
-    expect(defaultOutcomeClassifier([], session)).toBe(null);
-    expect(
-      defaultOutcomeClassifier(
-        [{ type: 'explosion', pos: { x: 0, y: 0 } }],
-        session,
-      ),
-    ).toBe(null);
-  });
+  describe('practice', () => {
+    const drive = (ev: 'win' | 'lose') => {
+      const sm = makeMachine();
+      sm.toMainMenu();
+      sm.enterGameplay(buildPracticeSession());
+      sm.onEvents([{ type: ev }]);
+      return sm;
+    };
 
-  it('classifyWithCampaignCompletion: last level clear -> campaign-complete', () => {
-    const classify = classifyWithCampaignCompletion(() => true);
-    const session = buildCampaignSession();
-    expect(classify([{ type: 'win' }], session)?.kind).toBe('campaign-complete');
-  });
-
-  it('classifyWithCampaignCompletion: intermediate clear -> mission-clear', () => {
-    const classify = classifyWithCampaignCompletion(() => false);
-    const session = buildCampaignSession();
-    expect(classify([{ type: 'win' }], session)?.kind).toBe('mission-clear');
-  });
-
-  it('classifyWithCampaignCompletion: lose -> campaign-over regardless of final-level predicate', () => {
-    const finalClassify = classifyWithCampaignCompletion(() => true);
-    const midClassify = classifyWithCampaignCompletion(() => false);
-    const session = buildCampaignSession();
-    expect(finalClassify([{ type: 'lose' }], session)?.kind).toBe('campaign-over');
-    expect(midClassify([{ type: 'lose' }], session)?.kind).toBe('campaign-over');
-  });
-
-  it('a caller-supplied classifier is used by the state machine', () => {
-    const sm = createGameStateMachine({
-      classifyOutcome: classifyWithCampaignCompletion(() => true),
+    it('maps win/lose to a cleared flag, never to campaign outcomes', () => {
+      expect(drive('win').outcome).toEqual({ kind: 'practice-result', cleared: true });
+      expect(drive('lose').outcome).toEqual({ kind: 'practice-result', cleared: false });
     });
+
+    it('a final-level practice clear is still a practice result, not campaign-complete', () => {
+      const sm = makeMachine({ final: true });
+      sm.toMainMenu();
+      sm.enterGameplay(buildPracticeSession());
+      sm.onEvents([{ type: 'win' }]);
+      expect(sm.outcome?.kind).toBe('practice-result');
+    });
+  });
+
+  describe('versus: attributed results, never a local-player guess', () => {
+    const drive = (result: VersusResult, ev: 'win' | 'lose') => {
+      const sm = makeMachine({ result });
+      sm.toMainMenu();
+      sm.enterGameplay(buildVersusSession());
+      sm.onEvents([{ type: ev }]);
+      return sm;
+    };
+
+    it('FFA where P2 wins reports slot 1, not a local-player victory', () => {
+      // The exact case the retired `localPlayerWon: true` shape mis-stated.
+      expect(drive(versusWinnerSlot(1), 'win').outcome).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'winner-slot', slot: 1 },
+      });
+    });
+
+    it('FFA where a later slot wins reports THAT slot', () => {
+      expect(drive(versusWinnerSlot(3), 'win').outcome).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'winner-slot', slot: 3 },
+      });
+    });
+
+    it.each([0, 1])('Teams where team %s wins reports that team', (team) => {
+      expect(drive(versusWinnerTeam(team), 'win').outcome).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'winner-team', team },
+      });
+    });
+
+    it('a simultaneous elimination is a DRAW, not a defeat for a seat', () => {
+      // The sim emits `lose` when ZERO remain. The classifier must not consult
+      // the derived winner at all on that path.
+      expect(drive(versusWinnerSlot(2), 'lose').outcome).toEqual({
+        kind: 'vs-match-end',
+        result: { kind: 'draw' },
+      });
+    });
+
+    it('a decided match presents as a win and a draw as a loss', () => {
+      expect(drive(versusWinnerSlot(2), 'win').presentsAsWin).toBe(true);
+      expect(drive(versusDraw(), 'lose').presentsAsLose).toBe(true);
+    });
+  });
+
+  it('a batch with no terminal event leaves the phase alone', () => {
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
-    sm.onEvents([{ type: 'win' }]);
-    expect(sm.outcome?.kind).toBe('campaign-complete');
+    sm.onEvents([{ type: 'explosion', pos: { x: 0, y: 0 } }]);
+    expect(sm.isPlaying).toBe(true);
+    expect(sm.hasOutcome).toBe(false);
   });
 });
 
 describe('onChange -- subscription', () => {
   it('fires exactly on transitions', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     const cb = vi.fn();
     sm.onChange(cb);
     sm.dismissLaunch();
@@ -394,7 +401,7 @@ describe('onChange -- subscription', () => {
   });
 
   it('does not fire onChange when the location is unchanged', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.dismissLaunch();
     const cb = vi.fn();
     sm.onChange(cb);
@@ -403,7 +410,7 @@ describe('onChange -- subscription', () => {
   });
 
   it('emits the new AppLocation payload to subscribers', () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     const seen: AppLocation[] = [];
     sm.onChange((loc) => seen.push(loc));
     sm.dismissLaunch();
@@ -417,7 +424,7 @@ describe('onChange -- subscription', () => {
 
 describe('Navigation-only transitions do not resolve or persist', () => {
   it("dismissLaunch, toMainMenu, toRoute never own a session", () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.dismissLaunch();
     expect(sm.session).toBe(null);
     sm.toMainMenu();
@@ -428,7 +435,7 @@ describe('Navigation-only transitions do not resolve or persist', () => {
 
   it("toMainMenu from within gameplay does NOT dispose the session --" +
       " it hands the display back to the route. Session cleanup is a caller concern.", () => {
-    const sm = createGameStateMachine();
+    const sm = makeMachine();
     sm.toMainMenu();
     sm.enterGameplay(buildCampaignSession());
     sm.toMainMenu();

@@ -28,9 +28,12 @@ import type { Tank, Vec2, Bullet, UnarmedTrigger } from '../sim/types';
 import {
   type AppLocation,
   type ResolvedSession,
+  type SessionDescriptor,
+  type TypedOutcome,
   campaignDescriptor,
   campaignOverOutcome,
   launchRoute,
+  legacyOutcomePresentation,
   locationAtRoute,
   locationInGameplay,
   mainMenuRoute,
@@ -56,14 +59,23 @@ type HarnessSurface = HudSurface;
  * resolved session to be well-formed; the harness holds a synthetic session
  * for that purpose (see `harnessSession`).
  */
-function locationForSurface(surface: HarnessSurface, session: ResolvedSession): AppLocation {
+function locationForSurface(
+  surface: HarnessSurface,
+  session: ResolvedSession,
+  outcome: TypedOutcome | null,
+): AppLocation {
   switch (surface) {
     case 'launch': return locationAtRoute(launchRoute());
     case 'main-menu': return locationAtRoute(mainMenuRoute());
     case 'playing': return locationInGameplay(session, playingPhase());
     case 'paused': return locationInGameplay(session, pausedPhase());
-    case 'outcome-win': return locationInGameplay(session, outcomePhase(missionClearOutcome()));
-    case 'outcome-lose': return locationInGameplay(session, outcomePhase(campaignOverOutcome()));
+    // When a real terminal event drove the transition, `outcome` is whatever
+    // the PRODUCTION classifier returned; the literals are the fallback for a
+    // test that forces a surface directly via `h.setState`.
+    case 'outcome-win':
+      return locationInGameplay(session, outcomePhase(outcome ?? missionClearOutcome()));
+    case 'outcome-lose':
+      return locationInGameplay(session, outcomePhase(outcome ?? campaignOverOutcome()));
     default: {
       const unreachable: never = surface;
       return unreachable;
@@ -76,6 +88,7 @@ import {
   tallyCoopKills,
   playerShellsInFlight,
   startGameWith,
+  versusResultFromWorld,
   deriveSeed,
   botSlotsFor,
   createBotSources,
@@ -125,6 +138,20 @@ interface Recorder {
   lives: number[];
   enemies: number[];
   hudStates: HarnessSurface[];
+  /**
+   * THE EXACT `ResolvedSession` objects production handed to
+   * `sm.enterGameplay`, in order (issue #316 review, finding 5).
+   *
+   * The fake used to discard this argument entirely, which is why a whole
+   * class of descriptor mistakes could survive with every loop test green:
+   * nothing observed what identity production actually resolved. Every
+   * descriptor-wiring test in this file reads THIS.
+   */
+  enteredSessions: ResolvedSession[];
+  /** The descriptor of each entered session, for terse assertions. */
+  enteredDescriptors: SessionDescriptor[];
+  /** Every typed outcome the real classifier produced, in order. */
+  typedOutcomes: TypedOutcome[];
   muted: boolean[];
   shellCounts: Array<{ inFlight: number; cap: number } | null>;
   roundPhases: Array<{ phase: string; secondsLeft: number } | null>;
@@ -264,7 +291,7 @@ interface Recorder {
   detectedPadsPushes: DetectedPad[][];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number } } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean } = {}): {
   deps: GameDeps;
   rec: Recorder;
   storage: Storage;
@@ -336,6 +363,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     lives: [],
     enemies: [],
     hudStates: [],
+    enteredSessions: [],
+    enteredDescriptors: [],
+    typedOutcomes: [],
     muted: [],
     shellCounts: [],
     roundPhases: [],
@@ -430,7 +460,23 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   const harnessSession: ResolvedSession = resolveSession(campaignDescriptor(), 1, 'test-arena');
   // Faithful to state.ts's initial state -- launch route.
   let currentSurface: HarnessSurface = 'launch';
-  let location: AppLocation = locationForSurface(currentSurface, harnessSession);
+  /**
+   * The session production most recently entered, or `null` before the first
+   * `enterGameplay`. The harness's AppLocation is built around THIS rather than
+   * a synthetic stand-in, so `sm.session`, `sm.descriptor` and every typed
+   * outcome the loop observes are the real ones production resolved.
+   */
+  let enteredSession: ResolvedSession | null = null;
+  /**
+   * The REAL classifier production handed to `createStateMachine`. The fake
+   * calls it rather than reimplementing one, which is what makes campaign
+   * completion and versus attribution testable through the production
+   * boundary instead of only as direct unit calls (issue #316 review,
+   * findings 1, 2 and 5).
+   */
+  let classifyOutcome: ((events: SimEvent[], session: ResolvedSession) => TypedOutcome | null) | null = null;
+
+  let location: AppLocation = locationForSurface(currentSurface, harnessSession, null);
   const changeCbs: Array<(location: AppLocation) => void> = [];
   let onMute = (): void => {};
   let onVolume = (_v: number): void => {};
@@ -522,10 +568,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
    * `sm.pause`/etc. through the same fake, and those methods below share
    * this setter.
    */
-  function setSurface(next: HarnessSurface): void {
+  function setSurface(next: HarnessSurface, outcome: TypedOutcome | null = null): void {
     if (currentSurface === next) return;
     currentSurface = next;
-    location = locationForSurface(next, harnessSession);
+    // The REAL session production entered, when there is one -- so assertions
+    // on `sm.session`/`sm.descriptor` and the loop's own `onChange` handler see
+    // the identity production actually resolved, not a stand-in.
+    location = locationForSurface(next, enteredSession ?? harnessSession, outcome);
     emit();
   }
 
@@ -720,7 +769,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
-    createStateMachine: () => ({
+    createStateMachine: (config) => ({
+      // Captured so `onEvents` below can run the real thing.
+      ...((): Record<string, never> => { classifyOutcome = config.classifyOutcome; return {} as Record<string, never>; })(),
       get location(): AppLocation { return location; },
       get route() {
         return location.kind === 'route' ? location.route : null;
@@ -748,10 +799,23 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       get hasOutcome(): boolean {
         return currentSurface === 'outcome-win' || currentSurface === 'outcome-lose';
       },
-      get wasWin(): boolean { return currentSurface === 'outcome-win'; },
-      get wasLose(): boolean { return currentSurface === 'outcome-lose'; },
+      get presentsAsWin(): boolean { return currentSurface === 'outcome-win'; },
+      get presentsAsLose(): boolean { return currentSurface === 'outcome-lose'; },
       onEvents(events: SimEvent[]): void {
         rec.machineSaw.push(events);
+        // Run the REAL production classifier, so campaign completion and
+        // versus attribution are exercised through this boundary.
+        if (currentSurface === 'playing' && classifyOutcome !== null && enteredSession !== null) {
+          const outcome = classifyOutcome(events, enteredSession);
+          if (outcome !== null) {
+            rec.typedOutcomes.push(outcome);
+            setSurface(
+              legacyOutcomePresentation(outcome) === 'win' ? 'outcome-win' : 'outcome-lose',
+              outcome,
+            );
+            return;
+          }
+        }
         // Faithful to state.ts: a win event flips the state SYNCHRONOUSLY
         // inside this call, so every onChange subscriber runs BEFORE the
         // driver reaches onFrameEvents. The fake used to only record, and
@@ -778,7 +842,13 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       dismissLaunch(): void {
         if (currentSurface === 'launch') setSurface('main-menu');
       },
-      enterGameplay(_session): void { setSurface('playing'); },
+      enterGameplay(session): void {
+        // RECORDED, not discarded -- see `Recorder.enteredSessions`.
+        rec.enteredSessions.push(session);
+        rec.enteredDescriptors.push(session.descriptor);
+        enteredSession = session;
+        setSurface('playing');
+      },
       restart(): void {
         if (currentSurface === 'outcome-win' || currentSurface === 'outcome-lose') {
           setSurface('playing');
@@ -1241,6 +1311,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     storage,
     devConsole,
     devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
+    // Any fixture that sets a developer flag is by definition a `?dev=1`
+    // session; an explicit `developerMode` overrides for the bare-gate case
+    // (`?dev=1` alone, which parses to exactly DEV_FLAGS_OFF).
+    developerMode: opts.developerMode ?? Object.keys(opts.devFlags ?? {}).length > 0,
   };
 
   return {
@@ -1284,7 +1358,29 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       startVersus: (config: VersusConfig) => onVersusStartCb(config),
       openCampaign: () => onCampaignOpenCb(),
     },
-    setState: (s) => { setSurface(s); },
+    setState: (s) => {
+      // An outcome surface means "the sim emitted a terminal event", so route
+      // it through the REAL production classifier rather than stamping a
+      // literal outcome on it. Stamping was its own small untruth: forcing
+      // `outcome-win` on a one-level campaign produced `mission-clear`, which
+      // contradicts the session it was forced on. `enteredSession` is used when
+      // production has actually entered one; otherwise the campaign-shaped
+      // harness session stands in, which is what every fixture that forces a
+      // surface without entering gameplay is.
+      if ((s === 'outcome-win' || s === 'outcome-lose') && classifyOutcome !== null) {
+        const session = enteredSession ?? harnessSession;
+        const outcome = classifyOutcome(
+          [{ type: s === 'outcome-win' ? 'win' : 'lose' }],
+          session,
+        );
+        if (outcome !== null) {
+          rec.typedOutcomes.push(outcome);
+          setSurface(s, outcome);
+          return;
+        }
+      }
+      setSurface(s);
+    },
     setTouch: (t: TouchIndicator) => {
       touchState = t;
     },
@@ -5902,3 +5998,352 @@ describe('startGameWith: leaving a CLEARED level for the main menu keeps the run
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Canonical session identity at the PRODUCTION boundary (issue #316, review
+// finding 5).
+//
+// Every case below inspects `rec.enteredSessions` -- the exact `ResolvedSession`
+// objects production handed to `sm.enterGameplay` -- and `rec.typedOutcomes`,
+// the outcomes production's own classifier produced. Before the harness
+// recorded these, the fake discarded the argument entirely, so a whole class of
+// descriptor mistakes could survive with every loop test green.
+//
+// Population: the seven entry shapes a session's identity can be established
+// through (campaign boot/Continue, menu Practice, leaving Practice, setup-pane
+// VS, developer VS flags, developer level jump, developer sandbox), plus the
+// campaign outcome split and the navigation-only guarantees.
+// ---------------------------------------------------------------------------
+
+/** The descriptor of the session production most recently entered. */
+function lastDescriptor(h: ReturnType<typeof makeDeps>): SessionDescriptor {
+  const d = h.rec.enteredDescriptors.at(-1);
+  if (!d) throw new Error('production never entered a session');
+  return d;
+}
+
+/** The resolved session production most recently entered. */
+function lastSession(h: ReturnType<typeof makeDeps>): ResolvedSession {
+  const s = h.rec.enteredSessions.at(-1);
+  if (!s) throw new Error('production never entered a session');
+  return s;
+}
+
+describe('startGameWith: canonical session identity at the production boundary', () => {
+  describe('Campaign', () => {
+    it('Continue from the Main Menu enters a CAMPAIGN session', () => {
+      const h = boot(makeDeps({ savedRun: { level: 0, lives: LIVES } }));
+      h.hud.startRestart(); // Continue
+      expect(lastDescriptor(h)).toEqual({ kind: 'campaign' });
+      h.handle.dispose();
+    });
+
+    it('New Game enters a CAMPAIGN session', () => {
+      const h = boot(makeDeps({ levelCount: 2 }));
+      h.hud.newGame();
+      expect(lastDescriptor(h)).toEqual({ kind: 'campaign' });
+      h.handle.dispose();
+    });
+
+    it('advancing a level keeps Campaign identity and resolves a FRESH instance', () => {
+      const h = boot(makeDeps({ levelCount: 3, savedRun: { level: 0, lives: LIVES } }));
+      h.hud.startRestart();
+      const first = lastSession(h);
+      h.setState('outcome-win');
+      h.hud.startRestart(); // Next Level
+      const second = lastSession(h);
+      expect(second.descriptor).toEqual({ kind: 'campaign' });
+      expect(second).not.toBe(first);
+      h.handle.dispose();
+    });
+  });
+
+  describe('Practice', () => {
+    it('a Level-Select pick enters PRACTICE naming the picked level', () => {
+      const h = boot(makeDeps({ levelCount: 3, progressHighest: 3 }));
+      h.hud.pickLevel(2); // 0-based -> level 3
+      expect(lastDescriptor(h)).toEqual({
+        kind: 'practice',
+        target: { kind: 'campaign-level', levelOrdinal: 3 },
+      });
+      h.handle.dispose();
+    });
+
+    it('advancing within Practice updates the ordinal to the level actually built', () => {
+      // A STORED descriptor would keep reporting the originally picked level.
+      const h = boot(makeDeps({ levelCount: 3, progressHighest: 3 }));
+      h.hud.pickLevel(0); // level 1
+      h.setState('outcome-win');
+      h.hud.startRestart(); // Next Level -> level 2, still practice
+      expect(lastDescriptor(h)).toEqual({
+        kind: 'practice',
+        target: { kind: 'campaign-level', levelOrdinal: 2 },
+      });
+      h.handle.dispose();
+    });
+
+    it('LEAVING Practice cannot retain a Practice descriptor on a campaign board', () => {
+      // Issue #316's finding 4, at the production boundary: a Practice result
+      // landing back on the campaign board used to clear a separate
+      // `inPractice` flag while the retained Practice descriptor rode along.
+      const h = boot(makeDeps({ levelCount: 1, progressHighest: 1 }));
+      h.hud.pickLevel(0);
+      expect(lastDescriptor(h).kind).toBe('practice');
+      h.setState('outcome-lose'); // practice ends
+      h.hud.startRestart(); // lands on the campaign board and re-enters
+      expect(lastDescriptor(h)).toEqual({ kind: 'campaign' });
+      h.handle.dispose();
+    });
+
+    it('Quit from a paused Practice session also returns Campaign identity', () => {
+      const h = boot(makeDeps({ levelCount: 2, progressHighest: 2 }));
+      h.hud.pickLevel(1);
+      expect(lastDescriptor(h).kind).toBe('practice');
+      h.setState('paused');
+      h.hud.quitToTitle();
+      h.hud.startRestart(); // Continue from the Main Menu
+      expect(lastDescriptor(h)).toEqual({ kind: 'campaign' });
+      h.handle.dispose();
+    });
+
+    it('New Game from Practice returns Campaign identity', () => {
+      const h = boot(makeDeps({ levelCount: 2, progressHighest: 2 }));
+      h.hud.pickLevel(1);
+      h.setState('outcome-win');
+      h.setState('main-menu');
+      h.hud.newGame();
+      expect(lastDescriptor(h)).toEqual({ kind: 'campaign' });
+      h.handle.dispose();
+    });
+  });
+
+  describe('Versus', () => {
+    const CONFIG: VersusConfig = {
+      mode: 'ffa', players: 2, arenaId: 'random', stock: VERSUS_STOCK, friendlyFire: false,
+    };
+
+    it('a setup-driven VS session retains RANDOM intent while resolving a concrete arena', () => {
+      const base = makeDeps();
+      const h = boot({
+        ...base,
+        deps: {
+          ...base.deps,
+          devFlags: { ...base.deps.devFlags, players: CONFIG.players },
+          initialVersusConfig: CONFIG,
+        },
+      });
+      h.hud.newGame(); // "Start Match"
+      const session = lastSession(h);
+      expect(session.descriptor.kind).toBe('versus');
+      if (session.descriptor.kind !== 'versus') throw new Error('unreachable');
+      // Retained intent: still un-resolved.
+      expect(session.descriptor.rules.arenaSelection).toBe('random');
+      // Resolved instance: a concrete arena, never the literal 'random'.
+      expect(session.arenaId).not.toBe('random');
+      expect(session.arenaId.length).toBeGreaterThan(0);
+      h.handle.dispose();
+    });
+
+    it('?dev=1&mode=ffa enters a VERSUS session, not Campaign', () => {
+      // The exact case the review found retaining a Campaign descriptor.
+      const h = boot(makeDeps({ devFlags: { mode: 'ffa', players: 2 } }));
+      h.hud.newGame();
+      expect(lastDescriptor(h).kind).toBe('versus');
+      h.handle.dispose();
+    });
+
+    it('?dev=1&mode=teams enters a VERSUS session carrying its real rules', () => {
+      const h = boot(makeDeps({ devFlags: { mode: 'teams', players: 2, friendlyFire: true } }));
+      h.hud.newGame();
+      const d = lastDescriptor(h);
+      expect(d.kind).toBe('versus');
+      if (d.kind !== 'versus') throw new Error('unreachable');
+      expect(d.rules.mode).toBe('teams');
+      expect(d.rules.friendlyFire).toBe(true);
+      // No stock or arena selection is expressible as a developer flag.
+      expect(d.rules.stock).toBe(null);
+      expect(d.rules.arenaSelection).toBe(null);
+      h.handle.dispose();
+    });
+
+    it('a developer versus world never writes the campaign run', () => {
+      // Reachable at players=1, where the old `tracksProgress && !isDevJump &&
+      // !inPractice && playerCount === 1` gate was satisfied by an FFA world.
+      const h = boot(makeDeps({ devFlags: { mode: 'ffa' }, savedRun: { level: 0, lives: LIVES } }));
+      h.hud.newGame();
+      h.setState('outcome-win');
+      expect(h.rec.runAdvances).toEqual([]);
+      expect(h.rec.runEnds).toBe(0);
+      h.handle.dispose();
+    });
+  });
+
+  describe('Developer level jump and sandbox', () => {
+    it('a level jump enters PRACTICE on the jumped level, not Campaign', () => {
+      const h = boot(makeDeps({ levelCount: 3, levelStart: 1, isDevJump: true, devFlags: { level: 2 } }));
+      h.hud.startRestart();
+      expect(lastDescriptor(h)).toEqual({
+        kind: 'practice',
+        target: { kind: 'campaign-level', levelOrdinal: 2 },
+      });
+      h.handle.dispose();
+    });
+
+    it('the sandbox enters PRACTICE on the sandbox target, with no fabricated ordinal', () => {
+      const h = boot(makeDeps({ levelCount: 1, tracksProgress: false, devFlags: { level: 'sandbox' } }));
+      h.hud.startRestart();
+      const d = lastDescriptor(h);
+      expect(d).toEqual({ kind: 'practice', target: { kind: 'sandbox' } });
+      if (d.kind !== 'practice') throw new Error('unreachable');
+      expect('levelOrdinal' in d.target).toBe(false);
+      h.handle.dispose();
+    });
+  });
+
+  describe('Typed outcomes through the production classifier', () => {
+    it('an intermediate campaign win is mission-clear, the final win campaign-complete', () => {
+      // Issue #316's finding 1, at the production boundary: production used to
+      // construct its machine with no completion context at all, so BOTH of
+      // these were `mission-clear`.
+      const mid = boot(makeDeps({ levelCount: 3, savedRun: { level: 0, lives: LIVES } }));
+      mid.hud.startRestart();
+      mid.setState('outcome-win');
+      expect(mid.rec.typedOutcomes.at(-1)?.kind).toBe('mission-clear');
+      mid.handle.dispose();
+
+      const last = boot(makeDeps({ levelCount: 1, savedRun: { level: 0, lives: LIVES } }));
+      last.hud.startRestart();
+      last.setState('outcome-win');
+      expect(last.rec.typedOutcomes.at(-1)?.kind).toBe('campaign-complete');
+      last.handle.dispose();
+    });
+
+    it('a campaign loss is campaign-over on any level', () => {
+      const h = boot(makeDeps({ levelCount: 3, savedRun: { level: 0, lives: LIVES } }));
+      h.hud.startRestart();
+      h.setState('outcome-lose');
+      expect(h.rec.typedOutcomes.at(-1)?.kind).toBe('campaign-over');
+      h.handle.dispose();
+    });
+
+    it('a Practice result is never a campaign outcome, even on the last level', () => {
+      const h = boot(makeDeps({ levelCount: 1, progressHighest: 1 }));
+      h.hud.pickLevel(0);
+      h.setState('outcome-win');
+      expect(h.rec.typedOutcomes.at(-1)).toEqual({ kind: 'practice-result', cleared: true });
+      h.handle.dispose();
+    });
+  });
+
+  describe('Navigation-only actions resolve no session and consume no seed', () => {
+    it('Quit to the Main Menu enters no new session', () => {
+      const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 0, lives: LIVES } }));
+      h.hud.startRestart();
+      const before = h.rec.enteredSessions.length;
+      h.setState('paused');
+      h.hud.quitToTitle();
+      expect(h.rec.enteredSessions.length).toBe(before);
+      h.handle.dispose();
+    });
+
+    it('opening and closing the VS setup pane enters no session', () => {
+      const h = boot(makeDeps());
+      const before = h.rec.enteredSessions.length;
+      h.hud.openVersus();
+      expect(h.rec.enteredSessions.length).toBe(before);
+      h.handle.dispose();
+    });
+
+    it('a pause/resume round trip re-enters nothing and keeps the SAME instance', () => {
+      const h = boot(makeDeps({ savedRun: { level: 0, lives: LIVES } }));
+      h.hud.startRestart();
+      const session = lastSession(h);
+      const before = h.rec.enteredSessions.length;
+      h.setState('paused');
+      h.hud.startRestart(); // Resume
+      expect(h.rec.enteredSessions.length).toBe(before);
+      expect(lastSession(h)).toBe(session);
+      h.handle.dispose();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// versusResultFromWorld: attributed VS results (issue #316, review finding 2).
+//
+// The sim's `win` event means "exactly one player -- or exactly one team -- is
+// not eliminated" and its `lose` means "none are". Neither says WHICH seat, so
+// the retired `localPlayerWon: boolean` payload turned every decided couch
+// match into a P1 victory claim. These cases drive real FFA/teams worlds into
+// each terminal shape and assert the seat actually reported.
+//
+// Population: FFA won by a non-first slot, FFA won by slot 0, both teams in
+// teams mode, and the simultaneous-elimination draw in each mode. The end
+// states are produced by setting `alive`/`stockRemaining` to exactly what the
+// sim's own `applyVersusStock` leaves behind, then read back through the
+// sim's own `isVersusEliminated` predicate.
+// ---------------------------------------------------------------------------
+describe('versusResultFromWorld', () => {
+  /** A real versus world with `players` slots in `mode`. */
+  function versusWorld(mode: 'ffa' | 'teams', players: number): World {
+    return createWorldFor(
+      arenaById(ARENA_DEFS[0].id), 1, undefined, undefined, undefined, undefined,
+      players, undefined, mode, false, 1,
+    );
+  }
+
+  /** Eliminate every listed slot the way a stock-exhausted death does. */
+  function eliminate(world: World, slots: number[]): World {
+    for (const t of world.tanks) {
+      if (t.kind !== 'player') continue;
+      if (!slots.includes(t.controlledBy ?? 0)) continue;
+      t.alive = false;
+      t.stockRemaining = 0;
+    }
+    return world;
+  }
+
+  it('FFA won by P2 reports SLOT 1, not slot 0', () => {
+    // The discriminating case: a P1-centric implementation reports slot 0 here
+    // and looks correct in every match P1 happens to win.
+    const w = eliminate(versusWorld('ffa', 2), [0]);
+    expect(versusResultFromWorld(w)).toEqual({ kind: 'winner-slot', slot: 1 });
+  });
+
+  it('FFA won by the last of four slots reports SLOT 3', () => {
+    const w = eliminate(versusWorld('ffa', 4), [0, 1, 2]);
+    expect(versusResultFromWorld(w)).toEqual({ kind: 'winner-slot', slot: 3 });
+  });
+
+  it('FFA won by P1 reports slot 0 -- the case a P1-centric bug also gets right', () => {
+    const w = eliminate(versusWorld('ffa', 2), [1]);
+    expect(versusResultFromWorld(w)).toEqual({ kind: 'winner-slot', slot: 0 });
+  });
+
+  it('FFA simultaneous elimination is a DRAW, not a win for anyone', () => {
+    const w = eliminate(versusWorld('ffa', 2), [0, 1]);
+    expect(versusResultFromWorld(w)).toEqual({ kind: 'draw' });
+  });
+
+  it.each([
+    { winner: 0, eliminated: [1, 3] },
+    { winner: 1, eliminated: [0, 2] },
+  ])('Teams won by team $winner reports that team', ({ winner, eliminated }) => {
+    // `teamOf(slot) = slot % 2` (arena.ts), so eliminating both slots of one
+    // side leaves exactly the other side standing.
+    const w = eliminate(versusWorld('teams', 4), eliminated);
+    expect(versusResultFromWorld(w)).toEqual({ kind: 'winner-team', team: winner });
+  });
+
+  it('Teams double wipeout is a DRAW', () => {
+    const w = eliminate(versusWorld('teams', 4), [0, 1, 2, 3]);
+    expect(versusResultFromWorld(w)).toEqual({ kind: 'draw' });
+  });
+
+  it('a teams world reports a TEAM, never a slot', () => {
+    // Mode dispatch, not tank-count coincidence: with one survivor in a teams
+    // world the answer is still that survivor's SIDE.
+    const w = eliminate(versusWorld('teams', 4), [0, 1, 2]);
+    expect(versusResultFromWorld(w).kind).toBe('winner-team');
+  });
+});
