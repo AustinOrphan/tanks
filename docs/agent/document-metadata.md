@@ -1,7 +1,9 @@
 # Plan and specification metadata
 
 This is the source of truth for machine-readable metadata on Markdown documents under
-`docs/superpowers/plans/` and `docs/superpowers/specs/`.
+`docs/superpowers/plans/`, `docs/superpowers/specs/`, and `docs/superpowers/backlog/`
+(the per-topic backlog files, split from the monolithic backlog by issue #265; the
+remaining `docs/superpowers/backlog.md` is their compact index and carries no header).
 
 ## Header format
 
