@@ -1,4 +1,5 @@
 import { existsSync, realpathSync } from 'node:fs';
+import { lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep, win32 } from 'node:path';
 
 const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -52,4 +53,36 @@ export function relativeInside(root, target) {
     throw new Error('internal capture workspace escaped the repository');
   }
   return rel.split(sep).join('/');
+}
+
+/** Refuse a pre-existing tmp symlink before creating the unique capture workspace. */
+export async function prepareTemporaryRoot(root) {
+  const realRoot = await realpath(root);
+  const temporaryRoot = resolve(realRoot, 'tmp');
+  try {
+    await mkdir(temporaryRoot);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  const info = await lstat(temporaryRoot);
+  if (info.isSymbolicLink()) {
+    throw new Error('internal capture tmp root must not be a symbolic link');
+  }
+  if (!info.isDirectory()) throw new Error('internal capture tmp root must be a directory');
+  const resolvedRoot = await realpath(temporaryRoot);
+  if (!inside(realRoot, resolvedRoot)) {
+    throw new Error('internal capture tmp root escapes the repository');
+  }
+  return resolvedRoot;
+}
+
+export async function createTemporaryWorkspace(root) {
+  const temporaryRoot = await prepareTemporaryRoot(root);
+  const workspace = await mkdtemp(resolve(temporaryRoot, 'capture-'));
+  const realWorkspace = await realpath(workspace);
+  if (!inside(temporaryRoot, realWorkspace)) {
+    await rm(workspace, { recursive: true, force: true });
+    throw new Error('internal capture workspace escaped the validated tmp root');
+  }
+  return realWorkspace;
 }

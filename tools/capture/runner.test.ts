@@ -1,11 +1,15 @@
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
-import { CAPTURE_RECIPES } from './registry.mjs';
+import { createProducerRegistry } from './producers.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
-import { captureRecipe } from './runner.mjs';
+import { PRODUCER_RESULT_SCHEMA_VERSION } from './producer.mjs';
+// @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
+import { CAPTURE_RECIPES, createRegistry } from './registry.mjs';
+// @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
+import { captureRecipe, cleanupCaptureResources } from './runner.mjs';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -34,47 +38,99 @@ const prerequisites = {
   ffprobe: 'ffprobe version 6.1.1',
 };
 
+function quantizedGifDuration(frames: number): number {
+  return Math.round((frames / 60) * 100) / 100;
+}
+
 function artifactDescription(format: string, frames: number) {
+  const gifDuration = quantizedGifDuration(frames);
   return {
     width: 640,
     height: 480,
     frameCount: frames,
-    durationSeconds: format === 'png' ? null : frames / 60,
+    durationSeconds: format === 'png' ? null : format === 'gif' ? gifDuration : frames / 60,
     codec: format === 'mp4' ? 'h264' : format,
     pixelFormat: format === 'mp4' ? 'yuv420p' : format === 'gif' ? 'bgra' : 'rgba',
-    averageFrameRate: format === 'png' ? null : 60,
-    looping: format === 'gif' ? true : null,
+    averageFrameRate: format === 'png' ? null : format === 'gif' ? 100 : 60,
+    container: format === 'mp4'
+      ? { faststart: true, moovOffset: 32, mdatOffset: 512, measuredBy: 'mp4-box-order' }
+      : format === 'gif'
+        ? {
+            loopExtensionPresent: true,
+            loopCount: 0,
+            looping: true,
+            frameCount: frames,
+            displayedDurationSeconds: gifDuration,
+            delayCentiseconds: { minimum: 1, maximum: 2, total: gifDuration * 100 },
+            measuredBy: 'gif-block-parser',
+          }
+        : null,
     byteSize: 10,
     sha256: 'b'.repeat(64),
   };
 }
 
-function common(runProducer: any, extra: Record<string, any> = {}) {
+function common(runProducer?: any, extra: Record<string, any> = {}) {
   return {
     inspectSourceState: vi.fn(async () => source),
     inspectPrerequisites: vi.fn(async () => prerequisites),
-    runProducer,
-    describeArtifact: vi.fn(async (_path: string, format: string) => artifactDescription(format, format === 'png' ? 1 : 47)),
+    ...(runProducer ? { runProducer } : {}),
+    encodeMp4: vi.fn(async ({ output }: { output: string }) => writeFile(output, 'mp4')),
+    encodeGif: vi.fn(async ({ output }: { output: string }) => writeFile(output, 'gif')),
+    describeArtifact: vi.fn(async (_path: string, format: string) =>
+      artifactDescription(format, format === 'png' ? 1 : 47)),
     ...extra,
+  };
+}
+
+function normalizedResult(context: any, options: {
+  frames: string[];
+  assertions?: any[];
+  metadata?: any;
+  kind?: string;
+  scenarioId?: string;
+  toolVersions?: Record<string, string>;
+}) {
+  return {
+    schemaVersion: PRODUCER_RESULT_SCHEMA_VERSION,
+    producer: {
+      kind: options.kind ?? context.recipe.producer.kind,
+      scenarioId: options.scenarioId ?? context.recipe.producer.scenarioId,
+    },
+    rawFrames: options.frames,
+    capture: {
+      viewport: context.recipe.viewport,
+      frameSchedule: context.recipe.schedule.kind === 'still'
+        ? { kind: 'still', frameCount: 1 }
+        : { kind: 'frames', frameCount: options.frames.length },
+    },
+    assertions: options.assertions ?? [],
+    metadata: options.metadata ?? null,
+    toolVersions: options.toolVersions ?? { chromium: '151.0.7922.34' },
+    diagnostics: [],
   };
 }
 
 async function stillProducer(context: any) {
   const frame = join(context.outputDirectory, 'frame.png');
   await writeFile(frame, 'png');
-  return {
-    rawFrames: [frame],
-    previewFile: null,
-    chromiumVersion: '151.0.7922.34',
-    report: {
-      producer: {
-        tickCount: 40,
-        fixture: { seed: 7 },
+  return normalizedResult(context, {
+    frames: [frame],
+    assertions: [{
+      kind: 'event-count',
+      passed: true,
+      diagnostic: null,
+      details: { expected: { type: 'fire', tick: 10, count: 1 }, observedCount: 1 },
+    }],
+    metadata: {
+      moment: {
+        fixture: { id: 'gallery.fire', seed: 7 },
+        tickSchedule: { kind: 'still', tick: 10, alpha: 0, frameCount: 1 },
         observedEvents: [{ type: 'fire', tick: 10 }],
         fixtureAssertions: [],
       },
     },
-  };
+  });
 }
 
 async function temporalProducer(context: any) {
@@ -84,18 +140,20 @@ async function temporalProducer(context: any) {
     await writeFile(frame, `frame ${index}`);
     rawFrames.push(frame);
   }
-  const previewFile = join(context.outputDirectory, 'gallery.gif');
-  await writeFile(previewFile, 'gif');
-  return {
-    rawFrames,
-    previewFile,
-    chromiumVersion: '151.0.7922.34',
-    report: {
-      producer: {
-        tickCount: 47, fixture: { seed: 7 }, observedEvents: [], fixtureAssertions: [],
+  return normalizedResult(context, {
+    frames: rawFrames,
+    metadata: {
+      moment: {
+        fixture: { id: 'gallery.ai-tracking', seed: 7 },
+        tickSchedule: {
+          kind: 'ticks', startTick: 0, endTickExclusive: 47, step: 1,
+          subdivisions: 1, tickRate: 60, frameCount: 47,
+        },
+        observedEvents: [],
+        fixtureAssertions: [],
       },
     },
-  };
+  });
 }
 
 describe('capture runner publication and cleanup', () => {
@@ -202,13 +260,14 @@ describe('capture runner publication and cleanup', () => {
     expect(await missing(`${output}.capture.lock`)).toBe(true);
   });
 
-  it('removes raw frames and partial output after an assertion failure', async () => {
+  it('removes raw frames and partial output after a normalized assertion failure', async () => {
     const checkout = await root();
     let workspace = '';
     const runProducer = vi.fn(async (context: any) => {
       workspace = dirname(context.outputDirectory);
       const result = await stillProducer(context);
-      result.report.producer.observedEvents = [];
+      result.assertions[0].passed = false;
+      result.assertions[0].diagnostic = 'expected 1 fire event at tick 10, observed 0';
       return result;
     });
     const output = join(checkout, 'artifacts/capture/assertion-failure');
@@ -220,18 +279,91 @@ describe('capture runner publication and cleanup', () => {
     expect(await missing(`${output}.capture.lock`)).toBe(true);
   });
 
-  it('does not publish a temporal directory until encoding and probing both succeed', async () => {
+  it('does not publish a temporal directory until both shared encoders and probes succeed', async () => {
     const checkout = await root();
-    const encodeMp4 = vi.fn(async ({ output }: { output: string }) => writeFile(output, 'mp4'));
+    const deps = common(temporalProducer);
     const result = await captureRecipe(CAPTURE_RECIPES[1], {
       root: checkout,
       out: 'artifacts/capture/temporal',
       retainFrames: false,
       sourceRef: null,
-    }, common(temporalProducer, { encodeMp4 }));
-    expect(encodeMp4).toHaveBeenCalledOnce();
+    }, deps);
+    expect(deps.encodeMp4).toHaveBeenCalledOnce();
+    expect(deps.encodeGif).toHaveBeenCalledOnce();
     expect((await stat(join(result.output.absolute, 'capture.mp4'))).isFile()).toBe(true);
     expect((await stat(join(result.output.absolute, 'preview.gif'))).isFile()).toBe(true);
     expect((await stat(join(result.output.absolute, 'capture.json'))).isFile()).toBe(true);
+  });
+
+  it('runs a fake non-moment producer through the complete shared artifact pipeline', async () => {
+    const checkout = await root();
+    const recipe = structuredClone(CAPTURE_RECIPES[1].recipe);
+    recipe.id = 'test.screen.clip';
+    recipe.producer = { kind: 'screen', scenarioId: 'fake-screen' };
+    recipe.fixture = { id: 'fake-screen', seed: 99 };
+    recipe.variant = {};
+    recipe.schedule = { kind: 'frames', frameCount: 2 };
+    const [entry] = createRegistry([recipe]);
+    const fakeScreen = vi.fn(async (context: any) => {
+      const frames = [];
+      for (let index = 0; index < 2; index++) {
+        const frame = join(context.outputDirectory, `arbitrary-${index}.png`);
+        await writeFile(frame, `screen ${index}`);
+        frames.push(frame);
+      }
+      return normalizedResult(context, {
+        frames,
+        kind: 'screen',
+        scenarioId: 'fake-screen',
+        metadata: null,
+        assertions: [{ kind: 'screen-ready', passed: true, diagnostic: null, details: {} }],
+        toolVersions: { fake: '1.0.0' },
+      });
+    });
+    const producerRegistry = createProducerRegistry([['screen', fakeScreen]]);
+    const deps = common(undefined, {
+      producerRegistry,
+      describeArtifact: vi.fn(async (_path: string, format: string) => artifactDescription(format, 2)),
+    });
+
+    const result = await captureRecipe(entry, {
+      root: checkout,
+      out: 'artifacts/capture/fake-screen',
+      retainFrames: false,
+      sourceRef: null,
+    }, deps);
+
+    expect(fakeScreen).toHaveBeenCalledOnce();
+    expect(deps.encodeMp4).toHaveBeenCalledOnce();
+    expect(deps.encodeGif).toHaveBeenCalledOnce();
+    expect(result.manifest.producer).toMatchObject({
+      kind: 'screen', scenarioId: 'fake-screen', metadata: null,
+    });
+    expect(result.manifest.capture).toMatchObject({
+      requestedSchedule: { kind: 'frames', frameCount: 2 },
+      frameSchedule: { kind: 'frames', frameCount: 2 },
+    });
+    expect(result.manifest.assertions).toEqual([
+      { kind: 'screen-ready', passed: true, diagnostic: null, details: {} },
+    ]);
+    expect((await stat(join(result.output.absolute, 'capture.mp4'))).isFile()).toBe(true);
+    expect((await stat(join(result.output.absolute, 'preview.gif'))).isFile()).toBe(true);
+  });
+
+  it('makes cleanup idempotent across overlapping cancellation paths', async () => {
+    const checkout = await root();
+    const workspace = join(checkout, 'tmp', 'capture-test');
+    const publishDirectory = join(workspace, 'publish');
+    const lockPath = join(checkout, 'capture.lock');
+    await mkdir(publishDirectory, { recursive: true });
+    const lock = await open(lockPath, 'wx');
+    const state: any = { lock, lockPath, workspace, publishDirectory, cleanupPromise: null };
+    const first = cleanupCaptureResources(state);
+    const second = cleanupCaptureResources(state);
+    expect(second).toBe(first);
+    await Promise.all([first, second]);
+    await expect(cleanupCaptureResources(state)).resolves.toBeUndefined();
+    expect(await missing(workspace)).toBe(true);
+    expect(await missing(lockPath)).toBe(true);
   });
 });

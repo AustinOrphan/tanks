@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { CAPTURE_USAGE, parseCaptureArgs } from './args.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
-import { resolveOutputPath } from './paths.mjs';
+import { prepareTemporaryRoot, resolveOutputPath } from './paths.mjs';
 
 const cleanup: string[] = [];
 afterEach(async () => {
@@ -89,5 +89,13 @@ describe('capture output paths', () => {
     cleanup.push(root, outside);
     await symlink(outside, join(root, 'artifacts'));
     expect(() => resolveOutputPath(root, 'artifacts/capture')).toThrow(/symbolic link/);
+  });
+
+  it.skipIf(process.platform === 'win32')('rejects a pre-existing tmp symlink before workspace creation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'capture-tmp-root-'));
+    const outside = await mkdtemp(join(tmpdir(), 'capture-tmp-outside-'));
+    cleanup.push(root, outside);
+    await symlink(outside, join(root, 'tmp'));
+    await expect(prepareTemporaryRoot(root)).rejects.toThrow(/tmp root must not be a symbolic link/);
   });
 });

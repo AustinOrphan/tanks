@@ -1,66 +1,54 @@
 import { MANIFEST_SCHEMA_VERSION } from './schema.mjs';
 
-function resolvedSchedule(recipe, producerResult) {
-  if (recipe.schedule.kind === 'still') {
-    return {
-      kind: 'still',
-      tick: recipe.schedule.tick,
-      alpha: recipe.schedule.alpha,
-      frameCount: 1,
-    };
-  }
-  const endTickExclusive = recipe.schedule.endTick === 'scenario'
-    ? producerResult.report.producer.tickCount
-    : recipe.schedule.endTick;
-  return {
-    kind: 'ticks',
-    startTick: recipe.schedule.startTick,
-    endTickExclusive,
-    step: recipe.schedule.step,
-    subdivisions: recipe.schedule.subdivisions,
-    tickRate: recipe.schedule.tickRate,
-    frameCount: producerResult.rawFrames.length,
-  };
-}
-
-function playback(recipe, artifacts, schedule) {
-  if (recipe.schedule.kind === 'still') {
+function playback(recipe, artifacts, frameSchedule) {
+  if (frameSchedule.kind === 'still') {
+    const still = artifacts.find((artifact) => artifact.format === 'png') ?? artifacts[0];
     return {
       rate: recipe.playback.rate,
       intendedFps: null,
       intendedDurationSeconds: null,
-      sourceOfTruth: 'capture.png',
+      sourceOfTruth: still.filename,
       effective: null,
     };
   }
-  const mp4 = artifacts.find((artifact) => artifact.format === 'mp4');
-  const gif = artifacts.find((artifact) => artifact.format === 'gif');
-  const framesPerTick = recipe.schedule.subdivisions / recipe.schedule.step;
-  const baseFrameRate = recipe.schedule.tickRate * framesPerTick;
+
+  const intendedFps = recipe.playback.intendedFps;
+  const intendedDurationSeconds = frameSchedule.frameCount / intendedFps;
+  const mp4 = artifacts.find((artifact) => artifact.format === 'mp4') ?? null;
+  const gif = artifacts.find((artifact) => artifact.format === 'gif') ?? null;
+  const effective = {};
+  if (mp4) {
+    effective.mp4 = {
+      averageFrameRate: mp4.averageFrameRate,
+      durationSeconds: mp4.durationSeconds,
+      playbackRate: mp4.averageFrameRate === null
+        ? null
+        : recipe.playback.rate * (mp4.averageFrameRate / intendedFps),
+      faststart: mp4.container?.faststart ?? null,
+    };
+  }
+  if (gif) {
+    const displayedDurationSeconds = gif.container?.displayedDurationSeconds ?? null;
+    const displayedAverageFrameRate = displayedDurationSeconds
+      ? gif.container.frameCount / displayedDurationSeconds
+      : null;
+    effective.gif = {
+      displayedAverageFrameRate,
+      durationSeconds: displayedDurationSeconds,
+      displayedPlaybackRate: displayedAverageFrameRate === null
+        ? null
+        : recipe.playback.rate * (displayedAverageFrameRate / intendedFps),
+      loopCount: gif.container?.loopCount ?? null,
+      looping: gif.container?.looping ?? null,
+      timingNote: 'GIF delays are measured in centiseconds; this preview is not exact 60 fps evidence.',
+    };
+  }
   return {
     rate: recipe.playback.rate,
-    intendedFps: recipe.playback.intendedFps,
-    intendedDurationSeconds: schedule.frameCount / recipe.playback.intendedFps,
-    sourceOfTruth: mp4.filename,
-    effective: {
-      mp4: {
-        averageFrameRate: mp4.averageFrameRate,
-        durationSeconds: mp4.durationSeconds,
-        playbackRate: mp4.averageFrameRate === null
-          ? null
-          : mp4.averageFrameRate / baseFrameRate,
-      },
-      gif: {
-        displayedAverageFrameRate: gif.durationSeconds
-          ? gif.frameCount / gif.durationSeconds
-          : gif.averageFrameRate,
-        durationSeconds: gif.durationSeconds,
-        displayedPlaybackRate: gif.durationSeconds
-          ? (gif.frameCount / gif.durationSeconds) / baseFrameRate
-          : null,
-        timingNote: 'GIF delays are quantized by the format; this preview is not exact 60 fps evidence.',
-      },
-    },
+    intendedFps,
+    intendedDurationSeconds,
+    sourceOfTruth: mp4?.filename ?? artifacts[0].filename,
+    effective,
   };
 }
 
@@ -70,14 +58,13 @@ export function buildManifest(input) {
     source,
     producerResult,
     prerequisites,
-    assertions,
     artifacts,
     rawFrames,
     startedAt,
     completedAt,
   } = input;
   const { recipe } = entry;
-  const schedule = resolvedSchedule(recipe, producerResult);
+  const frameSchedule = producerResult.capture.frameSchedule;
   const totalBytes = artifacts.reduce((sum, artifact) => sum + artifact.byteSize, 0)
     + (rawFrames?.byteSize ?? 0);
   return {
@@ -99,25 +86,24 @@ export function buildManifest(input) {
     producer: {
       kind: recipe.producer.kind,
       scenarioId: recipe.producer.scenarioId,
-      fixture: {
-        id: recipe.fixture.id,
-        seed: producerResult.report.producer.fixture.seed,
+      requestedInputs: {
+        fixture: recipe.fixture,
+        variant: recipe.variant,
       },
-      variant: recipe.variant,
-      observedEvents: producerResult.report.producer.observedEvents,
-      fixtureAssertions: producerResult.report.producer.fixtureAssertions,
+      metadata: producerResult.metadata,
     },
     capture: {
-      viewport: recipe.viewport,
+      viewport: producerResult.capture.viewport,
       profile: recipe.profile,
-      schedule,
+      requestedSchedule: recipe.schedule,
+      frameSchedule,
     },
-    playback: playback(recipe, artifacts, schedule),
-    assertions,
+    playback: playback(recipe, artifacts, frameSchedule),
+    assertions: producerResult.assertions,
     tools: {
       node: process.version,
-      playwright: prerequisites.playwright.version,
-      chromium: producerResult.chromiumVersion,
+      playwright: prerequisites.playwright?.version ?? null,
+      producer: producerResult.toolVersions,
       ffmpeg: prerequisites.ffmpeg,
       ffprobe: prerequisites.ffprobe,
     },
@@ -127,7 +113,7 @@ export function buildManifest(input) {
         retained: false,
         directory: null,
         pattern: null,
-        frameCount: producerResult.rawFrames.length,
+        frameCount: frameSchedule.frameCount,
         byteSize: null,
         sha256: null,
       },
@@ -136,12 +122,12 @@ export function buildManifest(input) {
       withinBudget: totalBytes <= recipe.outputBudgetBytes,
     },
     determinism: {
-      scenarioInputs: 'fixed by recipe, source, and producer fixture',
-      scheduleAndDimensions: 'fixed by recipe and recorded effective values',
+      scenarioInputs: 'fixed by the recipe and recorded producer inputs/metadata',
+      scheduleAndDimensions: 'fixed by the recipe and recorded effective frame schedule/viewport',
       rawFrameEquality: 'may be compared only within a pinned supported environment',
       encodedByteEqualityAcrossEnvironments: false,
     },
     timing: { startedAt, completedAt },
-    diagnostics: [],
+    diagnostics: producerResult.diagnostics,
   };
 }

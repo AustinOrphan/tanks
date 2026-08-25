@@ -349,6 +349,11 @@ async function run(browser) {
       browser: { chromiumVersion: browser.version() },
       producer: producerReport,
     }, null, 2)}\n`);
+    // `--report` is the capture-adapter seam: publish raw frames and producer metadata
+    // only. The shared capture runner owns every requested PNG/MP4/GIF assembly so a
+    // future producer never needs to duplicate gallery's FFmpeg behavior.
+    console.log(`wrote ${shots.reduce((total, shot) => total + shot.n, 0)} raw frame(s) to ${outDir}`);
+    return;
   }
 
   if (!has('ffmpeg')) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
-import { adapterForKind } from './gallery-adapter.mjs';
+import { producerForKind } from './producers.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { CAPTURE_RECIPES, createRegistry } from './registry.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
@@ -52,7 +52,7 @@ describe('capture recipe schema', () => {
       future.producer.kind = kind;
       future.variant = {};
       expect(() => validateRecipe(future)).not.toThrow(); // contract shape is extensible
-      expect(() => adapterForKind(kind)).toThrow(new RegExp(`'${kind}'.*not implemented`));
+      expect(() => producerForKind(kind)).toThrow(new RegExp(`'${kind}'.*not implemented`));
     }
   });
 
@@ -105,6 +105,17 @@ describe('capture recipe schema', () => {
     const mismatchedPlayback = recipe(1);
     mismatchedPlayback.playback.intendedFps = 30;
     expect(() => validateRecipe(mismatchedPlayback)).toThrow(/fixed schedule rate/);
+
+    const frameScheduled = recipe(1);
+    frameScheduled.producer.kind = 'screen';
+    frameScheduled.producer.scenarioId = 'fake-screen';
+    frameScheduled.variant = {};
+    frameScheduled.schedule = { kind: 'frames', frameCount: 12 };
+    frameScheduled.playback.intendedFps = 24;
+    expect(() => validateRecipe(frameScheduled)).not.toThrow();
+
+    frameScheduled.schedule.frameCount = 0;
+    expect(() => validateRecipe(frameScheduled)).toThrow(/schedule\.frameCount/);
   });
 
   it('rejects non-JSON canonical values rather than hashing implementation accidents', () => {

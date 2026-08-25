@@ -97,8 +97,9 @@ the manifest. Output defaults under ignored `artifacts/capture/`, refuses collis
 can be redirected with a safe relative `--out` path. Temporary numbered PNGs are removed
 unless `--retain-frames` is explicit. The MP4 is timing truth; GIF delay precision cannot
 express exact 60 fps. See [`tools/capture/README.md`](../../tools/capture/README.md) for
-prerequisites, registry/manifest fields, safety, and the cross-environment determinism
-boundary.
+the normalized producer/registration contract, shared format assembly, probed media
+validation, cooperative signal cleanup, prerequisites, registry/manifest fields, safety,
+and the cross-environment determinism boundary.
 
 `npm run issues:audit` checks every open issue for the repository's required size, risk,
 area, impact, horizon, readiness, and active-queue invariants. It infers the repository from

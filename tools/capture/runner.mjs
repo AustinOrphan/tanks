@@ -1,7 +1,6 @@
 import {
   copyFile,
   mkdir,
-  mkdtemp,
   open,
   rename,
   rm,
@@ -10,12 +9,23 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { evaluateExpectations } from './assertions.mjs';
-import { adapterForKind } from './gallery-adapter.mjs';
+import { throwIfAborted } from './cancellation.mjs';
 import { buildManifest } from './manifest.mjs';
-import { describeArtifact, describeRawFrames, encodeMp4 } from './media.mjs';
-import { relativeInside, resolveOutputPath } from './paths.mjs';
+import {
+  describeArtifact,
+  describeRawFrames,
+  encodeGif,
+  encodeMp4,
+  validateArtifact,
+} from './media.mjs';
+import {
+  createTemporaryWorkspace,
+  relativeInside,
+  resolveOutputPath,
+} from './paths.mjs';
 import { inspectPrerequisites } from './prerequisites.mjs';
+import { validateProducerResult } from './producer.mjs';
+import { producerForKind } from './producers.mjs';
 import { inspectSourceState } from './provenance.mjs';
 
 async function exists(path) {
@@ -28,64 +38,79 @@ async function exists(path) {
   }
 }
 
-function validateCapturedSchedule(recipe, producerResult) {
-  const tickCount = producerResult.report.producer.tickCount;
-  if (!Number.isInteger(tickCount) || tickCount < 1) {
-    throw new Error(`moment producer reported invalid tick count ${tickCount}`);
+async function stageRawFrames(rawFrames, workspace, signal) {
+  const directory = join(workspace, 'frames');
+  await mkdir(directory);
+  const staged = [];
+  for (let index = 0; index < rawFrames.length; index++) {
+    throwIfAborted(signal);
+    const target = join(directory, `frame-${String(index).padStart(4, '0')}.png`);
+    await copyFile(rawFrames[index], target);
+    staged.push(target);
   }
-  if (recipe.schedule.kind === 'still') {
-    if (recipe.schedule.tick >= tickCount) {
-      throw new Error(`still tick ${recipe.schedule.tick} is outside the ${tickCount}-tick moment`);
-    }
-    if (producerResult.rawFrames.length !== 1) throw new Error('still producer must return one raw frame');
-    return;
-  }
-  const expectedFrames = Math.ceil((tickCount - recipe.schedule.startTick) / recipe.schedule.step)
-    * recipe.schedule.subdivisions;
-  if (producerResult.rawFrames.length !== expectedFrames) {
-    throw new Error(
-      `fixed schedule resolves to ${expectedFrames} frames, producer returned ${producerResult.rawFrames.length}`,
-    );
-  }
+  return staged;
 }
 
-function validateArtifact(recipe, artifact, expectedFrameCount) {
-  const expectedWidth = Math.round(recipe.viewport.width * recipe.viewport.devicePixelRatio);
-  const expectedHeight = Math.round(recipe.viewport.height * recipe.viewport.devicePixelRatio);
-  if (artifact.width !== expectedWidth || artifact.height !== expectedHeight) {
-    throw new Error(
-      `${artifact.filename} is ${artifact.width}x${artifact.height}; expected ${expectedWidth}x${expectedHeight}`,
-    );
+function constructionFor(format) {
+  if (format === 'png') return { method: 'captured-frame-copy' };
+  if (format === 'mp4') {
+    return {
+      method: 'ffmpeg',
+      codecRequested: 'libx264',
+      pixelFormatRequested: 'yuv420p',
+      faststartRequested: true,
+    };
   }
-  if (artifact.frameCount !== expectedFrameCount) {
-    throw new Error(
-      `${artifact.filename} has ${artifact.frameCount} frames; expected ${expectedFrameCount}`,
-    );
-  }
-  if (artifact.format === 'png' && artifact.codec !== 'png') {
-    throw new Error(`${artifact.filename} codec is ${artifact.codec}; expected png`);
-  }
-  if (artifact.format === 'mp4') {
-    if (artifact.codec !== 'h264') throw new Error(`${artifact.filename} codec is ${artifact.codec}; expected h264`);
-    if (artifact.pixelFormat !== 'yuv420p') {
-      throw new Error(`${artifact.filename} pixel format is ${artifact.pixelFormat}; expected yuv420p`);
-    }
-    if (!(artifact.durationSeconds > 0)) throw new Error(`${artifact.filename} has no positive duration`);
-  }
-  if (artifact.format === 'gif') {
-    if (artifact.codec !== 'gif') throw new Error(`${artifact.filename} codec is ${artifact.codec}; expected gif`);
-    if (artifact.looping !== true) throw new Error(`${artifact.filename} is not configured to loop`);
-    if (!(artifact.durationSeconds > 0)) throw new Error(`${artifact.filename} has no positive duration`);
-  }
+  return {
+    method: 'ffmpeg',
+    infiniteLoopRequested: true,
+    delayPrecision: 'centiseconds',
+    paletteMode: 'generated-per-capture',
+  };
 }
 
-async function retainRawFrames(producerResult, publishDirectory) {
+async function assembleRequestedArtifacts(recipe, frames, publishDirectory, options, deps) {
+  const inputPattern = join(dirname(frames[0]), 'frame-%04d.png');
+  const artifactFiles = [];
+  for (const requested of recipe.artifacts) {
+    throwIfAborted(options.signal);
+    const target = join(publishDirectory, requested.filename);
+    if (requested.format === 'png') {
+      if (frames.length !== 1) throw new Error('PNG capture requires exactly one raw frame');
+      await copyFile(frames[0], target);
+    } else {
+      const encoder = requested.format === 'mp4'
+        ? (deps.encodeMp4 ?? encodeMp4)
+        : (deps.encodeGif ?? encodeGif);
+      await encoder({
+        fps: recipe.playback.intendedFps,
+        inputPattern,
+        frameCount: frames.length,
+        output: target,
+        cwd: options.root,
+        env: options.env,
+        timeoutMs: recipe.timeoutMs,
+        signal: options.signal,
+      });
+    }
+    artifactFiles.push({
+      format: requested.format,
+      filename: requested.filename,
+      path: target,
+      construction: constructionFor(requested.format),
+    });
+  }
+  return artifactFiles;
+}
+
+async function retainRawFrames(frames, publishDirectory, signal) {
   const directory = join(publishDirectory, 'frames');
   await mkdir(directory);
   const files = [];
-  for (let index = 0; index < producerResult.rawFrames.length; index++) {
+  for (let index = 0; index < frames.length; index++) {
+    throwIfAborted(signal);
     const target = join(directory, `frame-${String(index).padStart(4, '0')}.png`);
-    await copyFile(producerResult.rawFrames[index], target);
+    await copyFile(frames[index], target);
     files.push(target);
   }
   const summary = await describeRawFrames(files);
@@ -97,27 +122,68 @@ async function retainRawFrames(producerResult, publishDirectory) {
   };
 }
 
+/** Cleanup may be requested more than once by overlapping cancellation paths. */
+export function cleanupCaptureResources(state) {
+  if (state.cleanupPromise) return state.cleanupPromise;
+  state.cleanupPromise = (async () => {
+    const errors = [];
+    if (state.lock) {
+      await state.lock.close().catch((error) => errors.push(error));
+      state.lock = null;
+    }
+    if (state.lockPath) {
+      await unlink(state.lockPath).catch((error) => {
+        if (error.code !== 'ENOENT') errors.push(error);
+      });
+    }
+    for (const path of [state.publishDirectory, state.workspace]) {
+      if (!path) continue;
+      await rm(path, { recursive: true, force: true }).catch((error) => errors.push(error));
+    }
+    state.publishDirectory = null;
+    state.workspace = null;
+    if (errors.length > 0) throw new AggregateError(errors, 'capture cleanup failed');
+  })();
+  return state.cleanupPromise;
+}
+
 export async function captureRecipe(entry, options, deps = {}) {
   const { recipe } = entry;
-  const producer = deps.runProducer ?? adapterForKind(recipe.producer.kind);
+  const producer = deps.runProducer
+    ?? producerForKind(recipe.producer.kind, deps.producerRegistry);
   const output = resolveOutputPath(options.root, options.out);
   if (await exists(output.absolute)) {
     throw new Error(`output directory already exists: ${output.relative}; choose a new --out path`);
   }
+  throwIfAborted(options.signal);
 
   const inspectSource = deps.inspectSourceState ?? inspectSourceState;
   const inspectTools = deps.inspectPrerequisites ?? inspectPrerequisites;
-  const source = await inspectSource(options.root, options.sourceRef ?? null);
-  const prerequisites = await inspectTools(options.env ?? process.env);
+  const source = await inspectSource(
+    options.root,
+    options.sourceRef ?? null,
+    { signal: options.signal },
+  );
+  throwIfAborted(options.signal);
+  const prerequisites = await inspectTools(
+    options.env ?? process.env,
+    { signal: options.signal },
+  );
+  throwIfAborted(options.signal);
   const startedAt = new Date().toISOString();
 
   await mkdir(dirname(output.absolute), { recursive: true });
   // Re-run the symlink-containment check after creating missing parents.
   resolveOutputPath(options.root, output.relative);
-  const lockPath = `${output.absolute}.capture.lock`;
-  let lock;
+  const state = {
+    lockPath: `${output.absolute}.capture.lock`,
+    lock: null,
+    workspace: null,
+    publishDirectory: null,
+    cleanupPromise: null,
+  };
   try {
-    lock = await open(lockPath, 'wx');
+    state.lock = await open(state.lockPath, 'wx');
   } catch (error) {
     if (error.code === 'EEXIST') {
       throw new Error(`another capture is already targeting ${output.relative}`);
@@ -125,66 +191,66 @@ export async function captureRecipe(entry, options, deps = {}) {
     throw error;
   }
 
-  let workspace = null;
-  let publishDirectory = null;
+  let failure = null;
   try {
+    throwIfAborted(options.signal);
     if (await exists(output.absolute)) {
       throw new Error(`output directory already exists: ${output.relative}; refusing to overwrite it`);
     }
-    const tempParent = join(options.root, 'tmp');
-    await mkdir(tempParent, { recursive: true });
-    workspace = await mkdtemp(join(tempParent, 'capture-'));
-    const producerDirectory = join(workspace, 'gallery');
+    const createWorkspace = deps.createTemporaryWorkspace ?? createTemporaryWorkspace;
+    state.workspace = await createWorkspace(options.root);
+    const producerDirectory = join(state.workspace, 'producer');
     await mkdir(producerDirectory);
-    publishDirectory = join(workspace, 'publish');
-    await mkdir(publishDirectory);
+    state.publishDirectory = join(state.workspace, 'publish');
+    await mkdir(state.publishDirectory);
 
-    const producerResult = await producer({
+    const rawResult = await producer({
       recipe,
       root: options.root,
       outputDirectory: producerDirectory,
       outputRelative: relativeInside(options.root, producerDirectory),
       prerequisites,
       env: options.env ?? process.env,
+      signal: options.signal,
     }, deps);
-    validateCapturedSchedule(recipe, producerResult);
-    const assertions = evaluateExpectations(recipe, producerResult.report.producer);
+    throwIfAborted(options.signal);
+    const validateResult = deps.validateProducerResult ?? validateProducerResult;
+    const producerResult = await validateResult(rawResult, { recipe, outputDirectory: producerDirectory });
+    const frames = await stageRawFrames(producerResult.rawFrames, state.workspace, options.signal);
 
-    const artifactFiles = [];
-    if (recipe.schedule.kind === 'still') {
-      const target = join(publishDirectory, 'capture.png');
-      await copyFile(producerResult.rawFrames[0], target);
-      artifactFiles.push({ format: 'png', filename: 'capture.png', path: target });
-    } else {
-      const mp4 = join(publishDirectory, 'capture.mp4');
-      const encode = deps.encodeMp4 ?? encodeMp4;
-      await encode({
-        fps: recipe.playback.intendedFps,
-        inputPattern: join(producerDirectory, 'frame-%04d.png'),
-        frameCount: producerResult.rawFrames.length,
-        output: mp4,
-        cwd: options.root,
+    const artifactFiles = await assembleRequestedArtifacts(
+      recipe,
+      frames,
+      state.publishDirectory,
+      {
+        root: options.root,
         env: options.env ?? process.env,
-        timeoutMs: recipe.timeoutMs,
-      });
-      const gif = join(publishDirectory, 'preview.gif');
-      await copyFile(producerResult.previewFile, gif);
-      artifactFiles.push(
-        { format: 'mp4', filename: 'capture.mp4', path: mp4 },
-        { format: 'gif', filename: 'preview.gif', path: gif },
-      );
-    }
+        signal: options.signal,
+      },
+      deps,
+    );
 
     const describe = deps.describeArtifact ?? describeArtifact;
+    const validateMedia = deps.validateArtifact ?? validateArtifact;
     const artifacts = [];
     for (const artifact of artifactFiles) {
-      const description = await describe(artifact.path, artifact.format);
-      const row = { filename: artifact.filename, ...description, format: artifact.format };
-      validateArtifact(recipe, row, producerResult.rawFrames.length);
+      throwIfAborted(options.signal);
+      const description = await describe(
+        artifact.path,
+        artifact.format,
+        { signal: options.signal },
+      );
+      const row = {
+        filename: artifact.filename,
+        ...description,
+        format: artifact.format,
+        construction: artifact.construction,
+      };
+      row.verification = validateMedia(recipe, row, frames.length);
       artifacts.push(row);
     }
     const rawFrames = options.retainFrames
-      ? await retainRawFrames(producerResult, publishDirectory)
+      ? await retainRawFrames(frames, state.publishDirectory, options.signal)
       : null;
     const totalBytes = artifacts.reduce((sum, artifact) => sum + artifact.byteSize, 0)
       + (rawFrames?.byteSize ?? 0);
@@ -199,29 +265,34 @@ export async function captureRecipe(entry, options, deps = {}) {
       source,
       producerResult,
       prerequisites,
-      assertions,
       artifacts,
       rawFrames,
       startedAt,
       completedAt: new Date().toISOString(),
     });
-    const manifestTmp = join(publishDirectory, 'capture.json.partial');
-    const manifestFile = join(publishDirectory, 'capture.json');
+    const manifestTmp = join(state.publishDirectory, 'capture.json.partial');
+    const manifestFile = join(state.publishDirectory, 'capture.json');
     await writeFile(manifestTmp, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     await rename(manifestTmp, manifestFile);
 
+    throwIfAborted(options.signal);
     if (await exists(output.absolute)) {
       throw new Error(`output directory appeared during capture: ${output.relative}; refusing to overwrite it`);
     }
-    await rename(publishDirectory, output.absolute);
-    publishDirectory = null;
+    await rename(state.publishDirectory, output.absolute);
+    state.publishDirectory = null;
     return { output, manifest };
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
-    await lock.close().catch(() => {});
-    await unlink(lockPath).catch((error) => {
-      if (error.code !== 'ENOENT') throw error;
-    });
-    if (publishDirectory) await rm(publishDirectory, { recursive: true, force: true });
-    if (workspace) await rm(workspace, { recursive: true, force: true });
+    try {
+      await cleanupCaptureResources(state);
+    } catch (cleanupError) {
+      if (failure) {
+        failure.message = `${failure.message}; cleanup also failed: ${cleanupError.message}`;
+        failure.cleanupError = cleanupError;
+      } else throw cleanupError;
+    }
   }
 }

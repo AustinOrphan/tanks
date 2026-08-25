@@ -141,7 +141,12 @@ function validateSchedule(recipe) {
     numberAt(schedule.alpha, 'schedule.alpha', { min: 0, max: 0.999_999 });
     return;
   }
-  if (schedule.kind !== 'ticks') fail('schedule.kind', "must be 'still' or 'ticks'");
+  if (schedule.kind === 'frames') {
+    exactKeys(schedule, 'schedule', ['kind', 'frameCount']);
+    integerAt(schedule.frameCount, 'schedule.frameCount', { min: 1, max: 1_000_000 });
+    return;
+  }
+  if (schedule.kind !== 'ticks') fail('schedule.kind', "must be 'still', 'frames', or 'ticks'");
   exactKeys(
     schedule,
     'schedule',
@@ -164,10 +169,12 @@ function validatePlayback(recipe) {
     return;
   }
   numberAt(playback.intendedFps, 'playback.intendedFps', { min: 1, max: 240 });
-  const derived = (recipe.schedule.tickRate * recipe.schedule.subdivisions * playback.rate)
-    / recipe.schedule.step;
-  if (Math.abs(playback.intendedFps - derived) > 1e-9) {
-    fail('playback.intendedFps', `must equal the fixed schedule rate (${derived})`);
+  if (recipe.schedule.kind === 'ticks') {
+    const derived = (recipe.schedule.tickRate * recipe.schedule.subdivisions * playback.rate)
+      / recipe.schedule.step;
+    if (Math.abs(playback.intendedFps - derived) > 1e-9) {
+      fail('playback.intendedFps', `must equal the fixed schedule rate (${derived})`);
+    }
   }
 }
 

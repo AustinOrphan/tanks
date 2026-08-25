@@ -1,15 +1,8 @@
-import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { evaluateExpectations } from './assertions.mjs';
+import { PRODUCER_RESULT_SCHEMA_VERSION } from './producer.mjs';
 import { runProcess } from './process.mjs';
-
-export function adapterForKind(kind) {
-  if (kind === 'moment') return runGalleryMoment;
-  if (['screen', 'flow', 'replay'].includes(kind)) {
-    throw new Error(`capture producer '${kind}' is recognized but not implemented; only 'moment' is available`);
-  }
-  throw new Error(`unknown capture producer '${kind}'`);
-}
 
 function assertMomentProfile(recipe) {
   const { profile } = recipe;
@@ -28,7 +21,9 @@ function assertMomentProfile(recipe) {
 }
 
 export function buildGalleryArguments(recipe, outputRelative) {
-  if (recipe.producer.kind !== 'moment') adapterForKind(recipe.producer.kind);
+  if (recipe.producer.kind !== 'moment') {
+    throw new Error(`gallery adapter cannot capture producer '${recipe.producer.kind}'`);
+  }
   assertMomentProfile(recipe);
   if (!/^tmp\/[A-Za-z0-9._/-]+$/.test(outputRelative) || outputRelative.includes('..')) {
     throw new Error('gallery adapter output must be an isolated relative tmp/ path');
@@ -53,6 +48,9 @@ export function buildGalleryArguments(recipe, outputRelative) {
     }
     args.push('--age', String(recipe.schedule.tick));
   } else {
+    if (recipe.schedule.kind !== 'ticks') {
+      throw new Error("gallery moment clips require a fixed 'ticks' schedule");
+    }
     if (
       recipe.schedule.startTick !== 0
       || recipe.schedule.endTick !== 'scenario'
@@ -97,11 +95,49 @@ function validateReport(report, recipe, rawFrameCount) {
   if ((report.capture.pageErrors ?? []).length > 0) {
     throw new Error(`gallery page raised ${report.capture.pageErrors.length} error(s)`);
   }
-  const failedFixtureAssertions = (report.producer.fixtureAssertions ?? [])
-    .filter((assertion) => !assertion.passed);
-  if (failedFixtureAssertions.length > 0) {
-    throw new Error(`gallery moment failed ${failedFixtureAssertions.length} fixture assertion(s)`);
+  const tickCount = report.producer.tickCount;
+  if (!Number.isInteger(tickCount) || tickCount < 1) {
+    throw new Error(`moment producer reported invalid tick count ${tickCount}`);
   }
+  if (recipe.schedule.kind === 'still') {
+    if (recipe.schedule.tick >= tickCount) {
+      throw new Error(`still tick ${recipe.schedule.tick} is outside the ${tickCount}-tick moment`);
+    }
+    if (rawFrameCount !== 1) throw new Error('still producer must return one raw frame');
+    return {
+      kind: 'still',
+      tick: recipe.schedule.tick,
+      alpha: recipe.schedule.alpha,
+      frameCount: 1,
+    };
+  }
+  const expectedFrames = Math.ceil((tickCount - recipe.schedule.startTick) / recipe.schedule.step)
+    * recipe.schedule.subdivisions;
+  if (rawFrameCount !== expectedFrames) {
+    throw new Error(
+      `fixed schedule resolves to ${expectedFrames} frames, producer returned ${rawFrameCount}`,
+    );
+  }
+  return {
+    kind: 'ticks',
+    startTick: recipe.schedule.startTick,
+    endTickExclusive: tickCount,
+    step: recipe.schedule.step,
+    subdivisions: recipe.schedule.subdivisions,
+    tickRate: recipe.schedule.tickRate,
+    frameCount: rawFrameCount,
+  };
+}
+
+function fixtureAssertionResults(fixtureAssertions) {
+  return fixtureAssertions.map((assertion) => ({
+    kind: 'producer-fixture',
+    passed: assertion.passed,
+    diagnostic: assertion.passed
+      ? null
+      : `gallery fixture expected ${assertion.type} at tick ${assertion.expectedTick}; observed ${assertion.observedTicks.join(', ') || 'none'}`,
+    details: assertion,
+  }));
 }
 
 export async function runGalleryMoment(context, deps = {}) {
@@ -119,6 +155,7 @@ export async function runGalleryMoment(context, deps = {}) {
       cwd: context.root,
       env,
       timeoutMs: context.recipe.timeoutMs,
+      signal: context.signal,
     });
   } catch (error) {
     throw new Error(`gallery moment capture failed: ${error.message}`, { cause: error });
@@ -136,7 +173,6 @@ export async function runGalleryMoment(context, deps = {}) {
 
   const names = await readdir(context.outputDirectory);
   let rawFrames;
-  let previewFile = null;
   if (context.recipe.schedule.kind === 'still') {
     rawFrames = names.includes('frame.png') ? [join(context.outputDirectory, 'frame.png')] : [];
     if (rawFrames.length !== 1) throw new Error('gallery moment still did not produce frame.png');
@@ -149,15 +185,36 @@ export async function runGalleryMoment(context, deps = {}) {
       }
     }
     rawFrames = frameNames.map((name) => join(context.outputDirectory, name));
-    previewFile = join(context.outputDirectory, 'gallery.gif');
-    if (!existsSync(previewFile)) throw new Error('gallery moment clip did not produce gallery.gif');
   }
 
-  validateReport(report, context.recipe, rawFrames.length);
+  const tickSchedule = validateReport(report, context.recipe, rawFrames.length);
+  const assertions = [
+    ...fixtureAssertionResults(report.producer.fixtureAssertions ?? []),
+    ...evaluateExpectations(context.recipe, report.producer),
+  ];
   return {
+    schemaVersion: PRODUCER_RESULT_SCHEMA_VERSION,
+    producer: {
+      kind: 'moment',
+      scenarioId: context.recipe.producer.scenarioId,
+    },
     rawFrames,
-    previewFile,
-    report,
-    chromiumVersion: report.browser.chromiumVersion,
+    capture: {
+      viewport: report.capture.viewport,
+      frameSchedule: context.recipe.schedule.kind === 'still'
+        ? { kind: 'still', frameCount: 1 }
+        : { kind: 'frames', frameCount: rawFrames.length },
+    },
+    assertions,
+    metadata: {
+      moment: {
+        fixture: { id: context.recipe.fixture.id, seed: report.producer.fixture.seed },
+        tickSchedule,
+        observedEvents: report.producer.observedEvents,
+        fixtureAssertions: report.producer.fixtureAssertions,
+      },
+    },
+    toolVersions: { chromium: report.browser.chromiumVersion },
+    diagnostics: [],
   };
 }
