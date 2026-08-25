@@ -206,13 +206,14 @@ import { step } from '../../src/sim/world';
  * replica of traceText's loop, run via vitest, then deleted. The replica reproduced this
  * fingerprint, which is what makes it the traced population rather than a similar one.
  *
- * Of 205695 enemy decision-ticks -- every alive non-player tank, every tick, the same
- * population stepAi iterates -- 34992 (17.01%) sent the turret somewhere OTHER than the
+ * Of 206980 enemy decision-ticks -- every alive non-player tank, every tick, the same
+ * population stepAi iterates -- 31560 (15.25%) sent the turret somewhere OTHER than the
  * freshly solved angle. That is the figure quoted deliberately, and it is the narrow one:
  * a tick where the tank holds an angle that happens to equal the fresh solution changes
- * nothing and is excluded, which is why this is 17% and not the 98% a naive "was a hold
- * live?" counter reports over the same run. 34992 diverging ticks is ample coupling for a
- * hash that moves on a single ULP; this is not a rounding artefact.
+ * nothing and is excluded, which is why this is 15% and not the 98% a naive "was a hold
+ * live?" counter reports over the same run -- the naive figure was measured first, and
+ * discarded for describing ticks on which nothing changed. 31560 diverging ticks is ample
+ * coupling for a hash that moves on a single ULP; this is not a rounding artefact.
  *
  * NOT a coincidence of some other change: this PR's only non-test src/sim edits are
  * ai/aim-hold.ts (new), the hold call site and write-back in ai/index.ts, the two Tank

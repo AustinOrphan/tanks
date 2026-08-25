@@ -100,7 +100,26 @@ export interface AIProfileBalance {
    * length, not a reaction delay: acquiring a genuinely new target stays immediate.
    *
    * Zero disables the hold for that profile and re-solves every tick, which is the
-   * pre-#344 behaviour.
+   * pre-#344 behaviour -- demonstrated, not assumed: setting every profile to zero
+   * reproduces the previous BASELINE_HASH byte for byte (tools/baseline/trace.ts).
+   *
+   * 0.1s (6 ticks) everywhere, chosen from a sweep of {0, 0.1, 0.2, 0.3, 0.45} over 60
+   * seeds x 2 arenas x 2 player policies. DWELL -- the fraction of live ticks the turret
+   * is perfectly still, which is what "the gun is twitching" actually measures -- is
+   * SATURATED by 0.1: brown on arena1/pacifist goes 72.93% -> 86.73% and then gains 1.5
+   * points across the whole rest of the range; teal goes 42.53% -> 69.14% and then gains
+   * 0.8. Lethality does not pay for it at that span (arena1 58/60 -> 60/60 losses,
+   * medianTicks 1494 -> 1511; arena3 60/60 either way), where longer spans start to cost
+   * kill speed without buying stillness. The shortest span that gets the benefit is also
+   * the one that leaves a barrel stale for the least time, so 0.1 is the conservative end
+   * of a flat region rather than a peak.
+   *
+   * Authored UNIFORMLY across profiles on purpose. The field is per-profile so it can
+   * become a personality axis the way commitmentTime is, but nothing measured here
+   * justifies differing values yet, and inventing a spread would be a difficulty change
+   * dressed up as polish. One row does keep improving past 0.1 -- teal on arena1/shooter,
+   * 63.16% at 0.1 rising to 71.88% at 0.45 -- so if teal specifically still reads as
+   * twitchy in play, that row is the evidence for raising teal alone, and re-measuring.
    */
   aimHoldTime: number;
   aggression: number;

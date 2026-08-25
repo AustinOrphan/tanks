@@ -57,6 +57,28 @@ describe('turret acceleration (issue #347)', () => {
     expect(moved).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
     expect(w.tanks[0].turretVel).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
 describe('aim hold (issue #344)', () => {
+  it('a held aim does NOT suppress the firing solution: hasSolution still reads the fresh solve', () => {
+    // Deliberate, and worth a pin because it is the load-bearing half of the design. The
+    // hold decides where the tank POINTS; it must not become a stealth accuracy change by
+    // also deciding what the tank believes it can hit. If hasSolution were computed against
+    // the held angle, a tank whose barrel had drifted would stop firing entirely -- a much
+    // larger behaviour change than the one measured, smuggled in as a smoothing fix.
+    // The cost of keeping them separate is that a tank can fire with its barrel up to
+    // AI_AIM_BREAK off the fresh solution and miss; that is what the engagement harness
+    // prices, and what reaction.test.ts is re-run against at every swept span.
+    const probe = tank(1, 'brown', { x: 0, y: 0 }, { ...HELD });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const fresh = decideAi(world([probe, player]), probe);
+
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, {
+      ...HELD, aiAimHeld: fresh.turretAngle + 0.01, aiAimHeldTicks: 5,
+    });
+    const held = decideAi(world([brown, tank(2, 'player', { x: 5, y: 0 })]), brown);
+    expect(held.turretAngle).not.toBe(fresh.turretAngle); // the hold IS in effect
+    expect(held.hasSolution).toBe(fresh.hasSolution);     // and the solution is untouched
+    expect(held.fireType).toBe(fresh.fireType);
+  });
+
   it('decideAi returns the HELD aim angle, not the fresh solution, while the span is live', () => {
     // Learn the fresh solution this fixture produces, then arm a hold a hair off it --
     // 0.01 rad, inside any shippable break threshold -- so the two are distinguishable.
