@@ -56,6 +56,9 @@ describe('turret acceleration (issue #347)', () => {
     expect(moved).toBeGreaterThan(0);
     expect(moved).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
     expect(w.tanks[0].turretVel).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
+  });
+});
+
 describe('aim hold (issue #344)', () => {
   it('a held aim does NOT suppress the firing solution: hasSolution still reads the fresh solve', () => {
     // Deliberate, and worth a pin because it is the load-bearing half of the design. The

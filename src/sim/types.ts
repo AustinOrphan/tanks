@@ -120,6 +120,7 @@ export interface Tank {
    * carrying the angular momentum it died with starts its next life mid-swing.
    */
   turretVel?: number;
+  /**
    * The aim solution this tank has committed to, and the ticks left before it re-solves
    * (issue #344). The turret slews toward THIS rather than toward a freshly recomputed
    * aimLead every tick, so the gun settles and dwells instead of micro-correcting at 60Hz.

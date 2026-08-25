@@ -195,8 +195,11 @@ import { step } from '../../src/sim/world';
  * nine decimals for every tank, so a changed aim target moves this hash directly.
  *
  * ATTRIBUTION IS EXACT, not inferred. Setting every profile's aimHoldTime to 0 -- changing
- * nothing else -- reproduces the PREVIOUS hash 42d764e9... byte for byte over the whole
- * traced population, and trace.test.ts passes green in that state. A span of zero re-arms
+ * nothing else -- reproduces the PREVIOUS hash 056afe38... byte for byte over the whole
+ * traced population, and trace.test.ts passes green in that state. Note that previous hash is
+ * issue #347's, not #224's: this work was rebased onto the merged turret-acceleration change,
+ * so the control is against a tree that ALREADY accelerates, and what it isolates is the aim
+ * hold alone on top of that. A span of zero re-arms
  * to a zero countdown, so the hold branch can never be taken and every tick re-solves,
  * which is precisely the pre-#344 behaviour. That also makes the "zero disables the hold"
  * contract documented on AIProfileBalance.aimHoldTime a measured fact rather than a claim.
@@ -206,8 +209,8 @@ import { step } from '../../src/sim/world';
  * replica of traceText's loop, run via vitest, then deleted. The replica reproduced this
  * fingerprint, which is what makes it the traced population rather than a similar one.
  *
- * Of 206980 enemy decision-ticks -- every alive non-player tank, every tick, the same
- * population stepAi iterates -- 31560 (15.25%) sent the turret somewhere OTHER than the
+ * Of 191833 enemy decision-ticks -- every alive non-player tank, every tick, the same
+ * population stepAi iterates -- 29273 (15.26%) sent the turret somewhere OTHER than the
  * freshly solved angle. That is the figure quoted deliberately, and it is the narrow one:
  * a tick where the tank holds an angle that happens to equal the fresh solution changes
  * nothing and is excluded, which is why this is 15% and not the 98% a naive "was a hold
@@ -224,11 +227,11 @@ import { step } from '../../src/sim/world';
  * attributable entirely to the changed aim target, and the aimHoldTime=0 control above
  * demonstrates that directly.
  *
- * History: 42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0 (issue #224 on
- * PR for feat/ai-wall-aware-evasion) -> the hash below, confirmed by actually running
+ * History: 056afe386774790c739f7b28a05bb77abb68e5d07b140f6a798bf7731850024e (issue #347 on
+ * PR #348, turret angular acceleration) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = '056afe386774790c739f7b28a05bb77abb68e5d07b140f6a798bf7731850024e';
+export const BASELINE_HASH = '190f2d0e9e97e6fde66bc81f4993a19fe70ba5cf8c5beffa4d9bcc76f9b7fcc5';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
