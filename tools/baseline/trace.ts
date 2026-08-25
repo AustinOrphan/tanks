@@ -158,7 +158,59 @@ import { step } from '../../src/sim/world';
  * PR for feat/ai-decision-commitment) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = '42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0';
+/*
+ * MOVED (2026-08-25, issue #330): the AI turret slew gained a DEADBAND. stepAi
+ * (ai/index.ts) now routes through turretSlew instead of slewAngle, and leaves the angle
+ * completely untouched on any tick whose angular error is under AI_TURRET_DEADBAND
+ * (0.25 degrees). AiDecision.turretAngle is recomputed from scratch every tick -- aimLead
+ * against a moving target plus the profile's aim jitter, with no memory of the last target
+ * -- so the old code chased every fractional recompute and read as continuous 60Hz shimmer
+ * on a tank that was otherwise holding still. stepAi sits squarely in the trace's reachable
+ * path (step -> stepAi -> decideAi), and traceText below samples turretAngle to nine
+ * decimals for every tank, so a changed turret angle moves this hash directly.
+ *
+ * ATTRIBUTION IS EXACT HERE, not inferred. Passing a deadband of 0 in place of
+ * AI_TURRET_DEADBAND at that one call site -- changing nothing else -- reproduces the
+ * PREVIOUS hash 42d764e9... byte for byte over the whole traced population. So the
+ * deadband is not merely the likeliest cause of the move, it is provably the only one:
+ * turretSlew(..., 0) is identical to slewAngle everywhere the trace reaches (abs(delta) is
+ * never negative, so the skip branch cannot fire), and this PR's only non-test src/sim
+ * edits are that call site plus the new constant -- confirmed via
+ * `git diff main...HEAD --name-only -- src/sim/ | grep -v '.test.ts'`, which lists exactly
+ * ai/index.ts and constants.ts. No Tank field was added or removed (types.ts is untouched),
+ * so no serialization change is even available as an alternative explanation.
+ *
+ * Exposure MEASURED on both trajectories, over exactly the traced population (5 arenas x 6
+ * seeds x 2500 ticks), by a throwaway probe -- a counter at stepAi's slew call site plus a
+ * replica of traceText's loop, run via vitest, then deleted. The replica reproduced the
+ * corresponding fingerprint in both directions, which is what makes it the traced
+ * population rather than a similar one:
+ *
+ *   - PRE-deadband trajectory (deadband 0, hash 42d764e9...): 204272 enemy decision-ticks
+ *     -- every alive non-player tank, every tick, the same population stepAi iterates. Of
+ *     those, 10076 (4.93%) had a turret error strictly between 0 and AI_TURRET_DEADBAND:
+ *     rotations the old code performed and the new code does not. These are precisely the
+ *     ticks the deadband removes.
+ *   - POST-deadband trajectory (hash below): 204497 enemy decision-ticks, of which 7326
+ *     (3.58%) were frozen with a nonzero error. The tick totals differ between the two
+ *     because the trajectories diverge and rounds then end at different ticks -- which is
+ *     itself evidence the change is behavioural rather than cosmetic.
+ *
+ * The probe's two raw pre-deadband counters were 177368 ticks under the deadband in total
+ * and 10076 of those with a nonzero error, so the remaining 167292 (81.9% of 204272) had
+ * an error of EXACTLY zero -- the decision held aim, most often idleDecision returning
+ * tank.turretAngle unchanged -- and are unaffected either way. (That 167292 is the
+ * subtraction of the two measured counters, not a third measurement.) They are excluded
+ * from the figures above on purpose: counting them would inflate the deadband's apparent
+ * reach from 4.93% to 86.83% while describing ticks on which nothing changed. 10076
+ * diverging ticks is ample coupling for a hash that moves on a single ULP; this is not a
+ * rounding artefact.
+ *
+ * History: 42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0 (issue #224 on
+ * PR for feat/ai-wall-aware-evasion) -> the hash below, confirmed by actually running
+ * trace.test.ts rather than by computing it a second way.
+ */
+export const BASELINE_HASH = 'f60d763b22475bd1fbbb8c689b4309dfa01f86cd2b4bf0d77cc8883dee159340';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

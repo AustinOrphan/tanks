@@ -477,18 +477,36 @@ export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 //     fewer, larger events, it does not reduce it.
 //   - That redistribution is the real risk this sweep was run to catch: a tick that
 //     ends a run of frozen ticks (a "release") is a single jump of roughly the
-//     accumulated error, and its size grows monotonically with the deadband, cutting
-//     across every kind/arena/policy measured -- median release size ~0.37 degrees at
-//     0.25, ~0.7 at 0.5, ~1.0 at 0.75, ~1.3 at 1.0, ~1.8 at 1.5. 0.25 and 0.5 both stay
-//     BELOW the issue's own 1.15-degree perceptibility line; 0.75 sits ON it (~1.0); by
-//     1.0 the release is clearly above it, as visible as the shimmer it replaced.
-//     Recommend against 1.0 and above on this basis. 0.5 is not disqualified by this
-//     argument -- it buys roughly 1.6x 0.25's shimmer reduction at a release size still
-//     under the line -- picking 0.25 over it is a conservatism call the sweep alone
-//     does not force; re-measure before moving to 0.5 if 0.25 reads as insufficient.
-// Lethality does not discriminate between candidates (engagement.measure.test.ts:
-// arena1 losses 57-59/60, freeWins 0-3/60, medianTicks 1390-1535; arena3 60/60,
-// medianTicks 1928-2039, all within seed noise; pacifist.test.ts passes at every value).
+//     accumulated error, and its size grows with the deadband. Median release size,
+//     over the 12 (arena, policy, kind) rows the sweep reports: 0.37-0.49 degrees at
+//     0.25, 0.69-0.88 at 0.5, 0.98-1.29 at 0.75, 1.25-1.76 at 1.0, 1.79-2.39 at 1.5.
+//     Monotonic in 11 of those 12 rows. The exception is arena3/shooter/grey, which
+//     reads 2.387 degrees -- exactly one tick's full slew budget -- at 0.25, dips to
+//     0.88/1.29/1.76 at 0.5/0.75/1.0, and returns to 2.387 at 1.5. That row's turret is
+//     dominated by large corrections rather than micro-tracking to begin with (its
+//     nonzero-step median is already 2.387 at deadband 0, over n=6727 nonzero ticks), so
+//     the release-size signal is swamped there rather than absent. Read the bound as
+//     "grows with the deadband wherever the row has micro-tracking to redistribute".
+//
+//     Against the issue's own 1.15-degree perceptibility line: 0.5 stays below it in all
+//     12 rows and 0.25 in 11 of 12 (the swamped row above being the exception); 0.75 sits
+//     ON it, below in 10 of 12 and above in arena1/shooter/grey (1.157) and
+//     arena3/shooter/grey (1.290); by 1.0 every row is above it, as visible as the
+//     shimmer it replaced. Recommend against 1.0 and above on this basis. 0.5 is not
+//     disqualified by this argument -- it buys roughly 1.6x 0.25's shimmer reduction at a
+//     release size still under the line -- picking 0.25 over it is a conservatism call
+//     the sweep alone does not force; re-measure before moving to 0.5 if 0.25 reads as
+//     insufficient.
+//
+//     Deadband 0 is NOT a meaningful comparison point for this column (it reads 2.387 in
+//     every row): with no deadband the only zero-rotation ticks are those where the
+//     decision returned an unchanged aim, so its "releases" are a different population,
+//     not smaller versions of the same one.
+// Lethality does not discriminate between candidates (engagement.measure.test.ts, the
+// same six values: arena1 losses 57-59/60, medianTicks 1390-1535; arena3 60/60 at every
+// value, medianTicks 1928-2039, all within seed noise; pacifist.test.ts passes 4/4 at
+// every value). freeWins is not an independent column here -- no run timed out, so it is
+// exactly 60 - losses, i.e. 1-3/60 across the sweep.
 //
 // AI ONLY. PLAYER_TURRET_TURN_RATE's slew (world.ts) has no deadband and must not gain
 // one: a deadband on live player input reads as input lag, not polish.
