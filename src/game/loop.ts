@@ -1103,7 +1103,8 @@ export function startGameWith(
   let botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
   /**
    * Is this session allowed to touch the active run at all? False for practice
-   * (see `inPractice`), for any session `deps.levels.tracksProgress` says is not
+   * (`sessionIdentity.kind`, the same identity `descriptorFor` turns into this
+   * session's descriptor), for any session `deps.levels.tracksProgress` says is not
    * real campaign play -- today that is only the dev sandbox (`?dev=1&level=sandbox`),
    * which must never unlock real levels OR mutate the real run, the same reasoning
    * `deps.progress.recordCleared` is already gated on below -- AND for a dev-flag
@@ -1902,9 +1903,10 @@ export function startGameWith(
    * fall through to nothing, so this is `switchTo(deps.levels.start)` there, exactly
    * as before the run model existed. The sandbox must never create OR read a real
    * campaign run. The LIVES line just below is gated on the narrower
-   * `campaignActive()` instead (which is `tracksProgress && !isDevJump` here,
-   * since `inPractice` is unconditionally false at this point) -- a jumped session
-   * must not even READ the run's lives, or a stray quit/retry would leak an
+   * `campaignActive()` instead (the first line of the body resets `sessionIdentity`
+   * to `bootContext.identity`, so no mid-session practice pick can still be in force
+   * and a campaign boot leaves exactly `tracksProgress && !isDevJump`) -- a jumped
+   * session must not even READ the run's lives, or a stray quit/retry would leak an
    * unrelated level's life count into a board the player did not reach by playing.
    */
   function landOnCampaignBoard(mayCreateRun: boolean): void {
@@ -1986,13 +1988,15 @@ export function startGameWith(
   // run -- real campaign play, neither the sandbox nor a jump -- may replace it;
   // the other two get a fresh board and leave the real run untouched.
   //
-  // `inPractice = false` is set FIRST, unconditionally, same as landOnCampaignBoard:
-  // New Game from title always leaves practice, campaign-owning or not. Today every
-  // path back to 'title' already runs through landOnCampaignBoard (quit-to-title) or
-  // starts with `inPractice` false from construction, so `sm.atMainMenu` with
-  // `inPractice === true` cannot currently happen -- this ordering is defensive, not
-  // covering a reachable gap, so a future path to title that skips
-  // landOnCampaignBoard cannot leave campaignActive() reading a stale practice flag.
+  // `sessionIdentity` is reset to `bootContext.identity` FIRST, unconditionally, the
+  // same ordering `landOnCampaignBoard` uses: New Game from title returns the session
+  // to whatever it booted as, campaign-owning or not. Today every path back to 'title'
+  // already runs through `landOnCampaignBoard` (quit-to-title), and a session that has
+  // never left the title screen is still on its boot identity, so reaching
+  // `sm.atMainMenu` with a practice pick still in force cannot currently happen -- this
+  // ordering is defensive, not covering a reachable gap, so a future path to title that
+  // skips `landOnCampaignBoard` still cannot leave `campaignActive()` reading a stale
+  // practice identity.
   hud.onNewGame(() => {
     if (!sm.atMainMenu) return;
     // Identity transition 2 of 2 (issue #316): New Game is a deliberate return
@@ -2093,12 +2097,11 @@ export function startGameWith(
     // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
     // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
     // lazily on Continue, so the Main Menu renders over the campaign's own
-    // board, not the abandoned (possibly practice) one. `landOnCampaignBoard`
-    // resets `inPractice` and rebuilds the campaign descriptor via the same
-    // path New Game takes, so a post-quit Continue enters gameplay on a real
-    // campaign board.
-    // No descriptor bookkeeping here: `landOnCampaignBoard` resets the session
-    // identity itself, and `switchTo` re-derives the descriptor from it.
+    // board, not the abandoned (possibly practice) one. No descriptor bookkeeping is
+    // needed here: `landOnCampaignBoard` resets `sessionIdentity` to
+    // `bootContext.identity` and `switchTo` re-derives the descriptor from it through
+    // `descriptorFor`, the same path New Game takes, so a post-quit Continue enters
+    // gameplay on a real campaign board.
     landOnCampaignBoard(false);
     sm.toMainMenu();
   });
