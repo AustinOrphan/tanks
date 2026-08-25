@@ -13,8 +13,6 @@ import { TANK_KINDS } from '../sim/config';
 import { CURRENT_ARENA, arenaBounds, createArenaWorld } from '../sim/arena';
 import { roundPhase } from '../sim/round';
 import {
-  TOUCH_SCHEMES,
-  FIRE_MODES,
   type TouchIndicator,
   type TouchScheme,
   type FireMode,
@@ -108,6 +106,20 @@ import {
 import { versusMapChoices, type VersusConfig } from './versus-config';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
+import {
+  createPlayerSettingsStore,
+  DEFAULT_VOLUME,
+  NOT_PERSISTED_NOTICE,
+  SETTINGS_KEY,
+  type PlayerSettingsStore,
+  type SettingsNotice,
+} from './settings';
+import {
+  createCapabilitySource,
+  createStaticReducedMotionSource,
+  type PlatformCapabilities,
+} from './capabilities';
+import { createEffectiveSettings } from './effective-settings';
 import { decodeTick, replayTrace, checkTrace } from './replay';
 import { createWorldFor, ARENA_DEFS, arenaById, CAMPAIGN_LEVELS, type CampaignLevel } from '../sim/arena';
 import { createLevelSystem } from './levels';
@@ -173,8 +185,20 @@ interface Recorder {
   fireModeStoreSets: FireMode[];
   /** Every mode echoed back to the HUD (hud.setFireMode), in order. */
   fireModeEchoes: FireMode[];
-  /** Every value accepted by the STORE (touchSettings.setHaptics), in order. */
+  /** Every value accepted by the STORE (settings.setDeviceHaptics), in order. */
   hapticsStoreSets: boolean[];
+  /** Every value offered to the STORE's setMuted, in order. */
+  mutedStoreSets: boolean[];
+  /** Every value offered to the STORE's setVolume, in order. */
+  volumeStoreSets: number[];
+  /** Every value pushed to the AUDIO engine's setMuted, in order. */
+  audioMuted: boolean[];
+  /** Every value pushed to the HUD's volume sliders (hud.setVolume), in order. */
+  volumeEchoes: number[];
+  /** Every reducedMotion flag handed to createPreview, in order. */
+  previewReducedMotion: boolean[];
+  /** Every persistence notice delivered to this session, in order. */
+  settingsNotices: SettingsNotice[];
   /** Every value echoed back to the HUD (hud.setHaptics), in order. */
   hapticsEchoes: boolean[];
   playerPosPushes: number;
@@ -302,10 +326,14 @@ interface Recorder {
   detectedPadsPushes: DetectedPad[][];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean } = {}): {
   deps: GameDeps;
   rec: Recorder;
   storage: Storage;
+  settingsStore: PlayerSettingsStore;
+  setCapabilities(next: Partial<PlatformCapabilities>): void;
+  armSettingsNotice(notice: SettingsNotice): void;
+  noticeListenerCount(): number;
   devConsole: DevConsoleTarget;
   previewCanvas: HTMLCanvasElement;
   previewButtons: readonly HTMLButtonElement[];
@@ -378,6 +406,12 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     enteredDescriptors: [],
     typedOutcomes: [],
     muted: [],
+    mutedStoreSets: [],
+    volumeStoreSets: [],
+    audioMuted: [],
+    volumeEchoes: [],
+    previewReducedMotion: [],
+    settingsNotices: [],
     shellCounts: [],
     roundPhases: [],
     deathSignals: 0,
@@ -601,6 +635,78 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     },
   } as unknown as HostWindow;
 
+  /**
+   * The REAL settings store, over its own memory storage -- not a re-implementation.
+   *
+   * The rules this file asserts on are settings.ts's own: an off-list scheme is REFUSED
+   * rather than stored, and a refused value publishes nothing, which is what leaves the
+   * HUD showing the value the input layer was actually told. A hand-written fake would
+   * restate those rules and stay green while the real store regressed, which is exactly
+   * the "mocks that restate implementation behaviour" this repository's testing rules
+   * warn about. The `savedX` options are applied through the real setters, so a fixture
+   * cannot seed a state the store would not accept.
+   */
+  const settingsStore = createPlayerSettingsStore(opts.settingsStorage ?? createMemoryStorage());
+  settingsStore.setMuted(opts.savedMuted ?? false);
+  settingsStore.setVolume(opts.savedVolume ?? DEFAULT_VOLUME);
+  settingsStore.setTouchScheme((opts.savedScheme ?? 'stick') as TouchScheme);
+  settingsStore.setFireMode((opts.savedFireMode ?? 'tap') as FireMode);
+  settingsStore.setDeviceHaptics(opts.savedHaptics ?? true);
+  settingsStore.setControllerRumble(opts.savedControllerRumble ?? true);
+
+  /**
+   * Capabilities default to ALL PRESENT so an existing test that says nothing about a
+   * device keeps exercising the same effective values it always did -- the pre-#320
+   * loop had no capability gate at all. A test that wants a gate closes it explicitly.
+   */
+  let capabilityFixture: PlatformCapabilities = {
+    deviceVibration: opts.capabilities?.deviceVibration ?? true,
+    controllerRumble: opts.capabilities?.controllerRumble ?? true,
+    touch: opts.capabilities?.touch ?? true,
+  };
+  const capabilitySource = createCapabilitySource(() => capabilityFixture);
+  const effectiveSettings = createEffectiveSettings({
+    store: settingsStore,
+    capabilities: capabilitySource,
+    motion: createStaticReducedMotionSource(opts.systemReducedMotion ?? false),
+  });
+
+  /** The page-scoped notice latch, in the same at-most-once shape app-settings.ts has. */
+  let noticePending: SettingsNotice | null = null;
+  let noticeDelivered = false;
+  const noticeListeners = new Set<(n: SettingsNotice) => void>();
+
+  /**
+   * The store, with every setter this file measures wrapped to record what was OFFERED.
+   *
+   * Recording the offer rather than the accepted value is the point: a test that toggles
+   * to an off-list scheme has to be able to see that the loop passed it on to the store
+   * (and that the store, not the loop, refused it).
+   */
+  const settings: PlayerSettingsStore = {
+    ...settingsStore,
+    setMuted(v: boolean): void {
+      rec.mutedStoreSets.push(v);
+      settingsStore.setMuted(v);
+    },
+    setVolume(v: number): void {
+      rec.volumeStoreSets.push(v);
+      settingsStore.setVolume(v);
+    },
+    setTouchScheme(id: TouchScheme): void {
+      rec.schemeStoreSets.push(id);
+      settingsStore.setTouchScheme(id);
+    },
+    setFireMode(m: FireMode): void {
+      rec.fireModeStoreSets.push(m);
+      settingsStore.setFireMode(m);
+    },
+    setDeviceHaptics(v: boolean): void {
+      rec.hapticsStoreSets.push(v);
+      settingsStore.setDeviceHaptics(v);
+    },
+  };
+
   const deps: GameDeps = {
     createRenderer: (canvas, w, h, boundary, options) => {
       rec.rendererArgs.push([canvas, w, h, boundary, options]);
@@ -626,9 +732,10 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
       };
     },
-    createPreview: (canvas, rotateButtons) => {
+    createPreview: (canvas, rotateButtons, reducedMotion) => {
       rec.previewCanvasesReceived.push(canvas);
       (rec.previewButtonsReceived as Array<readonly HTMLElement[]>).push(rotateButtons);
+      rec.previewReducedMotion.push(reducedMotion);
       if (opts.previewUnavailable) return null; // no spare WebGL context, real code path
       return {
         setStyle(hex: string | null, skin: string, accent: string | null): void {
@@ -728,7 +835,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       stopMusic: () => {
         rec.musicStops += 1;
       },
-      setMuted: () => {},
+      setMuted: (m: boolean) => {
+        rec.audioMuted.push(m);
+      },
       toggleMute: () => true,
       isMuted: () => false,
       setVolume: (v: number) => {
@@ -887,6 +996,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setTouchIndicator: (t: TouchIndicator) => rec.touchPushes.push(t),
         setMuted: (m) => rec.muted.push(m),
+        setVolume: (v: number) => rec.volumeEchoes.push(v),
         setShellCount: (i) => rec.shellCounts.push(i),
         setLevel: (c: number, t: number) => rec.hudLevels.push([c, t]),
         setRoundPhase: (info) => rec.roundPhases.push(info),
@@ -1079,31 +1189,19 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         accentHexFor: (id: AccentId) => (id === 'auto' ? null : `#accent-${id}`),
       };
     })(),
-    touchSettings: (() => {
-      let scheme: TouchScheme = (opts.savedScheme ?? 'stick') as TouchScheme;
-      let fireMode: FireMode = (opts.savedFireMode ?? 'tap') as FireMode;
-      let haptics = opts.savedHaptics ?? true;
-      // From the REAL scheme/mode lists, not duplicates that could drift.
-      const VALID = new Set<string>(TOUCH_SCHEMES);
-      const VALID_MODES = new Set<string>(FIRE_MODES);
-      return {
-        scheme: () => scheme,
-        setScheme: (id: TouchScheme) => {
-          if (VALID.has(id)) scheme = id;
-          rec.schemeStoreSets.push(id);
-        },
-        fireMode: () => fireMode,
-        setFireMode: (id: FireMode) => {
-          if (VALID_MODES.has(id)) fireMode = id;
-          rec.fireModeStoreSets.push(id);
-        },
-        haptics: () => haptics,
-        setHaptics: (v: boolean) => {
-          haptics = v;
-          rec.hapticsStoreSets.push(v);
-        },
-      };
-    })(),
+    settings,
+    effectiveSettings,
+    onSettingsNotice: (cb) => {
+      if (noticeDelivered) return () => {};
+      noticeListeners.add(cb);
+      if (noticePending) {
+        const notice = noticePending;
+        noticeDelivered = true;
+        for (const l of [...noticeListeners]) l(notice);
+        noticeListeners.clear();
+      }
+      return () => noticeListeners.delete(cb);
+    },
     achievements: (() => {
       const earned = new Set<AchievementId>((opts.savedAchievements ?? []) as AchievementId[]);
       return {
@@ -1340,6 +1438,28 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     deps,
     rec,
     storage,
+    /** The UNWRAPPED store, for asserting what was actually accepted and persisted. */
+    settingsStore,
+    /** Move a capability mid-session, the way plugging in a pad does. */
+    setCapabilities(next: Partial<PlatformCapabilities>): void {
+      capabilityFixture = { ...capabilityFixture, ...next };
+      capabilitySource.refresh();
+    },
+    /**
+     * Arm the page's persistence notice, as `AppSettings` does when storage is denied or
+     * a write fails. Delivered to whichever session has registered, at most once.
+     */
+    armSettingsNotice(notice: SettingsNotice): void {
+      if (noticeDelivered) return;
+      noticePending = notice;
+      if (noticeListeners.size > 0) {
+        noticeDelivered = true;
+        for (const l of [...noticeListeners]) l(notice);
+        noticeListeners.clear();
+      }
+    },
+    /** How many session callbacks are still registered for the notice. Leak check. */
+    noticeListenerCount: () => noticeListeners.size,
     devConsole,
     previewCanvas: fakePreviewCanvas,
     previewButtons: fakePreviewButtons,
@@ -1571,13 +1691,18 @@ describe('startGameWith: construction', () => {
   });
 
   it('reads the persisted haptics preference at boot, pushes it to the director, and echoes it to the HUD', () => {
+    // TWO pushes to the director at boot, both the same value and both deliberate: one
+    // where the director is built (before the HUD exists, so the very first frame's
+    // events are already gated correctly) and one from `applySettings`, which is the
+    // single place every settings consumer is fed once the HUD does exist. Pinned as an
+    // exact array rather than `.at(-1)` so deleting EITHER push fails here.
     const on = boot(makeDeps({ savedHaptics: true }));
-    expect(on.rec.hapticsEnabledCalls).toEqual([true]);
+    expect(on.rec.hapticsEnabledCalls).toEqual([true, true]);
     expect(on.rec.hapticsEchoes[0]).toBe(true);
     on.handle.dispose();
 
     const off = boot(makeDeps({ savedHaptics: false }));
-    expect(off.rec.hapticsEnabledCalls).toEqual([false]);
+    expect(off.rec.hapticsEnabledCalls).toEqual([false, false]);
     expect(off.rec.hapticsEchoes[0]).toBe(false);
     off.handle.dispose();
   });
@@ -1618,17 +1743,43 @@ describe('startGameWith: construction', () => {
 });
 
 describe('startGameWith: HUD wiring', () => {
-  it('routes the mute button to the engine and back to the button', () => {
+  it('routes the mute button through the STORE, to the engine, and back to the button', () => {
+    // The persistence half is the new part (issue #320): the button no longer calls
+    // `audio.toggleMute()` and hands the answer to the HUD -- it writes the store, and
+    // the store's subscription is what reaches the engine and both buttons. Without the
+    // store write the mute would not survive a reload; without the subscription the
+    // engine would never hear about it.
     const h = boot();
+    expect(h.rec.muted, 'the button must show the stored value before any click').toEqual([false]);
     h.hud.mute();
-    expect(h.rec.muted).toEqual([true]);
+    expect(h.rec.mutedStoreSets).toEqual([true]);
+    expect(h.settingsStore.snapshot().audio.muted).toBe(true);
+    expect(h.rec.audioMuted.at(-1)).toBe(true);
+    expect(h.rec.muted).toEqual([false, true]);
     h.handle.dispose();
   });
 
-  it('routes the volume slider to the engine', () => {
+  it('routes the volume slider through the STORE and on to the engine', () => {
     const h = boot();
     h.hud.volume(0.42);
-    expect(h.rec.volumes).toEqual([0.42]);
+    expect(h.rec.volumeStoreSets).toEqual([0.42]);
+    expect(h.settingsStore.snapshot().audio.volume).toBe(0.42);
+    // DEFAULT_VOLUME at boot, then the accepted new value -- the boot push is what stops
+    // a returning player's slider showing 0.6 while the game plays at something else.
+    expect(h.rec.volumes).toEqual([DEFAULT_VOLUME, 0.42]);
+    h.handle.dispose();
+  });
+
+  it('boots audio and both sliders from the PERSISTED mute and volume', () => {
+    // The defect issue #320 names: mute and volume were session-local, so every reload
+    // and every internal session replacement silently restored DEFAULT_VOLUME, unmuted.
+    // Non-default on BOTH fields, and neither value is a default, so a wiring that
+    // ignored the store would have to be wrong here rather than accidentally right.
+    const h = boot(makeDeps({ savedMuted: true, savedVolume: 0.2 }));
+    expect(h.rec.audioMuted).toEqual([true]);
+    expect(h.rec.volumes).toEqual([0.2]);
+    expect(h.rec.muted).toEqual([true]);
+    expect(h.rec.volumeEchoes).toEqual([0.2]);
     h.handle.dispose();
   });
 
@@ -1846,7 +1997,10 @@ describe('startGameWith: leaving the title screen', () => {
     const h = bootAtSplash();
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
     expect(h.getState()).toBe('main-menu');
-    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([]);
+    // `[false]` is the boot push, not a mute: the button was told the stored value once
+    // when the HUD appeared. A mute would append `true`.
+    expect(h.rec.muted, 'the key that began the game also muted it').toEqual([false]);
+    expect(h.rec.mutedStoreSets, 'the key that began the game reached the store').toEqual([]);
     h.handle.dispose();
   });
 
@@ -1854,7 +2008,12 @@ describe('startGameWith: leaving the title screen', () => {
     // The other edge: the early return must not swallow the hotkey forever.
     const h = boot(); // already past the splash
     h.keydown({ key: 'm', repeat: false, target: null } as Partial<KeyboardEvent>);
-    expect(h.rec.muted).toEqual([true]);
+    expect(h.rec.muted).toEqual([false, true]);
+    // Through the STORE, like both buttons. The hotkey used to call `audio.toggleMute()`
+    // directly, which is the shape that would make an M-key mute the one mute that did
+    // not survive a reload.
+    expect(h.rec.mutedStoreSets).toEqual([true]);
+    expect(h.settingsStore.snapshot().audio.muted).toBe(true);
     h.handle.dispose();
   });
 });
@@ -2091,6 +2250,234 @@ describe('startGameWith: the touch fire-mode wiring', () => {
   });
 });
 
+describe('startGameWith: capability-aware settings (issue #320)', () => {
+  it('gates the haptics director on device VIBRATION, not on the stored preference alone', () => {
+    // The preference is on and the device cannot vibrate, so the director must be off.
+    // A wiring that read the raw store would push `true` here.
+    const h = boot(makeDeps({ savedHaptics: true, capabilities: { deviceVibration: false } }));
+    expect(h.rec.hapticsEnabledCalls).toEqual([false, false]);
+    // ...and the PREFERENCE is untouched, which is what lets it come back.
+    expect(h.settingsStore.snapshot().input.deviceHaptics).toBe(true);
+    // The toggle that EDITS the preference still shows what the player chose, rather
+    // than reading as a dead control that has forgotten their answer.
+    expect(h.rec.hapticsEchoes.at(-1)).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('turns the live director back on when the capability APPEARS mid-session', () => {
+    const h = boot(makeDeps({ savedHaptics: true, capabilities: { deviceVibration: false } }));
+    expect(h.rec.hapticsEnabledCalls.at(-1)).toBe(false);
+    h.setCapabilities({ deviceVibration: true });
+    expect(h.rec.hapticsEnabledCalls.at(-1)).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('keeps controller rumble on its OWN capability, never device vibration', () => {
+    // Issue #320 forbids conflating the two, and forbids routing rumble through
+    // `navigator.vibrate`. Both preferences are on and exactly one capability is
+    // present, in each direction, so a resolver reading one capability for both would
+    // get one row wrong.
+    const phone = boot(
+      makeDeps({
+        savedHaptics: true,
+        savedControllerRumble: true,
+        capabilities: { deviceVibration: true, controllerRumble: false },
+      }),
+    );
+    expect(phone.deps.effectiveSettings.current()).toMatchObject({
+      deviceHaptics: true,
+      controllerRumble: false,
+    });
+    phone.handle.dispose();
+
+    const pad = boot(
+      makeDeps({
+        savedHaptics: true,
+        savedControllerRumble: true,
+        capabilities: { deviceVibration: false, controllerRumble: true },
+      }),
+    );
+    expect(pad.deps.effectiveSettings.current()).toMatchObject({
+      deviceHaptics: false,
+      controllerRumble: true,
+    });
+    pad.handle.dispose();
+  });
+
+  it('never persists a gamepad index, id, or slot assignment', () => {
+    // Issue #320: exact connected gamepad indices and temporary controller assignments
+    // must stay out of durable storage. Measured against the raw stored bytes with a
+    // pad present and a settings change forced, rather than asserted about the shape of
+    // the payload -- a serialiser that grew a `padIndex` field would pass a shape check
+    // written before it existed.
+    const storage = createMemoryStorage();
+    const h = makeDeps({ settingsStorage: storage, capabilities: { controllerRumble: true } });
+    h.setDetectedPadsFixture([{ padIndex: 3, id: 'Xbox Wireless Controller' }]);
+    const booted = boot(h);
+    booted.hud.toggleHaptics(false);
+    const raw = storage.getItem(SETTINGS_KEY) ?? '';
+    expect(raw).not.toBe('');
+    // Nothing identifying the device, by substring...
+    for (const forbidden of ['padIndex', 'Xbox', 'Wireless', 'assignment']) {
+      expect(raw, forbidden).not.toContain(forbidden);
+    }
+    // ...and the payload's shape is exactly the documented schema, so a serialiser that
+    // GREW an index field is caught rather than merely a currently-absent one.
+    const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
+    expect(Object.keys(parsed).sort()).toEqual(['audio', 'input', 'presentation', 'version']);
+    expect(Object.keys(parsed.input).sort()).toEqual([
+      'controllerRumble',
+      'deviceHaptics',
+      'fireMode',
+      'touchScheme',
+    ]);
+    booted.handle.dispose();
+  });
+});
+
+describe('startGameWith: reduced motion reaches the preview through the effective seam', () => {
+  it('hands the preview the resolved policy, not a media query', () => {
+    // preview.ts used to call `window.matchMedia` itself. Under System the OS answer
+    // wins; the two overrides ignore it. Population: all three motion states, each
+    // against an OS preference set to the OPPOSITE of the expected answer where the
+    // override applies, so a resolver that just echoed the OS would fail two rows.
+    const rows: Array<[('system' | 'full' | 'reduced'), boolean, boolean]> = [
+      ['system', true, true],
+      ['system', false, false],
+      ['full', true, false],
+      ['reduced', false, true],
+    ];
+    for (const [motion, os, expected] of rows) {
+      const h = boot(makeDeps({ systemReducedMotion: os }));
+      h.settingsStore.setMotion(motion);
+      h.hud.openCustomize();
+      expect(h.rec.previewReducedMotion.at(-1), `${motion} with OS ${os}`).toBe(expected);
+      h.handle.dispose();
+    }
+  });
+});
+
+describe('startGameWith: the persistence notice (issue #320)', () => {
+  it('shows the page notice once, through the existing toast rail', () => {
+    // Non-modal, non-blocking, self-expiring, `aria-live` polite -- reusing showToast is
+    // what keeps this from becoming a new navigation state. Testable without a real
+    // browser storage failure, which is the point of the injected latch.
+    const h = makeDeps();
+    h.armSettingsNotice({ kind: 'not-persisted', message: NOT_PERSISTED_NOTICE });
+    const booted = boot(h);
+    expect(booted.rec.plainToasts).toEqual([NOT_PERSISTED_NOTICE]);
+    booted.handle.dispose();
+  });
+
+  it('HOLDS a boot-time notice until the splash is gone, then shows it exactly once', () => {
+    // Visibility, not just delivery. `.hud-splash` is z-index 3 over a full-bleed 0.92
+    // scrim and `.hud-toasts` is z-index 2 (hud.css), so a toast raised while the title
+    // screen is up paints behind it and expires after TOAST_MS unseen. Both conditions
+    // knowable at boot -- memory-only storage and a future-schema payload -- arrive
+    // exactly there, immediately after createHud.
+    //
+    // `bootAtSplash`, not `boot`: `boot` dismisses the splash for you, which is what
+    // made an earlier version of this wiring look correct.
+    const h = makeDeps();
+    h.armSettingsNotice({ kind: 'not-persisted', message: NOT_PERSISTED_NOTICE });
+    const booted = bootAtSplash(h);
+    expect(booted.getState()).toBe('launch');
+    expect(booted.rec.plainToasts, 'toasted behind the title screen').toEqual([]);
+
+    booted.pointerdown(); // splash -> main menu, the way a player leaves it
+    expect(booted.rec.plainToasts).toEqual([NOT_PERSISTED_NOTICE]);
+
+    // Still at most once: every later surface change must not re-toast it.
+    booted.hud.startRestart();
+    expect(booted.rec.plainToasts).toEqual([NOT_PERSISTED_NOTICE]);
+    booted.handle.dispose();
+  });
+
+  it('shows one that arrives LATER in the session, not only at boot', () => {
+    // The Safari private-mode shape: a real localStorage whose setItem throws, which is
+    // not knowable until the first write.
+    const h = boot();
+    expect(h.rec.plainToasts).toEqual([]);
+    h.armSettingsNotice({ kind: 'not-persisted', message: NOT_PERSISTED_NOTICE });
+    expect(h.rec.plainToasts).toEqual([NOT_PERSISTED_NOTICE]);
+    h.handle.dispose();
+  });
+
+  it('does not interrupt input or change the screen', () => {
+    // A notice that stole focus, cleared the input latch, or opened a layer would fail
+    // the "non-blocking, does not require confirmation" half of the requirement.
+    // Measured as a CONTRAST against an otherwise identical session with no notice,
+    // rather than against hardcoded numbers -- the boot path has input clears and HUD
+    // state pushes of its own, and pinning their absolute values would assert something
+    // this test is not about.
+    const quiet = boot();
+    const quietState = quiet.getState();
+    const quietClears = quiet.rec.inputClears;
+    const quietStates = [...quiet.rec.hudStates];
+    quiet.handle.dispose();
+
+    const h = makeDeps();
+    h.armSettingsNotice({ kind: 'not-persisted', message: NOT_PERSISTED_NOTICE });
+    const noisy = boot(h);
+    expect(noisy.rec.plainToasts).toEqual([NOT_PERSISTED_NOTICE]); // it really fired
+    expect(noisy.getState()).toBe(quietState);
+    expect(noisy.rec.inputClears).toBe(quietClears);
+    expect(noisy.rec.hudStates).toEqual(quietStates);
+    noisy.handle.dispose();
+  });
+
+  it('unregisters on teardown, so a notice cannot reach a dead HUD', () => {
+    // The registration closes over THIS session's HUD, and the session is destroyed on
+    // every campaign/versus reboot.
+    const h = boot();
+    expect(h.noticeListenerCount()).toBe(1);
+    h.handle.dispose();
+    expect(h.noticeListenerCount()).toBe(0);
+    h.armSettingsNotice({ kind: 'not-persisted', message: NOT_PERSISTED_NOTICE });
+    expect(h.rec.plainToasts).toEqual([]);
+  });
+});
+
+describe('startGameWith: settings survive internal session replacement', () => {
+  it('a second session on the SAME deps comes up with the first session\'s settings', () => {
+    // boot.ts's reboot path in miniature: dispose the handle, build another session on
+    // the page-scoped settings owner. Every value here is off its default, so a session
+    // that fell back to session-local defaults would have to disagree.
+    const h = makeDeps();
+    const first = boot(h);
+    first.hud.mute();
+    first.hud.volume(0.2);
+    first.hud.toggleScheme('point');
+    first.hud.toggleFireMode('button');
+    first.handle.dispose();
+
+    const canvas = document.createElement('canvas');
+    const root = document.createElement('div');
+    const second = startGameWith(canvas, root, h.deps);
+    expect(h.rec.audioMuted.at(-1), 'the replacement session unmuted').toBe(true);
+    expect(h.rec.volumes.at(-1), 'the replacement session restored DEFAULT_VOLUME').toBe(0.2);
+    expect(h.rec.schemeSets.at(-1)).toBe('point');
+    expect(h.rec.fireModeSets.at(-1)).toBe('button');
+    second.dispose();
+  });
+
+  it('releases the settings subscription on teardown rather than accumulating one per session', () => {
+    // A session that left its listener attached would keep its HUD, audio engine and
+    // input controller alive, and every later settings change would be applied once per
+    // dead session as well as the live one.
+    const h = makeDeps();
+    const first = boot(h);
+    first.handle.dispose();
+    const canvas = document.createElement('canvas');
+    const root = document.createElement('div');
+    const second = startGameWith(canvas, root, h.deps);
+    const before = h.rec.audioMuted.length;
+    h.settingsStore.setMuted(true);
+    expect(h.rec.audioMuted.length - before, 'the dead session was still listening').toBe(1);
+    second.dispose();
+  });
+});
+
 describe('startGameWith: the haptics toggle wiring', () => {
   it('a toggle stores the pick, takes effect on the LIVE director, and echoes the accepted value to the HUD', () => {
     // Same three-step convention as the scheme/fire-mode toggles: store, then echo what
@@ -2099,7 +2486,7 @@ describe('startGameWith: the haptics toggle wiring', () => {
     // setEnabled, which is why this asserts hapticsEnabledCalls rather than an
     // input-controller setter.
     const h = boot(makeDeps({ savedHaptics: true }));
-    expect(h.rec.hapticsEnabledCalls).toEqual([true]); // the boot-time read
+    expect(h.rec.hapticsEnabledCalls).toEqual([true, true]); // the two boot-time pushes
     h.hud.toggleHaptics(false);
     expect(h.rec.hapticsStoreSets).toEqual([false]);
     expect(
@@ -2192,14 +2579,16 @@ describe('startGameWith: listeners and teardown', () => {
   it('toggles mute on M through the registered listener', () => {
     const h = boot();
     h.keydown({ key: 'm', repeat: false, target: null });
-    expect(h.rec.muted).toEqual([true]);
+    expect(h.rec.muted).toEqual([false, true]);
     h.handle.dispose();
   });
 
   it('does not toggle mute on auto-repeat', () => {
     const h = boot();
     h.keydown({ key: 'm', repeat: true, target: null });
-    expect(h.rec.muted).toEqual([]);
+    // Only the boot push. A repeat that reached the store would append to both arrays.
+    expect(h.rec.muted).toEqual([false]);
+    expect(h.rec.mutedStoreSets).toEqual([]);
     h.handle.dispose();
   });
 
@@ -5830,12 +6219,17 @@ describe('startGameWith: the dev console surface', () => {
     h.handle.dispose();
   });
 
-  it('publishes only save with saveIo on, and only replay with replay on', () => {
+  it('publishes only the saveIo pair with saveIo on, and only replay with replay on', () => {
     // One at a time, so a wiring that publishes both together -- or crosses them --
     // fails rather than passing on the aggregate. Population: the 2 flags that can
     // publish, alone and together.
+    //
+    // `saveIo` publishes TWO members since issue #320 -- the raw save api and the
+    // player-settings surface beside it -- because they are one concern: the raw key
+    // layer plus the one typed store that can end up unwritable. They are pinned as an
+    // exact key set, so a third member added under this flag has to be declared here.
     const s = boot(makeDeps({ devFlags: { saveIo: true } }));
-    expect(Object.keys(api(s)).sort()).toEqual(['save']);
+    expect(Object.keys(api(s)).sort()).toEqual(['save', 'settings']);
     s.handle.dispose();
 
     const r = boot(makeDeps({ devFlags: { replay: true } }));
@@ -5843,7 +6237,7 @@ describe('startGameWith: the dev console surface', () => {
     r.handle.dispose();
 
     const both = boot(makeDeps({ devFlags: { saveIo: true, replay: true } }));
-    expect(Object.keys(api(both)).sort()).toEqual(['replay', 'save']);
+    expect(Object.keys(api(both)).sort()).toEqual(['replay', 'save', 'settings']);
     both.handle.dispose();
   });
 
@@ -5892,6 +6286,83 @@ describe('startGameWith: save export/import reaches the real storage', () => {
     expect(result.ok).toBe(true);
     // Read back off the storage the deps were built with, not off the API.
     expect(h.storage.getItem('tanks.progress.v1')).toBe('4');
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: Reset Progress and settings are separate boundaries', () => {
+  it('Reset Progress leaves the settings key ALONE', () => {
+    // The destructive hazard in the direction the settings store cannot guard: this
+    // handler owns progress, stats and achievements, and adding `settings.reset()` to
+    // it would silently discard a player's audio, control and accessibility choices
+    // every time they cleared a campaign. Passes today; it can fail tomorrow, which is
+    // what makes it a guard rather than a decoration.
+    const h = boot();
+    h.settingsStore.setMuted(true);
+    h.settingsStore.setUiScale(150);
+    h.hud.resetProgress();
+    expect(h.settingsStore.snapshot()).toMatchObject({
+      audio: { muted: true },
+      presentation: { uiScale: 150 },
+    });
+    expect(h.rec.progressResets).toBeGreaterThan(0); // the reset really ran
+    h.handle.dispose();
+  });
+});
+
+describe('startGameWith: the dev settings surface (issue #320)', () => {
+  it('publishes settings beside save under the SAME flag, and only under it', () => {
+    const off = boot();
+    expect(off.devConsole[DEV_CONSOLE_KEY]).toBeUndefined();
+    off.handle.dispose();
+
+    const h = boot(makeDeps({ devFlags: { saveIo: true } }));
+    const api = (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).settings!;
+    expect(api).toBeDefined();
+    h.handle.dispose();
+  });
+
+  it('reads through to the LIVE store and the effective layer', () => {
+    // Not a snapshot taken at publish time: a change made after the surface was built
+    // has to be visible through it, or the reset below would be operating on something
+    // other than what the player is looking at.
+    const h = boot(makeDeps({ devFlags: { saveIo: true }, capabilities: { deviceVibration: false } }));
+    const api = (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).settings!;
+    h.hud.volume(0.2);
+    expect(api.snapshot().audio.volume).toBe(0.2);
+    // Stored versus effective, side by side: the preference is on, the device cannot
+    // vibrate, and the two answers differ.
+    expect(api.snapshot().input.deviceHaptics).toBe(true);
+    expect(api.effective().deviceHaptics).toBe(false);
+    expect(api.status()).toMatchObject({ writable: true, schema: 'current' });
+    h.handle.dispose();
+  });
+
+  it('reset() restores the defaults and reaches the live runtime', () => {
+    // The only exit from a future-schema lock, and the operation the notice text
+    // promises exists. It must be a real reset, not just a store write: the audio
+    // engine and both mute buttons have to come back too.
+    const h = boot(makeDeps({ devFlags: { saveIo: true }, savedMuted: true, savedVolume: 0.2 }));
+    const api = (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).settings!;
+    api.reset();
+    expect(api.snapshot()).toEqual(h.settingsStore.snapshot());
+    expect(h.rec.audioMuted.at(-1)).toBe(false);
+    expect(h.rec.volumes.at(-1)).toBe(DEFAULT_VOLUME);
+    h.handle.dispose();
+  });
+
+  it('reset() does not touch progress, stats or achievements', () => {
+    // The hazard in the destructive direction. Settings and progress are separate keys
+    // and separate reset boundaries, and conflating them would lose a campaign.
+    const h = boot(
+      makeDeps({
+        devFlags: { saveIo: true },
+        savedKeys: { 'tanks.progress.v1': '2', 'tanks.achievements.v1': '{"earned":["first-blood"]}' },
+      }),
+    );
+    (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).settings!.reset();
+    expect(h.storage.getItem('tanks.progress.v1')).toBe('2');
+    expect(h.storage.getItem('tanks.achievements.v1')).toBe('{"earned":["first-blood"]}');
     h.handle.dispose();
   });
 });

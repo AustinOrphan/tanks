@@ -130,6 +130,16 @@ export interface Hud {
   /** Reflect the engine's mute state in the button. */
   setMuted(muted: boolean): void;
   /**
+   * Reflect the effective master volume in BOTH sliders.
+   *
+   * The markup renders them at `DEFAULT_VOLUME`, which was the truth while volume was a
+   * session-local field on the audio engine. Since issue #320 it is a persisted setting,
+   * so a returning player's slider would sit at 0.6 while the game played at whatever
+   * they last chose -- the control lying about the state it controls. loop.ts pushes the
+   * accepted stored value through here at boot, and again whenever it changes.
+   */
+  setVolume(v: number): void;
+  /**
    * Round-start countdown. `null` hides it; otherwise a bare number, centred and
    * transient -- it pops in and fades out (the `hud-count-pop` keyframes, applied via
    * the `.hud-count--pop` class, in hud.css) rather than sitting on screen, so it
@@ -2522,6 +2532,19 @@ export function createHud(root: HTMLElement): Hud {
 
   setMuted(false);
 
+  /**
+   * Both sliders, always, from one call -- they are two views of one value, and the
+   * input handlers above already mirror each other for exactly that reason.
+   *
+   * Writes `String(v)` rather than trusting the caller's formatting: `value` is a string
+   * attribute, and the browser re-snaps it to the step grid on read.
+   */
+  function setVolume(v: number): void {
+    const text = String(v);
+    if (volumeEl.value !== text) volumeEl.value = text;
+    if (panelVolumeEl.value !== text) panelVolumeEl.value = text;
+  }
+
   // textContent's setter tears down and rebuilds the text node even when the
   // string is identical. loop.ts calls these every frame for values that change
   // a handful of times a round, so skip the write when nothing changed.
@@ -2618,6 +2641,7 @@ export function createHud(root: HTMLElement): Hud {
     },
     setState,
     setMuted,
+    setVolume,
     setRoundPhase(info: RoundPhaseInfo | null): void {
       if (!info || info.phase === 'live') {
         countEl.classList.add('hud-count--hidden');

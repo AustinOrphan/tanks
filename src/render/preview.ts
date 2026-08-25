@@ -205,30 +205,32 @@ export function previewWorld(): World {
 }
 
 /**
- * True when the player has asked the platform for less motion, in which case the idle
- * spin does not run at all.
- *
- * Read once per preview rather than subscribed to: the preview lives only while the
- * Customize panel is open, so a change taking effect on the next open is soon enough,
- * and a `matchMedia` subscription is one more listener to leak. Guarded because
- * `matchMedia` is not universally present (jsdom does not implement it), and losing
- * the preview to a missing media-query API would be an absurd trade.
- */
-function prefersReducedMotion(): boolean {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}
-
-/**
  * @param rotateButtons The HUD's four rotate buttons, in any order. Optional, and the
  * preview is fully usable without them -- the drag, hover-aim and keyboard schemes are
  * on the canvas. They are passed in rather than looked up here because hud.ts owns the
  * markup and this file owns none of it (the same split that keeps `previewCanvas` on
  * the Hud interface), and because a querySelector against the document would make this
  * module silently depend on a class name nothing type-checks.
+ *
+ * @param reducedMotion whether the idle spin is suppressed. PASSED IN, not read here.
+ * This file used to call `window.matchMedia('(prefers-reduced-motion: reduce)')` itself,
+ * which meant the OS preference was the only input -- a player who wanted full effects
+ * anyway had no way to say so, and the read was invisible to the settings model. Issue
+ * #320 makes the effective reduced-motion policy one resolved value (game/
+ * effective-settings.ts), combining the stored System/Full/Reduced choice with the live
+ * OS query, and consumers take it as an argument. Defaults to `false` -- the same
+ * behaviour a host with no `matchMedia` used to get, which is what the GL harness and
+ * gallery callers rely on.
+ *
+ * Still read ONCE per preview rather than subscribed to: the preview lives only while
+ * the Customize panel is open, so a change taking effect on the next open is soon enough,
+ * and this file owning a subscription would be one more listener to leak. The SOURCE is
+ * live (capabilities.ts) even though this consumer samples it.
  */
 export function createTankPreview(
   canvas: HTMLCanvasElement,
   rotateButtons?: Iterable<HTMLElement>,
+  reducedMotion = false,
 ): TankPreview | null {
   let renderer: THREE.WebGLRenderer;
   try {
@@ -328,7 +330,7 @@ export function createTankPreview(
   const controls: PreviewControls = createPreviewControls(canvas, {
     camera,
     initialPose: INITIAL_PREVIEW_POSE,
-    reducedMotion: prefersReducedMotion(),
+    reducedMotion,
     rotateButtons,
     onPose(pose): void {
       applyPose(world, pose);

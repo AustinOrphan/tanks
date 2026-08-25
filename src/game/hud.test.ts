@@ -36,6 +36,22 @@ describe('createHud volume control', () => {
     expect(Number(volumeSlider(root).value)).toBe(DEFAULT_VOLUME);
   });
 
+  it('setVolume moves BOTH sliders, so the persisted level is not shown in one place only', () => {
+    // The markup renders at DEFAULT_VOLUME, which was the truth while volume was a
+    // session-local field on the audio engine. Since issue #320 it is persisted, and
+    // loop.ts pushes the stored value through here at boot -- so a returning player who
+    // set 0.2 must not see 0.6 on either control.
+    //
+    // BOTH, asserted separately: the topbar slider and the pause-panel slider are two
+    // views of one value, and the input handlers already mirror each other in the other
+    // direction. Dropping the panel write leaves the topbar test green and the panel
+    // silently stale, which is exactly the half a fake HUD in loop.test.ts cannot see.
+    const { hud, root } = mount();
+    hud.setVolume(0.2);
+    expect(volumeSlider(root).value).toBe('0.2');
+    expect((root.querySelector('.hud-panel-volume') as HTMLInputElement).value).toBe('0.2');
+  });
+
   it('keeps DEFAULT_VOLUME on the step grid the browser will snap to', () => {
     // Real browsers sanitize <input type="range"> onto the `step` grid; jsdom
     // does not. A DEFAULT_VOLUME of, say, 1/3 would leave the test above green

@@ -4,7 +4,7 @@ title: Privacy Policy
 
 # Privacy Policy
 
-Last updated: 2026-08-21
+Last updated: 2026-08-25
 
 This policy covers the **Tanks!** browser game (the "game" or "app"), published at
 `austinorphan.com/tanks/`.
@@ -32,11 +32,30 @@ The stored data is organized into the following keys:
 | `tanks.stats.v1` | Lifetime and per-attempt game statistics |
 | `tanks.run.v2` | Active campaign run: current level, remaining lives |
 | `tanks.custom.v1` | Chosen tank color and paint customization |
-| `tanks.touch.v1` | Touch control settings: stick position, button layout |
+| `tanks.settings.v1` | Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, motion/flash preference, interface scale |
 | `tanks.achievements.v1` | Earned achievements |
+
+`tanks.settings.v1` replaces an older `tanks.touch.v1` key. The first time you open
+this version of the game, any touch control settings saved under the old key are
+copied into the new one and the old key is deleted. The game never writes
+`tanks.touch.v1` again; it is still accepted when importing a save file exported by
+an older version.
+
+The settings key stores your **preferences only**. It never records which
+controllers are connected, their identifiers, their slot numbers, or which player is
+using which device.
 
 This data is stored entirely in the browser. It never leaves your device and is
 not transmitted anywhere.
+
+If your browser cannot save data &mdash; for example in a private window, or with
+site storage blocked &mdash; the game still runs, and shows a brief on-screen note
+that settings will not be saved for that session.
+
+You can export and import all of the keys above as a single file, and you can reset
+your settings back to their defaults. Resetting settings does not affect campaign
+progress, statistics, or achievements, and resetting progress does not affect
+settings.
 
 The data is scoped to the game's origin: it is accessible only to the origin
 that serves the game and is unreachable by other sites.

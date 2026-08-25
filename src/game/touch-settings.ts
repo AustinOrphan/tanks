@@ -1,99 +1,91 @@
 import { TOUCH_SCHEMES, FIRE_MODES, type TouchScheme, type FireMode } from '../input/touch';
 
 /**
- * The right thumb's chosen aim scheme (see touch.ts's `TouchScheme`), how it pulls the
- * trigger (`FireMode`), and whether haptic pulses (haptics.ts) are on, persisted the
- * same way the paint shop's choice is (customization.ts) but under its OWN key: these
- * are input/feedback preferences, not cosmetic ones, and a junk value in one FIELD must
- * never be able to reset another -- all three degrade independently, exactly as this
- * store's own key is separate from customization's. Haptics rides this store rather than
- * a new one: it is a sixth `tanks.*` key only if it needs to be, and a field fits.
+ * The LEGACY touch-preferences key, kept as a READER only (issue #320).
+ *
+ * This module used to own a writable store: the right thumb's aim scheme, its fire mode
+ * and the haptics switch, persisted under `tanks.touch.v1` with per-field validation. All
+ * three now live in the canonical `tanks.settings.v1` payload (settings.ts), which also
+ * covers mute, volume, controller rumble, motion policy and UI scale -- one versioned
+ * model instead of a settings key that grew a field whenever one was needed.
+ *
+ * The store is GONE rather than deprecated in place. Leaving a second writable source
+ * would mean two shadows over one preference, and whichever wrote last would win by
+ * accident; issue #320 asks for exactly one authoritative store.
+ *
+ * What survives is the compatibility surface:
+ *
+ *  - `TOUCH_SETTINGS_KEY`, so the save importer can still accept an export taken before
+ *    the canonical key existed (save.ts's `SAVE_IMPORT_KEYS`), and so the settings store
+ *    can find and clear it;
+ *  - `readLegacyTouchSettings`, the one-way migration read.
+ *
+ * Nothing in the tree writes this key any more. `createPlayerSettingsStore` removes it as
+ * soon as it has written the canonical payload, so an ordinary session converges to one
+ * key on its first boot after the upgrade.
  */
 export const TOUCH_SETTINGS_KEY = 'tanks.touch.v1';
-
-export const DEFAULT_TOUCH_SCHEME: TouchScheme = 'stick';
-export const DEFAULT_FIRE_MODE: FireMode = 'tap';
-/** On by default, the same convention as audio (unmuted until the player says otherwise). */
-export const DEFAULT_HAPTICS = true;
 
 const SCHEME_IDS = new Set<string>(TOUCH_SCHEMES);
 const FIRE_MODE_IDS = new Set<string>(FIRE_MODES);
 
-export interface TouchSettingsStore {
-  scheme(): TouchScheme;
-  /** Off-list values are refused, not stored -- same discipline as an off-palette hull. */
-  setScheme(id: TouchScheme): void;
-  fireMode(): FireMode;
-  /** Off-list values are refused, not stored -- same discipline as setScheme. */
-  setFireMode(id: FireMode): void;
-  /** Whether haptics.ts's vibrate calls are allowed through. */
-  haptics(): boolean;
-  setHaptics(v: boolean): void;
+/**
+ * What a legacy payload actually carried, field by field.
+ *
+ * `present` is separate from the three fields, and is the reason this is not just a
+ * nullable object: `present: true` with all three fields null is a key holding junk,
+ * which still has to be CLEANED UP after migration, while `present: false` is a key that
+ * was never there and must not cause a write at all.
+ *
+ * Each field is `null` when it was missing or off-domain, never defaulted here. Applying
+ * defaults is the canonical store's job, and a reader that defaulted would make "the
+ * legacy value was 'stick'" and "there was no legacy value" indistinguishable -- the
+ * exact distinction migration needs to preserve a valid sibling of a malformed field.
+ */
+export interface LegacyTouchRead {
+  readonly present: boolean;
+  readonly scheme: TouchScheme | null;
+  readonly fireMode: FireMode | null;
+  readonly haptics: boolean | null;
 }
 
-export function createTouchSettingsStore(storage: Storage): TouchSettingsStore {
-  function read(): { scheme: TouchScheme; fireMode: FireMode; haptics: boolean } {
-    const fallback = {
-      scheme: DEFAULT_TOUCH_SCHEME,
-      fireMode: DEFAULT_FIRE_MODE,
-      haptics: DEFAULT_HAPTICS,
-    };
-    let raw: string | null = null;
-    try {
-      raw = storage.getItem(TOUCH_SETTINGS_KEY);
-    } catch {
-      return fallback;
-    }
-    if (raw === null || raw === '') return fallback;
-    try {
-      const parsed = JSON.parse(raw) as
-        | { scheme?: unknown; fireMode?: unknown; haptics?: unknown }
-        | null;
-      // Each field validated and defaulted independently: junk in one must never fall
-      // back another away from what it actually stored.
-      return {
-        scheme:
-          typeof parsed?.scheme === 'string' && SCHEME_IDS.has(parsed.scheme)
-            ? (parsed.scheme as TouchScheme)
-            : DEFAULT_TOUCH_SCHEME,
-        fireMode:
-          typeof parsed?.fireMode === 'string' && FIRE_MODE_IDS.has(parsed.fireMode)
-            ? (parsed.fireMode as FireMode)
-            : DEFAULT_FIRE_MODE,
-        haptics: typeof parsed?.haptics === 'boolean' ? parsed.haptics : DEFAULT_HAPTICS,
-      };
-    } catch {
-      return fallback;
-    }
+const ABSENT: LegacyTouchRead = Object.freeze({
+  present: false,
+  scheme: null,
+  fireMode: null,
+  haptics: null,
+});
+
+export function readLegacyTouchSettings(storage: Storage): LegacyTouchRead {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(TOUCH_SETTINGS_KEY);
+  } catch {
+    // A storage that refuses reads has nothing to migrate and nothing to clean up.
+    return ABSENT;
   }
-
-  let shadow = read();
-
-  function persist(): void {
-    try {
-      storage.setItem(TOUCH_SETTINGS_KEY, JSON.stringify(shadow));
-    } catch {
-      // Private mode: the shadow carries the session.
-    }
+  if (raw === null) return ABSENT;
+  // An EMPTY string is present-but-useless: worth clearing, with nothing to adopt.
+  const junk: LegacyTouchRead = Object.freeze({
+    present: true,
+    scheme: null,
+    fireMode: null,
+    haptics: null,
+  });
+  if (raw === '') return junk;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return junk;
   }
-
-  return {
-    scheme: () => shadow.scheme,
-    setScheme(id: TouchScheme): void {
-      if (!SCHEME_IDS.has(id)) return;
-      shadow = { ...shadow, scheme: id };
-      persist();
-    },
-    fireMode: () => shadow.fireMode,
-    setFireMode(id: FireMode): void {
-      if (!FIRE_MODE_IDS.has(id)) return;
-      shadow = { ...shadow, fireMode: id };
-      persist();
-    },
-    haptics: () => shadow.haptics,
-    setHaptics(v: boolean): void {
-      shadow = { ...shadow, haptics: v };
-      persist();
-    },
-  };
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return junk;
+  const p = parsed as { scheme?: unknown; fireMode?: unknown; haptics?: unknown };
+  return Object.freeze({
+    present: true,
+    scheme: typeof p.scheme === 'string' && SCHEME_IDS.has(p.scheme) ? (p.scheme as TouchScheme) : null,
+    fireMode:
+      typeof p.fireMode === 'string' && FIRE_MODE_IDS.has(p.fireMode) ? (p.fireMode as FireMode) : null,
+    haptics: typeof p.haptics === 'boolean' ? p.haptics : null,
+  });
 }
