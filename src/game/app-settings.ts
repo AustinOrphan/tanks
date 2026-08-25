@@ -1,4 +1,11 @@
-import { createStores, resolveStorageWithStatus, type GameStores } from './storage';
+import {
+  createNamespacedStorage,
+  createStores,
+  resolveStorageWithStatus,
+  selectStorageNamespace,
+  type GameStores,
+  type StorageNamespace,
+} from './storage';
 import { noticeFor, type PlayerSettingsStore, type SettingsNotice } from './settings';
 import {
   createCapabilitySource,
@@ -35,8 +42,22 @@ import { createEffectiveSettings, type EffectiveSettingsHandle } from './effecti
  * later hold, in the shape it will hold it. #317 moves the construction, not the model.
  */
 export interface AppSettings {
-  /** The one resolved `Storage` every store in `stores` shares. save.ts's raw layer. */
+  /**
+   * The one resolved `Storage` every store in `stores` shares. save.ts's raw layer.
+   *
+   * On a developer session this is the NAMESPACED adapter, the same object the stores
+   * were built on -- not the browser's `localStorage` underneath it. save.ts reads and
+   * writes raw keys through whatever it is handed, so handing it the base storage here
+   * would let a `?dev=1` session export the real player's save and import back over it,
+   * through the one path that does not go through a store (issue #245).
+   */
   readonly storage: Storage;
+  /**
+   * Which key namespace this page is persisting into. Read-only state for the Developer
+   * Tools surface of issue #246 onwards; nothing in the game branches on it, because the
+   * adapter has already applied it by the time any store sees a key.
+   */
+  readonly namespace: StorageNamespace;
   readonly stores: GameStores;
   /** Shorthand for `stores.settings`. The one writable settings source on the page. */
   readonly settings: PlayerSettingsStore;
@@ -68,6 +89,8 @@ export interface AppSettings {
 
 export interface AppSettingsDeps {
   readonly storage: Storage;
+  /** The namespace `storage` already applies. Required, so a caller cannot forget it. */
+  readonly namespace: StorageNamespace;
   readonly stores: GameStores;
   readonly capabilities: CapabilitySource;
   readonly motion: ReducedMotionSource;
@@ -104,6 +127,7 @@ export function createAppSettings(deps: AppSettingsDeps): AppSettings {
 
   return {
     storage: deps.storage,
+    namespace: deps.namespace,
     stores: deps.stores,
     settings,
     effective,
@@ -131,9 +155,17 @@ export function createAppSettings(deps: AppSettingsDeps): AppSettings {
  * collaborator `boot.ts` is handed by `main.ts`.
  */
 export function createBrowserAppSettings(): AppSettings {
-  const { storage, availability } = resolveStorageWithStatus();
+  // Selected BEFORE the stores exist, and applied once: `storage` below is the namespaced
+  // object, and both `createStores` and `AppSettings.storage` receive that same instance.
+  // A second adapter, or the base storage on either side, would put half the session in
+  // one namespace and half in the other.
+  const namespace = selectStorageNamespace(globalThis.location?.search ?? '');
+  const resolved = resolveStorageWithStatus();
+  const availability = resolved.availability;
+  const storage = createNamespacedStorage(resolved.storage, namespace);
   return createAppSettings({
     storage,
+    namespace,
     stores: createStores(storage, availability),
     capabilities: createCapabilitySource(() => detectCapabilities()),
     motion: createMediaReducedMotionSource(),

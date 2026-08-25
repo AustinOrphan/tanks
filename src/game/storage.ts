@@ -8,6 +8,7 @@ import {
 } from './settings';
 import { createAchievementsStore, type AchievementsStore } from './achievements';
 import { createRunStore, type RunStore } from './run';
+import { parseDeveloperMode } from './devflags';
 
 /**
  * The ONE place the game decides where persisted state lives.
@@ -130,6 +131,109 @@ export function resolveStorageWithStatus(
     // Access threw: fall through to the shim.
   }
   return { storage: createMemoryStorage(), availability: 'memory' };
+}
+
+/**
+ * Which key namespace a session persists into (issue #245).
+ *
+ * `production` is what every ordinary URL gets and what every build shipped before this
+ * existed. `developer` is what a `?dev=1` session gets, so that dev level jumps, sandbox
+ * events and achievement checks cannot reach the keys holding a real player's campaign.
+ */
+export const STORAGE_NAMESPACES = ['production', 'developer'] as const;
+export type StorageNamespace = (typeof STORAGE_NAMESPACES)[number];
+
+/**
+ * The prefix a developer session's keys carry.
+ *
+ * Applied to the WHOLE key, so `tanks.progress.v1` becomes
+ * `tanks.dev.tanks.progress.v1` rather than the tidier `tanks.dev.progress.v1`. That
+ * redundancy buys a property the tidier form cannot have: the mapping is INJECTIVE with
+ * one code path and no branch. Stripping a leading `tanks.` and re-prefixing would send
+ * `tanks.progress.v1` and a hypothetical `progress.v1` to the SAME underlying key, so two
+ * stores could clobber each other in developer sessions and nowhere else -- and `key(i)`
+ * would have no inverse. Guarding that with a fallback branch instead would add a branch
+ * no test can kill, the thing `createMemoryStorage.key` above declines to do.
+ *
+ * It stays inside the `tanks.` prefix deliberately: this origin is SHARED with the rest of
+ * austinorphan.com (see save.ts), so a developer namespace must not colonise a new
+ * top-level prefix there.
+ */
+export const DEVELOPER_KEY_PREFIX = 'tanks.dev.';
+
+/** The underlying key a store-facing key lands on. Identity in `production`. */
+export function namespacedKey(namespace: StorageNamespace, key: string): string {
+  return namespace === 'developer' ? `${DEVELOPER_KEY_PREFIX}${key}` : key;
+}
+
+/**
+ * The namespace a query string selects.
+ *
+ * Keyed to the `dev` GATE (`parseDeveloperMode`), not to any individual flag: `?aimRay=1`
+ * alone turns nothing on, so it must not move the session off the production keys either.
+ * Pure, so the whole table is assertable without a browser -- the same reason
+ * `parseDevFlags` takes a string.
+ */
+export function selectStorageNamespace(search: string): StorageNamespace {
+  return parseDeveloperMode(search) ? 'developer' : 'production';
+}
+
+/**
+ * A `Storage` that reads and writes inside one namespace.
+ *
+ * `production` returns the base object ITSELF, not an equivalent wrapper. That is what
+ * makes "ordinary URLs retain current key names and behavior" provable rather than
+ * argued: on a production session there is no code between the stores and the browser.
+ *
+ * `length`, `key(i)` and `clear()` are scoped too, not just the three key-addressed
+ * methods. Nothing in `src/` enumerates a `Storage` today -- save.ts works from the
+ * explicit `SAVE_KEYS` allow-list -- but an unscoped `clear()` on a developer session
+ * would wipe the player's real save, which is the single most damaging thing this
+ * adapter could do, and the scoping is what stops it being one line away.
+ *
+ * Deliberately does NOT catch. Every store already wraps its own reads and writes and
+ * degrades (progress.ts, achievements.ts); swallowing here would turn Safari private mode
+ * into a silent no-op the stores never learn about.
+ */
+export function createNamespacedStorage(base: Storage, namespace: StorageNamespace): Storage {
+  if (namespace === 'production') return base;
+
+  const underlying = (key: string): string => namespacedKey(namespace, String(key));
+
+  /** The store-facing names currently present, in the base storage's own order. */
+  function names(): string[] {
+    const out: string[] = [];
+    for (let index = 0; index < base.length; index += 1) {
+      const key = base.key(index);
+      if (key !== null && key.startsWith(DEVELOPER_KEY_PREFIX)) {
+        out.push(key.slice(DEVELOPER_KEY_PREFIX.length));
+      }
+    }
+    return out;
+  }
+
+  return {
+    get length(): number {
+      return names().length;
+    },
+    key(index: number): string | null {
+      // `?? null` covers a negative, fractional or out-of-range index the same way
+      // createMemoryStorage does: it simply never matches.
+      return names()[index] ?? null;
+    },
+    getItem(key: string): string | null {
+      return base.getItem(underlying(key));
+    },
+    setItem(key: string, value: string): void {
+      base.setItem(underlying(key), value);
+    },
+    removeItem(key: string): void {
+      base.removeItem(underlying(key));
+    },
+    clear(): void {
+      for (const name of names()) base.removeItem(underlying(name));
+    },
+  };
 }
 
 export interface GameStores {

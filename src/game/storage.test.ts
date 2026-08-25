@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { createMemoryStorage, resolveStorage, createStores, type GameStores } from './storage';
+import {
+  createMemoryStorage,
+  createNamespacedStorage,
+  createStores,
+  namespacedKey,
+  resolveStorage,
+  selectStorageNamespace,
+  DEVELOPER_KEY_PREFIX,
+  STORAGE_NAMESPACES,
+  type GameStores,
+  type StorageNamespace,
+} from './storage';
+import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { PROGRESS_KEY } from './progress';
 import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
@@ -11,14 +23,34 @@ import { CAMPAIGN_LEVELS } from '../sim/arena';
 /** Every key the six stores own, as the wire strings the browser sees. */
 const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY];
 
+/**
+ * One write per store in `GameStores`, keyed by that store's own field name.
+ *
+ * A keyed record rather than a flat function body so `Object.keys` is an INVENTORY.
+ * Adding a seventh store to `GameStores` without adding a driver here fails
+ * `covers every store in GameStores` below -- which is the only thing standing between a
+ * new store and a silent bypass of the developer namespace (issue #245). A flat function
+ * cannot fail that way: it just quietly stops covering the new store.
+ */
+const STORE_WRITES: Record<keyof GameStores, (stores: GameStores) => void> = {
+  progress: (s) => s.progress.recordCleared(CAMPAIGN_LEVELS[1]),
+  stats: (s) => s.stats.resetLifetime(),
+  customization: (s) => s.customization.setHull('red'),
+  settings: (s) => s.settings.setTouchScheme('point'),
+  achievements: (s) => s.achievements.reset(),
+  run: (s) => s.run.startNewRun('level-01'),
+};
+
 /** Make each of the six stores write, so their keys have to appear somewhere. */
 function writeThroughEveryStore(stores: GameStores): void {
-  stores.progress.recordCleared(CAMPAIGN_LEVELS[1]);
-  stores.stats.resetLifetime();
-  stores.customization.setHull('red');
-  stores.settings.setTouchScheme('point');
-  stores.achievements.reset();
-  stores.run.startNewRun('level-01');
+  for (const write of Object.values(STORE_WRITES)) write(stores);
+}
+
+/** Every key in the base storage, in insertion order. */
+function rawKeys(storage: Storage): string[] {
+  const seen: string[] = [];
+  for (let i = 0; i < storage.length; i++) seen.push(storage.key(i)!);
+  return seen;
 }
 
 describe('createMemoryStorage', () => {
@@ -172,6 +204,224 @@ describe('createStores', () => {
       },
     } as Storage;
     const stores = createStores(hostile);
+    expect(stores.progress.highestCleared()).toBe(0);
+    expect(() => writeThroughEveryStore(stores)).not.toThrow();
+  });
+});
+
+describe('selectStorageNamespace', () => {
+  it.each([
+    ['', 'production'],
+    ['?level=2', 'production'],
+    ['?dev=0', 'production'],
+    ['?dev=1', 'developer'],
+    ['?dev', 'developer'],
+    ['?dev=1&aimRay=1', 'developer'],
+  ])('reads %o as the %s namespace', (search, expected) => {
+    expect(selectStorageNamespace(search)).toBe(expected);
+  });
+
+  it('is the `dev` GATE, not any individual flag', () => {
+    // `?aimRay=1` without `dev` turns nothing on (devflags.ts), so it must not move a
+    // session off the production keys either.
+    expect(selectStorageNamespace('?aimRay=1')).toBe('production');
+  });
+});
+
+describe('createNamespacedStorage: production', () => {
+  it('hands back the SAME object, so production keys stay byte-for-byte untouched', () => {
+    // Identity, not an equivalent wrapper. It is what makes "ordinary URLs retain current
+    // key names and behavior" (issue #245) provable rather than argued: there is no code
+    // between the stores and the browser to get it wrong.
+    const base = createMemoryStorage();
+    expect(createNamespacedStorage(base, 'production')).toBe(base);
+  });
+
+  it('maps every key to itself', () => {
+    for (const key of [...ALL_KEYS, TOUCH_SETTINGS_KEY]) {
+      expect(namespacedKey('production', key)).toBe(key);
+    }
+  });
+});
+
+describe('createNamespacedStorage: developer', () => {
+  function dev(): { base: Storage; storage: Storage } {
+    const base = createMemoryStorage();
+    return { base, storage: createNamespacedStorage(base, 'developer') };
+  }
+
+  it('writes under the developer prefix and leaves the production key absent', () => {
+    const { base, storage } = dev();
+    storage.setItem(PROGRESS_KEY, '3');
+
+    expect(base.getItem(`${DEVELOPER_KEY_PREFIX}${PROGRESS_KEY}`)).toBe('3');
+    expect(base.getItem(PROGRESS_KEY)).toBeNull();
+  });
+
+  it('reads back its own writes', () => {
+    const { storage } = dev();
+    storage.setItem(PROGRESS_KEY, '3');
+    expect(storage.getItem(PROGRESS_KEY)).toBe('3');
+  });
+
+  it('cannot see a production key, however it was written', () => {
+    const { base, storage } = dev();
+    base.setItem(PROGRESS_KEY, 'production');
+    expect(storage.getItem(PROGRESS_KEY)).toBeNull();
+  });
+
+  it('removes only its own key', () => {
+    const { base, storage } = dev();
+    base.setItem(PROGRESS_KEY, 'production');
+    storage.setItem(PROGRESS_KEY, 'developer');
+    storage.removeItem(PROGRESS_KEY);
+
+    expect(storage.getItem(PROGRESS_KEY)).toBeNull();
+    expect(base.getItem(PROGRESS_KEY)).toBe('production');
+  });
+
+  it('clears only its own namespace', () => {
+    const { base, storage } = dev();
+    base.setItem(PROGRESS_KEY, 'production');
+    base.setItem('some-other-app.session', 'not ours');
+    storage.setItem(PROGRESS_KEY, 'developer');
+    storage.setItem(STATS_KEY, 'developer');
+    storage.clear();
+
+    expect(storage.length).toBe(0);
+    expect(rawKeys(base).sort()).toEqual([PROGRESS_KEY, 'some-other-app.session'].sort());
+  });
+
+  it('enumerates store-facing names, scoped to the namespace', () => {
+    const { base, storage } = dev();
+    base.setItem(PROGRESS_KEY, 'production');
+    storage.setItem(STATS_KEY, 'developer');
+    storage.setItem(CUSTOM_KEY, 'developer');
+
+    expect(storage.length).toBe(2);
+    expect(rawKeys(storage).sort()).toEqual([STATS_KEY, CUSTOM_KEY].sort());
+  });
+
+  it('answers null for an index outside the namespace', () => {
+    const { storage } = dev();
+    storage.setItem(STATS_KEY, 'developer');
+    expect(storage.key(1)).toBeNull();
+    expect(storage.key(-1)).toBeNull();
+  });
+
+  it('maps distinct store keys to distinct underlying keys, and inverts', () => {
+    // Injectivity is the property that makes the developer namespace behave like the
+    // production one. A mapping that collapsed two store keys onto one would let two
+    // stores clobber each other in developer sessions and nowhere else, which is a
+    // divergence no store-level test would attribute to the adapter.
+    const keys = [...ALL_KEYS, TOUCH_SETTINGS_KEY];
+    const mapped = keys.map((key) => namespacedKey('developer', key));
+    expect(new Set(mapped).size).toBe(keys.length);
+
+    const { storage } = dev();
+    for (const key of keys) storage.setItem(key, key);
+    expect(rawKeys(storage).sort()).toEqual(keys.slice().sort());
+  });
+
+  it('lets a throwing base storage throw, so a store degrade path still runs', () => {
+    // The adapter must not catch. Every store wraps its own getItem/setItem and degrades
+    // (progress.ts, achievements.ts); swallowing here would turn Safari private mode into
+    // a silent no-op the stores never learn about.
+    const hostile = {
+      get length(): number {
+        throw new Error('nope');
+      },
+      key: (): string | null => {
+        throw new Error('nope');
+      },
+      getItem: (): string | null => {
+        throw new Error('nope');
+      },
+      setItem: (): void => {
+        throw new Error('nope');
+      },
+      removeItem: (): void => {
+        throw new Error('nope');
+      },
+      clear: (): void => {
+        throw new Error('nope');
+      },
+    } as Storage;
+    const storage = createNamespacedStorage(hostile, 'developer');
+
+    expect(() => storage.getItem(PROGRESS_KEY)).toThrow();
+    expect(() => storage.setItem(PROGRESS_KEY, '3')).toThrow();
+  });
+});
+
+describe('the developer namespace over the whole store inventory', () => {
+  it('covers every store in GameStores', () => {
+    // The inventory guard issue #245 asks for. Adding a store to `GameStores` and to
+    // `createStores` without adding a driver to STORE_WRITES fails here, which is what
+    // stops the namespace assertions below from quietly under-reporting.
+    const stores = createStores(createMemoryStorage());
+    expect(Object.keys(STORE_WRITES).slice().sort()).toEqual(Object.keys(stores).slice().sort());
+  });
+
+  it('leaves ZERO production keys behind when every store writes', () => {
+    const base = createMemoryStorage();
+    const storage = createNamespacedStorage(base, 'developer');
+    writeThroughEveryStore(createStores(storage));
+
+    const written = rawKeys(base);
+    expect(written.length).toBeGreaterThan(0);
+    for (const key of written) {
+      expect(key.startsWith(DEVELOPER_KEY_PREFIX), `${key} escaped the namespace`).toBe(true);
+    }
+    expect(written.slice().sort()).toEqual(
+      ALL_KEYS.map((key) => namespacedKey('developer', key)).slice().sort(),
+    );
+  });
+
+  it('does not disturb production data a previous session wrote', () => {
+    const base = createMemoryStorage();
+    for (const key of ALL_KEYS) base.setItem(key, `production:${key}`);
+    const before = ALL_KEYS.map((key) => base.getItem(key));
+
+    writeThroughEveryStore(createStores(createNamespacedStorage(base, 'developer')));
+
+    expect(ALL_KEYS.map((key) => base.getItem(key))).toEqual(before);
+  });
+
+  it('persists across a reload: a second store bundle reads the first one back', () => {
+    const base = createMemoryStorage();
+    const first = createStores(createNamespacedStorage(base, 'developer'));
+    first.progress.recordCleared(CAMPAIGN_LEVELS[1]);
+    const cleared = first.progress.highestCleared();
+    expect(cleared).toBeGreaterThan(0);
+
+    const second = createStores(createNamespacedStorage(base, 'developer'));
+    expect(second.progress.highestCleared()).toBe(cleared);
+  });
+
+  it.each(STORAGE_NAMESPACES)('degrades the same way in the %s namespace', (namespace) => {
+    const hostile = {
+      get length(): number {
+        throw new Error('nope');
+      },
+      key: (): string | null => {
+        throw new Error('nope');
+      },
+      getItem: (): string | null => {
+        throw new Error('nope');
+      },
+      setItem: (): void => {
+        throw new Error('nope');
+      },
+      removeItem: (): void => {
+        throw new Error('nope');
+      },
+      clear: (): void => {
+        throw new Error('nope');
+      },
+    } as Storage;
+    const stores = createStores(createNamespacedStorage(hostile, namespace as StorageNamespace));
+
     expect(stores.progress.highestCleared()).toBe(0);
     expect(() => writeThroughEveryStore(stores)).not.toThrow();
   });

@@ -3,7 +3,13 @@
 // from the sessions built and torn down beneath it.
 import { describe, it, expect } from 'vitest';
 import { createAppSettings, createBrowserAppSettings, type AppSettings } from './app-settings';
-import { createStores, createMemoryStorage } from './storage';
+import {
+  createMemoryStorage,
+  createNamespacedStorage,
+  createStores,
+  namespacedKey,
+  type StorageNamespace,
+} from './storage';
 import {
   NOT_PERSISTED_NOTICE,
   FUTURE_SCHEMA_NOTICE,
@@ -22,12 +28,14 @@ import {
 function build(opts: {
   storage?: Storage;
   availability?: 'persistent' | 'memory';
+  namespace?: StorageNamespace;
   caps?: Partial<PlatformCapabilities>;
   motion?: ReducedMotionSource;
 } = {}): AppSettings {
   const storage = opts.storage ?? createMemoryStorage();
   return createAppSettings({
     storage,
+    namespace: opts.namespace ?? 'production',
     stores: createStores(storage, opts.availability ?? 'persistent'),
     capabilities: createCapabilitySource(() => ({ ...NO_CAPABILITIES, ...opts.caps })),
     motion: opts.motion ?? createStaticReducedMotionSource(false),
@@ -60,6 +68,7 @@ describe('createAppSettings: ownership', () => {
     const stores = createStores(storage);
     const app = createAppSettings({
       storage,
+      namespace: 'production',
       stores,
       capabilities: createCapabilitySource(() => NO_CAPABILITIES),
       motion: createStaticReducedMotionSource(false),
@@ -202,5 +211,26 @@ describe('createBrowserAppSettings', () => {
     app.settings.setMuted(true);
     expect(app.settings.snapshot().audio.muted).toBe(true);
     app.dispose();
+  });
+});
+
+describe('createAppSettings: the storage namespace (issue #245)', () => {
+  it('reports the namespace it was built for', () => {
+    expect(build().namespace).toBe('production');
+    expect(build({ namespace: 'developer' }).namespace).toBe('developer');
+  });
+
+  it('exposes the SAME object the stores were built on, so save.ts stays in-namespace', () => {
+    // save.ts reads and writes RAW keys through `AppSettings.storage`. Handing it the base
+    // storage while the stores sit on the adapter would let a developer session export the
+    // real player's save and import back over it -- the one path that skips every store.
+    const base = createMemoryStorage();
+    const storage = createNamespacedStorage(base, 'developer');
+    const app = build({ storage, namespace: 'developer' });
+
+    expect(app.storage).toBe(storage);
+    app.storage.setItem(SETTINGS_KEY, 'through save.ts');
+    expect(base.getItem(namespacedKey('developer', SETTINGS_KEY))).toBe('through save.ts');
+    expect(base.getItem(SETTINGS_KEY)).toBeNull();
   });
 });
