@@ -5,7 +5,7 @@
 //
 // Every assertion below names the change that would make it fail; the negative-control
 // tests apply those changes to a temporary corpus and prove the guard goes red.
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -224,6 +224,21 @@ describe('the real index agrees with the corpus it indexes', () => {
     }
     for (const entry of model.historical) {
       expect(section(committed, 'Superseded and historical'), entry.path).toContain(entry.title);
+    }
+  });
+
+  it('resolves every link it emits', () => {
+    const index = renderDocumentIndex(ROOT);
+    const targets = [...index.matchAll(/\]\(([^)]+)\)/g)].map((match) => match[1]);
+
+    // Vacuity guard: a generator that emitted no links would pass the loop trivially.
+    expect(targets.length).toBeGreaterThanOrEqual(collectIndexModel(ROOT).total - 16);
+    for (const target of targets) {
+      expect(target, `${target} must be a repository-relative link`).not.toMatch(/^[a-z]+:/);
+      const resolved = path.resolve(path.dirname(INDEX), target);
+      expect(existsSync(resolved), `${target} is linked from the index but does not exist`).toBe(
+        true,
+      );
     }
   });
 
