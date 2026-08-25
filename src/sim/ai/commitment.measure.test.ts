@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { describe, it } from 'vitest';
 import { ARENAS, createWorldFor } from '../arena';
 import { step } from '../world';
@@ -29,10 +30,19 @@ import type { World } from '../world';
 // tables in constants.ts assume it") because its numbers are cited in constants.ts.
 // Adding per-tick sampling there would change its cost and invite editing it.
 //
-// Usage: flip describe.skip to describe, run
-//   npx vitest run src/sim/ai/commitment.measure.test.ts --testTimeout=3600000
-// and read the table off the console. Flip back before committing; the pinned CI
-// gates for AI health are pacifist.test.ts and the golden trace, not this.
+// Usage: set VITE_RUN_MEASURE=1, run
+//   VITE_RUN_MEASURE=1 npx vitest run src/sim/ai/commitment.measure.test.ts --testTimeout=3600000
+// and read the table off the console. No skip to flip back and no risk of a flipped
+// skip landing in a commit -- the harness stays gated behind the env var by default,
+// and CI's measure.yml workflow sets it deliberately for a chosen harness on demand.
+// The pinned CI gates for AI health remain pacifist.test.ts and the golden trace, not
+// this.
+//
+// Read via `import.meta.env`, NOT `process.env`: this file lives under src/sim/, and
+// purity.test.ts's FORBIDDEN_GLOBALS bans the bare token "process" anywhere in src/sim/
+// (it scans every .ts file there, test files included, for a real host clock that
+// walked past the guard once already -- see that file's header). `VITE_` is Vite's
+// required prefix for a shell env var to reach `import.meta.env` at all.
 //
 // Method (keep stable across sweeps):
 // 60 fixed seeds per (arena, player policy), the same wandering player as
@@ -266,7 +276,11 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
     + `\n  moving-tick occupancy (all kinds, n=${occTotal}): ${occRow}`;
 }
 
-describe.skip('decision-stability measurement (flip skip off to run locally)', () => {
+// Gate on an env var instead of describe.skip: hand-flipping the skip has nearly been
+// committed several times, since it is a one-word diff easy to miss in review.
+const measure = import.meta.env.VITE_RUN_MEASURE ? describe : describe.skip;
+
+measure('decision-stability measurement (set VITE_RUN_MEASURE=1 to run)', () => {
   it('reports per-kind movement reversal and aim-jump distributions', () => {
     const out: string[] = [];
     for (const arena of [0, 2]) {

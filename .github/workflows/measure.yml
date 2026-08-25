@@ -1,0 +1,100 @@
+name: Measurement harness
+
+# Manual only. These are the three describe.skip-turned-VITE_RUN_MEASURE-gated harnesses under
+# src/sim/ai/*.measure.test.ts -- multi-minute, multi-seed sweeps that produce a console
+# table for tuning AI constants, not a pass/fail gate (see each file's header comment).
+# Previously the only way to run one meant hand-flipping describe.skip to describe on a
+# dev machine and remembering to flip it back before committing -- a hazard that has
+# nearly landed several times. This workflow runs a chosen harness on a runner instead,
+# with its console output uploaded as an artifact, and touches nothing describe.skip did.
+on:
+  workflow_dispatch:
+    inputs:
+      harness:
+        description: Which measurement harness to run
+        required: true
+        type: choice
+        options:
+          - engagement
+          - commitment
+          - evasion
+      testTimeout:
+        description: >-
+          vitest --testTimeout in ms. Seed counts and sweep sizes are constants inside
+          each harness file, not exposed here -- they are not read from the environment
+          today, and adding that would be a new interface these harnesses don't have.
+        required: false
+        default: '3600000'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    # Generous: these are multi-minute sweeps by design (60 seeds x up to 3 arenas x a
+    # 3-minute in-sim cap each), and a runner is shared hardware, not this repo's known
+    # dev box. Comfortably above the harnesses' own documented --testTimeout=3600000.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # Resolve the choice input to its file path once, named steps below stay readable.
+      # Read via env rather than interpolating ${{ inputs.* }} directly into the script:
+      # a `choice` input can't carry shell metacharacters, but keeping every input out of
+      # the literal script text is the cheap habit that makes that true by construction
+      # rather than by the input type someone chose today.
+      - name: Resolve harness path
+        id: harness
+        env:
+          HARNESS: ${{ inputs.harness }}
+        run: |
+          case "$HARNESS" in
+            engagement) echo "path=src/sim/ai/engagement.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
+            commitment) echo "path=src/sim/ai/commitment.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
+            evasion) echo "path=src/sim/ai/evasion.measure.test.ts" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Unknown harness: $HARNESS" >&2; exit 1 ;;
+          esac
+
+      # Output goes straight to a file, not through a pipe -- a pipe to tee/grep can
+      # launder vitest's exit code, and this is the one step here whose exit code is the
+      # entire point of running it in CI rather than by hand.
+      # VITE_-prefixed, not RUN_MEASURE: the harnesses read this through
+      # `import.meta.env`, not `process.env` -- see the "Read via import.meta.env" note
+      # in each src/sim/ai/*.measure.test.ts header. A bare `process.env` reference from
+      # inside src/sim/ trips purity.test.ts's FORBIDDEN_GLOBALS ban on the token
+      # "process" anywhere under src/sim/, and only a VITE_-prefixed shell var reaches
+      # `import.meta.env` at all.
+      - name: Run measurement harness
+        env:
+          VITE_RUN_MEASURE: '1'
+          HARNESS_PATH: ${{ steps.harness.outputs.path }}
+          TEST_TIMEOUT: ${{ inputs.testTimeout }}
+        run: |
+          # `|| status=$?`, not a bare call followed by `status=$?`: a `run:` block's
+          # default shell is `bash -e {0}`, so a bare failing call exits the step on the
+          # spot and the `cat` below never runs -- on the very failure you most want to
+          # read, the log would reach the uploaded artifact but never the step's console.
+          # A command on the left of `||` is exempt from errexit, so this keeps both the
+          # console output and the exit code. Verified against `bash -e` directly: the
+          # bare form skips the `cat` and exits 1, this form prints and exits 1.
+          npx vitest run "$HARNESS_PATH" --testTimeout="$TEST_TIMEOUT" \
+            > measure-output.log 2>&1 || status=$?
+          cat measure-output.log
+          exit "${status:-0}"
+
+      - name: Upload console output
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: measure-${{ inputs.harness }}-output
+          path: measure-output.log
+          retention-days: 14

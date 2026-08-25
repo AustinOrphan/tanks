@@ -34,6 +34,31 @@ a repository dependency: install the version pinned in `.github/workflows/ci.yml
 Chromium browser before running the visual composite locally. Safari and the cross-OS/
 architecture engine matrix remain separate because Linux cannot reproduce them.
 
+### Constrained-machine escape hatches
+
+Two optional environment variables relax Vitest for a machine that cannot keep up. Both are
+unset by default and the repository ships Vitest's own behaviour; setting neither changes
+anything, locally or in CI.
+
+| Variable | Effect when set | Behaviour when unset |
+| --- | --- | --- |
+| `TANKS_TEST_MAX_FORKS` | Caps concurrent fork-pool workers | one worker per available core, uncapped |
+| `TANKS_TEST_TIMEOUT` | Per-test timeout in milliseconds | Vitest's 5000ms default |
+
+```sh
+TANKS_TEST_MAX_FORKS=2 TANKS_TEST_TIMEOUT=20000 npm test
+```
+
+Set them per machine — a shell profile, `direnv`, or the command itself — rather than
+committing either as a repository default. An unbounded fork pool on a 4-core/4GB box
+starves itself under this repository's heavier tests and reports "Test timed out in 5000ms"
+in files the change under test never touched, all of which pass in isolation. That is
+contention rather than a thin budget: measured with no contention on that same box, the
+heaviest individual tests finish in roughly 2.3–2.6 seconds against the 5000ms default.
+Raising the repository default would ship one machine's constraint to every contributor and
+to CI, where a hung test would take proportionally longer to fail and a genuine performance
+regression could stop tripping the timeout.
+
 The mutation phase also refuses to run when a file named by its manifest has uncommitted
 changes. Run `verify:full` against the clean candidate commit in a clean worktree. While
 editing, run the applicable quick, build, and subsystem checks first; do not discard or
