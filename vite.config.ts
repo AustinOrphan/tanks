@@ -1,7 +1,32 @@
 // From 'vitest/config', not 'vite': since vitest 3 / vite 8, vite's own defineConfig no
 // longer accepts a `test` block and tsc rejects it. Runtime behaviour is unchanged.
 import { defineConfig } from 'vitest/config';
-import { availableParallelism } from 'node:os';
+
+// Opt-in escape hatches for constrained machines. BOTH DEFAULT TO VITEST'S OWN BEHAVIOUR:
+// unset, this file changes nothing about how the suite runs, here or in CI.
+//
+// They exist because an unbounded fork pool on a 4-core/4GB box starves itself under this
+// repo's own heavy tests -- running versus-catalog-rules.test.ts, versus-variants.test.ts,
+// tools/baseline/safari.test.ts and tools/mutate/orchestrate.test.ts together produced five
+// "Test timed out in 5000ms" failures in files the change under test never touched, all
+// passing in isolation.
+//
+// Deliberately NOT repo defaults. Measured on that same box with no contention, the
+// heaviest individual tests (versus-catalog-rules' two catalog sweeps) finish in 2335ms and
+// 2598ms against the 5000ms default -- roughly half the budget, on the slowest hardware in
+// play. So 5000ms is not too thin for this suite; it is too thin only while the box is
+// oversubscribed. Baking a higher timeout into the repo would ship that machine's problem
+// to everyone and, worse, to CI, where a hung test would take four times as long to fail
+// and a real performance regression would stop tripping the timeout at all. Likewise a
+// cores/2 fork cap would halve local parallelism for a contributor whose machine was never
+// the problem.
+//
+// Set them per-machine instead (shell profile, direnv, or the command itself):
+//   TANKS_TEST_MAX_FORKS=2 TANKS_TEST_TIMEOUT=20000 npm test
+const maxForks = Number(process.env.TANKS_TEST_MAX_FORKS);
+const testTimeout = Number(process.env.TANKS_TEST_TIMEOUT);
+const capForks = Number.isFinite(maxForks) && maxForks > 0;
+const overrideTimeout = Number.isFinite(testTimeout) && testTimeout > 0;
 
 export default defineConfig({
   // Relative base, so the built bundle carries no assumption about where it is
@@ -23,29 +48,10 @@ export default defineConfig({
     // normal gate. tools/gl/ has no *.test.ts of its own -- its browser checks run under
     // "npm run test:gl", which vitest cannot host because they need a GL context.
     include: ['src/**/*.test.ts', 'tools/**/*.test.ts'],
-    // Vitest's default pool is 'forks' (confirmed in node_modules/vitest/dist/chunks/
-    // defaults.*.js -- the ThreadsOptions doc comment claiming threads is the default is
-    // stale), one child process per core with no cap. On a 4-core/4GB dev box that
-    // starved the CPU under its own heavy tests: running versus-catalog-rules.test.ts,
-    // versus-variants.test.ts, tools/baseline/safari.test.ts and
-    // tools/mutate/orchestrate.test.ts together produced FIVE "Test timed out in 5000ms"
-    // failures in files the change under test never touched, all of them passing in
-    // isolation. CI runners get dedicated cores and no local dev work competing for them,
-    // so only cap outside CI -- halving available cores leaves headroom for the OS and
-    // the main vitest process without serializing the suite.
-    poolOptions: process.env.CI
-      ? undefined
-      : { forks: { maxForks: Math.max(1, Math.floor(availableParallelism() / 2)) } },
-    // vitest's own default is 5000ms. Measured on this same 4-core box: the heaviest
-    // individual tests here (versus-catalog-rules' full-catalog sweep, orchestrate's
-    // real-subprocess probe) take ~2-4s in isolation and ~6s when several heavy files
-    // run concurrently under the pre-cap unbounded pool above -- that's what produced
-    // the five timeouts cited above. 20000ms clears that measured worst case with
-    // margin while the pool cap (above) removes most of the contention that caused it;
-    // it is NOT raised to the minutes-long budget the measurement harnesses need for
-    // their own multi-seed sweeps -- those pass --testTimeout explicitly (see
-    // src/sim/ai/*.measure.test.ts) so a global bump here can't hide an actual hang in
-    // the hundreds of ordinary unit tests that normally finish in single-digit ms.
-    testTimeout: 20000,
+    // Spread rather than assigned, so an unset variable leaves the key absent entirely and
+    // vitest applies its own default. Assigning `undefined` would not be equivalent for
+    // every option vitest reads with a presence check rather than a nullish one.
+    ...(capForks ? { poolOptions: { forks: { maxForks } } } : {}),
+    ...(overrideTimeout ? { testTimeout } : {}),
   },
 });
