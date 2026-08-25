@@ -963,5 +963,54 @@
     "tests": [
       "src/game/loop.test.ts"
     ]
+  },
+  {
+    "id": "ai-turret-deadband-guard-disabled",
+    "file": "src/sim/ai/index.ts",
+    "find": "  if (Math.abs(angleDelta(current, target)) < deadband) return current;",
+    "replace": "  if (Math.abs(angleDelta(current, target)) < deadband * 0) return current;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Neutralises issue #330's deadband at its source while keeping `deadband` READ, so a tsc error cannot stand in for a test failure (the same reason `preview-drops-the-rotate-buttons` keeps its dropped parameter live). With `deadband * 0` the skip branch can never fire and turretSlew degenerates to plain slewAngle, so the AI turret chases every fractional recompute of AiDecision.turretAngle again -- the pre-#330 shimmer, measured on that code at sub-1.15-degree turret rotations on 22.4% (brown) / 19.0% (grey) / 38.9% (teal) of live ticks. Killed by dispatch.test.ts, 3 of 35, and the three failing cases were read back by name: the pure-helper 'does not move at all when the error is smaller than the deadband', its 'is symmetric in sign' companion (whose inside-the-deadband assertion is a freeze too), and the stepAi case 'a stationary AI target: an error inside AI_TURRET_DEADBAND produces no rotation at all'. The count is scoped to the declared file and is NOT re-verified repo-wide: vitest's own dependency graph relates 64 test files to src/sim/ai/index.ts.",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ]
+  },
+  {
+    "id": "ai-turret-deadband-unsigned-error",
+    "file": "src/sim/ai/index.ts",
+    "find": "  if (Math.abs(angleDelta(current, target)) < deadband) return current;",
+    "replace": "  if (angleDelta(current, target) < deadband) return current;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The deadband is on the MAGNITUDE of the aim error, not on its signed value. angleDelta returns a normalised `target - current`, so a target behind the current angle yields a negative delta and any negative number is below a positive deadband: dropping Math.abs freezes the turret for EVERY negative-direction correction however large, leaving an AI gun that can only ever turn one way. This entry exists because that was not a hypothetical here. Measured against dispatch.test.ts as #330 first shipped it, this mutation SURVIVED at 0 of 34 -- every deadband fixture in that file, and world.test.ts's companion player-turret case, approached its target from below, so nothing there could see the sign. The mirrored 'is symmetric in sign: a negative-direction error outside the deadband slews too' case added alongside this entry is what kills it now: 1 of 35, read back by name, and it is the only failure in the file. Everywhere else the mutation is caught only incidentally, by fixtures that happen to need a negative-direction slew -- measured KILLED by olive.test.ts (1 of 5, 'fires AGAIN once the first rocket dies: the cap RELEASES through the full pipeline') and by pacifist.test.ts (1 of 4, 'does not hand the player a free win by destroying itself'), and measured SURVIVES by reaction.test.ts (0 of 6) and by world/determinism/step-integration together (0 of 36). That is 7 of the 64 test files vitest's dependency graph relates to src/sim/ai/index.ts; the other 57 were not probed.",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ]
+  },
+  {
+    "id": "ai-turret-deadband-not-wired-into-stepai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    tank.turretAngle = turretSlew(tank.turretAngle, decision.turretAngle, AI_TURRET_TURN_RATE * DT, AI_TURRET_DEADBAND);",
+    "replace": "    tank.turretAngle = turretSlew(tank.turretAngle, decision.turretAngle, AI_TURRET_TURN_RATE * DT, AI_TURRET_DEADBAND * 0);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The WIRING, which is a different property from the helper's own logic: turretSlew stays correct but stepAi hands it a zero deadband, so the AI turret shimmers exactly as it did pre-#330 while every pure-helper unit test in dispatch.test.ts keeps passing -- they pass their own literal deadband of 0.02 and never touch the constant. Kept separate from `ai-turret-deadband-guard-disabled` for exactly that reason: this one is killed by the integration case and nothing else, 1 of 35 in dispatch.test.ts, read back by name as 'a stationary AI target: an error inside AI_TURRET_DEADBAND produces no rotation at all'. `AI_TURRET_DEADBAND * 0` rather than a bare `0` so the import stays used and a tsc error cannot stand in for a test failure. Scoped count; not re-verified repo-wide.",
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ]
+  },
+  {
+    "id": "ai-turret-deadband-degrees-not-radians",
+    "file": "src/sim/constants.ts",
+    "find": "export const AI_TURRET_DEADBAND = (0.25 * Math.PI) / 180;",
+    "replace": "export const AI_TURRET_DEADBAND = 0.25;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The UNITS. AI_TURRET_DEADBAND is written `(0.25 * Math.PI) / 180` because angleDelta and slewAngle both work in radians; reading the 0.25 as radians instead makes the deadband 14.3 degrees, about 6x one tick's AI slew budget (AI_TURRET_TURN_RATE 2.5 rad/s * DT = 0.0417 rad), which stops being a shimmer filter and starts freezing real tracking. This is the negative control for constants.test.ts's `expect(AI_TURRET_DEADBAND).toBeLessThan(AI_TURRET_TURN_RATE * DT)`, an assertion that otherwise has nothing proving it can fail. Killed 2 of 51 across the two declared files, both read back by name: constants.test.ts's own 'AI_TURRET_DEADBAND (issue #330)' case, and -- because dispatch.test.ts's stepAi fixtures are expressed as multiples of the constant and so move with it -- 'the same target just outside AI_TURRET_DEADBAND still slews normally', whose 1.5x offset (0.375 rad mutated) now exceeds one tick's budget, so the turret no longer reaches the decision's angle in that tick. world.test.ts is deliberately NOT in scope: measured on its own it SURVIVES this mutation at 0 of 10, because the player's much larger budget (PLAYER_TURRET_TURN_RATE 8.0 rad/s * DT = 0.133 rad) still closes its mutated 0.125-rad fixture gap in one tick. Scoped counts only -- a constants.ts mutation also moves tests far outside these two files, and that was not measured.",
+    "tests": [
+      "src/sim/constants.test.ts",
+      "src/sim/ai/dispatch.test.ts"
+    ]
   }
 ]

@@ -390,6 +390,27 @@ describe('stepAi', () => {
         expect(turretSlew(0, 0.05, 0.1, 0.02)).toBe(0.05);
       });
 
+      // Every case above approaches its target from BELOW (angleDelta > 0), and so does
+      // every stepAi fixture in this describe and world.test.ts's companion. The deadband
+      // is on the MAGNITUDE of the error, not on its signed value, and one-sided fixtures
+      // cannot see that difference: dropping turretSlew's `Math.abs` -- which freezes the
+      // turret for EVERY negative-direction correction, however large, so an AI gun could
+      // only ever turn one way -- passed all 34 of this file's other tests when measured
+      // (manifest entry `ai-turret-deadband-unsigned-error`).
+      it('is symmetric in sign: a negative-direction error outside the deadband slews too', () => {
+        // Mirror of 'closes the gap in one tick': target below current, gap inside the
+        // tick budget. Without Math.abs this returns 0.05 (frozen) instead of 0.
+        expect(turretSlew(0.05, 0, 0.1, 0.02)).toBe(0);
+        // Mirror of the ordinary-rate case: a large negative-direction error must still
+        // step by exactly maxDelta toward the target rather than freeze.
+        const maxDelta = AI_TURRET_TURN_RATE * DT;
+        expect(turretSlew(0, -3.0, maxDelta, 0.02)).toBe(slewAngle(0, -3.0, maxDelta));
+        expect(turretSlew(0, -3.0, maxDelta, 0.02)).toBeCloseTo(-maxDelta, 12);
+        // ...and the deadband itself still applies on this side: an error INSIDE it
+        // freezes here exactly as it does in the positive direction above.
+        expect(turretSlew(0.01, 0, 0.1, 0.02)).toBe(0.01);
+      });
+
       it('negative control: with deadband 0, behaviour is byte-identical to slewAngle for every case above', () => {
         // abs(delta) < 0 is never true, so the skip branch can never fire: deadband=0
         // must fall through to slewAngle on every call, matching pre-#330 behaviour
