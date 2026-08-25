@@ -1025,5 +1025,54 @@
       "src/sim/coop-attempts.test.ts"
     ],
     "why": "resetArena snaps every turret to its spawn angle; leaving the angular velocity behind opens the new round with a gun already swinging for no reason, which accelSlew then has to brake before it can track anything. The self-assignment keeps the field read so this is a behaviour change rather than a type error."
+  },
+  {
+    "id": "ai-aim-hold-no-hold",
+    "file": "src/sim/ai/aim-hold.ts",
+    "find": "    return { angle: held, nextHeld: held, nextHeldTicks: ticks - 1 };",
+    "replace": "    return { angle: solution, nextHeld: held, nextHeldTicks: ticks - 1 };",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/sim/ai/aim-hold.test.ts",
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "The hold IS issue #344's mechanism: while a span is live and the fresh solution has not drifted past AI_AIM_BREAK, the turret is sent to the angle the tank already committed to. Letting the fresh solution through restores exactly the per-tick re-solve the issue reports -- measured before the layer existed, the turret was perfectly still on only 42.53% of live ticks for teal and 72.93% for brown (arena1/pacifist, 60 seeds x 2 arenas x 2 player policies), micro-correcting on the rest at 60Hz."
+  },
+  {
+    "id": "ai-aim-hold-raw-break",
+    "file": "src/sim/ai/aim-hold.ts",
+    "find": "Math.abs(angleDelta(held, solution)) < breakRad",
+    "replace": "Math.abs(held - solution) < breakRad",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/aim-hold.test.ts"
+    ],
+    "why": "The break test must measure the SHORTEST arc. A raw subtraction reads an angle a hair under +pi and one a hair over -pi as most of a full turn rather than 0.06 rad apart, so every tank tracking through due west would break its hold every tick and the layer would silently stop working in exactly one bearing. angleDelta is the same helper slewAngle uses, so the two cannot disagree about what 'close' means."
+  },
+  {
+    "id": "ai-aim-hold-no-countdown",
+    "file": "src/sim/ai/aim-hold.ts",
+    "find": "nextHeldTicks: ticks - 1 };",
+    "replace": "nextHeldTicks: ticks };",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/aim-hold.test.ts"
+    ],
+    "why": "Without the decrement the span never expires: a hold armed once is held for the rest of the round, so the tank stops re-solving entirely rather than dwelling and re-aiming. That is a far larger behaviour change than the one measured, and it would read as an AI that has stopped tracking rather than one that has stopped twitching."
+  },
+  {
+    "id": "ai-aim-hold-not-wired-into-decideai",
+    "file": "src/sim/ai/index.ts",
+    "find": "    turretAngle: aim.angle,",
+    "replace": "    turretAngle: decision.turretAngle,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "Pins the WIRING, not the helper: holdAimFor can be correct and fully unit-tested while decideAi quietly discards its result, which would leave every unit test in aim-hold.test.ts green and the shipped game completely unchanged. The write-back pair is deliberately left intact here so the mutation is a pure 'result ignored', not a type error."
   }
 ]
