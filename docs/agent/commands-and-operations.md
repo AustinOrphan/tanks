@@ -80,6 +80,7 @@ Specialized commands remain directly available:
 
 ```sh
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
+npm run capture -- --list                                  # list reproducible media recipes
 npm run mutate -- --only <id>                              # run one mutation entry
 npm run test:gl                                            # renderer construction checks
 npm run trace:browser -- --all                              # golden trace in three Playwright engines
@@ -87,6 +88,17 @@ npm run trace:safari                                       # real Safari on supp
 npm run portability                                        # inspect an existing dist/
 npm run visual                                             # inspect an existing dist/ in Chromium
 ```
+
+`npm run capture` (`tools/capture/`) wraps the gallery's deterministic moment path in a
+versioned, reviewed recipe contract. `npm run capture -- --recipe gallery.fire.still`
+publishes `capture.png` plus `capture.json`; `npm run capture -- --recipe
+gallery.ai-tracking.normal` publishes a timing-faithful H.264 MP4, a convenience GIF, and
+the manifest. Output defaults under ignored `artifacts/capture/`, refuses collisions, and
+can be redirected with a safe relative `--out` path. Temporary numbered PNGs are removed
+unless `--retain-frames` is explicit. The MP4 is timing truth; GIF delay precision cannot
+express exact 60 fps. See [`tools/capture/README.md`](../../tools/capture/README.md) for
+prerequisites, registry/manifest fields, safety, and the cross-environment determinism
+boundary.
 
 `npm run issues:audit` checks every open issue for the repository's required size, risk,
 area, impact, horizon, readiness, and active-queue invariants. It infers the repository from
@@ -112,12 +124,12 @@ to catch a sub-second moment (a shell leaving the muzzle) that a still would mis
 through the same `setPlayerStyle` call `--skin`/`--hull`/`--accent` use. `--scene
 <moment>` swaps the posed gallery for one of `tools/gallery/moments.ts`'s scripted
 timelines (`fire`, `destroyed`, `respawn`, `ricochet`, `wall-break`, `mine-cycle`,
-`drive`, `pivot`, `traverse`, `trail-stop`, `trail-cross`, `trail-skins`) — a moment is
+`drive`, `pivot`, `traverse`, `trail-stop`, `trail-cross`, `trail-skins`, `ai-tracking`) — a moment is
 deterministic and scripted end to end, so its frame count comes from the moment itself;
 `--frames` is rejected outright for it. A moment composes with `--skin`/`--hull`/
-`--accent`, which dress `world.tanks[0]` only — every other slot renders the roster
-default, so a two-tank moment (`trail-cross`, `trail-skins`) already contrasts by
-construction. `--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a
+`--accent`, which dress controlled slot 0, while `--spawn-anim` is applied to every
+controlled slot so a respawning tank does not depend on which slot the moment uses.
+`--elements`/`--reach`/`--timer`/`--fill` are gallery-composition flags a
 moment scene does not consume either, but they are dropped silently rather than rejected.
 See `tools/gallery/`.
 

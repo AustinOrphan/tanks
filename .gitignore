@@ -9,6 +9,7 @@ dist
 # generated renders -- visual gate output and gallery stills
 visual-out/
 gallery-out/
+/artifacts/capture/
 *.gif
 audio-out/
 

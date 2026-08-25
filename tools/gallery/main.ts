@@ -62,8 +62,14 @@ const g = moment
 
 // The runner calls this per frame and screenshots between calls, so no pixels ever cross
 // the CDP bridge -- returning frames as arrays ran node out of memory on a 4GB box.
-type W2 = typeof window & { GALLERY_DRAW: (a: number, al: number) => void; GALLERY_FRAMES: number; GALLERY_READY: boolean };
+type W2 = typeof window & {
+  GALLERY_DRAW: (a: number, al: number) => void;
+  GALLERY_FRAMES: number;
+  GALLERY_READY: boolean;
+  GALLERY_REPORT: unknown | null;
+};
 (window as W2).GALLERY_DRAW = (age, alpha) => g.draw(age, alpha);
 (window as W2).GALLERY_FRAMES = g.frames;
+(window as W2).GALLERY_REPORT = 'captureReport' in g ? g.captureReport : null;
 g.draw(Number(params.get('age') ?? 0), Number(params.get('alpha') ?? 0));
 (window as W2).GALLERY_READY = true;

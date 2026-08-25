@@ -46,12 +46,14 @@ npm ci                # install from package-lock.json
 npm run dev           # Vite development server
 npm run verify:quick  # typecheck + Vitest suite (`npm test` is an alias)
 npm run verify:build  # production bundle + subpath-portability check
+npm run capture -- --list  # list reproducible screenshot/clip recipes
 npm run preview       # serve the built bundle
 ```
 
 The atomic `npm run typecheck`, `npm run test:unit`, and `npm run build` commands each
 perform only the named operation. See the [verification command reference](docs/agent/commands-and-operations.md#verification-command-surface)
 for full, visual, and subsystem-specific checks.
+Reproducible local review media is documented in the [capture recipe reference](tools/capture/README.md).
 
 ## Architecture
 

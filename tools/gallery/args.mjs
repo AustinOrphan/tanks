@@ -31,6 +31,10 @@ export const DEFAULTS = {
   out: 'gallery-out',
   w: 640,
   h: 480,
+  /** Browser device scale factor. The canvas remains w x h CSS pixels. */
+  dpr: 1,
+  /** Initial timeline tick for a still. Animated capture still starts at tick 0. */
+  age: 0,
   fps: 20,
   subdiv: 3,
   anim: false,
@@ -76,6 +80,8 @@ export const DEFAULTS = {
    * ticks long, so an animated SKIN had no timeline to scroll along.
    */
   frames: null,
+  /** Optional basename for an internal, machine-readable producer report. */
+  report: null,
 };
 
 /**
@@ -121,6 +127,12 @@ export const MOMENT_IDS = [
   'ai-tracking',
 ];
 
+/**
+ * The camera names exported by subjects.ts. This plain-node module cannot import the
+ * TypeScript value directly, so args.test.ts pins the two lists in both directions.
+ */
+export const GALLERY_VIEW_IDS = ['game', 'close', 'low', 'top', 'headon', 'behind', 'below'];
+
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 const BOOLISH = ['anim', 'reach', 'timer', 'fill'];
@@ -145,7 +157,7 @@ export function parseValues(raw) {
     .map((v) => v.split('|').map((x) => x.trim()).filter(Boolean))
     .filter((v) => v.length > 0);
 }
-const NUMERIC = ['w', 'h', 'fps', 'subdiv', 'settle', 'slowmo', 'burst', 'frames'];
+const NUMERIC = ['w', 'h', 'dpr', 'age', 'fps', 'subdiv', 'settle', 'slowmo', 'burst', 'frames'];
 
 export function parseArgs(argv) {
   const out = { ...DEFAULTS, values: [] };
@@ -186,6 +198,32 @@ export function parseArgs(argv) {
     // setPlayerStyle's 5th argument and read as SPAWN_ANIMATORS[spawnAnim] undefined deep
     // inside the page, behind a full browser launch.
     throw new Error(`--spawn-anim must be one of ${SPAWN_ANIM_IDS.join(', ')}, got '${out.spawnAnim}'`);
+  }
+  if (!GALLERY_VIEW_IDS.includes(out.view)) {
+    throw new Error(`--view must be one of ${GALLERY_VIEW_IDS.join(', ')}, got '${out.view}'`);
+  }
+  for (const key of ['w', 'h']) {
+    if (!Number.isInteger(out[key]) || out[key] < 1) {
+      throw new Error(`--${key} must be a positive whole number, got ${out[key]}`);
+    }
+  }
+  if (!Number.isFinite(out.dpr) || out.dpr <= 0 || out.dpr > 4) {
+    throw new Error(`--dpr must be in (0, 4], got ${out.dpr}`);
+  }
+  if (!Number.isInteger(out.age) || out.age < 0) {
+    throw new Error(`--age must be a non-negative whole tick, got ${out.age}`);
+  }
+  if (out.anim && out.age !== 0) {
+    throw new Error('--age only selects a still frame; animated capture always starts at tick 0');
+  }
+  if (out.report !== null && !/^[a-z0-9][a-z0-9._-]*\.json$/i.test(out.report)) {
+    throw new Error(`--report must be a safe JSON basename, got '${out.report}'`);
+  }
+  if (out.report !== null && !MOMENT_IDS.includes(out.scene)) {
+    throw new Error('--report is only available for a deterministic moment scene');
+  }
+  if (out.report !== null && out.sweep) {
+    throw new Error('--report cannot be combined with --sweep');
   }
   for (const key of ['hull', 'accent']) {
     if (out[key] !== null && !HEX.test(out[key])) {

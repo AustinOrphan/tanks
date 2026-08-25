@@ -1,0 +1,125 @@
+[
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "gallery.fire.still",
+    "producer": {
+      "kind": "moment",
+      "scenarioId": "fire"
+    },
+    "fixture": {
+      "id": "gallery.fire",
+      "seed": 7
+    },
+    "variant": {
+      "view": "game",
+      "skin": "solid",
+      "hull": null,
+      "accent": null,
+      "spawnAnimation": "warp"
+    },
+    "viewport": {
+      "width": 640,
+      "height": 480,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 10,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [
+        {
+          "type": "fire",
+          "tick": 10,
+          "count": 1
+        }
+      ],
+      "allowUnexpectedEvents": false
+    },
+    "title": "Gallery fire event still",
+    "description": "The existing deterministic fire moment at its pinned fire-event tick, rendered through the production entity and particle path.",
+    "altText": "A blue toy-like tank firing a shell across the felt arena floor.",
+    "timeoutMs": 120000,
+    "outputBudgetBytes": 5000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "gallery.ai-tracking.normal",
+    "producer": {
+      "kind": "moment",
+      "scenarioId": "ai-tracking"
+    },
+    "fixture": {
+      "id": "gallery.ai-tracking",
+      "seed": 7
+    },
+    "variant": {
+      "view": "game",
+      "skin": "solid",
+      "hull": null,
+      "accent": null,
+      "spawnAnimation": "warp"
+    },
+    "viewport": {
+      "width": 640,
+      "height": 480,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "ticks",
+      "startTick": 0,
+      "endTick": "scenario",
+      "step": 1,
+      "subdivisions": 1,
+      "tickRate": 60
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 60
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      },
+      {
+        "format": "gif",
+        "filename": "preview.gif"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": false
+    },
+    "title": "Gallery AI tracking at normal speed",
+    "description": "A stationary brown tank tracks a moving player across the existing deterministic gallery moment at normal simulation speed. This is generic tracking evidence, not evidence of turret shimmer or a deadband choice.",
+    "altText": "A stationary brown tank rotates its turret to follow a blue tank driving laterally across the felt arena.",
+    "timeoutMs": 180000,
+    "outputBudgetBytes": 20000000
+  }
+]
