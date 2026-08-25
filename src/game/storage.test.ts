@@ -12,6 +12,7 @@ import {
   type StorageNamespace,
 } from './storage';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
+import { exportSave, importSave, SAVE_FORMAT, SAVE_VERSION } from './save';
 import { PROGRESS_KEY } from './progress';
 import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
@@ -424,5 +425,65 @@ describe('the developer namespace over the whole store inventory', () => {
 
     expect(stores.progress.highestCleared()).toBe(0);
     expect(() => writeThroughEveryStore(stores)).not.toThrow();
+  });
+});
+
+describe('a developer session cannot reach production data', () => {
+  /** run.ts deletes this at construction; it is not exported, so the control below pins it. */
+  const LEGACY_RUN_KEY = 'tanks.run.v1';
+
+  it('leaves a production legacy run record alone -- and the control proves the key is live', () => {
+    // Control first: on the BASE storage, constructing the stores DOES delete it. Without
+    // this the developer assertion below would keep passing if run.ts renamed the key, and
+    // would then be pinning nothing.
+    const control = createMemoryStorage();
+    control.setItem(LEGACY_RUN_KEY, 'a real run record');
+    createStores(control);
+    expect(control.getItem(LEGACY_RUN_KEY)).toBeNull();
+
+    const base = createMemoryStorage();
+    base.setItem(LEGACY_RUN_KEY, 'a real run record');
+    createStores(createNamespacedStorage(base, 'developer'));
+    expect(base.getItem(LEGACY_RUN_KEY)).toBe('a real run record');
+  });
+
+  it('neither adopts nor deletes the production legacy touch settings', () => {
+    const legacy = JSON.stringify({ scheme: 'point', fireMode: 'tap', haptics: false });
+
+    // Control: on the base storage the settings store migrates and then clears the key.
+    const control = createMemoryStorage();
+    control.setItem(TOUCH_SETTINGS_KEY, legacy);
+    expect(createStores(control).settings.snapshot().input.touchScheme).toBe('point');
+    expect(control.getItem(TOUCH_SETTINGS_KEY)).toBeNull();
+
+    const base = createMemoryStorage();
+    base.setItem(TOUCH_SETTINGS_KEY, legacy);
+    const stores = createStores(createNamespacedStorage(base, 'developer'));
+    expect(stores.settings.snapshot().input.touchScheme).not.toBe('point');
+    expect(base.getItem(TOUCH_SETTINGS_KEY)).toBe(legacy);
+  });
+
+  it('exports and imports through save.ts inside its own namespace', () => {
+    // save.ts is the one path that reads and writes raw keys without going through a
+    // store. It gets `AppSettings.storage`, so it inherits the namespace -- this pins that
+    // the adapter is enough, with no save.ts change.
+    const base = createMemoryStorage();
+    for (const key of ALL_KEYS) base.setItem(key, `production:${key}`);
+    const storage = createNamespacedStorage(base, 'developer');
+    writeThroughEveryStore(createStores(storage));
+
+    expect(exportSave(storage)).not.toContain('production:');
+    expect(exportSave(base)).toContain('production:');
+
+    importSave(
+      storage,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: SAVE_VERSION,
+        keys: { [PROGRESS_KEY]: 'imported' },
+      }),
+    );
+    expect(storage.getItem(PROGRESS_KEY)).toBe('imported');
+    expect(base.getItem(PROGRESS_KEY)).toBe(`production:${PROGRESS_KEY}`);
   });
 });
