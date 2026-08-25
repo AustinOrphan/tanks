@@ -14,9 +14,22 @@
  *   npm run gallery -- --elements tank --skin flow --anim --frames 90 --out flow.gif
  *   npm run gallery -- --scene ai-tracking --anim --sweep TURRET_R --values 0.2,0.55 --out cmp.gif
  *
- * The last line is --anim + --sweep together: one labelled animated gif per swept
+ *   npm run gallery -- --scene ai-tracking --anim --subdiv 1 --fps 60 --out clip.gif
+ *
+ * The --sweep line is --anim + --sweep together: one labelled animated gif per swept
  * variant, composed side by side into a single animated grid (see the assembly
  * section's `animated && shots.length > 1` branch).
+ *
+ * NORMAL-SPEED PLAYBACK needs `--subdiv 1 --fps 60`, as the last line shows, and the
+ * defaults deliberately do NOT give it. `--subdiv` (default 3) renders three interpolated
+ * frames per sim tick and `--fps` (default 20) plays them back at 20, so a moment plays at
+ * 20/3 ticks per second against the sim's 60 -- nine times slower than real time, which is
+ * what you want for inspecting a shape and wrong for judging whether something READS as
+ * smooth. MEASURED on the 47-tick `ai-tracking` moment (47 ticks / 60Hz = 0.783s of game
+ * time): the defaults produce 141 frames playing over 7.05s, and `--subdiv 1 --fps 60`
+ * produces 47 frames over 0.790s -- within 0.9% of real time. The residual is GIF's
+ * centisecond frame-delay quantisation, which cannot express 60fps exactly; it is a
+ * property of the container, not of the capture.
  *
  * --skin/--hull/--accent dress the PLAYER tank through the game's own setPlayerStyle.
  * --frames gives an animated skin a timeline: every shipped element is static or a few

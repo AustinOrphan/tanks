@@ -736,6 +736,19 @@ export const MOMENTS: Record<string, MomentDef> = {
    * the ONE thing #335 identifies as missing tooling for: a capture where a
    * stationary AI's turret has a moving target to track at all.
    *
+   * DO NOT reach for this moment to demonstrate a turret DEADBAND, and do not read a
+   * flat before/after here as evidence a deadband does nothing. MEASURED against issue
+   * #330's deadband (0.25 degrees), sweeping AI_TURRET_DEADBAND over 0 and 0.25 on a
+   * tree that carried both: 46 of the 47 rendered frames came out BYTE-IDENTICAL, the
+   * single exception being frame 29. The reason is in the tick-by-tick note below --
+   * the turret here slews at the 2.39deg/tick turn-rate cap on essentially every tick,
+   * an order of magnitude above any deadband worth shipping, so the guard is inert
+   * except right at the closest-approach turnaround (~tick 28), where the turret
+   * reverses and the error passes through zero. Demonstrating shimmer needs the
+   * OPPOSITE regime: a target whose bearing changes by well UNDER a degree per tick,
+   * i.e. slow or distant enough that the turret makes small corrections instead of
+   * saturating. That scenario is not authored yet.
+   *
    * The player drives due east at a fixed y = 2, passing almost directly over the
    * AI at x = 0 -- "laterally across the AI's field of view" -- so the turret sweeps
    * through a wide arc rather than a narrow one, and REVERSES direction partway
