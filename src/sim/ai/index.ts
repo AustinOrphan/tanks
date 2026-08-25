@@ -1,6 +1,5 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
-import { slewAngle } from '../types';
 import type { SimEvent } from '../events';
 import type { AiDecision } from './decision';
 import { brownDecision } from './brown';
@@ -104,8 +103,6 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // therefore about COVER BREAKS in live play, not round openings.
     tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
-    // Turret turns at a finite rate rather than snapping instantly (slewAngle, types.ts)
-    // -- see AI_TURRET_TURN_RATE's comment in constants.ts (a primary difficulty knob).
     // Turret turns at a finite rate AND a finite acceleration (issue #347): accelSlew
     // carries the angular velocity on the tank, so the gun ramps up, tracks, and eases back
     // down instead of only ever being stopped or travelling at the cap. See
