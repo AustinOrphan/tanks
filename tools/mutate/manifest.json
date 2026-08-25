@@ -1146,5 +1146,29 @@
       "src/game/storage.test.ts"
     ],
     "why": "Pins the SELECTOR, not the adapter: a correct, fully covered createNamespacedStorage is worth nothing if no session ever asks for the developer namespace. Under this mutation `?dev=1` persists into the real player's keys exactly as it did before issue #245, and every adapter case above still passes because the adapter itself is untouched -- measured, 3 of 40, and the three are the developer rows of selectStorageNamespace's table (`?dev=1`, `?dev`, `?dev=1&aimRay=1`). The ternary keeps parseDeveloperMode's result and `search` read so the mutation compiles under the repo's noUnusedLocals/noUnusedParameters (the same device as preview-drops-the-rotate-buttons); measured at `tsc --noEmit` exit 0 under the mutation. Directional, and deliberately so: this mutation under-triggers, so the production rows and the 'is the `dev` GATE, not any individual flag' case cannot see it, and no entry in this manifest currently mutates the selector in the over-triggering direction."
+  },
+  {
+    "id": "storage-namespace-always-selects-developer",
+    "file": "src/game/storage.ts",
+    "find": "  return parseDeveloperMode(search) ? 'developer' : 'production';",
+    "replace": "  return parseDeveloperMode(search) ? 'developer' : 'developer';",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "The OVER-triggering half of the selector, which `storage-namespace-never-selects-developer` deliberately cannot see. This is the more damaging direction of the two: an ordinary URL would start persisting into `tanks.dev.*`, so the player's campaign, stats and achievements would still be on disk but invisible to the game -- indistinguishable from a wiped save, and silent. Killed by the production rows of selectStorageNamespace's table and by the `dev` GATE case, none of which the under-triggering entry reaches."
+  },
+  {
+    "id": "storage-developer-reads-fall-through-to-production",
+    "file": "src/game/storage.ts",
+    "find": "    getItem(key: string): string | null {\n      return base.getItem(underlying(key));\n    },",
+    "replace": "    getItem(key: string): string | null {\n      return base.getItem(String(key));\n    },",
+    "expect": "killed",
+    "expectFailures": 6,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "Isolation has a read half as well as a write half, and `storage-developer-writes-land-on-production-keys` only pins the write. Under this mutation a developer session WRITES to `tanks.dev.*` but READS the player's real keys, so it adopts the production campaign, the production legacy touch settings, and exports production data through save.ts -- while every write-side assertion still passes. `String(key)` rather than `key` so the mutation keeps the argument coercion the adapter does and differs only in the namespace mapping."
   }
 ]
