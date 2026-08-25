@@ -67,8 +67,10 @@ and specification files that predate this contract. An unchanged file in that sn
 temporarily accepted without metadata. A new file or any changed legacy file must add a
 valid header; never update a baseline hash to exempt new work.
 
-Issue #264 will classify the remaining corpus. This contract does not move, delete, index,
-or make current-direction judgments about those documents.
+Issue #264 classified the remaining corpus, so every plan, specification, and backlog topic
+now carries a header; `npm run docs:check` reports the split. This contract still does not
+move or delete documents. Current-direction judgments belong to each document's own `status`
+field, which `docs/README.md` reads.
 
 ## Research inventory
 
@@ -80,8 +82,17 @@ boundary), a one-line `relevance` statement, and evidence-backed `related-issues
 `related-prs`, and `related-docs`. The same `npm run docs:check` guard fails when a
 research document is added, moved, or removed without updating the inventory.
 
+## The generated index
+
+`docs/README.md` is generated from these headers and from the research inventory by
+`tools/docs/index.mjs`. It groups documents by `status`, so a document reaches the right
+section of the index by declaring the right status, never by being listed somewhere. Run
+`npm run docs:index` after any change that moves a row: adding or deleting a document,
+changing its `status`, `scope`, title, or its implementation and supersession links.
+
 ## Author workflow
 
-Run `npm run docs:check` after adding or editing a plan or specification. The complete unit
-suite runs the same repository guard, so `npm run verify:quick` and both required CI verify
-jobs reject missing, invalid, or contradictory metadata.
+Run `npm run docs:check` after adding or editing a plan or specification. It fails when the
+committed index disagrees with the generator, and `npm run docs:index` is the fix. The
+complete unit suite runs the same repository guard, so `npm run verify:quick` and both
+required CI verify jobs reject missing, invalid, or contradictory metadata.

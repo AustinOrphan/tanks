@@ -19,6 +19,8 @@ const AGENTS = fileURLToPath(new URL('../AGENTS.md', import.meta.url));
 const BACKLOG = fileURLToPath(new URL('../docs/superpowers/backlog.md', import.meta.url));
 const RULES_DIR = fileURLToPath(new URL('../.claude/rules/', import.meta.url));
 const CONTEXT_BUDGET = fileURLToPath(new URL('../docs/agent/context-budget.md', import.meta.url));
+const DOCUMENT_INDEX = fileURLToPath(new URL('../docs/README.md', import.meta.url));
+const AGENT_REFERENCE = fileURLToPath(new URL('../docs/agent/README.md', import.meta.url));
 const TESTING_AND_REVIEW = fileURLToPath(new URL('../docs/agent/testing-and-review.md', import.meta.url));
 
 const MAX_ROOT_LINES = 200;
@@ -230,6 +232,22 @@ describe('the instruction files', () => {
 
     expect(riskTierHeadings(missingHigh)).not.toEqual(REQUIRED_RISK_TIERS);
     expect(riskTierHeadings(duplicateLow)).not.toEqual(REQUIRED_RISK_TIERS);
+  });
+
+  it('routes to the generated document index by link, never by import', () => {
+    const root = readFileSync(CLAUDE, 'utf8');
+
+    // Issue #266: the corpus is reachable from startup context without any of it being
+    // loaded there. Deleting the routing sentence from CLAUDE.md fails this.
+    expect(root).toContain('docs/README.md');
+    expect(existsSync(DOCUMENT_INDEX)).toBe(true);
+    expect(root).not.toMatch(/(^|[^`\w])@docs\/README\.md/);
+    expect(readFileSync(AGENT_REFERENCE, 'utf8')).toContain('../README.md');
+
+    // A hand-written index would satisfy the routing assertions above and still drift.
+    const index = readFileSync(DOCUMENT_INDEX, 'utf8');
+    expect(index).toContain('GENERATED');
+    expect(index).toContain('npm run docs:index');
   });
 
   it('names the backlog as the home for deferred investigations, and it exists', () => {

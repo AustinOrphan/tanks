@@ -1,7 +1,8 @@
 # Tanks!
 
 A browser arena shooter with a pure deterministic 2D simulation and a Three.js projection
-layer. Specifications, plans, and deferred work live under `docs/superpowers/`.
+layer. `docs/README.md` is the generated index of every specification, plan, backlog topic,
+and research note.
 
 ## Start here
 
@@ -9,8 +10,9 @@ layer. Specifications, plans, and deferred work live under `docs/superpowers/`.
 - Claude Code loads a scoped rule from `.claude/rules/` when it reads a file matching that
   rule's `paths` patterns. Other agents should open the rule files matching every path they
   touch.
-- Use `docs/agent/README.md` to locate detailed rationale and historical landmines. Read only
-  the relevant section; these references are intentionally not imported globally.
+- Use `docs/README.md` to find current direction, plans, backlog topics, and research, and
+  `docs/agent/README.md` for detailed rationale and historical landmines. Read only the
+  relevant section; neither index's documents are imported globally.
 - Preserve unrelated user changes and keep a task in its own branch or worktree.
 
 ## Essential commands
