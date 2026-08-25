@@ -14,6 +14,36 @@ export type HudSurface =
   | 'paused'
   | 'outcome-win'
   | 'outcome-lose';
+
+/**
+ * WHAT IS BEING PLAYED -- the actual session kind, projected from the canonical
+ * `SessionDescriptor.kind` (`app-state.ts`) by `loop.ts` at every world build.
+ * Structurally the same three literals as `SessionDescriptorKind`, declared
+ * here for the same reason `HudSurface` is: the HUD owns its own vocabulary and
+ * does not import the model. A fourth descriptor kind is therefore a compile
+ * error at `loop.ts`'s call site rather than a silent fold into `'campaign'`.
+ *
+ * Drives the GAMEPLAY surfaces only -- campaign Lives/Enemies stats and the
+ * versus stock strip. It deliberately does NOT drive any button's label or
+ * visibility; see `HudRelaunchTarget` for why those are a different question.
+ */
+export type HudSessionKind = 'campaign' | 'practice' | 'versus';
+
+/**
+ * WHAT THE BUTTONS DO -- which system this session's menu and outcome ACTIONS
+ * relaunch play through. Projected from `session-intent.ts`'s `RelaunchTarget`,
+ * whose doc comment carries the full rationale.
+ *
+ * Separate from `HudSessionKind` because the two genuinely disagree for one
+ * shipped boot: `?dev=1&mode=ffa` is a real Versus session (stock strip on,
+ * campaign stats off) that still runs the CAMPAIGN level system, so Continue,
+ * Levels and "Play Again" all still do the right campaign-shaped thing there.
+ * Collapsing the two in either direction produces a lie: reporting that session
+ * as Campaign hides its stock strip and mis-types its outcome, while reporting
+ * its BUTTONS as versus labels a click "Versus Setup" when `loop.ts`'s
+ * `onStartRestart` lands it on a campaign board.
+ */
+export type HudRelaunchTarget = 'campaign-levels' | 'versus-setup';
 import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
@@ -401,38 +431,72 @@ export interface Hud {
    */
   showVersusSetup(show: boolean, initial?: VersusConfig | null): void;
   /**
-   * Which kind of session this is -- 'campaign' (the default, until a caller says
-   * otherwise) leaves every title-screen affordance exactly as it was before this
-   * method existed. 'versus' is Task 5b's own fix for a rebooted versus session's
-   * title screen: its `deps.levels` is the versus level system for the session's
-   * whole life (one-value-per-session, levels.ts), so Continue -- the one title
-   * affordance that reaches `sm.startPlaying()` WITHOUT rebuilding the world
-   * (loop.ts's `onStartRestart`) -- would resume whatever frozen win/lose world is
-   * still sitting in `driver.world` rather than a fresh campaign board (the
-   * "corpse-world window" a versus win/lose -> this pane's Back -> title sequence
-   * opens: reviewer-confirmed reachable whenever a real campaign run is also active,
-   * since `deps.run` is the SAME store both session kinds share). Continue and the
-   * Levels-open button (whose own `levelChoice` gate is already permanently false for
-   * a versus session's single synthetic level -- this is belt-and-suspenders, not a
-   * live fix) both hide; a new Campaign button shows instead, wired through
-   * `onCampaignOpen` to `boot.ts`'s `requestCampaignSession` reboot seam.
+   * WHAT IS BEING PLAYED. Projected from the canonical `SessionDescriptor.kind`
+   * by `loop.ts` at every world build, so it tracks the descriptor rather than
+   * a boot-time guess -- a Levels pick that turns a campaign session into
+   * Practice arrives here, and so does the landing that turns it back.
    *
-   * New Game is treated differently, DELIBERATELY NOT hidden: unlike Continue, its
-   * handler (`loop.ts`'s `onNewGame`) always rebuilds the world via `switchTo` before
-   * `startPlaying()` -- for a versus session this is the ONLY path from title into
-   * the just-configured match (a versus session is never `campaignActive()`, so
-   * nothing else ever calls `sm.startPlaying()` from title once Levels is hidden).
-   * Hiding it as the controller ruling's literal text asked would have made a freshly
-   * rebooted versus session unplayable through this UI. It is RELABELED "Start Match"
-   * instead (see setState's action-button label branch for the parallel "Versus
-   * Setup" relabel) so it no longer reads as a campaign action while doing exactly
-   * what it always has for a non-campaign session.
+   * Gates the two GAMEPLAY surfaces whose correctness is a statement about the
+   * world, not about a button:
    *
-   * Also drives the win/lose action button's label (setState): a finished versus
-   * match's "Play Again"/"Retry" becomes "Versus Setup", since that click now reopens
-   * this pane rather than restarting.
+   *  - the campaign Lives/Enemies stats, hidden for `'versus'` alone (issue
+   *    #282). Practice shows them, exactly as it always has -- a Level-Select
+   *    board is a campaign board being played in isolation, and its lives and
+   *    enemy count are as real there as anywhere;
+   *  - the in-match versus stock strip (spec section 3a), shown for `'versus'`
+   *    while playing or paused.
+   *
+   * NOT fixed for the session's life, and no caller may assume it is: both a
+   * Levels pick and the landing back on a session's home board re-derive it.
+   * Every consumer is recomputed from one place (`applySessionKindSurfaces`) so
+   * a later change lands on all of them at once, whatever order the calls come
+   * in.
+   *
+   * Deliberately NOT the gate for any button's label or visibility. A
+   * developer-flag versus session (`?dev=1&mode=ffa`) is genuinely `'versus'`
+   * here while its buttons stay campaign-shaped, because it still runs the
+   * campaign level system -- see `setRelaunchTarget`.
+   *
+   * Defaults to `'campaign'`, so a HUD that never calls this (every css/gallery
+   * fixture) renders byte-identical to before the method existed.
    */
-  setSessionKind(kind: 'campaign' | 'versus'): void;
+  setSessionKind(kind: HudSessionKind): void;
+  /**
+   * WHAT THE BUTTONS DO -- the legacy title/outcome affordance policy, and the
+   * one thing that decides every kind-dependent button in this HUD:
+   *
+   *  - `'campaign-levels'` (the default): the shipped campaign title screen.
+   *  - `'versus-setup'`: Continue hides -- it is the one title affordance that
+   *    reaches gameplay WITHOUT rebuilding the world (`loop.ts`'s
+   *    `onStartRestart`), so with the versus level system installed it would
+   *    resume whatever frozen win/lose world is still in `driver.world` rather
+   *    than a fresh board (the "corpse-world window" a versus win/lose -> Back
+   *    -> title sequence opens; reachable whenever a real campaign run is also
+   *    active, since `deps.run` is the SAME store both kinds share). The
+   *    Levels-open button hides with it (its own `levelChoice` gate is already
+   *    permanently false for a single synthetic level -- belt-and-suspenders,
+   *    not a live fix), and a Campaign button shows instead, wired through
+   *    `onCampaignOpen` to `boot.ts`'s `requestCampaignSession` seam.
+   *
+   * New Game is treated differently, DELIBERATELY NOT hidden: unlike Continue,
+   * its handler (`loop.ts`'s `onNewGame`) always rebuilds the world via
+   * `switchTo` before entering gameplay -- for a setup-pane versus session this
+   * is the ONLY path from title into the just-configured match. Hiding it as
+   * the controller ruling's literal text asked would have made a freshly
+   * rebooted versus session unplayable through this UI. It is RELABELED "Start
+   * Match" instead so it no longer reads as a campaign action while doing
+   * exactly what it always has for a non-campaign session.
+   *
+   * Also drives the win/lose action button's label (setState): "Play Again"/
+   * "Retry" becomes "Versus Setup", because for THIS target that click really
+   * does reopen the pane instead of rebuilding a board. That label belongs here
+   * and not on `setSessionKind` precisely because the click's destination is
+   * what the word has to be true about: `onStartRestart` routes a
+   * developer-flag versus session -- Versus by identity -- through
+   * `landOnCampaignBoard`, so "Versus Setup" there would name a pane the click
+   * never opens.
+   */
+  setRelaunchTarget(target: HudRelaunchTarget): void;
   /**
    * The versus-kind title screen's Campaign button was clicked -- a bare click
    * passthrough, the exact shape `onVersusOpen`/`onNewGame` already use. `loop.ts`'s
@@ -506,7 +570,7 @@ export function createHud(root: HTMLElement): Hud {
            the campaign default and a versus world has no enemy-kind tanks (countEnemies
            is always 0 there), so both would read as noise beside the stock readout below.
            The class carries no styling of its own (.hud-stat already does); only its
-           --hidden modifier, toggled from setSessionKind, does anything. -->
+           --hidden modifier, toggled from applySessionKindSurfaces, does anything. -->
       <div class="hud-stat hud-campaign-stat">Lives: <span class="hud-lives">3</span></div>
       <div class="hud-stat hud-campaign-stat">Enemies: <span class="hud-enemies">3</span></div>
       <div class="hud-stat hud-level hud-level--hidden">Level: <span class="hud-level-num"></span></div>
@@ -768,11 +832,11 @@ export function createHud(root: HTMLElement): Hud {
            comment on the Hud interface for why its click handler is a bare
            passthrough rather than a local showX(true) call. -->
       <button class="hud-versus-open hud-versus-open--hidden" type="button">Versus</button>
-      <!-- Task 5b: a versus session's title has nothing for Continue/Levels-open to do
-           (see setSessionKind's own doc comment on the Hud interface) -- this replaces
-           them with a reboot back to a plain campaign session instead. Hidden by
-           default, same convention as every other kind-gated button here; only shown
-           once setSessionKind('versus') runs. -->
+      <!-- A setup-pane versus session's title has nothing for Continue/Levels-open to
+           do (see setRelaunchTarget's own doc comment on the Hud interface) -- this
+           replaces them with a reboot back to a plain campaign session instead. Hidden
+           by default, same convention as every other gated button here; only shown once
+           setRelaunchTarget('versus-setup') runs. -->
       <button class="hud-campaign-open hud-campaign-open--hidden" type="button">Campaign</button>
       <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
@@ -821,7 +885,7 @@ export function createHud(root: HTMLElement): Hud {
   const livesEl = el.querySelector('.hud-lives') as HTMLElement;
   const enemiesEl = el.querySelector('.hud-enemies') as HTMLElement;
   // Both campaign-only topbar stats, hidden together for a versus session -- see
-  // setSessionKind's own implementation below and the markup comment above.
+  // applySessionKindSurfaces below and the markup comment above.
   const campaignStatEls = Array.from(el.querySelectorAll('.hud-campaign-stat')) as HTMLElement[];
   const levelChip = el.querySelector('.hud-level') as HTMLElement;
   const levelNum = el.querySelector('.hud-level-num') as HTMLElement;
@@ -1116,7 +1180,7 @@ export function createHud(root: HTMLElement): Hud {
    *  see setVersusStocks' own doc comment on the Hud interface. */
   let versusStocksData: { slot: number; stock: number; team?: number }[] | null = null;
   /**
-   * The state+sessionKind visibility GATE for the stock strip, maintained here as its
+   * The surface+sessionKind visibility GATE for the stock strip, maintained here as its
    * own variable rather than read back off `versusStocksEl`'s classList (fix, review of
    * this task's own first landing). The DOM class is not a safe proxy for "should this
    * be showing": `renderVersusStocks` ALSO writes that same class off `versusStocksData`
@@ -1849,47 +1913,112 @@ export function createHud(root: HTMLElement): Hud {
   // What setState last showed: setLevelSelect may re-render while ANOTHER panel is
   // up (unlocks are recorded at the win event), and must not splash a button onto it.
   let shownState: HudSurface = 'launch';
-  // Task 5b: which kind of session this is -- see setSessionKind's own doc comment on
-  // the Hud interface. Defaults to 'campaign' so a HUD that never calls setSessionKind
-  // (every caller before this task, including the css/gallery fixtures) renders
-  // byte-identical to before this method existed.
-  let sessionKind: 'campaign' | 'versus' = 'campaign';
+  // WHAT IS BEING PLAYED -- see setSessionKind's own doc comment on the Hud
+  // interface. Defaults to 'campaign' so a HUD that never calls setSessionKind
+  // (every css/gallery fixture) renders byte-identical to before this method
+  // existed.
+  let sessionKind: HudSessionKind = 'campaign';
+  // WHAT THE BUTTONS DO -- see setRelaunchTarget's own doc comment. A separate
+  // variable from `sessionKind` on purpose: they disagree for `?dev=1&mode=ffa`,
+  // which is a real versus session driven by campaign-shaped buttons.
+  let relaunchTarget: HudRelaunchTarget = 'campaign-levels';
+  /**
+   * The surface `setState` was last CALLED with -- distinct from `shownState`,
+   * which setState leaves untouched on its `playing`/`launch` early return
+   * (both hide the whole panel, so the title affordances inside it have nothing
+   * to recompute). The versus stock strip is not inside that panel and IS
+   * visible while playing, so its gate needs the surface setState actually
+   * reached, including the two `shownState` never records.
+   */
+  let currentSurface: HudSurface = 'launch';
   const levelSelectCbs: Array<(level: number) => void> = [];
   const newGameCbs: Array<() => void> = [];
 
   /**
-   * The title-only affordances that depend on `sessionKind` -- Continue, New Game's
+   * The title-only affordances that depend on `relaunchTarget` -- Continue, New Game's
    * LABEL, Levels-open, and Campaign-open -- recomputed together from
-   * `shownState`/`sessionKind`/`hasProgress`/`levelChoice`, whichever of the four last
+   * `shownState`/`relaunchTarget`/`hasProgress`/`levelChoice`, whichever of the four last
    * changed. One function instead of four inline toggles because `setContinueAvailable`
    * and `setLevelSelect` each toggle their OWN button independent of `setState` (a
    * run/unlock can change while another panel is up) -- and both must ALSO respect
-   * `sessionKind`: gating only inside `setState` would leave a later
+   * `relaunchTarget`: gating only inside `setState` would leave a later
    * `setContinueAvailable(true)` re-show Continue at a versus session's title, reopening
-   * the exact corpse-world window this task exists to close. That is not theoretical:
+   * the exact corpse-world window this exists to close. That is not theoretical:
    * `deps.run` is the SAME store a versus session shares with campaign (loop.ts's
    * `versusAwareDeps`), so this fires whenever a real campaign run is ALSO active --
    * true for most returning players, not an edge case. Calling this from
-   * `setSessionKind` too makes the kind itself order-independent: a caller may set it
-   * before OR after `setState('main-menu')` and land on the same DOM either way.
+   * `setRelaunchTarget` too makes the target itself order-independent: a caller may set
+   * it before OR after `setState('main-menu')` and land on the same DOM either way.
+   *
+   * Reads `relaunchTarget`, NEVER `sessionKind`: every button here is a claim about
+   * what the click DOES, and a developer-flag versus session's clicks are
+   * campaign-shaped even though the session is Versus.
    */
   function applyTitleAffordances(): void {
     const atTitle = shownState === 'main-menu';
-    const versusKind = sessionKind === 'versus';
+    const versusKind = relaunchTarget === 'versus-setup';
     continueBtn.classList.toggle('hud-continue--hidden', !atTitle || !hasProgress || versusKind);
     // New Game stays VISIBLE for a versus session, unlike Continue and Levels-open --
-    // see setSessionKind's own doc comment on the Hud interface for why: its handler
+    // see setRelaunchTarget's own doc comment on the Hud interface for why: its handler
     // (loop.ts's onNewGame) always rebuilds the world via switchTo before
     // startPlaying(), so for a versus session it is the ONLY path from title into the
     // just-configured match. Only its LABEL changes.
     newGameBtn.classList.toggle('hud-new-game--hidden', !atTitle);
     newGameBtn.textContent = versusKind ? 'Start Match' : 'New Game';
-    // Symmetric with Continue, but inert today: a versus session's single synthetic
-    // level already keeps `levelChoice` false (setLevelSelect's own `total > 1`), so
-    // this button is already hidden there without the kind check. Added anyway for
+    // Symmetric with Continue, but inert today: a setup-pane versus session's single
+    // synthetic level already keeps `levelChoice` false (setLevelSelect's own
+    // `total > 1`), so this button is already hidden there without the target check. Added anyway for
     // defense-in-depth against a future multi-level versus system.
     levelSelectOpenBtn.classList.toggle('hud-levelselect-open--hidden', !atTitle || !levelChoice || versusKind);
     campaignOpenBtn.classList.toggle('hud-campaign-open--hidden', !atTitle || !versusKind);
+  }
+
+  /**
+   * The GAMEPLAY surfaces that depend on `sessionKind` -- the campaign
+   * Lives/Enemies stats and the versus stock strip -- recomputed together, for
+   * the same order-independence reason `applyTitleAffordances` exists: both
+   * `setState` and `setSessionKind` can be the call that last changed one of
+   * the two inputs, and a session's kind is no longer fixed for its life (a
+   * Levels pick makes a campaign session Practice; landing back on its home
+   * board makes it Campaign again). Whichever arrives last, the DOM lands in
+   * the same place.
+   *
+   * Reads `sessionKind`, NEVER `relaunchTarget`: both surfaces are statements
+   * about the world being played, and `?dev=1&mode=ffa` really is a versus
+   * world -- the strip belongs on screen there even though that session's
+   * buttons stay campaign-shaped. It staying hidden was the defect this split
+   * removes.
+   *
+   * `hideCampaignStats` is `=== 'versus'`, NOT `!== 'campaign'`: Practice is a
+   * campaign board played in isolation and its lives/enemy count are as real
+   * there as in a run. Widening this to Practice would be a shipped-behaviour
+   * regression on the Level-Select path.
+   *
+   * The stock strip's own gate needs the surface too (it is in-match chrome,
+   * not a menu affordance): visible ONLY while a versus session is actually
+   * being played -- `playing` or `paused` -- never at main-menu/outcome/launch.
+   * Assigns the OUTER `versusStocksVisible` variable (see its own doc comment
+   * for why this must be a variable, never a classList read) -- `setVersusStocks`
+   * reads the SAME variable to decide whether to render, so the two can never
+   * disagree about "should this be showing" the way a class read could.
+   * `renderVersusStocks` still independently re-adds `--hidden` when there is no
+   * data yet (`setState('playing')` fires before the first real `setVersusStocks`
+   * call in production -- no `SimEvent` marks a versus match's own start): that
+   * is a SEPARATE, legitimate reason to hide ("nothing to show"), and is exactly
+   * why `versusStocksVisible` must not be read back off the DOM. Doing so once
+   * mistook that data-driven hide for a state-driven one and refused every
+   * subsequent `setVersusStocks` call until the next `setState` (a pause)
+   * revived it.
+   */
+  function applySessionKindSurfaces(): void {
+    const versusSession = sessionKind === 'versus';
+    for (const statEl of campaignStatEls) {
+      statEl.classList.toggle('hud-campaign-stat--hidden', versusSession);
+    }
+    versusStocksVisible =
+      versusSession && (currentSurface === 'playing' || currentSurface === 'paused');
+    versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
+    if (versusStocksVisible) renderVersusStocks();
   }
 
   const handleLevelSelectOpen = (): void => showLevelSelect(true);
@@ -2215,6 +2344,9 @@ export function createHud(root: HTMLElement): Hud {
   newGameBtn.addEventListener('click', blurIfPointer);
 
   function setState(s: HudSurface): void {
+    // Recorded FIRST and unconditionally, unlike `shownState` further down --
+    // see this variable's own doc comment for why the two differ.
+    currentSurface = s;
     // Any state change closes the stats and customize pages FIRST -- including the
     // playing early-return below, or an overlay opened on the Main Menu would
     // sit over the live game. They are Main-Menu affairs.
@@ -2247,26 +2379,13 @@ export function createHud(root: HTMLElement): Hud {
     // The topbar is the only chrome that outranks the menu panel, so it is also the
     // only thing that would show through on the Launch route.
     topbarEl.classList.toggle('hud-topbar--hidden', atLaunch);
-    // The in-match stock readout (spec §3a): visible ONLY while a versus session is
-    // actually being played -- `playing` OR `paused` -- never at main-menu/outcome/launch.
-    // Placed here, BEFORE the playing/launch early return just below, specifically so
-    // 'playing' itself is covered; `paused` is covered too since it falls through this
-    // far (its own early return is further down). `sessionKind` is fixed for a
-    // session's whole life (setSessionKind's own doc comment), so this cannot flip
-    // mid-match. Assigns the OUTER `versusStocksVisible` variable (see its own doc
-    // comment above for why this must be a variable, never a classList read) --
-    // `setVersusStocks` below reads the SAME variable to decide whether to render, so
-    // the two can never disagree about "should this be showing" the way a class read
-    // could. `renderVersusStocks` still independently re-adds `--hidden` when there is
-    // no data yet (`setState('playing')` fires before the first real
-    // `setVersusStocks` call, in production -- no `SimEvent` marks a versus match's own
-    // start) -- that is a SEPARATE, legitimate reason to hide ("nothing to show"), and
-    // is exactly why `versusStocksVisible` must not be read back off the DOM: doing so
-    // once mistook that data-driven hide for a state-driven one and refused every
-    // subsequent `setVersusStocks` call until the next `setState` (a pause) revived it.
-    versusStocksVisible = sessionKind === 'versus' && (s === 'playing' || s === 'paused');
-    versusStocksEl.classList.toggle('hud-versus-stocks--hidden', !versusStocksVisible);
-    if (versusStocksVisible) renderVersusStocks();
+    // The in-match stock readout and the campaign stat row -- both keyed on the
+    // SESSION KIND, both recomputed in one place (`applySessionKindSurfaces`, see
+    // its own doc comment) so `setSessionKind` and `setState` cannot disagree
+    // whichever arrives last. Placed here, BEFORE the playing/launch early return
+    // just below, specifically so 'playing' itself is covered; `paused` is covered
+    // too since it falls through this far (its own early return is further down).
+    applySessionKindSurfaces();
     // Launch and playing both want the menu panel gone. Launch returns BEFORE the
     // branches below for the same reason `paused` returns early: the final `else`
     // renders a Game Over corpse screen, so any state that falls through to it gets
@@ -2316,8 +2435,8 @@ export function createHud(root: HTMLElement): Hud {
     // Level, Play Again and Retry all still route through actionBtn below, which is why
     // this toggles on the Main Menu alone rather than joining the group above.
     // Continue, New Game (its label), Levels-open, and Campaign-open all also depend on
-    // `sessionKind` -- see applyTitleAffordances' own doc comment for why they are one
-    // function rather than four inline toggles here.
+    // `relaunchTarget` -- see applyTitleAffordances' own doc comment for why they are
+    // one function rather than four inline toggles here.
     applyTitleAffordances();
     actionBtn.classList.toggle('hud-action--hidden', atMainMenu);
     // The attempt summary belongs to the END screens alone.
@@ -2362,19 +2481,25 @@ export function createHud(root: HTMLElement): Hud {
       } else {
         titleEl.textContent = 'You Win!';
         setSubtitle('Arena cleared.');
-        // A versus session's FINAL win never has a next level to advance to (its single
-        // synthetic level always lands here, not the `levelPos` branch above), and this
-        // click no longer restarts a match -- loop.ts's own `onStartRestart` reopens the
-        // setup pane instead. "Play Again" would be a lie about what the click does;
-        // "Versus Setup" says it. Paused's "Resume" and the intermediate "Next Level"
-        // above are both left alone -- neither click opens the pane, so relabeling
-        // either would be the same lie in reverse.
-        actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Play Again';
+        // A setup-pane versus session's FINAL win never has a next level to advance to
+        // (its single synthetic level always lands here, not the `levelPos` branch
+        // above), and this click no longer restarts a match -- loop.ts's own
+        // `onStartRestart` reopens the setup pane instead. "Play Again" would be a lie
+        // about what the click does; "Versus Setup" says it. Paused's "Resume" and the
+        // intermediate "Next Level" above are both left alone -- neither click opens the
+        // pane, so relabeling either would be the same lie in reverse.
+        //
+        // Keyed on `relaunchTarget`, NOT `sessionKind`: `onStartRestart` branches on
+        // exactly this policy, so a developer-flag versus session -- Versus by
+        // identity, campaign-levels by target -- lands on a campaign board here and
+        // must keep reading "Play Again".
+        actionBtn.textContent = relaunchTarget === 'versus-setup' ? 'Versus Setup' : 'Play Again';
       }
     } else {
       titleEl.textContent = 'Game Over';
       setSubtitle('Out of lives.');
-      actionBtn.textContent = sessionKind === 'versus' ? 'Versus Setup' : 'Retry';
+      // Same `relaunchTarget` reasoning as the win branch's label just above.
+      actionBtn.textContent = relaunchTarget === 'versus-setup' ? 'Versus Setup' : 'Retry';
     }
   }
 
@@ -2468,7 +2593,7 @@ export function createHud(root: HTMLElement): Hud {
       // setLevelSelect may re-render while ANOTHER panel is up (unlocks are recorded at
       // the win event) and must not splash the button onto it -- same `shownState`
       // convention the row itself used to follow directly. Routed through
-      // applyTitleAffordances so this also respects `sessionKind` (see its own doc
+      // applyTitleAffordances so this also respects `relaunchTarget` (see its own doc
       // comment for why gating only inside `setState` is not enough).
       applyTitleAffordances();
     },
@@ -2480,7 +2605,7 @@ export function createHud(root: HTMLElement): Hud {
       // Same `shownState` convention as setLevelSelect just above: this can be pushed
       // while another panel is up (a game-over/completion transition ends the run
       // before the player is back at the title screen to see it). Routed through
-      // applyTitleAffordances for the same `sessionKind` reason as setLevelSelect above.
+      // applyTitleAffordances for the same `relaunchTarget` reason as setLevelSelect above.
       applyTitleAffordances();
     },
     onNewGame(cb: () => void): void {
@@ -2688,22 +2813,23 @@ export function createHud(root: HTMLElement): Hud {
       versusStartCbs.push(cb);
     },
     showVersusSetup,
-    setSessionKind(kind: 'campaign' | 'versus'): void {
+    setSessionKind(kind: HudSessionKind): void {
       sessionKind = kind;
-      // Issue #282: the campaign Lives/Enemies stats, gated on sessionKind ALONE, not
-      // state -- unlike the stock strip (setState's own versusStocksVisible gate), there
-      // is no legitimate data-driven reason to hide these anyway (a campaign board with
-      // 0 enemies left is real "cleared" feedback, not noise), so no state re-check is
-      // needed here the way renderVersusStocks needs one for "no entries yet". sessionKind
-      // is fixed for a session's whole life (this method's own doc comment on the Hud
-      // interface), so setting the class once, here, covers every state the session will
-      // ever reach -- including ones already shown before this call and ones reached
-      // after it, the same order-independence applyTitleAffordances already gives this
-      // variable's other consumers.
-      const hideCampaignStats = kind === 'versus';
-      for (const statEl of campaignStatEls) {
-        statEl.classList.toggle('hud-campaign-stat--hidden', hideCampaignStats);
-      }
+      // Both kind-dependent gameplay surfaces, recomputed together and
+      // order-independently -- see applySessionKindSurfaces' own doc comment.
+      // Nothing here touches a button: a session's kind says what is being
+      // played, never what a click does.
+      applySessionKindSurfaces();
+    },
+    setRelaunchTarget(target: HudRelaunchTarget): void {
+      relaunchTarget = target;
+      // Every consumer of this policy is a title/outcome BUTTON. The title ones
+      // recompute here so the target is order-independent against
+      // `setState`/`setContinueAvailable`/`setLevelSelect` (see
+      // applyTitleAffordances' own doc comment); the outcome action button's
+      // label is read live inside `setState`, which cannot be showing an
+      // outcome panel at the moment this is called from `loop.ts`'s
+      // construction.
       applyTitleAffordances();
     },
     onCampaignOpen(cb: () => void): void {

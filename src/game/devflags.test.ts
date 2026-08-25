@@ -2,11 +2,69 @@ import { describe, it, expect } from 'vitest';
 import { TANK_KINDS } from '../sim/config';
 import {
   parseDevFlags,
+  parseDeveloperMode,
   DEV_FLAGS_OFF,
   FLAG_REGISTRY,
   PLAYTEST_BUNDLE,
   registryKeyMismatch,
 } from './devflags';
+
+// ---------------------------------------------------------------------------
+// parseDeveloperMode: the `dev` GATE itself, read separately from the flags.
+//
+// A bare `?dev=1` parses to exactly DEV_FLAGS_OFF, so `parseDevFlags` alone
+// cannot tell "developer mode on, nothing enabled" from "no developer mode" --
+// that is what this function exists for, and what makes DeveloperMetadata.active
+// truthful. It is real production wiring (loop.ts's createBrowserDeps), so it
+// gets direct coverage here rather than relying on the session-intent and loop
+// tests, every one of which injects an already-decided `developerMode` boolean
+// and would stay green with this function hardcoded to false.
+//
+// Population: the absent case, the documented enabled forms accepted by `isOn`
+// (`?dev`, `?dev=`, `?dev=1`, and any non-FALSY value), and every member of the
+// FALSY set, swept rather than sampled.
+// ---------------------------------------------------------------------------
+describe('parseDeveloperMode', () => {
+  it('is inactive with no dev parameter at all', () => {
+    expect(parseDeveloperMode('')).toBe(false);
+    expect(parseDeveloperMode('?')).toBe(false);
+    expect(parseDeveloperMode('?aimRay=1&seed=42')).toBe(false);
+  });
+
+  it('is active for the documented enabled forms', () => {
+    // Same acceptance `isOn` gives every other flag: present-with-no-value counts.
+    for (const search of ['?dev=1', 'dev=1', '?dev', '?dev=', '?dev=true', '?dev=on', '?dev=1&aimRay=1']) {
+      expect(parseDeveloperMode(search), search).toBe(true);
+    }
+  });
+
+  it('is inactive for every negative form the flag conventions define', () => {
+    // The complete FALSY set (devflags.ts), case-insensitively -- not a sample.
+    for (const raw of ['0', 'false', 'off', 'no', 'FALSE', 'Off', 'NO']) {
+      expect(parseDeveloperMode(`?dev=${raw}`), raw).toBe(false);
+    }
+  });
+
+  it('a BARE developer gate with no other enabled flag is still active', () => {
+    // The exact case the flags object cannot express: `?dev=1` alone parses to
+    // DEV_FLAGS_OFF, so a consumer deriving activity from the flags would read
+    // this session as having no developer mode at all.
+    expect(parseDevFlags('?dev=1')).toEqual(DEV_FLAGS_OFF);
+    expect(parseDeveloperMode('?dev=1')).toBe(true);
+  });
+
+  it('is independent of the feature flags: a feature flag WITHOUT the gate activates nothing', () => {
+    expect(parseDeveloperMode('?aimRay=1')).toBe(false);
+    expect(parseDevFlags('?aimRay=1').aimRay).toBe(false);
+  });
+
+  it('reads only the `dev` key -- a lookalike parameter does not open the gate', () => {
+    // Kills a `search.includes('dev')`-shaped implementation.
+    expect(parseDeveloperMode('?developer=1')).toBe(false);
+    expect(parseDeveloperMode('?devtools=1')).toBe(false);
+    expect(parseDeveloperMode('?undev=1')).toBe(false);
+  });
+});
 
 describe('parseDevFlags', () => {
   it('is off for an empty query', () => {
