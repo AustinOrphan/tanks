@@ -209,8 +209,8 @@ import { step } from '../../src/sim/world';
  * replica of traceText's loop, run via vitest, then deleted. The replica reproduced this
  * fingerprint, which is what makes it the traced population rather than a similar one.
  *
- * Of 191833 enemy decision-ticks -- every alive non-player tank, every tick, the same
- * population stepAi iterates -- 29273 (15.26%) sent the turret somewhere OTHER than the
+ * Of 201661 enemy decision-ticks -- every alive non-player tank, every tick, the same
+ * population stepAi iterates -- 33539 (16.63%) sent the turret somewhere OTHER than the
  * freshly solved angle. That is the figure quoted deliberately, and it is the narrow one:
  * a tick where the tank holds an angle that happens to equal the fresh solution changes
  * nothing and is excluded, which is why this is 15% and not the 98% a naive "was a hold
@@ -231,7 +231,7 @@ import { step } from '../../src/sim/world';
  * PR #348, turret angular acceleration) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = '190f2d0e9e97e6fde66bc81f4993a19fe70ba5cf8c5beffa4d9bcc76f9b7fcc5';
+export const BASELINE_HASH = 'a1df14427a1b6e87c57ec9a72a46b97018ccd79e3cd8ea48a6f901bf27f7dda7';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
