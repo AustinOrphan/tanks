@@ -309,8 +309,23 @@ describe('ai-tracking moment specifics', () => {
     // -- and so this pivot tick -- earlier, reddening this exact loop at the tick
     // where the two phases no longer agree with 28 -- verified live and reverted (see
     // this task's report).
+    //
+    // NOT strictly monotonic, and deliberately not asserted as such. Issue #330's
+    // AI_TURRET_DEADBAND freezes the turret for the single tick where the sweep reverses
+    // and the tracking error passes through zero, so a strict `>` here passes on a tree
+    // without the deadband and FAILS on one with it. That would make whichever of the two
+    // changes merged second break main, which is exactly what happened when the two were
+    // merged locally to check. MEASURED on that merged tree, frozen ticks by deadband
+    // value: 0 deg -> none (peak at tick 28); 0.25 and 0.5 -> [28] (peak moves to tick 27);
+    // 0.75 -> [28, 46]; 1.0 -> [28, 43, 45, 47]; 1.5 -> nine ticks. So the SHAPE below --
+    // one climb, one fall, at most one frozen tick and only at the turnaround -- holds for
+    // every deadband value still under consideration and fails from 0.75 up, where the
+    // guard starts biting the tail of the sweep too. That failure is wanted: it is a real
+    // change in what this clip shows, not a brittle assertion.
     const PEAK_TICK = 28;
+    const TURNAROUND_TICK = 28;
     const tl = simulateMoment(MOMENTS['ai-tracking']);
+    const frozen: number[] = [];
     for (let t = 1; t <= MOMENTS['ai-tracking'].ticks; t++) {
       const prev = tl.worlds[t - 1].tanks[0];
       const cur = tl.worlds[t].tanks[0];
@@ -321,9 +336,15 @@ describe('ai-tracking moment specifics', () => {
       expect(cur.pos.x).toBe(0);
       expect(cur.pos.y).toBe(0);
       expect(cur.bodyAngle).toBe(0);
-      if (t <= PEAK_TICK) expect(cur.turretAngle).toBeGreaterThan(prev.turretAngle);
+      if (cur.turretAngle === prev.turretAngle) frozen.push(t);
+      else if (t <= PEAK_TICK) expect(cur.turretAngle).toBeGreaterThan(prev.turretAngle);
       else expect(cur.turretAngle).toBeLessThan(prev.turretAngle);
     }
+    // A turret that stopped tracking altogether would freeze on most ticks and sail
+    // through the per-tick checks above, which only fire on ticks that MOVED. These two
+    // are what keep that from passing: at most one frozen tick, and it is the turnaround.
+    expect(frozen.length).toBeLessThanOrEqual(1);
+    expect(frozen.every((t) => t === TURNAROUND_TICK)).toBe(true);
   });
 
   it('never fires: the 48-tick reaction gate (STATIC_BASIC reactionTime * TICK_HZ) is never reached in 47 ticks', () => {
