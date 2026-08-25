@@ -17,6 +17,8 @@ import {
   SETTINGS_SCHEMA_VERSION,
   type SettingsNotice,
 } from './settings';
+import { PROGRESS_KEY } from './progress';
+import { CAMPAIGN_LEVELS } from '../sim/arena';
 import {
   createCapabilitySource,
   createStaticReducedMotionSource,
@@ -199,7 +201,50 @@ describe('createAppSettings: disposal', () => {
   });
 });
 
+/** Run `body` with `globalThis.location` replaced, then put the original back. */
+function withSearch(search: string, body: () => void): void {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    value: { search },
+    configurable: true,
+    writable: true,
+  });
+  try {
+    body();
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'location', original);
+    else delete (globalThis as { location?: unknown }).location;
+  }
+}
+
 describe('createBrowserAppSettings', () => {
+  it('takes the storage namespace from the URL', () => {
+    // The one unpinned line issue #245 adds. Without this the whole adapter could be
+    // correct and fully covered while no session ever asked for the developer namespace.
+    withSearch('?dev=1', () => {
+      const app = createBrowserAppSettings();
+      expect(app.namespace).toBe('developer');
+      app.dispose();
+    });
+    withSearch('?aimRay=1', () => {
+      const app = createBrowserAppSettings();
+      expect(app.namespace).toBe('production');
+      app.dispose();
+    });
+  });
+
+  it('gives the stores and `storage` the SAME namespaced object', () => {
+    // A store handed the base storage while `AppSettings.storage` held the adapter would
+    // read back null here: the store's key would be `tanks.progress.v1` and this lookup
+    // would go to `tanks.dev.tanks.progress.v1`.
+    withSearch('?dev=1', () => {
+      const app = createBrowserAppSettings();
+      app.stores.progress.recordCleared(CAMPAIGN_LEVELS[1]);
+      expect(app.storage.getItem(PROGRESS_KEY)).not.toBeNull();
+      app.dispose();
+    });
+  });
+
   it('builds a working owner against the real environment', () => {
     // The one unpinned line in the chain, exercised once so a throw inside it -- a
     // capability probe reaching a hostile global, say -- cannot go unnoticed until it
