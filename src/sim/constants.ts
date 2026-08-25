@@ -488,6 +488,15 @@ export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 // cliff at 3; recorded rather than smoothed over, because "gates pass at every swept value"
 // would be false.
 export const AI_TURRET_RAMP_TICKS = data.turret.aiRampTicks;
+// ---- AI aim hold (issue #344) ----
+// How far the freshly recomputed aim solution may drift from the one a tank is HOLDING
+// before the hold breaks and the tank re-solves immediately (radians). Below this the
+// tank keeps pointing where it decided to point; above it, a genuinely new target has
+// appeared and waiting out the rest of the span would be a visible failure to react.
+//
+// Read with aimHoldTime (the per-profile span, config/types.ts): the span decides how
+// long a tank dwells, this decides what interrupts the dwell.
+export const AI_AIM_BREAK = data.ai.aimBreak;
 
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {

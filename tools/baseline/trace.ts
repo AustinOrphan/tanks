@@ -186,6 +186,42 @@ import { step } from '../../src/sim/world';
  *     would have returned from the same state on the same tick. The two rules agree whenever
  *     the turret is already saturated or sitting on its target, and disagree while it is
  *     ramping, which is exactly the intended surface.
+ * MOVED (2026-08-25, issue #344): AI tanks now HOLD a solved aim angle for a profile
+ * span (aimHoldTime) instead of re-solving aimLead from scratch every tick and slewing at
+ * whatever came out. decideAi layers holdAimFor (ai/aim-hold.ts) over the behaviour
+ * function's turretAngle, exactly as it already layers commitMove over desiredMove, and
+ * stepAi writes the held angle and its countdown back onto the tank. stepAi is squarely in
+ * the traced path (step -> stepAi -> decideAi) and traceText below samples turretAngle to
+ * nine decimals for every tank, so a changed aim target moves this hash directly.
+ *
+ * ATTRIBUTION IS EXACT, not inferred. Setting every profile's aimHoldTime to 0 -- changing
+ * nothing else -- reproduces the PREVIOUS hash 42d764e9... byte for byte over the whole
+ * traced population, and trace.test.ts passes green in that state. A span of zero re-arms
+ * to a zero countdown, so the hold branch can never be taken and every tick re-solves,
+ * which is precisely the pre-#344 behaviour. That also makes the "zero disables the hold"
+ * contract documented on AIProfileBalance.aimHoldTime a measured fact rather than a claim.
+ *
+ * Exposure MEASURED on this tree, over exactly the traced population (5 arenas x 6 seeds x
+ * 2500 ticks), by a throwaway probe -- a counter at decideAi's hold call site plus a
+ * replica of traceText's loop, run via vitest, then deleted. The replica reproduced this
+ * fingerprint, which is what makes it the traced population rather than a similar one.
+ *
+ * Of 205695 enemy decision-ticks -- every alive non-player tank, every tick, the same
+ * population stepAi iterates -- 34992 (17.01%) sent the turret somewhere OTHER than the
+ * freshly solved angle. That is the figure quoted deliberately, and it is the narrow one:
+ * a tick where the tank holds an angle that happens to equal the fresh solution changes
+ * nothing and is excluded, which is why this is 17% and not the 98% a naive "was a hold
+ * live?" counter reports over the same run. 34992 diverging ticks is ample coupling for a
+ * hash that moves on a single ULP; this is not a rounding artefact.
+ *
+ * NOT a coincidence of some other change: this PR's only non-test src/sim edits are
+ * ai/aim-hold.ts (new), the hold call site and write-back in ai/index.ts, the two Tank
+ * fields in types.ts, the two AiDecision fields plus their eight literal construction
+ * sites, AI_AIM_BREAK in constants.ts, and aimHoldTime in config/types.ts + validate.ts.
+ * The Tank and AiDecision field additions could NOT have moved this by themselves --
+ * traceText serializes no struct, only pos/turretAngle/alive -- so the move is
+ * attributable entirely to the changed aim target, and the aimHoldTime=0 control above
+ * demonstrates that directly.
  *
  * History: 42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0 (issue #224 on
  * PR for feat/ai-wall-aware-evasion) -> the hash below, confirmed by actually running

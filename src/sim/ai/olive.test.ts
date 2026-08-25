@@ -101,7 +101,13 @@ describe('olive, driven end-to-end by its resolved config', () => {
     // on the bare behaviour's. Every other field must still match grey byte for byte --
     // which is what makes this fixture discriminate DEFENSIVE routing from TACTICAL, the
     // property this test exists for.
-    const withoutCommitment = ({ nextIntent: _i, nextIntentTicks: _t, ...rest }: AiDecision) => rest;
+    // `nextAimHeld`/`nextAimHeldTicks` are stripped for the same reason (issue #344's aim
+    // hold is the second thing decideAi layers on). `turretAngle` is deliberately NOT
+    // stripped and still has to match: with nothing yet held the hold adopts the fresh
+    // solution unchanged, so a routing difference would still show up there.
+    const withoutCommitment = (
+      { nextIntent: _i, nextIntentTicks: _t, nextAimHeld: _a, nextAimHeldTicks: _at, ...rest }: AiDecision,
+    ) => rest;
     expect(withoutCommitment(d)).toEqual(withoutCommitment(greyDecision(w, w.tanks[0])));
     expect(d.fire).toBe(false); // teal-routing fires here
     expect(d.nextTimer).toBe(1); // the DEFENSIVE patience counter, running

@@ -93,6 +93,16 @@ export interface AIProfileBalance {
    * silently default to "no commitment", which is the defect this closes.
    */
   commitmentTime: number;
+  /**
+   * Seconds this tank holds a solved aim angle before re-solving (issue #344). Consumed
+   * by `holdAimFor` (ai/aim-hold.ts) as `Math.round(aimHoldTime * TICK_HZ)`. A hold also
+   * breaks early when the fresh solution drifts past AI_AIM_BREAK, so this is the DWELL
+   * length, not a reaction delay: acquiring a genuinely new target stays immediate.
+   *
+   * Zero disables the hold for that profile and re-solves every tick, which is the
+   * pre-#344 behaviour.
+   */
+  aimHoldTime: number;
   aggression: number;
   preferredDistance: number;
   minimumDistance: number;

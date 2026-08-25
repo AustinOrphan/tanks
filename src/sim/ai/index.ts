@@ -10,13 +10,14 @@ import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread } from './targeting';
 import { commitMove } from './commitment';
 import { accelSlew } from './turret-accel';
+import { holdAimFor } from './aim-hold';
 import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_MINE_FLEE_RADIUS } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
 /** An inert decision: hold position, hold aim, do nothing. */
 function idleDecision(tank: Tank): AiDecision {
-  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0 };
+  return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: 'normal', mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
 }
 
 export function decideAi(world: World, tank: Tank): AiDecision {
@@ -67,11 +68,25 @@ export function decideAi(world: World, tank: Tank): AiDecision {
   // MOVEMENT is, so an enemy that has committed to a heading still tracks and shoots you
   // the instant it can -- the reaction clock in stepAi below keeps its existing meaning.
   const committed = commitMove(world, tank, cfg, decision.desiredMove, decision.avoid, decision.avoidKind);
+
+  // THE AIM-HOLD LAYER (issue #344), applied centrally beside the commitment layer and
+  // for the same reasons. It replaces only `turretAngle` and its write-back pair.
+  //
+  // `hasSolution` and `fire` are deliberately left reading the FRESH solution: this holds
+  // where the tank has decided to point, not whether it believes it has a shot, and the
+  // dispatcher below re-vets friendly fire against the ACTUAL post-slew angle anyway. A
+  // held aim that has drifted off target simply misses, which is the cost the profile's
+  // aimHoldTime is tuned against -- it is not allowed to become a stealth accuracy buff.
+  const aim = holdAimFor(tank, cfg, decision.turretAngle);
+
   return {
     ...decision,
     desiredMove: committed.move,
     nextIntent: committed.nextIntent,
     nextIntentTicks: committed.nextIntentTicks,
+    turretAngle: aim.angle,
+    nextAimHeld: aim.nextHeld,
+    nextAimHeldTicks: aim.nextHeldTicks,
   };
 }
 
@@ -123,6 +138,12 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // heading of due-east.
     tank.aiIntent = decision.nextIntent ?? undefined;
     tank.aiIntentTicks = decision.nextIntentTicks;
+    // The held aim angle and its countdown, written back beside the movement pair above
+    // and for the same reason: decisions stay pure and the dispatcher owns the write
+    // (issue #344). Cleared to undefined rather than left stale when nothing is held, so
+    // "no held aim" is genuinely absent rather than an angle of 0 that reads as due east.
+    tank.aiAimHeld = decision.nextAimHeld ?? undefined;
+    tank.aiAimHeldTicks = decision.nextAimHeldTicks;
 
     // Friendly fire is vetted TWICE, and it has to be. The decision functions check their
     // own firing solution, but the shot below leaves along the post-slew turret angle,

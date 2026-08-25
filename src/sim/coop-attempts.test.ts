@@ -286,7 +286,13 @@ describe('resolveStatusCoop: ATTEMPTS mode (world.coopAttempts, the default)', (
     // No second gate added anywhere -- resolveStatusCoop's attempts branch never sets
     // respawnAtTick, so stepRespawns (still called unconditionally by stepInputs at
     // countPlayerTanks >= 2) simply finds nothing to do every tick.
-    let w = coopWorld(3);
+    // enemyAlive = false: this test is about respawn SCHEDULING, and a live enemy makes it
+    // about enemy marksmanship instead. With the brown shooting, whether B survives all 300
+    // ticks decides whether the round wipes and restarts -- and a round restart revives A
+    // through a completely different path than the stepRespawns one under test here. Issue
+    // #344's aim hold shifted that outcome and reddened this, which is the tell that the
+    // enemy was load-bearing for a reason the test never intended.
+    let w = coopWorld(3, true, false);
     const a = tankById(w, A_ID);
     a.alive = false;
     let world = w;

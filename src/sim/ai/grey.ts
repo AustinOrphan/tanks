@@ -66,7 +66,7 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
   const sees = player !== undefined && lineOfSight(tank.pos, player.pos, world.walls);
   if (underFire && dodgeTicks < patienceTicks) {
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
   }
 
   let turretAngle = tank.turretAngle;
@@ -114,5 +114,5 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // `avoid` is threaded, not recomputed downstream: decideAi's commitment layer needs the
   // dodge direction derived from THIS tank's perceived radii (see AiDecision.avoid).
   // nextIntent/nextIntentTicks are placeholders -- decideAi overwrites both.
-  return { desiredMove: move, turretAngle, fire, hasSolution: sees, fireType: weapon.bulletType, mine, nextState, nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
+  return { desiredMove: move, turretAngle, fire, hasSolution: sees, fireType: weapon.bulletType, mine, nextState, nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
 }

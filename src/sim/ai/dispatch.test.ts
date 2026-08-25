@@ -56,6 +56,21 @@ describe('turret acceleration (issue #347)', () => {
     expect(moved).toBeGreaterThan(0);
     expect(moved).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
     expect(w.tanks[0].turretVel).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
+describe('aim hold (issue #344)', () => {
+  it('decideAi returns the HELD aim angle, not the fresh solution, while the span is live', () => {
+    // Learn the fresh solution this fixture produces, then arm a hold a hair off it --
+    // 0.01 rad, inside any shippable break threshold -- so the two are distinguishable.
+    const probe = tank(1, 'brown', { x: 0, y: 0 }, { ...HELD });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const fresh = decideAi(world([probe, player]), probe).turretAngle;
+
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, {
+      ...HELD, aiAimHeld: fresh + 0.01, aiAimHeldTicks: 5,
+    });
+    const d = decideAi(world([brown, tank(2, 'player', { x: 5, y: 0 })]), brown);
+    expect(d.turretAngle).toBe(fresh + 0.01);
+    expect(d.nextAimHeld).toBe(fresh + 0.01);
+    expect(d.nextAimHeldTicks).toBe(4);
   });
 });
 

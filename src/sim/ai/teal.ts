@@ -49,7 +49,7 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     // Grey does in the same situation. Freezing at {0,0} here made Teal a stationary
     // target for the whole of every countdown and every player respawn -- a hardcoded
     // zero, not a decision. `move` already folds in the dodge when one is present.
-    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
+    return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
   }
 
   const speed = weapon.speed;
@@ -117,10 +117,10 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     && mineThreatensPlayer(world, tank, AI_MINE_TACTICAL_RADIUS + hazardOffset);
 
   if (turretAngle !== null) {
-    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
+    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
   }
 
 
   // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
-  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0 };
+  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
 }
