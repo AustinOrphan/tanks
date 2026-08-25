@@ -21,6 +21,20 @@ import { DOCUMENT_STATUSES } from './metadata.mjs';
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const INDEX = path.join(ROOT, INDEX_PATH);
 const SPEC = 'docs/superpowers/specs/fixture.md';
+
+/** The heading each contract status must land under. AC2 of issue #266 is this mapping. */
+const STATUS_SECTIONS: Record<string, string> = {
+  proposed: 'Current direction',
+  active: 'Current direction',
+  completed: 'Implementation record',
+  superseded: 'Superseded and historical',
+  historical: 'Superseded and historical',
+};
+const DOCUMENT_SECTIONS = [
+  'Current direction',
+  'Implementation record',
+  'Superseded and historical',
+];
 const temporaryRoots: string[] = [];
 
 function tempRoot(): string {
@@ -163,7 +177,7 @@ describe('the index guard fails on the changes it exists to catch', () => {
 });
 
 describe('the index places every document somewhere', () => {
-  it.each(DOCUMENT_STATUSES)('gives a `%s` document a visible home', (status) => {
+  it.each(DOCUMENT_STATUSES)('files a `%s` document under its own heading', (status) => {
     const root = tempRoot();
     const replacement = 'docs/superpowers/specs/replacement.md';
     write(root, replacement, doc({ title: 'Replacement' }));
@@ -177,9 +191,21 @@ describe('the index places every document somewhere', () => {
       }),
     );
 
-    // Fails if a future status is added to the contract without a section here, which is
-    // the way a document silently disappears from the index.
-    expect(renderDocumentIndex(root)).toContain(`Document with status ${status}`);
+    // Presence is not placement. The real corpus has no `proposed` or `historical`
+    // document, so the committed-output equality test is blind to those two: routing
+    // `historical` into Current direction would leave every other assertion green. This
+    // asserts the heading each status lands under, and that it lands under no other.
+    const expected = STATUS_SECTIONS[status];
+    const rendered = renderDocumentIndex(root);
+    const title = `Document with status ${status}`;
+
+    expect(section(rendered, expected)).toContain(title);
+    for (const heading of DOCUMENT_SECTIONS) {
+      if (heading === expected) continue;
+      expect(section(rendered, heading), `${status} must not appear under ${heading}`).not.toContain(
+        title,
+      );
+    }
   });
 
   it('counts backlog topics rather than listing them a second time', () => {
