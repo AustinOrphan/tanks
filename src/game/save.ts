@@ -2,11 +2,13 @@ import { PROGRESS_KEY } from './progress';
 import { STATS_KEY } from './stats';
 import { CUSTOM_KEY } from './customization';
 import { TOUCH_SETTINGS_KEY } from './touch-settings';
+import { SETTINGS_KEY } from './settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
 import { RUN_KEY } from './run';
 
 /**
- * Serialise and restore the whole save: the six `tanks.*` keys as one blob.
+ * Serialise and restore the whole save: the six `tanks.*` keys an export carries, as one
+ * blob -- plus one seventh key the IMPORTER still accepts for backward compatibility.
  *
  * localStorage is ORIGIN-scoped. The web game lives at `austinorphan.com`; a
  * wrapped mobile build lives at `capacitor://localhost` or `https://localhost`.
@@ -18,12 +20,15 @@ import { RUN_KEY } from './run';
  * project page on austinorphan.com (CLAUDE.md), so anything that clears storage
  * for that origin takes the save with it.
  *
- * Deliberately at the RAW key/value layer, not through the six typed stores.
+ * Deliberately at the RAW key/value layer, not through the typed stores.
  * The stores validate on read and drop what they do not recognise, so a
  * store-level round trip would silently discard a field written by a newer
  * version of the game -- exactly the data an export exists to preserve. Junk is
  * still safe: each store already validates whatever it is handed at boot, so an
- * imported blob cannot produce an invalid game, only a defaulted one.
+ * imported blob cannot produce an invalid game, only a defaulted one. An imported
+ * `tanks.settings.v1` from a FUTURE schema is the one case that is neither: the settings
+ * store recognises it, refuses to reinterpret or overwrite it, and runs the session on
+ * defaults (settings.ts).
  */
 
 /** The wire discriminator. Present so a pasted blob of some other JSON is rejected loudly. */
@@ -41,15 +46,41 @@ export const SAVE_VERSION = 1;
  * Sourced from the six store modules rather than retyped, so a renamed key
  * cannot leave this list pointing at a key nothing writes. The order is fixed so
  * two exports of the same state are byte-identical and diffable.
+ *
+ * `tanks.touch.v1` was here until issue #320; `tanks.settings.v1` takes its slot. A new
+ * export must not keep emitting the legacy key, because no current build WRITES it -- an
+ * export that carried it would be shipping whatever bytes happened to survive migration
+ * on that device, and re-importing them elsewhere would resurrect settings the player had
+ * already changed. See `SAVE_IMPORT_KEYS` for the other half of that decision.
  */
 export const SAVE_KEYS: readonly string[] = Object.freeze([
   PROGRESS_KEY,
   STATS_KEY,
   CUSTOM_KEY,
-  TOUCH_SETTINGS_KEY,
+  SETTINGS_KEY,
   ACHIEVEMENTS_KEY,
   RUN_KEY,
 ]);
+
+/**
+ * The IMPORT allow-list: every export key, plus `tanks.touch.v1` as a deliberate
+ * compatibility key.
+ *
+ * Two lists rather than one, and this is the wider of the two on purpose. A save exported
+ * before issue #320 carries `tanks.touch.v1` and nothing else about settings; refusing it
+ * would silently drop that player's scheme, fire mode and haptics on restore. Widening
+ * `SAVE_KEYS` instead would have made every NEW export emit a key nothing writes.
+ *
+ * This is a superset by EXACTLY one key, and it is still an allow-list -- the security
+ * property is unchanged. The origin is shared with every other project page on
+ * austinorphan.com, so a blob a player was talked into pasting still cannot set
+ * `some-other-app.session`; it can only set keys this game already owns.
+ *
+ * A blob carrying BOTH keys applies both raw values, and the canonical one wins on the
+ * next construction: `createPlayerSettingsStore` migrates from the legacy key only when
+ * there is no usable canonical payload, then clears the legacy key (settings.ts).
+ */
+export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS, TOUCH_SETTINGS_KEY]);
 
 export interface SaveBlob {
   format: string;
@@ -100,11 +131,17 @@ export function exportSave(storage: Storage): string {
  * Unknown keys are IGNORED, not written. That is a security property, not
  * tidiness: this origin's localStorage namespace is shared with every other
  * project page on austinorphan.com, so a blob a player was talked into pasting
- * must not be able to set `some-other-app.session`. The allow-list is SAVE_KEYS.
+ * must not be able to set `some-other-app.session`. The allow-list is SAVE_IMPORT_KEYS --
+ * SAVE_KEYS plus the legacy touch key, and nothing else.
  *
  * A key the blob omits is left ALONE rather than cleared -- an import is a
  * restore, and there is no way to tell "this save has no achievements" from
  * "this export predates achievements".
+ *
+ * Adding `tanks.settings.v1` did NOT bump SAVE_VERSION. The blob SCHEMA is unchanged --
+ * same three fields, same raw-string map -- and an old build reading a new export ignores
+ * the unknown key exactly as its own allow-list already required. Bumping would have made
+ * every new export unreadable by an old build for no wire-format reason.
  */
 export function importSave(storage: Storage, text: string): ImportResult {
   const empty = { applied: [] as string[], ignored: [] as string[], failed: [] as string[] };
@@ -139,7 +176,7 @@ export function importSave(storage: Storage, text: string): ImportResult {
   const failed: string[] = [];
   for (const key of Object.keys(keys)) {
     const value = (keys as Record<string, unknown>)[key];
-    if (!SAVE_KEYS.includes(key) || typeof value !== 'string') {
+    if (!SAVE_IMPORT_KEYS.includes(key) || typeof value !== 'string') {
       ignored.push(key);
       continue;
     }
@@ -173,6 +210,8 @@ export interface SaveApi {
   import(text: string): ImportResult;
   /** The keys an export covers, so the console can show them. */
   keys: readonly string[];
+  /** The wider set an import will accept -- `keys` plus the legacy compatibility key. */
+  importKeys: readonly string[];
 }
 
 export function createSaveApi(storage: Storage): SaveApi {
@@ -180,5 +219,6 @@ export function createSaveApi(storage: Storage): SaveApi {
     export: () => exportSave(storage),
     import: (text: string) => importSave(storage, text),
     keys: SAVE_KEYS,
+    importKeys: SAVE_IMPORT_KEYS,
   };
 }

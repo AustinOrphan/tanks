@@ -100,24 +100,23 @@ async function measure(label: string, seconds: number, build: () => { dispose: (
   samples.push(summarise(label, elapsed, durations));
 }
 
-/** Force `prefers-reduced-motion: reduce`, which is preview.ts's own off switch for the
- * spin -- the control arm of every comparison here. */
-function suppressMotion(): void {
-  window.matchMedia = ((q: string) => ({
-    matches: q.includes('prefers-reduced-motion'),
-    media: q,
-    addEventListener() {},
-    removeEventListener() {},
-  })) as unknown as typeof window.matchMedia;
-}
+/**
+ * The control arm of every comparison here: the preview built with its reduced-motion
+ * flag set, which suppresses the idle spin entirely.
+ *
+ * Passed as an ARGUMENT since issue #320. It used to be a `window.matchMedia` stub,
+ * because `createTankPreview` read the media query itself; the effective reduced-motion
+ * policy is now resolved in `src/game/effective-settings.ts` and handed to the preview,
+ * so the probe sets the same switch the game does instead of faking the platform.
+ */
+const REDUCED_MOTION = true;
 
 async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   if (params.get('mode') === 'probe') {
     // Nothing to sample: the runner drives this arm through __vis and reads the
     // browser's own main-thread task accounting over the window.
-    if (params.get('reduced') === '1') suppressMotion();
-    installVisProbe(params.get('kind') ?? 'preview');
+    installVisProbe(params.get('kind') ?? 'preview', params.get('reduced') === '1');
     window.__idleCost = { samples, notes };
     return;
   }
@@ -127,10 +126,9 @@ async function main(): Promise<void> {
 
   // 2. Control: the same preview with prefers-reduced-motion, which suppresses the spin
   //    entirely. Anything but 0 frames here means the probe is measuring something else.
-  const realMatchMedia = window.matchMedia;
-  suppressMotion();
-  await measure('control: reduced motion (spin off)', 5, () => createTankPreview(previewCanvas()));
-  window.matchMedia = realMatchMedia;
+  await measure('control: reduced motion (spin off)', 5, () =>
+    createTankPreview(previewCanvas(), undefined, REDUCED_MOTION),
+  );
 
   // 3. The same loop with a gl.finish() forced after each frame -- the GPU-inclusive
   //    upper bound. Done by wrapping rAF a second time around a finish() on the
@@ -169,8 +167,11 @@ async function main(): Promise<void> {
  * assumed. 'preview' is the shipped loop; 'raf' is an empty rAF loop with no WebGL at
  * all, which is the control that says whether a busy main thread is the DRAWING or
  * merely the fact that something asks for frames; 'none' runs nothing.
+ *
+ * `reducedMotion` is the same control arm as `REDUCED_MOTION` above, handed to the
+ * preview as an argument rather than faked through `window.matchMedia` (issue #320).
  */
-function installVisProbe(kind: string): void {
+function installVisProbe(kind: string, reducedMotion = false): void {
   window.__vis = ((): VisProbe => {
     let frames = 0;
     let preview: { dispose: () => void } | null = null;
@@ -193,7 +194,7 @@ function installVisProbe(kind: string): void {
           return;
         }
         if (kind === 'none') return;
-        preview = createTankPreview(previewCanvas());
+        preview = createTankPreview(previewCanvas(), undefined, reducedMotion);
       },
       mark(): number {
         return frames;

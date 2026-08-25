@@ -45,10 +45,65 @@ Pointing the game at Capacitor Preferences or a file-backed desktop shim is a on
 change with a test that can fail. `src/game/save.ts` serialises those six keys as one
 blob at the RAW key/value layer, deliberately not through the typed stores: they validate
 on read and drop what they do not recognise, which is exactly the data an export exists to
-preserve. Import writes only keys on the `SAVE_KEYS` allow-list — the origin is shared, so
-a pasted blob must not be able to set a neighbour's key — and an imported save is
-**invisible until reload**, because every store snapshots its key into an in-memory shadow
-at construction.
+preserve. Import writes only keys on the `SAVE_IMPORT_KEYS` allow-list — the origin is
+shared, so a pasted blob must not be able to set a neighbour's key — and an imported save
+is **invisible until reload**, because every store snapshots its key into an in-memory
+shadow at construction.
+
+`SAVE_IMPORT_KEYS` is deliberately WIDER than `SAVE_KEYS`, by exactly one key. A new export
+carries `tanks.settings.v1` and never `tanks.touch.v1`, because no current build writes the
+legacy key; an import still accepts `tanks.touch.v1` so a save taken before #320 does not
+lose its touch preferences on restore. Widening the export list instead would have made
+every new export emit a key nothing writes; weakening the import list to one shared set
+would have widened the security boundary. Adding the settings key did not bump
+`SAVE_VERSION`: the blob SCHEMA is unchanged, and an old build already ignores keys outside
+its own allow-list.
+
+**Player settings are one versioned, capability-aware model (#320).** `tanks.settings.v1`
+holds every durable preference, grouped `audio` / `input` / `presentation`, with an explicit
+`version` integer INSIDE the payload — the other stores version by key name, which cannot
+distinguish "a key this build does not know" from "this key, written by a newer build".
+
+| Field | Default | Domain | Invalid stored value | Capability gate | Effective rule |
+| --- | --- | --- | --- | --- | --- |
+| `audio.muted` | `false` | boolean | default | none | the stored value |
+| `audio.volume` | `DEFAULT_VOLUME` (0.6) | finite number in [0, 1] | finite out of range is clamped; anything else defaults | none | the stored value |
+| `input.touchScheme` | `stick` | `TOUCH_SCHEMES` | default | none, deliberately | the stored value |
+| `input.fireMode` | `tap` | `FIRE_MODES` | default | none, deliberately | the stored value |
+| `input.deviceHaptics` | `true` | boolean | default | `navigator.vibrate` exists | stored AND capable |
+| `input.controllerRumble` | `true` | boolean | default | a connected pad has an actuator | stored AND capable |
+| `presentation.motion` | `system` | `system` / `full` / `reduced` | default | live `prefers-reduced-motion` | `system` follows the OS; `full` is false; `reduced` is true |
+| `presentation.uiScale` | `100` | `100` / `125` / `150` percent | default | none | the stored value, plus a `uiScaleFactor` multiplier for #290/#321 |
+
+Every field validates independently, so junk in one never resets a sibling. Touch scheme and
+fire mode are ungated on purpose: gating them on touch capability would rewrite a hybrid
+device's saved choice, and whether to SHOW the control is #227's question. Device vibration
+and controller rumble are separate capabilities end to end — rumble is never delivered
+through `navigator.vibrate`. Only booleans leave `capabilities.ts`; no gamepad index, device
+id or slot assignment is ever persisted.
+
+`src/game/effective-settings.ts` is the only place those rules are applied, and
+`src/game/capabilities.ts` is the only place JavaScript reads
+`matchMedia('(prefers-reduced-motion: reduce)')` — consumers take the resolved value as an
+argument (`createTankPreview`) rather than querying the platform.
+
+**`AppSettings` owns persistence for the PAGE, not the session.** `boot.ts` builds
+`createBrowserAppSettings()` once and hands the same instance to every `startGame` call.
+It has to be above the session: `boot.ts` disposes the whole game handle and rebuilds
+`GameDeps` on every campaign/versus reboot, so anything a session owns restarts at its
+default — which is why mute and volume used to reset on the way into a versus match. One
+owner also means one settings store per page (no second writable shadow), one resolved
+`Storage` (the in-memory shim is not re-created per session), and a persistence notice that
+can fire at most once per document load. A session subscribes and unsubscribes on teardown;
+only the page's `pagehide` disposes the owner. This is the slice #317's app shell will take
+over, in the shape it will take it over.
+
+`tanks.touch.v1` is now a migration READ only (`readLegacyTouchSettings`). When there is no
+usable canonical payload, each legacy field is validated independently, merged over the
+current defaults, written canonically, and the legacy key is removed — in that order, so a
+storage that refuses writes keeps the player's data rather than losing it. A valid canonical
+payload always wins, and a FUTURE-version payload is never migrated over, never
+reinterpreted field by field, and never overwritten except by an explicit `reset()`.
 
 **A run is recordable because the sim is pure, and the recorder is a DECORATOR.**
 `src/game/replay.ts` wraps the input collaborator `loop.ts` hands the driver — `driver.ts`

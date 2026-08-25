@@ -120,11 +120,17 @@ describe('createAudioEngine', () => {
     engine.dispose();
   });
 
-  it('applies DEFAULT_VOLUME at construction, so the HUD slider is not lying', () => {
-    // The HUD renders its volume slider at DEFAULT_VOLUME before the user has
-    // touched anything. If the engine boots at some other level and waits for
-    // an 'input' event to call Howler.volume(), the displayed value is wrong
-    // until the first drag.
+  it('applies DEFAULT_VOLUME at construction, so an unconfigured engine matches the markup', () => {
+    // The engine's OWN starting level, independent of any stored setting. If it booted
+    // at some other level and waited for an 'input' event to call Howler.volume(), a
+    // brand-new player would hear something other than what the markup shows.
+    //
+    // The rationale here used to read "so the HUD slider is not lying", meaning the
+    // slider that hud.ts renders at DEFAULT_VOLUME. That is no longer the whole story:
+    // since issue #320, volume is persisted, and loop.ts pushes the STORED value into
+    // both the engine and both sliders the moment the HUD exists -- so for a returning
+    // player neither shows DEFAULT_VOLUME. The assertion below is unchanged and still
+    // correct about this engine; only the reason it matters has narrowed.
     const engine = createAudioEngine(LOADABLE);
 
     expect(globalVolume).toHaveBeenCalledWith(DEFAULT_VOLUME);

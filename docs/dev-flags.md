@@ -30,7 +30,7 @@ accident.
 | `muzzleInside` | `muzzleInside` | `false` | Restores today's pre-clearance behaviour: a shell can be born already inside an adjacent live tank's hit circle. |
 | `replay` | `replay` | `false` | Records the per-tick input stream and publishes it on the dev console object. |
 | `sandboxDisarmed` | `disarmed` | `true` | Controls whether sandbox enemies carry weapons. |
-| `saveIo` | `saveIo` | `false` | Publishes save export/import on the dev console object (`__tanks`). |
+| `saveIo` | `saveIo` | `false` | Publishes save export/import and the player-settings surface (snapshot, effective values, status, reset) on the dev console object (`__tanks`). |
 | `shellCount` | `shellCount` | `false` | Shows the count of shells currently in flight against SHELL_CAP. |
 
 Notes:

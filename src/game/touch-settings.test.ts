@@ -1,216 +1,119 @@
 // @vitest-environment jsdom
-// The right thumb's scheme preference: persisted the same way the paint shop's choice
-// is (customization.ts), including per-field validation -- an unknown stored value must
-// fall back to the default, never crash or leak into a differently-shaped state.
+// The LEGACY touch-preferences key, now a one-way migration read (issue #320). The
+// writable store this file used to cover lives in settings.ts; what is left here is the
+// compatibility surface, and the property that matters is per-field independence -- a
+// junk value in one field must never take a valid sibling down with it, because the
+// migration adopts these fields one at a time.
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  createTouchSettingsStore,
-  DEFAULT_TOUCH_SCHEME,
-  DEFAULT_FIRE_MODE,
-  DEFAULT_HAPTICS,
-  TOUCH_SETTINGS_KEY,
-} from './touch-settings';
+import { readLegacyTouchSettings, TOUCH_SETTINGS_KEY } from './touch-settings';
 import { TOUCH_SCHEMES, FIRE_MODES } from '../input/touch';
+import { createMemoryStorage } from './storage';
 
 beforeEach(() => localStorage.clear());
 
-describe('createTouchSettingsStore', () => {
-  it('defaults to stick', () => {
-    // Pins the DEFAULT constant itself, not just that some scheme is returned --
-    // the spec requires 'stick' specifically.
-    expect(DEFAULT_TOUCH_SCHEME).toBe('stick');
-    expect(createTouchSettingsStore(localStorage).scheme()).toBe('stick');
-  });
-
-  it('starts at the default and persists a pick across instances', () => {
-    const a = createTouchSettingsStore(localStorage);
-    expect(a.scheme()).toBe(DEFAULT_TOUCH_SCHEME);
-    a.setScheme('point');
-    expect(createTouchSettingsStore(localStorage).scheme()).toBe('point');
-  });
-
-  it('treats junk and unknown scheme values as the default', () => {
-    for (const junk of ['banana', '{"scheme":"joystick"}', '{"scheme":7}', '']) {
-      localStorage.setItem(TOUCH_SETTINGS_KEY, junk);
-      expect(createTouchSettingsStore(localStorage).scheme(), junk).toBe(DEFAULT_TOUCH_SCHEME);
-    }
-  });
-
-  it('refuses to store a value off TOUCH_SCHEMES', () => {
-    const s = createTouchSettingsStore(localStorage);
-    s.setScheme('joystick' as never); // forced past the types
-    expect(s.scheme()).toBe(DEFAULT_TOUCH_SCHEME);
-  });
-
-  it('accepts every scheme TOUCH_SCHEMES actually lists', () => {
-    // Population: the full, current set of legal schemes -- not a hardcoded 'point'
-    // that would stop covering a third scheme added later.
-    for (const id of TOUCH_SCHEMES) {
-      const s = createTouchSettingsStore(localStorage);
-      s.setScheme(id);
-      expect(s.scheme(), id).toBe(id);
-    }
-  });
-
-  it('survives a throwing storage, carrying the pick in-memory', () => {
-    const throwing = {
-      getItem: () => {
-        throw new Error('denied');
-      },
-      setItem: () => {
-        throw new Error('denied');
-      },
-    } as unknown as Storage;
-    const s = createTouchSettingsStore(throwing);
-    s.setScheme('point'); // must not throw
-    expect(s.scheme()).toBe('point');
-  });
-
-  it('a junk value under one key never touches the other store', () => {
-    // The whole reason this is a separate key from tanks.custom.v1: a broken write to
-    // one must not be able to reset the other's default.
-    localStorage.setItem(TOUCH_SETTINGS_KEY, 'not json');
-    expect(createTouchSettingsStore(localStorage).scheme()).toBe(DEFAULT_TOUCH_SCHEME);
-    expect(localStorage.getItem('tanks.custom.v1')).toBeNull();
+describe('TOUCH_SETTINGS_KEY', () => {
+  it('is still the exact wire string older saves were written under', () => {
+    // A LITERAL. This key is only ever read now, and only from data written by builds
+    // that no longer exist to be consulted -- renaming it would silently orphan every
+    // pre-#320 player's preferences with nothing failing.
+    expect(TOUCH_SETTINGS_KEY).toBe('tanks.touch.v1');
   });
 });
 
-describe('createTouchSettingsStore — fire mode', () => {
-  it('defaults to tap', () => {
-    // Pins the DEFAULT constant itself, not just that some mode is returned -- the
-    // spec requires 'tap' specifically.
-    expect(DEFAULT_FIRE_MODE).toBe('tap');
-    expect(createTouchSettingsStore(localStorage).fireMode()).toBe('tap');
+describe('readLegacyTouchSettings', () => {
+  it('reports an absent key as absent, with nothing to adopt', () => {
+    expect(readLegacyTouchSettings(localStorage)).toEqual({
+      present: false,
+      scheme: null,
+      fireMode: null,
+      haptics: null,
+    });
   });
 
-  it('starts at the default and persists a pick across instances', () => {
-    const a = createTouchSettingsStore(localStorage);
-    expect(a.fireMode()).toBe(DEFAULT_FIRE_MODE);
-    a.setFireMode('double');
-    expect(createTouchSettingsStore(localStorage).fireMode()).toBe('double');
+  it('reads all three fields when all three are valid', () => {
+    localStorage.setItem(
+      TOUCH_SETTINGS_KEY,
+      JSON.stringify({ scheme: 'point', fireMode: 'button', haptics: false }),
+    );
+    expect(readLegacyTouchSettings(localStorage)).toEqual({
+      present: true,
+      scheme: 'point',
+      fireMode: 'button',
+      haptics: false,
+    });
   });
 
-  it('treats junk and unknown fire-mode values as the default', () => {
-    for (const junk of ['banana', '{"fireMode":"triple"}', '{"fireMode":7}', '']) {
+  it('accepts every scheme and mode the real lists actually name', () => {
+    // Population: the full current TOUCH_SCHEMES x FIRE_MODES cross-product (2 x 3 = 6
+    // pairs as this is written), sourced from input/touch.ts rather than retyped, so a
+    // scheme added later is covered here without an edit.
+    let pairs = 0;
+    for (const scheme of TOUCH_SCHEMES) {
+      for (const fireMode of FIRE_MODES) {
+        localStorage.setItem(TOUCH_SETTINGS_KEY, JSON.stringify({ scheme, fireMode }));
+        const read = readLegacyTouchSettings(localStorage);
+        expect(read.scheme, `${scheme}/${fireMode}`).toBe(scheme);
+        expect(read.fireMode, `${scheme}/${fireMode}`).toBe(fireMode);
+        pairs += 1;
+      }
+    }
+    expect(pairs).toBe(TOUCH_SCHEMES.length * FIRE_MODES.length);
+  });
+
+  it('keeps a VALID field when its sibling is junk -- the property migration depends on', () => {
+    // Population: each of the three fields corrupted in turn, with the other two valid.
+    // This is the exact behaviour issue #320 requires migration to preserve, and the
+    // reason this reader answers per field rather than all-or-nothing.
+    const rows: Array<[string, unknown, Record<string, unknown>]> = [
+      ['scheme', { scheme: 'joystick', fireMode: 'button', haptics: false }, { scheme: null, fireMode: 'button', haptics: false }],
+      ['fireMode', { scheme: 'point', fireMode: 7, haptics: false }, { scheme: 'point', fireMode: null, haptics: false }],
+      ['haptics', { scheme: 'point', fireMode: 'button', haptics: 'yes' }, { scheme: 'point', fireMode: 'button', haptics: null }],
+    ];
+    for (const [label, stored, expected] of rows) {
+      localStorage.setItem(TOUCH_SETTINGS_KEY, JSON.stringify(stored));
+      expect(readLegacyTouchSettings(localStorage), label).toEqual({ present: true, ...expected });
+    }
+  });
+
+  it('reports junk as PRESENT with nothing to adopt, so it still gets cleaned up', () => {
+    // Population: the four ways a stored value can be unusable as a whole -- empty
+    // string, unparseable text, a JSON array, and a JSON scalar. `present: true` is the
+    // load-bearing half: a key holding junk must still be removed after migration, and a
+    // reader that answered "absent" for junk would leave it behind forever.
+    for (const junk of ['', 'not json', '[1,2,3]', '7']) {
       localStorage.setItem(TOUCH_SETTINGS_KEY, junk);
-      expect(createTouchSettingsStore(localStorage).fireMode(), junk).toBe(DEFAULT_FIRE_MODE);
+      expect(readLegacyTouchSettings(localStorage), JSON.stringify(junk)).toEqual({
+        present: true,
+        scheme: null,
+        fireMode: null,
+        haptics: null,
+      });
     }
   });
 
-  it('refuses to store a value off FIRE_MODES', () => {
-    const s = createTouchSettingsStore(localStorage);
-    s.setFireMode('triple' as never); // forced past the types
-    expect(s.fireMode()).toBe(DEFAULT_FIRE_MODE);
+  it('treats a JSON null root as junk rather than throwing', () => {
+    // `typeof null === 'object'`, so only the explicit null check rejects it. Without
+    // that check the property reads below would throw straight out of a boot path.
+    localStorage.setItem(TOUCH_SETTINGS_KEY, 'null');
+    expect(readLegacyTouchSettings(localStorage).present).toBe(true);
+    expect(readLegacyTouchSettings(localStorage).scheme).toBeNull();
   });
 
-  it('accepts every mode FIRE_MODES actually lists', () => {
-    // Population: the full, current set of legal fire modes -- not a hardcoded 'tap'
-    // that would stop covering a fourth mode added later.
-    for (const id of FIRE_MODES) {
-      const s = createTouchSettingsStore(localStorage);
-      s.setFireMode(id);
-      expect(s.fireMode(), id).toBe(id);
-    }
-  });
-
-  it('survives a throwing storage, carrying the pick in-memory', () => {
+  it('survives a storage whose getItem THROWS', () => {
+    // Safari private mode / a locked-down context. Nothing to migrate and nothing to
+    // clean up, and above all no throw out of the settings store's constructor.
     const throwing = {
-      getItem: () => {
-        throw new Error('denied');
-      },
-      setItem: () => {
+      getItem: (): string | null => {
         throw new Error('denied');
       },
     } as unknown as Storage;
-    const s = createTouchSettingsStore(throwing);
-    s.setFireMode('double'); // must not throw
-    expect(s.fireMode()).toBe('double');
+    expect(() => readLegacyTouchSettings(throwing)).not.toThrow();
+    expect(readLegacyTouchSettings(throwing).present).toBe(false);
   });
 
-  it('a junk fireMode value never touches scheme, and vice versa -- the two fields degrade independently', () => {
-    // Corrupt fireMode alone: scheme is untouched.
-    localStorage.setItem(TOUCH_SETTINGS_KEY, JSON.stringify({ scheme: 'point', fireMode: 7 }));
-    let s = createTouchSettingsStore(localStorage);
-    expect(s.scheme(), 'a bad fireMode reset scheme too').toBe('point');
-    expect(s.fireMode()).toBe(DEFAULT_FIRE_MODE);
-
-    // Corrupt scheme alone: fireMode is untouched.
-    localStorage.setItem(
-      TOUCH_SETTINGS_KEY,
-      JSON.stringify({ scheme: 'joystick', fireMode: 'double' }),
-    );
-    s = createTouchSettingsStore(localStorage);
-    expect(s.scheme()).toBe(DEFAULT_TOUCH_SCHEME);
-    expect(s.fireMode(), 'a bad scheme reset fireMode too').toBe('double');
-  });
-
-  it('a junk value under one key never touches the other store', () => {
-    localStorage.setItem(TOUCH_SETTINGS_KEY, 'not json');
-    expect(createTouchSettingsStore(localStorage).fireMode()).toBe(DEFAULT_FIRE_MODE);
-    expect(localStorage.getItem('tanks.custom.v1')).toBeNull();
-  });
-});
-
-describe('createTouchSettingsStore — haptics', () => {
-  it('defaults to on', () => {
-    // Pins the DEFAULT constant itself, not just that some boolean is returned --
-    // the spec requires `true` specifically, the same convention as audio's unmuted
-    // default.
-    expect(DEFAULT_HAPTICS).toBe(true);
-    expect(createTouchSettingsStore(localStorage).haptics()).toBe(true);
-  });
-
-  it('starts at the default and persists a pick across instances', () => {
-    const a = createTouchSettingsStore(localStorage);
-    expect(a.haptics()).toBe(DEFAULT_HAPTICS);
-    a.setHaptics(false);
-    expect(createTouchSettingsStore(localStorage).haptics()).toBe(false);
-  });
-
-  it('treats junk haptics values as the default', () => {
-    for (const junk of ['banana', '{"haptics":"yes"}', '{"haptics":1}', '']) {
-      localStorage.setItem(TOUCH_SETTINGS_KEY, junk);
-      expect(createTouchSettingsStore(localStorage).haptics(), junk).toBe(DEFAULT_HAPTICS);
-    }
-  });
-
-  it('survives a throwing storage, carrying the pick in-memory', () => {
-    const throwing = {
-      getItem: () => {
-        throw new Error('denied');
-      },
-      setItem: () => {
-        throw new Error('denied');
-      },
-    } as unknown as Storage;
-    const s = createTouchSettingsStore(throwing);
-    s.setHaptics(false); // must not throw
-    expect(s.haptics()).toBe(false);
-  });
-
-  it('a junk haptics value never resets scheme or fireMode, and vice versa -- all three degrade independently', () => {
-    localStorage.setItem(
-      TOUCH_SETTINGS_KEY,
-      JSON.stringify({ scheme: 'point', fireMode: 'double', haptics: 'nope' }),
-    );
-    let s = createTouchSettingsStore(localStorage);
-    expect(s.scheme(), 'a bad haptics value reset scheme too').toBe('point');
-    expect(s.fireMode(), 'a bad haptics value reset fireMode too').toBe('double');
-    expect(s.haptics()).toBe(DEFAULT_HAPTICS);
-
-    localStorage.setItem(
-      TOUCH_SETTINGS_KEY,
-      JSON.stringify({ scheme: 'joystick', fireMode: 7, haptics: false }),
-    );
-    s = createTouchSettingsStore(localStorage);
-    expect(s.scheme()).toBe(DEFAULT_TOUCH_SCHEME);
-    expect(s.fireMode()).toBe(DEFAULT_FIRE_MODE);
-    expect(s.haptics(), 'a bad scheme/fireMode reset haptics too').toBe(false);
-  });
-
-  it('a junk value under one key never touches the other store', () => {
-    localStorage.setItem(TOUCH_SETTINGS_KEY, 'not json');
-    expect(createTouchSettingsStore(localStorage).haptics()).toBe(DEFAULT_HAPTICS);
-    expect(localStorage.getItem('tanks.custom.v1')).toBeNull();
+  it('reads only its own key, never a neighbour', () => {
+    const s = createMemoryStorage();
+    s.setItem('tanks.custom.v1', JSON.stringify({ scheme: 'point' }));
+    expect(readLegacyTouchSettings(s).present).toBe(false);
   });
 });

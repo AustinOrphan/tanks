@@ -14,10 +14,17 @@ import { resolveVersusConfig, type VersusConfig } from './versus-config';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
-import type { TouchSettingsStore } from './touch-settings';
+import type {
+  PlayerSettings,
+  PlayerSettingsStore,
+  SettingsNotice,
+  SettingsStatus,
+} from './settings';
+import type { EffectiveSettings, EffectiveSettingsHandle } from './effective-settings';
+import { createBrowserAppSettings, type AppSettings } from './app-settings';
 import type { AchievementsStore, AchievementContext } from './achievements';
 import type { RunStore } from './run';
-import { resolveStorage, createStores } from './storage';
+
 import { createSaveApi, type SaveApi } from './save';
 import {
   createRecordingInput,
@@ -151,6 +158,8 @@ export interface GameDeps {
   readonly createPreview: (
     canvas: HTMLCanvasElement,
     rotateButtons: readonly HTMLElement[],
+    /** The resolved reduced-motion policy (effective-settings.ts), never a media query. */
+    reducedMotion: boolean,
   ) => TankPreview | null;
   readonly createInput: (
     target: HTMLElement,
@@ -229,8 +238,35 @@ export interface GameDeps {
   readonly stats: StatsStore;
   /** The paint shop's saved choice. Render-only downstream. */
   readonly customization: CustomizationStore;
-  /** The right thumb's saved aim scheme. Input-only downstream, unlike customization. */
-  readonly touchSettings: TouchSettingsStore;
+  /**
+   * Every durable player preference, as STORED (settings.ts): mute, volume, touch scheme,
+   * fire mode, device haptics, controller rumble, motion policy, UI scale.
+   *
+   * Written to when the player changes something. Almost never READ from here -- read
+   * `effectiveSettings` instead, which is the same values after the capability and OS
+   * rules have been applied. The two are separate fields precisely so a consumer cannot
+   * reach for the raw preference by accident and buzz a device that cannot vibrate.
+   *
+   * PAGE-scoped: the same instance across every session on this document load (see
+   * `createBrowserDeps`), which is what makes mute and volume survive the campaign/versus
+   * reboot that replaces everything else in this object.
+   */
+  readonly settings: PlayerSettingsStore;
+  /**
+   * The resolved values every consumer should apply (effective-settings.ts). Page-scoped,
+   * like `settings`.
+   *
+   * `startGameWith` must NOT dispose this -- see `EffectiveSettingsHandle.dispose`. It
+   * unsubscribes its own listener on teardown and leaves the handle alive for the next
+   * session.
+   */
+  readonly effectiveSettings: EffectiveSettingsHandle;
+  /**
+   * Register for the one persistence notice this page will show, if any. Returns an
+   * unregister the session teardown must call -- the HUD it closes over dies with the
+   * session, and the notice can arrive later (a first failed write).
+   */
+  readonly onSettingsNotice: (cb: (notice: SettingsNotice) => void) => () => void;
   readonly achievements: AchievementsStore;
   /**
    * The RAW key/value layer the six stores above sit on.
@@ -330,10 +366,38 @@ export const DEV_CONSOLE_KEY = '__tanks';
  * empty one that reads as "the feature is here but broken".
  */
 export interface DevConsole {
-  /** Export/import the five `tanks.*` keys. Reload after an import -- see save.ts. */
+  /** Export/import the `tanks.*` save keys. Reload after an import -- see save.ts. */
   save?: SaveApi;
+  /**
+   * Player settings (issue #320): what is stored, whether it is actually being saved,
+   * and the reset that restores the documented defaults.
+   *
+   * Rides `saveIo` rather than earning a flag of its own, because it is the same
+   * concern: the raw save layer beside the one typed store that can end up UNWRITABLE.
+   * `status()` is the difference between "your settings are saved", "they die with this
+   * page", and "a newer build's payload is under this key and nothing will be written
+   * until you reset" -- and `reset()` is the only exit from that last state, which the
+   * notice text promises exists. The Settings -> Data affordance that will make it
+   * reachable without a dev flag belongs to issue #226.
+   */
+  settings?: SettingsApi;
   /** The input trace for the CURRENT level, replayable through replay.ts. */
   replay?: () => ReplayTrace;
+}
+
+export interface SettingsApi {
+  /** The accepted settings, exactly as every consumer sees them. */
+  snapshot(): PlayerSettings;
+  /** The EFFECTIVE values, after capability and OS rules -- what is actually applied. */
+  effective(): EffectiveSettings;
+  /** Whether settings are reaching storage, and why not. See `SettingsStatus`. */
+  status(): SettingsStatus;
+  /**
+   * Restore the documented defaults and persist them. Clears a future-schema lock and
+   * the legacy `tanks.touch.v1` key. Progress, stats and achievements are untouched --
+   * those belong to the HUD's own Reset Progress, which does not touch settings either.
+   */
+  reset(): void;
 }
 
 /** Where the dev surface is published. `globalThis` in the browser; a plain object in tests. */
@@ -753,15 +817,22 @@ function countEnemies(world: World): number {
  * read off globalThis so that a mis-call under node yields undefined at the use
  * site rather than a ReferenceError at import.
  */
-export function createBrowserDeps(): GameDeps {
+export function createBrowserDeps(appSettings: AppSettings = createBrowserAppSettings()): GameDeps {
   const search = globalThis.location?.search ?? '';
   const devFlags = parseDevFlags(search);
-  // Resolved ONCE and shared by all five stores. It used to be resolved per
+  // Resolved ONCE and shared by all six stores. It used to be resolved per
   // store, which was harmless only because localStorage hands back the same
   // object every time -- with the in-memory fallback it would have given each
   // store its own private namespace. storage.ts makes that structural.
-  const storage = resolveStorage();
-  const { progress, stats, customization, touchSettings, achievements, run } = createStores(storage);
+  //
+  // Since issue #320 the resolution happens one level HIGHER still: `AppSettings` owns it
+  // for the whole page (app-settings.ts), and this function is handed the result. That is
+  // what makes the stores -- and with them mute, volume and every other preference --
+  // the SAME objects across the campaign/versus reboot that rebuilds these deps. The
+  // default argument keeps `createBrowserDeps()` callable on its own, which is what the
+  // tests that exercise dev-flag parsing against a real `location` rely on.
+  const { storage, stores } = appSettings;
+  const { progress, stats, customization, settings, achievements, run } = stores;
   return {
     createRenderer,
     createPreview: createTankPreview,
@@ -778,7 +849,9 @@ export function createBrowserDeps(): GameDeps {
     run,
     stats,
     customization,
-    touchSettings,
+    settings,
+    effectiveSettings: appSettings.effective,
+    onSettingsNotice: appSettings.onNotice,
     achievements,
     storage,
     devConsole: globalThis as unknown as DevConsoleTarget,
@@ -884,8 +957,20 @@ export function versusAwareDeps(
   versus: { config: VersusConfig } | null | undefined,
   requestVersusSession: (config: VersusConfig) => void,
   requestCampaignSession?: () => void,
+  /**
+   * The page's ONE settings/persistence owner (app-settings.ts), created once by
+   * `boot.ts` and handed to every session it starts. Optional so an existing caller that
+   * has none still builds a working session with its own; production always passes it,
+   * which is what makes settings survive a reboot.
+   */
+  appSettings?: AppSettings,
 ): GameDeps {
-  return applyVersusToDeps(createBrowserDeps(), versus, requestVersusSession, requestCampaignSession);
+  return applyVersusToDeps(
+    createBrowserDeps(appSettings),
+    versus,
+    requestVersusSession,
+    requestCampaignSession,
+  );
 }
 
 export function startGameWith(
@@ -1191,12 +1276,19 @@ export function startGameWith(
     // docs/superpowers/plans/2026-08-17-controllers-4.md.
     gamepad: deps.devFlags.gamepad,
   });
-  // The saved scheme, pushed at boot so the very first touch already uses it -- see the
-  // echo-back wiring below for what happens when the player changes it in the HUD.
-  input.setTouchScheme(deps.touchSettings.scheme());
-  // Same convention for the saved fire mode: pushed at boot so the very first tap on
-  // the aim side already reads under the right gesture.
-  input.setFireMode(deps.touchSettings.fireMode());
+  // The saved scheme and fire mode, pushed at boot so the very first touch already uses
+  // them. Read through `effectiveSettings`, never the store: the effective layer is the
+  // only place allowed to decide what a stored preference actually means on this device,
+  // and reading the raw store here would be a second, silently divergent answer.
+  //
+  // `applyEffectiveSettings` below re-pushes both -- and everything else -- from one
+  // place once the HUD, audio and haptics exist, and on every later change. These two
+  // calls exist because `input` is built here, long before that.
+  {
+    const effective = deps.effectiveSettings.current();
+    input.setTouchScheme(effective.touchScheme);
+    input.setFireMode(effective.fireMode);
+  }
   /**
    * Build the `PlayerInputSource` a `SlotSource` DESCRIBES -- `null` for `'bot'`, which
    * has none: `decidePlayerInput` reads straight off `botSources`/`world`, so building a
@@ -1324,10 +1416,13 @@ export function startGameWith(
     : null;
   const director = deps.createDirector(audio, playerId ?? -1);
   const haptics = deps.createHaptics(playerId ?? -1);
-  // Read once at boot; the toggle below (see the settings-row wiring) keeps it live
-  // afterward, the same as the saved scheme/fire-mode reads just above. Re-reading here
-  // on every world switch would be redundant with that.
-  haptics.setEnabled(deps.touchSettings.haptics());
+  // The EFFECTIVE value, not the stored preference: a device with no `navigator.vibrate`
+  // has `deviceHaptics: false` here however the player has the switch set, and the
+  // preference is left untouched so it comes back if the capability ever does
+  // (effective-settings.ts). `applyEffectiveSettings` re-pushes this on every change,
+  // including a capability change, so this call only covers the window before the HUD
+  // exists. Re-reading on every world switch would be redundant with that.
+  haptics.setEnabled(deps.effectiveSettings.current().deviceHaptics);
   /**
    * THE PRODUCTION CLASSIFIER (issue #316's finding 1).
    *
@@ -1353,6 +1448,108 @@ export function startGameWith(
     }),
   });
   const hud = deps.createHud(uiRoot);
+
+  /**
+   * THE ONE PLACE a settings value reaches a runtime consumer.
+   *
+   * Before issue #320 each preference had its own three-step echo -- write the store,
+   * read back the accepted value, push it to the HUD and to the one runtime object that
+   * cared -- repeated per setting, and mute/volume had no store at all, so the audio
+   * engine and both mute buttons were the state. That is what let a returning player's
+   * volume slider sit at DEFAULT_VOLUME while the game played at something else, and what
+   * made a versus reboot silently unmute.
+   *
+   * Now every handler does exactly one thing: write the store. This function is what runs
+   * afterwards, from the two subscriptions below, and it is the only writer of runtime
+   * audio/input/haptics/HUD state from settings.
+   *
+   * Note which side each consumer is given:
+   *
+   *  - `haptics.setEnabled` gets the EFFECTIVE value, so a device with no
+   *    `navigator.vibrate` stays silent whatever the switch says;
+   *  - `hud.setHaptics` gets the STORED preference, because that toggle EDITS the
+   *    preference. Showing it forced off on an unsupported device would look like a dead
+   *    control and would suggest the preference had been erased, which is exactly what
+   *    issue #320 forbids. Hiding it where it cannot apply is issue #227's work.
+   *
+   * Touch scheme and fire mode are ungated, so stored and effective agree by construction
+   * (effective-settings.ts); they are read from the effective side so that every consumer
+   * in this function reads from the same place a future gate would appear.
+   */
+  function applySettings(): void {
+    const stored = deps.settings.snapshot();
+    const effective = deps.effectiveSettings.current();
+    audio.setMuted(effective.muted);
+    audio.setVolume(effective.volume);
+    input.setTouchScheme(effective.touchScheme);
+    input.setFireMode(effective.fireMode);
+    haptics.setEnabled(effective.deviceHaptics);
+    hud.setMuted(effective.muted);
+    hud.setVolume(effective.volume);
+    hud.setTouchScheme(effective.touchScheme);
+    hud.setFireMode(effective.fireMode);
+    hud.setHaptics(stored.input.deviceHaptics);
+  }
+
+  /**
+   * Store -> audio -> button, for all three mute paths.
+   *
+   * Both mute buttons and the M hotkey used to call `audio.toggleMute()` directly and
+   * hand its return value to `hud.setMuted`. Routing them all through the store is what
+   * makes an M-key mute survive a reload; leaving any one of them on the old path would
+   * make mute persist or not depending on which control the player used.
+   */
+  function toggleMute(): void {
+    deps.settings.setMuted(!deps.settings.snapshot().audio.muted);
+  }
+
+  applySettings();
+  // ONE subscription. `EffectiveSettingsHandle.subscribe` republishes on any INPUT change
+  // -- a stored preference, a capability, or the OS motion preference -- not only when
+  // the resolved value moves, which is what lets this single registration cover both the
+  // runtime consumers and the controls that edit the preferences (see its own comment).
+  const stopEffectiveSubscription = deps.effectiveSettings.subscribe(applySettings);
+  /**
+   * The persistence notice (issue #320): one line, in the existing self-expiring toast
+   * rail, at most once per page.
+   *
+   * Registered rather than polled because the condition it reports is not always known at
+   * boot: a real `localStorage` whose `setItem` throws (Safari private mode) only reveals
+   * itself on the first write. `showToast` is already non-modal, already `aria-live`
+   * polite, already self-expiring and already takes no input -- reusing it is what keeps
+   * this from becoming a new navigation state.
+   *
+   * The unregister is not optional: this closure holds THIS session's HUD, and the
+   * session is torn down and rebuilt on every campaign/versus reboot.
+   *
+   * HELD WHILE THE SPLASH IS UP, and this is the difference between the notice existing
+   * and the player seeing it. `.hud-splash` is `z-index: 3` over a full-bleed
+   * `rgba(14, 17, 22, 0.92)` scrim; `.hud-toasts` is `z-index: 2` (hud.css). The title
+   * screen deliberately paints over everything, the toast rail included. Both conditions
+   * that are knowable at BOOT -- memory-only storage and a future-schema payload -- are
+   * delivered the instant this registers, which is immediately after `createHud`, while
+   * the surface is still `launch`. A toast raised there expires behind the scrim after
+   * TOAST_MS (3200ms, hud.ts) and a player who takes longer than that to press a key
+   * never sees it at all. Deferring to the first surface that is not `launch` is what
+   * makes "surfaces a notice" true rather than merely "called showToast".
+   *
+   * Deliberately NOT solved by raising the rail above the splash: the splash's
+   * z-index comment states the title screen is the whole screen and nothing may paint
+   * over it, and a notice about storage is not worth reopening that ruling.
+   */
+  let pendingNotice: SettingsNotice | null = null;
+  function flushSettingsNotice(): void {
+    if (pendingNotice === null || sm.atLaunch) return;
+    const notice = pendingNotice;
+    // Cleared BEFORE the toast, not after: `showToast` is the only caller that could
+    // re-enter, and a notice shown twice would break the at-most-once contract.
+    pendingNotice = null;
+    hud.showToast(notice.message);
+  }
+  const stopSettingsNotice = deps.onSettingsNotice((notice) => {
+    pendingNotice = notice;
+    flushSettingsNotice();
+  });
   // THE TWO SEPARATE HUD PROJECTIONS (issue #316 review, finding 1), both
   // derived from the canonical model -- never from `deps.initialVersusConfig`,
   // a URL read, or a `world.mode` check.
@@ -1538,16 +1735,26 @@ export function startGameWith(
       // disconnect is visible immediately rather than only through the panel's dimmed row
       // (see input/assignment.ts's Reserved-idle semantics -- the slot's tank keeps
       // holding either way, this is purely the notification).
+      let changedGamepadConnection = false;
       for (let i = 0; i < playerCount; i++) {
         const isKeyboardSlot = assignment[i].kind === 'keyboard';
         const connected = slotGamepadConnected(i);
         if (connected && !gamepadConnectedPrev[i]) {
           hud.showToast(isKeyboardSlot ? 'Gamepad connected' : `Player ${i + 1}'s controller connected`);
+          changedGamepadConnection = true;
         } else if (!connected && gamepadConnectedPrev[i]) {
           hud.showToast(isKeyboardSlot ? 'Gamepad disconnected' : `Player ${i + 1}'s controller disconnected`);
+          changedGamepadConnection = true;
         }
         gamepadConnectedPrev[i] = connected;
       }
+      // A pad arriving or leaving can change whether controller rumble is available at
+      // all, so the boot snapshot is not permanently correct. Hung off the edge
+      // detection this loop already runs rather than a `gamepadconnected` listener of
+      // its own: no new registration, no new disposal surface, and it fires exactly on
+      // the transitions that matter. `refresh()` publishes only on a real change
+      // (capabilities.ts), so the common case -- nothing changed -- costs one scan.
+      if (changedGamepadConnection) deps.effectiveSettings.refreshCapabilities();
       refreshRoundPhase(w);
       audio.setMusicIntensity(musicIntensity(countEnemies(w), enemiesAtRoundStart));
       // Task 6's in-match stock readout (spec §3a), dispatched HERE rather than from
@@ -1728,11 +1935,11 @@ export function startGameWith(
     hud.setControllers(assignment);
   }
 
-  hud.onMuteToggle(() => {
-    hud.setMuted(audio.toggleMute());
-  });
+  // Write the store and stop. `applySettings`, from the subscription above, is what
+  // reaches the audio engine and both buttons -- see its own doc comment.
+  hud.onMuteToggle(toggleMute);
   hud.onVolumeChange((v) => {
-    audio.setVolume(v);
+    deps.settings.setVolume(v);
   });
   hud.onStartRestart(() => {
     // This click is the only guaranteed user gesture in the game, and Safari
@@ -2049,35 +2256,23 @@ export function startGameWith(
     input.pressFire();
   });
 
-  // The aim-scheme toggle: store, then echo the ACCEPTED value back -- same convention
-  // as the paint shop's onPickHullColor/onPickSkin below. setScheme refuses anything off
-  // TOUCH_SCHEMES, so the echo can never show a scheme the input layer was not told.
+  // The three input toggles: write the store, and nothing else. The old three-step
+  // "store, read back the accepted value, echo it to the HUD and the runtime" is now
+  // `applySettings` running from the subscription, once, for every setting at once.
+  //
+  // An OFF-LIST value is still refused rather than stored (settings.ts's setters), and
+  // refusing publishes nothing -- so the HUD keeps showing the accepted value, exactly as
+  // the echo used to guarantee. The HUD never flips optimistically on its own (hud.ts's
+  // toggles render only from `setTouchScheme`/`setFireMode`/`setHaptics`), which is what
+  // makes "publish nothing" the correct response to a rejected value.
   hud.onTouchSchemeChange((next) => {
-    deps.touchSettings.setScheme(next);
-    const accepted = deps.touchSettings.scheme();
-    hud.setTouchScheme(accepted);
-    input.setTouchScheme(accepted);
+    deps.settings.setTouchScheme(next);
   });
-
-  // The fire-mode toggle: same three-step convention -- store, then echo the ACCEPTED
-  // value back to both the HUD and the input controller. setFireMode refuses anything
-  // off FIRE_MODES, so the echo can never show a mode the input layer was not told.
   hud.onFireModeChange((next) => {
-    deps.touchSettings.setFireMode(next);
-    const accepted = deps.touchSettings.fireMode();
-    hud.setFireMode(accepted);
-    input.setFireMode(accepted);
+    deps.settings.setFireMode(next);
   });
-
-  // The haptics toggle: same three-step convention -- store, then echo the ACCEPTED
-  // value back to both the HUD and the live director, since this preference has no
-  // input-controller half the way scheme/fire-mode do. Booleans have no off-list value
-  // to refuse, unlike setScheme/setFireMode.
   hud.onHapticsChange((next) => {
-    deps.touchSettings.setHaptics(next);
-    const accepted = deps.touchSettings.haptics();
-    hud.setHaptics(accepted);
-    haptics.setEnabled(accepted);
+    deps.settings.setDeviceHaptics(next);
   });
 
   hud.onQuitToTitle(() => {
@@ -2121,7 +2316,15 @@ export function startGameWith(
   // contexts (this one plus the main game's), never three.
   let preview: TankPreview | null = null;
   hud.onCustomizeOpen(() => {
-    preview = deps.createPreview(hud.previewCanvas, hud.previewRotateButtons);
+    // The EFFECTIVE reduced-motion policy, resolved once here and handed down. preview.ts
+    // used to call `window.matchMedia` itself, which meant the OS was the only input and
+    // a player who wanted full effects anyway could not say so. Sampled at open, like the
+    // media query it replaces -- the preview lives only while this panel is open.
+    preview = deps.createPreview(
+      hud.previewCanvas,
+      hud.previewRotateButtons,
+      deps.effectiveSettings.current().reducedMotion,
+    );
     preview?.setStyle(
       deps.customization.hexFor(deps.customization.hull()),
       deps.customization.skin(),
@@ -2233,6 +2436,12 @@ export function startGameWith(
 
   sm.onChange((location) => {
     hud.setState(locationToHudSurface(location));
+    // The splash covers the toast rail, so a notice raised at boot is held until the
+    // player has left it -- see `flushSettingsNotice`. Called on EVERY change rather
+    // than only on the launch->main-menu edge: the notice can also arrive later (a
+    // first failed write), and a later arrival while the splash is somehow still up
+    // must not be dropped either.
+    flushSettingsNotice();
     const nowPlaying = location.kind === 'gameplay' && location.phase.kind === 'playing';
     const nowAtMainMenu =
       location.kind === 'route' && location.route.kind === 'main-menu';
@@ -2324,9 +2533,8 @@ export function startGameWith(
   hud.setHullColor(deps.customization.hull());
   hud.setSkin(deps.customization.skin());
   hud.setAccentColor(deps.customization.accent());
-  hud.setTouchScheme(deps.touchSettings.scheme());
-  hud.setFireMode(deps.touchSettings.fireMode());
-  hud.setHaptics(deps.touchSettings.haptics());
+  // Mute, volume, touch scheme, fire mode and haptics are all pushed by
+  // `applySettings()`, called the moment the HUD exists -- see its own doc comment.
   hud.setAchievements(deps.achievements.earned());
   hud.setBotAssignmentAllowed(botsMayDrivePlayers);
   hud.setControllers(assignment);
@@ -2358,7 +2566,7 @@ export function startGameWith(
       sm.dismissLaunch();
       return;
     }
-    if (isMuteHotkey(e)) hud.setMuted(audio.toggleMute());
+    if (isMuteHotkey(e)) toggleMute();
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from `playing`
       // and resume() only from `paused`, so main-menu/outcome ignore the key
@@ -2395,7 +2603,15 @@ export function startGameWith(
    * and a button shipped here would decide it by accident.
    */
   const devApi: DevConsole = {};
-  if (deps.devFlags.saveIo) devApi.save = createSaveApi(deps.storage);
+  if (deps.devFlags.saveIo) {
+    devApi.save = createSaveApi(deps.storage);
+    devApi.settings = {
+      snapshot: () => deps.settings.snapshot(),
+      effective: () => deps.effectiveSettings.current(),
+      status: () => deps.settings.status(),
+      reset: () => deps.settings.reset(),
+    };
+  }
   if (recorder) devApi.replay = (): ReplayTrace => recorder.trace();
   const publishedDevApi = Object.keys(devApi).length > 0;
   if (publishedDevApi) deps.devConsole[DEV_CONSOLE_KEY] = devApi;
@@ -2413,6 +2629,14 @@ export function startGameWith(
       deps.host.removeEventListener('resize', onResize);
       deps.host.removeEventListener('blur', onBlur);
       deps.host.removeEventListener('pointerdown', onSplashGesture);
+      // The two settings registrations this SESSION made. The store, the effective
+      // handle and the notice latch all outlive it (they belong to the page -- see
+      // app-settings.ts), so what is released here is this session's listeners, holding
+      // this session's HUD, audio engine and input controller. Disposing the handle
+      // itself here instead would leave the NEXT session with a dead OS motion
+      // subscription and settings that stop updating after one navigation.
+      stopEffectiveSubscription();
+      stopSettingsNotice();
       input.dispose();
       // Every REAL source except `input` itself, whichever slot currently holds it --
       // `input` is the boot-to-teardown singleton, disposed exactly once above,

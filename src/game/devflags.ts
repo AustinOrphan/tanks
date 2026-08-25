@@ -642,7 +642,8 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
   },
   saveIo: {
     kind: 'boolean',
-    description: 'Publishes save export/import on the dev console object (`__tanks`).',
+    description:
+      'Publishes save export/import and the player-settings surface (snapshot, effective values, status, reset) on the dev console object (`__tanks`).',
   },
   replay: {
     kind: 'boolean',

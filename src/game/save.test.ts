@@ -5,18 +5,27 @@ import {
   importSave,
   createSaveApi,
   SAVE_KEYS,
+  SAVE_IMPORT_KEYS,
   SAVE_FORMAT,
   SAVE_VERSION,
   type SaveBlob,
 } from './save';
 import { CAMPAIGN_LEVELS } from '../sim/arena';
+import { SETTINGS_KEY, SETTINGS_SCHEMA_VERSION, serializeSettings, DEFAULT_SETTINGS } from './settings';
+import { TOUCH_SETTINGS_KEY } from './touch-settings';
+
+/** The canonical settings payload the seeded save carries. Built through the real serialiser. */
+const SEEDED_SETTINGS = serializeSettings({
+  ...DEFAULT_SETTINGS,
+  input: { ...DEFAULT_SETTINGS.input, touchScheme: 'point', fireMode: 'button' },
+});
 
 function seeded(): Storage {
   const s = createMemoryStorage();
   s.setItem('tanks.progress.v1', '3');
   s.setItem('tanks.stats.v1', JSON.stringify({ shotsFired: 12, shellKills: 4 }));
   s.setItem('tanks.custom.v1', JSON.stringify({ hull: 'green', skin: 'camo', accent: 'gold' }));
-  s.setItem('tanks.touch.v1', JSON.stringify({ scheme: 'point', fireMode: 'button' }));
+  s.setItem(SETTINGS_KEY, SEEDED_SETTINGS);
   s.setItem('tanks.achievements.v1', JSON.stringify({ earned: ['first-blood'] }));
   s.setItem(
     'tanks.run.v2',
@@ -39,10 +48,29 @@ describe('SAVE_KEYS', () => {
       'tanks.progress.v1',
       'tanks.stats.v1',
       'tanks.custom.v1',
-      'tanks.touch.v1',
+      'tanks.settings.v1',
       'tanks.achievements.v1',
       'tanks.run.v2',
     ]);
+  });
+
+  it('does NOT export the legacy touch key', () => {
+    // The half of issue #320 an "importable" assertion cannot cover. Nothing in the
+    // tree writes tanks.touch.v1 any more, so an export that still carried it would be
+    // shipping whatever bytes happened to survive migration on that one device -- and
+    // re-importing them elsewhere would resurrect settings the player had changed.
+    expect(SAVE_KEYS).not.toContain(TOUCH_SETTINGS_KEY);
+  });
+});
+
+describe('SAVE_IMPORT_KEYS', () => {
+  it('is exactly SAVE_KEYS plus the legacy touch key -- a superset by ONE', () => {
+    // Set equality in BOTH directions, not `toContain`. A one-way check would pass on
+    // an allow-list that had been widened with something else as well, which is the
+    // failure mode that matters: this list is the security boundary that keeps a pasted
+    // blob from writing a neighbouring site's key on this shared origin.
+    expect(SAVE_IMPORT_KEYS.slice().sort()).toEqual([...SAVE_KEYS, TOUCH_SETTINGS_KEY].sort());
+    expect(SAVE_IMPORT_KEYS.length).toBe(SAVE_KEYS.length + 1);
   });
 
   it('covers every key the six stores actually write', () => {
@@ -55,7 +83,7 @@ describe('SAVE_KEYS', () => {
     stores.progress.recordCleared(CAMPAIGN_LEVELS[0]);
     stores.stats.resetLifetime();
     stores.customization.setHull('red');
-    stores.touchSettings.setScheme('point');
+    stores.settings.setTouchScheme('point');
     stores.achievements.reset();
     stores.run.startNewRun('level-01');
     const written: string[] = [];
@@ -141,8 +169,8 @@ describe('importSave', () => {
     expect(stores.progress.highestCleared()).toBe(3);
     expect(stores.customization.hull()).toBe('green');
     expect(stores.customization.skin()).toBe('camo');
-    expect(stores.touchSettings.scheme()).toBe('point');
-    expect(stores.touchSettings.fireMode()).toBe('button');
+    expect(stores.settings.snapshot().input.touchScheme).toBe('point');
+    expect(stores.settings.snapshot().input.fireMode).toBe('button');
     expect([...stores.achievements.earned()]).toEqual(['first-blood']);
     expect(stores.stats.lifetime().shotsFired).toBe(12);
     expect(stores.run.active()).toEqual({
@@ -271,6 +299,97 @@ describe('importSave', () => {
     expect(to.getItem('portfolio.session')).toBeNull();
     expect(to.getItem('tanks.progress.v2')).toBeNull();
     expect(to.length).toBe(1);
+  });
+
+  it('accepts an OLD export that still carries tanks.touch.v1', () => {
+    // Backward compatibility, and the reason the import allow-list is wider than the
+    // export list. A save taken before issue #320 has no tanks.settings.v1 at all; its
+    // touch preferences are the only settings it carries, and refusing the key would
+    // drop them silently on restore.
+    const to = createMemoryStorage();
+    const result = importSave(
+      to,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: 1,
+        keys: {
+          'tanks.progress.v1': '4',
+          [TOUCH_SETTINGS_KEY]: JSON.stringify({ scheme: 'point', fireMode: 'button', haptics: false }),
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.applied.slice().sort()).toEqual([TOUCH_SETTINGS_KEY, 'tanks.progress.v1'].sort());
+    expect(result.ignored).toEqual([]);
+    // The RAW bytes, unchanged -- an import is a restore at the key/value layer.
+    expect(to.getItem(TOUCH_SETTINGS_KEY)).toBe(
+      JSON.stringify({ scheme: 'point', fireMode: 'button', haptics: false }),
+    );
+
+    // ...and after the project's established reload boundary (a fresh store
+    // construction -- see createSaveApi's own note on why an import is invisible until
+    // then), the legacy data has become canonical settings.
+    const stores = createStores(to);
+    const settings = stores.settings.snapshot();
+    expect(settings.input.touchScheme).toBe('point');
+    expect(settings.input.fireMode).toBe('button');
+    expect(settings.input.deviceHaptics).toBe(false);
+    expect(stores.settings.status().migratedLegacy).toBe(true);
+    expect(to.getItem(TOUCH_SETTINGS_KEY)).toBeNull();
+    expect(to.getItem(SETTINGS_KEY)).not.toBeNull();
+  });
+
+  it('lets CANONICAL settings win when a blob carries both keys', () => {
+    // A hand-merged or partially-upgraded blob. The two disagree on every field they
+    // share, so whichever wins is unambiguous -- a fixture where they agreed would pass
+    // under either rule.
+    const to = createMemoryStorage();
+    const canonical = serializeSettings({
+      ...DEFAULT_SETTINGS,
+      input: {
+        ...DEFAULT_SETTINGS.input,
+        touchScheme: 'stick',
+        fireMode: 'tap',
+        deviceHaptics: true,
+      },
+    });
+    const result = importSave(
+      to,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: 1,
+        keys: {
+          [SETTINGS_KEY]: canonical,
+          [TOUCH_SETTINGS_KEY]: JSON.stringify({ scheme: 'point', fireMode: 'button', haptics: false }),
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    const settings = createStores(to).settings.snapshot();
+    expect(settings.input.touchScheme).toBe('stick');
+    expect(settings.input.fireMode).toBe('tap');
+    expect(settings.input.deviceHaptics).toBe(true);
+    // The loser is cleared, so there is exactly one settings key afterwards.
+    expect(to.getItem(TOUCH_SETTINGS_KEY)).toBeNull();
+  });
+
+  it('round-trips a FUTURE-schema settings payload byte for byte', () => {
+    // The property the raw key/value layer exists for. This build cannot interpret a
+    // version-2 payload and deliberately refuses to overwrite it (settings.ts); an
+    // export taken on this build must still carry it back out intact, or a player who
+    // downgraded once would lose settings a newer build wrote.
+    const from = createMemoryStorage();
+    const future = JSON.stringify({
+      version: SETTINGS_SCHEMA_VERSION + 1,
+      audio: { muted: true, volume: 0.1 },
+      somethingNew: { fromTheFuture: true },
+    });
+    from.setItem(SETTINGS_KEY, future);
+    // Constructing the store must not rewrite it, and the export must carry the
+    // original bytes.
+    createStores(from);
+    expect(from.getItem(SETTINGS_KEY)).toBe(future);
+    expect(parse(exportSave(from)).keys[SETTINGS_KEY]).toBe(future);
   });
 
   it('ignores a known key whose value is not a string', () => {

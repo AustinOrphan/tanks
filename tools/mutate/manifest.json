@@ -125,11 +125,11 @@
   {
     "id": "storage-resolver-ignores-the-host",
     "file": "src/game/storage.ts",
-    "find": "    if (host.localStorage) return host.localStorage;",
-    "replace": "    if (false as boolean) return host.localStorage!;",
+    "find": "    if (host.localStorage) return { storage: host.localStorage, availability: 'persistent' };",
+    "replace": "    if (false as boolean) return { storage: host.localStorage!, availability: 'persistent' };",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "resolveStorage must hand back the host's REAL localStorage when there is one; returning the in-memory shim instead means the shipped game silently persists nothing, and every round-trip assertion still passes on the shim. Only an IDENTITY assertion can see it, which is what storage.test.ts's 'returns the host storage ITSELF' case is. Verified through this harness at the commit that added the entry.",
+    "why": "resolveStorage must hand back the host's REAL localStorage when there is one; returning the in-memory shim instead means the shipped game silently persists nothing, and every round-trip assertion still passes on the shim. Only an IDENTITY assertion can see it, which is what storage.test.ts's 'returns the host storage ITSELF' case is. Verified through this harness at the commit that added the entry. RE-POINTED in the #320 settings PR: the resolver body moved into `resolveStorageWithStatus`, which returns `{ storage, availability }` instead of a bare `Storage` (`resolveStorage` is now a one-line wrapper over it), so the original find string no longer existed and the harness reported FAILED-TO-APPLY. The MUTATION is unchanged in substance -- it still makes the host's real localStorage unreachable -- and the identity assertion that kills it is the same one.",
     "tests": [
       "src/game/storage.test.ts"
     ]
@@ -137,11 +137,11 @@
   {
     "id": "save-import-drops-the-allow-list",
     "file": "src/game/save.ts",
-    "find": "    if (!SAVE_KEYS.includes(key) || typeof value !== 'string') {",
+    "find": "    if (!SAVE_IMPORT_KEYS.includes(key) || typeof value !== 'string') {",
     "replace": "    if (typeof value !== 'string') {",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "importSave writes only keys on SAVE_KEYS. That is a security property, not tidiness: austinorphan.com's localStorage namespace is shared with every other project page on the origin (CLAUDE.md), so a blob a player was talked into pasting must not be able to set a neighbour's key. Dropping the allow-list leaves every round-trip test green -- the keys a real export carries are all on the list -- and is caught only by the case that imports a blob carrying a foreign key. Verified through this harness at the commit that added the entry.",
+    "why": "importSave writes only keys on SAVE_KEYS. That is a security property, not tidiness: austinorphan.com's localStorage namespace is shared with every other project page on the origin (CLAUDE.md), so a blob a player was talked into pasting must not be able to set a neighbour's key. Dropping the allow-list leaves every round-trip test green -- the keys a real export carries are all on the list -- and is caught only by the case that imports a blob carrying a foreign key. Verified through this harness at the commit that added the entry. RE-POINTED in the #320 settings PR: the import allow-list is now `SAVE_IMPORT_KEYS` (SAVE_KEYS plus the legacy `tanks.touch.v1` compatibility key) rather than `SAVE_KEYS`, so the original find string no longer existed and the harness reported FAILED-TO-APPLY. The security property being mutated is identical -- the list is still an allow-list, and dropping it still lets a pasted blob set a neighbour's key.",
     "tests": [
       "src/game/save.test.ts"
     ]
@@ -773,6 +773,193 @@
     "expect": "killed",
     "expectFailures": 7,
     "why": "The retired localPlayerWon payload, reconstructed: every decided couch match reported as a P1 victory, and every simultaneous-elimination draw as one too. The sim's win event in ffa/teams means 'exactly one player (or team) is not eliminated' and says nothing about WHICH seat, so this is the defect the typed VersusResult exists to make unrepresentable. Scoped to loop.test.ts, whose versusResultFromWorld block drives real FFA/teams worlds into each terminal shape. expectFailures is the count MEASURED by this harness against the scoped `tests` on this branch, not a repo-wide count.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-boot-ignores-persisted-audio",
+    "file": "src/game/loop.ts",
+    "find": "    audio.setMuted(effective.muted);\n    audio.setVolume(effective.volume);",
+    "replace": "    audio.setMuted(false);\n    audio.setVolume(0.6);",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "`applySettings` is the one place a settings value reaches a runtime consumer, and mute/volume are the two that had NO store at all before issue #320 -- they were fields on the audio engine, so every reload and every internal session replacement silently restored DEFAULT_VOLUME, unmuted. Pinning the boot values to the literals they used to be is exactly that defect. Killed by loop.test.ts's 'boots audio and both sliders from the PERSISTED mute and volume' and the mute/volume routing tests. NOTE that hud.test.ts CANNOT kill this: it builds the HUD directly and asserts the slider renders at DEFAULT_VOLUME, which stays true whether or not loop.ts ever pushes the stored value -- the kill has to enter through startGameWith with a fake audio engine, which is why the declared tests are loop.test.ts's. 4 of 366 in the scoped run.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-legacy-overrides-canonical",
+    "file": "src/game/settings.ts",
+    "find": "    const legacy = readLegacyTouchSettings(storage);\n    if (legacy.present) removeLegacy();",
+    "replace": "    const legacy = readLegacyTouchSettings(storage);\n    if (legacy.scheme !== null) {\n      shadow = freezeSettings({ ...shadow, input: { ...shadow.input, touchScheme: legacy.scheme } });\n    }\n    if (legacy.present) removeLegacy();",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Migration rule 1: a valid canonical payload wins outright. This mutation makes the legacy `tanks.touch.v1` scheme overwrite it, which is the shape a naive 'always merge legacy' migration takes -- and it is silent for any player whose two keys happen to agree. Killed by settings.test.ts's 'lets a VALID canonical payload win outright' and save.test.ts's 'lets CANONICAL settings win when a blob carries both keys', whose fixtures deliberately DISAGREE on every shared field. 2 of 62 across the two declared files.",
+    "tests": [
+      "src/game/settings.test.ts",
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "settings-legacy-migration-all-or-nothing",
+    "file": "src/game/settings.ts",
+    "find": "          touchScheme: legacy.scheme ?? DEFAULT_TOUCH_SCHEME,",
+    "replace": "          touchScheme: legacy.fireMode === null ? DEFAULT_TOUCH_SCHEME : (legacy.scheme ?? DEFAULT_TOUCH_SCHEME),",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "Migration rule 3: a valid legacy field survives a malformed sibling. This makes a corrupt `fireMode` also discard a perfectly good `scheme` -- the all-or-nothing read that `tanks.touch.v1`'s own store was written to avoid (touch-settings.ts's original comment) and that the migration has to carry forward. Killed by settings.test.ts's per-field corruption sweep, whose fixtures put every value OFF its default so a defaulted answer cannot pass by coincidence. 5 of 41 in settings.test.ts.",
+    "tests": [
+      "src/game/settings.test.ts"
+    ]
+  },
+  {
+    "id": "settings-future-payload-overwritten",
+    "file": "src/game/settings.ts",
+    "find": "    if (!lockedFuture) write(shadow);",
+    "replace": "    write(shadow);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The future-schema lock. A payload whose `version` exceeds this build's is real data a NEWER build wrote; reinterpreting it field by field or overwriting it destroys settings this build cannot represent. Dropping the guard makes the next ordinary change stamp a version-1 payload over it. Killed by settings.test.ts's 'does NOT overwrite a future-schema payload', which asserts the RAW bytes are unchanged after a setter runs. 1 of 62 across the two declared files -- deliberately narrow: this is one specific byte-level property, and a broader failure population would mean some other test had started depending on the lock incidentally.",
+    "tests": [
+      "src/game/settings.test.ts",
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "settings-device-haptics-ignores-capability",
+    "file": "src/game/effective-settings.ts",
+    "find": "    deviceHaptics: settings.input.deviceHaptics && capabilities.deviceVibration,",
+    "replace": "    deviceHaptics: settings.input.deviceHaptics,",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "The device-vibration gate. Without it a stored `deviceHaptics: true` reaches haptics.ts on a browser with no `navigator.vibrate` at all -- which per haptics.ts's own support note is every Safari and Firefox user, on any OS. Killed by effective-settings.test.ts's 2x2 stored-x-capability sweep and by loop.test.ts's 'gates the haptics director on device VIBRATION', which enters through startGameWith. 7 of 385 across the two declared files.",
+    "tests": [
+      "src/game/effective-settings.test.ts",
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-rumble-conflated-with-vibration",
+    "file": "src/game/effective-settings.ts",
+    "find": "    controllerRumble: settings.input.controllerRumble && capabilities.controllerRumble,",
+    "replace": "    controllerRumble: settings.input.controllerRumble && capabilities.deviceVibration,",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "The exact conflation issue #320 forbids: resolving controller rumble from the DEVICE vibration capability. A phone with `navigator.vibrate` and no pad would report rumble available; a desktop pad with an actuator and no `navigator.vibrate` would report none. Killed by effective-settings.test.ts's 'gates each on its OWN capability' and loop.test.ts's 'keeps controller rumble on its OWN capability', both of which set exactly one capability in each direction so a resolver reading the wrong one has to get a row wrong. 7 of 385 across the two declared files.",
+    "tests": [
+      "src/game/effective-settings.test.ts",
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-motion-not-subscribed",
+    "file": "src/game/effective-settings.ts",
+    "find": "    deps.motion.subscribe(republish),",
+    "replace": "    () => {},",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The System motion state's live half. Dropping the media subscription leaves the effective handle reporting whatever reduced-motion was at construction, forever -- which is what render/preview.ts's old inline `matchMedia` read already did, and what issue #320 requires be fixed. Killed by effective-settings.test.ts's 'reacts to a LIVE OS motion change under System', which drives a source that really publishes rather than one that is merely re-read. 1 of 19.",
+    "tests": [
+      "src/game/effective-settings.test.ts"
+    ]
+  },
+  {
+    "id": "settings-media-query-listener-dropped",
+    "file": "src/game/capabilities.ts",
+    "find": "    query.addEventListener('change', onChange);",
+    "replace": "    void onChange;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "One layer lower than the mutation above: the platform registration itself. capabilities.ts is the ONLY place JavaScript touches `matchMedia('(prefers-reduced-motion: reduce)')`, so a dropped `addEventListener` makes every downstream consumer stale no matter how correctly they subscribe. Killed by capabilities.test.ts's 'REACTS while the page is open' and the exactly-one-platform-listener test. 2 of 24.",
+    "tests": [
+      "src/game/capabilities.test.ts"
+    ]
+  },
+  {
+    "id": "settings-export-emits-legacy-key",
+    "file": "src/game/save.ts",
+    "find": "  CUSTOM_KEY,\n  SETTINGS_KEY,\n  ACHIEVEMENTS_KEY,",
+    "replace": "  CUSTOM_KEY,\n  TOUCH_SETTINGS_KEY,\n  ACHIEVEMENTS_KEY,",
+    "expect": "killed",
+    "expectFailures": 10,
+    "why": "Puts `tanks.touch.v1` back in the EXPORT list in place of `tanks.settings.v1`. Nothing in the tree writes the legacy key any more, so this produces exports that carry stale bytes and omit the settings a player actually has. Killed broadly -- the SAVE_KEYS literal, the 'does NOT export the legacy touch key' guard, the measured store-coverage check, the round trips, and loop.test.ts's dev-console key list. 10 of 400 across the three declared files; the wide population is the point, since this key list is the wire format several suites read through.",
+    "tests": [
+      "src/game/save.test.ts",
+      "src/game/storage.test.ts",
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-import-drops-legacy-key",
+    "file": "src/game/save.ts",
+    "find": "export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS, TOUCH_SETTINGS_KEY]);",
+    "replace": "export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS]);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Narrows the IMPORT allow-list back to the export list, which is what makes an old save's touch preferences disappear on restore. This is the half that motivates two lists instead of one: the export list must NOT carry the legacy key and the import list MUST accept it. Killed by save.test.ts's set-equality assertion on SAVE_IMPORT_KEYS and by 'accepts an OLD export that still carries tanks.touch.v1'. 2 of 21.",
+    "tests": [
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "settings-owner-rebuilt-per-session",
+    "file": "src/boot.ts",
+    "find": "        requestCampaignSession,\n        appSettings,\n      );",
+    "replace": "        requestCampaignSession,\n        deps.createAppSettings(),\n      );",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Rebuilds the page's settings owner on every versus reboot instead of reusing the one boot.ts created. This is the pre-#320 defect in its structural form: a fresh owner means a fresh store, a fresh in-memory storage shim, and a persistence notice that can fire once per navigation. It is invisible to every session-level test, because each session in isolation looks perfectly healthy. Killed by boot.test.ts's 'hands every session the SAME instance across both reboot paths', which asserts IDENTITY rather than equality. 1 of 36.",
+    "tests": [
+      "src/boot.test.ts"
+    ]
+  },
+  {
+    "id": "settings-notice-registration-leaks",
+    "file": "src/game/loop.ts",
+    "find": "      stopSettingsNotice();",
+    "replace": "      void stopSettingsNotice;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Leaves this session's persistence-notice registration attached at teardown. The callback closes over the session's HUD, which is destroyed on every campaign/versus reboot, so a notice arriving later would call `showToast` on a torn-down HUD. Killed by loop.test.ts's 'unregisters on teardown, so a notice cannot reach a dead HUD', which counts the live registrations and then fires a notice after disposal. 1 of 366.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-preview-ignores-motion-policy",
+    "file": "src/game/loop.ts",
+    "find": "      deps.effectiveSettings.current().reducedMotion,",
+    "replace": "      false,",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Hardcodes the Customize preview's reduced-motion flag, which is what the module did before issue #320 in a different form -- it read `window.matchMedia` itself, so the OS was the only input and a player who wanted full effects anyway had no say. Killed by loop.test.ts's four-row motion sweep, which drives all three player-facing states against an OS preference set opposite to the expected answer wherever the override applies. 1 of 366.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "settings-future-payload-parsed-as-junk",
+    "file": "src/game/settings.ts",
+    "find": "  if (version > SETTINGS_SCHEMA_VERSION) return { kind: 'future', version };",
+    "replace": "  if (version > SETTINGS_SCHEMA_VERSION) return { kind: 'malformed' };",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The BOOT half of the future-schema contract, one layer above `settings-future-payload-overwritten`: that entry mutates a later write, this one makes the PARSER classify a version-2 payload as junk. Under it the store reports `schema: 'recovered'` rather than `'future'`, stops reporting `storedVersion`, drops the `locked-future` persistence state -- so the notice becomes the wrong one -- and becomes eligible for legacy migration, which would adopt older values over a newer build's payload. Killed by settings.test.ts's future-payload status assertions and the 'never migrates the legacy key over a future payload' case, plus app-settings.test.ts's future-schema notice. 4 of 55 across the two declared files.",
+    "tests": [
+      "src/game/settings.test.ts",
+      "src/game/app-settings.test.ts"
+    ]
+  },
+  {
+    "id": "settings-notice-toasts-behind-the-splash",
+    "file": "src/game/loop.ts",
+    "find": "    if (pendingNotice === null || sm.atLaunch) return;",
+    "replace": "    if (pendingNotice === null) return;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The persistence notice's VISIBILITY, which is a different property from its delivery. `.hud-splash` is `z-index: 3` over a full-bleed `rgba(14, 17, 22, 0.92)` scrim and `.hud-toasts` is `z-index: 2` (hud.css), so the title screen paints over the toast rail by design -- its own z-index comment says nothing is allowed to paint over it. Both conditions knowable at BOOT (memory-only storage, and a future-schema payload) are delivered immediately after `createHud`, while the surface is still `launch`; without this guard the toast is raised there and expires behind the scrim after TOAST_MS (3200ms), so a player who takes longer than that to press a key never sees it. Nothing else in the suite can catch this: loop.test.ts's fake HUD records `showToast` CALLS, and `npm run visual` never drives a storage failure -- which is why the test that kills this enters through `bootAtSplash` and asserts the toast is absent BEFORE the pointerdown and present after. 1 of 366.",
     "tests": [
       "src/game/loop.test.ts"
     ]

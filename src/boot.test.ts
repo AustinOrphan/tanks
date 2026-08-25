@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { GameHandle } from './game/loop';
 import type { VersusConfig } from './game/versus-config';
 import { boot, NO_WEBGL_MESSAGE, type BootDeps } from './boot';
+import type { AppSettings } from './game/app-settings';
 
 type StartArgs = [
   HTMLCanvasElement,
@@ -10,12 +11,15 @@ type StartArgs = [
   { config: VersusConfig } | null,
   (config: VersusConfig) => void,
   () => void,
+  AppSettings,
 ];
 
 function harness(
-  opts: { throwOnStart?: unknown } = {},
+  opts: { throwOnStart?: unknown; throwOnAppSettings?: unknown } = {},
 ): {
   deps: BootDeps;
+  appSettingsBuilds: number;
+  appSettingsDisposals: number;
   root: HTMLElement;
   disposals: number;
   /**
@@ -42,7 +46,18 @@ function harness(
   const canvases: HTMLCanvasElement[] = [];
   const disposedIds: number[] = [];
   let nextId = 0;
-  const box = { disposals: 0 };
+  const box = { disposals: 0, appSettingsBuilds: 0, appSettingsDisposals: 0 };
+  /**
+   * A stand-in for the page's ONE settings owner. Identity is the whole assertion: every
+   * session must be handed this exact object, because a fresh one per session is the
+   * pre-#320 defect (mute and volume reset on the way into a versus match) wearing a new
+   * shape, and nothing in loop.test.ts's own fakes could see it.
+   */
+  const appSettings = {
+    dispose(): void {
+      box.appSettingsDisposals += 1;
+    },
+  } as unknown as AppSettings;
 
   const deps: BootDeps = {
     root,
@@ -56,8 +71,13 @@ function harness(
       canvases.push(canvas);
       return canvas;
     },
-    startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession): GameHandle => {
-      startArgs.push([canvas, uiRoot, versus, requestVersusSession, requestCampaignSession]);
+    createAppSettings: (): AppSettings => {
+      box.appSettingsBuilds += 1;
+      if ('throwOnAppSettings' in opts) throw opts.throwOnAppSettings;
+      return appSettings;
+    },
+    startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession, settings): GameHandle => {
+      startArgs.push([canvas, uiRoot, versus, requestVersusSession, requestCampaignSession, settings]);
       if ('throwOnStart' in opts) throw opts.throwOnStart;
       const id = nextId++;
       return {
@@ -81,6 +101,12 @@ function harness(
   return {
     deps,
     root,
+    get appSettingsBuilds(): number {
+      return box.appSettingsBuilds;
+    },
+    get appSettingsDisposals(): number {
+      return box.appSettingsDisposals;
+    },
     get disposals(): number {
       return box.disposals;
     },
@@ -164,6 +190,76 @@ describe('boot: the happy path', () => {
     boot(h.deps);
     expect(h.root.textContent).toBe('');
     expect(h.errors).toHaveLength(0);
+  });
+});
+
+describe('boot: the page-scoped settings owner', () => {
+  it('builds it exactly ONCE, before the first session', () => {
+    const h = harness();
+    boot(h.deps);
+    expect(h.appSettingsBuilds).toBe(1);
+    expect(h.startArgs).toHaveLength(1);
+  });
+
+  it('hands every session the SAME instance across both reboot paths', () => {
+    // The defect issue #320 names, in its structural form. Every other collaborator a
+    // session owns -- audio engine, HUD, renderer, input -- is rebuilt on a reboot, and
+    // rebuilding the settings owner too is exactly what made mute and volume reset on
+    // the way into a versus match. Identity, not equality: a fresh owner over the same
+    // localStorage would still lose an unsaved in-memory value, and would give the page
+    // a second writable settings source.
+    const h = harness();
+    boot(h.deps);
+    const [, , , requestVersus, requestCampaign] = h.startArgs[0];
+    requestVersus({ mode: 'ffa', players: 2, friendlyFire: false, arenaId: 'random' } as VersusConfig);
+    requestCampaign();
+    requestVersus({ mode: 'ffa', players: 2, friendlyFire: false, arenaId: 'random' } as VersusConfig);
+
+    expect(h.startArgs).toHaveLength(4);
+    expect(h.appSettingsBuilds).toBe(1);
+    const owners = h.startArgs.map((a) => a[5]);
+    for (const owner of owners) expect(owner).toBe(owners[0]);
+    expect(owners[0]).toBeDefined();
+  });
+
+  it('does NOT dispose it on a session reboot', () => {
+    // The other half of the same decision. Disposing it with the session would leave
+    // the next one with a dead OS motion subscription and settings that stop updating
+    // after a single navigation -- which no unit test of a session could see.
+    const h = harness();
+    boot(h.deps);
+    h.startArgs[0][4](); // requestCampaignSession
+    expect(h.disposals).toBe(1); // the session went
+    expect(h.appSettingsDisposals).toBe(0); // the page's settings did not
+  });
+
+  it('disposes it exactly once when the PAGE goes away', () => {
+    const h = harness();
+    boot(h.deps);
+    h.firePagehide();
+    expect(h.appSettingsDisposals).toBe(1);
+  });
+
+  it('keeps it alive through a bfcache freeze', () => {
+    // A persisted pagehide is a FREEZE, not a destruction: the page comes back intact
+    // and must come back with its settings still live and still listening to the OS.
+    const h = harness();
+    boot(h.deps);
+    h.firePagehide(true);
+    expect(h.appSettingsDisposals).toBe(0);
+    expect(h.disposals).toBe(0);
+  });
+
+  it('shows the error page when building it throws, rather than failing silently', () => {
+    // It resolves storage and probes platform capabilities; a locked-down context can
+    // make either throw at the property access. That must land on the same visible
+    // failure a missing WebGL context does.
+    const boom = new Error('storage denied');
+    const h = harness({ throwOnAppSettings: boom });
+    boot(h.deps);
+    expect(h.errors).toEqual([boom]);
+    expect(h.root.textContent).toBe(NO_WEBGL_MESSAGE);
+    expect(h.startArgs).toEqual([]);
   });
 });
 

@@ -27,7 +27,7 @@
     </head>
     <body>
       <h1>Privacy Policy</h1>
-      <p>Last updated: August 21, 2026</p>
+      <p>Last updated: August 25, 2026</p>
 
       <p>This policy covers the <strong>Tanks!</strong> browser game (the &ldquo;game&rdquo; or
       &ldquo;app&rdquo;), published at <code>austinorphan.com/tanks/</code>.</p>
@@ -51,14 +51,33 @@
           <tr><td><code>tanks.stats.v1</code></td><td>Lifetime and per-attempt game statistics</td></tr>
           <tr><td><code>tanks.run.v2</code></td><td>Active campaign run: current level, remaining lives</td></tr>
           <tr><td><code>tanks.custom.v1</code></td><td>Chosen tank color and paint customization</td></tr>
-          <tr><td><code>tanks.touch.v1</code></td><td>Touch control settings: stick position, button layout</td></tr>
+          <tr><td><code>tanks.settings.v1</code></td><td>Player settings: sound mute and volume, touch control scheme and fire mode, device vibration and controller rumble preferences, motion/flash preference, interface scale</td></tr>
           <tr><td><code>tanks.achievements.v1</code></td><td>Earned achievements</td></tr>
         </tbody>
       </table>
 
+      <p><code>tanks.settings.v1</code> replaces an older <code>tanks.touch.v1</code> key.
+      The first time you open this version of the game, any touch control settings saved
+      under the old key are copied into the new one and the old key is deleted. The game
+      never writes <code>tanks.touch.v1</code> again; it is still accepted when importing a
+      save file exported by an older version.</p>
+
+      <p>The settings key stores your <strong>preferences only</strong>. It never records
+      which controllers are connected, their identifiers, their slot numbers, or which
+      player is using which device.</p>
+
       <p>This data is stored entirely in the browser and <strong>never leaves your device</strong>.
       It is scoped to the game&rsquo;s origin: only the origin serving the game may
       access it, and it is unreachable by other sites.</p>
+
+      <p>If your browser cannot save data &mdash; for example in a private window, or with
+      site storage blocked &mdash; the game still runs, and shows a brief on-screen note
+      that settings will not be saved for that session.</p>
+
+      <p>You can export and import all of the keys above as a single file, and you can
+      reset your settings back to their defaults. Resetting settings does not affect
+      campaign progress, statistics, or achievements, and resetting progress does not
+      affect settings.</p>
 
        <h2>Audio &amp; visuals</h2>
        <p><strong>Sound is synthesized in real time.</strong> The game uses the Web Audio API
