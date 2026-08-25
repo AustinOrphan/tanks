@@ -112,6 +112,15 @@ export interface Tank {
   aiIntent?: Vec2;
   aiIntentTicks?: number;
   /**
+   * The AI turret's angular VELOCITY, in radians per tick (issue #347). Carried between
+   * ticks so the turret can accelerate and decelerate instead of only ever being stopped
+   * or travelling at the full rate cap.
+   *
+   * Undefined means at rest. MUST be cleared when a tank respawns -- a tank that comes back
+   * carrying the angular momentum it died with starts its next life mid-swing.
+   */
+  turretVel?: number;
+  /**
    * Consecutive ticks the AI has HELD a firing solution (decision.hasSolution),
    * reset the tick it loses one. The dispatcher's reaction gate compares this
    * against the profile's reactionTime before letting a shot off -- an enemy

@@ -3887,9 +3887,18 @@ describe('startGameWith: autoplay wiring', () => {
     // (same pattern as the "routes events" test above). COUNTDOWN_TICKS (180, 3s) blocks
     // all movement, so this needs to clear that before the player can have moved at all.
     for (let i = 1; i <= 60; i++) h.fireFrame(i * 100); // 60 x 100ms, well under the clamp
-    const r = h.rec.renders[h.rec.renders.length - 1];
-    const player = r.curr.tanks.find((t: Tank) => t.kind === 'player')!;
-    expect(player.pos).not.toEqual(spawn);
+    // Checked across EVERY recorded frame, not just the last one. Sampling only the final
+    // frame silently depends on the bot surviving the whole run: a respawn puts it back
+    // exactly on its spawn point, so a bot that drove away and then died reads identically
+    // to a bot that never moved. Issue #347's turret acceleration changed enemy accuracy
+    // enough to kill it once inside these 6 seconds (observed: alive, on spawn, lives 3->2),
+    // which reddened this test without anything being wrong with the autoplay wiring it
+    // exists to check.
+    const movedAtSomePoint = h.rec.renders.some((rr) => {
+      const p = rr.curr.tanks.find((t: Tank) => t.kind === 'player');
+      return p !== undefined && (p.pos.x !== spawn.x || p.pos.y !== spawn.y);
+    });
+    expect(movedAtSomePoint).toBe(true);
     h.handle.dispose();
   });
 

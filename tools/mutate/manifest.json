@@ -963,5 +963,67 @@
     "tests": [
       "src/game/loop.test.ts"
     ]
+  },
+  {
+    "id": "ai-turret-accel-no-limit",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  const nv = vel + Math.max(-aMax, Math.min(aMax, vDes - vel));",
+    "replace": "  const nv = vDes;",
+    "expect": "killed",
+    "expectFailures": 9,
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts",
+      "src/sim/ai/dispatch.test.ts",
+      "tools/gallery/moments.test.ts"
+    ],
+    "why": "This IS the change. Letting the velocity jump straight to vDes restores the bang-bang slew: the turret is stopped or at the rate cap with nothing in between, which measured an abrupt speed change on 0.84% (brown) / 1.84% (grey) / 2.85% (teal) of ticks over 60 seeds x 2 arenas, against 0.06/0.24/0.44% with the limit in place."
+  },
+  {
+    "id": "ai-turret-accel-no-decel",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  const vDes = Math.sign(err) * Math.min(vMax, vStop);",
+    "replace": "  const vDes = Math.sign(err) * vMax;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts"
+    ],
+    "why": "Ramping IN without ramping OUT is a half-fix that still slams the turret to a halt at the end of every sweep -- the same discontinuity at the other end of the motion. vStop is the fastest speed from which the remaining error can still be shed at aMax, so dropping it means the turret arrives at full tilt and stops dead."
+  },
+  {
+    "id": "ai-turret-accel-no-arrival-clamp",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  if (Math.abs(nv) >= Math.abs(err)) return { angle: target, vel: 0 };",
+    "replace": "  if (Math.abs(nv) >= Math.abs(err) && false) return { angle: target, vel: 0 };",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts"
+    ],
+    "why": "Without the clamp the final tick of a sweep lands PAST the target and the turret has to come back, which reads as a wobble on every arrival rather than a stop. The `&& false` keeps both operands evaluated so a tsc error cannot stand in for a real test failure."
+  },
+  {
+    "id": "ai-turret-accel-raw-angle-difference",
+    "file": "src/sim/ai/turret-accel.ts",
+    "find": "  const err = angleDelta(current, target);",
+    "replace": "  const err = target - current;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/turret-accel.test.ts"
+    ],
+    "why": "The error must be the SHORTEST arc. A raw subtraction sends a turret tracking through due west most of a full turn the wrong way, because an angle a hair under +pi and one a hair over -pi read as 6.26 radians apart rather than 0.02."
+  },
+  {
+    "id": "ai-turret-accel-velocity-survives-respawn",
+    "file": "src/sim/world.ts",
+    "find": "    t.turretVel = undefined; // round restart (issue #347)",
+    "replace": "    t.turretVel = t.turretVel; // round restart (issue #347)",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/coop-attempts.test.ts"
+    ],
+    "why": "resetArena snaps every turret to its spawn angle; leaving the angular velocity behind opens the new round with a gun already swinging for no reason, which accelSlew then has to brake before it can track anything. The self-assignment keeps the field read so this is a behaviour change rather than a type error."
   }
 ]

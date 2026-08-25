@@ -3,6 +3,7 @@ import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from 
 import type { World } from '../../src/sim/world';
 import {
   RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
+  AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS,
 } from '../../src/sim/constants';
 import { EMIT_SPACING } from '../../src/render/tread-trails';
 
@@ -310,22 +311,17 @@ describe('ai-tracking moment specifics', () => {
     // where the two phases no longer agree with 28 -- verified live and reverted (see
     // this task's report).
     //
-    // NOT strictly monotonic, and deliberately not asserted as such. Issue #330's
-    // AI_TURRET_DEADBAND freezes the turret for the single tick where the sweep reverses
-    // and the tracking error passes through zero, so a strict `>` here passes on a tree
-    // without the deadband and FAILS on one with it. That would make whichever of the two
-    // changes merged second break main, which is exactly what happened when the two were
-    // merged locally to check. MEASURED on that merged tree, frozen ticks by deadband
-    // value: 0 deg -> none (peak at tick 28); 0.25 and 0.5 -> [28] (peak moves to tick 27);
-    // 0.75 -> [28, 46]; 1.0 -> [28, 43, 45, 47]; 1.5 -> nine ticks. So the SHAPE below --
-    // one climb, one fall, at most one frozen tick and only at the turnaround -- holds for
-    // every deadband value still under consideration and fails from 0.75 up, where the
-    // guard starts biting the tail of the sweep too. That failure is wanted: it is a real
-    // change in what this clip shows, not a brittle assertion.
-    const PEAK_TICK = 28;
-    const TURNAROUND_TICK = 28;
+    // Pins the SHAPE of the sweep, not a tick-by-tick trajectory. Three separate AI changes
+    // have now altered that trajectory without altering what this clip is FOR: #330's turret
+    // deadband froze the single tick where the sweep reverses, #344's aim hold froze seven and
+    // turned the fall into bursts, and #347 gave the turret acceleration so it ramps. A strict
+    // per-tick `>` / `<` passes on a tree with none of them and fails on a tree with any, which
+    // makes whichever lands next break main -- not hypothetical, it happened twice.
+    //
+    // What the moment exists to demonstrate survives all of them: a stationary hull, and a
+    // turret that sweeps one way through a wide arc and comes back.
     const tl = simulateMoment(MOMENTS['ai-tracking']);
-    const frozen: number[] = [];
+    const deltas: number[] = [];
     for (let t = 1; t <= MOMENTS['ai-tracking'].ticks; t++) {
       const prev = tl.worlds[t - 1].tanks[0];
       const cur = tl.worlds[t].tanks[0];
@@ -336,15 +332,35 @@ describe('ai-tracking moment specifics', () => {
       expect(cur.pos.x).toBe(0);
       expect(cur.pos.y).toBe(0);
       expect(cur.bodyAngle).toBe(0);
-      if (cur.turretAngle === prev.turretAngle) frozen.push(t);
-      else if (t <= PEAK_TICK) expect(cur.turretAngle).toBeGreaterThan(prev.turretAngle);
-      else expect(cur.turretAngle).toBeLessThan(prev.turretAngle);
+      deltas.push(cur.turretAngle - prev.turretAngle);
     }
-    // A turret that stopped tracking altogether would freeze on most ticks and sail
-    // through the per-tick checks above, which only fire on ticks that MOVED. These two
-    // are what keep that from passing: at most one frozen tick, and it is the turnaround.
-    expect(frozen.length).toBeLessThanOrEqual(1);
-    expect(frozen.every((t) => t === TURNAROUND_TICK)).toBe(true);
+
+    // Exactly one reversal: the turret goes out and comes back, and does not dither.
+    const signs = deltas.map(Math.sign).filter((x) => x !== 0);
+    expect(signs.filter((x, i) => i > 0 && x !== signs[i - 1]).length).toBe(1);
+
+    // And it actually sweeps: a frozen turret would satisfy the flip count vacuously.
+    const angles = tl.worlds.map((w) => (w.tanks[0].turretAngle * 180) / Math.PI);
+    expect(Math.max(...angles)).toBeGreaterThan(55);
+
+    // Never faster than one tick's budget: rate-limited, never a snap.
+    const cap = AI_TURRET_TURN_RATE * DT;
+    expect(Math.max(...deltas.map(Math.abs))).toBeLessThanOrEqual(cap + 1e-9);
+
+    // ISSUE #347: the turret RAMPS UP rather than starting at the cap. The opening steps
+    // each grow by about one acceleration budget until the cap is reached, which is the
+    // whole point of the change and is what this moment is used to film. On a bang-bang
+    // tree the very first step IS the cap and this fails immediately.
+    const aMax = cap / AI_TURRET_RAMP_TICKS;
+    // Deriving the expected first step FROM the constant would make this pass at any ramp,
+    // including a ramp of 1 -- which is bang-bang. This is the assertion that actually
+    // discriminates: on a tree without acceleration the opening step IS the full cap.
+    expect(Math.abs(deltas[0])).toBeLessThan(cap);
+    expect(Math.abs(deltas[0])).toBeCloseTo(aMax, 9);
+    for (let i = 1; i < AI_TURRET_RAMP_TICKS; i++) {
+      expect(Math.abs(deltas[i])).toBeGreaterThan(Math.abs(deltas[i - 1]));
+      expect(Math.abs(deltas[i])).toBeLessThanOrEqual(cap + 1e-9);
+    }
   });
 
   it('never fires: the 48-tick reaction gate (STATIC_BASIC reactionTime * TICK_HZ) is never reached in 47 ticks', () => {
