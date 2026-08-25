@@ -466,6 +466,27 @@ export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 // PLAYER TURRET IS DELIBERATELY EXCLUDED. world.ts's driveTank still calls slewAngle, and
 // must: easing live player input reads as input lag, not polish. Same ruling as issue #330's
 // deadband, and world.test.ts has the companion proof.
+// 6 ticks (0.1s), chosen from a sweep of {1, 3, 6, 10, 15} over 60 seeds x 2 arenas. The
+// metric is the fraction of ticks on which the per-tick step SIZE changes by more than half
+// the cap -- an abrupt change of speed, which is what the eye reads as a twitch. Dwell (%
+// still ticks) is deliberately NOT the metric: it measures stillness, which trades AGAINST
+// smoothness, and optimising it is what produced a turret whose median move was the full cap.
+//
+// arena1, abrupt-change rate by ramp (brown / grey / teal):
+//   1  -> 0.84% / 1.84% / 2.85%   (ramp 1 is the closest thing to the old bang-bang slew)
+//   3  -> 0.30% / 0.69% / 0.86%
+//   6  -> 0.06% / 0.24% / 0.44%   <- the knee: ~85% of the total available reduction
+//   10 -> 0.03% / 0.21% / 0.36%
+//   15 -> 0.02% / 0.16% / 0.32%
+// 6 is where the curve flattens; 10 and 15 buy two to four more points of teal at the cost of
+// a turret that takes a quarter of a second to reach speed. Lethality does not discriminate
+// (arena1 losses 56-60/60, medianTicks 1424-1551, no trend).
+//
+// ONE HONEST EXCEPTION in the gate sweep: at ramp 3, pacifist.test.ts FAILS -- 4 of 60 rounds
+// won by a non-firing player against a bound of 3 -- while 1, 6, 10 and 15 all pass. One round
+// over a tight bound, non-monotonic in the ramp, so most likely seed noise rather than a real
+// cliff at 3; recorded rather than smoothed over, because "gates pass at every swept value"
+// would be false.
 export const AI_TURRET_RAMP_TICKS = data.turret.aiRampTicks;
 
 // ---- Per-type bullet tuning ----

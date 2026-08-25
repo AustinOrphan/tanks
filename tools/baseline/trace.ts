@@ -158,7 +158,40 @@ import { step } from '../../src/sim/world';
  * PR for feat/ai-decision-commitment) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = '42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0';
+/*
+ * MOVED (2026-08-25, issue #347): the AI turret gained angular ACCELERATION. stepAi now
+ * routes through accelSlew (ai/turret-accel.ts), which carries the turret's angular velocity
+ * on the tank and bounds how fast that velocity may change, instead of slewAngle's bang-bang
+ * min(|error|, maxDelta). stepAi is in the traced path and traceText below samples
+ * turretAngle to nine decimals per tank, so a changed turret trajectory moves this hash.
+ *
+ * ATTRIBUTION, STATED HONESTLY -- this one does NOT have the byte-for-byte control that
+ * issues #344/#345 had, and the difference is worth being explicit about. There is no setting
+ * of AI_TURRET_RAMP_TICKS that recovers the old behaviour: at ramp 1 the acceleration budget
+ * equals the whole rate cap, but accelSlew ALSO decelerates onto its target and clamps
+ * arrival, and both of those are unconditional. Measured rather than assumed -- ramp 1
+ * produces 0be09f94..., which is neither this hash nor the previous 42d764e9... So the
+ * constant cannot be used as an off switch, and no claim is made that it can.
+ *
+ * What the attribution rests on instead:
+ *   - Edit surface: this PR's only non-test src/sim behaviour edits are ai/turret-accel.ts
+ *     (new), the single slew call site in ai/index.ts, Tank.turretVel in types.ts, the two
+ *     revival resets in world.ts, and the new constant. Confirmed with
+ *     `git diff main...HEAD --name-only -- src/sim/ | grep -v '.test.ts'`.
+ *   - traceText serializes no struct -- only pos/turretAngle/alive -- so the new Tank field
+ *     cannot have moved this hash by existing; only a changed trajectory can.
+ *   - Direct exposure, measured on this tree over exactly the traced population (5 arenas x 6
+ *     seeds x 2500 ticks) by a throwaway probe that reproduced this fingerprint: of 197815
+ *     enemy turret updates, 10357 (5.24%) returned an angle DIFFERENT from what slewAngle
+ *     would have returned from the same state on the same tick. The two rules agree whenever
+ *     the turret is already saturated or sitting on its target, and disagree while it is
+ *     ramping, which is exactly the intended surface.
+ *
+ * History: 42d764e94d4234e1acea2dd16ed45bdea8cb0c9e22ba3635753a4739346b81f0 (issue #224 on
+ * PR for feat/ai-wall-aware-evasion) -> the hash below, confirmed by actually running
+ * trace.test.ts rather than by computing it a second way.
+ */
+export const BASELINE_HASH = '056afe386774790c739f7b28a05bb77abb68e5d07b140f6a798bf7731850024e';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

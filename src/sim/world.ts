@@ -452,7 +452,7 @@ function resetArena(world: World): void {
     // Angular momentum does not survive the round (issue #347). The line above snaps the
     // turret to its spawn angle; leaving the velocity behind would open the new round with
     // a gun already swinging, which accelSlew then has to brake before it can track.
-    t.turretVel = undefined;
+    t.turretVel = undefined; // round restart (issue #347)
     t.alive = true;
     t.desiredMove = { x: 0, y: 0 };
     t.activeMineIds = [];

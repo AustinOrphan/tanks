@@ -65,4 +65,17 @@ describe('accelSlew', () => {
     const r = accelSlew(Math.PI - 0.01, 0, -Math.PI + 0.01, 0.05, 0.01);
     expect(r.vel).toBeGreaterThan(0); // positive = onward through +pi, the short way
   });
+
+  it('a target that jumps BEHIND a fast-moving turret is arrived at, not overshot -- and the discarded velocity is bounded by the speed cap, not the acceleration budget', () => {
+    // The case that falsified an earlier version of the arrival clamp's comment. Travelling
+    // +0.04/tick with the target now 0.02 BEHIND: the clamp fires while the turret still
+    // carries most of its old speed, so the velocity dropped here is large relative to aMax.
+    // Pinned so the bound stated in turret-accel.ts stays honest if the clamp is ever changed.
+    const vel = 0.04;
+    const r = accelSlew(0, vel, -0.02, 0.05, 0.01);
+    expect(r.angle).toBe(-0.02);   // arrived, did not sail past
+    expect(r.vel).toBe(0);
+    expect(vel).toBeGreaterThan(0.01); // ...and what was discarded exceeded aMax
+    expect(Math.abs(vel)).toBeLessThanOrEqual(0.05); // bounded by vMax, which is the real claim
+  });
 });
