@@ -55,6 +55,10 @@ perform only the named operation. See the [verification command reference](docs/
 for full, visual, and subsystem-specific checks.
 Reproducible local review media is documented in the [capture recipe reference](tools/capture/README.md).
 
+Design direction, implementation plans, deferred spikes, and research are listed in the
+[documentation index](docs/README.md), which is generated from each document's own metadata
+and separates current direction from the implementation record.
+
 ## Architecture
 
 `src/sim/` is a pure, deterministic core: given a seed and an input stream it

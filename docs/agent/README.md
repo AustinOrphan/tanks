@@ -19,4 +19,7 @@ heading and read only the required section.
 | `context-budget.md` | exact global instruction-size measurement and enforced budget |
 | `document-metadata.md` | plan/spec metadata, the research inventory, and validation workflow |
 
-For product plans, specifications, and deferred investigations, use `docs/superpowers/`.
+For product direction, plans, specifications, backlog topics, and research, start from
+[`docs/README.md`](../README.md). It is generated from each document's own metadata, so it
+separates current direction from the implementation record without anyone maintaining a
+second list by hand.

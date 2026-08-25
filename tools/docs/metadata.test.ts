@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { run } from './check.mjs';
+import { INDEX_PATH, renderDocumentIndex } from './index.mjs';
 import {
   DOCUMENT_STATUSES,
   FRONTMATTER_BYTE_LIMIT,
@@ -325,6 +326,9 @@ describe('incremental repository guard', () => {
     expect(logs).toEqual([]);
 
     write(root, PLAN, validHeader());
+    // The canonical check also gates docs/README.md against its generator, so a fixture
+    // that passes it has to carry a current index.
+    write(root, INDEX_PATH, renderDocumentIndex(root));
     expect(run(root, { error: (value: string) => errors.push(value), log: (value: string) => logs.push(value) })).toBe(0);
     expect(logs.at(-1)).toContain('1 classified, 0 unchanged legacy, 1 total');
   });

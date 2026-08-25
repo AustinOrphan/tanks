@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateDocumentGraph } from './graph.mjs';
+import { INDEX_PATH, validateDocumentIndex } from './index.mjs';
 import { formatDiagnostics, validateRepositoryDocuments } from './metadata.mjs';
 import { validateResearchInventory } from './research.mjs';
 
@@ -8,7 +9,13 @@ export function run(root = process.cwd(), io = console) {
   const research = validateResearchInventory(root);
   const graph = validateDocumentGraph(root);
   const documents = validateRepositoryDocuments(root);
-  const diagnostics = [...research.diagnostics, ...graph.diagnostics, ...documents.diagnostics];
+  const index = validateDocumentIndex(root);
+  const diagnostics = [
+    ...research.diagnostics,
+    ...graph.diagnostics,
+    ...documents.diagnostics,
+    ...index.diagnostics,
+  ];
   if (diagnostics.length > 0) {
     io.error(formatDiagnostics(diagnostics));
     return 1;
@@ -17,6 +24,7 @@ export function run(root = process.cwd(), io = console) {
     io.log(`Research inventory valid: ${research.documents} documents.`);
   }
   io.log(`Document graph valid: ${graph.links} supersession links.`);
+  io.log(`${INDEX_PATH} matches the generator.`);
   io.log(
     `Document metadata valid: ${documents.metadataFiles} classified, ` +
       `${documents.legacyFiles} unchanged legacy, ${documents.files} total.`,

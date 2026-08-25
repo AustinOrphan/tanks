@@ -32,6 +32,7 @@
     "issues:audit": "node tools/issues/run.mjs audit",
     "issues:maintain": "node tools/issues/run.mjs event",
     "docs:check": "node tools/docs/check.mjs",
+    "docs:index": "node tools/docs/index.mjs",
     "mutate": "node tools/mutate/run.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",

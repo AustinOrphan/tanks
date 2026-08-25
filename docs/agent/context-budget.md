@@ -1,20 +1,23 @@
 # Project instruction context budget
 
-Initial baseline measured for #211 on 2026-08-19; current figures re-measured for #213 on
-2026-08-21.
+Initial baseline measured for #211 on 2026-08-19; re-measured for #213 on 2026-08-21 and
+again for #266 on 2026-08-25. The conditional-rule table below had drifted between those
+re-measurements -- it recorded `documentation.md` at 31 lines / 1350 bytes against a file
+that was already 35 / 1663 -- so its figures are recomputed here on the final tree, not
+adjusted. Only the `After` row is enforced by a test.
 
 ## Unconditional startup footprint
 
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 110 | 6128 |
-| Reduction | globally loaded project prose | — | 66265 (91.5%) |
+| After | root `CLAUDE.md` on this branch | 112 | 6231 |
+| Reduction | globally loaded project prose | — | 66162 (91.4%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.
 No rule under `.claude/rules/` is unscoped, and no on-demand reference is imported by
 the root file. Therefore the exact repository-owned prose Claude Code loads
-unconditionally is the root `CLAUDE.md`: 6128 bytes, before built-in, user, skill,
+unconditionally is the root `CLAUDE.md`: 6231 bytes, before built-in, user, skill,
 MCP, or auto-memory context.
 
 This is an exact byte/line measurement, not a tokenizer or billing estimate. Token count
@@ -32,8 +35,8 @@ These files load only after Claude Code reads a file matching their `paths` fron
 | `.claude/rules/audio.md` | 20 | 778 |
 | `.claude/rules/testing.md` | 31 | 1475 |
 | `.claude/rules/workflows.md` | 36 | 1634 |
-| `.claude/rules/documentation.md` | 31 | 1350 |
-| **Total conditional rules** | — | **9778** |
+| `.claude/rules/documentation.md` | 39 | 2029 |
+| **Total conditional rules** | — | **10457** |
 
 The documents in this directory are normal links and remain unloaded until read.
 
