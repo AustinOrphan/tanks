@@ -50,6 +50,21 @@ export interface MomentSceneOptions {
   spawnAnim: SpawnAnimId;
 }
 
+export interface MomentProducerReport {
+  schemaVersion: 1;
+  producer: { kind: 'moment'; scenarioId: string };
+  fixture: { seed: number };
+  tickCount: number;
+  observedEvents: { type: string; tick: number }[];
+  fixtureAssertions: {
+    kind: 'event-at-tick';
+    type: string;
+    expectedTick: number;
+    observedTicks: number[];
+    passed: boolean;
+  }[];
+}
+
 /**
  * Renders a `MOMENTS` timeline (Task 3/4) through the SAME render consumer set and
  * order the game itself drives (renderer.ts: `entities.sync`, `particles.spawn` +
@@ -73,9 +88,29 @@ export function buildMomentScene(
   w: number,
   h: number,
   opts: MomentSceneOptions,
-): { draw(age: number, alpha: number): void; frames: number; dispose(): void } {
+): {
+  draw(age: number, alpha: number): void;
+  frames: number;
+  dispose(): void;
+  captureReport: MomentProducerReport;
+} {
   const def = MOMENTS[opts.moment];
   const tl = simulateMoment(def);
+  const observedEvents = tl.events.flatMap((events, tick) =>
+    events.map((event) => ({ type: event.type, tick })),
+  );
+  const fixtureAssertions = def.expect.map(({ type, tick }) => {
+    const observedTicks = observedEvents
+      .filter((event) => event.type === type)
+      .map((event) => event.tick);
+    return {
+      kind: 'event-at-tick' as const,
+      type,
+      expectedTick: tick,
+      observedTicks,
+      passed: observedTicks.length === 1 && observedTicks[0] === tick,
+    };
+  });
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x14171a);
@@ -205,5 +240,17 @@ export function buildMomentScene(
   // [0, frames), so `events[def.ticks]` is never fed; every shipped moment's `expect`
   // ticks sit well inside that range (fire@10/40, destroyed@15/20, respawn@135/180), so
   // this is a real constraint to keep in mind for a future moment, not a live bug.
-  return { draw, frames: def.ticks, dispose };
+  return {
+    draw,
+    frames: def.ticks,
+    dispose,
+    captureReport: {
+      schemaVersion: 1,
+      producer: { kind: 'moment', scenarioId: opts.moment },
+      fixture: { seed: tl.worlds[0].seed },
+      tickCount: def.ticks,
+      observedEvents,
+      fixtureAssertions,
+    },
+  };
 }

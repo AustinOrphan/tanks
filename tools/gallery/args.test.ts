@@ -3,9 +3,13 @@
 // in the image as literal text. Those are cheap to pin and expensive to rediscover.
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error -- plain .mjs, deliberately dependency-free so the runner can use it
-import { parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS, MOMENT_IDS } from './args.mjs';
+import {
+  parseArgs, safeLabel, gridShape, DEFAULTS, SKIN_IDS, SPAWN_ANIM_IDS, MOMENT_IDS,
+  GALLERY_VIEW_IDS,
+} from './args.mjs';
 import { SKINS, SPAWN_ANIMATIONS, DEFAULT_SPAWN_ANIM } from '../../src/game/customization';
 import { MOMENTS } from './moments';
+import { VIEWS } from './subjects';
 
 const ESC = String.fromCharCode(27);
 
@@ -38,6 +42,24 @@ describe('gallery args', () => {
     expect(a.anim).toBe(true);
     expect(a.fps).toBe(24);
     expect(typeof a.fps).toBe('number'); // not the string '24', which ffmpeg would reject
+  });
+
+  it('reads deterministic capture metadata controls', () => {
+    const a = parseArgs([
+      '--scene', 'fire', '--age', '10', '--dpr', '2', '--report', 'producer.json',
+    ]);
+    expect(a.age).toBe(10);
+    expect(a.dpr).toBe(2);
+    expect(a.report).toBe('producer.json');
+  });
+
+  it('validates deterministic capture metadata controls before launching a browser', () => {
+    expect(() => parseArgs(['--dpr', '0'])).toThrow(/--dpr/);
+    expect(() => parseArgs(['--dpr', '5'])).toThrow(/--dpr/);
+    expect(() => parseArgs(['--age', '-1'])).toThrow(/--age/);
+    expect(() => parseArgs(['--scene', 'fire', '--age', '1', '--anim'])).toThrow(/still frame/);
+    expect(() => parseArgs(['--report', 'producer.json'])).toThrow(/moment scene/);
+    expect(() => parseArgs(['--scene', 'fire', '--report', '..\/producer.json'])).toThrow(/safe JSON basename/);
   });
 
   it('rejects a flag with no value instead of swallowing the next flag', () => {
@@ -216,6 +238,12 @@ describe('gallery args', () => {
     // the URL, behind a full browser launch.
     expect([...MOMENT_IDS].sort()).toEqual(Object.keys(MOMENTS).sort());
     for (const id of MOMENT_IDS) expect(parseArgs(['--scene', id]).scene).toBe(id);
+  });
+
+  it('accepts exactly the camera views the gallery ships, in both directions', () => {
+    expect([...GALLERY_VIEW_IDS].sort()).toEqual(Object.keys(VIEWS).sort());
+    for (const id of GALLERY_VIEW_IDS) expect(parseArgs(['--view', id]).view).toBe(id);
+    expect(() => parseArgs(['--view', 'overhead-ish'])).toThrow(/--view must be one of/);
   });
 
   it('rejects a --scene that is neither gallery/game nor a known moment', () => {

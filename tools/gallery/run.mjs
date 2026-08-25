@@ -118,7 +118,12 @@ async function main() {
   }
 
   const { chromium } = await import(PW);
-  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  const browser = await chromium.launch({
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      : {}),
+    args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'],
+  });
   // Every path out of here must close the browser. It did not, and an error inside the
   // sweep loop left node alive on the open Chromium handle -- the run did not fail, it
   // HUNG, which is far worse to diagnose.
@@ -130,9 +135,13 @@ async function main() {
 }
 
 async function run(browser) {
-  const page = await browser.newPage({ viewport: { width: args.w + 40, height: args.h + 40 } });
+  const page = await browser.newPage({
+    viewport: { width: args.w + 40, height: args.h + 40 },
+    deviceScaleFactor: args.dpr,
+  });
   page.setDefaultTimeout(30000);
   const errors = [];
+  let producerReport = null;
   page.on('pageerror', (e) => errors.push(String(e)));
 
   if (args.slowmo !== 1) {
@@ -169,6 +178,7 @@ async function run(browser) {
     if (args.hull) p.set('hull', args.hull);
     if (args.accent) p.set('accent', args.accent);
     if (args.frames !== null) p.set('frames', String(args.frames));
+    if (args.age !== 0) p.set('age', String(args.age));
     // Only when non-default, mirroring skin/hull/accent above: DEFAULTS.spawnAnim is
     // always defined, so an UNCONDITIONAL emit would set ?spawn-anim= on every gallery
     // invocation and fire setPlayerStyle through subjects.ts's widened guard even when
@@ -268,6 +278,10 @@ async function run(browser) {
     await page.goto(q(), { waitUntil: 'load' });
     await page.waitForFunction(() => window.GALLERY_READY === true, undefined, { timeout: 20000 });
     const frames = await page.evaluate(() => window.GALLERY_FRAMES);
+    if (args.report) {
+      producerReport = await page.evaluate(() => window.GALLERY_REPORT);
+      if (!producerReport) throw new Error('--report requested, but the gallery scene exposed no producer report');
+    }
     const canvas = page.locator('canvas');
     if (!args.anim || frames <= 1) {
       await canvas.screenshot({ path: `${outDir}/${prefix}.png` });
@@ -322,6 +336,25 @@ async function run(browser) {
   }
 
   console.log('pageerrors:', errors.length ? errors.slice(0, 3).join(' | ') : 'none');
+
+  if (args.report) {
+    const devicePixelRatio = await page.evaluate(() => window.devicePixelRatio);
+    writeFileSync(`${outDir}/${args.report}`, `${JSON.stringify({
+      schemaVersion: 1,
+      capture: {
+        frameCount: shots.reduce((total, shot) => total + shot.n, 0),
+        viewport: { width: args.w, height: args.h, devicePixelRatio },
+        pageErrors: errors,
+      },
+      browser: { chromiumVersion: browser.version() },
+      producer: producerReport,
+    }, null, 2)}\n`);
+    // `--report` is the capture-adapter seam: publish raw frames and producer metadata
+    // only. The shared capture runner owns every requested PNG/MP4/GIF assembly so a
+    // future producer never needs to duplicate gallery's FFmpeg behavior.
+    console.log(`wrote ${shots.reduce((total, shot) => total + shot.n, 0)} raw frame(s) to ${outDir}`);
+    return;
+  }
 
   if (!has('ffmpeg')) {
     console.log(`wrote PNG frames to ${outDir} (install ffmpeg for gif/grid assembly)`);
