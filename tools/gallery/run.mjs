@@ -12,6 +12,24 @@
  *   npm run gallery -- --subject mine --view low --sweep MINE_DOME_H --values 0.04,0.08,0.12
  *   npm run gallery -- --elements tank --view close --skin flow --hull '#3d7bd6'
  *   npm run gallery -- --elements tank --skin flow --anim --frames 90 --out flow.gif
+ *   npm run gallery -- --scene ai-tracking --anim --sweep TURRET_R --values 0.2,0.55 --out cmp.gif
+ *
+ *   npm run gallery -- --scene ai-tracking --anim --subdiv 1 --fps 60 --out clip.gif
+ *
+ * The --sweep line is --anim + --sweep together: one labelled animated gif per swept
+ * variant, composed side by side into a single animated grid (see the assembly
+ * section's `animated && shots.length > 1` branch).
+ *
+ * NORMAL-SPEED PLAYBACK needs `--subdiv 1 --fps 60`, as the last line shows, and the
+ * defaults deliberately do NOT give it. `--subdiv` (default 3) renders three interpolated
+ * frames per sim tick and `--fps` (default 20) plays them back at 20, so a moment plays at
+ * 20/3 ticks per second against the sim's 60 -- nine times slower than real time, which is
+ * what you want for inspecting a shape and wrong for judging whether something READS as
+ * smooth. MEASURED on the 47-tick `ai-tracking` moment (47 ticks / 60Hz = 0.783s of game
+ * time): the defaults produce 141 frames playing over 7.05s, and `--subdiv 1 --fps 60`
+ * produces 47 frames over 0.790s -- within 0.9% of real time. The residual is GIF's
+ * centisecond frame-delay quantisation, which cannot express 60fps exactly; it is a
+ * property of the container, not of the capture.
  *
  * --skin/--hull/--accent dress the PLAYER tank through the game's own setPlayerStyle.
  * --frames gives an animated skin a timeline: every shipped element is static or a few
@@ -316,6 +334,61 @@ async function run(browser) {
     sh('ffmpeg', ['-y', '-framerate', String(args.fps), '-i', `${outDir}/frame-%04d.png`,
       '-vf', 'split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
       '-loop', '0', target]);
+    console.log('wrote', target);
+    return;
+  }
+  if (animated && shots.length > 1) {
+    // --anim + --sweep: build one labelled, palette-quantized gif per variant (the
+    // exact ffmpeg recipe the single-gif branch above uses), then hstack/vstack those
+    // gifs into ONE final animated grid, reusing gridShape/probeSize/label from the
+    // static-grid branch below. args.mjs already refuses --crop with animated output
+    // (`--crop is not applied to animated output`), so there is no crop case to carry
+    // into this branch -- every input here is a full, uncropped capture.
+    //
+    // Variants can capture different frame counts. Rather than pad a shorter variant
+    // with a frozen last frame -- which would make that variant visibly STOP moving
+    // while its neighbours kept animating, exactly the kind of misleading artefact
+    // this tool exists to show correctly -- every variant is TRUNCATED to the
+    // shortest variant's count. A dropped tail is still real captured motion; a
+    // padded one would not be.
+    const minN = Math.min(...shots.map((s) => s.n));
+    const cells = shots.map((s, i) => {
+      const dst = `${outDir}/anim-${i}.gif`;
+      const vf = args.label
+        ? `drawtext=text='${safeLabel(s.label)}':x=10:y=8:fontsize=22:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=5,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3`
+        : 'split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3';
+      sh('ffmpeg', ['-y', '-framerate', String(args.fps), '-i', `${outDir}/${s.prefix}-%04d.png`,
+        '-frames:v', String(minN), '-vf', vf, dst]);
+      return dst;
+    });
+    const { cols, rows } = gridShape(cells.length);
+    const pad = cols * rows - cells.length;
+    // Pad cell, same reasoning as the static grid below: a blank clip at the real
+    // cells' own pixel size (not the capture size) and the same truncated frame
+    // count, so hstack/vstack sees uniform inputs.
+    const cellSize = pad > 0 ? probeSize(cells[0]) : null;
+    for (let i = 0; i < pad; i++) {
+      const dst = `${outDir}/anim-${cells.length}.gif`;
+      sh('ffmpeg', ['-y', '-f', 'lavfi', '-i', `color=c=black:s=${cellSize.w}x${cellSize.h}:r=${args.fps}`,
+        '-frames:v', String(minN), dst]);
+      cells.push(dst);
+    }
+    const inputs = cells.flatMap((c) => ['-i', c]);
+    // Same hstack/vstack shaping as the static grid below, including its inputs=1
+    // workaround -- video streams hit the identical ffmpeg restriction stills do.
+    let fc = '';
+    for (let r = 0; r < rows; r++) {
+      const row = Array.from({ length: cols }, (_, c) => `[${r * cols + c}:v]`).join('');
+      fc += cols === 1 ? `${row}null[r${r}];` : `${row}hstack=inputs=${cols}[r${r}];`;
+    }
+    const stack = Array.from({ length: rows }, (_, r) => `[r${r}]`).join('');
+    fc += rows === 1 ? `${stack}null[grid]` : `${stack}vstack=inputs=${rows}[grid]`;
+    // Re-quantize the composed grid to its own fresh palette rather than reusing each
+    // cell's already-quantized colours -- the same palettegen/paletteuse pair every
+    // gif in this file is built with, applied once more at the composition stage.
+    fc += ';[grid]split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3';
+    const target = outFile ?? `${outDir}/grid.gif`;
+    sh('ffmpeg', ['-y', ...inputs, '-filter_complex', fc, '-loop', '0', target]);
     console.log('wrote', target);
     return;
   }

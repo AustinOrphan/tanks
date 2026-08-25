@@ -719,6 +719,111 @@ export const MOMENTS: Record<string, MomentDef> = {
     input: () => ({ move: { x: 1, y: 0 }, aim: { x: 1000, y: 0.75 }, fire: false, mine: false }),
     input2: () => ({ move: { x: 1, y: 0 }, aim: { x: 1000, y: -0.75 }, fire: false, mine: false }),
   },
+
+  /**
+   * Issue #330's artefact: a STATIONARY AI tank's turret visibly tracking a moving
+   * player. Brown is the only kind that isolates this to pure turret motion -- its
+   * `brownDecision` (brown.ts) hardcodes `desiredMove: { x: 0, y: 0 }` on every path
+   * (the STATIONARY behaviour), so the hull never moves and any motion on screen is
+   * the turret alone, unlike grey/teal which also reposition.
+   *
+   * Unlike every earlier moment's single scripted tank, the thing being demonstrated
+   * here is NOT the scripted player's own input -- it is `stepAi`'s per-tick
+   * recompute of `AiDecision.turretAngle` (via `aimLead` against the player's
+   * position, slewed at `AI_TURRET_TURN_RATE`, ai/index.ts), which #330 reports as a
+   * continuous micro-shimmer because there is no deadband yet. This moment does not
+   * fix or even measure that shimmer (no deadband exists to sweep) -- it only stages
+   * the ONE thing #335 identifies as missing tooling for: a capture where a
+   * stationary AI's turret has a moving target to track at all.
+   *
+   * DO NOT reach for this moment to demonstrate a turret DEADBAND, and do not read a
+   * flat before/after here as evidence a deadband does nothing. MEASURED against issue
+   * #330's deadband (0.25 degrees), sweeping AI_TURRET_DEADBAND over 0 and 0.25 on a
+   * tree that carried both: 46 of the 47 rendered frames came out BYTE-IDENTICAL, the
+   * single exception being frame 29. The reason is in the tick-by-tick note below --
+   * the turret here slews at the 2.39deg/tick turn-rate cap on essentially every tick,
+   * an order of magnitude above any deadband worth shipping, so the guard is inert
+   * except right at the closest-approach turnaround (~tick 28), where the turret
+   * reverses and the error passes through zero. Demonstrating shimmer needs the
+   * OPPOSITE regime: a target whose bearing changes by well UNDER a degree per tick,
+   * i.e. slow or distant enough that the turret makes small corrections instead of
+   * saturating. That scenario is not authored yet.
+   *
+   * The player drives due east at a fixed y = 2, passing almost directly over the
+   * AI at x = 0 -- "laterally across the AI's field of view" -- so the turret sweeps
+   * through a wide arc rather than a narrow one, and REVERSES direction partway
+   * through (the closest-approach point), rather than merely slewing toward one
+   * fixed heading the way `traverse`'s single fixed aim point does.
+   */
+  'ai-tracking': (() => {
+    const AI_TRACKING_PLAYER_Y = 2;
+    const AI_TRACKING_PLAYER_X0 = -1.5;
+    const AI_TRACKING_INPUT: InputState = { move: { x: 1, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
+    return {
+      // MEASURED (throwaway vite-node probe, duplicate fixture, deleted before
+      // commit): with the AI's turret starting at angle 0 and the player entering
+      // already visible (no walls, los true from tick 0), turretAngle slews at the
+      // turn-rate cap every tick -- 2.39deg/tick -- climbing to a peak of ~64.70deg
+      // at tick 28 (the player's closest approach to x = 0) and then falling back to
+      // 40.68deg by tick 47 as the player continues past. No plateau anywhere in
+      // that window: each tick's turretAngle differs from its predecessor.
+      //
+      // 47, not longer: brownDecision's firing GATE (stepAi, ai/index.ts) requires
+      // `aimTicks >= round(reactionTime * TICK_HZ)` -- STATIC_BASIC's reactionTime is
+      // 0.8s, so 48 ticks -- before an actual shot leaves, and aimTicks climbs by
+      // exactly 1 every tick once line of sight holds (which it does from tick 1
+      // here). But `decision.fire` (brown.ts's state machine) only goes true on an
+      // 'aim'-state tick, and tank.aiState cycles idle -> aim -> fire -> reposition ->
+      // idle every 4 ticks REGARDLESS of whether the reaction gate actually let a shot
+      // through (stepAi writes `tank.aiState = decision.nextState` unconditionally) --
+      // so a firing OPPORTUNITY exists only on ticks 2, 6, 10, ..., 4k + 2. The first
+      // one at or past the 48-tick gate is tick 50 (4*12 + 2), not 48. MEASURED:
+      // extending this same fixture to 55 ticks does fire at tick 50, confirming the
+      // derivation. Stopping at 47 keeps this moment PURE turret-tracking, with
+      // nothing else to pin -- see the never-fires test in moments.test.ts, whose own
+      // negative control is exactly this 55-tick extension.
+      ticks: 47,
+      expect: [],
+      // Framed on the midpoint of the AI (0, 0) and the player's path's closest
+      // stretch (x in [-1.5, 0.85] at y = 2), so both the turret and the tank
+      // crossing its sights stay in frame the whole clip.
+      focus: [-0.3, 0.3, 1], span: 5,
+      build: () => {
+        const w = createWorld({
+          walls: [],
+          spawns: [
+            { kind: 'brown', pos: { x: 0, y: 0 }, angle: 0 },
+            { kind: 'player', pos: { x: AI_TRACKING_PLAYER_X0, y: AI_TRACKING_PLAYER_Y }, angle: 0 },
+          ],
+          lives: 3,
+          tanks: [
+            {
+              id: 1, kind: 'brown',
+              pos: { x: 0, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+              aiState: 'idle', aiTimer: 0,
+            },
+            {
+              id: 2, kind: 'player',
+              pos: { x: AI_TRACKING_PLAYER_X0, y: AI_TRACKING_PLAYER_Y }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+              aiState: 'idle', aiTimer: 0,
+            },
+          ],
+          seed: 7,
+        });
+        // Same landmine every other moment in this file documents: a fresh world's
+        // roundStartTick locks fire/mine (and here, the player's own move) through the
+        // round-start countdown/grace phase, so tick 0 must already be live.
+        w.roundStartTick = -600;
+        return w;
+      },
+      // aim far down the tank's own due-east heading, same "aim is a world-space point"
+      // landmine every other moment here documents -- irrelevant to what's on screen
+      // (the player never fires), kept only so the player's own turret doesn't wander.
+      input: () => AI_TRACKING_INPUT,
+    };
+  })(),
 };
 
 /**

@@ -18,6 +18,19 @@ describe('gallery args', () => {
     expect(a.sweep).toBeNull();
   });
 
+  it('pins the subdiv/fps defaults the normal-speed recipe in run.mjs is arithmetic on', () => {
+    // run.mjs's header documents `--subdiv 1 --fps 60` as the normal-speed recipe and
+    // states, as measured figures, that the DEFAULTS instead play a moment nine times
+    // slower than real time (47 ticks -> 141 frames over 7.05s). That "nine times" is
+    // 60 / (fps / subdiv) = 60 / (20 / 3), so it is arithmetic on these two values and
+    // goes silently stale the moment either default moves. Changing either one without
+    // updating that comment fails here.
+    const a = parseArgs([]);
+    expect(a.subdiv).toBe(3);
+    expect(a.fps).toBe(20);
+    expect(60 / (a.fps / a.subdiv)).toBe(9);
+  });
+
   it('reads values, booleans and numbers', () => {
     const a = parseArgs(['--elements', 'blast,tank', '--view', 'top', '--anim', '--fps', '24']);
     expect(a.elements).toBe('blast,tank');
