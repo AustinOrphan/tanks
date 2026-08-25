@@ -1170,5 +1170,29 @@
       "src/game/storage.test.ts"
     ],
     "why": "Isolation has a read half as well as a write half, and `storage-developer-writes-land-on-production-keys` only pins the write. Under this mutation a developer session WRITES to `tanks.dev.*` but READS the player's real keys, so it adopts the production campaign, the production legacy touch settings, and exports production data through save.ts -- while every write-side assertion still passes. `String(key)` rather than `key` so the mutation keeps the argument coercion the adapter does and differs only in the namespace mapping."
+  },
+  {
+    "id": "app-settings-namespace-ignores-the-url",
+    "file": "src/game/app-settings.ts",
+    "find": "  const namespace = selectStorageNamespace(globalThis.location?.search ?? '');",
+    "replace": "  const namespace = selectStorageNamespace('');",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-settings.test.ts"
+    ],
+    "why": "The one unpinned line issue #245 adds. `createNamespacedStorage` and `selectStorageNamespace` can both be correct and fully covered while this line never asks for the developer namespace, in which case `?dev=1` persists into the real player's keys exactly as before. Killed by `takes the storage namespace from the URL`, which stubs globalThis.location rather than trusting the node environment's absence of one.",
+    "expectFailures": 1
+  },
+  {
+    "id": "app-settings-stores-skip-the-namespace",
+    "file": "src/game/app-settings.ts",
+    "find": "    stores: createStores(storage, availability),",
+    "replace": "    stores: createStores(resolved.storage, availability),",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-settings.test.ts"
+    ],
+    "why": "Splits the session across two namespaces: the six stores land on the base keys while `AppSettings.storage` -- what save.ts and the `__tanks` dev console get -- stays namespaced. Every storage.ts adapter test still passes, because the adapter is untouched; only the wiring is wrong. Killed by `gives the stores and storage the SAME namespaced object`, where a store write becomes unreadable through AppSettings.storage.",
+    "expectFailures": 1
   }
 ]
