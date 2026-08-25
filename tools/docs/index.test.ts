@@ -228,7 +228,10 @@ describe('the real index agrees with the corpus it indexes', () => {
   });
 
   it('documents where durable decisions and temporary plans belong', () => {
-    const placement = section(readFileSync(INDEX, 'utf8'), 'Where documentation belongs');
+    // Read the generated string, not the committed file: the equality test above already
+    // binds the two, and asserting on the generator is what makes this fail when the
+    // placement table loses a home rather than only when the file is hand-edited.
+    const placement = section(renderDocumentIndex(ROOT), 'Where documentation belongs');
 
     expect(placement).toContain('docs/superpowers/specs/');
     expect(placement).toContain('docs/superpowers/plans/');
