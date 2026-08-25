@@ -452,6 +452,22 @@ export const TANK_TURN_RATE = data.tank.turnRate;
 // Lowering it makes enemies more readable/telegraphed.
 export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 
+// ---- AI turret angular acceleration (issue #347) ----
+// Ticks the AI turret takes to reach AI_TURRET_TURN_RATE from a standstill. The per-tick
+// acceleration budget is AI_TURRET_TURN_RATE * DT / this, and accelSlew (ai/turret-accel.ts)
+// also uses it to decelerate ONTO a target rather than stopping dead.
+//
+// Why this exists: slewAngle is bang-bang -- min(|error|, maxDelta) with no velocity state --
+// so before this the turret could only be stopped or travelling at the full rate cap, with
+// nothing in between. Measured over 60 seeds x 2 arenas, the step size changed by more than
+// half the cap in a single tick on 0.8% (brown) / 1.8% (grey) / 2.2% (teal) of ticks: the gun
+// switching between stopped and flat out, which is what reads as unpolished.
+//
+// PLAYER TURRET IS DELIBERATELY EXCLUDED. world.ts's driveTank still calls slewAngle, and
+// must: easing live player input reads as input lag, not polish. Same ruling as issue #330's
+// deadband, and world.test.ts has the companion proof.
+export const AI_TURRET_RAMP_TICKS = data.turret.aiRampTicks;
+
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {
   normal: { speed: NORMAL_SPEED, bounces: NORMAL_BOUNCES },

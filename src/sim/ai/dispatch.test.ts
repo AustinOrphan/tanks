@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
-import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, DT } from '../constants';
+import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, DT } from '../constants';
 import type { Tank, Vec2 } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
@@ -39,6 +39,23 @@ describe('decideAi', () => {
     const player = tank(2, 'player', { x: 5, y: 0 });
     const d = decideAi(world([brown, player]), brown);
     expect(d.desiredMove).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('turret acceleration (issue #347)', () => {
+  it('stepAi ramps the turret from rest instead of jumping straight to the rate cap', () => {
+    // Player far off to the side, so the aim error is large and the turret has room to
+    // accelerate. Before #347 the first tick moved a full AI_TURRET_TURN_RATE * DT; now it
+    // moves one acceleration budget, which is that divided by AI_TURRET_RAMP_TICKS.
+    const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 0 });
+    const w = world([grey, tank(2, 'player', { x: 0, y: 8 })]);
+    const before = w.tanks[0].turretAngle;
+    stepAi(w, []);
+    const moved = Math.abs(w.tanks[0].turretAngle - before);
+    const cap = AI_TURRET_TURN_RATE * DT;
+    expect(moved).toBeGreaterThan(0);
+    expect(moved).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
+    expect(w.tanks[0].turretVel).toBeCloseTo(cap / AI_TURRET_RAMP_TICKS, 12);
   });
 });
 
@@ -270,11 +287,13 @@ describe('stepAi', () => {
       // Turret still tracks the target during countdown (orientation is the point of it),
       // but it only SLEWS: the desired angle (pi/2 + jitter, jitter bounded by
       // profileAimSpread(grey) ~= 0.133) is far more than one tick's turn budget away from the
-      // starting angle of 0, so after one stepAi call the turret has only advanced by
-      // AI_TURRET_TURN_RATE*DT -- the exact desired angle (and its jitter) is not yet
-      // visible in a single tick's result.
-      const maxDelta = AI_TURRET_TURN_RATE * DT;
-      expect(w.tanks[0].turretAngle).toBeCloseTo(maxDelta, 10);
+      // starting angle of 0, so after one stepAi call the turret has advanced by ONE
+      // ACCELERATION BUDGET -- the exact desired angle (and its jitter) is not yet
+      // visible in a single tick's result. Was a full AI_TURRET_TURN_RATE*DT before
+      // issue #347 gave the turret angular acceleration; the point of the assertion is
+      // unchanged (the turret slews, it does not snap), only the first tick is smaller.
+      const firstTick = (AI_TURRET_TURN_RATE * DT) / AI_TURRET_RAMP_TICKS;
+      expect(w.tanks[0].turretAngle).toBeCloseTo(firstTick, 10);
     });
 
     it('the tick the countdown ends on is fully live for the AI too', () => {
@@ -320,13 +339,15 @@ describe('stepAi', () => {
     // magnitude are fully determined without needing to also compute the jitter by hand.
     const BEHIND_PLAYER_POS = { x: -10, y: 5.7735026918962575 };
 
-    it('an AI cannot instantly face a target that appears behind it: the turret only advances by AI_TURRET_TURN_RATE*DT after one tick', () => {
+    it('an AI cannot instantly face a target that appears behind it: one tick advances by one acceleration budget', () => {
       const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD }); // turretAngle starts at 0 (facing +x)
       const player = tank(2, 'player', BEHIND_PLAYER_POS); // stationary, bearing ~150deg
       const w = world([grey, player]);
       stepAi(w, []);
-      const maxDelta = AI_TURRET_TURN_RATE * DT; // 2.5/60 = 0.041666...
-      expect(w.tanks[0].turretAngle).toBeCloseTo(maxDelta, 10);
+      // One acceleration budget, not the full rate cap: issue #347 starts the turret from
+      // rest. The cap is still the ceiling, it just takes AI_TURRET_RAMP_TICKS to reach it.
+      const firstTick = (AI_TURRET_TURN_RATE * DT) / AI_TURRET_RAMP_TICKS;
+      expect(w.tanks[0].turretAngle).toBeCloseTo(firstTick, 10);
       expect(w.tanks[0].turretAngle).toBeLessThan(Math.PI / 2); // nowhere near the ~150deg target yet
     });
 
@@ -354,10 +375,10 @@ describe('stepAi', () => {
       expect(w.bullets.length).toBe(1);
       const bullet = w.bullets[0];
       const bulletAngle = Math.atan2(bullet.vel.y, bullet.vel.x);
-      const maxDelta = AI_TURRET_TURN_RATE * DT;
+      const firstTick = (AI_TURRET_TURN_RATE * DT) / AI_TURRET_RAMP_TICKS;
       // The bullet's actual travel direction matches the tank's post-slew turret angle...
       expect(bulletAngle).toBeCloseTo(w.tanks[0].turretAngle, 10);
-      expect(bulletAngle).toBeCloseTo(maxDelta, 10);
+      expect(bulletAngle).toBeCloseTo(firstTick, 10);
       // ...NOT the ~150deg (2.618 rad) the decision function actually wanted.
       expect(Math.abs(bulletAngle - (5 * Math.PI) / 6)).toBeGreaterThan(1);
     });

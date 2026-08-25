@@ -230,6 +230,25 @@ describe('resolveStatusCoop: ATTEMPTS mode (world.coopAttempts, the default)', (
     expect(w.roundStartTick).toBe(w.tick + 1); // re-arms countdown/grace, resetArena's own convention
   });
 
+  it('a round reset clears the AI turret angular velocity (issue #347)', () => {
+    // resetArena snaps every turret to its spawn angle. Without clearing the velocity the
+    // enemy comes back pointing the right way but still SWINGING at whatever rate it died
+    // carrying, so the new round opens with a turret already in motion for no reason -- and
+    // accelSlew would then have to brake it before it could track anything.
+    const w = coopWorld(2);
+    const a = tankById(w, A_ID);
+    const b = tankById(w, B_ID);
+    const enemy = tankById(w, 3);
+    enemy.turretVel = 0.03; // mid-swing when the wipe lands
+    a.alive = false;
+    b.alive = false;
+
+    resolveStatus(w, [destroyed(A_ID), destroyed(B_ID)]);
+
+    expect(enemy.alive).toBe(true);
+    expect(enemy.turretVel ?? 0).toBe(0);
+  });
+
   it('a full wipe at lives === 1 drains to 0 and calls lose -- WITHOUT resetArena (tanks stay dead, in place)', () => {
     const w = coopWorld(1);
     const a = tankById(w, A_ID);
