@@ -121,6 +121,17 @@ export interface Tank {
    */
   turretVel?: number;
   /**
+   * The aim solution this tank has committed to, and the ticks left before it re-solves
+   * (issue #344). The turret slews toward THIS rather than toward a freshly recomputed
+   * aimLead every tick, so the gun settles and dwells instead of micro-correcting at 60Hz.
+   * Undefined rather than a sentinel when nothing is held, so "no commitment" is genuinely
+   * absent -- an angle of 0 is a real heading (due east), exactly as for aiIntent above.
+   *
+   * Written only by stepAi's dispatcher, from AiDecision.nextAimHeld/nextAimHeldTicks.
+   */
+  aiAimHeld?: number;
+  aiAimHeldTicks?: number;
+  /**
    * Consecutive ticks the AI has HELD a firing solution (decision.hasSolution),
    * reset the tick it loses one. The dispatcher's reaction gate compares this
    * against the profile's reactionTime before letting a shot off -- an enemy

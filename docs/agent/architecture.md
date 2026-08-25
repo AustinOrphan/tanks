@@ -282,7 +282,22 @@ bot-driven PLAYER tanks via `commitHeading`, with the state in the caller-owned
 personality axis and is deliberately NOT scored by `tankDifficultyBreakdown`
 (committing longer is both more decisive and more predictable, so it is not
 monotonic in threat); like `estimationAccuracy`, it is inert for STATIONARY
-profiles, whose `desiredMove` is hardcoded zero so they never acquire an intent. **Every profile field is consumed by the
+profiles, whose `desiredMove` is hardcoded zero so they never acquire an intent — and
+`aimHoldTime` (issue #344): the AIM span, `Math.round(aimHoldTime · TICK_HZ)`, applied
+centrally by `decideAi` through `holdAimFor` (`ai/aim-hold.ts`) over whatever
+`turretAngle` the behaviour returned, with `stepAi` writing the held angle and its
+countdown back to `Tank.aiAimHeld`/`aiAimHeldTicks`. While a hold is live the turret
+slews toward the held angle rather than a freshly solved one, so the gun settles and
+dwells instead of correcting every tick; the hold breaks early when the fresh solution
+drifts past `AI_AIM_BREAK`, so acquiring a genuinely new target is immediate. A span of
+zero re-arms to a zero countdown and re-solves every tick, which is the pre-#344
+behaviour exactly — demonstrated, not assumed: setting every profile to zero reproduces
+the previous `BASELINE_HASH` byte for byte. `hasSolution` and `fire` deliberately keep
+reading the FRESH solution, so this holds where a tank POINTS, never what it believes it
+can hit, and the dispatcher still re-vets friendly fire against the actual post-slew
+angle. Unlike `commitmentTime`, `aimHoldTime` is NOT inert for STATIONARY profiles: a
+turret that never moves its hull still tracks, and brown is the kind whose shimmer this
+was measured against. **Every profile field is consumed by the
 implementations it applies to** — a scoped claim since 2026-08-16, not a universal
 one: `estimationAccuracy` is read only where hazard estimation happens, so
 STATIONARY's two profiles (STATIC_BASIC, RICOCHET_SNIPER) carry a value nothing

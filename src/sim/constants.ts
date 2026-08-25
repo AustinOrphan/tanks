@@ -488,6 +488,29 @@ export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 // cliff at 3; recorded rather than smoothed over, because "gates pass at every swept value"
 // would be false.
 export const AI_TURRET_RAMP_TICKS = data.turret.aiRampTicks;
+// ---- AI aim hold (issue #344) ----
+// How far the freshly recomputed aim solution may drift from the one a tank is HOLDING
+// before the hold breaks and the tank re-solves immediately (radians). Below this the
+// tank keeps pointing where it decided to point; above it, a genuinely new target has
+// appeared and waiting out the rest of the span would be a visible failure to react.
+//
+// Read with aimHoldTime (the per-profile span, config/types.ts): the span decides how
+// long a tank dwells, this decides what interrupts the dwell.
+//
+// 0.14 radians (8 degrees) is the MIDPOINT of the swept range, and it is chosen rather
+// than measured -- stated plainly because the sweep did not discriminate. At span 0.1
+// over {0.07, 0.14, 0.28}, 60 seeds x 2 arenas x 2 player policies, dwell for brown on
+// arena1/pacifist reads 87.34% / 86.73% / 86.39% and the other eleven rows move as little;
+// arena1 losses read 60/60, 60/60, 59/60 and medianTicks 1624 / 1511 / 1538, a spread no
+// wider than the seed noise the span sweep already showed at a FIXED break (1426-1560).
+// reaction.test.ts and pacifist.test.ts pass 10/10 at every value.
+//
+// So this constant is under-determined by the evidence, and the honest reading is that
+// anything in single-digit degrees behaves the same. It is pinned at the midpoint so that
+// neither end of the tested range is a surprise, and pinned by a mutation entry so that
+// changing it is deliberate. If a future artefact turns out to hinge on it, re-measure
+// rather than treating this figure as load-bearing.
+export const AI_AIM_BREAK = data.ai.aimBreak;
 
 // ---- Per-type bullet tuning ----
 export const bulletConfig: Record<BulletType, { speed: number; bounces: number }> = {

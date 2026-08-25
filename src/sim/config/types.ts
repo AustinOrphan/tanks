@@ -93,6 +93,46 @@ export interface AIProfileBalance {
    * silently default to "no commitment", which is the defect this closes.
    */
   commitmentTime: number;
+  /**
+   * Seconds this tank holds a solved aim angle before re-solving (issue #344). Consumed
+   * by `holdAimFor` (ai/aim-hold.ts) as `Math.round(aimHoldTime * TICK_HZ)`. A hold also
+   * breaks early when the fresh solution drifts past AI_AIM_BREAK, so this is the DWELL
+   * length, not a reaction delay: acquiring a genuinely new target stays immediate.
+   *
+   * Zero disables the hold for that profile and re-solves every tick, which is the
+   * pre-#344 behaviour -- demonstrated, not assumed: setting every profile to zero
+   * reproduces the previous BASELINE_HASH byte for byte (tools/baseline/trace.ts).
+   *
+   * 0.2s (12 ticks) everywhere, chosen from a JOINT sweep against AI_TURRET_RAMP_TICKS on
+   * the tree that already carries issue #347's turret acceleration. The joint sweep is the
+   * point: an earlier standalone sweep, taken against the old bang-bang slew, picked 0.1s
+   * because longer holds cost kill speed there -- every release started at the full rate
+   * cap. With acceleration underneath, the release RAMPS, so a longer hold no longer hurts,
+   * and 0.1s is no longer the right answer. Re-measured rather than carried over.
+   *
+   * arena1, 60 seeds x 2 arenas x 2 player policies. abrupt% is the fraction of ticks whose
+   * per-tick step size moves by more than half the cap (lower is smoother); still% is the
+   * fraction of live ticks the turret is perfectly still:
+   *
+   *   span  ramp | brown abrupt / teal abrupt | brown still / teal still | a1 losses, median
+   *   0     6    | 0.06 / 0.44               | 75.6 / 41.0              | 59/60, 1508
+   *   0     10   | 0.03 / 0.36               | 78.6 / 42.1              | 60/60, 1528
+   *   0.1   6    | 0.04 / 0.44               | 82.9 / 57.0              | 58/60, 1524
+   *   0.1   10   | 0.04 / 0.36               | 81.2 / 53.6              | 59/60, 1420
+   *   0.2   6    | 0.03 / 0.36               | 84.0 / 62.3              | 60/60, 1510   <- chosen
+   *   0.2   10   | 0.03 / 0.33               | 83.9 / 57.5              | 60/60, 1449
+   *
+   * 0.2/6 dominates the previously shipped 0.1/6 on every column, lethality included. Past
+   * 0.2 the returns stop: extending to 0.3 and 0.45 at ramp 6 gives teal abrupt 0.40 then
+   * 0.35 against 0.36 -- non-monotonic, i.e. noise -- for at most 2.3 more points of teal
+   * stillness and a longer window in which a barrel can sit stale. reaction.test.ts and
+   * pacifist.test.ts pass 10/10 at every point above.
+   *
+   * Authored UNIFORMLY across profiles on purpose. The field is per-profile so it can become
+   * a personality axis the way commitmentTime is, but nothing measured justifies differing
+   * values yet, and inventing a spread would be a difficulty change dressed up as polish.
+   */
+  aimHoldTime: number;
   aggression: number;
   preferredDistance: number;
   minimumDistance: number;

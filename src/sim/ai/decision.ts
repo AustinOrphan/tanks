@@ -36,4 +36,11 @@ export interface AiDecision {
   /** The committed heading and its remaining ticks, written back by `stepAi`. */
   nextIntent: Vec2 | null;
   nextIntentTicks: number;
+  /**
+   * The aim solution this tank is holding, and how many ticks it has left to hold it
+   * (issue #344). Null when nothing is held. Written back by stepAi onto
+   * Tank.aiAimHeld/aiAimHeldTicks, the same shape nextIntent uses for movement.
+   */
+  nextAimHeld: number | null;
+  nextAimHeldTicks: number;
 }

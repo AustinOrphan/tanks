@@ -159,7 +159,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
 }
 
 const PROFILE_FIELDS = [
-  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aggression', 'preferredDistance',
+  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aimHoldTime', 'aggression', 'preferredDistance',
   'minimumDistance', 'retreatChance', 'directShotWeight', 'bankShotWeight',
 ] as const;
 const PROFILE_OPTIONAL_FIELDS = ['minePlacementChance'] as const;
@@ -200,6 +200,10 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // negative countdown -- which never satisfies `ticks > 0`, silently disabling the
       // commitment for that profile instead of failing loudly at load.
       commitmentTime: nonNegative(file, `${profile}.commitmentTime`, p.commitmentTime),
+      // Same reason commitmentTime is guarded: holdAimFor re-arms to
+      // Math.round(aimHoldTime * TICK_HZ), and a negative span would re-arm to a negative
+      // countdown that never reaches zero -- an aim frozen for the rest of the round.
+      aimHoldTime: nonNegative(file, `${profile}.aimHoldTime`, p.aimHoldTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
       minimumDistance: num(file, `${profile}.minimumDistance`, p.minimumDistance),

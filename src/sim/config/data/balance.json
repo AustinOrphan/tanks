@@ -19,7 +19,7 @@
     "fuseWarningTicks": 30,
     "proximityDelayTicks": 30
   },
-  "ai": { "aimSpread": 0.08, "hazardSpread": 0.4 },
+  "ai": { "aimSpread": 0.08, "hazardSpread": 0.4, "aimBreak": 0.14 },
   "lives": 3,
   "versusStock": 3
 }
