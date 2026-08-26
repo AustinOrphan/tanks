@@ -1,8 +1,79 @@
+/* ---- Design tokens (issue #321) -------------------------------------------------
+ *
+ * One place for the values the HUD repeats, named for the ROLE they play rather than
+ * for the colour or number they happen to be. Every value here is byte-identical to the
+ * literal it replaced: this block is a pure refactor, and a token whose value changes is
+ * a visual change that owes its own evidence.
+ *
+ * What is NOT here, deliberately. This stylesheet holds 52 distinct colour literals over
+ * 98 occurrences (measured on this file, comments excluded). Only the ones used for a
+ * single, repeated role are tokenised -- `#d8dde6` is `color` on 19 rules and nothing
+ * else, `rgba(216, 221, 230, 0.16)` is `background` on 8 and nothing else. A literal used
+ * once stays a literal: naming it would claim a role the stylesheet does not actually
+ * reuse, and every such name is one more thing a reader has to resolve to know what a
+ * rule paints.
+ *
+ * Reading these in a test: jsdom does not resolve `var()`, so `getComputedStyle` returns
+ * the literal string `var(--name)`. `hud.css.test.ts`'s `resolved()` is what makes an
+ * assertion over a tokenised property a measurement rather than a vacuous pass -- see its
+ * comment for the two ways this breaks a guard, one of them silently. */
+:root {
+  /* Colour roles. */
+  --hud-text: #d8dde6;
+  --hud-text-bright: #f2f5fa;
+  --hud-text-danger: #ffb4b4;
+  --hud-quiet-fill: rgba(216, 221, 230, 0.16);
+  --hud-gold: #e0c04a;
+
+  /* Elevation: three scrim depths, darkest for the full-pane overlays. */
+  --hud-scrim-panel: rgba(20, 24, 30, 0.55);
+  --hud-scrim-page: rgba(10, 12, 16, 0.72);
+  --hud-scrim-pane: rgba(11, 14, 20, 0.86);
+
+  /* Focus ring. One treatment, three selectors -- the panel, the preview canvas and the
+   * rotate buttons all draw the same ring, and it must stay the same on all three. */
+  --hud-focus-color: #7fd0ff;
+  --hud-focus-width: 2px;
+  --hud-focus-offset: 2px;
+
+  /* Radii. */
+  --hud-radius-sm: 8px;
+  --hud-radius-md: 10px;
+  --hud-radius-lg: 12px;
+  --hud-radius-pill: 999px;
+
+  /* Spacing scale, from the gaps this file already uses. */
+  --hud-space-1: 6px;
+  --hud-space-2: 8px;
+  --hud-space-3: 10px;
+  --hud-space-4: 12px;
+  --hud-space-5: 14px;
+  --hud-space-6: 16px;
+  --hud-space-7: 18px;
+
+  /* Control sizing. `--hud-control-min` is the 44 CSS px touch floor new primitives are
+   * held to; `--hud-control-touch` is the larger on-screen driving control. The rotate
+   * cluster's 34px predates this floor and is raised in issue #352, not here, because a
+   * size change relayouts the 260px preview pane and would break this block's claim to
+   * move no pixel. */
+  --hud-control-min: 44px;
+  --hud-control-touch: 56px;
+
+  /* Type. */
+  --hud-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --hud-weight-normal: 700;
+  --hud-weight-strong: 800;
+
+  /* Motion. The two durations this file already animates at. */
+  --hud-duration-fast: 220ms;
+  --hud-duration-slow: 700ms;
+}
+
 .hud {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--hud-font);
   color: #fff;
   user-select: none;
 }
@@ -17,7 +88,7 @@
   right: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--hud-space-6);
   /* The spacing knobs live in custom properties so the safe-area padding below can be
    * written ONCE. The narrow-viewport blocks further down retune these two numbers and
    * must not set `padding` themselves: a `padding` shorthand in an @media wins over
@@ -42,7 +113,7 @@
 
 .hud-stat {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   letter-spacing: 0.5px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
@@ -58,7 +129,7 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--hud-space-3);
   pointer-events: auto;
 }
 
@@ -66,9 +137,9 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--hud-radius-sm);
   padding: 6px 12px;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   background: #ffcf3f;
   color: #3a2c00;
 }
@@ -93,8 +164,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  background: rgba(20, 24, 30, 0.55);
+  gap: var(--hud-space-5);
+  background: var(--hud-scrim-panel);
   pointer-events: auto;
   /* Issue #151: `.hud-title` at 56px/900 does not fit one line at phone widths
    * ("Level 3 cleared!" wraps at 390px), and a wrapped block-level heading with no
@@ -154,8 +225,8 @@
  * is what keeps this rule correct if a sixth panel is ever added. */
 .hud button:focus-visible,
 .hud [tabindex]:not([tabindex="-1"]):focus-visible {
-  outline: 2px solid #7fd0ff;
-  outline-offset: 2px;
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
 }
 
 /* On a phone the topbar did not fit: measured at 393px wide, the volume slider ran 35px
@@ -169,7 +240,7 @@
  * least afford it. */
 @media (max-width: 760px) {
   .hud-topbar {
-    gap: 8px;
+    gap: var(--hud-space-2);
     /* The knobs, not `padding`: see the base rule. Setting the shorthand here would
      * override the safe-area padding on every phone. */
     --hud-topbar-pad-y: 8px;
@@ -200,7 +271,7 @@
  * button whose label must stay readable. */
 @media (max-width: 360px) {
   .hud-topbar {
-    gap: 6px;
+    gap: var(--hud-space-1);
     --hud-topbar-pad-y: 6px;
     --hud-topbar-pad-x: 8px;
   }
@@ -400,7 +471,7 @@
   bottom: max(14px, env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--hud-space-4);
   /* none on the CONTAINER, auto on the buttons: the 12px gap between them is part of
    * the row's box, and with `auto` here it swallowed aim taps that fell in it --
    * neither firing nor aiming, which reads as the game ignoring you. */
@@ -438,12 +509,12 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--hud-radius-lg);
   min-width: 56px;
   min-height: 56px;
   padding: 8px 14px;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: var(--hud-weight-strong);
   letter-spacing: 1px;
   background: rgba(216, 221, 230, 0.18);
   color: #e7ecf4;
@@ -495,7 +566,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: var(--hud-space-7);
   background: rgba(14, 17, 22, 0.92);
   pointer-events: auto;
   cursor: pointer;
@@ -510,9 +581,9 @@
 .hud-splash-title {
   margin: 0;
   font-size: 72px;
-  font-weight: 800;
+  font-weight: var(--hud-weight-strong);
   letter-spacing: 2px;
-  color: #f2f5fa;
+  color: var(--hud-text-bright);
   text-shadow: 0 4px 0 rgba(0, 0, 0, 0.45);
 }
 
@@ -569,10 +640,10 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--hud-radius-lg);
   padding: 12px 28px;
   font-size: 20px;
-  font-weight: 800;
+  font-weight: var(--hud-weight-strong);
   background: #4fd06a;
   color: #06340f;
   box-shadow: 0 6px 0 #2f8f45;
@@ -625,11 +696,11 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--hud-radius-md);
   padding: 8px 20px;
-  font-weight: 700;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* The panel buttons stack under a heading, so they carry the gap and a fixed size.
@@ -668,7 +739,7 @@
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: var(--hud-space-4);
   margin-top: 18px;
 }
 
@@ -692,9 +763,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  background: rgba(10, 12, 16, 0.72);
-  color: #d8dde6;
+  gap: var(--hud-space-5);
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
 }
 
 /* Without this rule the stats page covers every screen from page load -- the class
@@ -722,7 +793,7 @@
 
 .hud-stats-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--hud-space-4);
   margin-top: 10px;
 }
 
@@ -735,11 +806,11 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--hud-radius-md);
   padding: 8px 20px;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   background: rgba(255, 90, 90, 0.18);
-  color: #ffb4b4;
+  color: var(--hud-text-danger);
 }
 
 .hud-danger--armed {
@@ -791,7 +862,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: var(--hud-space-5);
   /* SAME strength as the stats scrim now (rgba(10, 12, 16, 0.72) -- not the same as
    * achievements, which is a different colour AND alpha: rgba(11, 14, 20, 0.86)),
    * not the old lighter 0.35 that this pane used to carry. That 0.35 existed only so
@@ -803,8 +874,8 @@
    * preview, the arena behind it is background noise, not content -- so it gets
    * stats' treatment, chosen over achievements' only because it was the closer
    * match already in the file; there is no requirement the two agree. */
-  background: rgba(10, 12, 16, 0.72);
-  color: #d8dde6;
+  background: var(--hud-scrim-page);
+  color: var(--hud-text);
 }
 
 /* Without this rule the pane covers every screen from page load. */
@@ -827,7 +898,7 @@
 .hud-preview {
   width: 260px;
   height: 190px;
-  border-radius: 12px;
+  border-radius: var(--hud-radius-lg);
   /* The preview is a turntable (render/preview-controls.ts), so a drag on it must
    * reach pointermove instead of being taken by the browser as a scroll. index.html
    * already sets `touch-action: none` on every canvas, and its own test guards that
@@ -859,8 +930,8 @@
  * ring -- a focusable control whose focus cannot be seen is worse than one that is not
  * focusable. */
 .hud-preview:focus-visible {
-  outline: 2px solid #7fd0ff;
-  outline-offset: 2px;
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
 }
 
 /* The rotate cluster under the preview: hull left/right, then turret left/right.
@@ -874,7 +945,7 @@
  * that already has those as section headings below. */
 .hud-preview-rotate {
   display: flex;
-  gap: 6px;
+  gap: var(--hud-space-1);
 }
 
 .hud-preview-rotate .hud-rotate-btn:nth-child(3) {
@@ -918,8 +989,8 @@
 }
 
 .hud-rotate-btn:focus-visible {
-  outline: 2px solid #7fd0ff;
-  outline-offset: 2px;
+  outline: var(--hud-focus-width) solid var(--hud-focus-color);
+  outline-offset: var(--hud-focus-offset);
 }
 
 .hud-rotate-icon {
@@ -934,7 +1005,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: var(--hud-space-3);
 }
 
 /* Same size/weight as the pane's own <h1>, one step down -- a label for a group of
@@ -942,13 +1013,13 @@
 .hud-customize-section h2 {
   margin: 0;
   font-size: 1em;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   opacity: 0.85;
 }
 
 .hud-swatches {
   display: flex;
-  gap: 12px;
+  gap: var(--hud-space-4);
 }
 
 /* Same layout as .hud-swatches -- the accent row reuses .hud-swatch for its buttons
@@ -957,7 +1028,7 @@
  * unlike every other row in this pane. */
 .hud-accents {
   display: flex;
-  gap: 12px;
+  gap: var(--hud-space-4);
 }
 
 .hud-swatch {
@@ -977,7 +1048,7 @@
 
 .hud-skins {
   display: flex;
-  gap: 10px;
+  gap: var(--hud-space-3);
   flex-wrap: wrap;
   justify-content: center;
 }
@@ -986,11 +1057,11 @@
   pointer-events: auto;
   cursor: pointer;
   border: 2px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--hud-radius-md);
   padding: 8px 16px;
-  font-weight: 700;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* Same contract as the swatch ring: the border is the only current-skin signal. */
@@ -1018,9 +1089,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: rgba(11, 14, 20, 0.86);
-  color: #d8dde6;
+  gap: var(--hud-space-3);
+  background: var(--hud-scrim-pane);
+  color: var(--hud-text);
   text-align: center;
 }
 
@@ -1041,9 +1112,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: rgba(11, 14, 20, 0.86);
-  color: #d8dde6;
+  gap: var(--hud-space-3);
+  background: var(--hud-scrim-pane);
+  color: var(--hud-text);
   text-align: center;
 }
 
@@ -1054,7 +1125,7 @@
 .hud-achievement-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--hud-space-1);
   max-height: 58vh;
   overflow-y: auto;
   padding: 4px 8px;
@@ -1073,11 +1144,11 @@
  * the page reads as nothing ever being earned. */
 .hud-achievement--earned {
   opacity: 1;
-  border-left-color: #e0c04a;
+  border-left-color: var(--hud-gold);
 }
 
 .hud-achievement-label {
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
 }
 
 .hud-achievement-desc {
@@ -1097,18 +1168,18 @@
   right: 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--hud-space-2);
   pointer-events: none;
 }
 
 .hud-toast {
   display: flex;
   flex-direction: column;
-  border-left: 3px solid #e0c04a;
-  border-radius: 8px;
+  border-left: 3px solid var(--hud-gold);
+  border-radius: var(--hud-radius-sm);
   padding: 8px 14px;
   background: rgba(11, 14, 20, 0.9);
-  color: #d8dde6;
+  color: var(--hud-text);
   animation: hud-toast-in 220ms ease-out;
 }
 
@@ -1120,7 +1191,7 @@
 }
 
 .hud-toast-label {
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
 }
 
 @keyframes hud-toast-in {
@@ -1141,7 +1212,7 @@
 .hud-levels {
   pointer-events: auto;
   display: flex;
-  gap: 10px;
+  gap: var(--hud-space-3);
   margin-bottom: 4px;
 }
 
@@ -1149,13 +1220,13 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--hud-radius-md);
   width: 44px;
   height: 44px;
   font-size: 18px;
-  font-weight: 800;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-strong);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* Locked levels read as locked, and the disabled attribute makes them unclickable --
@@ -1169,11 +1240,11 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--hud-radius-sm);
   padding: 6px 14px;
-  font-weight: 700;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 .hud-panel-volume {
@@ -1190,20 +1261,20 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--hud-radius-sm);
   padding: 6px 14px;
-  font-weight: 700;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
 
 .hud-shells {
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--hud-radius-pill);
   background: rgba(216, 221, 230, 0.12);
-  color: #d8dde6;
+  color: var(--hud-text);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
@@ -1212,7 +1283,7 @@
    whole state this readout exists to make visible. */
 .hud-shells--full {
   background: rgba(255, 106, 106, 0.22);
-  color: #ffb4b4;
+  color: var(--hud-text-danger);
 }
 
 .hud-shells--hidden {
@@ -1230,9 +1301,9 @@
 .hud-versus-stocks {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--hud-space-3);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
@@ -1294,9 +1365,9 @@
   justify-content: center;
   pointer-events: none;
   font-size: clamp(72px, 20vmin, 240px);
-  font-weight: 800;
+  font-weight: var(--hud-weight-strong);
   font-variant-numeric: tabular-nums;
-  color: #f2f5fa;
+  color: var(--hud-text-bright);
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
   opacity: 0; /* base state between pops -- see .hud-count-pop */
 }
@@ -1391,9 +1462,9 @@
 }
 
 @keyframes hud-lives-pulse {
-  0% { color: #d8dde6; transform: scale(1); }
+  0% { color: var(--hud-text); transform: scale(1); }
   15% { color: #ff6a6a; transform: scale(1.5); }
-  100% { color: #d8dde6; transform: scale(1); }
+  100% { color: var(--hud-text); transform: scale(1); }
 }
 
 /* The counter needs to be its own box for transform to apply. */
@@ -1416,7 +1487,7 @@
     opacity: 1;
   }
   @keyframes hud-lives-pulse {
-    0%, 100% { color: #d8dde6; transform: none; }
+    0%, 100% { color: var(--hud-text); transform: none; }
     50% { color: #ff6a6a; transform: none; }
   }
 }
@@ -1441,9 +1512,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: rgba(11, 14, 20, 0.86);
-  color: #d8dde6;
+  gap: var(--hud-space-3);
+  background: var(--hud-scrim-pane);
+  color: var(--hud-text);
   text-align: center;
 }
 
@@ -1458,7 +1529,7 @@
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--hud-space-3);
   max-height: 58vh;
   overflow-y: auto;
   padding: 4px 8px;
@@ -1468,13 +1539,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--hud-space-1);
   border-left: 3px solid rgba(216, 221, 230, 0.25);
   padding: 6px 12px;
 }
 
 .hud-controller-row-label {
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
 }
 
 .hud-controller-row-current {
@@ -1494,13 +1565,13 @@
   pointer-events: auto;
   cursor: pointer;
   border: 2px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--hud-radius-md);
   padding: 4px 10px;
   margin: 2px;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   font-size: 0.85em;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* Same contract as the paint shop's swatch/skin rings: the border is the only
@@ -1536,9 +1607,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: rgba(11, 14, 20, 0.86);
-  color: #d8dde6;
+  gap: var(--hud-space-3);
+  background: var(--hud-scrim-pane);
+  color: var(--hud-text);
   text-align: center;
   /* The pane's own six rows plus the who's-playing preview can exceed the viewport
    * on a phone (the same reason .hud-achievement-list scrolls) -- pan-y above already
@@ -1559,13 +1630,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--hud-space-2);
 }
 
 .hud-versus-row h2 {
   margin: 0;
   font-size: 1em;
-  font-weight: 700;
+  font-weight: var(--hud-weight-normal);
   opacity: 0.85;
 }
 
@@ -1576,7 +1647,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--hud-space-2);
 }
 
 /* One button per choice -- Mode, Players, Map and Stock all reuse this ONE control
@@ -1586,11 +1657,11 @@
   pointer-events: auto;
   cursor: pointer;
   border: 2px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--hud-radius-md);
   padding: 6px 14px;
-  font-weight: 700;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* Same contract as every other selection ring in this file: the border is the only
@@ -1606,11 +1677,11 @@
   pointer-events: auto;
   cursor: pointer;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--hud-radius-sm);
   padding: 6px 14px;
-  font-weight: 700;
-  background: rgba(216, 221, 230, 0.16);
-  color: #d8dde6;
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
 }
 
 /* Shown only while the pane's chosen player count does not match the running
