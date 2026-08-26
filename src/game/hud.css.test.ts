@@ -383,6 +383,9 @@ describe('hud.css is syntactically whole', () => {
       // sources and the versus options; four separate rules said so before it existed.
       '.ui-btn', '.ui-btn--slab', '.ui-btn--sm', '.ui-btn--primary', '.ui-btn--danger',
       '.ui-selectable', '.ui-selectable--on',
+      // The disabled-reason line. Without it the two reasons in the HUD render at body
+      // size and full opacity, reading as content rather than as an aside.
+      '.ui-hint',
       // losing a life -- '--hud-damage-color' is the variable hud.ts's signalPlayerDeath
       // tints (death-pulse issue #200); without it the vignette is stuck on whatever
       // the default red resolves to no matter what colour is passed in.
@@ -409,6 +412,9 @@ describe('hud.css is syntactically whole', () => {
       '.hud-panel-volume', // the settings row's slider; its buttons are `.ui-btn--sm`
                            // now and have no rule of their own to be present
       '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
+      // ...and the reason a locked one is locked: without the hidden rule it explains a
+      // state the player has already left
+      '.hud-levels-note--hidden',
       // the level select PANEL: without the hidden rules it covers everything from load,
       // and without the open button's hidden rule it shows outside the title screen
       '.hud-levelselect', '.hud-levelselect--hidden', '.hud-levelselect-open--hidden',

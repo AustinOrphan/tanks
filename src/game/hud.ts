@@ -63,6 +63,7 @@ import {
   type FireMode,
 } from '../input/touch';
 import './hud.css';
+import { describeDisabledReason, setSelected } from './ui';
 
 export interface RoundPhaseInfo {
   phase: RoundPhase;
@@ -660,6 +661,11 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1" aria-labelledby="hud-levelselect-title">
       <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
+      <!-- A locked level is dimmed and unclickable, which says THAT it is unavailable
+           and not why (#321). This line is the why, and every locked button points at
+           it with aria-describedby; it is hidden outright once nothing is locked, so it
+           never explains a state the player is not in. -->
+      <p class="ui-hint hud-levels-note hud-levels-note--hidden" id="hud-levels-note">Clear a level to unlock the next.</p>
       <button class="ui-btn ui-btn--slab hud-levelselect-back" type="button">Back</button>
     </div>
     <!-- The controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
@@ -717,7 +723,7 @@ export function createHud(root: HTMLElement): Hud {
         <h2>Who's playing</h2>
         <!-- Shown only when the pane's chosen player count does not match the
              running session's real Assignment -- see renderVersusControllerRows. -->
-        <p class="hud-versus-assignment-note hud-versus-assignment-note--hidden">Assignment applies after Start.</p>
+        <p class="ui-hint hud-versus-assignment-note hud-versus-assignment-note--hidden" id="hud-versus-assignment-note">Assignment applies after Start.</p>
         <div class="hud-controller-rows"></div>
       </div>
       <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
@@ -961,6 +967,7 @@ export function createHud(root: HTMLElement): Hud {
   const versusFriendlyFireRow = el.querySelector('.hud-versus-friendlyfire-row') as HTMLElement;
   const versusControllerRowsEl = el.querySelector('.hud-versus-setup .hud-controller-rows') as HTMLElement;
   const versusAssignmentNoteEl = el.querySelector('.hud-versus-assignment-note') as HTMLElement;
+  const levelsNoteEl = el.querySelector('.hud-levels-note') as HTMLElement;
   const versusStartBtn = el.querySelector('.hud-versus-start') as HTMLButtonElement;
   const versusBackBtn = el.querySelector('.hud-versus-back') as HTMLButtonElement;
   const panelMuteBtn = el.querySelector('.hud-panel-mute') as HTMLButtonElement;
@@ -1110,7 +1117,7 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderSwatchSelection(): void {
     for (const b of Array.from(swatchesRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('ui-selectable--on', b.dataset.hull === currentHull);
+      setSelected(b, b.dataset.hull === currentHull);
     }
   }
 
@@ -1140,7 +1147,7 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderSkinSelection(): void {
     for (const b of Array.from(skinsRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('ui-selectable--on', b.dataset.skin === currentSkin);
+      setSelected(b, b.dataset.skin === currentSkin);
     }
   }
 
@@ -1176,7 +1183,7 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderAccentSelection(): void {
     for (const b of Array.from(accentsRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('ui-selectable--on', b.dataset.accent === currentAccent);
+      setSelected(b, b.dataset.accent === currentAccent);
     }
   }
 
@@ -1532,7 +1539,7 @@ export function createHud(root: HTMLElement): Hud {
         btn.type = 'button';
         btn.className = 'ui-btn ui-selectable hud-controller-source-btn';
         btn.textContent = candidateLabel(candidate);
-        btn.classList.toggle('ui-selectable--on', sameSource(candidate, source));
+        setSelected(btn, sameSource(candidate, source));
         const forSlot = slot; // captured per-iteration, not the loop's shared binding
         if (interactive) {
           btn.addEventListener('click', () => {
@@ -1545,6 +1552,10 @@ export function createHud(root: HTMLElement): Hud {
           // programmatic one) can never reassign a slot that does not exist yet.
           btn.disabled = true;
         }
+        // The reason is already on screen for a sighted player -- the note this row
+        // renders beside, toggled by the same `matchesSession` that decides
+        // `interactive` -- so the only thing missing was the association (#321).
+        describeDisabledReason(btn, interactive ? null : 'hud-versus-assignment-note');
         row.appendChild(btn);
       }
       container.appendChild(row);
@@ -2099,20 +2110,17 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderVersusModeSelection(): void {
     for (const b of Array.from(versusModeRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('ui-selectable--on', b.dataset.mode === versusConfigState.mode);
+      setSelected(b, b.dataset.mode === versusConfigState.mode);
     }
   }
   function renderVersusPlayersSelection(): void {
     for (const b of Array.from(versusPlayersRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle(
-        'ui-selectable--on',
-        Number(b.dataset.players) === versusConfigState.players,
-      );
+      setSelected(b, Number(b.dataset.players) === versusConfigState.players);
     }
   }
   function renderVersusStockSelection(): void {
     for (const b of Array.from(versusStockRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('ui-selectable--on', Number(b.dataset.stock) === versusConfigState.stock);
+      setSelected(b, Number(b.dataset.stock) === versusConfigState.stock);
     }
   }
 
@@ -2139,7 +2147,7 @@ export function createHud(root: HTMLElement): Hud {
       b.className = 'ui-btn ui-selectable hud-versus-option-btn';
       b.dataset.map = choice;
       b.textContent = choice === 'random' ? 'Random' : arenaLabel(choice);
-      b.classList.toggle('ui-selectable--on', choice === versusConfigState.arenaId);
+      setSelected(b, choice === versusConfigState.arenaId);
       b.addEventListener('click', () => {
         versusConfigState = { ...versusConfigState, arenaId: choice };
         renderVersusMapRow(); // REPLACE -- rebuilds the whole row for the new selection ring
@@ -2593,6 +2601,10 @@ export function createHud(root: HTMLElement): Hud {
     },
     setLevelSelect(unlocked: number, total: number): void {
       levelChoice = total > 1;
+      // The reason line follows the locked buttons exactly: shown while any level is
+      // still locked, gone the moment none is. Toggled here rather than in setState,
+      // because `unlocked` is only known at this call.
+      levelsNoteEl.classList.toggle('hud-levels-note--hidden', unlocked >= total);
       // REPLACE, never append: this re-renders after every unlock.
       levelsRow.textContent = '';
       for (let i = 0; i < total; i++) {
@@ -2605,6 +2617,7 @@ export function createHud(root: HTMLElement): Hud {
           // disabled button never fires click handlers.
           btn.disabled = true;
           btn.classList.add('hud-level-btn--locked');
+          describeDisabledReason(btn, 'hud-levels-note');
         } else {
           btn.addEventListener('click', (e) => {
             for (const cb of levelSelectCbs) cb(i);
