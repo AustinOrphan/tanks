@@ -3,7 +3,13 @@
 // from the sessions built and torn down beneath it.
 import { describe, it, expect } from 'vitest';
 import { createAppSettings, createBrowserAppSettings, type AppSettings } from './app-settings';
-import { createStores, createMemoryStorage } from './storage';
+import {
+  createMemoryStorage,
+  createNamespacedStorage,
+  createStores,
+  namespacedKey,
+  type StorageNamespace,
+} from './storage';
 import {
   NOT_PERSISTED_NOTICE,
   FUTURE_SCHEMA_NOTICE,
@@ -11,6 +17,8 @@ import {
   SETTINGS_SCHEMA_VERSION,
   type SettingsNotice,
 } from './settings';
+import { PROGRESS_KEY } from './progress';
+import { CAMPAIGN_LEVELS } from '../sim/arena';
 import {
   createCapabilitySource,
   createStaticReducedMotionSource,
@@ -22,12 +30,14 @@ import {
 function build(opts: {
   storage?: Storage;
   availability?: 'persistent' | 'memory';
+  namespace?: StorageNamespace;
   caps?: Partial<PlatformCapabilities>;
   motion?: ReducedMotionSource;
 } = {}): AppSettings {
   const storage = opts.storage ?? createMemoryStorage();
   return createAppSettings({
     storage,
+    namespace: opts.namespace ?? 'production',
     stores: createStores(storage, opts.availability ?? 'persistent'),
     capabilities: createCapabilitySource(() => ({ ...NO_CAPABILITIES, ...opts.caps })),
     motion: opts.motion ?? createStaticReducedMotionSource(false),
@@ -60,6 +70,7 @@ describe('createAppSettings: ownership', () => {
     const stores = createStores(storage);
     const app = createAppSettings({
       storage,
+      namespace: 'production',
       stores,
       capabilities: createCapabilitySource(() => NO_CAPABILITIES),
       motion: createStaticReducedMotionSource(false),
@@ -190,7 +201,50 @@ describe('createAppSettings: disposal', () => {
   });
 });
 
+/** Run `body` with `globalThis.location` replaced, then put the original back. */
+function withSearch(search: string, body: () => void): void {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    value: { search },
+    configurable: true,
+    writable: true,
+  });
+  try {
+    body();
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'location', original);
+    else delete (globalThis as { location?: unknown }).location;
+  }
+}
+
 describe('createBrowserAppSettings', () => {
+  it('takes the storage namespace from the URL', () => {
+    // The one unpinned line issue #245 adds. Without this the whole adapter could be
+    // correct and fully covered while no session ever asked for the developer namespace.
+    withSearch('?dev=1', () => {
+      const app = createBrowserAppSettings();
+      expect(app.namespace).toBe('developer');
+      app.dispose();
+    });
+    withSearch('?aimRay=1', () => {
+      const app = createBrowserAppSettings();
+      expect(app.namespace).toBe('production');
+      app.dispose();
+    });
+  });
+
+  it('gives the stores and `storage` the SAME namespaced object', () => {
+    // A store handed the base storage while `AppSettings.storage` held the adapter would
+    // read back null here: the store's key would be `tanks.progress.v1` and this lookup
+    // would go to `tanks.dev.tanks.progress.v1`.
+    withSearch('?dev=1', () => {
+      const app = createBrowserAppSettings();
+      app.stores.progress.recordCleared(CAMPAIGN_LEVELS[1]);
+      expect(app.storage.getItem(PROGRESS_KEY)).not.toBeNull();
+      app.dispose();
+    });
+  });
+
   it('builds a working owner against the real environment', () => {
     // The one unpinned line in the chain, exercised once so a throw inside it -- a
     // capability probe reaching a hostile global, say -- cannot go unnoticed until it
@@ -202,5 +256,26 @@ describe('createBrowserAppSettings', () => {
     app.settings.setMuted(true);
     expect(app.settings.snapshot().audio.muted).toBe(true);
     app.dispose();
+  });
+});
+
+describe('createAppSettings: the storage namespace (issue #245)', () => {
+  it('reports the namespace it was built for', () => {
+    expect(build().namespace).toBe('production');
+    expect(build({ namespace: 'developer' }).namespace).toBe('developer');
+  });
+
+  it('exposes the SAME object the stores were built on, so save.ts stays in-namespace', () => {
+    // save.ts reads and writes RAW keys through `AppSettings.storage`. Handing it the base
+    // storage while the stores sit on the adapter would let a developer session export the
+    // real player's save and import back over it -- the one path that skips every store.
+    const base = createMemoryStorage();
+    const storage = createNamespacedStorage(base, 'developer');
+    const app = build({ storage, namespace: 'developer' });
+
+    expect(app.storage).toBe(storage);
+    app.storage.setItem(SETTINGS_KEY, 'through save.ts');
+    expect(base.getItem(namespacedKey('developer', SETTINGS_KEY))).toBe('through save.ts');
+    expect(base.getItem(SETTINGS_KEY)).toBeNull();
   });
 });

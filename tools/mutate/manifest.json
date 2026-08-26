@@ -1074,5 +1074,125 @@
       "src/sim/ai/dispatch.test.ts"
     ],
     "why": "Pins the WIRING, not the helper: holdAimFor can be correct and fully unit-tested while decideAi quietly discards its result, which would leave every unit test in aim-hold.test.ts green and the shipped game completely unchanged. The write-back pair is deliberately left intact here so the mutation is a pure 'result ignored', not a type error."
+  },
+  {
+    "id": "storage-developer-writes-land-on-production-keys",
+    "file": "src/game/storage.ts",
+    "find": "      base.setItem(underlying(key), value);",
+    "replace": "      base.setItem(String(key), value);",
+    "expect": "killed",
+    "expectFailures": 10,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "The headline issue #245 defect: a developer session's WRITES land on the production keys, so a dev level jump, sandbox event or achievement check overwrites the real player's campaign. Only setItem is unnamespaced here -- reads still go through the prefix -- which is what makes it destructive rather than obviously broken: the developer session boots at defaults, writes over the player's save, and nothing in that session ever displays the collision. 10 of 40 tests in storage.test.ts, spanning the write/read-back pair, removeItem and clear scoping, enumeration, injectivity, the whole-inventory sweep, the reload round trip and the save.ts export/import case. The wide population is the point rather than noise: every property the adapter exists to provide is downstream of setItem landing in the right namespace."
+  },
+  {
+    "id": "storage-developer-clear-is-unscoped",
+    "file": "src/game/storage.ts",
+    "find": "      for (const name of names()) base.removeItem(underlying(name));",
+    "replace": "      base.clear();",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "The single most damaging thing this adapter could do wrong, and the reason clear() is scoped at all rather than delegated: an unscoped clear() on a developer session wipes the player's real save AND every neighbouring key on the origin this game shares with the rest of austinorphan.com (see save.ts). Killed by exactly one case, 'clears only its own namespace', 1 of 40 -- and only by its assertion on the surviving BASE keys: names() iterates the base, so an emptied base makes the adapter's own `length` read 0 either way and the length assertion alone would still pass."
+  },
+  {
+    "id": "storage-developer-key-enumerates-the-base",
+    "file": "src/game/storage.ts",
+    "find": "      return names()[index] ?? null;",
+    "replace": "      return base.key(index);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "key(i) must answer the STORE-FACING name inside the namespace, not the base storage's raw key at that index. Delegating to the base leaks both directions at once: a developer session enumerating storage sees the production keys it must not know about, and sees its own keys under their `tanks.dev.`-prefixed underlying names, so key(i) stops inverting setItem. Nothing in src/ walks a Storage by index today -- save.ts works from the SAVE_KEYS allow-list -- which is precisely why this needs a manifest entry rather than trust. 2 of 40 in storage.test.ts: the scoped-enumeration case and the injectivity case that round-trips every store key back out through key(i)."
+  },
+  {
+    "id": "storage-production-namespace-is-wrapped",
+    "file": "src/game/storage.ts",
+    "find": "  if (namespace === 'production') return base;",
+    "replace": "  if (false as boolean) return base;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "Drops the production short-circuit, so an ordinary URL gets a WRAPPER instead of the browser's own Storage object. Every key-addressed method still behaves identically (namespacedKey is the identity in production), so round-trip assertions stay green -- but `length`, `key(i)` and `clear()` would then filter on the developer prefix and report a production session as empty, and '#245: ordinary URLs retain current key names and behavior' stops being provable by identity and becomes an argument about wrapper equivalence. Killed only by the identity assertion 'hands back the SAME object', 1 of 40, which is the assertion that entry exists to keep load-bearing. `false as boolean` (the device storage-resolver-ignores-the-host already uses) keeps the mutation type-valid instead of a comparison tsc would reject; measured at `tsc --noEmit` exit 0 under the mutation, so the verdict is about test coverage rather than the compiler."
+  },
+  {
+    "id": "storage-developer-prefix-strips-the-tanks-segment",
+    "file": "src/game/storage.ts",
+    "find": "  return namespace === 'developer' ? `${DEVELOPER_KEY_PREFIX}${key}` : key;",
+    "replace": "  return namespace === 'developer' ? `${DEVELOPER_KEY_PREFIX}${key.replace(/^tanks\\./, '')}` : key;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "Applies the tidier `tanks.dev.progress.v1` mapping that the doc comment above DEVELOPER_KEY_PREFIX rejects, instead of prefixing the whole key. It is self-consistent -- read, write, remove and clear all agree on it -- so no single store's round trip breaks, and that self-consistency is exactly why it needs pinning: what it costs is the INVERSE, because names() strips only the prefix and hands back `progress.v1` where the store wrote `tanks.progress.v1`, and two store keys differing only by a leading `tanks.` would collapse onto one underlying key. 3 of 40 in storage.test.ts: the write-lands-under-the-prefix case, the scoped-enumeration case, and the injectivity/inverse case."
+  },
+  {
+    "id": "storage-namespace-never-selects-developer",
+    "file": "src/game/storage.ts",
+    "find": "  return parseDeveloperMode(search) ? 'developer' : 'production';",
+    "replace": "  return parseDeveloperMode(search) ? 'production' : 'production';",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "Pins the SELECTOR, not the adapter: a correct, fully covered createNamespacedStorage is worth nothing if no session ever asks for the developer namespace. Under this mutation `?dev=1` persists into the real player's keys exactly as it did before issue #245, and every adapter case above still passes because the adapter itself is untouched -- measured, 3 of 40, and the three are the developer rows of selectStorageNamespace's table (`?dev=1`, `?dev`, `?dev=1&aimRay=1`). The ternary keeps parseDeveloperMode's result and `search` read so the mutation compiles under the repo's noUnusedLocals/noUnusedParameters (the same device as preview-drops-the-rotate-buttons); measured at `tsc --noEmit` exit 0 under the mutation. Directional, and deliberately so: this mutation under-triggers, so the production rows and the 'is the `dev` GATE, not any individual flag' case cannot see it, and no entry in this manifest currently mutates the selector in the over-triggering direction."
+  },
+  {
+    "id": "storage-namespace-always-selects-developer",
+    "file": "src/game/storage.ts",
+    "find": "  return parseDeveloperMode(search) ? 'developer' : 'production';",
+    "replace": "  return parseDeveloperMode(search) ? 'developer' : 'developer';",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "The OVER-triggering half of the selector, which `storage-namespace-never-selects-developer` deliberately cannot see. This is the more damaging direction of the two: an ordinary URL would start persisting into `tanks.dev.*`, so the player's campaign, stats and achievements would still be on disk but invisible to the game -- indistinguishable from a wiped save, and silent. Killed by the production rows of selectStorageNamespace's table and by the `dev` GATE case, none of which the under-triggering entry reaches."
+  },
+  {
+    "id": "storage-developer-reads-fall-through-to-production",
+    "file": "src/game/storage.ts",
+    "find": "    getItem(key: string): string | null {\n      return base.getItem(underlying(key));\n    },",
+    "replace": "    getItem(key: string): string | null {\n      return base.getItem(String(key));\n    },",
+    "expect": "killed",
+    "expectFailures": 6,
+    "tests": [
+      "src/game/storage.test.ts"
+    ],
+    "why": "Isolation has a read half as well as a write half, and `storage-developer-writes-land-on-production-keys` only pins the write. Under this mutation a developer session WRITES to `tanks.dev.*` but READS the player's real keys, so it adopts the production campaign, the production legacy touch settings, and exports production data through save.ts -- while every write-side assertion still passes. `String(key)` rather than `key` so the mutation keeps the argument coercion the adapter does and differs only in the namespace mapping."
+  },
+  {
+    "id": "app-settings-namespace-ignores-the-url",
+    "file": "src/game/app-settings.ts",
+    "find": "  const namespace = selectStorageNamespace(globalThis.location?.search ?? '');",
+    "replace": "  const namespace = selectStorageNamespace('');",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-settings.test.ts"
+    ],
+    "why": "The one unpinned line issue #245 adds. `createNamespacedStorage` and `selectStorageNamespace` can both be correct and fully covered while this line never asks for the developer namespace, in which case `?dev=1` persists into the real player's keys exactly as before. Killed by `takes the storage namespace from the URL`, which stubs globalThis.location rather than trusting the node environment's absence of one.",
+    "expectFailures": 1
+  },
+  {
+    "id": "app-settings-stores-skip-the-namespace",
+    "file": "src/game/app-settings.ts",
+    "find": "    stores: createStores(storage, availability),",
+    "replace": "    stores: createStores(resolved.storage, availability),",
+    "expect": "killed",
+    "tests": [
+      "src/game/app-settings.test.ts"
+    ],
+    "why": "Splits the session across two namespaces: the six stores land on the base keys while `AppSettings.storage` -- what save.ts and the `__tanks` dev console get -- stays namespaced. Every storage.ts adapter test still passes, because the adapter is untouched; only the wiring is wrong. Killed by `gives the stores and storage the SAME namespaced object`, where a store write becomes unreadable through AppSettings.storage.",
+    "expectFailures": 1
   }
 ]

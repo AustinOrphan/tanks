@@ -87,6 +87,24 @@ id or slot assignment is ever persisted.
 `matchMedia('(prefers-reduced-motion: reduce)')` — consumers take the resolved value as an
 argument (`createTankPreview`) rather than querying the platform.
 
+**A developer session persists into its own key namespace (issue #245).**
+`selectStorageNamespace(location.search)` reads the `dev` GATE — `parseDeveloperMode`, not
+any individual flag, so a stray `?aimRay=1` cannot move a session off the player's keys —
+and `createNamespacedStorage` applies it once, before `createStores`. The `production`
+namespace returns the base `Storage` **object itself**, which is what makes "ordinary URLs
+keep current key names and behavior" provable rather than argued: on a production session
+there is nothing between the stores and the browser. The `developer` namespace prefixes the
+WHOLE key, so `tanks.progress.v1` becomes `tanks.dev.tanks.progress.v1` rather than the
+tidier `tanks.dev.progress.v1` — the redundancy buys injectivity with one code path, where
+strip-and-re-prefix would map `tanks.progress.v1` and `progress.v1` onto the same underlying
+key and leave `key(i)` with no inverse. `length`, `key(i)` and `clear()` are scoped too:
+nothing in `src/` enumerates a `Storage` today, but an unscoped `clear()` on a developer
+session would wipe the player's real save. The adapter deliberately does **not** catch —
+every store already degrades on its own — and because `AppSettings.storage` is the same
+adapter instance the stores got, `save.ts` and the `__tanks` dev console inherit the
+namespace with no change of their own. Legacy migration follows: a developer session neither
+adopts nor deletes the production `tanks.touch.v1` or `tanks.run.v1`.
+
 **`AppSettings` owns persistence for the PAGE, not the session.** `boot.ts` builds
 `createBrowserAppSettings()` once and hands the same instance to every `startGame` call.
 It has to be above the session: `boot.ts` disposes the whole game handle and rebuilds

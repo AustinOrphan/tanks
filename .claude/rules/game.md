@@ -13,9 +13,13 @@ paths:
 
 - `src/main.ts` stays wiring-only; construction and behavior belong behind injected seams
   in `src/boot.ts` or game modules.
-- All persistence enters through `src/game/storage.ts`. Resolve storage once, inject the
-  same object into all stores, and keep save import/export at the raw allow-listed key
-  layer. Imported data becomes visible after reload.
+- All persistence enters through `src/game/storage.ts`. Resolve storage once, select the
+  namespace before the stores exist, inject that ONE object into all stores and into
+  `AppSettings.storage`, and keep save import/export at the raw allow-listed key layer.
+  Imported data becomes visible after reload.
+- A new store must be added to `GameStores`, to `createStores`, and to `STORE_WRITES` in
+  `src/game/storage.test.ts`; the inventory test fails until it is, which is what stops a
+  store bypassing the developer namespace.
 - A campaign run owns its shared lives and campaign progress. Practice/level-select state
   must not create or mutate a campaign run.
 - Replay recording decorates the effective per-tick input. It spans one world; its data
