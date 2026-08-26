@@ -20,6 +20,7 @@ import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor } from '../sim/config';
 import { TANK_KINDS } from '../sim/config/validate';
 import { createSkinTexture } from './skins';
+import { createDeathPulseSystem } from './death-pulse';
 
 function makeTank(id: number, kind: Tank['kind'], x: number, y: number): Tank {
   return {
@@ -2222,6 +2223,255 @@ describe('spawn animation (#199)', () => {
     expect(worldScale.x).toBeCloseTo(0.5, 5);
     expect(worldScale.y).toBeCloseTo(0.5, 5);
     expect(worldScale.z).toBeCloseTo(0.5, 5);
+    views.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #239: a VS stock respawn keeps the tank's id and does NOT restart the
+// round, so `snap` (roundStartTick) is false and the revived tank lerped from
+// its DEATH position to its new respawn point. The spawn ring is a child of the
+// tank group, so it inherited the same travel -- the ring appeared to fly across
+// the arena from where the player died to where they came back.
+// ---------------------------------------------------------------------------
+describe('entity views — a stock respawn snaps to the selected spawn point (#239)', () => {
+  const DIED_AT: Vec2 = { x: 5, y: 5 };
+  const RESPAWN_AT: Vec2 = { x: 30, y: 10 };
+
+  /** Two player tanks in one world: id 1 is the one that dies, id 2 never does. */
+  function vsWorld(
+    one: { alive: boolean; pos: Vec2; bodyAngle?: number; turretAngle?: number },
+    twoPos: Vec2,
+    mode: 'ffa' | 'teams' = 'ffa',
+  ): World {
+    const teams = mode === 'teams';
+    const t1: Tank = {
+      ...makeTank(1, 'player', one.pos.x, one.pos.y),
+      alive: one.alive,
+      bodyAngle: one.bodyAngle ?? 0,
+      turretAngle: one.turretAngle ?? 0,
+      controlledBy: 0,
+      ...(teams ? { team: 0 } : {}),
+    };
+    const t2: Tank = {
+      ...makeTank(2, 'player', twoPos.x, twoPos.y),
+      controlledBy: 1,
+      ...(teams ? { team: 1 } : {}),
+    };
+    const spawns: Spawn[] = [
+      { kind: 'player', pos: DIED_AT, angle: 0 },
+      { kind: 'player', pos: twoPos, angle: 0 },
+    ];
+    // roundStartTick is left at createWorld's default on BOTH worlds in every case
+    // below: a stock respawn does not restart the round, which is exactly why the
+    // existing whole-round snap does not cover it.
+    return createWorld({ walls: [], tanks: [t1, t2], spawns, lives: 3, ...(teams ? { mode: 'teams' as const } : {}) });
+  }
+
+  const tankGroups = (scene: THREE.Scene): THREE.Group[] =>
+    scene.children.filter((c): c is THREE.Group => c instanceof THREE.Group);
+
+  /**
+   * Drive the scene to the frame BEFORE the revival and return the survivor's group.
+   *
+   * Identifying the two groups by uuid rather than by position, because position is
+   * what these tests measure. While tank 1 is dead its view is disposed and removed
+   * (syncTanks' own cleanup loop), so exactly one group is left and it is tank 2's;
+   * the group that appears on the next sync is therefore tank 1's new one.
+   */
+  function upToTheDeath(scene: THREE.Scene, views: ReturnType<typeof createEntityViews>): THREE.Group {
+    const alive = vsWorld({ alive: true, pos: DIED_AT }, { x: 20, y: 20 });
+    views.sync(alive, alive, 1, 0.016);
+    const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 });
+    views.sync(alive, dead, 1, 0.016);
+    const left = tankGroups(scene);
+    expect(left, 'the dead tank\'s view should have been disposed').toHaveLength(1);
+    return left[0];
+  }
+
+  function revivedGroup(scene: THREE.Scene, survivor: THREE.Group): THREE.Group {
+    const other = tankGroups(scene).filter((g) => g.uuid !== survivor.uuid);
+    expect(other, 'the revived tank has no group of its own').toHaveLength(1);
+    return other[0];
+  }
+
+  it.each([0, 0.25, 0.5, 0.99])(
+    'puts the revived tank at its respawn point at alpha %s, never between the two',
+    (alpha) => {
+      const scene = new THREE.Scene();
+      const views = createEntityViews(scene);
+      const survivor = upToTheDeath(scene, views);
+
+      const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 });
+      const revived = vsWorld({ alive: true, pos: RESPAWN_AT }, { x: 21, y: 20 });
+      views.sync(dead, revived, alpha, 0.016);
+      scene.updateMatrixWorld(true);
+
+      const g = revivedGroup(scene, survivor);
+      expect(g.position.x, 'x is between the death point and the respawn').toBeCloseTo(RESPAWN_AT.x, 9);
+      expect(g.position.z, 'z is between the death point and the respawn').toBeCloseTo(RESPAWN_AT.y, 9);
+      views.dispose();
+    },
+  );
+
+  it('anchors the spawn ring at the respawn point too, in WORLD space', () => {
+    // The ring is a child of the tank group, so it cannot be checked by reading its
+    // local position -- that is 0,0,0 whatever the group does. This reads where it
+    // actually lands after the whole transform, which is what a player sees.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const survivor = upToTheDeath(scene, views);
+
+    const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 });
+    const revived = vsWorld({ alive: true, pos: RESPAWN_AT }, { x: 21, y: 20 });
+    views.sync(dead, revived, 0.5, 0.016);
+    scene.updateMatrixWorld(true);
+
+    let ring: THREE.Object3D | undefined;
+    revivedGroup(scene, survivor).traverse((o) => {
+      if (o.name === 'spawn-ring') ring = o;
+    });
+    expect(ring, 'no spawn ring on the revived tank').toBeTruthy();
+    const at = new THREE.Vector3();
+    ring!.getWorldPosition(at);
+    expect(at.x).toBeCloseTo(RESPAWN_AT.x, 9);
+    expect(at.z).toBeCloseTo(RESPAWN_AT.y, 9);
+    views.dispose();
+  });
+
+  it('snaps only the revived tank: the other player keeps interpolating on the same sync', () => {
+    // The half that makes this a per-TANK teleport rather than a second world-wide
+    // `snap`. Without it the fix would freeze every tank in the arena for a frame
+    // whenever anyone respawned.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const survivor = upToTheDeath(scene, views);
+
+    const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 });
+    const revived = vsWorld({ alive: true, pos: RESPAWN_AT }, { x: 21, y: 20 });
+    views.sync(dead, revived, 0.5, 0.016);
+    scene.updateMatrixWorld(true);
+
+    expect(survivor.position.x, 'the survivor was snapped too').toBeCloseTo(20.5, 9);
+    expect(survivor.position.z).toBeCloseTo(20, 9);
+    views.dispose();
+  });
+
+  it('snaps the revived tank\'s FACING as well as its position', () => {
+    // A respawn re-orients as well as relocating. Lerping the angle drew the hull
+    // spinning to its new heading over the same frame it was streaking across the map.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const survivor = upToTheDeath(scene, views);
+
+    const dead = vsWorld({ alive: false, pos: DIED_AT, bodyAngle: 0, turretAngle: 0 }, { x: 20, y: 20 });
+    const revived = vsWorld(
+      { alive: true, pos: RESPAWN_AT, bodyAngle: Math.PI / 2, turretAngle: Math.PI / 2 },
+      { x: 21, y: 20 },
+    );
+    views.sync(dead, revived, 0.5, 0.016);
+    scene.updateMatrixWorld(true);
+
+    const g = revivedGroup(scene, survivor);
+    expect(g.rotation.y, 'the hull was lerped to a half-turned heading').toBeCloseTo(-Math.PI / 2, 9);
+    views.dispose();
+  });
+
+  // FFA and Teams reach the SAME snap -- the mode changes only which colour the spawn
+  // ring is built in (resolveOwnerColor: team colour under 'teams', identity colour
+  // otherwise), and the acceptance criteria ask for both to be covered rather than for
+  // one to be argued to imply the other.
+  it.each(['ffa', 'teams'] as const)('holds in %s mode, tank and ring alike', (mode) => {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const alive = vsWorld({ alive: true, pos: DIED_AT }, { x: 20, y: 20 }, mode);
+    views.sync(alive, alive, 1, 0.016);
+    const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 }, mode);
+    views.sync(alive, dead, 1, 0.016);
+    const survivor = tankGroups(scene)[0];
+
+    const revived = vsWorld({ alive: true, pos: RESPAWN_AT }, { x: 21, y: 20 }, mode);
+    views.sync(dead, revived, 0.5, 0.016);
+    scene.updateMatrixWorld(true);
+
+    const g = revivedGroup(scene, survivor);
+    expect(g.position.x).toBeCloseTo(RESPAWN_AT.x, 9);
+    expect(g.position.z).toBeCloseTo(RESPAWN_AT.y, 9);
+    let ring: THREE.Object3D | undefined;
+    g.traverse((o) => {
+      if (o.name === 'spawn-ring') ring = o;
+    });
+    const at = new THREE.Vector3();
+    ring!.getWorldPosition(at);
+    expect(at.x).toBeCloseTo(RESPAWN_AT.x, 9);
+    expect(at.z).toBeCloseTo(RESPAWN_AT.y, 9);
+    // The mode really is in play, rather than the argument being ignored: under 'teams'
+    // the ring is built in the tank's TEAM colour, under 'ffa' in its identity colour,
+    // and team 0 and slot 0 are different colours.
+    const expected = mode === 'teams' ? TEAM_COLORS[0] : IDENTITY_RING_COLORS[0];
+    expect((ring as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>).material.color.getHex())
+      .toBe(expected);
+    views.dispose();
+  });
+
+  it('leaves the death pulse at the death point while the spawn effect begins at the respawn', () => {
+    // The two-location sequence, composed: the two systems are independent by
+    // construction -- death-pulse.ts reads the EVENT's `pos` and never the tank view
+    // (its own test pins that), while the spawn ring is a child of the tank group --
+    // so this is the case that shows the pair reading as one event to the player: a
+    // ring left behind where the tank died, and a second ring where it comes back.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const dp = createDeathPulseSystem(scene);
+    const survivor = upToTheDeath(scene, views);
+
+    const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 });
+    dp.spawn(
+      [{ type: 'tank-destroyed', tankId: 1, kind: 'player', by: { source: 'shell', ownerId: 1 }, pos: DIED_AT }],
+      dead,
+      { enemyEnabled: false },
+    );
+    const revived = vsWorld({ alive: true, pos: RESPAWN_AT }, { x: 21, y: 20 });
+    views.sync(dead, revived, 0.5, 0.016);
+    scene.updateMatrixWorld(true);
+
+    const pulse = scene.children.filter((c) => c.name === 'death-ring' && c.visible);
+    expect(pulse, 'no death pulse for the death that started this').toHaveLength(1);
+    expect(pulse[0].position.x, 'the death pulse followed the tank to its respawn').toBeCloseTo(DIED_AT.x, 9);
+    expect(pulse[0].position.z).toBeCloseTo(DIED_AT.y, 9);
+
+    let ring: THREE.Object3D | undefined;
+    revivedGroup(scene, survivor).traverse((o) => {
+      if (o.name === 'spawn-ring') ring = o;
+    });
+    const at = new THREE.Vector3();
+    ring!.getWorldPosition(at);
+    expect(at.x, 'the spawn effect did not start at the respawn').toBeCloseTo(RESPAWN_AT.x, 9);
+    expect(at.z).toBeCloseTo(RESPAWN_AT.y, 9);
+    // Not vacuous: the two rings are in genuinely different places, so an
+    // implementation that put both at either end fails one of the two pairs above.
+    expect(Math.abs(pulse[0].position.x - at.x)).toBeGreaterThan(1);
+
+    dp.dispose();
+    views.dispose();
+  });
+
+  it('handles a respawn at the SAME point as the death without special-casing it', () => {
+    // The degenerate case the acceptance criteria name: snapping and lerping agree
+    // here, so this cannot distinguish the fix -- it exists to prove the fix does not
+    // BREAK the case where nothing moved, which a mis-scoped snap easily could.
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const survivor = upToTheDeath(scene, views);
+
+    const dead = vsWorld({ alive: false, pos: DIED_AT }, { x: 20, y: 20 });
+    const revived = vsWorld({ alive: true, pos: DIED_AT }, { x: 21, y: 20 });
+    views.sync(dead, revived, 0.5, 0.016);
+    scene.updateMatrixWorld(true);
+
+    const g = revivedGroup(scene, survivor);
+    expect(g.position.x).toBeCloseTo(DIED_AT.x, 9);
+    expect(g.position.z).toBeCloseTo(DIED_AT.y, 9);
     views.dispose();
   });
 });

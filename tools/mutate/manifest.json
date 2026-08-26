@@ -1280,5 +1280,29 @@
     ],
     "why": "`renderControllerRowsInto` builds BOTH the standalone Controllers panel's real reassignment rows and the versus pane's who's-playing preview, and only the preview is disabled. Pointing every row at \"Assignment applies after Start.\" tells a screen reader that a button which reassigns a slot right now will not take effect until Start -- an explanation that is not merely redundant but false, and attached to a note that is itself hidden in that state. The half of the assertion that catches it is the one that reads the Controllers panel and expects NO reference; a test that only checked the preview gains it would stay green.",
     "expectFailures": 1
+  },
+  {
+    "id": "render-respawn-teleport-removed",
+    "file": "src/render/entities.ts",
+    "find": "      const p = snap || revived ? undefined : prevT;",
+    "replace": "      const p = snap ? undefined : prevT;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "Restores the defect #239 fixed: with only the world-wide `snap` left, a VS stock respawn -- which keeps the tank's id and does NOT restart the round -- interpolates the revived tank from the position it died at to the spawn point selected for it, and drags the spawn ring parented to its group along with it. Nothing else in the file notices: the tank is at the right place again one tick later, so every assertion about what a respawn LOOKS like a frame after the edge stays green, which is why the alpha sweep reads the first frame at four alphas rather than at one.",
+    "expectFailures": 9
+  },
+  {
+    "id": "render-respawn-teleport-applied-to-every-tank",
+    "file": "src/render/entities.ts",
+    "find": "      const revived = !!prevT && !prevT.alive;",
+    "replace": "      const revived = true;",
+    "expect": "killed",
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The over-correction, and the reason the teleport is read per tank rather than raised into the world-level `snap` beside `roundStartTick`: snapping unconditionally freezes every tank in the arena onto its current-tick pose, so nothing in the game interpolates at all and motion becomes a 60 Hz stutter. It is invisible to any test that renders a single alpha or a single tank, which is what `snaps only the revived tank: the other player keeps interpolating on the same sync` exists for -- and `interpolates normally within a round` catches the same thing from the pre-#239 side of the file.",
+    "expectFailures": 4
   }
 ]
