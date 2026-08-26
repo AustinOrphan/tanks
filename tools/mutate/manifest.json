@@ -1194,5 +1194,29 @@
     ],
     "why": "Splits the session across two namespaces: the six stores land on the base keys while `AppSettings.storage` -- what save.ts and the `__tanks` dev console get -- stays namespaced. Every storage.ts adapter test still passes, because the adapter is untouched; only the wiring is wrong. Killed by `gives the stores and storage the SAME namespaced object`, where a store write becomes unreadable through AppSettings.storage.",
     "expectFailures": 1
+  },
+  {
+    "id": "capture-playwright-module-becomes-an-override",
+    "file": "tools/capture/prerequisites.mjs",
+    "find": "  const candidates = [...new Set([env.PLAYWRIGHT_MODULE, 'playwright'].filter(Boolean))];",
+    "replace": "  const candidates = env.PLAYWRIGHT_MODULE ? [env.PLAYWRIGHT_MODULE] : ['playwright'];",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/capture/prerequisites.test.ts"
+    ],
+    "why": "The obvious \"make PLAYWRIGHT_MODULE an override\" edit, which prerequisites.test.ts already names in prose as this case's negative control. PLAYWRIGHT_MODULE is a PREFERENCE, not an override: a stale or mistyped value must not stop capture from finding a working install, and the aggregate failure must list every specifier it tried. Under the mutation a contributor whose PLAYWRIGHT_MODULE points at a moved install is told \"Playwright with Chromium is required\" with only that one dead path under `Tried:`, while a perfectly good ambient `playwright` is never attempted. Killed by `treats PLAYWRIGHT_MODULE as the first candidate and still tries the bare specifier` (#353), the only case that reads the second `Tried:` line -- 1 of the file's 4 cases; the other 3 pass under it, which is what expectFailures pins. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). The second `Tried:` line's TEXT differs between them (`Chromium executable is missing at /missing/chromium` where playwright resolves, `ERR_MODULE_NOT_FOUND` where it does not); the line is PRESENT either way, which is why the assertion -- and this entry -- read the same in both."
+  },
+  {
+    "id": "capture-prerequisite-error-drops-the-ci-pin",
+    "file": "tools/capture/prerequisites.mjs",
+    "find": "      + `  npm i --no-save playwright@${CI_PLAYWRIGHT_VERSION}\\n`",
+    "replace": "      + '  npm i --no-save playwright\\n'",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/capture/prerequisites.test.ts"
+    ],
+    "why": "The change issue #353's third acceptance criterion asks to be named: `loadPlaywright` stops naming the pinned version in its remediation. The message then tells a contributor to run `npm i --no-save playwright` unpinned, npm resolves whatever is latest, and the next capture run trips loadPlaywright's OWN version check a few lines up (`Playwright <x> is installed, but CI and capture require <CI_PLAYWRIGHT_VERSION>`) -- guidance that sends the reader in a circle instead of to the install CI uses. Killed by the rejection assertion in `ties capture documentation and errors to the canonical CI Playwright pin`, 1 of the file's 4 cases: that case's earlier assertions read ci.yml and README.md and still pass, and the other 3 cases never inspect the remediation text. The `\\n` in `find`/`replace` is two literal bytes inside a template literal, not a newline. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). `playwright@<version>` appears nowhere else in the aggregate message in either world, so deleting it here is what makes the case fail rather than an environment fact -- which is the whole point of #353, where the same case passed or failed on whether Playwright happened to resolve."
   }
 ]
