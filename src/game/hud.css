@@ -59,6 +59,14 @@
   --hud-control-min: 44px;
   --hud-control-touch: 56px;
 
+  /* Safe areas. The floor the touch controls keep off a display edge when the device
+   * reports no inset; `max(--hud-safe-inset, env(safe-area-inset-*))` is the pattern.
+   * There is deliberately no panel-width token: no two panels in this stylesheet share a
+   * width -- they size to content -- so naming one would claim a role that does not
+   * exist. `--hud-topbar-pad-x/y` stay where they are, on `.hud-topbar`, because the
+   * narrow-viewport blocks retune them per breakpoint and a `:root` value could not. */
+  --hud-safe-inset: 14px;
+
   /* Type. */
   --hud-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --hud-weight-normal: 700;
@@ -467,8 +475,8 @@
    * swipe that starts on a button is the system's, not the game's. The pair above is
    * the fallback for a browser that parses neither function; these two win wherever
    * they parse, and collapse back to 14px on a device with no inset. */
-  right: max(14px, env(safe-area-inset-right));
-  bottom: max(14px, env(safe-area-inset-bottom));
+  right: max(var(--hud-safe-inset), env(safe-area-inset-right));
+  bottom: max(var(--hud-safe-inset), env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: var(--hud-space-4);
