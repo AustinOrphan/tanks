@@ -57,8 +57,16 @@ function splitShorthand(value: string): string[] {
  * What the measurement rules OUT is the useful half: `padding` and `font-weight` are
  * NOT in the intersection -- `.hud-swatch` sets neither and `.hud-level-btn` no
  * padding -- so requiring either would fail on buttons that are correctly themed.
+ *
+ * `background`, the SHORTHAND, replaced `backgroundColor` when the stylesheet was
+ * tokenised (issue #321), and the reason is the jsdom behaviour `resolved` documents:
+ * jsdom keeps a `var()` reference on the shorthand a rule actually writes and never
+ * expands it into the longhands, so `backgroundColor` reads its initial
+ * `rgba(0, 0, 0, 0)` on every button whose fill is now `background: var(--hud-quiet-fill)`
+ * -- identical to a bare button, which made this sweep report 62 false positives. Reading
+ * the property the stylesheet writes is what keeps the question "does this look themed".
  */
-const THEMED_PROPS = ['backgroundColor', 'color', 'borderRadius', 'cursor'] as const;
+const THEMED_PROPS = ['background', 'color', 'borderRadius', 'cursor'] as const;
 
 /**
  * A single `var(--name)` or `var(--name, fallback)` reference, whole.
@@ -465,13 +473,15 @@ describe('hud.css is syntactically whole', () => {
     const { root, dispose } = mountEveryButton();
     const bare = document.createElement('button'); // same document: same UA defaults
     document.body.appendChild(bare);
-    const ref = getComputedStyle(bare);
 
+    // Read through `resolved`, not `getComputedStyle`: three of these four properties are
+    // tokenised, and jsdom hands back the literal `var(--hud-text)` for them. That string
+    // is unequal to the bare button's value, so this sweep would report every button as
+    // themed -- including a genuinely unstyled one -- while measuring nothing.
     const buttons = Array.from(root.querySelectorAll('button'));
     const unstyled = buttons
       .map((b) => {
-        const cs = getComputedStyle(b);
-        const bareProps = THEMED_PROPS.filter((p) => cs[p] === ref[p]);
+        const bareProps = THEMED_PROPS.filter((p) => resolved(b, p) === resolved(bare, p));
         return { button: Array.from(b.classList).join('.'), bareProps };
       })
       .filter((r) => r.bareProps.length > 0)
@@ -600,7 +610,7 @@ describe('hud.css is syntactically whole', () => {
     const accentsStyle = getComputedStyle(accents);
     expect(accentsStyle.display).toBe('flex');
     expect(accentsStyle.display).toBe(swatchesStyle.display);
-    expect(accentsStyle.gap).toBe(swatchesStyle.gap);
+    expect(resolved(accents, 'gap')).toBe(resolved(swatches, 'gap'));
 
     document.body.innerHTML = '';
   });
@@ -830,9 +840,12 @@ describe('hud.css is syntactically whole', () => {
     document.body.appendChild(cluster);
     const row = getComputedStyle(cluster);
     expect(row.display).toBe('flex');
-    expect(parseFloat(row.gap)).toBeGreaterThan(0);
-    const margins = made.map((b) => parseFloat(getComputedStyle(b).marginLeft) || 0);
-    expect(margins[2], 'the pairs are not separated').toBeGreaterThan(parseFloat(row.gap));
+    // `gap` is tokenised, so `parseFloat(getComputedStyle(...).gap)` is NaN here and every
+    // comparison below it would fail loudly rather than measure the layout.
+    const rowGap = parseFloat(resolved(cluster, 'gap'));
+    expect(rowGap).toBeGreaterThan(0);
+    const margins = made.map((b) => parseFloat(resolved(b, 'marginLeft')) || 0);
+    expect(margins[2], 'the pairs are not separated').toBeGreaterThan(rowGap);
     expect([margins[0], margins[1], margins[3]]).toEqual([0, 0, 0]);
     document.body.innerHTML = '';
   });
