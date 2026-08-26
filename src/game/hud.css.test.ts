@@ -238,6 +238,16 @@ describe('resolved(): the token-aware computed style this suite reads', () => {
     expect(resolved(el, 'fontSize')).toBe('13px');
   });
 
+  it('prefers the token over the fallback when BOTH are present', () => {
+    // Added because a mutation survived: swapping the precedence so the fallback wins kept
+    // all 35 other cases green. No case had a defined token AND a differing fallback, so
+    // the rule that decides between them was never measured. A stylesheet that tokenises
+    // with fallbacks -- `var(--radius-md, 10px)` -- would then be read at its fallback,
+    // reporting the OLD literal however the token was retuned.
+    const el = probe(':root { --probe-size: 21px } .probe { font-size: var(--probe-size, 99px) }');
+    expect(resolved(el, 'fontSize')).toBe('21px');
+  });
+
   it('THROWS on a token with no value and no fallback, instead of passing vacuously', () => {
     // Returning `''` here would restore the exact failure this helper removes: a
     // `.not.toBe(...)` against `''` reports green while measuring nothing.
