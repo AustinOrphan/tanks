@@ -31,11 +31,39 @@ describe('capture prerequisites', () => {
     expect(workflow).toContain(`playwright-chromium-${CI_PLAYWRIGHT_VERSION}-`);
     expect(documentation).toContain(`playwright@${CI_PLAYWRIGHT_VERSION}`);
 
-    await expect(loadPlaywright({ PLAYWRIGHT_MODULE: '/missing/playwright' }))
+    // Both candidates must fail for this to be a measurement rather than an environment
+    // reading. `PLAYWRIGHT_MODULE` is the FIRST candidate, not the only one: `loadPlaywright`
+    // falls through to the bare `'playwright'` specifier, so on a worktree that has Playwright
+    // resolvable -- which is exactly how the documented `npm i --no-save playwright@x.y.z`
+    // capture setup leaves it -- the call SUCCEEDED and this case failed with
+    // `promise resolved ... instead of rejecting` (issue #353). Denying Chromium to whichever
+    // candidate does resolve is what makes the aggregate error the only outcome, and it is the
+    // same technique the missing-Chromium case above already uses.
+    await expect(loadPlaywright({
+      PLAYWRIGHT_MODULE: '/missing/playwright',
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/missing/chromium',
+    }))
       .rejects.toThrow(new RegExp(`playwright@${CI_PLAYWRIGHT_VERSION.replaceAll('.', '\\.')}`));
 
     expect(() => playwrightVersionFromCi(
       'npm i --no-save playwright@1.2.3\nnpm i --no-save playwright@4.5.6',
     )).toThrow(/exactly one Playwright install version/);
+  });
+
+  // The behaviour that made the case above read its environment instead of the code, pinned
+  // so the next reader meets it as a stated fact: `PLAYWRIGHT_MODULE` is a PREFERENCE, and a
+  // failure to load it falls through to the bare specifier rather than ending the search.
+  //
+  // Negative control: narrowing `candidates` to `env.PLAYWRIGHT_MODULE ? [env.PLAYWRIGHT_MODULE]
+  // : ['playwright']` -- the obvious "make PLAYWRIGHT_MODULE an override" edit -- drops the
+  // second line from `Tried:` and fails this. Denying Chromium keeps it from depending on
+  // whether `'playwright'` happens to resolve here: the entry's TEXT differs between a worktree
+  // with Playwright installed and one without, but the entry is present either way.
+  it('treats PLAYWRIGHT_MODULE as the first candidate and still tries the bare specifier', async () => {
+    await expect(loadPlaywright({
+      PLAYWRIGHT_MODULE: '/missing/playwright',
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/missing/chromium',
+    }))
+      .rejects.toThrow(/Tried:\n {2}\/missing\/playwright: [^\n]*\n {2}playwright: /);
   });
 });
