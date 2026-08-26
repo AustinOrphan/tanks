@@ -30,6 +30,12 @@ paths:
   Update `FLAG_REGISTRY` and regenerate `docs/dev-flags.md` with `npm run devflags:doc`.
 - For CSS, preserve the raw-content test setup and structural guards; Vitest can otherwise
   stub a stylesheet to an empty string and make assertions vacuous.
+- HUD design tokens live in `hud.css`'s `:root` block. Tokenise a value only where it is a
+  repeated ROLE, and treat a token's VALUE changing as a visual change owing its own
+  evidence. jsdom does not resolve `var()`, so read any tokenised property through
+  `resolved()` in `hud.css.test.ts` -- `getComputedStyle` returns the literal `var(--name)`,
+  which makes a `.not.toBe(...)` pass while measuring nothing, and leaves the longhands of a
+  tokenised shorthand at their initial values.
 
 Read `docs/agent/architecture.md` and `docs/agent/known-holes.md` at the matching heading
 before changing persistence, replay, frame/driver wiring, or development flags.
