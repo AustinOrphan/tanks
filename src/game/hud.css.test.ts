@@ -7,7 +7,7 @@
 // Both were invisible to `npm test` and to `tsc`. This is the cheapest guard that would
 // have caught either.
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import css from './hud.css?raw';
 import { createHud } from './hud';
 import { ACHIEVEMENTS } from './achievements';
@@ -59,6 +59,66 @@ function splitShorthand(value: string): string[] {
  * padding -- so requiring either would fail on buttons that are correctly themed.
  */
 const THEMED_PROPS = ['backgroundColor', 'color', 'borderRadius', 'cursor'] as const;
+
+/**
+ * A single `var(--name)` or `var(--name, fallback)` reference, whole.
+ *
+ * Anchored: a value that merely CONTAINS a reference -- `1px solid var(--x)` -- is not one
+ * this resolver handles, and falls through to the `var(` check in `resolved` rather than
+ * being half-substituted.
+ */
+const VAR_REFERENCE = /^var\(\s*(--[A-Za-z0-9_-]+)\s*(?:,\s*([\s\S]*?))?\s*\)$/;
+
+/**
+ * A computed value with one level of `var()` resolved. Use this, not `getComputedStyle`,
+ * for any property this stylesheet tokenises.
+ *
+ * jsdom does NOT resolve `var()`. Measured directly: a rule of `font-size: var(--probe)`
+ * against `:root { --probe: 21px }` makes `getComputedStyle(el).fontSize` read the literal
+ * string `"var(--probe)"`, where a browser reads `"21px"`. The custom property itself IS
+ * readable and IS inherited, through `getPropertyValue('--probe')`.
+ *
+ * That matters here more than it would in most suites, because these guards are computed
+ * style guards on purpose -- see the button rule's own comment on the eleven ways past a
+ * text-parsing draft. Tokenising a declaration breaks them in two ways, and the second is
+ * far worse than the first:
+ *
+ *  - a numeric assertion fails LOUDLY, since `parseFloat("var(--x)")` is `NaN`;
+ *  - any `.not.toBe(...)` on a tokenised property starts passing VACUOUSLY, because the
+ *    literal `"var(--x)"` is unequal to every expected value. The assertion keeps
+ *    reporting green while measuring nothing.
+ *
+ * Both were reproduced on this suite before this helper existed, by substituting five
+ * tokens whose values were byte-identical to the literals they replaced: 2 of 25 cases
+ * failed, and the rest of that test's assertions went quiet.
+ *
+ * THROWS rather than returning the unresolved string, and rather than returning `''`,
+ * when a reference has no value and no fallback. A typo in a token name is then a red
+ * suite instead of the same vacuous pass this helper exists to remove. One level only:
+ * this stylesheet chains no tokens, and a recursive resolver would be a branch no test
+ * here could kill.
+ */
+function resolved(el: Element, prop: keyof CSSStyleDeclaration & string): string {
+  const style = getComputedStyle(el);
+  const raw = String((style as unknown as Record<string, unknown>)[prop] ?? '');
+  const match = VAR_REFERENCE.exec(raw.trim());
+  if (!match) {
+    if (raw.includes('var(')) {
+      throw new Error(`resolved(${prop}): jsdom left an unresolvable reference in ${raw}`);
+    }
+    return raw;
+  }
+  const [, token, fallback] = match;
+  const value = style.getPropertyValue(token).trim();
+  const out = value !== '' ? value : (fallback ?? '').trim();
+  if (out === '') {
+    throw new Error(`resolved(${prop}): ${token} has no value and no fallback`);
+  }
+  if (out.includes('var(')) {
+    throw new Error(`resolved(${prop}): ${token} resolves to another reference, ${out}`);
+  }
+  return out;
+}
 
 /** Every button the mounted HUD can show, with each subtree-rebuilding setter driven. */
 function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
@@ -123,6 +183,103 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
     },
   };
 }
+
+describe('resolved(): the token-aware computed style this suite reads', () => {
+  const injected: HTMLStyleElement[] = [];
+
+  function probe(rules: string, cls = 'probe'): HTMLElement {
+    const style = document.createElement('style');
+    style.textContent = rules;
+    document.head.appendChild(style);
+    // Tracked, and only these are removed. `hud.ts`'s own `import './hud.css'` puts the
+    // real stylesheet in this same document at module scope -- a blanket
+    // `head.querySelectorAll('style').forEach(remove)` deletes it and takes the other
+    // twenty-five cases down with it. Observed, not theorised.
+    injected.push(style);
+    const el = document.createElement('div');
+    el.className = cls;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  afterEach(() => {
+    while (injected.length > 0) injected.pop()?.remove();
+    document.body.innerHTML = '';
+  });
+
+  it('records the jsdom behaviour this helper exists for', () => {
+    // The premise, asserted rather than assumed: if jsdom ever starts resolving var(),
+    // this case fails and the helper below can be deleted.
+    const el = probe(':root { --probe-size: 21px } .probe { font-size: var(--probe-size) }');
+    expect(getComputedStyle(el).fontSize).toBe('var(--probe-size)');
+    expect(getComputedStyle(el).getPropertyValue('--probe-size')).toBe('21px');
+  });
+
+  it('passes a plain literal through untouched', () => {
+    const el = probe('.probe { font-size: 21px }');
+    expect(resolved(el, 'fontSize')).toBe('21px');
+  });
+
+  it('resolves a reference to the token value', () => {
+    const el = probe(':root { --probe-size: 21px } .probe { font-size: var(--probe-size) }');
+    expect(resolved(el, 'fontSize')).toBe('21px');
+  });
+
+  it('FOLLOWS a change in the token value, which is what makes it a measurement', () => {
+    // The discriminating control. A helper that merely stripped the `var()` wrapper, or
+    // returned a constant, would pass every case above and fail this one.
+    const el = probe(':root { --probe-size: 11px } .probe { font-size: var(--probe-size) }');
+    expect(resolved(el, 'fontSize')).toBe('11px');
+    expect(resolved(el, 'fontSize')).not.toBe('21px');
+  });
+
+  it('uses the declared fallback when the token is absent', () => {
+    const el = probe('.probe { font-size: var(--missing, 13px) }');
+    expect(resolved(el, 'fontSize')).toBe('13px');
+  });
+
+  it('THROWS on a token with no value and no fallback, instead of passing vacuously', () => {
+    // Returning `''` here would restore the exact failure this helper removes: a
+    // `.not.toBe(...)` against `''` reports green while measuring nothing.
+    const el = probe('.probe { font-size: var(--missing) }');
+    expect(() => resolved(el, 'fontSize')).toThrow(/no value and no fallback/);
+  });
+
+  it('THROWS on a chained token rather than returning a second reference', () => {
+    const el = probe(
+      ':root { --a: var(--b); --b: 9px } .probe { font-size: var(--a) }',
+    );
+    expect(() => resolved(el, 'fontSize')).toThrow(/another reference/);
+  });
+
+  it('THROWS when a reference is embedded in a larger value it cannot resolve', () => {
+    const el = probe(':root { --w: 2px } .probe { outline: var(--w) solid #7fd0ff }');
+    expect(() => resolved(el, 'outline')).toThrow(/unresolvable reference/);
+  });
+
+  it('records the OTHER jsdom trap: a tokenised shorthand leaves its longhands unset', () => {
+    // Measured. With `outline: var(--w) solid #7fd0ff`, jsdom keeps the reference on the
+    // SHORTHAND (`outline` reads `"var(--w) solid #7fd0ff"`) but never expands it, so
+    // `outlineWidth` reads its initial `"medium"` -- no reference for `resolved` to catch
+    // and nothing to signal that the declaration was dropped. A guard that reads the
+    // longhand of a tokenised shorthand is therefore measuring the initial value, not the
+    // stylesheet. Tokenise the focus ring's longhands individually, not `outline`.
+    const el = probe(':root { --w: 2px } .probe { outline: var(--w) solid #7fd0ff }');
+    expect(getComputedStyle(el).outlineWidth).toBe('medium');
+    expect(resolved(el, 'outlineWidth')).toBe('medium');
+  });
+
+  it('never returns a string that still contains `var(`', () => {
+    // The property every downstream assertion depends on. Whatever comes back is either a
+    // real value or an exception -- never something that compares unequal to everything.
+    const el = probe(
+      ':root { --probe-size: 21px } .probe { font-size: var(--probe-size); color: #123456 }',
+    );
+    for (const prop of ['fontSize', 'color'] as const) {
+      expect(resolved(el, prop)).not.toContain('var(');
+    }
+  });
+});
 
 describe('hud.css is syntactically whole', () => {
   it('loads as text at all', () => {
