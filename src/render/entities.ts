@@ -1322,12 +1322,27 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         }
       }
       // New id (no prev): snap to curr pose, do not lerp from a garbage origin.
-      // `snap` covers the other discontinuity: resetArena teleports every tank
+      // `snap` covers the second discontinuity: resetArena teleports every tank
       // back to its spawn within one tick while keeping its id and reviving it,
       // so a plain lerp drew the tank streaking across the arena for a frame on
       // every life lost. A tick can move a tank at most TANK_SPEED*DT, so any
       // round-boundary jump is a teleport by definition, not motion.
-      const p = snap ? undefined : prevMap.get(t.id);
+      //
+      // `revived` is the third, and the one `snap` cannot see (issue #239). A VS
+      // stock respawn keeps the tank's id and does NOT restart the round, so
+      // `roundStartTick` is unchanged and this tank alone teleports -- from
+      // wherever it died to whichever spawn point was selected for it. Lerping
+      // that drew the tank, and the spawn ring parented to it, travelling across
+      // the arena from the death point to the respawn.
+      //
+      // Deliberately PER TANK, and that is the whole difficulty: `snap` is a
+      // property of the world, so reusing it here would freeze every other tank
+      // in the arena for a frame whenever anyone respawned. `!prevT.alive` is
+      // read rather than a dead->alive edge, because `t.alive` is already true --
+      // the loop skips the dead above.
+      const prevT = prevMap.get(t.id);
+      const revived = !!prevT && !prevT.alive;
+      const p = snap || revived ? undefined : prevT;
       const pos = p ? lerpVec2(p.pos, t.pos, alpha) : t.pos;
       const bodyA = p ? lerpAngle(p.bodyAngle, t.bodyAngle, alpha) : t.bodyAngle;
       const turretA = p ? lerpAngle(p.turretAngle, t.turretAngle, alpha) : t.turretAngle;
@@ -1344,8 +1359,9 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // read off shieldUntilTick every frame (never latched), then restore-and-clear.
       // Enemies are out of scope here -- their death effect is a separate issue.
       if (t.kind === 'player') {
-        const prevT = prevMap.get(t.id);
-        const enteredRespawn = !!prevT && !prevT.alive && t.alive;
+        // `revived` above is the same edge, read for the same reason -- one dead
+        // `prevT` and a tank the loop already proved alive.
+        const enteredRespawn = revived;
         const enteredRound = curr.roundStartTick !== prev.roundStartTick;
         if ((enteredRespawn || enteredRound) && !view.spawn) {
           // Per-slot selection: the player-facing picker UI that writes anything but the
