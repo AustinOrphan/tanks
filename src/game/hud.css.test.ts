@@ -350,6 +350,26 @@ describe('hud.css is syntactically whole', () => {
     expect(depth).toBe(0); // and the file ends closed
   });
 
+  it('declares no design token it never references', () => {
+    // A token used ZERO times claims more than the "a literal used once stays a literal"
+    // rule the token block itself states -- it names a role the stylesheet does not have
+    // anywhere. Four were shipped that way in the first draft of issue #321's token block
+    // (control sizing and both animation durations) and this is what would have caught
+    // them.
+    //
+    // The inertness reduction that proves the token layer moves no pixel is structurally
+    // BLIND to this: an unused token expands to nothing, so byte-identical stays
+    // byte-identical however many dead names are added. This is the assertion that is not.
+    const root = /\n:root \{([\s\S]*?)\n\}/.exec(stripComments(css));
+    expect(root, 'the :root token block must exist').not.toBeNull();
+    const declared = [...(root as RegExpExecArray)[1].matchAll(/(--[a-z0-9-]+):/g)].map((m) => m[1]);
+    // Vacuity guard: a regex that stopped matching would make the loop below trivially true.
+    expect(declared.length).toBeGreaterThan(20);
+
+    const unused = declared.filter((name) => !css.includes(`var(${name})`));
+    expect(unused, 'declared but never referenced').toEqual([]);
+  });
+
   it('still carries the rules the features depend on', () => {
     // Presence, not styling -- a rule silently deleted in a merge is the other half of
     // the failure mode above. Population: the selectors whose absence disables a

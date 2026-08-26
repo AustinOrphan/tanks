@@ -445,7 +445,7 @@
 /* A shot landed on this mark. Brief and bright: it confirms the tap did something,
  * which the muzzle flash cannot do when the muzzle is under the player's hand. */
 .hud-aimdot--fired {
-  animation: hud-aimdot-fire 220ms ease-out;
+  animation: hud-aimdot-fire var(--hud-duration-fast) ease-out;
 }
 
 @keyframes hud-aimdot-fire {
@@ -518,8 +518,8 @@
   cursor: pointer;
   border: none;
   border-radius: var(--hud-radius-lg);
-  min-width: 56px;
-  min-height: 56px;
+  min-width: var(--hud-control-touch);
+  min-height: var(--hud-control-touch);
   padding: 8px 14px;
   font-size: 15px;
   font-weight: var(--hud-weight-strong);
@@ -1042,8 +1042,8 @@
 .hud-swatch {
   pointer-events: auto;
   cursor: pointer;
-  width: 44px;
-  height: 44px;
+  width: var(--hud-control-min);
+  height: var(--hud-control-min);
   border-radius: 50%;
   border: 3px solid transparent;
 }
@@ -1188,7 +1188,7 @@
   padding: 8px 14px;
   background: rgba(11, 14, 20, 0.9);
   color: var(--hud-text);
-  animation: hud-toast-in 220ms ease-out;
+  animation: hud-toast-in var(--hud-duration-fast) ease-out;
 }
 
 .hud-toast-head {
@@ -1229,8 +1229,8 @@
   cursor: pointer;
   border: none;
   border-radius: var(--hud-radius-md);
-  width: 44px;
-  height: 44px;
+  width: var(--hud-control-min);
+  height: var(--hud-control-min);
   font-size: 18px;
   font-weight: var(--hud-weight-strong);
   background: var(--hud-quiet-fill);
@@ -1456,7 +1456,7 @@
 }
 
 .hud-damage--hit {
-  animation: hud-damage-flash 700ms ease-out 1;
+  animation: hud-damage-flash var(--hud-duration-slow) ease-out 1;
 }
 
 @keyframes hud-damage-flash {
@@ -1466,7 +1466,7 @@
 }
 
 .hud-lives--hit {
-  animation: hud-lives-pulse 700ms ease-out 1;
+  animation: hud-lives-pulse var(--hud-duration-slow) ease-out 1;
 }
 
 @keyframes hud-lives-pulse {
