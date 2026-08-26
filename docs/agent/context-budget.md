@@ -1,7 +1,7 @@
 # Project instruction context budget
 
 Initial baseline measured for #211 on 2026-08-19; re-measured for #213 on 2026-08-21 and
-again for #266 and then #245 on 2026-08-25. The conditional-rule table below had drifted
+again for #266, #245 and #321 on 2026-08-25. The conditional-rule table below had drifted
 between those re-measurements -- before #266 it recorded `documentation.md` at 31 lines /
 1350 bytes against a file that was already 35 / 1663 -- so its figures are recomputed here
 on the final tree, not adjusted. Only the `After` row is enforced by a test.
@@ -30,13 +30,13 @@ These files load only after Claude Code reads a file matching their `paths` fron
 | Rule | Lines | UTF-8 bytes |
 | --- | ---: | ---: |
 | `.claude/rules/simulation.md` | 29 | 1627 |
-| `.claude/rules/game.md` | 35 | 1778 |
+| `.claude/rules/game.md` | 41 | 2270 |
 | `.claude/rules/rendering.md` | 32 | 1437 |
 | `.claude/rules/audio.md` | 20 | 778 |
 | `.claude/rules/testing.md` | 31 | 1475 |
 | `.claude/rules/workflows.md` | 36 | 1634 |
 | `.claude/rules/documentation.md` | 39 | 2029 |
-| **Total conditional rules** | — | **10758** |
+| **Total conditional rules** | — | **11250** |
 
 The documents in this directory are normal links and remain unloaded until read.
 
