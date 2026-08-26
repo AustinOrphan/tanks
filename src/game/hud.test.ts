@@ -1311,7 +1311,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     // 3 fixed (Keyboard/Bot/None) + 2 detected pads = 5.
     expect(btns.map((b) => b.textContent)).toEqual(['Keyboard', 'Bot', 'None', 'Pad A (index 0)', 'Pad B (index 1)']);
     // Only the slot's CURRENT source (gamepad padIndex 1) carries the selection ring.
-    expect(btns.map((b) => b.classList.contains('hud-controller-source-btn--selected')))
+    expect(btns.map((b) => b.classList.contains('ui-selectable--on')))
       .toEqual([false, false, false, false, true]);
   });
 
@@ -1496,7 +1496,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.showVersusSetup(true);
-    expect(stockBtn(root, VERSUS_STOCK).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(stockBtn(root, VERSUS_STOCK).classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it('friendly fire is GENUINELY ABSENT from the DOM under FFA, present under Teams', () => {
@@ -1557,10 +1557,10 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
       friendlyFire: true,
     };
     h.showVersusSetup(true, initial);
-    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(mapBtn(root, initial.arenaId).classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(stockBtn(root, 2).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
+    expect(playersBtn(root, 4).classList.contains('ui-selectable--on')).toBe(true);
+    expect(mapBtn(root, initial.arenaId).classList.contains('ui-selectable--on')).toBe(true);
+    expect(stockBtn(root, 2).classList.contains('ui-selectable--on')).toBe(true);
     expect(friendlyFireBtn(root)).not.toBeNull();
     expect((friendlyFireBtn(root) as HTMLButtonElement).textContent).toBe('Friendly fire: On');
   });
@@ -1576,8 +1576,8 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.setState('playing'); // setState's close-all discipline hides the pane
     h.setState('main-menu');
     h.showVersusSetup(true); // no `initial` argument at all
-    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(stockBtn(root, 5).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
+    expect(stockBtn(root, 5).classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it("passing `null` -- Task 5's own `deps.initialVersusConfig ?? null` for \"nothing retained yet\" -- also keeps the pane's persisted selections, same as omitting the argument", () => {
@@ -1592,8 +1592,8 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.setState('playing');
     h.setState('main-menu');
     h.showVersusSetup(true, null);
-    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
+    expect(playersBtn(root, 4).classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it("who's-playing renders the REAL session assignment, interactively, when the pane's player count matches it", () => {
@@ -2303,7 +2303,7 @@ describe('hud: the paint shop', () => {
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(pane(root).classList.contains('hud-customize--hidden')).toBe(false);
     expect(swatches(root).length).toBeGreaterThanOrEqual(6);
-    const selected = swatches(root).filter((b) => b.classList.contains('hud-swatch--selected'));
+    const selected = swatches(root).filter((b) => b.classList.contains('ui-selectable--on'));
     expect(selected).toHaveLength(1);
     expect(selected[0].dataset.hull).toBe('red');
   });
@@ -2318,7 +2318,7 @@ describe('hud: the paint shop', () => {
     purple.dispatchEvent(new MouseEvent('click'));
     expect(picks).toEqual(['purple']);
     h.setHullColor('purple'); // the loop echoes the accepted pick back
-    expect(purple.classList.contains('hud-swatch--selected')).toBe(true);
+    expect(purple.classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it('offers one skin button per SKINS entry, current one marked, and reports picks', () => {
@@ -2332,7 +2332,7 @@ describe('hud: the paint shop', () => {
     // One button per entry in the REAL skin list, labelled from it.
     expect(skins().map((b) => b.dataset.skin)).toEqual(SKINS.map((sk) => sk.id));
     expect(skins().map((b) => b.textContent)).toEqual(SKINS.map((sk) => sk.label));
-    const selected = skins().filter((b) => b.classList.contains('hud-skin--selected'));
+    const selected = skins().filter((b) => b.classList.contains('ui-selectable--on'));
     expect(selected).toHaveLength(1);
     expect(selected[0].dataset.skin).toBe('camo');
 
@@ -2340,8 +2340,8 @@ describe('hud: the paint shop', () => {
     checker.dispatchEvent(new MouseEvent('click'));
     expect(picks).toEqual(['checker']);
     h.setSkin('checker'); // the loop echoes the accepted pick back
-    expect(checker.classList.contains('hud-skin--selected')).toBe(true);
-    expect(skins().filter((b) => b.classList.contains('hud-skin--selected'))).toHaveLength(1);
+    expect(checker.classList.contains('ui-selectable--on')).toBe(true);
+    expect(skins().filter((b) => b.classList.contains('ui-selectable--on'))).toHaveLength(1);
   });
 
   it('offers one accent swatch per ACCENTS entry, current one marked, and reports picks', () => {
@@ -2356,7 +2356,7 @@ describe('hud: the paint shop', () => {
       ACCENTS.map((a) => a.id),
     );
     const selected = accentSwatches(root).filter((b) =>
-      b.classList.contains('hud-swatch--selected'),
+      b.classList.contains('ui-selectable--on'),
     );
     expect(selected).toHaveLength(1);
     expect(selected[0].dataset.accent).toBe('black');
@@ -2365,9 +2365,9 @@ describe('hud: the paint shop', () => {
     gold.dispatchEvent(new MouseEvent('click'));
     expect(picks).toEqual(['gold']);
     h.setAccentColor('gold'); // the loop echoes the accepted pick back
-    expect(gold.classList.contains('hud-swatch--selected')).toBe(true);
+    expect(gold.classList.contains('ui-selectable--on')).toBe(true);
     expect(
-      accentSwatches(root).filter((b) => b.classList.contains('hud-swatch--selected')),
+      accentSwatches(root).filter((b) => b.classList.contains('ui-selectable--on')),
     ).toHaveLength(1);
   });
 

@@ -648,7 +648,7 @@ export function createHud(root: HTMLElement): Hud {
       <h1 id="hud-achievements-title">Achievements</h1>
       <p class="hud-achievements-count"></p>
       <div class="hud-achievement-list"></div>
-      <button class="hud-achievements-back" type="button">Back</button>
+      <button class="ui-btn ui-btn--slab hud-achievements-back" type="button">Back</button>
     </div>
     <!-- The level select panel: reached from the "Levels" button on the main menu,
          following the Stats/Achievements/Customize pattern exactly (issue #135). The
@@ -660,7 +660,7 @@ export function createHud(root: HTMLElement): Hud {
     <div class="hud-levelselect hud-levelselect--hidden" tabindex="-1" aria-labelledby="hud-levelselect-title">
       <h1 id="hud-levelselect-title">Levels</h1>
       <div class="hud-levels"></div>
-      <button class="hud-levelselect-back" type="button">Back</button>
+      <button class="ui-btn ui-btn--slab hud-levelselect-back" type="button">Back</button>
     </div>
     <!-- The controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
          assignment.md): ONE panel, TWO entry points -- the title screen's own open
@@ -674,7 +674,7 @@ export function createHud(root: HTMLElement): Hud {
       <!-- REPLACE, never append -- rebuilt on open and on every detection refresh, same
            convention setLevelSelect already uses for .hud-levels. -->
       <div class="hud-controller-rows"></div>
-      <button class="hud-controllers-back" type="button">Back</button>
+      <button class="ui-btn ui-btn--slab hud-controllers-back" type="button">Back</button>
     </div>
     <!-- The versus setup pane (docs/superpowers/plans/2026-08-21-versus-setup-menu.md,
          docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md §3): reached from
@@ -720,8 +720,8 @@ export function createHud(root: HTMLElement): Hud {
         <p class="hud-versus-assignment-note hud-versus-assignment-note--hidden">Assignment applies after Start.</p>
         <div class="hud-controller-rows"></div>
       </div>
-      <button class="hud-versus-start" type="button">Start</button>
-      <button class="hud-versus-back" type="button">Back</button>
+      <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
+      <button class="ui-btn ui-btn--slab hud-versus-back" type="button">Back</button>
     </div>
     <div class="hud-customize hud-customize--hidden" tabindex="-1" aria-labelledby="hud-customize-title">
       <h1 id="hud-customize-title">Customize</h1>
@@ -782,15 +782,15 @@ export function createHud(root: HTMLElement): Hud {
         <div class="hud-skins"></div>
         <div class="hud-accents"></div>
       </section>
-      <button class="hud-customize-back" type="button">Back</button>
+      <button class="ui-btn ui-btn--slab hud-customize-back" type="button">Back</button>
     </div>
     <div class="hud-stats hud-stats--hidden" tabindex="-1" aria-labelledby="hud-stats-title">
       <h1 id="hud-stats-title">Stats</h1>
       <table class="hud-stats-table"></table>
       <div class="hud-stats-actions">
-        <button class="hud-reset-stats hud-danger" type="button">Reset stats</button>
-        <button class="hud-reset-progress hud-danger" type="button">Reset progress</button>
-        <button class="hud-stats-back" type="button">Back</button>
+        <button class="ui-btn ui-btn--slab ui-btn--danger hud-reset-stats hud-danger" type="button">Reset stats</button>
+        <button class="ui-btn ui-btn--slab ui-btn--danger hud-reset-progress hud-danger" type="button">Reset progress</button>
+        <button class="ui-btn ui-btn--slab hud-stats-back" type="button">Back</button>
       </div>
     </div>
     <!-- tabindex="-1" so the menu can RECEIVE focus on every panel-open transition
@@ -823,17 +823,17 @@ export function createHud(root: HTMLElement): Hud {
            at the furthest unlocked level and is offered only once there is something to
            resume; New Game always starts level 1. The .hud-action button itself survives
            for Resume/Next Level/Play Again/Retry -- see setState -- and hides at title. -->
-      <button class="hud-continue hud-continue--hidden" type="button">Continue</button>
-      <button class="hud-new-game hud-new-game--hidden" type="button">New Game</button>
-      <button class="hud-action" type="button"></button>
-      <button class="hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
-      <button class="hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
-      <button class="hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
-      <button class="hud-levelselect-open hud-levelselect-open--hidden" type="button">Levels</button>
+      <button class="ui-btn ui-btn--primary hud-continue hud-continue--hidden" type="button">Continue</button>
+      <button class="ui-btn ui-btn--primary hud-new-game hud-new-game--hidden" type="button">New Game</button>
+      <button class="ui-btn ui-btn--primary hud-action" type="button"></button>
+      <button class="ui-btn ui-btn--slab hud-stats-open hud-stats-open--hidden" type="button">Stats</button>
+      <button class="ui-btn ui-btn--slab hud-achievements-open hud-achievements-open--hidden" type="button">Achievements</button>
+      <button class="ui-btn ui-btn--slab hud-customize-open hud-customize-open--hidden" type="button">Customize</button>
+      <button class="ui-btn ui-btn--slab hud-levelselect-open hud-levelselect-open--hidden" type="button">Levels</button>
       <!-- Visible at title AND paused -- the one new variant of this file's per-button
            visibility pattern, precedented by .hud-panel-settings itself already showing
            at both those states (see setState). -->
-      <button class="hud-controllers-open hud-controllers-open--hidden" type="button">Controllers</button>
+      <button class="ui-btn ui-btn--slab hud-controllers-open hud-controllers-open--hidden" type="button">Controllers</button>
       <!-- Versus setup entry (docs/superpowers/specs/2026-08-21-versus-setup-menu-
            design.md, ruling 1): TITLE ONLY, unlike Controllers just above (title AND
            paused) -- a live round's mode/players/stock are closed over for its whole
@@ -841,34 +841,34 @@ export function createHud(root: HTMLElement): Hud {
            nothing this button could offer mid-round. See onVersusOpen's own doc
            comment on the Hud interface for why its click handler is a bare
            passthrough rather than a local showX(true) call. -->
-      <button class="hud-versus-open hud-versus-open--hidden" type="button">Versus</button>
+      <button class="ui-btn ui-btn--slab hud-versus-open hud-versus-open--hidden" type="button">Versus</button>
       <!-- A setup-pane versus session's title has nothing for Continue/Levels-open to
            do (see setRelaunchTarget's own doc comment on the Hud interface) -- this
            replaces them with a reboot back to a plain campaign session instead. Hidden
            by default, same convention as every other gated button here; only shown once
            setRelaunchTarget('versus-setup') runs. -->
-      <button class="hud-campaign-open hud-campaign-open--hidden" type="button">Campaign</button>
-      <button class="hud-quit hud-quit--hidden" type="button">Quit to Title</button>
+      <button class="ui-btn ui-btn--slab hud-campaign-open hud-campaign-open--hidden" type="button">Campaign</button>
+      <button class="ui-btn ui-btn--slab hud-quit hud-quit--hidden" type="button">Quit to Title</button>
       <!-- The panel settings row, shown on the main menu AND the pause panel: the
            seed of the settings pane. Mirrors the topbar audio pair (same engine, same
            callbacks) rather than moving it, so audio stays adjustable mid-game too.
            autocomplete="off" for the same Firefox bfcache reason as the topbar slider. -->
       <div class="hud-panel-settings hud-panel-settings--hidden">
-        <button class="hud-panel-mute" type="button">Mute (M)</button>
+        <button class="ui-btn ui-btn--sm hud-panel-mute" type="button">Mute (M)</button>
         <input class="hud-panel-volume" type="range" min="0" max="1" step="0.01" value="${DEFAULT_VOLUME}" autocomplete="off" />
         <!-- The right thumb's aim scheme, reachable from both the title screen and the
              pause panel -- a phone player can only change this here, there being no
              keyboard to bind it to. Label/hint text is filled in by renderSchemeToggle. -->
-        <button class="hud-scheme-toggle" type="button"></button>
+        <button class="ui-btn ui-btn--sm hud-scheme-toggle" type="button"></button>
         <!-- How the aim thumb pulls the trigger (see FireMode in touch.ts) -- beside the
              aim-scheme toggle, same row, same reachability. The FIRE button works in
              EVERY mode; this only adds a gesture. Label/hint filled in by
              renderFireModeToggle. -->
-        <button class="hud-firemode-toggle" type="button"></button>
+        <button class="ui-btn ui-btn--sm hud-firemode-toggle" type="button"></button>
         <!-- Whether haptics.ts's vibrate calls fire at all -- same row, same
              reachability as the two toggles above (a phone player can only reach this
              here). Label/hint text is filled in by renderHapticsToggle. -->
-        <button class="hud-haptics-toggle" type="button"></button>
+        <button class="ui-btn ui-btn--sm hud-haptics-toggle" type="button"></button>
       </div>
     </div>
   `;
@@ -1097,7 +1097,7 @@ export function createHud(root: HTMLElement): Hud {
   for (const swatch of PALETTE) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-swatch';
+    b.className = 'ui-selectable hud-swatch';
     b.dataset.hull = swatch.id;
     b.title = swatch.label;
     b.style.background = swatch.hex;
@@ -1110,7 +1110,7 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderSwatchSelection(): void {
     for (const b of Array.from(swatchesRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('hud-swatch--selected', b.dataset.hull === currentHull);
+      b.classList.toggle('ui-selectable--on', b.dataset.hull === currentHull);
     }
   }
 
@@ -1128,7 +1128,7 @@ export function createHud(root: HTMLElement): Hud {
   for (const skin of SKINS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-skin';
+    b.className = 'ui-btn ui-selectable hud-skin';
     b.dataset.skin = skin.id;
     b.textContent = skin.label;
     b.addEventListener('click', (e) => {
@@ -1140,7 +1140,7 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderSkinSelection(): void {
     for (const b of Array.from(skinsRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('hud-skin--selected', b.dataset.skin === currentSkin);
+      b.classList.toggle('ui-selectable--on', b.dataset.skin === currentSkin);
     }
   }
 
@@ -1163,7 +1163,7 @@ export function createHud(root: HTMLElement): Hud {
   for (const accentSwatch of ACCENTS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-swatch';
+    b.className = 'ui-selectable hud-swatch';
     b.dataset.accent = accentSwatch.id;
     b.title = accentSwatch.label;
     b.style.background = accentSwatch.hex ?? '#4a4f58';
@@ -1176,7 +1176,7 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderAccentSelection(): void {
     for (const b of Array.from(accentsRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('hud-swatch--selected', b.dataset.accent === currentAccent);
+      b.classList.toggle('ui-selectable--on', b.dataset.accent === currentAccent);
     }
   }
 
@@ -1530,9 +1530,9 @@ export function createHud(root: HTMLElement): Hud {
       for (const candidate of candidates) {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'hud-controller-source-btn';
+        btn.className = 'ui-btn ui-selectable hud-controller-source-btn';
         btn.textContent = candidateLabel(candidate);
-        btn.classList.toggle('hud-controller-source-btn--selected', sameSource(candidate, source));
+        btn.classList.toggle('ui-selectable--on', sameSource(candidate, source));
         const forSlot = slot; // captured per-iteration, not the loop's shared binding
         if (interactive) {
           btn.addEventListener('click', () => {
@@ -2099,20 +2099,20 @@ export function createHud(root: HTMLElement): Hud {
 
   function renderVersusModeSelection(): void {
     for (const b of Array.from(versusModeRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('hud-versus-option-btn--selected', b.dataset.mode === versusConfigState.mode);
+      b.classList.toggle('ui-selectable--on', b.dataset.mode === versusConfigState.mode);
     }
   }
   function renderVersusPlayersSelection(): void {
     for (const b of Array.from(versusPlayersRow.children) as HTMLButtonElement[]) {
       b.classList.toggle(
-        'hud-versus-option-btn--selected',
+        'ui-selectable--on',
         Number(b.dataset.players) === versusConfigState.players,
       );
     }
   }
   function renderVersusStockSelection(): void {
     for (const b of Array.from(versusStockRow.children) as HTMLButtonElement[]) {
-      b.classList.toggle('hud-versus-option-btn--selected', Number(b.dataset.stock) === versusConfigState.stock);
+      b.classList.toggle('ui-selectable--on', Number(b.dataset.stock) === versusConfigState.stock);
     }
   }
 
@@ -2136,10 +2136,10 @@ export function createHud(root: HTMLElement): Hud {
     for (const choice of choices) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'hud-versus-option-btn';
+      b.className = 'ui-btn ui-selectable hud-versus-option-btn';
       b.dataset.map = choice;
       b.textContent = choice === 'random' ? 'Random' : arenaLabel(choice);
-      b.classList.toggle('hud-versus-option-btn--selected', choice === versusConfigState.arenaId);
+      b.classList.toggle('ui-selectable--on', choice === versusConfigState.arenaId);
       b.addEventListener('click', () => {
         versusConfigState = { ...versusConfigState, arenaId: choice };
         renderVersusMapRow(); // REPLACE -- rebuilds the whole row for the new selection ring
@@ -2169,7 +2169,7 @@ export function createHud(root: HTMLElement): Hud {
     heading.textContent = 'Friendly fire';
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-versus-friendlyfire-btn';
+    b.className = 'ui-btn ui-btn--sm hud-versus-friendlyfire-btn';
     renderVersusFriendlyFireLabel(b);
     b.addEventListener('click', () => {
       versusConfigState = { ...versusConfigState, friendlyFire: !versusConfigState.friendlyFire };
@@ -2212,11 +2212,11 @@ export function createHud(root: HTMLElement): Hud {
 
   // Mode/Players/Stock are FIXED-size option sets (unlike Map/who's-playing, they
   // never change count), so -- like the paint shop's swatch/skin/accent rows -- their
-  // buttons are built ONCE here and only ever toggle a `--selected` class afterward.
+  // buttons are built ONCE here and only ever toggle `ui-selectable--on` afterward.
   for (const opt of VERSUS_MODE_OPTIONS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-versus-option-btn';
+    b.className = 'ui-btn ui-selectable hud-versus-option-btn';
     b.dataset.mode = opt.id;
     b.textContent = opt.label;
     b.addEventListener('click', () => {
@@ -2233,7 +2233,7 @@ export function createHud(root: HTMLElement): Hud {
   for (const players of VERSUS_PLAYERS_OPTIONS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-versus-option-btn';
+    b.className = 'ui-btn ui-selectable hud-versus-option-btn';
     b.dataset.players = String(players);
     b.textContent = String(players);
     b.addEventListener('click', () => {
@@ -2250,7 +2250,7 @@ export function createHud(root: HTMLElement): Hud {
   for (const stock of VERSUS_STOCK_OPTIONS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'hud-versus-option-btn';
+    b.className = 'ui-btn ui-selectable hud-versus-option-btn';
     b.dataset.stock = String(stock);
     b.textContent = String(stock);
     b.addEventListener('click', () => {
@@ -2598,7 +2598,7 @@ export function createHud(root: HTMLElement): Hud {
       for (let i = 0; i < total; i++) {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'hud-level-btn';
+        btn.className = 'ui-btn hud-level-btn';
         btn.textContent = String(i + 1);
         if (i + 1 > unlocked) {
           // Disabled, not merely grey: a locked level must be unclickable, and a
