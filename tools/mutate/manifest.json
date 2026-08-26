@@ -1218,5 +1218,67 @@
       "tools/capture/prerequisites.test.ts"
     ],
     "why": "The change issue #353's third acceptance criterion asks to be named: `loadPlaywright` stops naming the pinned version in its remediation. The message then tells a contributor to run `npm i --no-save playwright` unpinned, npm resolves whatever is latest, and the next capture run trips loadPlaywright's OWN version check a few lines up (`Playwright <x> is installed, but CI and capture require <CI_PLAYWRIGHT_VERSION>`) -- guidance that sends the reader in a circle instead of to the install CI uses. Killed by the rejection assertion in `ties capture documentation and errors to the canonical CI Playwright pin`, 1 of the file's 4 cases: that case's earlier assertions read ci.yml and README.md and still pass, and the other 3 cases never inspect the remediation text. The `\\n` in `find`/`replace` is two literal bytes inside a template literal, not a newline. First two manifest entries outside `src/`: the harness's own `vitest related` preflight relates tools/capture/prerequisites.test.ts to this file, so a tools/ target is measured exactly like a src/ one. Measured in both worlds this repo actually runs in, because Playwright is deliberately not a declared dependency: with node_modules/playwright{,-core} present (the documented local capture setup) and with them absent (CI's `verify` job, which installs Playwright only in the separate `visual` job). `playwright@<version>` appears nowhere else in the aggregate message in either world, so deleting it here is what makes the case fail rather than an environment fact -- which is the whole point of #353, where the same case passed or failed on whether Playwright happened to resolve."
+  },
+  {
+    "id": "ui-btn-sm-size-flattened-into-the-slab",
+    "file": "src/game/hud.css",
+    "find": ".ui-btn--sm {\n  border-radius: var(--hud-radius-sm);\n  padding: 6px 14px;\n}",
+    "replace": ".ui-btn--sm {\n  border-radius: var(--hud-radius-md);\n  padding: 8px 20px;\n}",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "why": "The whole reason `.ui-btn` has size MODIFIERS rather than a size: the pause panel's Mute and the three toggles beside it are a smaller control than the slab a panel stacks, and flattening the two into one size is the tidy-looking edit that erases the distinction. Every button still looks themed under this mutation -- `.ui-btn` supplies fill, text colour and cursor either way -- so `never lets a button fall through to browser default styling` stays green and only `keeps each size of quiet control to ONE size` notices, because that case measures each size group against the OTHER group as well as against itself. Without its final `not.toBe`, the two loops would both pass on a stylesheet that gave every button in the HUD one shape.",
+    "expectFailures": 1
+  },
+  {
+    "id": "ui-level-button-drops-the-primitive-base",
+    "file": "src/game/hud.ts",
+    "find": "btn.className = 'ui-btn hud-level-btn';",
+    "replace": "btn.className = 'hud-level-btn';",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "why": "A button built without the primitive -- the shape of the defect #321 exists to remove, where `.hud-achievements-open` shipped with no base rule and rendered as a stock grey browser button beside three themed siblings. Two cases catch it and they catch DIFFERENT things: `never lets a button fall through to browser default styling` sees the rendering (the level buttons keep their own size rule, so they lose only fill, text colour and cursor), and `groups every button under a primitive` sees the omission itself, which is the property that still holds for a control whose own rule happens to cover everything. The second is what replaces `a new button joins by adding its selector to the group` now that the group is gone.",
+    "expectFailures": 2
+  },
+  {
+    "id": "ui-selected-state-drawn-but-not-announced",
+    "file": "src/game/ui.ts",
+    "find": "  el.setAttribute('aria-pressed', String(selected));",
+    "replace": "  el.setAttribute('data-selected', String(selected));",
+    "expect": "killed",
+    "tests": [
+      "src/game/ui.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "why": "Exactly the state the HUD was in before #321: the selection ring is drawn and nothing is announced, so which choice is current is carried by a white border and by nothing else. `setSelected` exists to make the two channels inseparable, and this mutation separates them again by writing the state to a `data-` attribute instead: the value is still recorded, still moves with the choice, and is still invisible to every assistive technology. The class toggle is untouched, so every visual assertion in the suite stays green. Killed by three unit cases in ui.test.ts and by the two HUD sweeps over all 50 choice controls.",
+    "expectFailures": 5
+  },
+  {
+    "id": "ui-disabled-reason-emptied-rather-than-removed",
+    "file": "src/game/ui.ts",
+    "find": "  if (reasonId === null) el.removeAttribute('aria-describedby');",
+    "replace": "  if (reasonId === null) el.setAttribute('aria-describedby', '');",
+    "expect": "killed",
+    "tests": [
+      "src/game/ui.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all.",
+    "expectFailures": 3
+  },
+  {
+    "id": "ui-versus-preview-reason-left-on-the-real-rows",
+    "file": "src/game/hud.ts",
+    "find": "        describeDisabledReason(btn, interactive ? null : 'hud-versus-assignment-note');",
+    "replace": "        describeDisabledReason(btn, 'hud-versus-assignment-note');",
+    "expect": "killed",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "why": "`renderControllerRowsInto` builds BOTH the standalone Controllers panel's real reassignment rows and the versus pane's who's-playing preview, and only the preview is disabled. Pointing every row at \"Assignment applies after Start.\" tells a screen reader that a button which reassigns a slot right now will not take effect until Start -- an explanation that is not merely redundant but false, and attached to a note that is itself hidden in that state. The half of the assertion that catches it is the one that reads the Controllers panel and expects NO reference; a test that only checked the preview gains it would stay green.",
+    "expectFailures": 1
   }
 ]

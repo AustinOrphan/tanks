@@ -375,6 +375,17 @@ describe('hud.css is syntactically whole', () => {
     // the failure mode above. Population: the selectors whose absence disables a
     // shipped feature or a dev overlay.
     for (const sel of [
+      // The primitives (issue #321). Every quiet control, every primary action and every
+      // choice control in the HUD now resolves its base through these, so deleting one
+      // does not disable one feature -- it unstyles a class of control across every
+      // panel at once. `.ui-selectable--on` in particular is the ONLY current-choice
+      // signal for the hull swatches, the accent swatches, the skins, the controller
+      // sources and the versus options; four separate rules said so before it existed.
+      '.ui-btn', '.ui-btn--slab', '.ui-btn--sm', '.ui-btn--primary', '.ui-btn--danger',
+      '.ui-selectable', '.ui-selectable--on',
+      // The disabled-reason line. Without it the two reasons in the HUD render at body
+      // size and full opacity, reading as content rather than as an aside.
+      '.ui-hint',
       // losing a life -- '--hud-damage-color' is the variable hud.ts's signalPlayerDeath
       // tints (death-pulse issue #200); without it the vignette is stuck on whatever
       // the default red resolves to no matter what colour is passed in.
@@ -398,9 +409,12 @@ describe('hud.css is syntactically whole', () => {
       '.hud-aimstick', '.hud-aimstick--hidden',
       // pause + menu: without the hidden rules, Quit/settings/levels show on EVERY panel
       '.hud-quit', '.hud-quit--hidden', '.hud-panel-settings', '.hud-panel-settings--hidden',
-      '.hud-panel-mute', '.hud-panel-volume', '.hud-scheme-toggle', '.hud-firemode-toggle',
-      '.hud-haptics-toggle', // the settings row's controls
+      '.hud-panel-volume', // the settings row's slider; its buttons are `.ui-btn--sm`
+                           // now and have no rule of their own to be present
       '.hud-levels', '.hud-level-btn', '.hud-level-btn--locked', // level select buttons
+      // ...and the reason a locked one is locked: without the hidden rule it explains a
+      // state the player has already left
+      '.hud-levels-note--hidden',
       // the level select PANEL: without the hidden rules it covers everything from load,
       // and without the open button's hidden rule it shows outside the title screen
       '.hud-levelselect', '.hud-levelselect--hidden', '.hud-levelselect-open--hidden',
@@ -416,9 +430,10 @@ describe('hud.css is syntactically whole', () => {
       // versus's kill/death tally (n-player arc PR 4): same rationale as coop's line
       // just above -- without the hidden rule it shows on every panel, not just win/lose
       '.hud-versus-results', '.hud-versus-results--hidden',
-      // paint shop: hidden rules + the selection ring, the pane's only current-colour signal
+      // paint shop: hidden rules, and the swatch's own size/shape (its ring is the
+      // shared `.ui-selectable` above)
       '.hud-customize', '.hud-customize--hidden', '.hud-customize-open--hidden',
-      '.hud-swatch', '.hud-swatch--selected',
+      '.hud-swatch',
       // the live preview's fixed size -- without it the canvas falls back to the HTML
       // default replaced-element size (300x150), and the section label styling
       '.hud-preview', '.hud-customize-section',
@@ -429,26 +444,25 @@ describe('hud.css is syntactically whole', () => {
       // the accent row's own flex/gap -- without it the swatches touch edge-to-edge,
       // unlike every other row in the pane (.hud-swatches, .hud-skins)
       '.hud-accents',
-      // skins: the border is the pane's only current-skin signal
-      '.hud-skin', '.hud-skin--selected',
+      // skins: the button's own padding; base and ring both come from the primitives
+      '.hud-skin',
       // achievements: hidden rules, the earned/locked contrast, and the toast rail
       '.hud-achievements', '.hud-achievements--hidden', '.hud-achievements-open--hidden',
       '.hud-achievement', '.hud-achievement--earned', '.hud-toasts', '.hud-toast',
       // controller assignment panel (docs/superpowers/plans/2026-08-17-controller-
       // assignment.md): hidden rules, the row layout, the disconnected dimming, and the
-      // per-candidate selection ring, the row's only current-source signal
+      // per-candidate button's own size
       '.hud-controllers', '.hud-controllers--hidden', '.hud-controllers-open--hidden',
       '.hud-controller-rows', '.hud-controller-row', '.hud-controller-row-label',
       '.hud-controller-row-current', '.hud-controller-row-current--disconnected',
-      '.hud-controller-source-btn', '.hud-controller-source-btn--selected',
+      '.hud-controller-source-btn',
       // versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
-      // design.md): hidden rules, the row/option-button layout, the selection ring,
-      // and the friendly-fire toggle -- the who's-playing preview reuses the
+      // design.md): hidden rules, the row/option-button layout, and the friendly-fire
+      // toggle -- the who's-playing preview reuses the
       // controller-assignment selectors just above rather than duplicating them.
       '.hud-versus-open--hidden', '.hud-versus-setup', '.hud-versus-setup--hidden',
       '.hud-versus-row', '.hud-versus-mode-row', '.hud-versus-players-row',
       '.hud-versus-map-row', '.hud-versus-stock-row', '.hud-versus-option-btn',
-      '.hud-versus-option-btn--selected', '.hud-versus-friendlyfire-btn',
       '.hud-versus-assignment-note', '.hud-versus-assignment-note--hidden',
       // issue #280: the who's-playing preview's own side-by-side override of the
       // controller-assignment selectors just above -- without these two, the preview
@@ -593,6 +607,70 @@ describe('hud.css is syntactically whole', () => {
     for (const cls of back) expect(parseFloat(styleOf(cls).marginTop), cls).toBe(0);
 
     document.body.innerHTML = '';
+  });
+
+  it('groups every button under a primitive, or names it as a deliberate exception', () => {
+    // What replaces "a new button joins by adding its selector to the group". The guard
+    // above asks whether a button LOOKS themed; this one asks whether it is themed from
+    // the shared source, which is the property that stops the next sibling drifting.
+    //
+    // The exceptions are the four control kinds that are genuinely not the quiet button:
+    // each has a fill and a shape of its own that `.ui-btn` would hand it only to be
+    // overridden. Listing them here is the point -- a fifth one has to be argued for in
+    // this list rather than appearing by omission.
+    const { root, dispose } = mountEveryButton();
+    const EXCEPTIONS = [
+      'hud-swatch', // the colour circles: their background IS the colour they offer
+      'hud-rotate-btn', // the preview's icon buttons: outlined, 34px, their own fill
+      'hud-mute', // the topbar mute: a yellow state chip, not a quiet control
+      'hud-pause-btn', 'hud-fire-btn', 'hud-mine-btn', // the on-screen driving controls
+    ];
+    const strays = Array.from(root.querySelectorAll('button'))
+      .filter((b) => !b.classList.contains('ui-btn'))
+      .filter((b) => !EXCEPTIONS.some((cls) => b.classList.contains(cls)))
+      .map((b) => Array.from(b.classList).join('.'));
+    expect(strays).toEqual([]);
+
+    // ...and the exception list is not allowed to go stale in the other direction: a
+    // class listed here that no longer names a button in the fixture is a name nobody
+    // has to justify any more, and should leave the list.
+    const unused = EXCEPTIONS.filter((cls) => root.querySelector(`button.${cls}`) === null);
+    expect(unused, 'exception named for a button the HUD no longer renders').toEqual([]);
+
+    dispose();
+  });
+
+  it('keeps each size of quiet control to ONE size, which is what the modifier is for', () => {
+    // `.ui-btn` alone makes a button look themed, so the guard above stays green if a
+    // control loses `--slab` or `--sm` -- only its padding and corner radius change, and
+    // both of those come from the modifier. This measures the group against ITSELF
+    // rather than against a number, so retuning a size is free and losing one is not.
+    const { root, dispose } = mountEveryButton();
+    const shape = (sel: string): string => {
+      const el = root.querySelector(sel);
+      expect(el, `${sel} is not in the fixture`).not.toBeNull();
+      return `${resolved(el!, 'padding')} / ${resolved(el!, 'borderRadius')}`;
+    };
+    // The slab a panel stacks, and the small control a row lays out in a line.
+    const slab = ['.hud-quit', '.hud-stats-open', '.hud-achievements-open',
+      '.hud-customize-open', '.hud-levelselect-open', '.hud-controllers-open',
+      '.hud-versus-open', '.hud-campaign-open', '.hud-stats-back', '.hud-customize-back',
+      '.hud-achievements-back', '.hud-levelselect-back', '.hud-controllers-back',
+      '.hud-versus-back', '.hud-reset-stats', '.hud-reset-progress'];
+    const small = ['.hud-panel-mute', '.hud-scheme-toggle', '.hud-firemode-toggle',
+      '.hud-haptics-toggle', '.hud-versus-friendlyfire-btn'];
+    for (const sel of slab) expect(shape(sel), sel).toBe(shape(slab[0]));
+    for (const sel of small) expect(shape(sel), sel).toBe(shape(small[0]));
+    // Without this the two loops above would both pass on a stylesheet that gave every
+    // button in the HUD one shape, which is the opposite of what the modifiers exist for.
+    expect(shape(slab[0])).not.toBe(shape(small[0]));
+
+    // The primary action is its own shape again, shared by all four of its buttons.
+    const primary = ['.hud-action', '.hud-continue', '.hud-new-game', '.hud-versus-start'];
+    for (const sel of primary) expect(shape(sel), sel).toBe(shape(primary[0]));
+    expect(shape(primary[0])).not.toBe(shape(slab[0]));
+
+    dispose();
   });
 
   it('lets the settings row wrap, since five controls no longer fit a phone width', () => {

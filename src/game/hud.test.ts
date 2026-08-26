@@ -1311,7 +1311,7 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
     // 3 fixed (Keyboard/Bot/None) + 2 detected pads = 5.
     expect(btns.map((b) => b.textContent)).toEqual(['Keyboard', 'Bot', 'None', 'Pad A (index 0)', 'Pad B (index 1)']);
     // Only the slot's CURRENT source (gamepad padIndex 1) carries the selection ring.
-    expect(btns.map((b) => b.classList.contains('hud-controller-source-btn--selected')))
+    expect(btns.map((b) => b.classList.contains('ui-selectable--on')))
       .toEqual([false, false, false, false, true]);
   });
 
@@ -1496,7 +1496,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.showVersusSetup(true);
-    expect(stockBtn(root, VERSUS_STOCK).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(stockBtn(root, VERSUS_STOCK).classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it('friendly fire is GENUINELY ABSENT from the DOM under FFA, present under Teams', () => {
@@ -1557,10 +1557,10 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
       friendlyFire: true,
     };
     h.showVersusSetup(true, initial);
-    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(mapBtn(root, initial.arenaId).classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(stockBtn(root, 2).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
+    expect(playersBtn(root, 4).classList.contains('ui-selectable--on')).toBe(true);
+    expect(mapBtn(root, initial.arenaId).classList.contains('ui-selectable--on')).toBe(true);
+    expect(stockBtn(root, 2).classList.contains('ui-selectable--on')).toBe(true);
     expect(friendlyFireBtn(root)).not.toBeNull();
     expect((friendlyFireBtn(root) as HTMLButtonElement).textContent).toBe('Friendly fire: On');
   });
@@ -1576,8 +1576,8 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.setState('playing'); // setState's close-all discipline hides the pane
     h.setState('main-menu');
     h.showVersusSetup(true); // no `initial` argument at all
-    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(stockBtn(root, 5).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
+    expect(stockBtn(root, 5).classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it("passing `null` -- Task 5's own `deps.initialVersusConfig ?? null` for \"nothing retained yet\" -- also keeps the pane's persisted selections, same as omitting the argument", () => {
@@ -1592,8 +1592,8 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.setState('playing');
     h.setState('main-menu');
     h.showVersusSetup(true, null);
-    expect(modeBtn(root, 'teams').classList.contains('hud-versus-option-btn--selected')).toBe(true);
-    expect(playersBtn(root, 4).classList.contains('hud-versus-option-btn--selected')).toBe(true);
+    expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
+    expect(playersBtn(root, 4).classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it("who's-playing renders the REAL session assignment, interactively, when the pane's player count matches it", () => {
@@ -2303,7 +2303,7 @@ describe('hud: the paint shop', () => {
     openBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(pane(root).classList.contains('hud-customize--hidden')).toBe(false);
     expect(swatches(root).length).toBeGreaterThanOrEqual(6);
-    const selected = swatches(root).filter((b) => b.classList.contains('hud-swatch--selected'));
+    const selected = swatches(root).filter((b) => b.classList.contains('ui-selectable--on'));
     expect(selected).toHaveLength(1);
     expect(selected[0].dataset.hull).toBe('red');
   });
@@ -2318,7 +2318,7 @@ describe('hud: the paint shop', () => {
     purple.dispatchEvent(new MouseEvent('click'));
     expect(picks).toEqual(['purple']);
     h.setHullColor('purple'); // the loop echoes the accepted pick back
-    expect(purple.classList.contains('hud-swatch--selected')).toBe(true);
+    expect(purple.classList.contains('ui-selectable--on')).toBe(true);
   });
 
   it('offers one skin button per SKINS entry, current one marked, and reports picks', () => {
@@ -2332,7 +2332,7 @@ describe('hud: the paint shop', () => {
     // One button per entry in the REAL skin list, labelled from it.
     expect(skins().map((b) => b.dataset.skin)).toEqual(SKINS.map((sk) => sk.id));
     expect(skins().map((b) => b.textContent)).toEqual(SKINS.map((sk) => sk.label));
-    const selected = skins().filter((b) => b.classList.contains('hud-skin--selected'));
+    const selected = skins().filter((b) => b.classList.contains('ui-selectable--on'));
     expect(selected).toHaveLength(1);
     expect(selected[0].dataset.skin).toBe('camo');
 
@@ -2340,8 +2340,8 @@ describe('hud: the paint shop', () => {
     checker.dispatchEvent(new MouseEvent('click'));
     expect(picks).toEqual(['checker']);
     h.setSkin('checker'); // the loop echoes the accepted pick back
-    expect(checker.classList.contains('hud-skin--selected')).toBe(true);
-    expect(skins().filter((b) => b.classList.contains('hud-skin--selected'))).toHaveLength(1);
+    expect(checker.classList.contains('ui-selectable--on')).toBe(true);
+    expect(skins().filter((b) => b.classList.contains('ui-selectable--on'))).toHaveLength(1);
   });
 
   it('offers one accent swatch per ACCENTS entry, current one marked, and reports picks', () => {
@@ -2356,7 +2356,7 @@ describe('hud: the paint shop', () => {
       ACCENTS.map((a) => a.id),
     );
     const selected = accentSwatches(root).filter((b) =>
-      b.classList.contains('hud-swatch--selected'),
+      b.classList.contains('ui-selectable--on'),
     );
     expect(selected).toHaveLength(1);
     expect(selected[0].dataset.accent).toBe('black');
@@ -2365,9 +2365,9 @@ describe('hud: the paint shop', () => {
     gold.dispatchEvent(new MouseEvent('click'));
     expect(picks).toEqual(['gold']);
     h.setAccentColor('gold'); // the loop echoes the accepted pick back
-    expect(gold.classList.contains('hud-swatch--selected')).toBe(true);
+    expect(gold.classList.contains('ui-selectable--on')).toBe(true);
     expect(
-      accentSwatches(root).filter((b) => b.classList.contains('hud-swatch--selected')),
+      accentSwatches(root).filter((b) => b.classList.contains('ui-selectable--on')),
     ).toHaveLength(1);
   });
 
@@ -3483,3 +3483,125 @@ describe('hud: relaunch target -- the title/outcome affordance policy', () => {
   });
 });
 
+
+describe('the UI kit contracts, swept across every control that uses them (issue #321)', () => {
+  function mountEveryChoice(): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const h = createHud(root);
+    h.setLevelSelect(2, 4);
+    h.setBotAssignmentAllowed(true);
+    h.setDetectedPads([{ padIndex: 1, id: 'Test Pad' }]);
+    h.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 }]);
+    // The paint shop's three rows render their selection when the game TELLS the HUD
+    // what is stored -- `setHullColor`/`setSkin`/`setAccentColor`, the same calls
+    // `loop.ts` makes at boot -- not at construction. A freshly built HUD shows no ring
+    // on them and, equally, announces no pressed state; that symmetry is the point, and
+    // driving the setters here is what puts those 18 controls inside the sweep at all
+    // rather than leaving them permanently unselected and permanently unannounced.
+    h.setHullColor((root.querySelector('.hud-swatch[data-hull]') as HTMLElement).dataset.hull as never);
+    h.setSkin((root.querySelector('.hud-skin') as HTMLElement).dataset.skin as never);
+    h.setAccentColor((root.querySelector('.hud-swatch[data-accent]') as HTMLElement).dataset.accent as never);
+    return { hud: h, root };
+  }
+
+  const selectables = (root: HTMLElement): HTMLButtonElement[] =>
+    Array.from(root.querySelectorAll('button.ui-selectable'));
+
+  it('announces the current choice on EVERY choice control, not only draws it', () => {
+    // Before `setSelected`, the hull swatches, accent swatches, skins, controller
+    // sources and versus options each toggled a class of their own and told assistive
+    // technology nothing: the current choice was a white border and nothing else.
+    const { root } = mountEveryChoice();
+    const btns = selectables(root);
+    // Exactly, not a lower bound -- this is the sweep's denominator, and it is measured
+    // against THIS fixture rather than derived: 11 swatches in the paint shop (PALETTE 6
+    // + ACCENTS 5, which share `.hud-swatch`) + 7 skins (SKINS) + 8 in the Controllers
+    // panel (2 slots x [Keyboard/Bot/None + 1 detected pad]) + 24 in the versus pane
+    // (16 option buttons -- Mode 2, Players 3, Map 6, Stock 5 -- and its who's-playing
+    // preview's own 8, the same 2 x 4 arithmetic as the panel). A different slot, pad or
+    // player count pins a different number; the number moving is the prompt to check the
+    // new row is inside the sweep rather than beside it.
+    expect(btns.length).toBe(11 + 7 + 8 + 24);
+    const missing = btns
+      .filter((b) => !b.hasAttribute('aria-pressed'))
+      .map((b) => Array.from(b.classList).join('.'));
+    expect(missing, 'choice controls with no announced state').toEqual([]);
+    // ...and the two channels agree, control for control. A helper that wrote the
+    // attribute once at build time and then only moved the class would pass the sweep
+    // above and fail here.
+    const disagree = btns
+      .filter((b) => (b.getAttribute('aria-pressed') === 'true')
+        !== b.classList.contains('ui-selectable--on'))
+      .map((b) => Array.from(b.classList).join('.'));
+    expect(disagree, 'the ring and the announced state disagree').toEqual([]);
+    // Not vacuous: something IS selected in this fixture, so the agreement above is not
+    // "every control is false" agreeing with "no control has the class".
+    expect(btns.filter((b) => b.getAttribute('aria-pressed') === 'true').length)
+      .toBeGreaterThan(0);
+  });
+
+  it('moves the announced state with the choice, not only on the first render', () => {
+    const { hud: h, root } = mountEveryChoice();
+    const skins = () => Array.from(root.querySelectorAll('.hud-skin')) as HTMLButtonElement[];
+    const pressed = () => skins().map((b) => b.getAttribute('aria-pressed'));
+    const before = pressed();
+    const other = skins().find((b) => b.getAttribute('aria-pressed') !== 'true')!;
+    h.setSkin(other.dataset.skin as never);
+    expect(pressed()).not.toEqual(before);
+    expect(other.getAttribute('aria-pressed')).toBe('true');
+    expect(pressed().filter((v) => v === 'true')).toHaveLength(1);
+  });
+
+  it('associates a locked level with the line that says why it is locked', () => {
+    const { hud: h, root } = mountEveryChoice();
+    const note = root.querySelector('#hud-levels-note') as HTMLElement;
+    expect(note, 'the level picker has no reason line').not.toBeNull();
+    expect(note.textContent).toContain('unlock');
+    expect(note.classList.contains('hud-levels-note--hidden')).toBe(false);
+
+    const btns = Array.from(root.querySelectorAll('.hud-level-btn')) as HTMLButtonElement[];
+    // setLevelSelect(2, 4): levels 1-2 open, 3-4 locked.
+    expect(btns.map((b) => b.disabled)).toEqual([false, false, true, true]);
+    expect(btns.map((b) => b.getAttribute('aria-describedby')))
+      .toEqual([null, null, 'hud-levels-note', 'hud-levels-note']);
+
+    // Nothing locked: the reason goes away rather than explaining a state the player is
+    // no longer in, and no button is left pointing at a line that is not on screen.
+    h.setLevelSelect(4, 4);
+    expect(note.classList.contains('hud-levels-note--hidden')).toBe(true);
+    const after = Array.from(root.querySelectorAll('.hud-level-btn')) as HTMLButtonElement[];
+    expect(after.map((b) => b.getAttribute('aria-describedby'))).toEqual([null, null, null, null]);
+  });
+
+  it("associates the versus pane's preview buttons with the note, and the real rows with nothing", () => {
+    const { root } = mountEveryChoice();
+    const described = (sel: string): (string | null)[] =>
+      Array.from(root.querySelectorAll(`${sel} .hud-controller-source-btn`))
+        .map((b) => b.getAttribute('aria-describedby'));
+    // The standalone Controllers panel reassigns for real: its buttons need no excuse.
+    expect(new Set(described('.hud-controllers'))).toEqual(new Set([null]));
+    expect(described('.hud-controllers').length).toBeGreaterThan(0);
+
+    // The versus pane's who's-playing PREVIEW is interactive while the pane's player
+    // count matches the session's (2 here, from setControllers above), so it is NOT
+    // described either -- the note beside it is hidden in that state too.
+    const noteEl = root.querySelector('#hud-versus-assignment-note') as HTMLElement;
+    expect(noteEl, 'the versus pane has no assignment note').not.toBeNull();
+    expect(noteEl.classList.contains('hud-versus-assignment-note--hidden')).toBe(true);
+    expect(new Set(described('.hud-versus-setup'))).toEqual(new Set([null]));
+
+    // Move the pane off the session's player count and the same rows become a preview:
+    // disabled, and now pointing at the note that has just appeared with them.
+    (root.querySelector('.hud-versus-players-row [data-players="4"]') as HTMLButtonElement)
+      .click();
+    expect(noteEl.classList.contains('hud-versus-assignment-note--hidden')).toBe(false);
+    const preview = Array.from(
+      root.querySelectorAll('.hud-versus-setup .hud-controller-source-btn'),
+    ) as HTMLButtonElement[];
+    expect(preview.length).toBeGreaterThan(0);
+    expect(preview.every((b) => b.disabled), 'a preview button is still clickable').toBe(true);
+    expect(new Set(preview.map((b) => b.getAttribute('aria-describedby'))))
+      .toEqual(new Set(['hud-versus-assignment-note']));
+  });
+});

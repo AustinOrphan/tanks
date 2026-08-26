@@ -72,9 +72,148 @@
   --hud-weight-normal: 700;
   --hud-weight-strong: 800;
 
+  /* The primary action's drop shadow, which the slab and its pressed state both draw.
+   * The green and its text colour beside it stay literals: after the extraction below
+   * each is written exactly once, in `.ui-btn--primary`, so naming them would add a
+   * hop without removing a repetition -- the same test #354 applied to every other
+   * candidate. That one rule is also the single site a light or forced-colors theme
+   * (#351) has to touch. */
+  --hud-primary-shadow: #2f8f45;
+
   /* Motion. The two durations this file already animates at. */
   --hud-duration-fast: 220ms;
   --hud-duration-slow: 700ms;
+}
+
+/* ---- Primitives (issue #321) -----------------------------------------------------
+ *
+ * The rules this stylesheet had written out more than once, hoisted into one place and
+ * named for the role they play rather than for the control that happened to need them
+ * first. Composing a new screen means adding these classes, not copying a sibling's
+ * rule.
+ *
+ * The defect that motivates it is on record rather than hypothetical:
+ * `.hud-achievements-open` shipped with no base rule at all -- a stock grey browser
+ * button beside three themed siblings, for as long as the feature existed -- because
+ * every sibling carried its own copy of the same block and one copy was simply missing.
+ * Grouping the selectors fixed that instance; a primitive removes the shape of it.
+ *
+ * A primitive holds ONLY what every one of its consumers already had in common. Anything
+ * that differed stays on the consumer, which is what lets this commit claim to move no
+ * pixel -- see the PR for the element-by-element computed-style comparison that proves
+ * it. `.ui-btn` in particular is deliberately SIZELESS: `.hud-level-btn` is a fixed
+ * 44x44 box with no padding of its own, so a padding here would inflate it.
+ *
+ * The 44 CSS px touch floor is NOT imposed here, and the omission is deliberate. Ruling
+ * on #321: the floor governs the new primitives, while raising an existing control
+ * relayouts the pane around it -- a visual change that owes its own evidence, which is
+ * exactly what this commit is arranged not to owe. `.ui-btn` is therefore sizeless and
+ * every control keeps the size it had. Exactly two controls declare a height that meets
+ * the floor -- `.hud-level-btn` and `.hud-swatch`, both `var(--hud-control-min)`; every
+ * other control here is sized by padding and its inherited font size, and whether that
+ * clears 44 px is a rendered measurement rather than something this file states.
+ * Establishing it is #290's control-scale work, and the rotate cluster is #352.
+ * A test cannot stand in for that here: jsdom does no layout, so the rendered height of a
+ * padded button is not measurable in this suite at all -- it needs the real browser those
+ * issues already require. */
+
+/* The quiet control: the HUD's default button surface, and what eight separate rules
+ * declared before it had a name. */
+.ui-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--hud-radius-md);
+  font-weight: var(--hud-weight-normal);
+  background: var(--hud-quiet-fill);
+  color: var(--hud-text);
+}
+
+/* Selectable: a control that can be chosen, carrying the transparent ring that
+ * `.ui-selectable--on` colours in. The ring is the ONLY visual signal of the current
+ * choice -- without it every swatch, skin, source and option looks identical and the
+ * pane reads as broken -- and four rules each declared it separately before this, each
+ * with a comment saying "same contract as" the last one. One declaration is what stops
+ * a fifth choice control being given a different selected treatment by accident.
+ *
+ * Colour alone is not a sufficient selected cue; making the signal redundant in the
+ * visual layer is #351's forced-colors work.
+ *
+ * DELIBERATELY NOT TOKENISED, and this is load-bearing rather than a style choice.
+ * jsdom drops a declaration whose value contains `var()` for every property in the
+ * `border` family it parses as a shorthand -- measured: `border: var(--w) solid
+ * transparent`, `border-color: var(--c)` and `border-width: var(--w)` all compute to
+ * the INITIAL border, while the longhand `border-top-color: var(--c)` survives. A token
+ * here would therefore make every jsdom guard over the selection ring vacuous, which is
+ * the exact failure #354's `resolved()` exists to prevent. Both values are written once,
+ * so a name would buy nothing to pay for that with. (`outline: var() solid var()` in the
+ * focus rules hits the same jsdom hole; those guards read the stylesheet TEXT and say so,
+ * for an unrelated reason -- jsdom does not recompute dynamic pseudo-classes.) */
+.ui-selectable {
+  border: 2px solid transparent;
+}
+
+.ui-selectable--on {
+  border-color: #ffffff;
+}
+
+/* Disabled-reason text: the line that says WHY a control the player could resolve is
+ * unavailable. Two consumers today -- the versus pane's "Assignment applies after Start."
+ * and the level picker's "Clear a level to unlock the next." -- and `ui.ts`'s
+ * `describeDisabledReason` is what associates one of these with the controls it explains,
+ * so the reason reaches a screen reader and not only a sighted player. */
+.ui-hint {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+/* The two sizes the quiet control already came in.
+ *
+ * `--slab` is what a panel stacks under a heading: Quit, the menu's pane buttons, every
+ * Back button, and the two destructive resets.
+ *
+ * `--sm` is the smaller control a row lays out in a line -- the pause panel's Mute, the
+ * aim-scheme, fire-mode and haptics toggles beside it, and the versus pane's
+ * friendly-fire toggle, which is the same kind of thing: a button that cycles between
+ * states. That toggle is built only under Teams (renderVersusFriendlyFireRow in hud.ts),
+ * so unlike every hidden-class pair in this file it has no `--hidden` modifier -- under
+ * FFA the row is genuinely absent from the DOM rather than hidden.
+ *
+ * `hud.css.test.ts` measures each group's members against each other rather than against
+ * a number, so a control that loses its size modifier is a red suite even though the
+ * base `.ui-btn` still makes it look themed. */
+.ui-btn--slab {
+  padding: 8px 20px;
+}
+
+.ui-btn--sm {
+  border-radius: var(--hud-radius-sm);
+  padding: 6px 14px;
+}
+
+/* Primary: one per immediate decision region (spec section 6). The raised slab with the
+ * green fill, and the press that pushes it into its own shadow rather than moving the
+ * layout around it. */
+.ui-btn--primary {
+  border-radius: var(--hud-radius-lg);
+  padding: 12px 28px;
+  font-size: 20px;
+  font-weight: var(--hud-weight-strong);
+  background: #4fd06a;
+  color: #06340f;
+  box-shadow: 0 6px 0 var(--hud-primary-shadow);
+}
+
+.ui-btn--primary:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 var(--hud-primary-shadow);
+}
+
+/* Destructive: the quiet slab, re-tinted. Reserved for replacing or resetting stored
+ * data, and always paired with the arm/confirm step `.hud-danger--armed` draws. */
+.ui-btn--danger {
+  background: rgba(255, 90, 90, 0.18);
+  color: var(--hud-text-danger);
 }
 
 .hud {
@@ -641,30 +780,6 @@
  * button offered (New Game alone with no progress, or both together once there is
  * some) and a player should not be able to tell from the styling which is "more
  * primary". */
-.hud-action,
-.hud-continue,
-.hud-new-game,
-.hud-versus-start {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-lg);
-  padding: 12px 28px;
-  font-size: 20px;
-  font-weight: var(--hud-weight-strong);
-  background: #4fd06a;
-  color: #06340f;
-  box-shadow: 0 6px 0 #2f8f45;
-}
-
-.hud-action:active,
-.hud-continue:active,
-.hud-new-game:active,
-.hud-versus-start:active {
-  transform: translateY(3px);
-  box-shadow: 0 3px 0 #2f8f45;
-}
-
 /* Without these, the retired single action button and its two replacements would all
  * three show at once at the title screen -- setState toggles them, this is what makes
  * the toggle visible. */
@@ -674,42 +789,17 @@
   display: none;
 }
 
-/* ---- The quiet button theme ----------------------------------------------------- */
+/* ---- What the quiet buttons do NOT share ---------------------------------------- */
 
-/* Every secondary button in the HUD -- the menu's five panes, Quit, and the five
- * Back buttons -- is the same quiet slab, deliberately less loud than `.hud-action`.
+/* Every secondary button here -- the menu's pane buttons, Quit, and the five Back
+ * buttons -- is `.ui-btn .ui-btn--slab`, deliberately less loud than the primary action.
+ * The base rule that used to live at this spot is the primitive now, and what is left
+ * below is only what these buttons do not share with every other quiet control.
  *
- * Grouped rather than repeated, because the repetition is what hid a real defect:
- * these were seven near-identical blocks, and `.hud-achievements-open` simply had no
- * base rule among them. It fell through to browser default button styling on the main
- * menu, beside three siblings that were themed, for as long as the feature existed.
- * Adding an eighth copy would have left the next one just as easy to miss.
- *
- * A new button joins by adding its selector here. `hud.css.test.ts` mounts the HUD and
- * fails if any button it renders has no base rule, so forgetting is a red suite. */
-.hud-quit,
-.hud-stats-open,
-.hud-achievements-open,
-.hud-customize-open,
-.hud-levelselect-open,
-.hud-controllers-open,
-.hud-versus-open,
-.hud-campaign-open,
-.hud-stats-back,
-.hud-customize-back,
-.hud-achievements-back,
-.hud-levelselect-back,
-.hud-controllers-back,
-.hud-versus-back {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-md);
-  padding: 8px 20px;
-  font-weight: var(--hud-weight-normal);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
-}
+ * A new button joins by carrying `ui-btn`, not by being added to a selector list, and
+ * `groups every button under a primitive` in hud.css.test.ts fails on one that does not
+ * -- so forgetting is still a red suite, by a guard that now names the omission instead
+ * of inferring it from the rendering. */
 
 /* The panel buttons stack under a heading, so they carry the gap and a fixed size.
  * The Back buttons sit alone at the foot of their pane and take neither. */
@@ -810,17 +900,6 @@
 }
 
 /* The destructive pair: quiet until armed, unmistakable after. */
-.hud-danger {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-md);
-  padding: 8px 20px;
-  font-weight: var(--hud-weight-normal);
-  background: rgba(255, 90, 90, 0.18);
-  color: var(--hud-text-danger);
-}
-
 .hud-danger--armed {
   background: #c03434;
   color: #fff;
@@ -1039,19 +1118,17 @@
   gap: var(--hud-space-4);
 }
 
+/* The colour swatches are NOT `.ui-btn`: each one's background IS the colour it offers,
+ * set inline, and it carries no text -- so the quiet control's fill and text colour
+ * would be handed to them only to be overridden. They do share the selection ring, at
+ * their own thicker width. */
 .hud-swatch {
   pointer-events: auto;
   cursor: pointer;
   width: var(--hud-control-min);
   height: var(--hud-control-min);
   border-radius: 50%;
-  border: 3px solid transparent;
-}
-
-/* The selection ring is the ONLY signal of the current colour; without this rule
- * every swatch looks identical and the pane appears broken. */
-.hud-swatch--selected {
-  border-color: #ffffff;
+  border-width: 3px;
 }
 
 .hud-skins {
@@ -1062,19 +1139,7 @@
 }
 
 .hud-skin {
-  pointer-events: auto;
-  cursor: pointer;
-  border: 2px solid transparent;
-  border-radius: var(--hud-radius-md);
   padding: 8px 16px;
-  font-weight: var(--hud-weight-normal);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
-}
-
-/* Same contract as the swatch ring: the border is the only current-skin signal. */
-.hud-skin--selected {
-  border-color: #ffffff;
 }
 
 .hud-achievements-open--hidden {
@@ -1224,17 +1289,17 @@
   margin-bottom: 4px;
 }
 
+/* Without this the reason line shows under a fully unlocked picker, explaining a state
+ * the player is no longer in. */
+.hud-levels-note--hidden {
+  display: none;
+}
+
 .hud-level-btn {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-md);
   width: var(--hud-control-min);
   height: var(--hud-control-min);
   font-size: 18px;
   font-weight: var(--hud-weight-strong);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
 }
 
 /* Locked levels read as locked, and the disabled attribute makes them unclickable --
@@ -1244,36 +1309,9 @@
   opacity: 0.35;
 }
 
-.hud-panel-mute {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-sm);
-  padding: 6px 14px;
-  font-weight: var(--hud-weight-normal);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
-}
-
 .hud-panel-volume {
   pointer-events: auto;
   width: 140px;
-}
-
-/* The right thumb's aim-scheme toggle, the fire-mode toggle beside it, and the haptics
- * toggle beside that. Themed like .hud-panel-mute -- same row, same kind of control (a
- * button that cycles between states). */
-.hud-scheme-toggle,
-.hud-firemode-toggle,
-.hud-haptics-toggle {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-sm);
-  padding: 6px 14px;
-  font-weight: var(--hud-weight-normal);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
 }
 
 /* ---- Dev: shells in flight (?dev=1&shellCount=1) -------------------------- */
@@ -1570,22 +1608,9 @@
 /* One button per candidate source (Keyboard / Bot / None / one per detected pad
  * index), same "one button per option" convention .hud-level-btn already uses. */
 .hud-controller-source-btn {
-  pointer-events: auto;
-  cursor: pointer;
-  border: 2px solid transparent;
-  border-radius: var(--hud-radius-md);
   padding: 4px 10px;
   margin: 2px;
-  font-weight: var(--hud-weight-normal);
   font-size: 0.85em;
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
-}
-
-/* Same contract as the paint shop's swatch/skin rings: the border is the only
- * current-source signal. */
-.hud-controller-source-btn--selected {
-  border-color: #ffffff;
 }
 
 /* ---- Versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
@@ -1662,42 +1687,12 @@
  * rather than four near-identical rules, the same "one button per option, a ring for
  * the current one" convention .hud-level-btn/.hud-controller-source-btn already use. */
 .hud-versus-option-btn {
-  pointer-events: auto;
-  cursor: pointer;
-  border: 2px solid transparent;
-  border-radius: var(--hud-radius-md);
   padding: 6px 14px;
-  font-weight: var(--hud-weight-normal);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
 }
 
-/* Same contract as every other selection ring in this file: the border is the only
- * current-choice signal. */
-.hud-versus-option-btn--selected {
-  border-color: #ffffff;
-}
-
-/* The friendly-fire toggle -- built only under Teams (renderVersusFriendlyFireRow in
- * hud.ts), so unlike every hidden-class pair above there is no `--hidden` modifier
- * here: the row is genuinely absent from the DOM under FFA, not merely hidden. */
-.hud-versus-friendlyfire-btn {
-  pointer-events: auto;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--hud-radius-sm);
-  padding: 6px 14px;
-  font-weight: var(--hud-weight-normal);
-  background: var(--hud-quiet-fill);
-  color: var(--hud-text);
-}
-
-/* Shown only while the pane's chosen player count does not match the running
- * session's real Assignment -- see renderVersusControllerRows (hud.ts). */
-.hud-versus-assignment-note {
-  font-size: 0.85em;
-  opacity: 0.7;
-}
+/* Shown only while the pane's chosen player count does not match the running session's
+ * real Assignment -- see renderVersusControllerRows (hud.ts). Its look is `.ui-hint`;
+ * only the visibility rule below is its own. */
 
 .hud-versus-assignment-note--hidden {
   display: none;
