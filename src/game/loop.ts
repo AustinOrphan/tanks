@@ -11,7 +11,7 @@ import {
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
 import { resolveVersusConfig, type VersusConfig } from './versus-config';
-import { botSlotsOf, resolveSources } from './versus-setup';
+import { botSlotsOf, resolveSources, type VersusSlotSetup } from './versus-setup';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
@@ -483,6 +483,32 @@ export function createBotSources(
  * remains, in `pad[i] -> slot[i]` order for the slots that are left. A bot-claimed slot
  * never constructs a gamepad reader at all.
  */
+/**
+ * How a session's initial slot assignment is decided, for BOTH entry paths (issue #260).
+ *
+ * Extracted and exported rather than left inline in `startGame` because it is the one place
+ * the two paths could silently diverge, and inline it was unreachable by any test: a
+ * mutation that made the VS path ignore its slots and fall back to the derived count
+ * SURVIVED the whole suite. Measured, not assumed -- that survivor is why this seam exists.
+ *
+ *   - VS (`versusSlots` present): roles come from the descriptor the pane validated, and
+ *     devices are re-resolved densely against what is plugged in RIGHT NOW. A human slot
+ *     with no pad stays `'none'` so the Start gate can name it instead of rebinding.
+ *   - Campaign/dev: the historical positional rule (`pad[i] -> slot[i]`, slot 0 keyboard),
+ *     with the `bots` flag claiming the LAST `botCount` slots. Unchanged on purpose --
+ *     nothing validates a campaign co-op session, so giving it the VS rule would hand it a
+ *     new failure mode for no benefit.
+ */
+export function seedAssignment(
+  versusSlots: readonly VersusSlotSetup[] | undefined,
+  playerCount: number,
+  botCount: number,
+  connectedPads: readonly number[],
+): Assignment {
+  if (versusSlots) return resolveSources(versusSlots, connectedPads);
+  return deriveInitialAssignment(playerCount, botSlotsFor(playerCount, botCount));
+}
+
 export function botSlotsFor(playerCount: number, botCount: number): Set<number> {
   const slots = new Set<number>();
   for (let i = playerCount - botCount; i < playerCount; i++) slots.add(i);
@@ -1050,7 +1076,6 @@ export function startGameWith(
    * the derived count agrees with the roles rather than contradicting them.
    */
   const versusSlots = deps.initialVersusConfig?.slots;
-  const botSlots = versusSlots ? botSlotsOf(versusSlots) : botSlotsFor(playerCount, botCount);
 
   /**
    * The controller assignment UI's session-held model (input/assignment.ts).
@@ -1071,13 +1096,16 @@ export function startGameWith(
    * again: every later site that needs "which slots are bots right now" reads it off
    * `assignment` (`botSlotsFromAssignment`), since a reassignment can move a slot in or out.
    */
-  let assignment: Assignment = versusSlots
-    // `readDetectedPads` is the EXISTING injected seam for "what is plugged in right now"
-    // (the assignment panel's live list), reused rather than adding a second gamepad read
-    // path. Read ONCE here, at session start, which is the moment the setup was validated
-    // against; hotplug during a match is the panel's business, not this seeding.
-    ? resolveSources(versusSlots, deps.readDetectedPads().map((p) => p.padIndex))
-    : deriveInitialAssignment(playerCount, botSlots);
+  // `readDetectedPads` is the EXISTING injected seam for "what is plugged in right now"
+  // (the assignment panel's live list), reused rather than adding a second gamepad read
+  // path. Read ONCE here, at session start, which is the moment the setup was validated
+  // against; hotplug during a match is the panel's business, not this seeding.
+  let assignment: Assignment = seedAssignment(
+    versusSlots,
+    playerCount,
+    botCount,
+    deps.readDetectedPads().map((p) => p.padIndex),
+  );
 
   /** Which slots `assignment` currently marks `'bot'` -- recomputed, never cached, so a
    *  mid-session reassignment is always reflected. */

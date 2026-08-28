@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { defaultSlots } from './versus-setup';
+import { defaultSlots, type VersusSlotSetup } from './versus-setup';
 //
 // jsdom, as hud.test.ts and input.test.ts already do: isMuteHotkey does an
 // `instanceof HTMLElement` check and the dispose path hands real elements
@@ -98,6 +98,7 @@ import {
   DEV_CONSOLE_KEY,
   createBrowserDeps,
   applyVersusToDeps,
+  seedAssignment,
   versusAwareDeps,
   type GameDeps,
   type HostWindow,
@@ -6088,6 +6089,50 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     expect(new Set(h.rec.sessionKinds)).toEqual(new Set(['campaign']));
     expect(h.rec.relaunchTargets).toEqual(['campaign-levels']); // boot-time, never re-pushed
     h.handle.dispose();
+  });
+});
+
+describe('seedAssignment: the two entry paths (issue #260)', () => {
+  // This suite exists because a mutation that made the VS path IGNORE its slots and fall
+  // back to the derived count SURVIVED the entire suite. The seam was extracted so the
+  // decision could be reached at all; these are the assertions that kill that survivor.
+
+  it('VS: takes the roles from the descriptor, at the positions the player chose', () => {
+    // The discriminating fixture: a bot in slot 0, NOT at the end. `botSlotsFor` puts bots
+    // in the LAST botCount slots, so with one bot it would claim slot 2 and this fails --
+    // which is exactly the survivor's behaviour.
+    const slots: VersusSlotSetup[] = [{ role: 'bot' }, { role: 'human' }, { role: 'human' }];
+    const out = seedAssignment(slots, 3, 1, [0]);
+    expect(out[0]).toEqual({ kind: 'bot' });
+    expect(out[1]).toEqual({ kind: 'keyboard' });
+    expect(out[2]).toEqual({ kind: 'gamepad', padIndex: 0 });
+  });
+
+  it('VS: leaves a human with no controller as none, so the gate can name it', () => {
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'human' }];
+    expect(seedAssignment(slots, 2, 0, [])).toEqual([{ kind: 'keyboard' }, { kind: 'none' }]);
+  });
+
+  it('VS: ignores the derived bot COUNT entirely', () => {
+    // Belt and braces on the precedence rule: even handed a contradictory botCount, the
+    // descriptor wins. If this ever starts failing, the two sources are competing again.
+    const slots: VersusSlotSetup[] = [{ role: 'human' }, { role: 'human' }];
+    const out = seedAssignment(slots, 2, 2, [3]);
+    expect(out.some((sourceEntry) => sourceEntry.kind === 'bot')).toBe(false);
+  });
+
+  it('campaign/dev: keeps the historical positional rule when there is no descriptor', () => {
+    // The other half: nothing validates a campaign co-op session, so it must NOT acquire
+    // the VS resolution rule. Bots claim the LAST slots; pads map positionally.
+    const out = seedAssignment(undefined, 3, 1, [0, 1]);
+    expect(out[0]).toEqual({ kind: 'keyboard' });
+    expect(out[1]).toEqual({ kind: 'gamepad', padIndex: 1 });
+    expect(out[2]).toEqual({ kind: 'bot' });
+  });
+
+  it('campaign/dev: a zero bot count leaves every slot to hardware', () => {
+    const out = seedAssignment(undefined, 2, 0, []);
+    expect(out.some((sourceEntry) => sourceEntry.kind === 'bot')).toBe(false);
   });
 });
 
