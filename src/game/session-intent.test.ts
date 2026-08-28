@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defaultSlots } from './versus-setup';
 import { DEV_FLAGS_OFF, type DevFlags } from './devflags';
 import type { VersusConfig } from './versus-config';
 import {
@@ -30,8 +31,7 @@ const paneConfig = (o: Partial<VersusConfig> = {}): VersusConfig => ({
   arenaId: 'random',
   stock: 3,
   friendlyFire: false,
-  ...o,
-});
+  ...o, slots: defaultSlots(2) });
 
 const boot = (o: {
   devFlags?: Partial<DevFlags>;

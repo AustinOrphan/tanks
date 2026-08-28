@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createVersusSetupStore, defaultVersusSetup, VERSUS_SETUP_KEY } from './versus-setup-store';
 import { createMemoryStorage } from './storage';
 import { defaultSlots } from './versus-setup';
+import { versusMapChoices } from './versus-config';
 
 /** A Storage whose every method throws -- private mode, or storage disabled by policy. */
 function hostileStorage(): Storage {
@@ -98,5 +99,45 @@ describe('createVersusSetupStore', () => {
     expect(() => store.set({ ...defaultVersusSetup(), players: 3 })).not.toThrow();
     expect(store.get().players).toBe(3); // the shadow still carries it
     expect(() => store.clear()).not.toThrow();
+  });
+});
+
+describe('arena ids out of storage cannot crash the launch path', () => {
+  // resolveVersusConfig THROWS twice over -- once for an id naming no catalog entry, and
+  // again for a real id whose entry does not support the (players, mode) being started.
+  // Both are reachable from storage alone, so both have to be repaired on the way out.
+
+  it('replaces a retired arena id with random', () => {
+    const storage = createMemoryStorage();
+    storage.setItem(VERSUS_SETUP_KEY, JSON.stringify({ ...defaultVersusSetup(), arenaId: 'arena-from-2019' }));
+    expect(createVersusSetupStore(storage).get().arenaId).toBe('random');
+  });
+
+  // NOTE the second throw case -- a real id whose entry does not support the (players,
+  // mode) being started -- is NOT tested here, and deliberately not with a hand-built
+  // catalog either. Every one of the five shipped entries supports 2/3/4 players in both
+  // modes today (versus-catalog.json), so the store's own predicate cannot be made to
+  // reject a real id, and a fixture that faked one would be testing the fixture. The
+  // MODEL-level test in versus-setup.test.ts covers that branch through the injected
+  // predicate instead. It becomes reachable here once #271/#272/#273 author dedicated
+  // two-, three- and four-player arenas, which is precisely why the guard exists now.
+
+  it('keeps an arena the stored (players, mode) really supports', () => {
+    // Non-vacuity for the two above: the repair must not simply flatten every id to random.
+    const storage = createMemoryStorage();
+    const ok = versusMapChoices(2, 'ffa')[0];
+    storage.setItem(VERSUS_SETUP_KEY, JSON.stringify({ ...defaultVersusSetup(), players: 2, arenaId: ok }));
+    expect(createVersusSetupStore(storage).get().arenaId).toBe(ok);
+  });
+
+  it("PRESERVES 'random' rather than resolving it", () => {
+    // VersusConfig.arenaId's own doc comment insists the UNRESOLVED config is what the pane
+    // reopens with. Across a reload the same must hold: persisting a resolved id would turn
+    // "surprise me" into whatever board the first Start rolled, permanently. A caller that
+    // writes the RESOLVED config is the way this breaks, so the round-trip is pinned here.
+    const storage = createMemoryStorage();
+    const a = createVersusSetupStore(storage);
+    a.set({ ...defaultVersusSetup(), arenaId: 'random' });
+    expect(createVersusSetupStore(storage).get().arenaId).toBe('random');
   });
 });

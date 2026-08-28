@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf,
+  defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, resizeSlots,
   type VersusSetup, type VersusSlotSetup,
 } from './versus-setup';
 
@@ -170,5 +170,75 @@ describe('botSlotsOf: the derived count', () => {
 
   it('is empty for an all-human setup', () => {
     expect(botSlotsOf([{ role: 'human' }, { role: 'human' }]).size).toBe(0);
+  });
+});
+
+describe('sanitizeSetup: arena ids are checked against what is offerable', () => {
+  // resolveVersusConfig throws for an id naming no catalog entry AND for a real id whose
+  // entry does not support the (players, mode) being started. Both are reachable from
+  // stored data alone, so both must be repaired before they reach the launch path.
+  const allowOnly = (ids: string[]) => (id: string) => ids.includes(id);
+
+  it('keeps an arena the predicate allows', () => {
+    const out = sanitizeSetup({ ...BASE, arenaId: 'arena-02' }, BASE, allowOnly(['arena-02']));
+    expect(out.arenaId).toBe('arena-02');
+  });
+
+  it('falls back to random for an arena the predicate refuses', () => {
+    const out = sanitizeSetup({ ...BASE, arenaId: 'arena-02' }, BASE, allowOnly([]));
+    expect(out.arenaId).toBe('random');
+  });
+
+  it('refuses on the (players, mode) actually stored, not on the fallback pair', () => {
+    // The subtle half: a map valid at 2 players, stored, then 4 players chosen. The
+    // predicate must be asked about the SANITIZED players/mode, or the check answers a
+    // question about the wrong match and lets the throw through.
+    const seen: Array<[string, number, string]> = [];
+    sanitizeSetup({ ...BASE, players: 4, mode: 'teams', arenaId: 'arena-02' }, BASE, (id, p, m) => {
+      seen.push([id, p, m]);
+      return false;
+    });
+    expect(seen).toEqual([['arena-02', 4, 'teams']]);
+  });
+
+  it("never asks the predicate about 'random', which is always allowed", () => {
+    // 'random' names no catalog entry, so a predicate backed by versusMapChoices would
+    // refuse it and silently convert "surprise me" into a concrete board on every read.
+    let asked = false;
+    const out = sanitizeSetup({ ...BASE, arenaId: 'random' }, BASE, () => {
+      asked = true;
+      return false;
+    });
+    expect(out.arenaId).toBe('random');
+    expect(asked).toBe(false);
+  });
+});
+
+describe('resizeSlots: the player-count buttons', () => {
+  it('KEEPS chosen roles when the count grows', () => {
+    // The bug this closes: changing 2 players to 3 left `slots` at length 2, so Start
+    // emitted a config whose slots did not describe the match. Caught by an existing hud
+    // test, not by anything written for this issue.
+    const chosen = [{ role: 'bot' as const }, { role: 'human' as const }];
+    expect(resizeSlots(chosen, 4).map((s) => s.role)).toEqual(['bot', 'human', 'bot', 'bot']);
+  });
+
+  it('keeps the surviving roles when the count shrinks', () => {
+    const chosen = [{ role: 'bot' as const }, { role: 'human' as const }, { role: 'human' as const }];
+    expect(resizeSlots(chosen, 2).map((s) => s.role)).toEqual(['bot', 'human']);
+  });
+
+  it('round-trips 2 -> 4 -> 2 back to the original choices', () => {
+    // Why resize rather than rebuild: a player who changes their mind about the count and
+    // changes it back should not silently lose the roles they set.
+    const chosen = [{ role: 'bot' as const }, { role: 'human' as const }];
+    expect(resizeSlots(resizeSlots(chosen, 4), 2)).toEqual(chosen);
+  });
+
+  it('copies rather than aliasing, so a later edit cannot reach back into the old array', () => {
+    const chosen = [{ role: 'human' as const }];
+    const out = resizeSlots(chosen, 2);
+    out[0].role = 'bot';
+    expect(chosen[0].role).toBe('human');
   });
 });

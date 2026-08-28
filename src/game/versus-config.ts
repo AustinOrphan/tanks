@@ -11,6 +11,7 @@ import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalo
 // for a wall-clock or engine RNG that would make two "random" picks with the same seed
 // disagree.
 import { mulberry32 } from '../sim/ai/player-profile';
+import type { VersusSlotSetup } from './versus-setup';
 
 /**
  * One versus match's selections -- what the setup pane collects and what
@@ -55,6 +56,21 @@ export interface VersusConfig {
    *  it outside that mode (see `World.friendlyFire`'s own doc comment), so carrying it
    *  unconditionally here is harmless. */
   friendlyFire: boolean;
+  /**
+   * WHO IS PLAYING EACH SLOT -- the canonical representation (issue #260), length
+   * `players`.
+   *
+   * Required, not optional, and that is the point of the issue: before this the config
+   * carried no per-slot field, so the pane's displayed "Who's playing" rows mutated the
+   * RUNNING session's assignment while Start disposed that very session and rebuilt from
+   * defaults. An optional field would have left exactly that hole open for any caller that
+   * forgot it.
+   *
+   * A bot COUNT is derived from this (`botSlotsOf`), never stored beside it -- the issue's
+   * binding decision. The DEVICE behind each human slot is not here either: it is resolved
+   * per page-session by `resolveSources`, so nothing stale can bind a controller.
+   */
+  slots: VersusSlotSetup[];
 }
 
 /**

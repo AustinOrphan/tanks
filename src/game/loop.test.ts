@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { defaultSlots } from './versus-setup';
 //
 // jsdom, as hud.test.ts and input.test.ts already do: isMuteHotkey does an
 // `instanceof HTMLElement` check and the dispose path hands real elements
@@ -5804,8 +5805,8 @@ describe('createBrowserDeps', () => {
 describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Task 5)', () => {
   // A concrete (non-'random') arenaId, same posture as the reboot-seam describe block's
   // own CONFIG just below -- a seed-driven map pick has no bearing on any test here.
-  const CONFIG: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false };
-  const REMATCH_CONFIG: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-01', stock: 5, friendlyFire: true };
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+  const REMATCH_CONFIG: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-01', stock: 5, friendlyFire: true, slots: defaultSlots(4) };
 
   /**
    * `makeDeps()`'s own GameDeps, widened the same way `applyVersusToDeps` widens a real
@@ -5974,7 +5975,7 @@ describe('startGameWith: versus entry, reboot-on-start, and return-to-setup (Tas
 describe('startGameWith: campaign return from a versus session (Task 5b)', () => {
   // A concrete (non-'random') arenaId -- same posture as Task 5's own describe block's
   // CONFIG just above; a seed-driven map pick has no bearing on any test here.
-  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
   /** Same shape as Task 5's own `versusDeps` helper (scoped to its own describe block,
    *  so not reusable here) -- widens devFlags.players (H2) and stamps
@@ -6094,7 +6095,7 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
   // A concrete (non-'random') arenaId suitable at players:3 -- see versus-config.test.ts
   // and levels.test.ts's own fixtures, reused here rather than hand-rolled -- so `world()`
   // below needs no seed-driven map pick to reason about.
-  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false };
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
   const noop = (_config: VersusConfig): void => {};
 
   /**
@@ -6117,6 +6118,43 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     expect(result.devFlags).toEqual(base.devFlags);
     expect(result.requestVersusSession).toBe(noop);
     expect(result.initialVersusConfig).toBeNull();
+  });
+
+  it('DERIVES devFlags.bots from the config slots, so count and roles cannot disagree', () => {
+    // Issue #260's "a bot count is derived data and is not authoritative", made structural.
+    // Two bots among three slots must show up as bots: 2 -- any consumer still reading the
+    // count then agrees with any consumer reading the roles.
+    const config: VersusConfig = {
+      ...CONFIG,
+      slots: [{ role: 'human' }, { role: 'bot' }, { role: 'bot' }],
+    };
+    const result = applyVersusToDeps(baseDeps(), { config }, noop);
+    expect(result.devFlags.bots).toBe(2);
+  });
+
+  it('OVERRIDES a URL-supplied bots count with the pane\'s roles', () => {
+    // "Developer flags and player setup cannot create competing assignment sources". A
+    // ?bots=3 in the address bar and a pane showing one bot are two answers to one
+    // question; the pane is the more specific and more recent statement of intent, so it
+    // wins. Without the override the seeded assignment and the dev flag disagree for the
+    // whole session, which is the competing-source failure the criterion names.
+    const config: VersusConfig = {
+      ...CONFIG,
+      slots: [{ role: 'human' }, { role: 'human' }, { role: 'bot' }],
+    };
+    const result = applyVersusToDeps(baseDeps({ bots: 3 }), { config }, noop);
+    expect(result.devFlags.bots).toBe(1);
+  });
+
+  it('reports ZERO bots for an all-human VS setup, rather than leaving the flag alone', () => {
+    // Non-vacuity for the two above: a build that only ever RAISED the count would pass
+    // both and still strand a stale ?bots=2 on an all-human match.
+    const config: VersusConfig = {
+      ...CONFIG,
+      slots: [{ role: 'human' }, { role: 'human' }, { role: 'human' }],
+    };
+    const result = applyVersusToDeps(baseDeps({ bots: 2 }), { config }, noop);
+    expect(result.devFlags.bots).toBe(0);
   });
 
   it('versusAwareDeps composes createBrowserDeps with the override, threading requestVersusSession through', () => {
@@ -6210,7 +6248,7 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     // table versus-config.test.ts's own "distributes" case pins: deriveSeed is a no-op
     // for inputs under 512 (`wallMs ^ (wallMs >>> 9)` clears no bits), so wallMs 1/6 here
     // resolve through pickVersusArena exactly like seeds 1/6 do there.
-    const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+    const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
     it("random resolves to a member of versusMapChoices(players), and levels.bounds matches THAT arena exactly -- the defect's direct oracle", () => {
       // wallMs 6 -> arena-03 (cols 33, the 22x18 class) -- deliberately NOT wallMs 1
@@ -6750,8 +6788,7 @@ describe('startGameWith: canonical session identity at the production boundary',
 
   describe('Versus', () => {
     const CONFIG: VersusConfig = {
-      mode: 'ffa', players: 2, arenaId: 'random', stock: VERSUS_STOCK, friendlyFire: false,
-    };
+      mode: 'ffa', players: 2, arenaId: 'random', stock: VERSUS_STOCK, friendlyFire: false, slots: defaultSlots(2) };
 
     it('a setup-driven VS session retains RANDOM intent while resolving a concrete arena', () => {
       const base = makeDeps();
@@ -6880,8 +6917,7 @@ describe('startGameWith: canonical session identity at the production boundary',
         deps: {
           ...base.deps,
           initialVersusConfig: {
-            mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false,
-          },
+            mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) },
         },
       });
       expect(lastKind(h)).toBe('versus');

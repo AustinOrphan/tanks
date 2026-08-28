@@ -11,6 +11,7 @@ import {
 import type { CampaignLevel } from '../sim/arena';
 import { createLevelSystem, createVersusLevelSystem, type LevelSystem } from './levels';
 import { resolveVersusConfig, type VersusConfig } from './versus-config';
+import { botSlotsOf, resolveSources } from './versus-setup';
 import type { ProgressStore } from './progress';
 import type { StatsStore } from './stats';
 import type { CustomizationStore, SkinId } from './customization';
@@ -939,6 +940,16 @@ export function applyVersusToDeps(
       mode: config.mode,
       players: config.players,
       friendlyFire: config.friendlyFire,
+      /**
+       * DERIVED from the slots, never carried alongside them (issue #260: "a bot count is
+       * derived data and is not authoritative"). This is the translation that makes the
+       * issue's "developer flags and player setup cannot create competing assignment
+       * sources" true by construction: a VS session's `devFlags.bots` is a VIEW of the
+       * roles the player chose, so any consumer still reading the count agrees with any
+       * consumer reading the roles. Whatever `bots` a URL carried is deliberately
+       * overwritten here -- the pane is the more specific, more recent statement of intent.
+       */
+      bots: botSlotsOf(config.slots).size,
     },
     requestVersusSession,
     initialVersusConfig: config,
@@ -1024,18 +1035,49 @@ export function startGameWith(
     deps.devFlags.mode ?? 'campaign-coop',
     deps.devFlags.bots !== null,
   );
-  /** The LAST `botCount` of `playerCount` slots -- see botSlotsFor's own doc comment. */
-  const botSlots = botSlotsFor(playerCount, botCount);
+  /**
+   * WHICH SLOTS ARE BOTS, and where that answer comes from (issue #260).
+   *
+   * TWO ENTRY PATHS, ONE DESCRIPTOR -- the issue's "deterministic developer-flag
+   * precedence by translating both player and dev entry through the same descriptor
+   * boundary". A VS session started from the setup pane carries per-slot roles, and those
+   * are authoritative: they are what the player actually saw and chose. A campaign or dev
+   * session has no pane, so it keeps the pre-existing derived rule, where the `bots` dev
+   * flag claims the LAST `botCount` slots.
+   *
+   * The two cannot compete, because the VS path does not consult `botCount` at all --
+   * `applyVersusToDeps` has already translated the config's roles into `devFlags.bots` so
+   * the derived count agrees with the roles rather than contradicting them.
+   */
+  const versusSlots = deps.initialVersusConfig?.slots;
+  const botSlots = versusSlots ? botSlotsOf(versusSlots) : botSlotsFor(playerCount, botCount);
 
   /**
-   * The controller assignment UI's SESSION-HELD model (input/assignment.ts, owner
-   * ruling: no persistence, no seventh store). Seeded ONCE from `botSlots` -- today's
-   * rule, made explicit -- and mutated only by `reassignSlot` below, via the panel.
-   * `botSlots` itself is not read again after this: every later site that needs "which
-   * slots are bots right now" reads it off `assignment` (`botSlotsFromAssignment`),
-   * since a session-long reassignment can move a slot to or from `'bot'`.
+   * The controller assignment UI's session-held model (input/assignment.ts).
+   *
+   * SEEDED DIFFERENTLY BY PATH, and the difference is deliberate rather than an accident of
+   * two functions existing:
+   *
+   *   - VS: `resolveSources` (versus-setup.ts), which packs connected pads DENSELY onto the
+   *     human slots and leaves a human with no pad as `'none'` so the Start gate can report
+   *     it. That is what makes a disconnected controller visible instead of silently
+   *     rebinding, and it is only correct because the pane has already validated the setup.
+   *   - Campaign/dev: `deriveInitialAssignment`, which keeps the historical positional rule
+   *     (`pad[i] -> slot[i]`, slot 0 keyboard). Nothing validates a campaign co-op session,
+   *     so the positional rule stays what it always was rather than acquiring a new failure
+   *     mode at this distance from the issue.
+   *
+   * Mutated after seeding only by `reassignSlot`, via the panel. `botSlots` is not read
+   * again: every later site that needs "which slots are bots right now" reads it off
+   * `assignment` (`botSlotsFromAssignment`), since a reassignment can move a slot in or out.
    */
-  let assignment: Assignment = deriveInitialAssignment(playerCount, botSlots);
+  let assignment: Assignment = versusSlots
+    // `readDetectedPads` is the EXISTING injected seam for "what is plugged in right now"
+    // (the assignment panel's live list), reused rather than adding a second gamepad read
+    // path. Read ONCE here, at session start, which is the moment the setup was validated
+    // against; hotplug during a match is the panel's business, not this seeding.
+    ? resolveSources(versusSlots, deps.readDetectedPads().map((p) => p.padIndex))
+    : deriveInitialAssignment(playerCount, botSlots);
 
   /** Which slots `assignment` currently marks `'bot'` -- recomputed, never cached, so a
    *  mid-session reassignment is always reflected. */

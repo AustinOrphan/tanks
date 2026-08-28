@@ -67,6 +67,22 @@ export type VersusSetupProblem =
 const ROLES: ReadonlySet<string> = new Set<VersusSlotRole>(['human', 'bot', 'none']);
 
 /**
+ * The draw-for-me sentinel. `VersusConfig.arenaId`'s own doc comment is emphatic that the
+ * UNRESOLVED config -- the one still carrying this -- is what the pane reopens with, and
+ * that it must survive a session in which a concrete arena was actually played. The same
+ * holds across a reload: persisting the RESOLVED id would silently convert "surprise me"
+ * into whatever board the first Start happened to roll, permanently.
+ */
+export const RANDOM_ARENA = 'random';
+
+/**
+ * Whether a stored arena id is offerable at a given (players, mode). Injected rather than
+ * imported so this module stays a pure model with no catalog dependency; the store passes
+ * a `versusMapChoices`-backed predicate, and tests can pass their own.
+ */
+export type ArenaAllowed = (arenaId: string, players: number, mode: 'ffa' | 'teams') => boolean;
+
+/**
  * Default role for a slot at first launch, before anything has been chosen.
  *
  * Slot 0 is the human on this device; every other slot starts as a BOT rather than as a
@@ -78,6 +94,23 @@ const ROLES: ReadonlySet<string> = new Set<VersusSlotRole>(['human', 'bot', 'non
 export function defaultSlots(players: number): VersusSlotSetup[] {
   const out: VersusSlotSetup[] = [];
   for (let i = 0; i < players; i++) out.push({ role: i === 0 ? 'human' : 'bot' });
+  return out;
+}
+
+/**
+ * Grow or shrink a slot array to `players`, KEEPING the roles already chosen.
+ *
+ * The pane's player-count buttons are the reason this exists as its own function: changing
+ * 2 players to 3 used to leave `slots` at length 2, so Start emitted a config whose slots
+ * did not describe the match being started -- the exact "Start initializes the session from
+ * the exact displayed assignments" criterion, failing silently. Resizing rather than
+ * rebuilding is what preserves a player's earlier choices when they change their mind about
+ * the count and change it back.
+ */
+export function resizeSlots(slots: readonly VersusSlotSetup[], players: number): VersusSlotSetup[] {
+  const defaults = defaultSlots(players);
+  const out: VersusSlotSetup[] = [];
+  for (let i = 0; i < players; i++) out.push(slots[i] ? { ...slots[i] } : defaults[i]);
   return out;
 }
 
@@ -94,7 +127,11 @@ export function defaultSlots(players: number): VersusSlotSetup[] {
  * is extended with defaults, a long one is truncated. Neither throws. A stored setup is not
  * a save file the player can see, so failing loudly buys nothing and costs a launch.
  */
-export function sanitizeSetup(raw: unknown, fallback: VersusSetup): VersusSetup {
+export function sanitizeSetup(
+  raw: unknown,
+  fallback: VersusSetup,
+  isArenaAllowed: ArenaAllowed = () => true,
+): VersusSetup {
   const o = (raw ?? {}) as Partial<Record<keyof VersusSetup, unknown>>;
 
   const mode: VersusSetup['mode'] = o.mode === 'ffa' || o.mode === 'teams' ? o.mode : fallback.mode;
@@ -104,7 +141,24 @@ export function sanitizeSetup(raw: unknown, fallback: VersusSetup): VersusSetup 
     ? Math.floor(o.stock)
     : fallback.stock;
   const friendlyFire = typeof o.friendlyFire === 'boolean' ? o.friendlyFire : fallback.friendlyFire;
-  const arenaId = typeof o.arenaId === 'string' && o.arenaId !== '' ? o.arenaId : fallback.arenaId;
+  // ARENA VALIDATION IS NOT OPTIONAL POLISH, and this is the one field where a
+  // well-formed stored value can still crash the launch path. `resolveVersusConfig`
+  // THROWS twice over: once for an id naming no catalog entry, and again for a real id
+  // whose entry does not support the (players, mode) being started. Both are reachable
+  // from storage alone -- an arena retired between builds, or a player who stored
+  // 'arena-two-player' and later chose 4 players -- so a stored setup could make the game
+  // fail to start with no way for the player to see why.
+  //
+  // `'random'` is always allowed and is the fallback, because `pickVersusArena` resolves
+  // it against the CURRENT catalog for the CURRENT (players, mode) and therefore cannot
+  // name something unsupported.
+  const storedArena = typeof o.arenaId === 'string' && o.arenaId !== '' ? o.arenaId : null;
+  const arenaId =
+    storedArena === null
+      ? fallback.arenaId
+      : storedArena === RANDOM_ARENA || isArenaAllowed(storedArena, players, mode)
+        ? storedArena
+        : RANDOM_ARENA;
 
   const rawSlots = Array.isArray(o.slots) ? o.slots : [];
   const slots: VersusSlotSetup[] = [];

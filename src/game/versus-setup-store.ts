@@ -1,4 +1,13 @@
-import { sanitizeSetup, defaultSlots, type VersusSetup } from './versus-setup';
+import { sanitizeSetup, defaultSlots, RANDOM_ARENA, type VersusSetup } from './versus-setup';
+import { versusMapChoices } from './versus-config';
+
+/**
+ * The catalog-backed arena check the model is handed. Kept here, at the boundary, so
+ * versus-setup.ts needs no catalog import -- and so this is the only place that has to
+ * change if the offerable set ever stops being a pure function of (players, mode).
+ */
+const arenaAllowed = (id: string, players: number, mode: 'ffa' | 'teams'): boolean =>
+  versusMapChoices(players, mode).includes(id);
 
 /**
  * The retained VS setup (issue #260).
@@ -22,7 +31,7 @@ export function defaultVersusSetup(): VersusSetup {
     players: 2,
     stock: 3,
     friendlyFire: false,
-    arenaId: 'random',
+    arenaId: RANDOM_ARENA,
     slots: defaultSlots(2),
   };
 }
@@ -52,7 +61,7 @@ export function createVersusSetupStore(storage: Storage): VersusSetupStore {
     }
     if (raw === null || raw === '') return fallback;
     try {
-      return sanitizeSetup(JSON.parse(raw), fallback);
+      return sanitizeSetup(JSON.parse(raw), fallback, arenaAllowed);
     } catch {
       // Unparseable JSON is the one case sanitizeSetup cannot see, because it never gets
       // the chance. Everything PAST the parse is that function's job, field by field.
@@ -78,7 +87,7 @@ export function createVersusSetupStore(storage: Storage): VersusSetupStore {
       // Sanitized on the way in too. A caller that hands over a slots array out of step
       // with `players` -- easy to do while the pane is mid-edit -- would otherwise write a
       // shape that only `get` repairs, so the two would disagree until the next reload.
-      shadow = sanitizeSetup(setup, fallback);
+      shadow = sanitizeSetup(setup, fallback, arenaAllowed);
       persist();
     },
     clear() {
