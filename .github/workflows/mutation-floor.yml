@@ -1,0 +1,36 @@
+# Complete minimum-runtime mutation verification, deliberately separate from CI.
+#
+# Normal pull-request and push feedback comes from CI's required `verify (current)`
+# full manifest plus `verify (floor)` smoke coverage. Keeping this daily/manual job in
+# its own workflow prevents it from becoming a required PR check or gating Pages deploys.
+name: Mutation floor
+
+on:
+  # Daily at 07:23 UTC (overnight in US Central and away from top-of-hour congestion).
+  # Scheduled workflows run from the latest commit on the default branch, which is main.
+  schedule:
+    - cron: '23 7 * * *'
+  # Manual runs execute the complete floor manifest for the ref selected at dispatch.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-floor:
+    name: mutation manifest (floor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.13.0'
+          cache: npm
+
+      - run: npm ci
+
+      # A red scheduled run is a floor-compatibility or manifest-contract failure that
+      # requires investigation; GitHub Actions retains its mutation output for diagnosis.
+      - name: Mutation manifest (full, floor)
+        run: npm run mutate

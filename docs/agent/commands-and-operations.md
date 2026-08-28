@@ -14,6 +14,7 @@ agents should normally start with the risk-appropriate composites and targeted c
 | `npm run test:unit` | Complete Vitest suite only | about 55 seconds |
 | `npm run build` | Vite production bundle only | about 1 second |
 | `npm run docs:check` | Plan/spec metadata and unchanged-legacy validation | under 1 second |
+| `npm run mutate:smoke` | One representative real mutation-harness path used by floor CI | under 5 seconds |
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
 | `npm run verify:visual` | Build/portability, GL tests, Chromium trace, and screenshot checks | roughly 30–90 seconds after browser setup |
@@ -98,10 +99,21 @@ worktree. Do not discard or stash unrelated work merely to satisfy the preflight
 
 ### CI and merge verification
 
-CI is authoritative for repository-wide verification. On pull requests, `verify (current)`
-runs the complete mutation manifest, `verify (floor)` verifies the supported Node floor,
-and `visual` remains a required independent browser/rendering gate. The push-to-`main`
-mutation behavior is intentionally unchanged by this policy.
+CI is authoritative for repository-wide verification. On pull requests and pushes to
+`main`, `verify (current)` runs the complete mutation manifest under Node 24. The exact
+Node 22.13.0 `verify (floor)` lane runs typecheck, unit tests, build, portability,
+production audit, and `npm run mutate:smoke`: one representative real manifest entry,
+not the complete manifest. `visual` remains a required independent browser/rendering
+gate, so the required context names remain `verify (floor)`, `verify (current)`, and
+`visual`.
+
+The separate `Mutation floor` workflow runs the complete manifest under exact Node
+22.13.0 daily at 07:23 UTC against the latest `main`, and `workflow_dispatch` can run it
+for a manually selected ref. Its `mutation manifest (floor)` job is intentionally outside
+the required `CI` workflow: it is complementary floor-runtime monitoring, not a required
+pull-request check and not a Pages deployment gate. A red scheduled run remains visible in
+GitHub Actions and requires investigation. This daily full-floor coverage does not make
+routine local full-manifest runs necessary; use the concrete exception list above.
 
 Inspect and resolve every CI failure rather than treating local candidate evidence as a
 substitute. Until all three required contexts pass on the candidate commit, report local
@@ -114,6 +126,7 @@ Specialized commands remain directly available:
 npm run gallery -- --elements mine,tank,shell --view low   # inspect a rendered element
 npm run capture -- --list                                  # list reproducible media recipes
 npm run mutate -- --only <id>                              # run one mutation entry
+npm run mutate:smoke                                      # floor CI's representative entry
 npm run test:gl                                            # renderer construction checks
 npm run trace:browser -- --all                              # golden trace in three Playwright engines
 npm run trace:safari                                       # real Safari on supported macOS
@@ -184,11 +197,22 @@ that `npm run verify:full` doesn't** -- this tool does not run the `typecheck` s
 part of the verdict, so a type-only mutation can still be caught by the full gate even
 when every entry here reports SURVIVES. `--only <id>` runs a single entry.
 
+`npm run mutate:smoke` selects `capture-prerequisite-error-drops-the-ci-pin`. Its
+browser-free four-test scope keeps floor feedback cheap while the real CLI still parses
+and validates the shipped manifest, honors `--only`, checks git cleanliness and Vitest
+reachability, establishes a green baseline, applies a real mutation, runs real tests,
+matches the declared failure count, and restores the target bytes. The normal unit suite
+already runs `tools/mutate/orchestrate.test.ts`, including real Vitest-subprocess and
+real-file mutation/restoration cases; the selected entry adds the actual CLI and shipped-
+manifest path those tests do not enter.
+
 CI (`.github/workflows/ci.yml`) invokes the same atomic package scripts in named steps:
-typecheck, unit tests, the conditionally selected mutation manifest, build, bundle
-portability, and production audit on Node 22.13.0 — the declared floor — and the Node 24
-LTS line. Its separate visual job uses the direct build, GL, browser-trace, and visual
-scripts so setup failures and rendering failures retain distinct diagnostics.
+typecheck, unit tests, build, bundle portability, and production audit on Node 22.13.0 —
+the declared floor — and the Node 24 LTS line. The current lane adds the complete mutation
+manifest; the floor lane adds only the representative smoke entry. Its separate visual job
+uses the direct build, GL, browser-trace, and visual scripts so setup failures and rendering
+failures retain distinct diagnostics. `.github/workflows/mutation-floor.yml` supplies the
+daily/manual complete-manifest run under exact Node 22.13.0 without joining the merge gate.
 `engines.node` is `^22.13.0 || ^24.0.0`, matching those two tested LTS lines exactly.
 Node 20 was removed from the support claim after reaching EOL.
 
@@ -202,7 +226,7 @@ call it — it cannot live in `npm test`, because under Vitest `import.meta.env.
 `/` even though vitest reads the same config that sets `base: './'`.
 
 **The deploy waits for CI.** `pages.yml` triggers on `workflow_run` for the `CI` workflow
-and its `build` job requires `conclusion == 'success'`, so on the automatic path all 9 of
+and its `build` job requires `conclusion == 'success'`, so on the automatic path all 10 of
 `ci.yml`'s checking steps have passed for that exact commit before a deploy starts. It
 checks out `github.event.workflow_run.head_sha` rather than the branch head — under
 `workflow_run` checkout defaults to the DEFAULT BRANCH'S head, which is a different commit
@@ -222,22 +246,24 @@ went red before assuming the deploy is broken.
 
 **`workflow_dispatch` is the ungated path, and it stays that way** — it exists to
 re-deploy without a commit, so it cannot have a CI run behind it. It re-runs **5 of
-`ci.yml`'s 9 checking steps** (`verify`: 6, `visual`: 3), **not the `visual` job and not
-`Mutation manifest`**, so a manual deploy can still publish a render regression that only
+`ci.yml`'s 10 checking steps** (`verify`: 7, `visual`: 3), **not the `visual` job and not
+either mutation step**, so a manual deploy can still publish a render regression that only
 `tools/gl/` and `tools/visual/` catch, and a stale `tools/mutate/manifest.json`. Those
 five steps are duplicated work on the automatic path; they are kept because deleting them
 would leave the manual path checking nothing. (Denominator: the named steps of both
 `ci.yml` jobs that check something — that can fail because of the tree — rather than set
 up the runner, so `checkout`, `setup-node`, `npm ci`, BOTH Playwright steps (`Install
 Playwright` and `Install chromium` are separate named steps), the browser cache and
-`upload-artifact` are all excluded. `verify` contributes 6: Typecheck, Test, Mutation
-manifest, Build, portability, audit. `visual` contributes 4 — Build, GL tests, Baseline
-trace, Visual check — but its `Build` is the same `npm run build` already counted, so it
-adds 3, for 9 distinct. The deploy runs 5 of them, all from `verify`: Typecheck, Test,
-Build, portability, audit.) The construction is written out because the bare number went
-stale twice unnoticed: `5 of 7` was **correct when #80 wrote it** — the same rule over
+`upload-artifact` are all excluded. `verify` contributes 7: Typecheck, Test, Mutation
+harness smoke, full Mutation manifest, Build, portability, audit. `visual` contributes 4 —
+Build, GL tests, Baseline trace, Visual check — but its `Build` is the same `npm run build`
+already counted, so it adds 3, for 10 distinct. The deploy runs 5 of them, all from
+`verify`: Typecheck, Test, Build, portability, audit.) The construction is written out
+because the bare number went stale twice unnoticed: `5 of 7` was **correct when #80 wrote
+it** — the same rule over
 that `ci.yml` gives `verify` 5 and `visual` 2 — then #104 added `Mutation manifest` (→ 8)
-and #128 added `Baseline trace (chromium)` (→ 9), and neither recounted. **`main` IS
+and #128 added `Baseline trace (chromium)` (→ 9); splitting floor smoke from current full
+adds the tenth distinct named check. **`main` IS
 protected now, by a REPOSITORY RULESET rather than classic branch protection** — which is
 why `GET /repos/:owner/:repo/branches/main/protection` still answers 404, and why the
 sentence this replaces ("no branch protection and no ruleset — nothing forces work through

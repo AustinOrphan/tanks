@@ -256,14 +256,22 @@ do not stash or discard unrelated work merely to make the preflight pass.
 
 CI is the authoritative repository-wide merge gate:
 
-- `verify (current)` runs the complete mutation manifest on pull requests
-- `verify (floor)` verifies compatibility with the supported Node floor
+- `verify (current)` runs the complete mutation manifest under Node 24 on pull requests
+  and pushes to `main`
+- `verify (floor)` runs the normal typecheck, unit, build, portability, and production
+  audit checks under exact Node 22.13.0 plus `npm run mutate:smoke`, one representative
+  real mutation-harness path; it does not run every manifest entry on each change
 - `visual` remains a required independent rendering gate
+- the separate `Mutation floor` workflow runs the complete manifest under exact Node
+  22.13.0 daily against `main` and on manual dispatch; it is complementary monitoring,
+  not a required pull-request context
 
 Agents must inspect and resolve CI failures; local candidate results do not override them.
 Until all required contexts pass on the candidate commit, report the exact local checks as
 candidate verification and state that CI is pending. Do not report the change as fully
-verified or merge-ready before the required CI gate completes.
+verified or merge-ready before the required CI gate completes. The scheduled full-floor
+run does not make routine local full-manifest execution necessary; use the concrete local
+exceptions above rather than manually compensating for the optimized floor lane.
 
 ### Delegation
 

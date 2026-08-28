@@ -34,6 +34,7 @@
     "docs:check": "node tools/docs/check.mjs",
     "docs:index": "node tools/docs/index.mjs",
     "mutate": "node tools/mutate/run.mjs",
+    "mutate:smoke": "npm run mutate -- --only capture-prerequisite-error-drops-the-ci-pin",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",
     "tanks:doc": "vite-node tools/tanks/generate.mjs",
