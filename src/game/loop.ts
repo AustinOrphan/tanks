@@ -2349,11 +2349,20 @@ export function startGameWith(
     //
     // THE ONE STATED RESIDUAL. The topbar's campaign Lives/Enemies readout is projected
     // from a WORLD (`refreshStats`), so with no world built here it keeps the abandoned
-    // session's numbers until the next build instead of the landing board's. That chrome
-    // does not belong on an application screen at all -- making the gameplay HUD
-    // contextual is #324 -- and this issue's own criterion "gameplay-only HUD elements
-    // must not leak into application screens" is where it goes away. Pinned in
-    // loop.test.ts rather than left for a reader to notice.
+    // session's numbers until the next build instead of the landing board's. Measured on
+    // the ENEMY COUNT, in a browser and in loop.test.ts; Lives rides the same call and is
+    // stale the same way but is not separately asserted -- see that test for why. The
+    // chrome does not belong on an application screen at all: making the gameplay HUD
+    // contextual is #324, and this issue's own criterion "gameplay-only HUD elements must
+    // not leak into application screens" is where it goes away.
+    //
+    // WHAT IS DELIBERATELY LEFT STALE UNTIL THE LANDING BUILDS: `currentDescriptor` and
+    // `currentSession` still describe the abandoned world, while the HUD has already been
+    // told the landing's kind. Inert, and checked rather than assumed -- nothing reads
+    // either at the Main Menu, and Continue rebuilds through `switchTo`, which re-derives
+    // both from `sessionIdentity` and the level it actually built before `enterGameplay`
+    // is handed one. Re-deriving them here would mean resolving a session against a world
+    // that does not exist yet.
     sessionIdentity = bootContext.identity;
     const landing = deps.levels.start;
     hud.setSessionKind(descriptorFor(sessionIdentity, ordinalOf(landing)).kind);

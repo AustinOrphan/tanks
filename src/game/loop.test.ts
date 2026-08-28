@@ -7135,12 +7135,19 @@ describe('startGameWith: canonical session identity at the production boundary',
       h.handle.dispose();
     });
 
-    it("THE STATED RESIDUAL: the menu keeps the abandoned world's Lives/Enemies until a board is built", () => {
+    it("THE STATED RESIDUAL: the menu keeps the abandoned world's enemy count until a board is built", () => {
       // Not a claim that this is right -- a pin on what deferring the world build costs,
-      // so it is reviewable instead of discovered. `refreshStats` projects both readouts
-      // from a WORLD, and a quit no longer builds one, so the topbar chrome on the menu
+      // so it is reviewable instead of discovered. `refreshStats` projects the topbar's
+      // campaign chrome from a WORLD, and a quit no longer builds one, so on the menu it
       // reads the session the player just left. Removing gameplay chrome from
       // application screens is #324, and that is what dissolves this.
+      //
+      // ENEMIES is what this measures. `setLives` rides the SAME `refreshStats` call and
+      // is stale in the same way, but it is not asserted here and this test does not
+      // claim it: the fake's world builder ignores its `lives` argument and echoes one
+      // constant, so a lives assertion would be measuring the fixture rather than
+      // production. That dead knob is worth fixing on its own; pretending the assertion
+      // exists would be worse than saying which half is measured.
       //
       // The fixture makes the two values genuinely differ: practice on another board
       // with fresh lives, quit, and the landing the quit ANNOUNCES is the run's level 1
