@@ -186,9 +186,14 @@ find/replace against a `src/` or `tools/` file, a declared `killed`/`survives`, 
 actually changed the file's bytes (refusing an ambiguous find rather than guessing),
 runs a BASELINE check on the unmutated file first (a pre-existing red test in scope
 must not be misattributed to the mutation), refuses to start if any entry's `tests`
-cannot reach its `file` (checked once via `vitest related`, so a wrong-scope mutation
-can never silently read as SURVIVES), applies the mutation, runs the scoped tests, and
-restores from the bytes it read -- verified by reading them back, not by a zero exit.
+cannot reach its `file`, applies the mutation, runs the scoped tests, and restores from
+the bytes it read -- verified by reading them back, not by a zero exit. Reachability is
+still proved separately for every mutation source, but those queries share one
+timeout-bounded Vitest context and its warmed Vite graph instead of starting one cold
+`vitest related` process per source. Within one manifest invocation, entries with the
+exact same ordered `tests` array share a completed baseline; after any earlier mutation,
+restoration is byte-verified before a later entry can reuse it, and a failed restoration
+stops the run immediately.
 The exit code is non-zero if any entry's real outcome (including a suite that fails to
 COLLECT under the mutation, which counts as killed even at 0 failed tests) does not
 match what it declared, which is what turns a manifest entry from a transcript into
@@ -204,7 +209,10 @@ reachability, establishes a green baseline, applies a real mutation, runs real t
 matches the declared failure count, and restores the target bytes. The normal unit suite
 already runs `tools/mutate/orchestrate.test.ts`, including real Vitest-subprocess and
 real-file mutation/restoration cases; the selected entry adds the actual CLI and shipped-
-manifest path those tests do not enter.
+manifest path those tests do not enter. The full-run process count is one reachability
+worker, at most one baseline process per exact ordered test scope, and one mutated-test
+process per entry; per-source reachability sets and per-entry mutation verdicts remain
+independent.
 
 CI (`.github/workflows/ci.yml`) invokes the same atomic package scripts in named steps:
 typecheck, unit tests, build, bundle portability, and production audit on Node 22.13.0 —

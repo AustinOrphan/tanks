@@ -1,6 +1,8 @@
 /**
  * Drives one mutation, and a whole manifest, through baseline -> apply -> test ->
- * restore.
+ * restore. A whole-manifest run caches each completed baseline by its exact ordered
+ * test-file scope; the cache never crosses invocations, and a failed byte restoration
+ * stops the run before a cached baseline can be reused.
  *
  * All IO is injected through `deps`, the same shape this repo already uses for
  * `game/loop.ts` and `game/driver.ts`: real fs/git/vitest in `run.mjs`, fakes in
@@ -43,6 +45,7 @@
  * @typedef {import('./lib.mjs').ApplyResult} ApplyResult
  * @typedef {(content: string, find: string, replace: string, occurrence?: number) => ApplyResult} ApplyAt
  * @typedef {{ failed: number, total: number, failedSuites?: number }} TestRunResult
+ * @typedef {(testFiles: string[]) => TestRunResult} BaselineLookup
  * @typedef {{ id: string, status: string, matches: boolean, detail?: string, failed?: number, total?: number }} MutationResult
  * @typedef {{
  *   readFile: (file: string) => string,
@@ -144,9 +147,10 @@ function resultDetail(result) {
  * @param {ManifestEntry} entry
  * @param {Deps} deps
  * @param {ApplyAt} applyAt
+ * @param {BaselineLookup} [runBaseline]
  * @returns {MutationResult}
  */
-export function runOne(entry, deps, applyAt) {
+export function runOne(entry, deps, applyAt, runBaseline = deps.runTests) {
   const dirty = deps.gitPorcelain(entry.file).trim();
   if (dirty) {
     return {
@@ -184,7 +188,7 @@ export function runOne(entry, deps, applyAt) {
   // an unrelated reason? Nothing is written to disk yet, so no restore is needed here.
   let baseline;
   try {
-    baseline = deps.runTests(entry.tests);
+    baseline = runBaseline(entry.tests);
   } catch (/** @type {any} */ e) {
     // `.interrupted` is a duck-typed flag run.mjs's classifySubprocessFailure attaches
     // to a thrown Error (see this file's header comment) -- there is no narrower real
@@ -288,11 +292,32 @@ export function runOne(entry, deps, applyAt) {
  */
 export function runManifest(entries, deps, applyAt) {
   const results = [];
+  /** @type {Map<string, TestRunResult>} */
+  const baselineByScope = new Map();
+
+  /**
+   * Baselines are invariant for an exact scoped test command while the source tree is
+   * unmutated. `runOne` restores and byte-verifies every mutation before returning;
+   * if that verification fails, this loop throws and stops before another entry can
+   * reuse anything. Keep the cache local to this manifest invocation, and keep the
+   * ordered array in the key rather than assuming test-runner argument order is
+   * irrelevant. A thrown/interrupted baseline is never inserted.
+   * @type {BaselineLookup}
+   */
+  const runBaseline = (testFiles) => {
+    const key = JSON.stringify(testFiles);
+    const cached = baselineByScope.get(key);
+    if (cached !== undefined) return cached;
+    const baseline = deps.runTests(testFiles);
+    baselineByScope.set(key, baseline);
+    return baseline;
+  };
+
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     let result;
     try {
-      result = runOne(entry, deps, applyAt);
+      result = runOne(entry, deps, applyAt, runBaseline);
     } catch (/** @type {any} */ e) {
       deps.onResult(
         { id: entry.id, status: 'FATAL', matches: false, detail: String(e?.message ?? e) },

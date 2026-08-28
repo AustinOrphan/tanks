@@ -12,9 +12,12 @@
  *   - an ambiguous find (matches more than once) is refused, not guessed at
  *   - the scoped tests must be GREEN on the unmutated file first (a baseline check) --
  *     otherwise a pre-existing red test elsewhere in the same file reports every
- *     mutation "KILLED" regardless of what it does, at exit 0
+ *     mutation "KILLED" regardless of what it does, at exit 0. Entries with the exact
+ *     same ordered scope reuse that baseline within one manifest invocation, only
+ *     after every earlier mutation has been restored and byte-verified
  *   - the manifest's declared `tests` must actually be able to REACH the mutated file
- *     (checked once per file via `vitest related`, before anything is mutated) --
+ *     (checked per file from one shared Vitest dependency graph, before anything is
+ *     mutated) --
  *     otherwise a mutation scoped to the wrong test file reports SURVIVES, which reads
  *     as "nothing catches this" when the true state is "this was never measured"
  *   - a whole test file failing to COLLECT (a broken import, a syntax error the
@@ -63,7 +66,7 @@
 import { readFileSync, writeFileSync, existsSync, rmSync, realpathSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join, isAbsolute, relative } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAt, validateManifest, findUnreachableEntries } from './lib.mjs';
 import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFailedError } from './orchestrate.mjs';
@@ -75,6 +78,13 @@ import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFaile
  * @typedef {{ reason: 'interrupted' | 'timeout' | 'indeterminate', detail: string }} FailureVerdict
  * @typedef {{ status: number | null, signal: string | null, error?: Error }} SpawnResultLike
  * @typedef {{ id: string, file: string, tests: string[], related: string[] }} UnreachableProblem
+ * @typedef {{
+ *   version: 1,
+ *   sourceCount: number,
+ *   testSpecificationCount: number,
+ *   durationMs: number,
+ *   relatedByFile: Record<string, string[]>,
+ * }} ReachabilityReport
  * @typedef {{
  *   readFile: (file: string) => string,
  *   gitPorcelain: (file: string) => string,
@@ -99,13 +109,15 @@ import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFaile
 // the bottom of this file, not for computing a location relative to import.meta.url the
 // way the old fixed-depth ROOT did.
 
-// A blocking subprocess (vitest, or `vitest related`) with no timeout cannot be
-// interrupted by vitest's OWN test timeout when this harness's meta-tests run it
-// inside a vitest worker -- a hang here would hang `npm test` forever, not just this
-// tool. Generous, because a full related-files probe or a large scoped run can
-// legitimately take tens of seconds; short enough that a genuine hang still surfaces.
+// A blocking subprocess (a scoped Vitest run or the reachability worker) with no
+// timeout cannot be interrupted by Vitest's OWN test timeout when this harness's
+// meta-tests run it inside a Vitest worker -- a hang here would hang `npm test`
+// forever, not just this tool. Generous, because a full related-files probe or a large
+// scoped run can legitimately take tens of seconds; short enough that a genuine hang
+// still surfaces.
 const SUBPROCESS_TIMEOUT_MS = 180_000;
 const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
+const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
 
 /** @param {string[]} argv
  * @returns {{ manifest: string, only: string | null, root: string }} */
@@ -186,16 +198,16 @@ export function unreachableReport(problems) {
 }
 
 /**
- * Classifies why a `vitest`-spawning subprocess produced no output file, from its
+ * Classifies why a child subprocess produced no output file, from its
  * spawnSync result alone (`{ status, signal, error }` -- the shape spawnSync always
  * returns, real or faked). Pure and exported so it is testable without spawning a
- * real, deliberately-broken vitest binary per case.
+ * real, deliberately-broken child per case.
  *
  * Three reasons, and they must never be conflated:
  *
  *   - 'interrupted': a real SIGINT/SIGTERM reached the child (res.signal is one of
- *     those), OR vitest caught the signal ITSELF and exited its own way -- measured
- *     directly: vitest handles SIGINT internally and exits status 130 with signal
+ *     those), OR a child caught the signal ITSELF and exited its own way -- measured
+ *     directly: Vitest handles SIGINT internally and exits status 130 with signal
  *     NULL, not by dying from the signal the way an unhandled child would, so
  *     checking `res.signal` alone misses it. Safe to treat as a graceful stop: this
  *     classifier only ever runs before anything has been mutated (the reachability
@@ -210,10 +222,10 @@ export function unreachableReport(problems) {
  *     this is not worth a wall-clock measurement to close.)
  *   - 'indeterminate': anything else -- `res.error` set (the binary could not even be
  *     launched: deleted, wrong permissions, ENOENT) or a plain nonzero exit with no
- *     report written (a crash, a broken vitest install). This is the case that was
+ *     report written (a crash, a broken Vitest install). This is the case that was
  *     previously conflated with "found nothing" -- measured directly (see
  *     orchestrate.test.ts): a genuinely-empty-but-successful probe (a file nothing
- *     imports) DOES write a report (`testResults: []`, exit 0, status 0). A MISSING
+ *     imports) DOES write a valid per-source report at exit 0. A MISSING
  *     report is therefore never a legitimate "found nothing" -- reporting one as such
  *     is the exact false claim ("nothing tests this file at all") this classifier
  *     exists to prevent when the true state is "the probe itself never completed".
@@ -224,12 +236,12 @@ export function classifySubprocessFailure(res) {
     return { reason: 'timeout', detail: `killed after ${SUBPROCESS_TIMEOUT_MS}ms with no response` };
   }
   if (res.signal != null || res.status === 130) {
-    return { reason: 'interrupted', detail: res.signal ? `signal ${res.signal}` : 'vitest exited 130 (its own SIGINT handling)' };
+    return { reason: 'interrupted', detail: res.signal ? `signal ${res.signal}` : 'child exited 130 (its own SIGINT handling)' };
   }
   if (res.error) {
-    return { reason: 'indeterminate', detail: `could not launch vitest: ${res.error.message}` };
+    return { reason: 'indeterminate', detail: `could not launch subprocess: ${res.error.message}` };
   }
-  return { reason: 'indeterminate', detail: `vitest exited ${res.status} without writing a report` };
+  return { reason: 'indeterminate', detail: `subprocess exited ${res.status} without writing a report` };
 }
 
 /** Turns a classifySubprocessFailure verdict into a thrown, appropriately-flagged
@@ -249,46 +261,96 @@ function failureError(verdict, what) {
   return err;
 }
 
-const relatedCache = new Map();
+/**
+ * Validate and normalize the reachability worker's untrusted JSON output. Every
+ * requested source must have its OWN array: accepting a union or silently treating a
+ * missing key as empty would recreate the false "unreachable" claim this preflight
+ * exists to prevent.
+ * @param {unknown} value @param {string[]} files
+ * @returns {{ relatedByFile: Map<string, Set<string>>, report: ReachabilityReport }}
+ */
+export function readReachabilityReport(value, files) {
+  if (value == null || typeof value !== 'object') {
+    throw new Error('reachability worker report must be an object');
+  }
+  /** @type {any} */
+  const report = value;
+  const uniqueFiles = [...new Set(files)];
+  if (
+    report.version !== 1 ||
+    report.relatedByFile == null ||
+    typeof report.relatedByFile !== 'object' ||
+    Array.isArray(report.relatedByFile)
+  ) {
+    throw new Error('reachability worker report has an unsupported or missing schema');
+  }
+  if (
+    report.sourceCount !== uniqueFiles.length ||
+    !Number.isInteger(report.testSpecificationCount) || report.testSpecificationCount < 0 ||
+    !Number.isInteger(report.durationMs) || report.durationMs < 0
+  ) {
+    throw new Error('reachability worker report has invalid or inconsistent metadata');
+  }
+  const relatedByFile = new Map();
+  for (const file of uniqueFiles) {
+    if (!Object.prototype.hasOwnProperty.call(report.relatedByFile, file)) {
+      throw new Error(`reachability worker report has no per-source result for ${file}`);
+    }
+    const related = report.relatedByFile[file];
+    if (!Array.isArray(related) || !related.every(
+      (/** @type {unknown} */ path) => typeof path === 'string' && path.length > 0,
+    )) {
+      throw new Error(`reachability worker report has an invalid per-source result for ${file}`);
+    }
+    relatedByFile.set(file, new Set(related));
+  }
+  return { relatedByFile, report };
+}
 
-/** The set of test files vitest's OWN dependency graph says are related to `file`,
- *  relative to `root`. One real `vitest related` subprocess per DISTINCT (root, file)
- *  pair in the manifest (cached), run once up front, before anything is mutated -- this
- *  is a manifest-correctness check, not a per-mutation cost.
+/**
+ * Run one timeout-bounded worker that retains one Vitest context while querying every
+ * distinct source file. The command/leading args are injectable so the existing real
+ * crash, missing-binary and signal tests still exercise this exact spawn boundary.
  *
- *  `root` defaults to `process.cwd()`, same reasoning as parseArgs. `vitestBin` is
- *  separately overridable (default: the real binary under `<root>/node_modules/.bin/`)
- *  so tests can point this at a deliberately broken stub without touching the real
- *  installation every other test in this process depends on -- see
- *  orchestrate.test.ts's real end-to-end cases for a stub that exits 1 and one that
- *  does not exist at all. Exported for the same reason: this is the exact function
- *  that produced review's false "nothing tests this file at all" claim, and it had no
- *  test of its own.
- * @param {string} file @param {string} [root] @param {string} [vitestBin] @returns {Set<string>} */
-export function relatedFilesFor(file, root = process.cwd(), vitestBin = join(root, 'node_modules/.bin/vitest')) {
-  const cacheKey = `${root}\0${vitestBin}\0${file}`;
-  if (relatedCache.has(cacheKey)) return relatedCache.get(cacheKey);
+ * @param {string[]} files
+ * @param {string} [root]
+ * @param {string} [workerCommand]
+ * @param {string[]} [workerArgs]
+ * @returns {Map<string, Set<string>>}
+ */
+export function relatedFilesForAll(
+  files,
+  root = process.cwd(),
+  workerCommand = process.execPath,
+  workerArgs = [REACHABILITY_WORKER],
+) {
+  const uniqueFiles = [...new Set(files)];
+  if (uniqueFiles.length === 0) {
+    throw new Error('reachability preflight requires at least one source file');
+  }
   const outFile = join(tmpdir(), `mutate-related-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
-  /** @type {Set<string>} */
-  let related;
   try {
-    const res = spawnSync(vitestBin, ['related', file, '--run', '--reporter=json', `--outputFile=${outFile}`], {
+    const res = spawnSync(workerCommand, [
+      ...workerArgs,
+      '--root', root,
+      '--output', outFile,
+      '--',
+      ...uniqueFiles,
+    ], {
       cwd: root,
       encoding: 'utf8',
       timeout: SUBPROCESS_TIMEOUT_MS,
       killSignal: SUBPROCESS_KILL_SIGNAL,
+      stdio: ['ignore', 'inherit', 'pipe'],
     });
-    if (!existsSync(outFile)) {
-      throw failureError(classifySubprocessFailure(res), `vitest related, probing ${file},`);
+    if (!existsSync(outFile) || res.status !== 0 || res.signal != null || res.error) {
+      throw failureError(classifySubprocessFailure(res), 'shared Vitest reachability worker');
     }
-    /** @type {any} */
-    const report = JSON.parse(readFileSync(outFile, 'utf8'));
-    related = new Set((report.testResults ?? []).map((/** @type {any} */ r) => relative(root, r.name).split('\\').join('/')));
+    const parsed = JSON.parse(readFileSync(outFile, 'utf8'));
+    return readReachabilityReport(parsed, uniqueFiles).relatedByFile;
   } finally {
     rmSync(outFile, { force: true });
   }
-  relatedCache.set(cacheKey, related);
-  return related;
 }
 
 /** Runs vitest against a scoped set of test files and returns exact pass/fail counts
@@ -420,12 +482,13 @@ async function run() {
   assertAllClean(files, root);
 
   // Reachability preflight: refuse to start (nothing mutated yet) if any entry's
-  // declared `tests` cannot possibly exercise its `file`. One `vitest related` call
-  // per distinct file, cached. Nothing is mutated yet at this point either way, so an
+  // declared `tests` cannot possibly exercise its `file`. One timeout-bounded worker
+  // retains one Vitest/Vite dependency graph while still returning a separate related
+  // set for every distinct source. Nothing is mutated yet at this point either way, so an
   // interruption here is always safe -- report it plainly (exit 130, matching the
   // interrupted-mid-run exit code) rather than letting it surface as a confusing
-  // "these entries are unreachable" refusal, which is what a failed `vitest related`
-  // probe would otherwise look like (see classifySubprocessFailure/relatedFilesFor).
+  // "these entries are unreachable" refusal, which is what a failed reachability
+  // probe would otherwise look like (see classifySubprocessFailure/relatedFilesForAll).
   // An INDETERMINATE probe (not interrupted, just failed -- a broken vitest install,
   // a deleted binary) is deliberately NOT distinguished from any other setup failure
   // here: it falls through to main()'s catch and reports "could not determine which
@@ -433,7 +496,9 @@ async function run() {
   // "nothing tests this file" (a confident, false, zero-coverage claim).
   let unreachable;
   try {
-    unreachable = findUnreachableEntries(entries, (file) => relatedFilesFor(file, root));
+    const mutationFiles = [...new Set(entries.map((entry) => entry.file))];
+    const relatedByFile = relatedFilesForAll(mutationFiles, root);
+    unreachable = findUnreachableEntries(entries, (file) => relatedByFile.get(file) ?? new Set());
   } catch (/** @type {any} */ e) {
     if (e?.interrupted) {
       console.error(`\ninterrupted during the reachability preflight; nothing was mutated`);
@@ -457,6 +522,12 @@ async function run() {
     runTests: (testFiles) => runTestsReal(testFiles, root),
     onResult: (result, index, count, entry) => console.log(formatResult(result, index, count, entry)),
   };
+
+  const baselineScopes = new Set(entries.map((entry) => JSON.stringify(entry.tests))).size;
+  console.log(
+    `[baseline] ${entries.length} mutation(s), ${baselineScopes} exact test scope(s); ` +
+    'each scope is checked at most once',
+  );
 
   let results;
   try {
