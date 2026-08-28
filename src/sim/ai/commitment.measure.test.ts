@@ -12,7 +12,18 @@ import {
 } from './targeting';
 import { roundPhase } from '../round';
 import { configFor } from '../config';
-import { AI_JITTER_TICKS, BANK_PREFER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR } from '../constants';
+import { AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR } from '../constants';
+
+/**
+ * The HISTORICAL plan clock: `BANK_PREFER_TICKS`, which tealDecision used to flip its
+ * bank-first/direct-first preference on before issue #332 held the plan per tank instead.
+ * It lives here rather than in constants.ts because production no longer reads it -- but
+ * the acceptance criterion is stated against these tick boundaries ("teal's boundary
+ * aim-step P95 falls to the same order as other kinds"), so the metric still needs the
+ * clock the defect was defined on. Keeping it in constants.ts would have left a tuning
+ * knob in the simulation that turns nothing.
+ */
+const PLAN_CLOCK_TICKS = 120;
 import { detHypot } from '../math/hypot';
 import type { Vec2, Tank } from '../types';
 import type { World } from '../world';
@@ -100,10 +111,10 @@ interface KindStats {
   aimStep: number[];
   aimHold: number[];
   /**
-   * The same |aim-target change|, for pairs crossing a BANK_PREFER_TICKS boundary --
+   * The same |aim-target change|, for pairs crossing a PLAN_CLOCK_TICKS boundary --
    * where teal re-picks bank-first vs direct-first (issue #332). Taken OUT of `aimStep`
    * rather than left in it, for the same reason `aimStep` is split out of `aimHold`:
-   * plan boundaries are 1-in-BANK_PREFER_TICKS of all pairs and 120 is an exact multiple
+   * plan boundaries are 1-in-PLAN_CLOCK_TICKS of all pairs and 120 is an exact multiple
    * of AI_JITTER_TICKS, so every plan boundary is also a jitter boundary and a blended
    * column reports the jitter step with the plan step hidden inside its tail.
    */
@@ -120,7 +131,7 @@ interface KindStats {
    * |aim-target change| on the ticks the held plan ACTUALLY turned over (issue #332).
    *
    * Distinct from `planStep`, and the distinction matters for what may be claimed. Once
-   * the plan stops following the BANK_PREFER_TICKS clock, `planStep` measures an arbitrary
+   * the plan stops following the PLAN_CLOCK_TICKS clock, `planStep` measures an arbitrary
    * tick set -- which is exactly the acceptance criterion's question ("does anything
    * special still happen at those ticks") but says nothing about what a turnover costs.
    * This column is that: the step on the ticks where `aiShotPlan` genuinely changed.
@@ -233,7 +244,7 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
             const crossed =
               Math.floor(w.tick / AI_JITTER_TICKS) !== Math.floor((w.tick - 1) / AI_JITTER_TICKS);
             const planCrossed =
-              Math.floor(w.tick / BANK_PREFER_TICKS) !== Math.floor((w.tick - 1) / BANK_PREFER_TICKS);
+              Math.floor(w.tick / PLAN_CLOCK_TICKS) !== Math.floor((w.tick - 1) / PLAN_CLOCK_TICKS);
             (planCrossed ? s.planStep : crossed ? s.aimStep : s.aimHold).push(jump);
           }
           prevAim.set(t.id, aimed);

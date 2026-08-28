@@ -133,6 +133,37 @@ export interface AIProfileBalance {
    * values yet, and inventing a spread would be a difficulty change dressed up as polish.
    */
   aimHoldTime: number;
+  /**
+   * Seconds this profile HOLDS its bank-first/direct-first shot plan before the plan may
+   * turn over (issue #332). Consumed by `tealDecision` (ai/teal.ts) as
+   * `Math.round(shotCommitmentTime * TICK_HZ)`, the same conversion `commitMove` and
+   * `holdAimFor` use for their own spans.
+   *
+   * DISTINCT from commitmentTime (movement) and aimHoldTime (aim smoothing) by decision,
+   * not by oversight: movement, aim tracking, and tactical shot selection are independently
+   * tuned behaviours, and changing one must not silently change another.
+   *
+   * The window is permissive, not absolute: it gates when the plan MAY turn over, and a
+   * lapsed window re-arms on the same plan unless the held plan also has no solution that
+   * tick. See tealDecision's own comment for what that does and does not buy.
+   *
+   * Inert for every behaviour except TACTICAL: tealDecision is the only decision function
+   * that evaluates a shot plan. The value is still required rather than optional, for the
+   * reason commitmentTime states -- an omitted field on a profile that later gains a shot
+   * plan would silently default to "no commitment", which is the defect this closes.
+   *
+   * NOT scored by `tankDifficultyBreakdown`, for commitmentTime's reason: holding a shot
+   * plan longer makes a tank more decisive AND more predictable at once, so its magnitude
+   * does not map monotonically onto threat.
+   *
+   * Authored UNIFORMLY at 2.0s across profiles. The sweep and its reasoning are recorded
+   * beside the measurement harness in ai/commitment.measure.test.ts; the short version is
+   * that the span does NOT control the smoothness the acceptance criterion measures -- the
+   * turnover gate does -- so what it is chosen for is plan VARIETY, which is stable from
+   * 0.5s to 4.0s and starves the direct plan at 8.0s. A mid-range value is what the
+   * measurement justifies, and nothing in it justifies a per-profile spread yet.
+   */
+  shotCommitmentTime: number;
   aggression: number;
   preferredDistance: number;
   minimumDistance: number;

@@ -416,13 +416,6 @@ export const AI_HAZARD_SPREAD = data.ai.hazardSpread;
 // the profile without retuning this pin (or vice versa) fails loudly.
 export const DODGE_PATIENCE_TICKS = 45;
 
-// ---- Teal AI (tealDecision) ----
-// Alternation period (in ticks) between bank-preferred and direct-preferred targeting, so
-// Teal visibly performs both shot types instead of banking only when cover happens to block
-// the direct line. 120 ticks = 2s at 60Hz. A preference only: the non-preferred option is
-// still tried as a fallback, so Teal never loses a shot it could have taken.
-export const BANK_PREFER_TICKS = 120;
-
 // ---- Turret slew (slewAngle, types.ts) ----
 // Turrets turn at a finite rate instead of snapping to their target angle in a single
 // tick. Applied at the two places a desired turret angle is written onto a tank:

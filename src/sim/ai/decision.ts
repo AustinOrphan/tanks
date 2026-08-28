@@ -43,7 +43,18 @@ export interface AiDecision {
    */
   nextAimHeld: number | null;
   nextAimHeldTicks: number;
-  /** PROTOTYPE (issue #332): optional so only teal sets them while the design is measured. */
+  /**
+   * The bank-first/direct-first shot plan to hold, and the ticks left on its window
+   * (issue #332). Mirrors Tank.aiShotPlan/aiShotPlanTicks.
+   *
+   * OPTIONAL, unlike the intent and aim-hold pairs above, and the distinction is which
+   * of "no opinion" and "clear it" has to be expressible. Those pairs use `null` to mean
+   * CLEAR because no behaviour needs to preserve a hold it did not itself set. A shot
+   * plan does: only tealDecision evaluates one, and brown's and grey's decisions must
+   * leave a teal tank's plan untouched rather than erase it -- so absent has to mean
+   * "this decision has no opinion", which `null` inside a required field cannot say
+   * without a third state. `stepAi` writes the pair back only when it is present.
+   */
   nextShotPlan?: 'bank' | 'direct';
   nextShotPlanTicks?: number;
 }
