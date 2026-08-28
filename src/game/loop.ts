@@ -1568,6 +1568,13 @@ export function startGameWith(
   // showed campaign Lives/Enemies for a match that has neither.
   hud.setRelaunchTarget(relaunchTarget);
   hud.setSessionKind(currentDescriptor.kind);
+  // WHICH GROUND the application screens stand on (issue #317). A third boot-time
+  // projection, and the only one a development flag decides: `null` -- absent or an
+  // unrecognised value -- is the shipped flat ground, and the mapping happens HERE
+  // rather than in the HUD so the HUD keeps its own vocabulary and never imports the
+  // flag module. Pushed unconditionally, so a session that boots with no flag actively
+  // states the default rather than relying on the element's initial classes.
+  hud.setBackdrop(deps.devFlags.backdrop === 'felt' ? 'felt' : 'default');
   // The stock strip's DATA, cleared once for a session that will never produce
   // any. Keyed on the descriptor, like the strip's own visibility gate: a
   // versus session -- setup-pane OR developer-flag -- skips this and lets

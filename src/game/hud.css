@@ -24,6 +24,20 @@
   --hud-text-danger: #ffb4b4;
   --hud-quiet-fill: rgba(216, 221, 230, 0.16);
   --hud-gold: #e0c04a;
+  /* The application backdrop's ground (issue #317, option A3). Referenced ONCE, which
+   * the block header above otherwise reserves for literals -- named anyway, on the
+   * adopted ruling: "It is one token value, so retuning the exact hex later costs one
+   * line and no argument." It is also the single surface a light theme (#351) and a
+   * selectable backdrop (#366) both have to retune, so the name marks the seam rather
+   * than a repetition.
+   *
+   * WHY NOT #14161c, the renderer's own clear colour, which would have matched the
+   * arena's void exactly: `--hud-scrim-panel` is rgba(20, 24, 30, 0.55) and that ground
+   * is rgb(20, 22, 28); composited they give #14171d -- a one-value change in one
+   * channel, sampled off the mockup capture. An opening panel would then change nothing
+   * and the menu would read as a single flat field. This value is the same family
+   * lifted far enough that the panel scrim still reads as a scrim. */
+  --hud-app-ground: #181c24;
 
   /* Elevation: three scrim depths, darkest for the full-pane overlays. */
   --hud-scrim-panel: rgba(20, 24, 30, 0.55);
@@ -214,6 +228,64 @@
 .ui-btn--danger {
   background: rgba(255, 90, 90, 0.18);
   color: var(--hud-text-danger);
+}
+
+/* The application backdrop (issue #317): the ground application screens stand on, so a
+ * menu is a layer over something rather than an overlay on a live game.
+ *
+ * One <div> and one rule. No GL context, no second renderer scene, nothing that needs a
+ * `World` -- which is the property that lets the same layer serve a loading, unsupported-
+ * renderer or error screen (#325), where there is no context to draw into at all.
+ *
+ * Shown on the Main Menu only. Launch keeps the arena behind `.hud-splash`'s 0.92 scrim
+ * (see that rule: "the game is visibly already there, waiting"), and pause and the
+ * outcome screens are read OVER the board the player was just on.
+ *
+ * z-index 0 AND first in the markup, which agree: below the topbar (1), the toast rail
+ * (2) and the title screen (3), and below the panels, which are positioned with
+ * z-index auto and therefore paint in tree order. pointer-events stay off -- the ground
+ * is scenery, and `.hud` itself is already transparent to the pointer. */
+.ui-app-ground {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--hud-app-ground);
+  pointer-events: none;
+}
+
+/* Without this the ground covers the arena from page load and never leaves -- the same
+ * dead-CSS failure `.hud-splash--hidden` carries its own note about. */
+.ui-app-ground--hidden {
+  display: none;
+}
+
+/* The felt tabletop, the alternative the ruling kept switchable rather than dropped
+ * (`?dev=1&backdrop=felt`; docs/dev-flags.md). Not player-facing: which backdrops a
+ * player may CHOOSE is #366.
+ *
+ * `#2f6d4f` is not invented -- it is `scene.ts`'s `groundMat.color`, the arena floor's
+ * own material colour. The gradient stops bracket what the lit board measures on screen
+ * through the menu scrim: #49665e where the sun catches the felt, #1e453a in shadow.
+ *
+ * The raised board edge is what turns "green" into "a game on a table"; the flat colour
+ * alone reads as paint. Its `inset: 6% 8%` frame is tuned for the desktop layout and
+ * crowds the settings row at phone width -- a breakpoint decision that belongs with
+ * #290's viewport matrix, and one this flag's development-only reach does not force. */
+.ui-app-ground--felt {
+  background:
+    repeating-linear-gradient(122deg, rgba(255, 255, 255, 0.014) 0 2px, rgba(0, 0, 0, 0.014) 2px 4px),
+    radial-gradient(120% 90% at 50% 34%, #3f7a5e 0%, #2f6d4f 42%, #25543f 78%, #1b3d2e 100%);
+}
+
+.ui-app-ground--felt::after {
+  content: '';
+  position: absolute;
+  inset: 6% 8%;
+  border-radius: var(--hud-radius-md);
+  box-shadow:
+    0 0 0 14px #2b3038,
+    0 0 0 16px #3a4049,
+    0 26px 60px rgba(0, 0, 0, 0.55);
 }
 
 .hud {

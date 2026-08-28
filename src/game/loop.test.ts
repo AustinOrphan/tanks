@@ -41,7 +41,7 @@ import {
   playingPhase,
   resolveSession,
 } from './app-state';
-import type { HudRelaunchTarget, HudSessionKind, HudSurface } from './hud';
+import type { HudBackdrop, HudRelaunchTarget, HudSessionKind, HudSurface } from './hud';
 
 /**
  * The HUD-visible surface the harness sets by name. Mirrors the exhaustive
@@ -232,6 +232,8 @@ interface Recorder {
    * a test that only watched one of them could not see that.
    */
   relaunchTargets: HudRelaunchTarget[];
+  /** Every value passed to hud.setBackdrop, in order -- WHICH GROUND the menu stands on. */
+  backdrops: HudBackdrop[];
   /**
    * A SINGLE shared log of every hud.setState and hud.showVersusSetup call, in the
    * exact order loop.ts made them -- unlike hudStates/versusSetupPushes (each its own
@@ -443,6 +445,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     versusSetupPushes: [],
     sessionKinds: [],
     relaunchTargets: [],
+    backdrops: [],
     hudCallLog: [],
     levelSelects: [],
     continueAvailable: [],
@@ -1152,6 +1155,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         setRelaunchTarget: (target: HudRelaunchTarget) => {
           rec.relaunchTargets.push(target);
           rec.hudCallLog.push(`relaunchTarget:${target}`);
+        },
+        setBackdrop: (treatment: HudBackdrop) => {
+          rec.backdrops.push(treatment);
         },
         onCampaignOpen: (cb: () => void) => {
           onCampaignOpenCb = cb;
@@ -5967,6 +5973,28 @@ describe('startGameWith: campaign return from a versus session (Task 5b)', () =>
     expect(h.rec.sessionKinds).toEqual(['campaign']);
     expect(h.rec.relaunchTargets).toEqual(['campaign-levels']);
     h.handle.dispose();
+  });
+
+  it('pushes the backdrop treatment once at construction: the flat ground by default', () => {
+    // The third boot-time projection (issue #317). Exactly once, and unconditionally --
+    // a session with no flag STATES the default rather than leaving the element on
+    // whatever classes its markup shipped with.
+    const h = boot(makeDeps());
+    expect(h.rec.backdrops).toEqual(['default']);
+    h.handle.dispose();
+  });
+
+  it('pushes the felt treatment for ?dev=1&backdrop=felt, and nothing else does', () => {
+    // The ruling kept B switchable rather than as dead CSS; this is the wire that makes
+    // the switch reach the screen. The `mineReach` case is the negative control: an
+    // UNRELATED developer flag must not move this projection, which a `devFlags` truthiness
+    // check rather than a value check would.
+    const felt = boot(makeDeps({ devFlags: { backdrop: 'felt' } }));
+    expect(felt.rec.backdrops).toEqual(['felt']);
+    felt.handle.dispose();
+    const other = boot(makeDeps({ devFlags: { mineReach: true } }));
+    expect(other.rec.backdrops).toEqual(['default']);
+    other.handle.dispose();
   });
 
   it('setSessionKind runs before the very first setState push -- order pin', () => {

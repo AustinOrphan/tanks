@@ -386,6 +386,13 @@ describe('hud.css is syntactically whole', () => {
       // The disabled-reason line. Without it the two reasons in the HUD render at body
       // size and full opacity, reading as content rather than as an aside.
       '.ui-hint',
+      // The application backdrop (issue #317). Without the base rule the menu is drawn
+      // over the live arena again; without the hidden rule an opaque ground covers the
+      // game from load and never leaves. The felt pair is the ruling's switchable
+      // alternative -- present here so a merge that drops it is a red test rather than a
+      // development flag that silently does nothing.
+      '.ui-app-ground', '.ui-app-ground--hidden',
+      '.ui-app-ground--felt', '.ui-app-ground--felt::after',
       // losing a life -- '--hud-damage-color' is the variable hud.ts's signalPlayerDeath
       // tints (death-pulse issue #200); without it the vignette is stuck on whatever
       // the default red resolves to no matter what colour is passed in.
@@ -484,6 +491,48 @@ describe('hud.css is syntactically whole', () => {
     ]) {
       expect(css, `${sel} missing from hud.css`).toContain(sel);
     }
+  });
+
+  it('paints the application ground OPAQUE, and at the tuned value -- both measured, not read', () => {
+    // The load-bearing property is opacity, not the hex. Issue #317's other half stops
+    // Quit from rebuilding the board, so whatever world the player abandoned is still
+    // behind this layer when the menu appears -- a scrim here, instead of a ground,
+    // would put a paused explosion under the New Game button. A transparent or
+    // translucent value fails the first assertion.
+    //
+    // The exact value is pinned second because the token block's own rule says a token
+    // whose VALUE changes is a visual change that owes its own evidence; this is where
+    // that change is caught. `#14161c`, the renderer's clear colour, is NOT this value
+    // on purpose: composited under `--hud-scrim-panel` (rgba(20, 24, 30, 0.55)) it gives
+    // #14171d, a one-value change in one channel, and an opening panel would then change
+    // nothing on screen. See the token's own comment.
+    //
+    // Read through `resolved`: the rule writes `background: var(--hud-app-ground)`, and
+    // jsdom hands back that literal string -- an assertion on the raw computed value
+    // would pass against any hex at all.
+    const el = document.createElement('div');
+    el.className = 'ui-app-ground';
+    document.body.appendChild(el);
+
+    const background = resolved(el, 'background');
+    expect(background, 'the application ground is not opaque').toMatch(/^#[0-9a-f]{6}$/i);
+    expect(background).toBe('#181c24');
+    document.body.innerHTML = '';
+  });
+
+  it('hides the ground with display, not with a colour -- the dead-CSS half', () => {
+    // `.ui-app-ground--hidden` carrying no declaration is the exact failure
+    // `.hud-splash--hidden` has its own note about: the class goes on, the element
+    // stays painted, and an opaque ground covers the game from load and never leaves.
+    // Measured against the SAME element with the modifier removed, so a rule that hid
+    // everything unconditionally would fail the control.
+    const el = document.createElement('div');
+    el.className = 'ui-app-ground ui-app-ground--hidden';
+    document.body.appendChild(el);
+    expect(getComputedStyle(el).display).toBe('none');
+    el.className = 'ui-app-ground';
+    expect(getComputedStyle(el).display, 'the ground is hidden even unmodified').not.toBe('none');
+    document.body.innerHTML = '';
   });
 
   it('never lets a button fall through to browser default styling', () => {

@@ -459,6 +459,33 @@ describe('parseDevFlags: mode (n-player arc PR 4 -- FFA + teams)', () => {
   });
 });
 
+describe('parseDevFlags: backdrop (issue #317 -- the felt treatment kept switchable)', () => {
+  it('is null without dev mode, whatever the value says', () => {
+    expect(parseDevFlags('?backdrop=felt').backdrop).toBeNull();
+  });
+
+  it('is null when absent -- the flat application ground is the shipped default', () => {
+    expect(parseDevFlags('?dev=1').backdrop).toBeNull();
+  });
+
+  it('accepts felt -- population: the one named treatment this build carries', () => {
+    expect(parseDevFlags('?dev=1&backdrop=felt').backdrop).toBe('felt');
+  });
+
+  it('rejects anything else to null rather than guessing -- population: the 5 forms below', () => {
+    // `default` and `flat` are in the set deliberately: naming the DEFAULT is not a way
+    // to select a treatment, and a parser that accepted either would put a value in the
+    // field that no consumer branches on.
+    for (const v of ['', 'FELT', 'velvet', 'default', 'flat']) {
+      expect(parseDevFlags(`?dev=1&backdrop=${v}`).backdrop).toBeNull();
+    }
+  });
+
+  it('does not disturb the boolean flags', () => {
+    expect(parseDevFlags('?dev=1&backdrop=felt')).toEqual({ ...DEV_FLAGS_OFF, backdrop: 'felt' });
+  });
+});
+
 describe('registryKeyMismatch: proven against synthetic fixtures first', () => {
   // The point of factoring this out: a check written directly against FLAG_REGISTRY can
   // never fail while `Record<keyof DevFlags, FlagSpec>` stands (a missing or extra key is

@@ -563,6 +563,61 @@ describe('createHud panel', () => {
     }
   });
 
+  it('draws the application backdrop on the Main Menu and on no other surface', () => {
+    // The whole visible half of issue #317's first change: with an opaque ground under
+    // the menu, the board behind it stops being what the player reads -- which is what
+    // makes a quit that no longer rebuilds that board invisible.
+    //
+    // Swept over all six surfaces, not spot-checked, for the same reason the touch-row
+    // sweep above is: one sample cannot tell "only on the Main Menu" from "always", and
+    // the two surfaces most easily got wrong are the two the Quit button is reachable
+    // from -- 'paused' and 'outcome-win', where the arena MUST stay visible.
+    const { hud: h, root } = mount();
+    const ground = root.querySelector('.ui-app-ground') as HTMLElement;
+    const hidden = (): boolean => ground.classList.contains('ui-app-ground--hidden');
+
+    h.setState('main-menu');
+    expect(hidden(), 'the menu has no ground under it').toBe(false);
+    for (const s of ['launch', 'playing', 'paused', 'outcome-win', 'outcome-lose'] as const) {
+      h.setState(s);
+      expect(hidden(), `the application ground is covering ${s}`).toBe(true);
+    }
+  });
+
+  it('starts hidden at mount, before any setState -- the ground never flashes over a boot frame', () => {
+    // The markup ships the --hidden class rather than relying on the first setState to
+    // add it. Without that, a HUD constructed before its first state push paints an
+    // opaque ground over whatever is on screen.
+    const { root } = mount();
+    expect((root.querySelector('.ui-app-ground') as HTMLElement).className).toContain(
+      'ui-app-ground--hidden',
+    );
+  });
+
+  it("setBackdrop switches the treatment class both ways, and changes nothing about WHEN the ground shows", () => {
+    // Two claims, because the pair is what the ruling asked for: the felt is reachable
+    // (`?dev=1&backdrop=felt` -> loop.ts -> here) and the default is genuinely restorable
+    // rather than a one-way trip. The visibility assertion is the negative control for
+    // wiring the treatment into the --hidden toggle by mistake: a setBackdrop that also
+    // decided visibility would fail the second half.
+    const { hud: h, root } = mount();
+    const ground = root.querySelector('.ui-app-ground') as HTMLElement;
+    h.setState('main-menu');
+
+    expect(ground.classList.contains('ui-app-ground--felt')).toBe(false);
+    h.setBackdrop('felt');
+    expect(ground.classList.contains('ui-app-ground--felt')).toBe(true);
+    h.setBackdrop('default');
+    expect(ground.classList.contains('ui-app-ground--felt')).toBe(false);
+
+    h.setBackdrop('felt');
+    expect(ground.classList.contains('ui-app-ground--hidden'), 'felt hid the ground').toBe(false);
+    h.setState('playing');
+    expect(ground.classList.contains('ui-app-ground--hidden'), 'felt kept it on during play').toBe(
+      true,
+    );
+  });
+
   it('does not render the Game Over panel behind the splash screen at boot', () => {
     // setState's final `else` is a Game Over branch, and every state that does not
     // return before reaching it falls in. 'splash' returns early alongside 'playing'.
