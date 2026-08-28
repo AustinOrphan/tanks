@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {
   mineWarningFrame, FUSE_WARNING_SECONDS, RING_STEPS,
   glowRadius, glowOpacity, litInnerFraction, litStepFor, litInnerForStep,
-  makeMineLitRing, makeMineGlowMesh,
+  makeMineLitRing, makeMineGlowMesh, disposeMineGlowMesh,
   GLOW_START_SCALE, GLOW_END_SCALE,
 } from './mine-warning';
 import { MINE_R, MINE_Y, createEntityViews } from './entities';
@@ -194,12 +194,36 @@ describe('the cues are actually VISIBLE, not just computed', () => {
   // on screen for half the countdown. Frame tests assert fractions; nothing in them says
   // whether pixels reach the player.
 
-  it('the glow is ADDITIVE, so it reads as light rather than as a painted disc', () => {
+  it('the glow is ADDITIVE and FADES OUT, so it reads as light rather than a painted disc', () => {
+    // Additive alone is not enough: a flat additive disc still has a hard rim, and a hard
+    // rim is the decal quality the owner objected to arriving by another route. The alpha
+    // must actually reach zero at the circumference.
     const mesh = makeMineGlowMesh();
     const mat = mesh.material as THREE.MeshBasicMaterial;
     expect(mat.blending).toBe(THREE.AdditiveBlending);
-    mesh.geometry.dispose();
-    mat.dispose();
+    const tex = mat.map!;
+    expect(tex).toBeDefined();
+    const px = (tex.image as { data: Uint8ClampedArray }).data;
+    const n = tex.image.width as number;
+    const alphaAt = (x: number, y: number) => px[(y * n + x) * 4 + 3];
+    const mid = Math.floor((n - 1) / 2);
+    expect(alphaAt(mid, mid)).toBeGreaterThan(240); // opaque at the centre
+    expect(alphaAt(0, mid)).toBe(0); // and gone at the rim
+    expect(alphaAt(mid, mid)).toBeGreaterThan(alphaAt(Math.floor(n * 0.75), mid)); // monotone
+    disposeMineGlowMesh(mesh);
+  });
+
+  it('disposing the glow releases its TEXTURE, which Material.dispose does not', () => {
+    // entities.ts's generic disposeObject frees geometry and material only, so routing the
+    // glow through it would leak one 64x64 RGBA buffer per mine that burned its fuse down.
+    const mesh = makeMineGlowMesh();
+    const tex = (mesh.material as THREE.MeshBasicMaterial).map!;
+    let disposed = false;
+    tex.addEventListener('dispose', () => {
+      disposed = true;
+    });
+    disposeMineGlowMesh(mesh);
+    expect(disposed).toBe(true);
   });
 
   it('the illumination clears the dome, so it is visible from the tick it is tripped', () => {

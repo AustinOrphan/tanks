@@ -9,7 +9,7 @@ import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '.
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
-import { mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction, makeMineGlowMesh, makeMineLitMesh, glowRadius, glowOpacity } from './mine-warning';
+import { mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction, makeMineGlowMesh, makeMineLitMesh, disposeMineGlowMesh, glowRadius, glowOpacity } from './mine-warning';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
@@ -1606,9 +1606,10 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         view.ring.position.set(m.pos.x, GLOW_Y, m.pos.y);
         (view.ring.material as THREE.MeshBasicMaterial).opacity = glowOpacity(warn.fuse.growth);
       } else if (view.ring) {
-        disposeObject(view.ring);
+        // disposeMineGlowMesh, not disposeObject: the glow's falloff texture is bound to
+        // `map`, and Material.dispose() does not release it.
+        disposeMineGlowMesh(view.ring);
         view.ring = null;
-        view.ringStep = -1;
       }
 
       if (warn.proximity) {
@@ -1642,7 +1643,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   /** Removes a mine's body AND both warning cues -- see MineView on why they are separate. */
   function disposeMineView(view: MineView): void {
     disposeObject(view.mesh);
-    if (view.ring) disposeObject(view.ring);
+    if (view.ring) disposeMineGlowMesh(view.ring);
     if (view.fill) disposeObject(view.fill);
   }
 

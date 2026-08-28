@@ -171,6 +171,43 @@ export function makeMineLitRing(mineRadius: number, step: number): THREE.RingGeo
   return new THREE.RingGeometry(Math.min(inner, mineRadius * 0.985), mineRadius, RING_SEGMENTS);
 }
 
+/** Resolution of the glow's falloff texture. 64 is ample for a soft radial ramp. */
+const GLOW_TEX_SIZE = 64;
+
+/**
+ * The glow's radial falloff, as a DataTexture rather than a flat colour.
+ *
+ * WITHOUT THIS IT IS NOT A GLOW. A flat additive disc has a hard rim, and a hard rim reads
+ * as a painted decal lying on the felt -- which is the exact quality the owner objected to
+ * in the previous revision, arriving again by a different route. Light has no edge, so the
+ * alpha ramps from opaque at the centre to zero at the circumference and the disc has no
+ * discernible boundary at all.
+ *
+ * `DataTexture` over a canvas gradient because this module has to build in the headless
+ * test environment, which has no `document` -- the same reason textures.ts writes raw pixel
+ * arrays. Squared falloff rather than linear: linear still leaves a faintly visible disc
+ * edge, since alpha is falling at its fastest right where the eye is looking for a boundary.
+ */
+function makeGlowTexture(): THREE.DataTexture {
+  const n = GLOW_TEX_SIZE;
+  const px = new Uint8ClampedArray(n * n * 4);
+  const c = (n - 1) / 2;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const i = (y * n + x) * 4;
+      const d = Math.hypot(x - c, y - c) / c;
+      const fade = d >= 1 ? 0 : (1 - d) * (1 - d);
+      px[i] = 255;
+      px[i + 1] = 255;
+      px[i + 2] = 255;
+      px[i + 3] = Math.round(255 * fade);
+    }
+  }
+  const t = new THREE.DataTexture(px, n, n, THREE.RGBAFormat);
+  t.needsUpdate = true;
+  return t;
+}
+
 /**
  * The under-mine glow's mesh: an additive disc laid just off the felt, scaled per frame.
  *
@@ -185,6 +222,7 @@ export function makeMineGlowMesh(): THREE.Mesh {
     new THREE.CircleGeometry(1, 32),
     new THREE.MeshBasicMaterial({
       color: MINE_WARNING_COLOR,
+      map: makeGlowTexture(),
       transparent: true,
       opacity: GLOW_OPACITY_MIN,
       side: THREE.DoubleSide,
@@ -195,6 +233,21 @@ export function makeMineGlowMesh(): THREE.Mesh {
   mesh.rotation.x = -Math.PI / 2;
   mesh.name = 'mine-fuse-warning';
   return mesh;
+}
+
+/**
+ * Disposes a glow mesh's geometry, material AND its falloff texture.
+ *
+ * Needed as its own function because `Material.dispose()` does NOT release a texture bound
+ * to `map` -- entities.ts's generic `disposeObject` would free the geometry and material and
+ * silently leak one 64x64 RGBA buffer per mine that ever burned its fuse down.
+ */
+export function disposeMineGlowMesh(mesh: THREE.Mesh): void {
+  const mat = mesh.material as THREE.MeshBasicMaterial;
+  mat.map?.dispose();
+  mat.dispose();
+  mesh.geometry.dispose();
+  mesh.parent?.remove(mesh);
 }
 
 /**
