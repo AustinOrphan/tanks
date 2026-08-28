@@ -133,6 +133,67 @@ export interface AIProfileBalance {
    * values yet, and inventing a spread would be a difficulty change dressed up as polish.
    */
   aimHoldTime: number;
+  /**
+   * Seconds this profile HOLDS its bank-first/direct-first shot plan before the plan may
+   * turn over (issue #332). Consumed by `tealDecision` (ai/teal.ts) as
+   * `Math.round(shotCommitmentTime * TICK_HZ)`, the same conversion `commitMove` and
+   * `holdAimFor` use for their own spans.
+   *
+   * DISTINCT from commitmentTime (movement) and aimHoldTime (aim smoothing) by decision,
+   * not by oversight: movement, aim tracking, and tactical shot selection are independently
+   * tuned behaviours, and changing one must not silently change another.
+   *
+   * The window is permissive, not absolute: it gates when the plan MAY turn over, and a
+   * lapsed window re-arms on the same plan unless the held plan also has no solution that
+   * tick. See tealDecision's own comment for what that does and does not buy.
+   *
+   * Inert for every behaviour except TACTICAL: tealDecision is the only decision function
+   * that evaluates a shot plan. The value is still required rather than optional, for the
+   * reason commitmentTime states -- an omitted field on a profile that later gains a shot
+   * plan would silently default to "no commitment", which is the defect this closes.
+   *
+   * NOT scored by `tankDifficultyBreakdown`, for commitmentTime's reason: holding a shot
+   * plan longer makes a tank more decisive AND more predictable at once, so its magnitude
+   * does not map monotonically onto threat.
+   *
+   * Authored UNIFORMLY at 2.0s across profiles, from the sweep below. Population: 60 seeds
+   * x 2 arenas x 2 player policies, via ai/commitment.measure.test.ts (VITE_RUN_MEASURE=1).
+   * The two figures in each cell are the two arena/policy combinations teal appears in.
+   *
+   *   span        plan-clock-boundary P95 | turnovers | occupancy bank/direct
+   *   (branch pt) 64.91, 52.83            | 348, 276  | 51/49, 51/49
+   *   30  / 0.5s  0.09, 0.07              | 175, 97   | 69/31, 73/27
+   *   60  / 1.0s  1.21, 0.79              | --        | 70/30, 74/26
+   *   120 / 2.0s  1.80, 1.47              | 38, 25    | 67/33, 73/27      <- chosen
+   *   240 / 4.0s  1.18, 1.20              | --        | 70/30, 70/30
+   *   480 / 8.0s  1.47, 0.79              | --        | 74/26, 81/19
+   *
+   * PROVENANCE, because the rows do not share one: the branch-point, 0.5s and 2.0s rows were
+   * measured on THIS tree. The 1.0s, 4.0s and 8.0s rows were measured on the prototype tree,
+   * before the rebase and before teal's no-target return carried the plan pair; they are
+   * carried, and they are the three rows with no turnover count because that column was added
+   * afterwards. The 0.5s row reproduced its prototype value exactly (0.09/0.07) when re-run
+   * here, which is the reason the other three are trusted enough to carry rather than re-run.
+   *
+   * WHAT THE SWEEP SHOWS, and it is NOT that the metric is flat -- an earlier draft of this
+   * comment said "flat with no trend across all five spans", and the table above refutes it:
+   * 0.5s measures about twenty times lower on the acceptance criterion's own metric than the
+   * value chosen. What the span actually controls is COMMITMENT, which is what the issue is
+   * about: turnovers fall 175 -> 38 and 97 -> 25 going from 0.5s to 2.0s, against 348 and 276
+   * at the branch point. The smoothness cost of buying that commitment is real and bounded --
+   * 0.09 -> 1.80 -- and 1.80 still sits inside the 0.03-2.26 that every OTHER kind spans in
+   * the same run, which is exactly what the acceptance criterion asks for.
+   *
+   * So 2.0s is chosen for commitment at a measured smoothness cost, not because the metric was
+   * indifferent. It also carries the healthiest direct-plan share in the table (33%) and
+   * matches the historical cadence, which keeps the change readable as "when the plan may turn
+   * over, not how often". A shorter span is the right answer if smoothness is ever weighted
+   * above commitment; the numbers to make that call are above rather than re-derivable.
+   *
+   * Nothing measured justifies a per-profile spread yet, and inventing one would be a
+   * difficulty change dressed as polish.
+   */
+  shotCommitmentTime: number;
   aggression: number;
   preferredDistance: number;
   minimumDistance: number;

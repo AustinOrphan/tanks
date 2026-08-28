@@ -159,7 +159,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
 }
 
 const PROFILE_FIELDS = [
-  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aimHoldTime', 'aggression', 'preferredDistance',
+  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aimHoldTime', 'shotCommitmentTime', 'aggression', 'preferredDistance',
   'minimumDistance', 'retreatChance', 'directShotWeight', 'bankShotWeight',
 ] as const;
 const PROFILE_OPTIONAL_FIELDS = ['minePlacementChance'] as const;
@@ -204,6 +204,9 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // Math.round(aimHoldTime * TICK_HZ), and a negative span would re-arm to a negative
       // countdown that never reaches zero -- an aim frozen for the rest of the round.
       aimHoldTime: nonNegative(file, `${profile}.aimHoldTime`, p.aimHoldTime),
+      // Same reason again: tealDecision re-arms to Math.round(shotCommitmentTime * TICK_HZ),
+      // and a negative span would re-arm to a negative countdown that is already lapsed.
+      shotCommitmentTime: nonNegative(file, `${profile}.shotCommitmentTime`, p.shotCommitmentTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
       minimumDistance: num(file, `${profile}.minimumDistance`, p.minimumDistance),

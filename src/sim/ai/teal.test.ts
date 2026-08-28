@@ -3,8 +3,8 @@ import { tealDecision } from './teal';
 import { aimJitter, aimLead, bankShot, wanderMove, profileAimSpread } from './targeting';
 import type { Tank, Vec2, Wall, Bullet } from '../types';
 import type { World } from '../world';
-import { configFor } from '../config';
-import { BANK_PREFER_TICKS, bulletConfig, RICOCHET_BOUNCES } from '../constants';
+import { configFor, type ResolvedTankConfig } from '../config';
+import { bulletConfig, RICOCHET_BOUNCES, TICK_HZ } from '../constants';
 
 // The spread these fixtures' expected angles float with: teal's PROFILE-derived
 // jitter (aimAccuracy pass), not the global anchor.
@@ -17,6 +17,15 @@ function tank(id: number, kind: Tank['kind'], pos: Vec2, over: Partial<Tank> = {
     aiState: 'idle', aiTimer: 0, ...over,
   };
 }
+// The shot plan these fixtures drive (issue #332). It replaced `tick: BANK_PREFER_TICKS`
+// as the way a test says "direct-preferred": the preference is per-tank state now, so a
+// tick no longer selects anything and a fixture that still set one would be asserting
+// against whatever the default happens to be. Ticks are deliberately mid-window (not 1),
+// so `lapsed` is false and these fixtures cannot also trip the turnover gate.
+function held(plan: 'bank' | 'direct'): Partial<Tank> {
+  return { aiShotPlan: plan, aiShotPlanTicks: 60 };
+}
+
 function bullet(id: number, ownerId: number, pos: Vec2, vel: Vec2): Bullet {
   return { id, ownerId, type: 'normal', pos, vel, bouncesLeft: 1, alive: true };
 }
@@ -208,11 +217,11 @@ describe('tealDecision', () => {
   // tank the shell touches, and lineOfSight only ever tested walls. ----
 
   it('does not take a direct shot with a teammate on the line, and banks instead', () => {
-    const teal = tank(1, 'teal', { x: 0, y: 0 });
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, held('direct'));
     const mate = tank(3, 'brown', { x: 2, y: 0 }); // on the direct line to the player
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(2, -5, 2, 10, 3)]; // bounce surface only; direct LOS is wall-clear
-    const w = world({ tanks: [teal, mate, player], walls, tick: BANK_PREFER_TICKS }); // direct-preferred
+    const w = world({ tanks: [teal, mate, player], walls }); // plan: direct-preferred
     const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
     // Fell through to the bank path (bounce point (2,2) -> pi/4), not the direct angle 0.
@@ -278,10 +287,10 @@ describe('tealDecision', () => {
     expect(Math.hypot(d.desiredMove.x, d.desiredMove.y)).toBeCloseTo(1, 6);
   });
 
-  // ---- Important 2 (user decision): alternate between bank-preferred and
-  // direct-preferred targeting on a deterministic tick-bucket cycle ----
+  // ---- Important 2 (user decision): both bank-preferred and direct-preferred targeting
+  // occur, selected by the tank's HELD plan rather than a global tick cycle (issue #332) ----
 
-  it('alternates shot preference deterministically: bank-preferred vs direct-preferred pick different angles when both a direct shot and a bank shot exist', () => {
+  it('the held shot plan selects the angle: bank-preferred vs direct-preferred pick different angles when both a direct shot and a bank shot exist', () => {
     const player = tank(2, 'player', { x: 4, y: 0 });
     // Only the top bounce wall, no blocker: the direct line y=0 never enters the wall's
     // y:[2,3] span, so lineOfSight is clear; the wall's bottom face also yields a valid
@@ -291,34 +300,42 @@ describe('tealDecision', () => {
     // since this is the only wall in the fixture). So both options are genuinely available
     // -- this is what makes the test discriminate real alternation from coincidence.
     const walls = [wall(2, -5, 2, 10, 3)];
-    const teal0 = tank(1, 'teal', { x: 0, y: 0 });
-    const w0 = world({ tanks: [teal0, player], walls, tick: 0 }); // preferBank: floor(0/120)=0, even
-    const d0 = tealDecision(w0, teal0);
-    const teal120 = tank(1, 'teal', { x: 0, y: 0 });
-    const w120 = world({ tanks: [teal120, player], walls, tick: BANK_PREFER_TICKS }); // floor(120/120)=1, odd -> direct-preferred
-    const d120 = tealDecision(w120, teal120);
-    expect(d0.fire).toBe(true);
-    expect(d120.fire).toBe(true);
-    // tick 0: bank-preferred -> bank path taken, plus this tick's seeded aim jitter
-    expect(d0.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w0, teal0, TEAL_SPREAD), 6);
-    // tick 120: direct-preferred -> direct shot taken, plus this tick's seeded aim jitter
-    expect(d120.turretAngle).toBeCloseTo(aimJitter(w120, teal120, TEAL_SPREAD), 6);
+    // BOTH worlds sit on tick 0 with the same tank id, so the seeded aim jitter is
+    // identical in the two branches and the HELD PLAN is the only independent variable.
+    const tealBank = tank(1, 'teal', { x: 0, y: 0 }, held('bank'));
+    const wBank = world({ tanks: [tealBank, player], walls });
+    const dBank = tealDecision(wBank, tealBank);
+    const tealDirect = tank(1, 'teal', { x: 0, y: 0 }, held('direct'));
+    const wDirect = world({ tanks: [tealDirect, player], walls });
+    const dDirect = tealDecision(wDirect, tealDirect);
+    expect(dBank.fire).toBe(true);
+    expect(dDirect.fire).toBe(true);
+    // plan 'bank': bank path taken, plus this tick's seeded aim jitter
+    expect(dBank.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(wBank, tealBank, TEAL_SPREAD), 6);
+    // plan 'direct': direct shot taken, plus this tick's seeded aim jitter
+    expect(dDirect.turretAngle).toBeCloseTo(aimJitter(wDirect, tealDirect, TEAL_SPREAD), 6);
+    // The two angles genuinely differ, so neither assertion above could pass by both
+    // branches collapsing onto the same default -- the vacuity the tick fixtures risked.
+    expect(dBank.turretAngle).not.toBeCloseTo(dDirect.turretAngle as number, 6);
+    // Solvable on both sides, so the window re-arms on the plan it held: no turnover.
+    expect(dBank.nextShotPlan).toBe('bank');
+    expect(dDirect.nextShotPlan).toBe('direct');
   });
 
-  it('fallthrough: bank-preferred tick still takes the direct shot when no bank path exists', () => {
-    const teal = tank(1, 'teal', { x: 0, y: 0 });
+  it('fallthrough: a bank-preferred plan still takes the direct shot when no bank path exists', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, held('bank'));
     const player = tank(2, 'player', { x: 5, y: 0 });
-    const w = world({ tanks: [teal, player], tick: 0 }); // preferBank true, no walls -> bank impossible
+    const w = world({ tanks: [teal, player] }); // plan: bank-preferred, no walls -> bank impossible
     const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
     expect(d.turretAngle).toBeCloseTo(aimJitter(w, teal, TEAL_SPREAD), 6);
   });
 
-  it('fallthrough: direct-preferred tick still takes the bank shot when line-of-sight is blocked', () => {
-    const teal = tank(1, 'teal', { x: 0, y: 0 });
+  it('fallthrough: a direct-preferred plan still takes the bank shot when line-of-sight is blocked', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, held('direct'));
     const player = tank(2, 'player', { x: 4, y: 0 });
     const walls = [wall(1, 1.5, -1, 2.5, 1), wall(2, -5, 2, 10, 3)]; // blocker + bounce wall
-    const w = world({ tanks: [teal, player], walls, tick: BANK_PREFER_TICKS }); // direct-preferred, LOS blocked
+    const w = world({ tanks: [teal, player], walls }); // plan: direct-preferred, LOS blocked
     const d = tealDecision(w, teal);
     expect(d.fire).toBe(true);
     expect(d.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w, teal, TEAL_SPREAD), 6);
@@ -385,5 +402,104 @@ describe('tealDecision', () => {
     const playerAt = tank(2, 'player', { x: 5, y: 0 });
     expect(tealDecision(world({ tanks: [below, playerBelow] }), below, MINE_SURE).mine).toBe(true);
     expect(tealDecision(world({ tanks: [at, playerAt] }), at, MINE_SURE).mine).toBe(false);
+  });
+});
+
+describe('teal shot-plan span (issue #332)', () => {
+  // The span the shipped teal profile authorises, derived the way teal.ts derives it, so
+  // these assertions track ai-profiles.json instead of restating a number beside it.
+  const SPAN = Math.round(configFor('teal').ai.shotCommitmentTime * TICK_HZ);
+  // Player in the open, no walls: the direct plan always solves here and the bank plan
+  // never can (bankShot needs a bounce surface). That asymmetry is what lets one fixture
+  // hold a solvable plan and another hold an unsolvable one on the same geometry.
+  const openField = (over: Partial<Tank>, cfg?: ResolvedTankConfig) => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, over);
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    return { teal, d: tealDecision(world({ tanks: [teal, player] }), teal, cfg ?? configFor('teal')) };
+  };
+
+  it('re-arms from the PROFILE FIELD, not from a constant that happens to equal it', () => {
+    // The shipped span is 2.0s = 120 ticks, which is exactly the value of the prototype
+    // constant this replaced -- so asserting 120 against the shipped profile could not
+    // tell the two apart. Injecting a DIFFERENT shotCommitmentTime is what discriminates:
+    // pin 120 in place of the field and this fails, while the shipped-profile assertion
+    // below keeps passing.
+    const slow = { ...configFor('teal'), ai: { ...configFor('teal').ai, shotCommitmentTime: 5 } };
+    const { d } = openField({ aiShotPlan: 'direct', aiShotPlanTicks: 1 }, slow); // lapsed
+    expect(d.nextShotPlanTicks).toBe(Math.round(5 * TICK_HZ));
+    expect(d.nextShotPlanTicks).not.toBe(SPAN); // 300 != the shipped 120
+  });
+
+  it('re-arms to the shipped profile span when nothing is injected', () => {
+    const { d } = openField({ aiShotPlan: 'direct', aiShotPlanTicks: 1 });
+    expect(d.nextShotPlanTicks).toBe(SPAN);
+  });
+
+  it('counts DOWN while the span is live', () => {
+    const { d } = openField({ aiShotPlan: 'direct', aiShotPlanTicks: 47 });
+    expect(d.nextShotPlanTicks).toBe(46);
+  });
+
+  it('a lapsed span whose plan still SOLVES re-arms on the same plan -- no turnover', () => {
+    const { d } = openField({ aiShotPlan: 'direct', aiShotPlanTicks: 1 });
+    expect(d.nextShotPlan).toBe('direct'); // direct solves in the open
+    expect(d.nextShotPlanTicks).toBe(SPAN);
+  });
+
+  it('a lapsed span whose plan does NOT solve is the only way the plan turns over', () => {
+    const { d } = openField({ aiShotPlan: 'bank', aiShotPlanTicks: 1 }); // no walls -> bank unsolvable
+    expect(d.nextShotPlan).toBe('direct');
+    // ...and it still fires this tick, via the fallback: a turnover is not a lost shot.
+    expect(d.fire).toBe(true);
+  });
+
+  it('an UNSOLVABLE plan inside a live span does NOT turn over -- the countdown is what gates it', () => {
+    // Same unsolvable-bank geometry as the turnover fixture above; only the countdown
+    // differs. This is the negative control for that test: without the `lapsed` term in
+    // tealDecision both fixtures would report 'direct'.
+    const { d } = openField({ aiShotPlan: 'bank', aiShotPlanTicks: 47 });
+    expect(d.nextShotPlan).toBe('bank');
+    expect(d.nextShotPlanTicks).toBe(46);
+  });
+
+  it('carries the plan on the NO-TARGET path, so the countdown cannot freeze', () => {
+    // stepAi writes the pair back only when the decision carries one, so a return that
+    // omitted it would stall the countdown for every tick the arena has no live player --
+    // every countdown and every player death -- making the real window longer than the
+    // profile says. Deleting `nextShotPlan`/`nextShotPlanTicks` from teal.ts's no-target
+    // return makes both assertions below fail.
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, { aiShotPlan: 'direct', aiShotPlanTicks: 47 });
+    const dead = tank(2, 'player', { x: 5, y: 0 }, { alive: false });
+    const d = tealDecision(world({ tanks: [teal, dead] }), teal);
+    expect(d.nextShotPlanTicks).toBe(46);
+    // No target means no evidence the held plan has failed, so it holds rather than flips.
+    expect(d.nextShotPlan).toBe('direct');
+  });
+
+  it('holds the plan across a lapse with no target, rather than flipping on the clock alone', () => {
+    // The pre-#332 behaviour flipped on the clock regardless of the engagement. A lapsed
+    // window with nobody to shoot at re-arms the same plan.
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, { aiShotPlan: 'bank', aiShotPlanTicks: 1 });
+    const dead = tank(2, 'player', { x: 5, y: 0 }, { alive: false });
+    const d = tealDecision(world({ tanks: [teal, dead] }), teal);
+    expect(d.nextShotPlan).toBe('bank');
+    expect(d.nextShotPlanTicks).toBe(SPAN);
+  });
+
+  it('a tank that has never held a plan starts on BANK, and arms a full span', () => {
+    // Deliberately NOT the open field the other fixtures use. There, bank is unsolvable, so
+    // a 'bank' default turns over to 'direct' on the first tick and a 'direct' default stays
+    // 'direct' -- both report 'direct', and the assertion could not see the default at all.
+    // This geometry solves BOTH ways (the same wall the held-plan test uses), so the default
+    // is visible in the ANGLE: flip teal.ts's `heldPlan === null ? true` to `false` and the
+    // first expectation below fails.
+    const walls = [wall(2, -5, 2, 10, 3)];
+    const teal = tank(1, 'teal', { x: 0, y: 0 }); // aiShotPlan undefined -- never held one
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const w = world({ tanks: [teal, player], walls });
+    const d = tealDecision(w, teal);
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w, teal, TEAL_SPREAD), 6); // the BANK angle
+    expect(d.nextShotPlan).toBe('bank');
+    expect(d.nextShotPlanTicks).toBe(SPAN);
   });
 });

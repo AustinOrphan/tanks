@@ -163,6 +163,18 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // "no held aim" is genuinely absent rather than an angle of 0 that reads as due east.
     tank.aiAimHeld = decision.nextAimHeld ?? undefined;
     tank.aiAimHeldTicks = decision.nextAimHeldTicks;
+    // The held shot plan (issue #332). Written only when the decision carried one, so a
+    // behaviour that never evaluates a shot plan leaves whatever it held untouched rather
+    // than clearing it -- see AiDecision.nextShotPlan for why absence means "no opinion"
+    // here and `null` means "clear" for the intent and aim-hold pairs above.
+    //
+    // The corollary is a trap, and teal.ts's no-target return is where it was found: a
+    // decision path that FORGETS the pair silently freezes the countdown instead of
+    // erroring, so the window runs longer than the profile authorises.
+    if (decision.nextShotPlan !== undefined) {
+      tank.aiShotPlan = decision.nextShotPlan;
+      tank.aiShotPlanTicks = decision.nextShotPlanTicks;
+    }
 
     // Friendly fire is vetted TWICE, and it has to be. The decision functions check their
     // own firing solution, but the shot below leaves along the post-slew turret angle,

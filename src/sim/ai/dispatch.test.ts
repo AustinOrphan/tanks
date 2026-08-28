@@ -529,3 +529,27 @@ describe('stepAi', () => {
     });
   });
 });
+
+describe('shot-plan write-back (issue #332)', () => {
+  // The WIRING layer, not the rule: teal.test.ts probes tealDecision directly and would
+  // stay entirely green if stepAi discarded the pair the decision returns. Then the plan
+  // would reset to the default every tick and the window would never advance at all.
+  it('stepAi persists the shot plan and its countdown onto the tank', () => {
+    const teal = tank(1, 'teal', { x: 0, y: 0 }, { ...HELD, aiShotPlan: 'direct', aiShotPlanTicks: 47 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    stepAi(world([teal, player]), [] as SimEvent[]);
+    expect(teal.aiShotPlan).toBe('direct');
+    expect(teal.aiShotPlanTicks).toBe(46); // advanced, not merely preserved
+  });
+
+  it('a decision with NO shot plan leaves an existing one untouched', () => {
+    // brownDecision never evaluates a shot plan, so the absent pair must read as "no
+    // opinion". Writing it unconditionally would clear a plan the tank still holds --
+    // which is why AiDecision.nextShotPlan is optional rather than nullable.
+    const brown = tank(1, 'brown', { x: 0, y: 0 }, { ...HELD, aiShotPlan: 'bank', aiShotPlanTicks: 47 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    stepAi(world([brown, player]), [] as SimEvent[]);
+    expect(brown.aiShotPlan).toBe('bank');
+    expect(brown.aiShotPlanTicks).toBe(47);
+  });
+});

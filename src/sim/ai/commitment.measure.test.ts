@@ -13,6 +13,17 @@ import {
 import { roundPhase } from '../round';
 import { configFor } from '../config';
 import { AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR } from '../constants';
+
+/**
+ * The HISTORICAL plan clock: `BANK_PREFER_TICKS`, which tealDecision used to flip its
+ * bank-first/direct-first preference on before issue #332 held the plan per tank instead.
+ * It lives here rather than in constants.ts because production no longer reads it -- but
+ * the acceptance criterion is stated against these tick boundaries ("teal's boundary
+ * aim-step P95 falls to the same order as other kinds"), so the metric still needs the
+ * clock the defect was defined on. Keeping it in constants.ts would have left a tuning
+ * knob in the simulation that turns nothing.
+ */
+const PLAN_CLOCK_TICKS = 120;
 import { detHypot } from '../math/hypot';
 import type { Vec2, Tank } from '../types';
 import type { World } from '../world';
@@ -100,6 +111,33 @@ interface KindStats {
   aimStep: number[];
   aimHold: number[];
   /**
+   * The same |aim-target change|, for pairs crossing a PLAN_CLOCK_TICKS boundary --
+   * where teal re-picks bank-first vs direct-first (issue #332). Taken OUT of `aimStep`
+   * rather than left in it, for the same reason `aimStep` is split out of `aimHold`:
+   * plan boundaries are 1-in-PLAN_CLOCK_TICKS of all pairs and 120 is an exact multiple
+   * of AI_JITTER_TICKS, so every plan boundary is also a jitter boundary and a blended
+   * column reports the jitter step with the plan step hidden inside its tail.
+   */
+  planStep: number[];
+  /**
+   * Live-tick occupancy per held shot plan (issue #332). The plan only turns over when the
+   * held one has no solution, so "both plans occur in representative matches" is not a
+   * property the rule guarantees by construction -- it depends on solutions genuinely
+   * coming and going as the player moves relative to cover, and that is measurable rather
+   * than arguable. A kind that never evaluates a plan contributes nothing here.
+   */
+  planOccupancy: Map<string, number>;
+  /**
+   * |aim-target change| on the ticks the held plan ACTUALLY turned over (issue #332).
+   *
+   * Distinct from `planStep`, and the distinction matters for what may be claimed. Once
+   * the plan stops following the PLAN_CLOCK_TICKS clock, `planStep` measures an arbitrary
+   * tick set -- which is exactly the acceptance criterion's question ("does anything
+   * special still happen at those ticks") but says nothing about what a turnover costs.
+   * This column is that: the step on the ticks where `aiShotPlan` genuinely changed.
+   */
+  turnoverStep: number[];
+  /**
    * Reversals bucketed by `prevSource->currSource`, where the source is which branch
    * of decideAi's `avoid ?? seekMove` produced that tick's intent. Without this the
    * reversal percentage says a problem exists but not which mechanism to fix, and the
@@ -119,7 +157,7 @@ interface KindStats {
 }
 
 function emptyStats(): KindStats {
-  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], transitions: new Map(), occupancy: new Map() };
+  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], planStep: [], planOccupancy: new Map(), turnoverStep: [], transitions: new Map(), occupancy: new Map() };
 }
 
 type PlayerPolicy = 'pacifist' | 'shooter';
@@ -159,6 +197,7 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
     // passed the held turret angle through -- see the aimJumps comment below).
     const prevMove = new Map<number, Vec2 & { src: MoveSource }>();
     const prevAim = new Map<number, number | null>();
+    const prevPlan = new Map<number, 'bank' | 'direct'>();
 
     while (w.status === 'playing' && ticks < TICK_CAP) {
       if (ticks % 45 === 0) heading += (rnd() - 0.5) * 2.4;
@@ -204,9 +243,19 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
             const jump = Math.abs(deg(angleDelta(aimed, pa)));
             const crossed =
               Math.floor(w.tick / AI_JITTER_TICKS) !== Math.floor((w.tick - 1) / AI_JITTER_TICKS);
-            (crossed ? s.aimStep : s.aimHold).push(jump);
+            const planCrossed =
+              Math.floor(w.tick / PLAN_CLOCK_TICKS) !== Math.floor((w.tick - 1) / PLAN_CLOCK_TICKS);
+            (planCrossed ? s.planStep : crossed ? s.aimStep : s.aimHold).push(jump);
           }
           prevAim.set(t.id, aimed);
+          if (t.aiShotPlan !== undefined) {
+            s.planOccupancy.set(t.aiShotPlan, (s.planOccupancy.get(t.aiShotPlan) ?? 0) + 1);
+            const pp = prevPlan.get(t.id);
+            if (pp !== undefined && pp !== t.aiShotPlan && aimed !== null && pa !== null && pa !== undefined) {
+              s.turnoverStep.push(Math.abs(deg(angleDelta(aimed, pa))));
+            }
+            prevPlan.set(t.id, t.aiShotPlan);
+          }
         }
       }
 
@@ -252,6 +301,13 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
         + ` turnMed=${q(s.turns, 0.5).toFixed(1)}deg turnP95=${q(s.turns, 0.95).toFixed(1)}deg`
         + ` | aimStepMed=${q(s.aimStep, 0.5).toFixed(2)}deg aimStepP95=${q(s.aimStep, 0.95).toFixed(2)}deg (n=${s.aimStep.length})`
         + ` aimHoldMed=${q(s.aimHold, 0.5).toFixed(2)}deg aimHoldP95=${q(s.aimHold, 0.95).toFixed(2)}deg`
+        + ` | planStepMed=${q(s.planStep, 0.5).toFixed(2)}deg planStepP95=${q(s.planStep, 0.95).toFixed(2)}deg (n=${s.planStep.length})`
+        + (s.turnoverStep.length > 0
+          ? ` | turnovers=${s.turnoverStep.length} turnoverMed=${q(s.turnoverStep, 0.5).toFixed(2)}deg turnoverP95=${q(s.turnoverStep, 0.95).toFixed(2)}deg turnoverMax=${Math.max(...s.turnoverStep).toFixed(2)}deg`
+          : '')
+        + (s.planOccupancy.size > 0
+          ? ` | plan ${[...s.planOccupancy].sort().map(([k, v]) => `${k}=${v}`).join(' ')}`
+          : '')
         + ` (n=${s.aimHold.length})`;
     });
   const trans = new Map<string, number>();
