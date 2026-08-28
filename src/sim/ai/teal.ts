@@ -69,8 +69,12 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // has a median of 0.00 degrees but a P95 of 23.97-58.93 and a maximum of 92.90-137.10 --
   // because losing a solution moves the gun to the other plan's angle whether or not the
   // stored preference follows. What the gating removes is the flips that used to happen
-  // while BOTH plans were solvable. An earlier draft of this comment claimed the turnover
-  // "moves no target"; the measurement above is what corrected it.
+  // while BOTH plans were solvable: measured plan turnovers fall from 348 and 276 to 38 and
+  // 25 over the same population, the before figures taken by restoring only `preferBank` to
+  // the old expression. An earlier draft of this comment claimed the turnover "moves no
+  // target"; the measurement above is what corrected it. A later draft quoted 199 and 163
+  // as the before counts; those are `planStep`'s SAMPLE counts, not turnovers, and the
+  // re-run is what corrected that.
   //
   // READ HERE, above the no-target return below, on purpose. `stepAi` writes the pair back
   // only when the decision carries one, so a return path that omits it FREEZES the
