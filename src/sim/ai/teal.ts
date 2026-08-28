@@ -117,10 +117,20 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   //
   // THE RULE, and the reason it is not merely a longer cycle: a longer span reduces how
   // OFTEN the swing happens and does nothing to the size of it, which is what the metric
-  // measures. The window may only turn the plan over at a moment when turning it over
-  // moves no target -- when the held plan has no solution this tick, so the fallback is
-  // already firing the other one. Solutions come and go as the player moves relative to
-  // cover, and that is what keeps both plans in circulation.
+  // measures. The window may only turn the plan over on a tick where the held plan has NO
+  // solution -- so the angle that tick is the fallback's either way, and the turnover adds
+  // nothing on top of a takeover that was already happening. That is a property of the two
+  // lines below, not an empirical claim. Solutions come and go as the player moves relative
+  // to cover, and that is what keeps both plans in circulation.
+  //
+  // WHAT THIS DOES NOT DO, measured rather than assumed: it does not make a plan change
+  // free to look at. On the ticks where the plan genuinely turned over, the aim-target step
+  // has a median of 0.00 degrees but a P95 of 23.97-58.93 and a maximum of 92.90-137.10 --
+  // because losing a solution moves the gun to the other plan's angle whether or not the
+  // stored preference follows. What the gating removes is the ~150 flips per arena/policy
+  // that used to happen while BOTH plans were solvable: plan changes fall from 199 and 163
+  // to 38 and 25 over the same population. An earlier draft of this comment claimed the
+  // turnover "moves no target"; the measurement above is what corrected it.
   const heldPlan = tank.aiShotPlan ?? null;
   const planTicks = tank.aiShotPlanTicks ?? 0;
   // The held plan is evaluated first, so `tryBank`'s O(walls^2) search is still only paid

@@ -117,6 +117,16 @@ interface KindStats {
    */
   planOccupancy: Map<string, number>;
   /**
+   * |aim-target change| on the ticks the held plan ACTUALLY turned over (issue #332).
+   *
+   * Distinct from `planStep`, and the distinction matters for what may be claimed. Once
+   * the plan stops following the BANK_PREFER_TICKS clock, `planStep` measures an arbitrary
+   * tick set -- which is exactly the acceptance criterion's question ("does anything
+   * special still happen at those ticks") but says nothing about what a turnover costs.
+   * This column is that: the step on the ticks where `aiShotPlan` genuinely changed.
+   */
+  turnoverStep: number[];
+  /**
    * Reversals bucketed by `prevSource->currSource`, where the source is which branch
    * of decideAi's `avoid ?? seekMove` produced that tick's intent. Without this the
    * reversal percentage says a problem exists but not which mechanism to fix, and the
@@ -136,7 +146,7 @@ interface KindStats {
 }
 
 function emptyStats(): KindStats {
-  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], planStep: [], planOccupancy: new Map(), transitions: new Map(), occupancy: new Map() };
+  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], planStep: [], planOccupancy: new Map(), turnoverStep: [], transitions: new Map(), occupancy: new Map() };
 }
 
 type PlayerPolicy = 'pacifist' | 'shooter';
@@ -176,6 +186,7 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
     // passed the held turret angle through -- see the aimJumps comment below).
     const prevMove = new Map<number, Vec2 & { src: MoveSource }>();
     const prevAim = new Map<number, number | null>();
+    const prevPlan = new Map<number, 'bank' | 'direct'>();
 
     while (w.status === 'playing' && ticks < TICK_CAP) {
       if (ticks % 45 === 0) heading += (rnd() - 0.5) * 2.4;
@@ -228,6 +239,11 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
           prevAim.set(t.id, aimed);
           if (t.aiShotPlan !== undefined) {
             s.planOccupancy.set(t.aiShotPlan, (s.planOccupancy.get(t.aiShotPlan) ?? 0) + 1);
+            const pp = prevPlan.get(t.id);
+            if (pp !== undefined && pp !== t.aiShotPlan && aimed !== null && pa !== null && pa !== undefined) {
+              s.turnoverStep.push(Math.abs(deg(angleDelta(aimed, pa))));
+            }
+            prevPlan.set(t.id, t.aiShotPlan);
           }
         }
       }
@@ -275,6 +291,9 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
         + ` | aimStepMed=${q(s.aimStep, 0.5).toFixed(2)}deg aimStepP95=${q(s.aimStep, 0.95).toFixed(2)}deg (n=${s.aimStep.length})`
         + ` aimHoldMed=${q(s.aimHold, 0.5).toFixed(2)}deg aimHoldP95=${q(s.aimHold, 0.95).toFixed(2)}deg`
         + ` | planStepMed=${q(s.planStep, 0.5).toFixed(2)}deg planStepP95=${q(s.planStep, 0.95).toFixed(2)}deg (n=${s.planStep.length})`
+        + (s.turnoverStep.length > 0
+          ? ` | turnovers=${s.turnoverStep.length} turnoverMed=${q(s.turnoverStep, 0.5).toFixed(2)}deg turnoverP95=${q(s.turnoverStep, 0.95).toFixed(2)}deg turnoverMax=${Math.max(...s.turnoverStep).toFixed(2)}deg`
+          : '')
         + (s.planOccupancy.size > 0
           ? ` | plan ${[...s.planOccupancy].sort().map(([k, v]) => `${k}=${v}`).join(' ')}`
           : '')
