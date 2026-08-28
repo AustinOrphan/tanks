@@ -486,12 +486,20 @@ describe('teal shot-plan span (issue #332)', () => {
     expect(d.nextShotPlanTicks).toBe(SPAN);
   });
 
-  it('a tank that has never held a plan starts on bank and arms a full span', () => {
-    const { d } = openField({}); // aiShotPlan undefined
-    // Bank is unsolvable in the open, so the very first decision is also a turnover: the
-    // default is visible in the FALLBACK it fires, not in nextShotPlan.
-    expect(d.fire).toBe(true);
-    expect(d.nextShotPlan).toBe('direct');
+  it('a tank that has never held a plan starts on BANK, and arms a full span', () => {
+    // Deliberately NOT the open field the other fixtures use. There, bank is unsolvable, so
+    // a 'bank' default turns over to 'direct' on the first tick and a 'direct' default stays
+    // 'direct' -- both report 'direct', and the assertion could not see the default at all.
+    // This geometry solves BOTH ways (the same wall the held-plan test uses), so the default
+    // is visible in the ANGLE: flip teal.ts's `heldPlan === null ? true` to `false` and the
+    // first expectation below fails.
+    const walls = [wall(2, -5, 2, 10, 3)];
+    const teal = tank(1, 'teal', { x: 0, y: 0 }); // aiShotPlan undefined -- never held one
+    const player = tank(2, 'player', { x: 4, y: 0 });
+    const w = world({ tanks: [teal, player], walls });
+    const d = tealDecision(w, teal);
+    expect(d.turretAngle).toBeCloseTo(Math.PI / 4 + aimJitter(w, teal, TEAL_SPREAD), 6); // the BANK angle
+    expect(d.nextShotPlan).toBe('bank');
     expect(d.nextShotPlanTicks).toBe(SPAN);
   });
 });

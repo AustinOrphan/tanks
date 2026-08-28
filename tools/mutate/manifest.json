@@ -1391,5 +1391,65 @@
     "tests": [
       "src/sim/ai/player-profile.test.ts"
     ]
+  },
+  {
+    "id": "teal-shot-plan-turns-over-without-a-lapsed-span",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const switching = lapsed && preferred === null;",
+    "replace": "  const switching = preferred === null;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "The SPAN is half the rule and the easiest half to drop, because dropping it leaves a tree that still holds a plan, still falls back, and still passes any test that only checks which angle came out. What it removes is the commitment: the plan would turn over on EVERY tick its preferred type has no solution, which is the churn issue #332 exists to stop -- teal would flip back and forth for as long as the player stayed behind cover. Deleting the `lapsed &&` term must fail a test, or the profile field is decorative."
+  },
+  {
+    "id": "teal-shot-plan-dropped-on-the-no-target-path",
+    "file": "src/sim/ai/teal.ts",
+    "find": "nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan: holdPlan, nextShotPlanTicks };",
+    "replace": "nextAimHeld: null, nextAimHeldTicks: 0 };",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "This is the defect found while shipping the issue, kept as a guard. stepAi writes the pair back only when the decision CARRIES one, so a return path that omits it does not error -- it silently freezes the countdown for every tick the arena has no live player, i.e. every countdown and every player death, making the real span longer than shotCommitmentTime authorises. The prototype shipped this bug and every measurement taken on it described a span the profile did not control."
+  },
+  {
+    "id": "teal-shot-plan-span-not-read-from-the-profile",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const nextShotPlanTicks = lapsed ? Math.round(cfg.ai.shotCommitmentTime * TICK_HZ) : planTicks - 1;",
+    "replace": "  const nextShotPlanTicks = lapsed ? 120 : planTicks - 1;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "The shipped profile authorises 2.0s = 120 ticks, EXACTLY the value of the prototype constant the field replaced -- so a test that asserts 120 against the shipped roster cannot tell a live profile read from a pin, and every acceptance criterion about a validated per-profile field would be met on paper by a hardcoded number. Killing this requires a fixture that injects a DIFFERENT shotCommitmentTime, which is why one exists."
+  },
+  {
+    "id": "teal-shot-plan-writeback-guard-inverted",
+    "file": "src/sim/ai/index.ts",
+    "find": "    if (decision.nextShotPlan !== undefined) {",
+    "replace": "    if (decision.nextShotPlan === undefined) {",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "Pins the WIRING and the polarity of 'no opinion' in one mutation, the way the aim-hold entry pins its own. Inverted, teal's plan is never persisted (the countdown never advances, so the span never elapses) while brown's and grey's decisions -- which never evaluate a plan -- would clear a plan the tank still holds. teal.test.ts probes tealDecision directly and stays entirely green either way, so only a dispatcher-level test can catch this."
+  },
+  {
+    "id": "teal-shot-plan-default-is-direct-rather-than-bank",
+    "file": "src/sim/ai/teal.ts",
+    "find": "  const preferBank = heldPlan === null ? true : heldPlan === 'bank';",
+    "replace": "  const preferBank = heldPlan === null ? false : heldPlan === 'bank';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/teal.test.ts"
+    ],
+    "why": "The never-held default is invisible on most geometry: where only one shot type solves, both defaults fall through to the same angle and the same stored plan, so an assertion taken on open ground passes under either value. It is only observable where BOTH types solve -- which is the fixture this entry forces to exist, and the reason that fixture does not reuse the open-field helper the neighbouring tests use."
   }
 ]
