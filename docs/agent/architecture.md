@@ -284,7 +284,16 @@ the perceived mine-flee radius, danger corridor and mine-tactical radius `danger
 the per-bucket mine-proposal probability (`mineInclination`) — and
 `reactionTime`: the dispatcher holds every AI shot until the solution has been
 HELD (`Tank.aimTicks`, `AiDecision.hasSolution`) for the profile's reaction
-span; cover resets the clock — and `commitmentTime` (issue #222): the movement
+span; cover resets the clock, and so does anything that is not LIVE play. The
+clock accumulates only while `roundPhase(world)` is `'live'` (issue #367): it
+used to bank the round countdown as well, on the argument that an enemy which
+watched the player through that phase had earned the shot at the bell — measured
+on the golden trace's population, 12 of its 30 runs had an enemy at or past its
+full span the moment the countdown ended, i.e. entitled to fire on the first
+live tick the player could act on. The turret still tracks through the countdown
+(that happens inside `decideAi`), so the shot stays telegraphed; only the clock
+is held. `decidePlayerInput`'s mirror clock in `PlayerAiState` carries the same
+gate — and `commitmentTime` (issue #222): the movement
 COMMITMENT span, `Math.round(commitmentTime · TICK_HZ)`, applied centrally by
 `decideAi` through `commitMove` (`ai/commitment.ts`) over whatever the behaviour
 returned, never inside `dangerAvoidMove` (that helper is shared with
