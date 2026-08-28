@@ -9,7 +9,7 @@ import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '.
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
-import { mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction, makeMineGlowMesh, makeMineLitMesh, disposeMineGlowMesh, glowRadius, glowOpacity } from './mine-warning';
+import { FUSE_WARNING_SECONDS, mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction, makeMineGlowMesh, makeMineLitMesh, disposeMineGlowMesh, glowRadius, glowOpacity } from './mine-warning';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
@@ -427,6 +427,14 @@ function clamp01(v: number): number {
 export const MINE_Y = 0.09;
 /** How many full bright/dark cycles a mine goes through over its whole fuse. */
 const MINE_PULSE_TURNS = 6;
+/**
+ * The pre-#276 fuse pulse: quadratic phase, so the RATE climbs linearly and a mine that
+ * ticks lazily when dropped is strobing by the time its window opens. Extracted so the
+ * warning window can ramp on FROM its value rather than cutting to a different brightness.
+ */
+function fusePulseAt(elapsed: number): number {
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
+}
 /** The mine body's radius. Exported because the #276 warning geometry is sized against it. */
 export const MINE_R = 0.28;
 const MINE_ARMED_LO = new THREE.Color(0x3a0a0a);
@@ -1583,7 +1591,29 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // Phase is quadratic in elapsed fuse, which makes the RATE climb linearly: the
       // mine ticks lazily when dropped and is strobing by the time it goes off.
       const elapsed = clamp01(1 - m.timer / MINE_TIMER);
-      const pulse = 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
+      // The two #276 warnings, projected from the same mine state (render/mine-warning.ts).
+      // Both are driven by the SIM's countdowns, never a wall clock, so a paused game holds
+      // its warning frame instead of animating on.
+      const warn = mineWarningFrame(m);
+      /**
+       * INSIDE THE FINAL FUSE WINDOW THE BODY STOPS PULSING and ramps to its brightest
+       * instead (owner ruling on PR #396: "drop the blinking").
+       *
+       * Not an aesthetic tidy-up -- without it the ruling cannot be honoured. The pulse
+       * above is six accelerating cycles across the whole fuse, so by the last half second
+       * it is a strobe, and it is on the mine BODY rather than on any cue this issue added.
+       * Captured frames made that concrete: 25 ticks before detonation the mine was a
+       * full-brightness flash and 1 tick before it was a dark trough. Whatever the warning
+       * cue does, the warning READS as blinking while the body behind it is doing that.
+       *
+       * So the window's own ramp takes over: monotone, brightest at expiry, and continuous
+       * with wherever the pulse happened to be when the window opened, so the handover is
+       * not itself a visible jump. Outside the window the accelerating pulse is untouched --
+       * that is the mine's pre-existing "armed and counting" language, not this issue's.
+       */
+      const pulse = warn.fuse
+        ? 1 - (1 - fusePulseAt(1 - FUSE_WARNING_SECONDS / MINE_TIMER)) * (1 - warn.fuse.growth)
+        : fusePulseAt(elapsed);
       const mat = mesh.material as THREE.MeshStandardMaterial;
       // Armed stays the loud one. An unarmed mine still burns its fuse -- it detonates on
       // expiry whether or not it ever armed -- so it pulses too, but dimly, and the
@@ -1591,11 +1621,6 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       const lo = m.armed ? MINE_ARMED_LO : MINE_IDLE_LO;
       const hi = m.armed ? MINE_ARMED_HI : MINE_IDLE_HI;
       mat.emissive.copy(lo).lerp(hi, pulse);
-
-      // The two #276 warnings, projected from the same mine state (render/mine-warning.ts).
-      // Both are driven by the SIM's countdowns, never a wall clock, so a paused game holds
-      // its warning frame instead of animating on.
-      const warn = mineWarningFrame(m);
 
       if (warn.fuse) {
         // The glow is a unit disc, so its growth is pure SCALE -- no geometry churn at all,
