@@ -263,7 +263,30 @@ export interface DevFlags {
    * Off = players only, enemies keep just the explosion burst -- the shipped rule.
    */
   enemyDeathPulse: boolean;
+  /**
+   * Which treatment the application backdrop draws (issue #317).
+   *
+   * `null` -- absent or unrecognised -- leaves the shipped default, the flat
+   * application ground. `'felt'` selects the green tabletop alternative.
+   *
+   * Adopted ruling (2026-08-26, issue #317): "A is the default. B stays in the code as a
+   * switchable alternative ... reachable through a `dev=1` development flag rather than
+   * left as dead CSS." This flag is that switch, so the felt can be compared against the
+   * default in a real browser instead of being re-mocked. Which backdrops a PLAYER may
+   * choose is #366, not this flag.
+   *
+   * Reject-to-null, the same idiom as `quality`/`mineTrigger`/`mode`: `?backdrop=velvet`
+   * leaves the default rather than guessing at a treatment that does not exist.
+   */
+  backdrop: BackdropTreatment | null;
 }
+
+/**
+ * The non-default backdrop treatments this build carries. One member today; the type
+ * exists so a second one is a compile error at every consumer rather than a silent
+ * string comparison.
+ */
+export type BackdropTreatment = 'felt';
 
 export const DEV_FLAGS_OFF: DevFlags = {
   aimRay: false,
@@ -292,6 +315,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   mode: null,
   friendlyFire: false,
   enemyDeathPulse: false,
+  backdrop: null,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -302,6 +326,8 @@ const MINE_TRIGGERS = new Set(['none', 'proximity', 'bullet', 'both']);
 const QUALITY_PRESET_NAMES = new Set(['low', 'medium', 'high']);
 
 const VERSUS_MODE_NAMES = new Set(['ffa', 'teams']);
+
+const BACKDROP_TREATMENTS = new Set(['felt']);
 
 /** One of the three named presets, or null when absent or unrecognised -- an
  * unrecognised value (`?quality=potato`) is rejected to null rather than guessed,
@@ -325,6 +351,13 @@ function asMineTrigger(params: URLSearchParams): UnarmedTrigger | null {
   const raw = params.get('mineTrigger');
   if (raw === null) return null;
   return MINE_TRIGGERS.has(raw) ? (raw as UnarmedTrigger) : null;
+}
+
+/** The one named non-default treatment, or null when absent or unrecognised. */
+function asBackdrop(params: URLSearchParams): BackdropTreatment | null {
+  const raw = params.get('backdrop');
+  if (raw === null) return null;
+  return BACKDROP_TREATMENTS.has(raw) ? (raw as BackdropTreatment) : null;
 }
 
 /** A positive integer flag, or null when absent, empty, or not one. */
@@ -454,6 +487,7 @@ export function parseDevFlags(search: string): DevFlags {
     mode: asMode(params),
     friendlyFire: isOn(params, 'friendlyFire'),
     enemyDeathPulse: isOn(params, 'enemyDeathPulse'),
+    backdrop: asBackdrop(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -739,6 +773,13 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Enemy tanks also fire the identity death pulse (a coloured world ring); off = ' +
       'players only, enemies keep just the explosion burst.',
+  },
+  backdrop: {
+    kind: 'valued',
+    values: [...BACKDROP_TREATMENTS],
+    description:
+      'Draws the application backdrop with a named alternative treatment; the shipped ' +
+      'default is the flat application ground.',
   },
 };
 

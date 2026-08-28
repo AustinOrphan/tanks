@@ -290,8 +290,39 @@ const CHECKS = [
   {
     name: 'something is actually painted',
     // The old harness reported 0%. Measured: 22-52% across viewports.
-    ok: (r) => r.paintedFraction > 0.1,
-    detail: (r) => `${(r.paintedFraction * 100).toFixed(1)}% painted`,
+    //
+    // Read off the BOARD-ONLY screenshot (the HUD hidden), not the full frame, since
+    // issue #317 gave application screens their own opaque ground. `painted` counts
+    // pixels more than BG_TOLERANCE from the renderer's CLEAR colour, and the menu's
+    // ground is `--hud-app-ground` = rgb(24, 28, 36) against a CLEAR of rgb(20, 22, 28)
+    // -- channel deltas 4/6/8, all inside the tolerance of 10 -- so the entire ground
+    // counts as untouched background and the full frame reads 2.3-14.2% on a board that
+    // renders perfectly. Measured on the built bundle at all four viewports.
+    //
+    // Moving the subject rather than moving the threshold, because the threshold is not
+    // what changed: this check has always been about the RENDERER having drawn a board,
+    // and the full frame was a proxy that worked only while the menu was transparent.
+    // The board numbers are byte-identical before and after that change -- 71.2 / 64.1 /
+    // 26.5 / 38.0% on both trees -- so the calibration carries over untouched, and the
+    // measurement is now taken where the arena actually is. It also stops a later retune
+    // of the ground's hex, which the #317 ruling explicitly allows, from reading as a
+    // renderer regression.
+    //
+    // What the full frame still guards: 'the frame is not a flat fill' below, which the
+    // opaque ground does not disturb (257 distinct colours at 1280x800 with it, 679
+    // without). A page that failed to boot has no canvas at all and fails the GL check
+    // above before either of these is reached.
+    //
+    // The control, run rather than reasoned: a stub dist whose canvas holds a LIVE
+    // context cleared to CLEAR and nothing else, under a full-frame DOM gradient. The
+    // frame reads 100% painted -- the old form of this check passes it -- and the board
+    // reads 0.0% at all four viewports, so this form fails it. A blank renderer hidden
+    // behind chrome is exactly the failure the full-frame proxy could not see.
+    ok: (r) => r.board.paintedFraction > 0.1,
+    detail: (r) =>
+      `${(r.board.paintedFraction * 100).toFixed(1)}% painted (board; frame ${(
+        r.paintedFraction * 100
+      ).toFixed(1)}%)`,
   },
   {
     name: 'the frame is not a flat fill',

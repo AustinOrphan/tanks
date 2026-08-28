@@ -30,6 +30,14 @@ export type HudSurface =
 export type HudSessionKind = 'campaign' | 'practice' | 'versus';
 
 /**
+ * WHICH GROUND the application screens stand on -- see `setBackdrop`. Projected by
+ * `loop.ts` from `DevFlags.backdrop`, which is `BackdropTreatment | null`; the HUD owns
+ * its own vocabulary and does not import the flag module, so the null-is-default half of
+ * that mapping happens at the one call site rather than here.
+ */
+export type HudBackdrop = 'default' | 'felt';
+
+/**
  * WHAT THE BUTTONS DO -- which system this session's menu and outcome ACTIONS
  * relaunch play through. Projected from `session-intent.ts`'s `RelaunchTarget`,
  * whose doc comment carries the full rationale.
@@ -509,6 +517,20 @@ export interface Hud {
    */
   setRelaunchTarget(target: HudRelaunchTarget): void;
   /**
+   * WHICH TREATMENT the application backdrop draws (issue #317). A boot-time fact,
+   * pushed once beside `setRelaunchTarget`: nothing in a session changes it.
+   *
+   * `'default'` is the flat application ground every player sees. `'felt'` is the green
+   * tabletop the adopted ruling kept as a switchable alternative rather than as dead
+   * CSS, reached through `?dev=1&backdrop=felt` -- `loop.ts` reads the flag, so the HUD
+   * takes a named treatment rather than a query string. A named union, not a boolean,
+   * because #366 adds further treatments to this same layer.
+   *
+   * Says nothing about WHEN the backdrop is visible: `setState` owns that, and shows it
+   * on the Main Menu only.
+   */
+  setBackdrop(treatment: HudBackdrop): void;
+  /**
    * The versus-kind title screen's Campaign button was clicked -- a bare click
    * passthrough, the exact shape `onVersusOpen`/`onNewGame` already use. `loop.ts`'s
    * one subscriber calls `deps.requestCampaignSession?.()`, `boot.ts`'s symmetric
@@ -576,6 +598,11 @@ export function createHud(root: HTMLElement): Hud {
   const el = document.createElement('div');
   el.className = 'hud';
   el.innerHTML = `
+    <!-- The application backdrop (issue #317). FIRST in the markup so it paints under
+         every other layer, and aria-hidden because it is scenery: it carries no content
+         and there is nothing here for a screen reader to announce. Shown on the Main
+         Menu only -- see setState, and the .ui-app-ground rule for why not on Launch. -->
+    <div class="ui-app-ground ui-app-ground--hidden" aria-hidden="true"></div>
     <div class="hud-topbar">
       <!-- hud-campaign-stat (issue #282): both are campaign-only concepts -- lives is
            the campaign default and a versus world has no enemy-kind tanks (countEnemies
@@ -880,6 +907,7 @@ export function createHud(root: HTMLElement): Hud {
   `;
   root.appendChild(el);
 
+  const appGroundEl = el.querySelector('.ui-app-ground') as HTMLElement;
   const countEl = el.querySelector('.hud-count') as HTMLElement;
   const shellsEl = el.querySelector('.hud-shells') as HTMLElement;
   const versusStocksEl = el.querySelector('.hud-versus-stocks') as HTMLElement;
@@ -2391,6 +2419,14 @@ export function createHud(root: HTMLElement): Hud {
     const atMainMenu = s === 'main-menu';
     const isOutcome = s === 'outcome-win' || s === 'outcome-lose';
     splashEl.classList.toggle('hud-splash--hidden', !atLaunch);
+    // The application backdrop, on for the Main Menu and nothing else (issue #317).
+    // Deliberately NOT `!atLaunch`-shaped like the line above: Launch keeps the arena
+    // behind its own scrim, and pause and the outcome screens are read over the board
+    // the player was just on. This is also what makes a quit that no longer rebuilds
+    // the world invisible -- the abandoned board is behind an opaque ground by the time
+    // the menu is on screen. It is toggled BEFORE the `playing`/`launch` early return
+    // below so those two surfaces are covered by this one line as well.
+    appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu);
     // Only while playing. Pausing from the pause panel is what its own buttons are for,
     // and a Mine button on the menu lays nothing.
     touchRow.classList.toggle('hud-touch--hidden', s !== 'playing');
@@ -2868,6 +2904,12 @@ export function createHud(root: HTMLElement): Hud {
       // outcome panel at the moment this is called from `loop.ts`'s
       // construction.
       applyTitleAffordances();
+    },
+    setBackdrop(treatment: HudBackdrop): void {
+      // A class toggle, not a style write: the two treatments are stylesheet rules, so a
+      // build that drops `hud.css` shows the same unstyled HUD here as everywhere else
+      // rather than one layer that still paints.
+      appGroundEl.classList.toggle('ui-app-ground--felt', treatment === 'felt');
     },
     onCampaignOpen(cb: () => void): void {
       campaignOpenCbs.push(cb);

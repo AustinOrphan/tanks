@@ -670,11 +670,11 @@
   {
     "id": "session-title-policy-reused-as-identity",
     "file": "src/game/loop.ts",
-    "find": "  hud.setSessionKind(currentDescriptor.kind);\n  // The stock strip's DATA",
-    "replace": "  hud.setSessionKind(relaunchTarget === 'versus-setup' ? 'versus' : 'campaign');\n  // The stock strip's DATA",
+    "find": "\n  hud.setSessionKind(currentDescriptor.kind);\n",
+    "replace": "\n  hud.setSessionKind(relaunchTarget === 'versus-setup' ? 'versus' : 'campaign');\n",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "The other direction of the same collapse: deriving the gameplay HUD's identity from the title/outcome affordance POLICY instead of from the descriptor. Structurally this is the pre-fix code, re-expressed through the new type, and it is exactly what makes a developer-flag versus session report Campaign to gameplay while a Levels pick stops reporting Practice at all. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "why": "The other direction of the same collapse: deriving the gameplay HUD's identity from the title/outcome affordance POLICY instead of from the descriptor. Structurally this is the pre-fix code, re-expressed through the new type, and it is exactly what makes a developer-flag versus session report Campaign to gameplay while a Levels pick stops reporting Practice at all. Scoped to loop.test.ts; expectFailures counts that scoped run only. Re-anchored 2026-08-28: the original find ran to the NEXT statement's comment (`// The stock strip's DATA`), so inserting the hud.setBackdrop projection between the two turned this entry into FAILED-TO-APPLY and `npm run mutate` into exit 1 while nothing about the behaviour changed. The anchor is now the call line delimited by its own newlines -- indentation-scoped, which is what distinguishes this boot-time push from the identically-worded one inside `switchTo` (indented one level deeper, re-derived on every world build), and it carries no neighbouring text for a later insertion to break.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -1304,5 +1304,53 @@
     ],
     "why": "The over-correction, and the reason the teleport is read per tank rather than raised into the world-level `snap` beside `roundStartTick`: snapping unconditionally freezes every tank in the arena onto its current-tick pose, so nothing in the game interpolates at all and motion becomes a 60 Hz stutter. It is invisible to any test that renders a single alpha or a single tank, which is what `snaps only the revived tank: the other player keeps interpolating on the same sync` exists for -- and `interpolates normally within a round` catches the same thing from the pre-#239 side of the file.",
     "expectFailures": 4
+  },
+  {
+    "id": "app-ground-covers-every-application-surface",
+    "file": "src/game/hud.ts",
+    "find": "appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu);",
+    "replace": "appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu && !atLaunch);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Widens the application backdrop by ONE surface, which is the mistake this gate is most likely to be made into: `.hud-splash`'s own rule already keys on `atLaunch`, so folding the ground into it looks like consistency. It is not -- the title screen is deliberately a 0.92 scrim over the live arena ('the game is visibly already there, waiting'), and an opaque ground under it removes the only place the game is shown before it starts. The same one-surface widening applied to `paused` or an outcome screen would hide the board the player is reading the panel over, which is why hud.test.ts sweeps all six surfaces rather than sampling. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "owed-landing-never-cleared",
+    "file": "src/game/loop.ts",
+    "find": "\n    pendingLanding = false;\n",
+    "replace": "\n    void pendingLanding;\n",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Leaves the landing a quit owes outstanding forever. `switchTo` is the ONE site that can settle the debt, because it is the one site that builds a world; without the clear, a Levels pick after a quit builds the picked board and the debt survives it, so the next Continue silently builds the campaign board over the level the player chose -- one extra world and one extra gameplay seed, on a gesture whose whole guarantee is that it enters what is already there. The alternative shape, clearing the flag at each of the three call sites that could satisfy it, is what `switchTo`'s own comment says did not hold by hand.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "continue-enters-before-redeeming-its-landing",
+    "file": "src/game/loop.ts",
+    "find": "      if (pendingLanding) landOnCampaignBoard(false);\n      sm.enterGameplay(currentSession);",
+    "replace": "      sm.enterGameplay(currentSession);\n      if (pendingLanding) landOnCampaignBoard(false);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Swaps build-then-reveal for reveal-then-build. Both statements still run, so a test that only counts worlds and seeds cannot see it -- what changes is that `enterGameplay` is handed the STALE `currentSession`, the one resolved against the world the player abandoned, and the state change that hides the application ground reaches the screen before the landing board exists. The visible half is a frame of the abandoned board; the recorded half is a resolved session that does not describe the world underneath it. Ordering is the property the comment at this site claims, so it gets an entry rather than a promise.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "app-ground-becomes-a-scrim",
+    "file": "src/game/hud.css",
+    "find": "  --hud-app-ground: #181c24;",
+    "replace": "  --hud-app-ground: rgba(24, 28, 36, 0.55);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Turns the application ground into a scrim, which is the failure the rest of issue #317 depends on not happening: the quit no longer rebuilds the board, so whatever world the player abandoned is still behind this layer -- a paused explosion under the New Game button if it is translucent. CSS is typechecked by nothing and read by no other test, the same silent-loss class the topbar safe-area entry above exists for, and the value is a token, so the loss would be one character in one line. hud.css.test.ts asserts opacity FIRST and the tuned value second for exactly this ordering of what matters.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
