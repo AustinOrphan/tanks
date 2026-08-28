@@ -85,6 +85,18 @@ Command behavior and CI/deployment details are in
   reserved for changes to the mutation harness, broad manifest edits, CI mutation-failure
   diagnosis, cross-cutting changes that targeted selection cannot cover with reasonable
   confidence, or another specifically identified repository-wide risk.
+- After local candidate verification, push or update the PR and trigger required CI. Record
+  it as `CI pending`; pending checks block merge and fully-verified claims, not independent
+  implementation work.
+- Default to at most one task actively undergoing implementation. `CI pending` PRs do not
+  consume that slot; keep them tracked and revisit them at natural boundaries instead of
+  polling while useful work exists.
+- Start an independent next task from current `main` in its own branch/worktree. If it
+  depends on or overlaps a pending PR, choose other ready work or deliberately stack it and
+  record the dependency.
+- A failing required check is not pending: investigate it promptly at the next safe boundary
+  and normally prioritize an attributable fix. Never merge with pending or failing required
+  checks.
 - User-visible visual changes require visual evidence. Build/deploy, entry-point, PWA, and
   asset-path changes require a built-output portability check.
 - Delegate only a concrete, bounded, independent investigation whose isolation or parallelism

@@ -22,6 +22,9 @@ const CONTEXT_BUDGET = fileURLToPath(new URL('../docs/agent/context-budget.md', 
 const DOCUMENT_INDEX = fileURLToPath(new URL('../docs/README.md', import.meta.url));
 const AGENT_REFERENCE = fileURLToPath(new URL('../docs/agent/README.md', import.meta.url));
 const TESTING_AND_REVIEW = fileURLToPath(new URL('../docs/agent/testing-and-review.md', import.meta.url));
+const COMMANDS_AND_OPERATIONS = fileURLToPath(new URL('../docs/agent/commands-and-operations.md', import.meta.url));
+const TASK_SIZING = fileURLToPath(new URL('../docs/agent/task-sizing.md', import.meta.url));
+const VERIFY_CHANGE = fileURLToPath(new URL('../.claude/skills/verify-change/SKILL.md', import.meta.url));
 
 const MAX_ROOT_LINES = 200;
 const MAX_ROOT_BYTES = 12_000;
@@ -317,6 +320,43 @@ describe('the instruction files', () => {
     expect(policy).toMatch(/Delegate when the question is concrete, bounded, independent/);
     expect(policy).toMatch(/worker that mutates files must use its own worktree/);
     expect(policy).toMatch(/lead agent verifies returned claims/);
+  });
+
+  it('pipelines CI-pending work without weakening the merge bar', () => {
+    const root = readFileSync(CLAUDE, 'utf8');
+    const review = readFileSync(TESTING_AND_REVIEW, 'utf8');
+    const operations = readFileSync(COMMANDS_AND_OPERATIONS, 'utf8');
+    const sizing = readFileSync(TASK_SIZING, 'utf8');
+    const verifySkill = readFileSync(VERIFY_CHANGE, 'utf8');
+    const requirements: Array<[string, string, RegExp]> = [
+      ['pending blocks merge, not unrelated work', root,
+        /pending checks block merge and fully-verified claims, not independent\s+implementation work/],
+      ['one implementation slot excludes pending PRs', root,
+        /at most one task actively undergoing implementation[\s\S]*`CI pending` PRs do not\s+consume that slot/],
+      ['independent work uses main or an explicit stack', root,
+        /independent next task from current `main`[\s\S]*deliberately stack it and\s+record the dependency/],
+      ['pending states stay bounded and tracked', review,
+        /Candidate complete \/ CI pending[\s\S]*concurrency remains bounded[\s\S]*concise session ledger/],
+      ['CI is checked at natural boundaries without polling', review,
+        /Revisit outstanding checks at natural boundaries[\s\S]*tightly poll GitHub Actions while useful work is available/],
+      ['attributable failures preempt lower-priority work', review,
+        /normally suspend lower-priority work to fix an attributable failure/],
+      ['task selection checks pending dependencies and overlap', sizing,
+        /compare its dependencies and likely file surface[\s\S]*branches from current `main`[\s\S]*stack it on the\s+predecessor and record that dependency/],
+      ['CI-pending branches stay isolated', review,
+        /Never add an\s+independent issue to a CI-pending PR's branch\/worktree or combine independent issues on one\s+branch/],
+      ['pending differs from failure and merge readiness', verifySkill,
+        /Pending CI is not a failure[\s\S]*Never call a candidate fully verified while required CI is pending[\s\S]*never describe it as merge-ready/],
+      ['CI is a merge gate rather than an implementation wait', operations,
+        /Required CI is authoritative for merge, not a synchronous implementation barrier[\s\S]*Do not rerun a full CI-equivalent local gate merely because CI\s+is pending/],
+      ['all required checks and threads still block merge', root,
+        /Required checks are\s+`verify \(floor\)`, `verify \(current\)`, and `visual`; unresolved review threads also block\s+merge/],
+    ];
+
+    for (const [name, text, pattern] of requirements) {
+      expect(text, name).toMatch(pattern);
+      expect(text.replace(pattern, '[required policy removed]'), name).not.toMatch(pattern);
+    }
   });
 
   it('makes missing or duplicate risk tiers fail the heading guard', () => {

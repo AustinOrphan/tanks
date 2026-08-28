@@ -141,6 +141,50 @@ general form: a test combining several calls with one assertion at the end is bl
 any defect a LATER call's own no-op path happens to undo: `run.test.ts`'s
 `describe('createRunStore: no run yet', ...)` block carries the repaired version.
 
+## CI-pending execution
+
+Local candidate verification and authoritative CI/merge verification are separate gates.
+Once implementation is complete, the applicable local checks pass, the branch is pushed,
+the PR is opened or updated, and required CI is triggered, the implementation can enter a
+tracked CI-pending state. Pending required CI blocks merge and claims of complete
+verification; it does not block unrelated implementation work.
+
+| State | Meaning | Permitted next action |
+| --- | --- | --- |
+| Candidate complete / CI pending | Implementation and required local candidate verification are complete, but at least one required CI check has not finished. | Track the PR and begin one independent ready task if useful work exists. Do not call the PR fully verified or merge-ready. |
+| CI passed / merge-ready | Every required check has passed and every other review and repository-rule requirement is satisfied. | Use the normal review and merge process. |
+| CI failed | A required check failed. | Investigate promptly at the next safe boundary; never merge through the failure. |
+
+Default to at most one task actively undergoing implementation. A PR whose implementation is
+complete and which is merely awaiting CI does not consume that slot. Multiple PRs may be
+CI-pending while one task is active, but concurrency remains bounded: before adding another
+candidate, deliberately review the outstanding queue instead of generating an unlimited PR
+backlog. Keep a concise session ledger such as `ready`, `active`, `CI pending`, `CI failed`,
+`merge-ready`, `blocked`, or `dependent on PR #X`; do not create a persistent repository file
+only for temporary execution state.
+
+Revisit outstanding checks at natural boundaries: after opening or updating a PR, after a
+meaningful implementation phase, before selecting another task, before merging, when a check
+completion or failure is reported, or when no useful independent work remains. Do not watch
+or tightly poll GitHub Actions while useful work is available.
+
+Before selecting the next task, confirm that it can branch cleanly from current `main`, does
+not require code from a pending PR, does not substantially overlap the pending PR's files, and
+is ready under the repository's priority and dependency metadata. If the highest-priority task
+depends on pending work, prefer another independent ready task. Stack only when continuing the
+dependent work is deliberately worthwhile: base it on the predecessor, record the dependency,
+do not claim independent mergeability, and rebase or retarget it when the predecessor lands.
+Unrelated work must not use an unmerged branch merely for convenience. Never add an
+independent issue to a CI-pending PR's branch/worktree or combine independent issues on one
+branch.
+
+Pending and failed are different operational states. If required CI fails while another task
+is active, reach a safe or natural boundary, inspect the first causal failure promptly, and
+normally suspend lower-priority work to fix an attributable failure in the failed PR's own
+branch/worktree. Rerun the necessary local candidate checks, push the correction, and return
+the PR to CI-pending status. Demonstrably unrelated or infrastructure-induced failures follow
+the existing CI/review policy; they are never silently dismissed.
+
 ## Merge bar
 
 Classify the complete diff before choosing verification. The tier is a minimum, not a

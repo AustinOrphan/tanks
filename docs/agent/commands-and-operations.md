@@ -216,6 +216,15 @@ daily/manual complete-manifest run under exact Node 22.13.0 without joining the 
 `engines.node` is `^22.13.0 || ^24.0.0`, matching those two tested LTS lines exactly.
 Node 20 was removed from the support claim after reaching EOL.
 
+Required CI is authoritative for merge, not a synchronous implementation barrier. After a
+candidate is locally verified, pushed, and submitted to required CI, record it as CI-pending
+and return the single active implementation slot to independent ready work. Inspect pending
+PRs once at the natural boundaries defined in
+[CI-pending execution](testing-and-review.md#ci-pending-execution); do not use a watch or
+tight polling loop while useful work exists. A required failure receives prompt attention
+and remains a merge blocker. Do not rerun a full CI-equivalent local gate merely because CI
+is pending; do so only for a concrete diagnosis or a named full-manifest exception.
+
 **The game deploys from `main` to GitHub Pages** (`.github/workflows/pages.yml`), live at
 `https://austinorphan.com/tanks/` — a **custom apex domain inherited from the user page**,
 so `austinorphan.github.io/tanks/` 301-redirects there. It is still a `/tanks/` subpath,
@@ -225,8 +234,9 @@ the bundle asks for `/assets/…` and the page is blank. `npm run portability`
 call it — it cannot live in `npm test`, because under Vitest `import.meta.env.BASE_URL` is
 `/` even though vitest reads the same config that sets `base: './'`.
 
-**The deploy waits for CI.** `pages.yml` triggers on `workflow_run` for the `CI` workflow
-and its `build` job requires `conclusion == 'success'`, so on the automatic path all 10 of
+**The deploy waits for CI; an agent need not.** `pages.yml` triggers on `workflow_run` for
+the `CI` workflow and its `build` job requires `conclusion == 'success'`, so on the
+automatic path all 10 of
 `ci.yml`'s checking steps have passed for that exact commit before a deploy starts. It
 checks out `github.event.workflow_run.head_sha` rather than the branch head — under
 `workflow_run` checkout defaults to the DEFAULT BRANCH'S head, which is a different commit
