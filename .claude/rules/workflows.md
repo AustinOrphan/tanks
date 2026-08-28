@@ -28,7 +28,8 @@ paths:
   contexts are `verify (floor)`, `verify (current)`, and `visual`.
 - Keep workflow-token permissions least-privilege and update action runtimes deliberately.
 - Keep CI's diagnostic and conditional boundaries as named atomic package-script steps;
-  agents use the composite `verify:*` entry points instead of duplicating tool commands.
+  agents use risk-appropriate `verify:*` entry points plus targeted mutation entries rather
+  than duplicating tool commands or routinely running the complete manifest locally.
 - Recount named checking steps whenever workflow structure changes; historical bare counts
   have repeatedly gone stale.
 

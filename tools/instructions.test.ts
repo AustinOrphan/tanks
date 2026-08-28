@@ -100,6 +100,33 @@ function markdownSection(text: string, heading: string): string {
     .exec(text)?.[1] ?? '';
 }
 
+function verificationPolicyProblems(root: string, policy: string): string[] {
+  const high = markdownSection(policy, 'High risk');
+  const exceptions = markdownSection(policy, 'Full local mutation-manifest exceptions');
+  const ci = markdownSection(policy, 'CI and merge verification');
+  const checks: Array<[string, boolean]> = [
+    ['targeted local mutation command', `${root}\n${policy}`.includes('npm run mutate -- --only <id>')],
+    ['root rejects routine full local manifest', /Do not run the complete mutation manifest locally by default/.test(root)],
+    ['high risk keeps quick verification', high.includes('npm run verify:quick')],
+    ['high risk keeps conditional build verification', high.includes('npm run verify:build')],
+    ['high risk selects applicable mutations', /all mutation entries applicable/.test(high)],
+    ['high risk does not require the full composite', !high.includes('npm run verify:full')],
+    ['exceptions retain the full composite', exceptions.includes('npm run verify:full')],
+    ['harness exception', /mutation harness itself/.test(exceptions)],
+    ['broad-manifest exception', /mutation manifest changes broadly/.test(exceptions)],
+    ['CI-failure exception', /CI mutation failure/.test(exceptions)],
+    ['cross-cutting exception', /cross-cutting behavior changes/.test(exceptions)],
+    ['named-risk exception', /specifically identified repository-wide risk/.test(exceptions)],
+    ['current CI context', ci.includes('verify (current)')],
+    ['floor CI context', ci.includes('verify (floor)')],
+    ['visual CI context', ci.includes('visual')],
+    ['current CI runs the complete manifest', /complete mutation manifest/.test(ci)],
+    ['pending CI blocks a fully-verified claim', /Do not report the change as fully\s+verified or merge-ready/.test(ci)],
+  ];
+
+  return checks.filter(([, valid]) => !valid).map(([name]) => name);
+}
+
 describe('the instruction files', () => {
   it('load as substantive text within the global context budget', () => {
     const text = readFileSync(CLAUDE, 'utf8');
@@ -209,8 +236,51 @@ describe('the instruction files', () => {
     expect(high).toMatch(/renderer\/WebGL infrastructure/);
     expect(high).toMatch(/CI, build, dependency\/engine, release, deployment/);
     expect(high).toMatch(/cross-cutting change/);
-    expect(high).toContain('npm run verify:full');
+    expect(high).toContain('npm run verify:quick');
+    expect(high).toContain('npm run verify:build');
+    expect(high).toMatch(/all mutation entries applicable/);
+    expect(high).not.toContain('npm run verify:full');
     expect(high).toMatch(/adversarially review invariants/);
+  });
+
+  it('separates targeted local candidate evidence from authoritative CI verification', () => {
+    const root = readFileSync(CLAUDE, 'utf8');
+    const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
+
+    expect(verificationPolicyProblems(root, policy)).toEqual([]);
+  });
+
+  it('makes the previous blanket policy and weakened CI/local boundaries fail the guard', () => {
+    const root = readFileSync(CLAUDE, 'utf8');
+    const policy = readFileSync(TESTING_AND_REVIEW, 'utf8');
+    const oldHighRisk = policy.replace(
+      '- run `npm run verify:quick` and add `npm run verify:build` when production output can\n  change',
+      '- from a clean candidate worktree, run `npm run verify:full`',
+    );
+    const noTargetedRoot = root.replaceAll('npm run mutate -- --only <id>', 'npm run mutate');
+    const noTargetedPolicy = policy.replaceAll('npm run mutate -- --only <id>', 'npm run mutate');
+    const noExceptions = policy.replace(
+      '### Full local mutation-manifest exceptions',
+      '### Routine full local mutation runs',
+    );
+    const weakenedCi = policy.replace(
+      'runs the complete mutation manifest on pull requests',
+      'runs selected mutation entries on pull requests',
+    );
+    const prematureCompletion = policy.replace(
+      'Do not report the change as fully\nverified or merge-ready',
+      'Report the change as fully verified and merge-ready',
+    );
+
+    for (const [name, candidateRoot, candidatePolicy] of [
+      ['blanket high-risk full gate', root, oldHighRisk],
+      ['missing targeted mutations', noTargetedRoot, noTargetedPolicy],
+      ['missing exception boundary', root, noExceptions],
+      ['weakened current CI manifest', root, weakenedCi],
+      ['premature completion claim', root, prematureCompletion],
+    ] as const) {
+      expect(verificationPolicyProblems(candidateRoot, candidatePolicy), name).not.toEqual([]);
+    }
   });
 
   it('keeps escalation, conditional evidence, and bounded delegation explicit', () => {

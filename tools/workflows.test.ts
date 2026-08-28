@@ -236,7 +236,7 @@ describe('the canonical verification scripts', () => {
     expect(browserLeaks(expandScript('verify:full', SCRIPTS))).toEqual([]);
     expect(browserLeaks(['typecheck', 'visual'])).toEqual(['visual']);
     expect(browserLeaks(['test:gl', 'audit:prod'])).toEqual(['test:gl']);
-    expect(COMMAND_REFERENCE).toMatch(/`verify:full` is the complete core, non-browser merge gate/);
+    expect(COMMAND_REFERENCE).toMatch(/`verify:full` is the complete core, non-browser composite/);
   });
 
   it('documents every stable entry point with scope and approximate runtime', () => {
@@ -253,7 +253,9 @@ describe('the canonical verification scripts', () => {
       expect(COMMAND_REFERENCE, name).toContain(`npm run ${name}`);
     }
     expect(COMMAND_REFERENCE).toContain('Typical warm local runtime');
-    expect(COMMAND_REFERENCE).toMatch(/Run `verify:full` against the clean candidate commit/);
+    expect(COMMAND_REFERENCE).toContain('Local full-manifest execution is exceptional');
+    expect(COMMAND_REFERENCE).toMatch(/`verify \(current\)`\s+runs the complete mutation manifest/);
+    expect(COMMAND_REFERENCE).toContain('not the routine local candidate gate');
   });
 
   it('proves the graph guard detects its duplicate, missing-reference, and cycle failures', () => {

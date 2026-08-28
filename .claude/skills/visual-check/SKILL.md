@@ -20,7 +20,8 @@ Treat invocation arguments as the behavior, scene, viewport, or failing check to
 3. Use the Playwright version and browser setup pinned in `.github/workflows/ci.yml`. Do not add or upgrade a project dependency merely to bypass a missing local prerequisite. Use FFmpeg only when the requested gallery output needs GIF or grid assembly.
 4. For a user-visible change, capture before and after with the same command, scene, seed, viewport, device scale, and browser. Inspect the images themselves at normal scale; a zero exit code or generated file is not visual evidence.
 5. Inspect `gallery-out/` for default gallery captures and `visual-out/<label>/` for visual screenshots plus `report.json`. Confirm page errors are absent, the intended checkout was served, and no blank, clipped, stale, or unrelated state was captured.
-6. Diagnose the first failing composite step with its direct repository script, then rerun the composite. Renderer/WebGL infrastructure is high risk and also requires `npm run verify:full` from a clean candidate worktree.
+6. Diagnose the first failing composite step with its direct repository script, then rerun the composite. Renderer/WebGL infrastructure is high risk: run the quick/build floor, the full visual composite, and every applicable mutation entry with `npm run mutate -- --only <id>`.
+7. Do not run `npm run verify:full` merely because rendering infrastructure is high risk. Reserve it for the documented full-manifest exceptions, and treat required CI — including the independent `visual` job — as authoritative for merge.
 
 ## Stop conditions
 
