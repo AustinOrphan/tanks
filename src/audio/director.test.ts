@@ -152,3 +152,39 @@ describe('createAudioDirector: rebinding the player across levels', () => {
     expect(calls.map((c) => c.key)).toEqual(['cannon-enemy', 'cannon', 'cannon-enemy']);
   });
 });
+
+describe('mine warning cues (issue #276)', () => {
+  it('plays DISTINCT sounds for the fuse warning and the proximity trip', () => {
+    // These two events used to be explicit no-ops. The assertion that matters is that the
+    // keys DIFFER: mapping both to one sound would satisfy "a cue exists" while destroying
+    // the only thing the issue is about, which is telling them apart.
+    const { engine, calls } = makeSpyEngine();
+    const d = createAudioDirector(engine);
+    d.handle([
+      { type: 'mine-fuse-warning', mineId: 1, ownerId: 2, pos: { x: 0, y: 0 } },
+      { type: 'mine-triggered', mineId: 1, ownerId: 2, pos: { x: 0, y: 0 } },
+    ]);
+    expect(calls.map((c) => c.key)).toEqual(['mine-fuse-warn', 'mine-trip']);
+    expect(calls[0].key).not.toBe(calls[1].key);
+  });
+
+  it('plays neither cue for an unrelated event', () => {
+    // Non-vacuity: proves the two assertions above are reading the events they name rather
+    // than a director that plays these keys unconditionally.
+    const { engine, calls } = makeSpyEngine();
+    createAudioDirector(engine).handle([{ type: 'mine-armed', mineId: 1, ownerId: 2, pos: { x: 0, y: 0 } }]);
+    expect(calls.map((c) => c.key)).not.toContain('mine-fuse-warn');
+    expect(calls.map((c) => c.key)).not.toContain('mine-trip');
+  });
+
+  it('emits one cue per event, so simultaneous warnings stay bounded', () => {
+    // The issue asks that multiple simultaneous warnings not spam. The director's contract
+    // is one play per event; four mines warning on the same tick is four cues, not a loop.
+    const { engine, calls } = makeSpyEngine();
+    const evts: SimEvent[] = [1, 2, 3, 4].map((id) => ({
+      type: 'mine-fuse-warning' as const, mineId: id, ownerId: 2, pos: { x: 0, y: 0 },
+    }));
+    createAudioDirector(engine).handle(evts);
+    expect(calls.filter((c) => c.key === 'mine-fuse-warn')).toHaveLength(4);
+  });
+});

@@ -10,6 +10,8 @@ const REQUIRED_KEYS = [
   'explosion',
   'mine-drop',
   'mine-arm',
+  'mine-fuse-warn',
+  'mine-trip',
   'mine-boom',
   'victory',
   'defeat',

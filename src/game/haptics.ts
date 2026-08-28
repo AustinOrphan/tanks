@@ -41,6 +41,19 @@ export const DESTROYED_PATTERN_MS: number[] = [50, 30, 50];
 
 /** A mine detonating within kill reach of the player. */
 export const MINE_NEAR_PULSE_MS = 60;
+/**
+ * The two mine warnings (issue #276), shaped so a hand can tell them apart without looking.
+ *
+ * A single SHORT tap for "the fuse is nearly out" and a two-beat pattern for "you tripped
+ * this": the trip is the one that means a blast is now committed, so it gets the pattern the
+ * hand notices. Both stay well under MINE_NEAR_PULSE_MS, because a warning that buzzes as
+ * hard as the detonation would make the detonation feel like nothing.
+ *
+ * Reinforcement only, never the sole cue -- each warning also has a distinct visual and a
+ * distinct sound, which is what the issue's accessibility criterion requires.
+ */
+export const MINE_FUSE_WARN_PULSE_MS = 18;
+export const MINE_TRIP_PATTERN_MS: number[] = [22, 40, 22];
 
 /**
  * "Near" for the mine-detonate cue: the radius `detonateMine` actually kills at,
@@ -124,9 +137,19 @@ export function createHapticsDirector(
       case 'lose':
         break;
       case 'mine-triggered':
+        // Distance-gated exactly like 'mine-detonate' above, and for the same reason: a
+        // mine tripped by someone else across the arena is not this player's problem, and
+        // buzzing for it is the anti-pattern CLAUDE.md names. The gate also bounds the
+        // spam the issue asks about -- several mines going off at once can only produce
+        // pulses for the ones actually near this player.
+        if (playerPos !== null && distance(e.pos, playerPos) <= MINE_DANGER_RADIUS) {
+          vibrate(MINE_TRIP_PATTERN_MS);
+        }
+        break;
       case 'mine-fuse-warning':
-        // No pulse in this child -- the two distinct warning presentations are
-        // #276's deliberate work (same posture as audio/director.ts).
+        if (playerPos !== null && distance(e.pos, playerPos) <= MINE_DANGER_RADIUS) {
+          vibrate(MINE_FUSE_WARN_PULSE_MS);
+        }
         break;
       default: {
         // Exhaustiveness guard: a new SimEvent kind fails to compile here, the

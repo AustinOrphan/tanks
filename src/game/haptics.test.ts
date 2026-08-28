@@ -8,6 +8,8 @@ import {
   FIRE_PULSE_MS,
   DESTROYED_PATTERN_MS,
   MINE_NEAR_PULSE_MS,
+  MINE_FUSE_WARN_PULSE_MS,
+  MINE_TRIP_PATTERN_MS,
   MINE_DANGER_RADIUS,
   type VibrateFn,
 } from './haptics';
@@ -44,6 +46,10 @@ function destroyedEvent(kind: 'player' | 'grey', tankId: number): SimEvent {
 
 function mineDetonateEvent(pos: { x: number; y: number }): SimEvent {
   return { type: 'mine-detonate', mineId: 1, ownerId: ENEMY_ID, pos };
+}
+
+function warnEvent(type: 'mine-triggered' | 'mine-fuse-warning', pos: { x: number; y: number }): SimEvent {
+  return { type, mineId: 1, ownerId: ENEMY_ID, pos };
 }
 
 describe('createHapticsDirector', () => {
@@ -229,5 +235,63 @@ describe('resolveVibrate', () => {
   it('returns a no-op when the host has no navigator at all', () => {
     const vibrate = resolveVibrate({});
     expect(vibrate([10, 20])).toBe(false);
+  });
+});
+
+describe('mine warning haptics (issue #276)', () => {
+  it('pulses for a fuse warning inside the danger radius, and NOT outside it', () => {
+    // The gate is the point, not the pulse: without it, a mine burning down on the far side
+    // of the arena buzzes a player who cannot even see it. Both sides asserted, so the test
+    // fails whether the gate is deleted or inverted.
+    const near = fakeVibrate();
+    const dNear = createHapticsDirector(near.vibrate, PLAYER_ID);
+    dNear.setPlayerPosition({ x: 0, y: 0 });
+    dNear.handle([warnEvent('mine-fuse-warning', { x: MINE_DANGER_RADIUS - 0.1, y: 0 })]);
+    expect(near.calls).toEqual([MINE_FUSE_WARN_PULSE_MS]);
+
+    const far = fakeVibrate();
+    const dFar = createHapticsDirector(far.vibrate, PLAYER_ID);
+    dFar.setPlayerPosition({ x: 0, y: 0 });
+    dFar.handle([warnEvent('mine-fuse-warning', { x: MINE_DANGER_RADIUS + 0.1, y: 0 })]);
+    expect(far.calls).toEqual([]);
+  });
+
+  it('pulses the TRIP pattern inside the danger radius, and NOT outside it', () => {
+    const near = fakeVibrate();
+    const dNear = createHapticsDirector(near.vibrate, PLAYER_ID);
+    dNear.setPlayerPosition({ x: 0, y: 0 });
+    dNear.handle([warnEvent('mine-triggered', { x: 0.5, y: 0 })]);
+    expect(near.calls).toEqual([MINE_TRIP_PATTERN_MS]);
+
+    const far = fakeVibrate();
+    const dFar = createHapticsDirector(far.vibrate, PLAYER_ID);
+    dFar.setPlayerPosition({ x: 0, y: 0 });
+    dFar.handle([warnEvent('mine-triggered', { x: MINE_DANGER_RADIUS + 0.1, y: 0 })]);
+    expect(far.calls).toEqual([]);
+  });
+
+  it('gives the two warnings DIFFERENT patterns, so a hand can tell them apart', () => {
+    // The whole point of the issue is that these two mean different things.
+    //
+    // An earlier version of this test asserted
+    // `expect(MINE_TRIP_PATTERN_MS).not.toEqual(MINE_FUSE_WARN_PULSE_MS)`, which CANNOT
+    // FAIL: one is an array and the other a number, so they are unequal whatever values
+    // they hold. It advertised coverage it did not have. What actually discriminates is
+    // the pair of RECORDED CALLS below -- point either case at the other's constant and
+    // this fails.
+    const { vibrate, calls } = fakeVibrate();
+    const d = createHapticsDirector(vibrate, PLAYER_ID);
+    d.setPlayerPosition({ x: 0, y: 0 });
+    d.handle([warnEvent('mine-fuse-warning', { x: 0.5, y: 0 }), warnEvent('mine-triggered', { x: 0.5, y: 0 })]);
+    expect(calls).toEqual([MINE_FUSE_WARN_PULSE_MS, MINE_TRIP_PATTERN_MS]);
+  });
+
+  it('stays silent with no known player position, rather than buzzing for every mine', () => {
+    // setPlayerPosition is never called here. An ungated fallback would vibrate for warnings
+    // anywhere on the map during the first frames of a round.
+    const { vibrate, calls } = fakeVibrate();
+    const d = createHapticsDirector(vibrate, PLAYER_ID);
+    d.handle([warnEvent('mine-fuse-warning', { x: 0, y: 0 }), warnEvent('mine-triggered', { x: 0, y: 0 })]);
+    expect(calls).toEqual([]);
   });
 });

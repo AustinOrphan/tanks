@@ -417,6 +417,57 @@ export const MOMENTS: Record<string, MomentDef> = {
    * MINE_TIMER math; this is the sim actually living through that countdown tick by
    * tick and detonating at the end of it.
    */
+  /**
+   * The PROXIMITY half of the mine warnings (issue #276), which no other moment stages:
+   * `mine-cycle` runs a fuse down to expiry, and `wall-break` shoots a mine (immediate, no
+   * warning at all). Here a tank walks into an already-armed mine, so the clip shows the
+   * reaction window itself -- the fill growing from the middle of the mine outward and
+   * reaching full on the frame the blast starts.
+   *
+   * The mine is owned by a tank id that is NOT in the world (99), which is what keeps it
+   * armed without staging an owner who would have to walk clear first. Same shortcut
+   * `wall-break` takes, and harmless for the same reason: nothing reads that owner except
+   * blast credit, and this moment pins no credit.
+   */
+  'mine-proximity': (() => {
+    const AIM = { x: 1000, y: 0 };
+    const WALK: InputState = { move: { x: 1, y: 0 }, aim: AIM, fire: false, mine: false };
+    return {
+      // MEASURED (throwaway probe through simulateMoment itself, this tree): walking from
+      // x=-2.4 the tank crosses MINE_PROXIMITY_RADIUS and trips the mine at events[19]; the
+      // blast lands at events[49], exactly MINE_PROXIMITY_DELAY_TICKS (30) later, and kills
+      // the tank that tripped it on the same tick. 89 leaves the usual ~40-tick margin past
+      // the detonation for the explosion burst to decay rather than cutting mid-fade.
+      //
+      // Measured THROUGH simulateMoment, not through a hand-rolled step() loop: the two
+      // disagree by one. `events[0]` is the tick-0 world's own events, so a bare loop's
+      // index t lands at events[t + 1] here. The first probe reported 18/48 and pinned
+      // ticks that fire nothing.
+      ticks: 89,
+      expect: [
+        { type: 'mine-triggered', tick: 19 },
+        { type: 'mine-detonate', tick: 49 },
+      ],
+      focus: [-0.8, 0.3, 0], span: 4.5,
+      build: () => {
+        const w = createWorld({
+          walls: [], spawns: [{ pos: { x: -2.4, y: 0 }, angle: 0 }], lives: 3,
+          tanks: [{
+            id: 1, kind: 'player',
+            pos: { x: -2.4, y: 0 }, bodyAngle: 0, turretAngle: 0, alive: true,
+            desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0,
+            aiState: 'idle', aiTimer: 0,
+          }],
+          seed: 7,
+        });
+        w.roundStartTick = -600;
+        w.mines.push({ id: 500, ownerId: 99, pos: { x: 0, y: 0 }, timer: 999, armed: true, detonated: false });
+        return w;
+      },
+      input: () => WALK,
+    };
+  })(),
+
   'mine-cycle': (() => {
     // Fixed far downrange so aimDir stays steady while the tank walks (same
     // aim-is-a-world-point landmine every other moment here documents); unrelated to

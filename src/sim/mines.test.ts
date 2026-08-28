@@ -842,6 +842,27 @@ describe('source-specific mine warnings (issue #275, owner-revised on PR #311)',
     expect(events.filter((e) => e.type === 'mine-detonate')).toHaveLength(1)
   })
 
+  it('a SHELL hit emits mine-detonate with NO mine-triggered, and stamps no delay', () => {
+    // "Shell hits receive no artificial warning delay" -- the one acceptance criterion of
+    // issue #276 whose negative case lives here rather than in the presentation layer. The
+    // blast-credit suite above already covers that a shell detonates immediately; what is
+    // asserted here is the EVENT shape, because that is what the audio, haptics and render
+    // cues key off. If a shell hit ever emitted mine-triggered, the player would get the
+    // "you tripped this" cue for a mine they deliberately shot, and the proximity fill would
+    // draw for an instant on a mine that is already gone.
+    const world = createWorld({ walls: [], tanks: [], spawns: [], lives: 3 })
+    const armed: Mine = { id: 9, ownerId: 1, pos: { x: 0, y: 0 }, timer: 99, armed: true, detonated: false }
+    world.mines.push(armed)
+    world.bullets.push({ id: 90, ownerId: 3, type: 'normal', pos: { x: 0.1, y: 0 }, vel: { x: 1, y: 0 }, bouncesLeft: 1, alive: true } as Bullet)
+    const events: SimEvent[] = []
+    resolveBulletHits(world, events)
+    expect(events.some((e) => e.type === 'mine-detonate')).toBe(true)
+    expect(events.some((e) => e.type === 'mine-triggered')).toBe(false)
+    expect(events.some((e) => e.type === 'mine-fuse-warning')).toBe(false)
+    // ...and no reaction window was opened, so nothing could render a proximity cue for it.
+    expect(armed.proximityDelayLeft).toBeUndefined()
+  })
+
   it('unarmed mines under the default policy still trip no delay on proximity', () => {
     const owner = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
     const enemy = mkTank({ id: 2, kind: 'brown', pos: { x: 1.0, y: 0 } })

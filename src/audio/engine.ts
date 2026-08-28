@@ -75,6 +75,8 @@ const FALLBACK_FREQ: Record<string, number> = {
   explosion: 90,
   'mine-drop': 300,
   'mine-arm': 660,
+  'mine-fuse-warn': 1560,
+  'mine-trip': 880,
   'mine-boom': 70,
   victory: 520,
   defeat: 160,

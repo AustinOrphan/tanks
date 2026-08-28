@@ -44,6 +44,8 @@ export const AUTHORED_LAYOUT: AudioManifest = {
     explosion: audioUrl('explosion.wav'),
     'mine-drop': audioUrl('mine-drop.wav'),
     'mine-arm': audioUrl('mine-arm.wav'),
+    'mine-fuse-warn': audioUrl('mine-fuse-warn.wav'),
+    'mine-trip': audioUrl('mine-trip.wav'),
     'mine-boom': audioUrl('mine-boom.wav'),
     victory: audioUrl('victory.wav'),
     defeat: audioUrl('defeat.wav'),

@@ -9,6 +9,7 @@ import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '.
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
+import { mineWarningFrame, makeMineWarningRing, ringStepFor, makeMineWarningRingMesh, makeMineWarningFillMesh, RING_OUTER_SCALE, FILL_OUTER_SCALE } from './mine-warning';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
@@ -422,9 +423,12 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-const MINE_Y = 0.09;
+/** Mine body centre height; the body spans 0..2*MINE_Y. Exported for the #276 fill's height. */
+export const MINE_Y = 0.09;
 /** How many full bright/dark cycles a mine goes through over its whole fuse. */
 const MINE_PULSE_TURNS = 6;
+/** The mine body's radius. Exported because the #276 warning geometry is sized against it. */
+export const MINE_R = 0.28;
 const MINE_ARMED_LO = new THREE.Color(0x3a0a0a);
 const MINE_ARMED_HI = new THREE.Color(0xff3322);
 const MINE_IDLE_LO = new THREE.Color(0x000000);
@@ -446,6 +450,16 @@ function disposeObject(obj: THREE.Object3D): void {
     else if (mat) mat.dispose();
   });
   obj.parent?.remove(obj);
+}
+
+/** A mine's body plus its two lazily-created warning cues (issue #276). */
+interface MineView {
+  mesh: THREE.Mesh;
+  /** Fuse-urgency outline. Its geometry is rebuilt only when the thickness step changes. */
+  ring: THREE.Mesh | null;
+  ringStep: number;
+  /** Proximity-trip fill, scaled from the middle outward. */
+  fill: THREE.Mesh | null;
 }
 
 /** A player tank's live entrance/invincibility animation -- see spawn-anim.ts. */
@@ -613,7 +627,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   }
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
-  const mineViews = new Map<number, THREE.Mesh>();
+  /**
+   * A mine's view is three objects now, not one: the body, plus the two warning cues from
+   * issue #276. `ring` and `fill` are created LAZILY -- most mines spend most of their life
+   * in neither state, and an always-present pair would be two invisible draw calls per mine
+   * per frame for the sake of avoiding one allocation.
+   */
+  const mineViews = new Map<number, MineView>();
   const wallViews = new Map<number, { mesh: THREE.Mesh; signature: string }>();
 
   /**
@@ -1177,7 +1197,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     return mesh;
   }
 
-  const MINE_R = 0.28;
+
   /**
    * Height of the straight side wall, before the dome starts.
    *
@@ -1229,6 +1249,41 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.45, metalness: 0.55 }),
     );
     mesh.castShadow = true;
+    scene.add(mesh);
+    return mesh;
+  }
+
+  /**
+   * BOTH cues sit on the mine's CROWN, just clear of the dome apex (the body spans
+   * 0..2*MINE_Y), not on the ground around it -- owner ruling on PR #396.
+   *
+   * One height for both, so they occupy the same surface and differ only in shape. Clearing
+   * the apex is what makes them visible at all: laid on the felt they would be under an
+   * opaque body, which is the defect the first revision of this feature shipped.
+   */
+  const CUE_Y = MINE_Y * 2 + 0.003;
+  /**
+   * Retained for the record: the fill's height is the whole reason it is visible. On the felt it would be a disc underneath an
+   * opaque 0.28-wide body: hidden until it grew wider than the mine, which is more than half
+   * the reaction window, so the cue would start late and appear to come out from BEHIND the
+   * mine rather than filling it. Clearing the dome (body spans 0..2*MINE_Y) puts it on the
+   * mine's own surface, where it reads as the mine filling up.
+   *
+   * Depth-tested NORMALLY, which is what this height buys over the alternative of drawing
+   * through the body with `depthTest: false`: that version was captured and rejected -- it
+   * also drew over the TANK standing on the mine, which looked like a bug. Here the mine no
+   * longer occludes the fill but a tank still does, which is correct in both directions.
+   */
+  const FILL_Y = CUE_Y;
+
+  function makeWarningRing(): THREE.Mesh {
+    const mesh = makeMineWarningRingMesh();
+    scene.add(mesh);
+    return mesh;
+  }
+
+  function makeWarningFill(): THREE.Mesh {
+    const mesh = makeMineWarningFillMesh();
     scene.add(mesh);
     return mesh;
   }
@@ -1522,11 +1577,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     for (const m of curr.mines) {
       if (m.detonated) continue;
       seen.add(m.id);
-      let mesh = mineViews.get(m.id);
-      if (!mesh) {
-        mesh = makeMine();
-        mineViews.set(m.id, mesh);
+      let view = mineViews.get(m.id);
+      if (!view) {
+        view = { mesh: makeMine(), ring: null, ringStep: -1, fill: null };
+        mineViews.set(m.id, view);
       }
+      const mesh = view.mesh;
       mesh.position.set(m.pos.x, MINE_Y, m.pos.y);
       // The fuse, made visible: the mine pulses, and pulses FASTER as it runs out.
       //
@@ -1546,13 +1602,57 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       const lo = m.armed ? MINE_ARMED_LO : MINE_IDLE_LO;
       const hi = m.armed ? MINE_ARMED_HI : MINE_IDLE_HI;
       mat.emissive.copy(lo).lerp(hi, pulse);
+
+      // The two #276 warnings, projected from the same mine state (render/mine-warning.ts).
+      // Both are driven by the SIM's countdowns, never a wall clock, so a paused game holds
+      // its warning frame instead of animating on.
+      const warn = mineWarningFrame(m);
+
+      if (warn.fuse) {
+        if (!view.ring) {
+          view.ring = makeWarningRing();
+          view.ringStep = -1;
+        }
+        const step = ringStepFor(warn.fuse.inner);
+        if (step !== view.ringStep) {
+          // Thickness lives in geometry, so it changes at most RING_STEPS times per fuse.
+          view.ring.geometry.dispose();
+          view.ring.geometry = makeMineWarningRing(MINE_R * RING_OUTER_SCALE, step);
+          view.ringStep = step;
+        }
+        view.ring.position.set(m.pos.x, CUE_Y, m.pos.y);
+        view.ring.visible = warn.fuse.on;
+      } else if (view.ring) {
+        disposeObject(view.ring);
+        view.ring = null;
+        view.ringStep = -1;
+      }
+
+      if (warn.proximity) {
+        if (!view.fill) view.fill = makeWarningFill();
+        // Grows from the middle OUTWARD: a disc of unit radius scaled by the fill fraction.
+        // Zero scale on the trip tick is intentionally invisible rather than a dot.
+        const r = Math.max(1e-4, warn.proximity.fill) * MINE_R * FILL_OUTER_SCALE;
+        view.fill.scale.set(r, r, 1);
+        view.fill.position.set(m.pos.x, FILL_Y, m.pos.y);
+      } else if (view.fill) {
+        disposeObject(view.fill);
+        view.fill = null;
+      }
     }
-    for (const [id, mesh] of mineViews) {
+    for (const [id, view] of mineViews) {
       if (!seen.has(id)) {
-        disposeObject(mesh);
+        disposeMineView(view);
         mineViews.delete(id);
       }
     }
+  }
+
+  /** Removes a mine's body AND both warning cues -- see MineView on why they are separate. */
+  function disposeMineView(view: MineView): void {
+    disposeObject(view.mesh);
+    if (view.ring) disposeObject(view.ring);
+    if (view.fill) disposeObject(view.fill);
   }
 
   /**
@@ -1642,7 +1742,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     enemySkinMaps.clear();
     for (const v of tankViews.values()) disposeObject(v.group);
     for (const m of bulletViews.values()) disposeObject(m);
-    for (const m of mineViews.values()) disposeObject(m);
+    for (const v of mineViews.values()) disposeMineView(v);
     for (const m of blastViews.values()) disposeObject(m);
     for (const v of wallViews.values()) disposeObject(v.mesh);
     tankViews.clear();
