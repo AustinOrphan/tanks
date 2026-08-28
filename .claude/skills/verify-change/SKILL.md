@@ -21,7 +21,7 @@ Treat invocation arguments as scope hints, never as a replacement for inspecting
 5. For behavior, code, or tests touched, run every applicable mutation entry with `npm run mutate -- --only <id>` and add or update entries when required. Prove a claimed testing gap with a real failing production mutation.
 6. Add `npm run verify:visual` for user-visible output or renderer/WebGL work. Add the applicable trace, persistence, portability, or device check required by the merge bar.
 7. Do not run `npm run verify:full` locally by default. Use it for mutation-harness changes, broad manifest edits, CI mutation-failure diagnosis, cross-cutting behavior that targeted selection cannot cover, or another named repository-wide risk.
-8. Treat required CI as authoritative: `verify (current)` runs the complete mutation manifest, `verify (floor)` covers the supported Node floor, and `visual` remains independent. Inspect failures; before all three pass, report only local candidate verification.
+8. Treat required CI as authoritative: `verify (current)` runs the complete mutation manifest, `verify (floor)` covers the supported Node floor, and `visual` remains independent. When a PR exists, inspect required CI once and classify it as `candidate complete / CI pending`, `CI failed`, or `CI passed / merge-ready` only when every required check and other merge requirement is satisfied. Return pending status to the caller's tracked queue instead of polling; pending CI does not prevent unrelated implementation work.
 9. On failure, identify the first causal atomic step and inspect its output. Do not turn an unexplained rerun into evidence or claim later steps passed when they never ran.
 10. Reinspect the final diff and status. Recompute all quoted counts after the last edit.
 
@@ -29,8 +29,8 @@ Treat invocation arguments as scope hints, never as a replacement for inspecting
 
 - Stop before destructive cleanup when unrelated changes overlap the work.
 - Stop and report an incomplete gate when a required browser, platform, credential, or clean-worktree prerequisite is unavailable.
-- Stop on a failing required check until it is fixed, explicitly scoped as unrelated with evidence, or returned to the user as a blocker.
+- Stop this PR's merge progression on a failing required check until it is fixed, explicitly scoped as unrelated with evidence, or returned to the user as a blocker. Pending CI is not a failure.
 
 ## Evidence
 
-Report the risk tier and rationale, every exact command and outcome, final test/check counts, inspected visual artifact paths when applicable, expected absences, and any check not run or only partially reproduced. Distinguish selected local mutation evidence from complete-manifest CI, and passed, pending, skipped, or unavailable checks. Never call a candidate fully verified while required CI is pending.
+Report the risk tier and rationale, every exact command and outcome, final test/check counts, inspected visual artifact paths when applicable, expected absences, and any check not run or only partially reproduced. Distinguish selected local mutation evidence from complete-manifest CI and local candidate evidence from CI/merge status. Distinguish passed, pending, skipped, and unavailable checks. Never call a candidate fully verified while required CI is pending, and never describe it as merge-ready.

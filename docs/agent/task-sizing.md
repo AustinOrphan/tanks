@@ -65,6 +65,20 @@ Planning horizon describes when work belongs in the execution queue, not how val
 Only an `agent-ready` `size:xs`, `size:s`, or `size:m` leaf may be `priority:now`.
 Roll-up epics stay Next or Later and are completed through their linked children.
 
+## Runtime execution queue
+
+The Now queue is a planning horizon, not permission to implement several tasks at once.
+Default to at most one active implementation. A candidate-complete PR awaiting required CI
+remains tracked but does not consume that implementation slot, so one independent ready leaf
+may start without waiting for it.
+
+Before selecting that leaf, compare its dependencies and likely file surface with every
+CI-pending PR. Independent work normally branches from current `main` in its own worktree. If
+the next leaf needs pending code, choose another ready leaf or deliberately stack it on the
+predecessor and record that dependency; never treat a stacked branch as independently
+mergeable. See [CI-pending execution](testing-and-review.md#ci-pending-execution) for status,
+check-boundary, failure, and merge rules.
+
 ## Readiness labels
 
 Add `agent-ready` only when all of these are true:

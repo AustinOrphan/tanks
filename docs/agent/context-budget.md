@@ -1,8 +1,8 @@
 # Project instruction context budget
 
 Initial baseline measured for #211 on 2026-08-19; re-measured for #213 on 2026-08-21,
-for #266, #245 and #321 on 2026-08-25, and for the targeted local mutation policy on
-2026-08-28. The conditional-rule table below had drifted
+for #266, #245 and #321 on 2026-08-25, and for the targeted local mutation and CI-pending
+orchestration policies on 2026-08-28. The conditional-rule table below had drifted
 between those re-measurements -- before #266 it recorded `documentation.md` at 31 lines /
 1350 bytes against a file that was already 35 / 1663 -- so its figures are recomputed here
 on the final tree, not adjusted. Only the `After` row is enforced by a test.
@@ -12,13 +12,13 @@ on the final tree, not adjusted. Only the `After` row is enforced by a test.
 | State | Source | Lines | UTF-8 bytes |
 | --- | --- | ---: | ---: |
 | Before | `CLAUDE.md` at `844986c` | 1002 | 72393 |
-| After | root `CLAUDE.md` on this branch | 123 | 7256 |
-| Reduction | globally loaded project prose | — | 65137 (90.0%) |
+| After | root `CLAUDE.md` on this branch | 135 | 8077 |
+| Reduction | globally loaded project prose | — | 64316 (88.8%) |
 
 `AGENTS.md` is the same file through a symlink and is retained for non-Claude harnesses.
 No rule under `.claude/rules/` is unscoped, and no on-demand reference is imported by
 the root file. Therefore the exact repository-owned prose Claude Code loads
-unconditionally is the root `CLAUDE.md`: 7256 bytes, before built-in, user, skill,
+unconditionally is the root `CLAUDE.md`: 8077 bytes, before built-in, user, skill,
 MCP, or auto-memory context.
 
 This is an exact byte/line measurement, not a tokenizer or billing estimate. Token count
