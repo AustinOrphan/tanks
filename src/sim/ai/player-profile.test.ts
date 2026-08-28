@@ -5,7 +5,7 @@ import type { Tank, Vec2 } from '../types';
 import { fromAngle, vnorm, vsub, vdist } from '../types';
 import { decidePlayerInput, createPlayerAiState, mulberry32 } from './player-profile';
 import { configFor } from '../config';
-import { TICK_HZ } from '../constants';
+import { TICK_HZ, COUNTDOWN_TICKS } from '../constants';
 
 function makeTank(kind: Tank['kind'], id: number, x: number, y: number, team?: number): Tank {
   return {
@@ -214,6 +214,40 @@ describe('a competent scripted player against the shipped arenas', () => {
     // aim/reaction retuning.
     const fires = all.reduce((n, r) => n + r.fires, 0);
     expect(fires / all.length).toBeGreaterThan(5);
+  });
+
+  it('countdown ticks do not satisfy the scripted player\'s reaction delay either (#367)', () => {
+    // The mirror of the enemy rule (reaction.test.ts). `applyPlayerInput` already refuses
+    // the shot during the countdown, so the defect this pins is invisible from the world:
+    // the CLOCK banked those ticks, and the scripted player was therefore entitled to
+    // fire on the very first live tick. Asserted on `input.fire`, the profile's own
+    // output, because that is where the entitlement lives.
+    //
+    // `createWorld` anchors roundStartTick to tick + 1, so this fixture opens in the
+    // countdown without having to say so -- the same anchoring production uses.
+    const pid = 1;
+    const player = makeTank('player', pid, 0, 0);
+    const enemy = makeTank('brown', 2, 6, 0); // clear line of sight, no cover between
+    const world = createWorld({ walls: [], tanks: [player, enemy], spawns: [], lives: 3 });
+    const rnd = mulberry32(11);
+    const state = createPlayerAiState(rnd);
+
+    let firedDuringCountdown = false;
+    for (let t = 0; t < COUNTDOWN_TICKS; t++) {
+      world.tick += 1;
+      if (decidePlayerInput(world, pid, rnd, state).fire) firedDuringCountdown = true;
+      expect(state.aimTicks, `countdown tick ${t}`).toBe(0);
+    }
+    expect(firedDuringCountdown, 'the profile asked to fire during the countdown').toBe(false);
+
+    // Live now. The first tick must NOT be a legal shot; the span starts here.
+    const reactionTicks = Math.round(configFor('player').ai.reactionTime * TICK_HZ);
+    expect(reactionTicks).toBe(48); // the shipped 0.8s; a retune moves this deliberately
+    world.tick += 1;
+    expect(decidePlayerInput(world, pid, rnd, state).fire, 'fired on live tick 1').toBe(
+      false,
+    );
+    expect(state.aimTicks).toBe(1);
   });
 
   it('lays mines occasionally rather than never or constantly', () => {

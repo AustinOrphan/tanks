@@ -9,6 +9,7 @@ import {
   TICK_HZ, WANDER_TICKS, SEEK_APPROACH_BIAS, VEC_EPS,
   AI_MINE_TACTICAL_RADIUS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_PATH_HORIZON_TICKS,
 } from '../constants';
+import { roundPhase } from '../round';
 
 /**
  * A scripted "competent player": drives the PLAYER tank the way a decent human would,
@@ -408,7 +409,15 @@ export function decidePlayerInput(
   // The reaction clock: same shape as the enemy dispatcher's (ai/index.ts) aimTicks/
   // reactionTime gate, applied here instead since the player never passes through
   // decideAi/stepAi (idleDecision short-circuits kind === 'player').
-  state.aimTicks = hasSolution ? state.aimTicks + 1 : 0;
+  //
+  // Gated on the LIVE phase for the same reason and by the same rule as the enemy clock
+  // (issue #367): a countdown is a phase in which nobody may fire, so time spent in it
+  // must not satisfy a reaction requirement. `applyPlayerInput` already refuses the shot
+  // itself during the countdown (world.ts), which is exactly why the clock had to be
+  // gated separately -- without this the scripted player banks the whole countdown and
+  // is entitled to fire on the first live tick, the mirror image of the enemy behaviour
+  // the issue names. The phase, not "can I fire": see the enemy site's comment.
+  state.aimTicks = roundPhase(world) === 'live' && hasSolution ? state.aimTicks + 1 : 0;
   const reactionTicks = Math.round(cfg.ai.reactionTime * TICK_HZ);
   const fire = hasSolution && state.aimTicks >= reactionTicks;
 

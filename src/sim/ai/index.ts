@@ -107,16 +107,35 @@ export function stepAi(world: World, events: SimEvent[]): void {
 
     const decision = decideAi(world, tank);
     // The reaction clock: consecutive ticks a firing solution has been HELD
-    // (see AiDecision.hasSolution). Accumulated here, where the per-tick truth
-    // arrives; losing the solution resets it, so cover breaks the clock.
+    // (see AiDecision.hasSolution) IN LIVE PLAY. Accumulated here, where the
+    // per-tick truth arrives; losing the solution resets it, so cover breaks
+    // the clock.
     //
-    // DELIBERATELY accumulates through the countdown: an enemy that can see
-    // (or bank on) the player during the announced, fire-free phase has been
-    // aiming that whole time, and fires at the bell -- review measured teal
-    // holding 180 countdown ticks on arena 1 and firing 1 tick into live,
-    // exactly as it did before the gate existed. The telegraph guarantee is
-    // therefore about COVER BREAKS in live play, not round openings.
-    tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;
+    // It used to accumulate through the countdown as well, deliberately -- the
+    // argument being that an enemy which can see (or bank on) the player during
+    // the announced, fire-free phase has been aiming that whole time and has
+    // earned the shot at the bell. Issue #367 reverses that: the countdown is a
+    // phase in which the PLAYER cannot act either, so time spent in it satisfying
+    // a reaction requirement is time the player was given no chance to answer.
+    // Measured before the reversal, on arena 1: teal held all 180 countdown ticks
+    // and fired 1 tick into live, which is the same first-shot timing the profile
+    // reaction gate exists to prevent.
+    //
+    // The phase, not `canAct`. The two agree only while GRACE_TICKS is 0
+    // (constants.ts); re-enabling grace would make `canAct` false for a phase in
+    // which tanks move and hunt, and the rule this implements is "start at LIVE
+    // acquisition", not "start when firing is allowed".
+    //
+    // Reset to 0 rather than frozen: nothing else reads `aimTicks` -- the only
+    // other consumer is the fire gate below -- so the two are observationally
+    // identical, and resetting is what "starts from live acquisition" means
+    // literally rather than by argument. `resetArena` zeroes it too (world.ts),
+    // so a post-death countdown gets the same rule as the opening one.
+    //
+    // What this does NOT change: the turret still tracks through the countdown
+    // (that happens inside `decideAi` above), so the shot at the bell stays
+    // telegraphed. Only the clock is held.
+    tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;
     tank.desiredMove = phase === 'countdown' ? { x: 0, y: 0 } : decision.desiredMove;
     // Turret turns at a finite rate AND a finite acceleration (issue #347): accelSlew
     // carries the angular velocity on the tank, so the gun ramps up, tracks, and eases back
@@ -160,11 +179,27 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // SEEING you and PUNISHING you, per kind. Sits with the other act-site
     // gates (cooldown, disarmed) so decision-level tests stay decision-level.
     //
-    // Measured on the 60-seed harness before shipping, reference spans as-is
-    // (brown 48 / grey 42 / olive 39 / teal 36 ticks):
+    // Measured on the 60-seed engagement harness when the gate SHIPPED, reference spans
+    // as-is (brown 48 / grey 42 / olive 39 / teal 36 ticks). These are the gate's own
+    // before/after and predate issue #367; they are not a current reading of the tree:
     //   without the gate: a1 losses 58/60, freeWins 2/60, medianTicks 1496
     //   with the gate:    a1 losses 57/60, freeWins 3/60, medianTicks 1671
     //   (arena 3: 60/60 both rows; 1750 -> 1852; pacifist suite passes)
+    //
+    // ISSUE #367's own cost, re-measured on pacifist.test.ts's 60 seeds by running that
+    // shipped harness with and without the phase term above and changing nothing else:
+    //   before #367: freeWins 0/60, losses 60/60, 35.18 shots/round, 2.62 mines/round,
+    //                median kill 1510 ticks
+    //   after  #367: freeWins 2/60, losses 58/60, 31.67 shots/round, 2.77 mines/round,
+    //                median kill 1534 ticks
+    // Two rounds in sixty are now winnable by a player who never fires, against that
+    // suite's MAX_FREE_WIN_RATE of 0.05 (3/60) -- inside the bar, and the direction is
+    // the point rather than a surprise: the enemies gave up a free opening shot, so a
+    // passive player survives a little more often. Kills land ~1.6% later.
+    //
+    // That delta is THIS clock's, not the branch's: `playPacifist` drives its player from
+    // its own `mulberry` wander and never calls `decidePlayerInput`, so the scripted
+    // player's matching gate (player-profile.ts) cannot move these numbers.
     // Kills arrive ~6-12% later and every cover-break punish is telegraphed by
     // the profile's span. 3/60 sits ON the pacifist boundary (as the pre-series
     // baseline did): an earlier draft measured 0/60, but that draft's teal

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ARENA_01, ARENAS, arenaBounds, arenaById, loadArena, createArenaWorld, createWorldFor } from './arena';
 import { raySegmentVsAABB } from './collision';
 import { bankShot, lineOfSight } from './ai/targeting';
-import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS } from './constants';
+import { RICOCHET_BOUNCES, LIVES, COUNTDOWN_TICKS, GRACE_TICKS, TICK_HZ } from './constants';
 import { step } from './world';
 import type { InputState } from './types';
 
@@ -646,7 +646,22 @@ describe('createArenaWorld', () => {
     const noInput: InputState = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false };
     // Must clear the round's countdown + grace phases (nobody can fire until then) with
     // margin to spare, so Teal gets a real chance to fire once normal play begins.
-    const stepCount = COUNTDOWN_TICKS + GRACE_TICKS + 10;
+    //
+    // The margin is FOUR SECONDS of live play, not the ten ticks it was. Issue #367
+    // stopped countdown ticks counting toward the reaction delay, and this case is the
+    // arena-level reproduction of the defect that issue names: on this fixture teal used
+    // to fire on live tick 1, having banked the whole countdown. Measured on the assembled
+    // arena after the fix, same default seed: teal acquires at the bell, loses the
+    // solution on live tick 10, re-acquires, and fires on live tick 96 -- its authored
+    // 0.6s (36 ticks) held continuously, plus the time to get a second look.
+    //
+    // Four seconds rather than 96-plus-a-bit on purpose. The exact figure is arena
+    // geometry and profile tuning, neither of which this case is about; what it asserts is
+    // that a real assembled arena's AI does eventually shoot. A tight pin here would fail
+    // on any future retune while telling nobody anything they did not already know from
+    // reaction.test.ts, which pins the span itself against a controlled fixture.
+    const liveMargin = 4 * TICK_HZ;
+    const stepCount = COUNTDOWN_TICKS + GRACE_TICKS + liveMargin;
 
     let tealShotAppeared = false;
     const tealId = world.tanks.find((t) => t.kind === 'teal')?.id;

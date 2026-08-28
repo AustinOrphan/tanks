@@ -227,11 +227,49 @@ import { step } from '../../src/sim/world';
  * attributable entirely to the changed aim target, and the aimHoldTime=0 control above
  * demonstrates that directly.
  *
+ * MOVED (2026-08-28, issue #367): the AI reaction clock no longer banks countdown ticks.
+ * `stepAi` accumulates `tank.aimTicks` only while `roundPhase(world)` is 'live', so time
+ * spent watching the player through the fire-free countdown no longer satisfies a
+ * profile's authored reaction delay. The turret still tracks during the countdown -- that
+ * happens inside `decideAi` -- so the telegraph is unchanged; only the clock is held. A
+ * changed first-shot tick moves every tank's sampled position downstream of it, so this
+ * hash moves directly.
+ *
+ * ATTRIBUTION IS EXACT, by the same method as the aim-hold entry above. Reverting the ONE
+ * changed term -- `phase === 'live' &&` in the dispatcher's `tank.aimTicks` assignment
+ * (src/sim/ai/index.ts), nothing else -- reproduces the previous hash
+ * a1df14427a1b6e87c57ec9a72a46b97018ccd79e3cd8ea48a6f901bf27f7dda7 byte for byte over the
+ * whole traced population, and trace.test.ts passes green in that state. Run, not reasoned.
+ *
+ * The branch's other production edit, the same rule at the scripted player's own clock
+ * (src/sim/ai/player-profile.ts), does not reach this trace: traceText drives the player
+ * with its own `Math.cos(t / 37)` input pattern and never calls `decidePlayerInput`. Not
+ * left as a reading of the code -- reverting THAT term alone, with the dispatcher's kept,
+ * reproduces the hash below unchanged and trace.test.ts stays green. So the move is
+ * attributable to the enemy dispatcher alone, by control rather than by argument.
+ *
+ * Exposure MEASURED over exactly this population (5 arenas x 6 seeds x 2500 ticks) by a
+ * throwaway probe that replicated traceText's loop and reproduced BOTH fingerprints -- the
+ * old one under the reverted term, the new one under the shipped term -- which is what
+ * makes it the traced population rather than a similar one:
+ *
+ *   - Under the OLD rule: 201652 enemy decision-ticks (every alive non-player tank, every
+ *     tick, the population stepAi iterates), of which 80757 fall in a countdown and 9540
+ *     of those banked a clock tick -- 11.81% of countdown ticks, 4.73% of all.
+ *   - The figure that matters is not that one. In 12 of the 30 traced runs an enemy stood
+ *     at or past its FULL authored reaction span at the moment the countdown ended, i.e.
+ *     was entitled to fire on the first live tick. That is the defect #367 names, at 40%
+ *     of runs.
+ *   - Under the NEW rule the same population is 212841 enemy decision-ticks: the divergence
+ *     changes who is alive and for how long, which is why the two totals differ and why a
+ *     single before/after count would have been the wrong shape to quote.
+ *
  * History: 056afe386774790c739f7b28a05bb77abb68e5d07b140f6a798bf7731850024e (issue #347 on
- * PR #348, turret angular acceleration) -> the hash below, confirmed by actually running
+ * PR #348, turret angular acceleration) -> a1df14427a1b6e87c57ec9a72a46b97018ccd79e3cd8ea48a6f901bf27f7dda7
+ * (issue #344, the AI aim hold) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = 'a1df14427a1b6e87c57ec9a72a46b97018ccd79e3cd8ea48a6f901bf27f7dda7';
+export const BASELINE_HASH = 'cf92a77bc9c5b85600cda0cf6031cc2279ec33bca66cd8c84ff9195436d73bb5';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
