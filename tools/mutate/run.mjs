@@ -12,7 +12,9 @@
  *   - an ambiguous find (matches more than once) is refused, not guessed at
  *   - the scoped tests must be GREEN on the unmutated file first (a baseline check) --
  *     otherwise a pre-existing red test elsewhere in the same file reports every
- *     mutation "KILLED" regardless of what it does, at exit 0
+ *     mutation "KILLED" regardless of what it does, at exit 0. Entries with the exact
+ *     same ordered scope reuse that baseline within one manifest invocation, only
+ *     after every earlier mutation has been restored and byte-verified
  *   - the manifest's declared `tests` must actually be able to REACH the mutated file
  *     (checked per file from one shared Vitest dependency graph, before anything is
  *     mutated) --
@@ -107,11 +109,12 @@ import { runManifest, computeExitCode, STATUS, NO_VERDICT_STATUSES, RestoreFaile
 // the bottom of this file, not for computing a location relative to import.meta.url the
 // way the old fixed-depth ROOT did.
 
-// A blocking subprocess (vitest, or `vitest related`) with no timeout cannot be
-// interrupted by vitest's OWN test timeout when this harness's meta-tests run it
-// inside a vitest worker -- a hang here would hang `npm test` forever, not just this
-// tool. Generous, because a full related-files probe or a large scoped run can
-// legitimately take tens of seconds; short enough that a genuine hang still surfaces.
+// A blocking subprocess (a scoped Vitest run or the reachability worker) with no
+// timeout cannot be interrupted by Vitest's OWN test timeout when this harness's
+// meta-tests run it inside a Vitest worker -- a hang here would hang `npm test`
+// forever, not just this tool. Generous, because a full related-files probe or a large
+// scoped run can legitimately take tens of seconds; short enough that a genuine hang
+// still surfaces.
 const SUBPROCESS_TIMEOUT_MS = 180_000;
 const SUBPROCESS_KILL_SIGNAL = 'SIGKILL';
 const REACHABILITY_WORKER = fileURLToPath(new URL('./reachability.mjs', import.meta.url));
@@ -195,16 +198,16 @@ export function unreachableReport(problems) {
 }
 
 /**
- * Classifies why a `vitest`-spawning subprocess produced no output file, from its
+ * Classifies why a child subprocess produced no output file, from its
  * spawnSync result alone (`{ status, signal, error }` -- the shape spawnSync always
  * returns, real or faked). Pure and exported so it is testable without spawning a
- * real, deliberately-broken vitest binary per case.
+ * real, deliberately-broken child per case.
  *
  * Three reasons, and they must never be conflated:
  *
  *   - 'interrupted': a real SIGINT/SIGTERM reached the child (res.signal is one of
- *     those), OR vitest caught the signal ITSELF and exited its own way -- measured
- *     directly: vitest handles SIGINT internally and exits status 130 with signal
+ *     those), OR a child caught the signal ITSELF and exited its own way -- measured
+ *     directly: Vitest handles SIGINT internally and exits status 130 with signal
  *     NULL, not by dying from the signal the way an unhandled child would, so
  *     checking `res.signal` alone misses it. Safe to treat as a graceful stop: this
  *     classifier only ever runs before anything has been mutated (the reachability
@@ -219,10 +222,10 @@ export function unreachableReport(problems) {
  *     this is not worth a wall-clock measurement to close.)
  *   - 'indeterminate': anything else -- `res.error` set (the binary could not even be
  *     launched: deleted, wrong permissions, ENOENT) or a plain nonzero exit with no
- *     report written (a crash, a broken vitest install). This is the case that was
+ *     report written (a crash, a broken Vitest install). This is the case that was
  *     previously conflated with "found nothing" -- measured directly (see
  *     orchestrate.test.ts): a genuinely-empty-but-successful probe (a file nothing
- *     imports) DOES write a report (`testResults: []`, exit 0, status 0). A MISSING
+ *     imports) DOES write a valid per-source report at exit 0. A MISSING
  *     report is therefore never a legitimate "found nothing" -- reporting one as such
  *     is the exact false claim ("nothing tests this file at all") this classifier
  *     exists to prevent when the true state is "the probe itself never completed".
@@ -233,12 +236,12 @@ export function classifySubprocessFailure(res) {
     return { reason: 'timeout', detail: `killed after ${SUBPROCESS_TIMEOUT_MS}ms with no response` };
   }
   if (res.signal != null || res.status === 130) {
-    return { reason: 'interrupted', detail: res.signal ? `signal ${res.signal}` : 'vitest exited 130 (its own SIGINT handling)' };
+    return { reason: 'interrupted', detail: res.signal ? `signal ${res.signal}` : 'child exited 130 (its own SIGINT handling)' };
   }
   if (res.error) {
-    return { reason: 'indeterminate', detail: `could not launch vitest: ${res.error.message}` };
+    return { reason: 'indeterminate', detail: `could not launch subprocess: ${res.error.message}` };
   }
-  return { reason: 'indeterminate', detail: `vitest exited ${res.status} without writing a report` };
+  return { reason: 'indeterminate', detail: `subprocess exited ${res.status} without writing a report` };
 }
 
 /** Turns a classifySubprocessFailure verdict into a thrown, appropriately-flagged
@@ -484,7 +487,7 @@ async function run() {
   // set for every distinct source. Nothing is mutated yet at this point either way, so an
   // interruption here is always safe -- report it plainly (exit 130, matching the
   // interrupted-mid-run exit code) rather than letting it surface as a confusing
-  // "these entries are unreachable" refusal, which is what a failed `vitest related`
+  // "these entries are unreachable" refusal, which is what a failed reachability
   // probe would otherwise look like (see classifySubprocessFailure/relatedFilesForAll).
   // An INDETERMINATE probe (not interrupted, just failed -- a broken vitest install,
   // a deleted binary) is deliberately NOT distinguished from any other setup failure
@@ -519,6 +522,12 @@ async function run() {
     runTests: (testFiles) => runTestsReal(testFiles, root),
     onResult: (result, index, count, entry) => console.log(formatResult(result, index, count, entry)),
   };
+
+  const baselineScopes = new Set(entries.map((entry) => JSON.stringify(entry.tests))).size;
+  console.log(
+    `[baseline] ${entries.length} mutation(s), ${baselineScopes} exact test scope(s); ` +
+    'each scope is checked at most once',
+  );
 
   let results;
   try {

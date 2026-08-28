@@ -4,9 +4,11 @@
  * - lib.mjs and orchestrate.mjs, exercised with FAKE deps (in-memory strings, no real
  *   fs/git/vitest). Fast, and what makes edge cases like "ambiguous find" or "restore
  *   verification fails" cheap to hit deliberately.
- * - run.mjs's own pure pieces (parseArgs, formatResult, dirtyReport), unit tested
- *   directly against strings -- no subprocess needed for CLI-argument or
- *   message-formatting logic.
+ * - run.mjs's own pure pieces (parseArgs, formatResult, dirtyReport, reachability
+ *   report validation), unit tested directly against values -- no subprocess needed
+ *   for CLI-argument, message-formatting, or worker-schema logic. The reachability
+ *   worker's one-context/many-source lifecycle is also tested with a fake context,
+ *   then its transitive per-source result is checked once against a REAL Vitest graph.
  * - a few REAL end-to-end cases that run runOne/runManifest with REAL fs and a REAL
  *   vitest subprocess (run.mjs's own runTestsReal), against a throwaway fixture
  *   .test.ts file generated with a unique name for each one and deleted in a finally.
@@ -193,9 +195,10 @@ describe('validateManifest', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * `runTests` is now called (at least) TWICE per entry that gets far enough to run
- * it -- once for the pre-mutation baseline, once after the mutation is applied -- so
- * the fake distinguishes them by call order rather than assuming one shared shape:
+ * A standalone `runOne` calls `runTests` TWICE when it gets far enough -- once for the
+ * pre-mutation baseline, once after the mutation is applied. `runManifest` may reuse
+ * the first result for later entries with the exact same scope. This fake primarily
+ * serves the standalone cases and distinguishes the two phases by call order:
  *   - `overrides.baseline`: the FIRST call's result (default: a healthy 3-test run).
  *   - `overrides.baselineThrow`: an Error to throw on the first call instead.
  *   - `overrides.runTests`: the function used for every call AFTER the first (the
@@ -494,6 +497,73 @@ describe('runManifest', () => {
     expect(deps.onResult.mock.calls[1][1]).toBe(2);
   });
 
+  it('runs one baseline for an exact repeated test scope, then one mutated run per entry', () => {
+    const deps = fakeDeps();
+    deps.runTests.mockImplementation(() => (
+      deps.files.get('f.ts') === 'const X = 1;'
+        ? { failed: 0, total: 3, failedSuites: 0 }
+        : { failed: 1, total: 3, failedSuites: 1 }
+    ));
+    const entries = [entry({ id: 'a' }), entry({ id: 'b' })];
+
+    const results = runManifest(entries, deps, applyAt);
+
+    expect(results.map((result) => result.status)).toEqual([STATUS.KILLED, STATUS.KILLED]);
+    expect(deps.runTests).toHaveBeenCalledTimes(3); // baseline once + two mutants
+    expect(deps.runTests.mock.calls.map(([tests]) => tests)).toEqual([
+      ['f.test.ts'],
+      ['f.test.ts'],
+      ['f.test.ts'],
+    ]);
+  });
+
+  it('does not combine different or differently ordered test scopes', () => {
+    const deps = fakeDeps();
+    deps.runTests.mockImplementation(() => (
+      deps.files.get('f.ts') === 'const X = 1;'
+        ? { failed: 0, total: 3, failedSuites: 0 }
+        : { failed: 1, total: 3, failedSuites: 1 }
+    ));
+    const entries = [
+      entry({ id: 'a', tests: ['a.test.ts', 'b.test.ts'] }),
+      entry({ id: 'b', tests: ['b.test.ts', 'a.test.ts'] }),
+    ];
+
+    runManifest(entries, deps, applyAt);
+
+    expect(deps.runTests).toHaveBeenCalledTimes(4); // two distinct baselines + two mutants
+  });
+
+  it('reuses a red or empty baseline result too, without ever applying those mutations', () => {
+    const redDeps = fakeDeps();
+    redDeps.runTests.mockReturnValue({ failed: 1, total: 3, failedSuites: 1 });
+    const redResults = runManifest([entry({ id: 'a' }), entry({ id: 'b' })], redDeps, applyAt);
+    expect(redResults.map((result) => result.status)).toEqual([STATUS.BASELINE_RED, STATUS.BASELINE_RED]);
+    expect(redDeps.runTests).toHaveBeenCalledTimes(1);
+    expect(redDeps.applyToDisk).not.toHaveBeenCalled();
+
+    const emptyDeps = fakeDeps();
+    emptyDeps.runTests.mockReturnValue({ failed: 0, total: 0, failedSuites: 0 });
+    const emptyResults = runManifest([entry({ id: 'a' }), entry({ id: 'b' })], emptyDeps, applyAt);
+    expect(emptyResults.map((result) => result.status)).toEqual([STATUS.ERROR, STATUS.ERROR]);
+    expect(emptyDeps.runTests).toHaveBeenCalledTimes(1);
+    expect(emptyDeps.applyToDisk).not.toHaveBeenCalled();
+  });
+
+  it('keeps the baseline cache local to one invocation', () => {
+    const deps = fakeDeps();
+    deps.runTests.mockImplementation(() => (
+      deps.files.get('f.ts') === 'const X = 1;'
+        ? { failed: 0, total: 1 }
+        : { failed: 1, total: 1 }
+    ));
+
+    runManifest([entry()], deps, applyAt);
+    runManifest([entry()], deps, applyAt);
+
+    expect(deps.runTests).toHaveBeenCalledTimes(4); // each invocation owns a fresh baseline
+  });
+
   it('stops immediately after a failed restore, without running later entries', () => {
     const deps = fakeDeps({ corruptRestore: true });
     const entries = [entry({ id: 'a' }), entry({ id: 'b' })];
@@ -640,6 +710,18 @@ describe('findUnreachableEntries + unreachableReport (the scoped-tests-must-reac
 });
 
 describe('shared Vitest reachability graph', () => {
+  const fixturesDir = join(ROOT, 'tools/mutate/fixtures');
+
+  function removeReachabilityFixtures() {
+    if (!existsSync(fixturesDir)) return;
+    for (const file of readdirSync(fixturesDir)) {
+      if (file.startsWith('tmp-reachability-')) rmSync(join(fixturesDir, file), { force: true });
+    }
+  }
+
+  beforeAll(removeReachabilityFixtures);
+  afterAll(removeReachabilityFixtures);
+
   const validReport = () => ({
     version: 1 as const,
     sourceCount: 2,
@@ -688,7 +770,7 @@ describe('shared Vitest reachability graph', () => {
       ]),
       getRelevantTestSpecifications: vi.fn(async () => {
         seenRelated.push([...(context.config.related ?? [])]);
-        const moduleId = context.config.related?.[0]?.endsWith('/a.ts')
+        const moduleId = context.config.related?.[0] === join(ROOT, sourceA)
           ? join(ROOT, 'src/a.test.ts')
           : join(ROOT, 'src/b.test.ts');
         return [{ moduleId }, { moduleId }]; // duplicate proves normalization too
@@ -738,7 +820,7 @@ describe('shared Vitest reachability graph', () => {
     const testA = `${base}-a.test.ts`;
     const testB = `${base}-b.test.ts`;
     const paths = [sourceA, bridgeA, sourceB, testA, testB];
-    mkdirSync(join(ROOT, 'tools/mutate/fixtures'), { recursive: true });
+    mkdirSync(fixturesDir, { recursive: true });
     writeFileSync(join(ROOT, sourceA), 'export const sourceA = 1;\n');
     writeFileSync(join(ROOT, bridgeA), `export { sourceA } from './tmp-reachability-${id}-a.ts';\n`);
     writeFileSync(join(ROOT, sourceB), 'export const sourceB = 2;\n');
@@ -780,7 +862,7 @@ describe('classifySubprocessFailure (review found this exact gap: a missing repo
   it('a missing/undeletable binary (spawnSync sets res.error, res.status stays null) is indeterminate', () => {
     const v = classifySubprocessFailure({ status: null, signal: null, error: new Error('spawn ENOENT') });
     expect(v.reason).toBe('indeterminate');
-    expect(v.detail).toMatch(/could not launch vitest: spawn ENOENT/);
+    expect(v.detail).toMatch(/could not launch subprocess: spawn ENOENT/);
   });
 
   it('a real SIGINT/SIGTERM (res.signal set) is interrupted, not indeterminate', () => {
