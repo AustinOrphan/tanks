@@ -156,12 +156,33 @@ export interface AIProfileBalance {
    * plan longer makes a tank more decisive AND more predictable at once, so its magnitude
    * does not map monotonically onto threat.
    *
-   * Authored UNIFORMLY at 2.0s across profiles. The sweep and its reasoning are recorded
-   * beside the measurement harness in ai/commitment.measure.test.ts; the short version is
-   * that the span does NOT control the smoothness the acceptance criterion measures -- the
-   * turnover gate does -- so what it is chosen for is plan VARIETY, which is stable from
-   * 0.5s to 4.0s and starves the direct plan at 8.0s. A mid-range value is what the
-   * measurement justifies, and nothing in it justifies a per-profile spread yet.
+   * Authored UNIFORMLY at 2.0s across profiles, from the sweep below. Population: 60 seeds
+   * x 2 arenas x 2 player policies, via ai/commitment.measure.test.ts (VITE_RUN_MEASURE=1).
+   * The two figures in each cell are the two arena/policy combinations teal appears in.
+   *
+   *   span        plan-clock-boundary aim-step P95 | plan occupancy bank/direct
+   *   30  / 0.5s  0.09, 0.07                       | 69/31, 73/27
+   *   60  / 1.0s  1.21, 0.79                       | 70/30, 74/26
+   *   120 / 2.0s  1.80, 1.47                       | 67/33, 73/27      <- chosen
+   *   240 / 4.0s  1.18, 1.20                       | 70/30, 70/30
+   *   480 / 8.0s  1.47, 0.79                       | 74/26, 81/19
+   *
+   * PROVENANCE, because the rows do not share one: the 2.0s row was RE-MEASURED on the
+   * shipped tree and is the row quoted everywhere else in this change. The other four were
+   * measured on the prototype tree, before the rebase and before teal's no-target return
+   * carried the plan pair. They are carried rather than re-run because the 2.0s row
+   * reproduced identically across both trees, and because the no-target path fires on
+   * 0 of 52961 teal decision-ticks in the traced population (measured, tools/baseline).
+   * They are still four rows from an older tree; a re-sweep would be cheap if any of them
+   * ever becomes load-bearing.
+   *
+   * WHAT THE SWEEP SHOWS is not what it was run to find. P95 is flat with no trend across
+   * all five spans, so the span does NOT control the smoothness the acceptance criterion
+   * measures -- the turnover gate does. What the span controls is plan VARIETY, stable from
+   * 0.5s to 4.0s and starving the direct plan at 8.0s. So a mid-range value is what the
+   * measurement justifies; 2.0s also matches the historical cadence, which keeps the change
+   * readable as "when the plan may turn over, not how often". Nothing measured justifies a
+   * per-profile spread yet, and inventing one would be a difficulty change dressed as polish.
    */
   shotCommitmentTime: number;
   aggression: number;
