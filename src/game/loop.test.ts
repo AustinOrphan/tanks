@@ -3132,7 +3132,12 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.setState('playing');
       h.keydown({ key: 'Escape' });
       h.hud.quitToTitle(); // back to the menu
-      // The board behind the title is the RUN's own position, not the practiced one.
+      // The quit itself builds nothing now (issue #317): the board is owed, and Continue
+      // is what redeems it. Asserted rather than skipped past, because it is what makes
+      // the next line a measurement of the DEFERRED landing and not of the quit.
+      expect(h.rec.levelBuilds.at(-1), 'the quit built a board').toEqual({ level: 2, lives: undefined });
+      h.hud.startRestart(); // Continue
+      // The board Continue resumes onto is the RUN's own position, not the practiced one.
       expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: 2 });
       expect(h.deps.run.active()).toEqual({
         campaignId: DEFAULT_CAMPAIGN_ID,
@@ -3374,11 +3379,18 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
       h.handle.dispose();
     });
 
-    it('quitting a jumped session shows the jumped board with fresh lives, never leaking the unrelated run\'s', () => {
+    it('resuming after quitting a jumped session gets the jumped board with fresh lives, never the unrelated run\'s', () => {
       const h = boot(makeDeps({ levelCount: 11, levelStart: 0, isDevJump: true, savedRun: { level: 3, lives: 1 } }));
       h.setState('playing');
       h.keydown({ key: 'Escape' });
       h.hud.quitToTitle();
+      // COUNTED, not read off `.at(-1)`. The boot build for this fixture is already
+      // `{ level: 0, lives: undefined }`, so once the quit stopped building (issue #317)
+      // the old assertion passed against the BOOT build and measured nothing about the
+      // landing at all -- a coincidence in the fixture, not a guard.
+      expect(h.rec.levelBuilds).toHaveLength(1); // boot only: the quit is navigation
+      h.hud.startRestart(); // Continue redeems the owed landing
+      expect(h.rec.levelBuilds).toHaveLength(2);
       expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 0, lives: undefined });
       expect(h.deps.run.active()?.livesRemaining, 'untouched').toBe(1); // exactly as saved
       h.handle.dispose();
@@ -4188,17 +4200,28 @@ describe('startGameWith: pause', () => {
     h.handle.dispose();
   });
 
-  it('Quit to Title returns to the title over a FRESH board at the starting level', () => {
+  it('Quit to Title returns to the title having built NOTHING, and reads as the starting level', () => {
+    // Issue #317 turned this around. Quit used to rebuild the starting board so the menu
+    // had something of its own to sit over; the shell now owns what is behind the menu
+    // (an opaque `.ui-app-ground`), so the quit builds no world at all and the board is
+    // owed until the player asks to play.
+    //
+    // What the player READS still lands immediately, which is the half worth keeping
+    // from the old case: the level chip says the level Continue would resume onto, not
+    // the one just abandoned, and it says so without a world existing to derive it from.
     const h = boot(makeDeps({ levelCount: 2, levelStart: 1 }));
     h.setState('playing');
     h.keydown({ key: 'Escape' });
     h.hud.quitToTitle();
     expect(h.getState()).toBe('main-menu');
-    // Rebuilt at levels.start; no active RUN was ever started here (see
-    // 'startGameWith: New Run' below for that), so lives stay undefined -- quit must
-    // never CREATE a run, only read one if it already exists.
-    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
+    expect(h.rec.levelBuilds).toHaveLength(1); // the boot build, and only that
     expect(h.rec.hudLevels.at(-1)).toEqual([2, 2]);
+
+    // ...and the landing it owes is at levels.start, with no run ever started here (see
+    // 'startGameWith: New Run' below), so lives stay undefined -- neither the quit nor
+    // the deferred landing may CREATE a run, only read one that already exists.
+    h.hud.startRestart(); // Continue
+    expect(h.rec.levelBuilds[1]).toEqual({ level: 1, lives: undefined });
     h.handle.dispose();
   });
 
@@ -4329,16 +4352,22 @@ describe('startGameWith: a level pick is bounds-checked', () => {
 });
 
 describe('startGameWith: quit and retry follow LIVE progress', () => {
-  it('quit after unlocking a level this session rebuilds at the NEW furthest level', () => {
-    // Reported 2026-07-31: clear level 1, advance, quit -- the menu background
-    // rebuilt at level 1 even though level 2 was now unlocked, because levels.start
-    // was a boot-time snapshot of saved progress.
+  it('resuming after a quit lands at the NEW furthest level unlocked this session', () => {
+    // Reported 2026-07-31: clear level 1, advance, quit -- the menu background rebuilt
+    // at level 1 even though level 2 was now unlocked, because levels.start was a
+    // boot-time snapshot of saved progress.
+    //
+    // The defect is unchanged; only WHEN the landing is built moved (issue #317). It is
+    // read at Continue rather than at the quit, which is strictly later and therefore
+    // still current -- a `levels.start` that went back to being a snapshot fails here
+    // exactly as it did before.
     const h = boot(makeDeps({ levelCount: 2 }));
     h.setState('playing');
     h.setState('outcome-win'); // clears level 1 -> level 2 unlocked
     h.hud.startRestart(); // advance to level 2
     h.keydown({ key: 'Escape' });
     h.hud.quitToTitle();
+    h.hud.startRestart(); // Continue
     expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: undefined });
     h.handle.dispose();
   });
@@ -4422,7 +4451,11 @@ describe('startGameWith: stats wiring', () => {
     h.handle.dispose();
   });
 
-  it('starts a fresh attempt tally at boot and on every level switch', () => {
+  it('starts a fresh attempt tally at boot and on every level switch -- and NOT on a quit', () => {
+    // The tally follows `switchTo`, so it follows world builds. Issue #317 took the quit
+    // out of that set: quitting is navigation and starts no attempt, and the attempt
+    // begins when the player asks to play again. Both halves are asserted, because the
+    // interesting failure is a quit that quietly starts an attempt nobody plays.
     const h = boot(makeDeps({ levelCount: 2 }));
     expect(h.rec.statAttemptStarts).toBe(1); // boot
     h.setState('outcome-win');
@@ -4430,7 +4463,9 @@ describe('startGameWith: stats wiring', () => {
     expect(h.rec.statAttemptStarts).toBe(2);
     h.setState('playing');
     h.keydown({ key: 'Escape' });
-    h.hud.quitToTitle(); // quit rebuild
+    h.hud.quitToTitle(); // navigation: no world, no attempt
+    expect(h.rec.statAttemptStarts, 'the quit started an attempt').toBe(2);
+    h.hud.startRestart(); // Continue: the deferred landing, and with it the attempt
     expect(h.rec.statAttemptStarts).toBe(3);
     h.handle.dispose();
   });
@@ -6868,9 +6903,11 @@ describe('startGameWith: canonical session identity at the production boundary',
       h.setState('paused');
       h.hud.quitToTitle();
       expect(lastKind(h)).toBe('campaign');
-      // ...and the campaign identity was pushed on the SAME build that produced the
-      // campaign descriptor, not afterwards: the last kind push precedes the
-      // Main Menu state push the quit ends with.
+      // ...and it was pushed BEFORE the Main Menu state change the quit ends with, so the
+      // menu never renders having been told it is showing Practice. It no longer rides a
+      // world build to get there -- issue #317's quit builds nothing and pushes the kind
+      // itself, from the landing level's descriptor -- which is why this asserts the
+      // ORDER against `state:main-menu` rather than against a build.
       const log = h.rec.hudCallLog;
       expect(log.lastIndexOf('sessionKind:campaign')).toBeLessThan(
         log.lastIndexOf('state:main-menu'),
@@ -6979,34 +7016,38 @@ describe('startGameWith: canonical session identity at the production boundary',
   });
 
   // -------------------------------------------------------------------------
-  // ISSUE #316's navigation-only acceptance criterion, scoped HONESTLY to what
-  // this branch's production code actually establishes.
+  // ISSUE #316's navigation-only acceptance criterion -- now held in FULL at the
+  // production boundary, which is the change issue #317 made here.
   //
-  // The criterion -- "navigation-only transitions do not create a resolved
+  // The criterion: "navigation-only transitions do not create a resolved
   // session, build a world, consume a seed, advance simulation, or mutate
-  // persistence" -- holds in FULL for the state model's own transitions, and
+  // persistence". It always held for the state model's own transitions, and
   // state.test.ts's "Navigation-only transitions are pure state" block proves
-  // it there. It does NOT hold for production Quit today: `onQuitToTitle` calls
+  // it there. It did NOT hold for production Quit: `onQuitToTitle` called
   // `landOnCampaignBoard(false)` -> `switchTo` -> `nextSeed()` -> a world build,
-  // so a quit consumes a seed and builds a world before `sm.toMainMenu()` runs.
+  // so a quit consumed a seed and built a world before `sm.toMainMenu()` ran.
   //
-  // That is deliberate and #317's to change, not this branch's. The eager
-  // rebuild is what makes the Main Menu render over the campaign's own board
-  // rather than the abandoned (possibly practice) one -- deferring it to the
-  // next gameplay-starting click would change what a player SEES behind the
-  // menu, and #316's own scope forbids changing shipped player-facing behaviour
-  // ("Existing visible behavior ... remain unchanged"). The UI/UX direction
-  // orders #317's persistent shell and replaceable session host AFTER #316 for
-  // exactly this reason: with no shell, the menu has nowhere to live but on top
-  // of a live world.
+  // #316 pinned that residual POSITIVELY rather than leaving it unstated, and
+  // asked for exactly this: "#317 flipping that residual should fail here and
+  // be re-stated, rather than sliding through a test whose title was already
+  // vague enough to cover both behaviours." It did fail here, and this block is
+  // the re-statement -- every number below re-measured on this branch.
   //
-  // So these cases claim what they prove -- no new GAMEPLAY ENTRY -- and PIN
-  // the seed/build residual positively, with the numbers measured rather than
-  // assumed. #317 flipping that residual should fail here and be re-stated,
-  // rather than sliding through a test whose title was already vague enough to
-  // cover both behaviours.
+  // What made the flip possible is the same thing #316 named as the reason it
+  // could not do it: the eager rebuild existed so the Main Menu rendered over
+  // the campaign's own board rather than the abandoned (possibly practice) one,
+  // and with no shell the menu had nowhere to live but on top of a live world.
+  // #317 gives it one -- an opaque application ground the shell owns
+  // (`.ui-app-ground`, hud.css) -- so what is behind the menu is not a board at
+  // all, and the landing the player would resume onto is built at the moment
+  // they ask to play instead (`pendingLanding`, loop.ts).
+  //
+  // THE ONE RESIDUAL LEFT has its own case below rather than a mention here:
+  // the topbar's campaign Lives/Enemies chrome is projected from a WORLD, so it
+  // keeps the abandoned session's numbers on the menu until the next build.
+  // Removing gameplay chrome from application screens is #324.
   // -------------------------------------------------------------------------
-  describe('Navigation-only actions enter no gameplay session (seed/world residual pinned)', () => {
+  describe('Navigation-only actions enter no gameplay session, and now build no world either', () => {
     /** Every recorder signal a "nothing happened" claim can be made against. */
     function signals(h: ReturnType<typeof boot>): {
       entered: number;
@@ -7025,26 +7066,101 @@ describe('startGameWith: canonical session identity at the production boundary',
       };
     }
 
-    it('Quit to the Main Menu enters no new gameplay session and mutates no run -- but DOES rebuild the board (#317 residual)', () => {
+    it('Quit to the Main Menu clears the whole bar: no entry, no seed, no world, no run write', () => {
       const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 0, lives: LIVES } }));
       h.hud.startRestart();
       const before = signals(h);
       h.setState('paused');
       h.hud.quitToTitle();
+
+      // Every signal at once, as one comparison -- the same shape the VS-pane case
+      // below has always used, and the point of writing it this way is that it can no
+      // longer be satisfied by looking at some signals harder than others. Measured on
+      // this branch: before and after are both {entered: 1, seeds: 1, worlds: 1,
+      // runWrites: 0} for this fixture.
+      expect(signals(h)).toEqual(before);
+      h.handle.dispose();
+    });
+
+    it('...and the landing it OWES is redeemed by Continue: exactly one world, not two and not none', () => {
+      // The other half of the flip above, and the reason it is a deferral rather than a
+      // deletion. Counted on both sides, because the two ways to get this wrong are
+      // opposite: a landing that never happens resumes the abandoned practice board,
+      // and one that happens twice is the eager rebuild plus the deferred one.
+      const h = boot(makeDeps({ levelCount: 3, levelStart: 1, savedRun: { level: 1, lives: 2 } }));
+      h.hud.pickLevel(2); // practice, on a board that is NOT the run's
+      h.setState('paused');
+      h.hud.quitToTitle();
+      const afterQuit = signals(h);
+      h.hud.startRestart(); // Continue
+      const afterContinue = signals(h);
+
+      expect(afterContinue.worlds - afterQuit.worlds).toBe(1);
+      expect(afterContinue.seeds - afterQuit.seeds).toBe(1);
+      expect(afterContinue.entered - afterQuit.entered).toBe(1);
+      expect(afterContinue.runWrites).toBe(afterQuit.runWrites); // still never writes
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: 2 }); // the RUN's board
+      h.handle.dispose();
+    });
+
+    it('Continue with no landing owed still builds nothing -- it is the pure start-play gesture', () => {
+      // The guarantee the deferral must not cost. Continue from a boot title enters the
+      // world that is already there; a landing redeemed unconditionally rather than only
+      // when one is owed would rebuild the board under every Continue, re-rolling the
+      // seed and discarding the boot world the player was looking at.
+      const h = boot(makeDeps({ levelCount: 2, savedRun: { level: 0, lives: LIVES } }));
+      const before = signals(h);
+      h.hud.startRestart(); // Continue, straight from boot: nothing was ever quit
       const after = signals(h);
+      expect(after.worlds).toBe(before.worlds);
+      expect(after.seeds).toBe(before.seeds);
+      expect(after.entered - before.entered).toBe(1); // it DID enter gameplay
+      h.handle.dispose();
+    });
 
-      // What the quit genuinely does NOT do.
-      expect(after.entered).toBe(before.entered);
-      expect(after.lastSessionId).toBe(before.lastSessionId);
-      expect(after.runWrites).toBe(before.runWrites);
+    it('a Levels pick after a quit satisfies the owed landing rather than leaving it owed', () => {
+      // `pendingLanding` is cleared inside `switchTo`, so ANY world build satisfies it --
+      // not only the one Continue redeems. Without that clear the debt outlives the pick,
+      // and the next Continue silently builds the campaign board over the level the
+      // player chose. Counted at each step, because the defect is one EXTRA build.
+      const h = boot(makeDeps({ levelCount: 3, progressHighest: 3, savedRun: { level: 0, lives: LIVES } }));
+      h.setState('paused');
+      h.hud.quitToTitle(); // a landing is now owed
+      const afterQuit = signals(h);
+      h.hud.pickLevel(2); // practice: its own build, and it settles the debt
+      expect(signals(h).worlds - afterQuit.worlds).toBe(1);
+      h.setState('main-menu'); // back to the menu with no gesture that could rebuild
+      h.hud.startRestart(); // Continue: enters the PRACTICE world, builds nothing
+      expect(signals(h).worlds - afterQuit.worlds, 'the pick left a landing owed').toBe(1);
+      h.handle.dispose();
+    });
 
-      // What it DOES do, pinned exactly rather than left unstated: one seed and
-      // one world, from `landOnCampaignBoard(false)` -> `switchTo`. Measured on
-      // this branch (before {seeds: 1, worlds: 1} -> after {seeds: 2, worlds: 2});
-      // #317 making Quit genuinely navigation-only turns these into `toBe(0)`
-      // deltas and must say so in its own diff.
-      expect(after.seeds - before.seeds).toBe(1);
-      expect(after.worlds - before.worlds).toBe(1);
+    it("THE STATED RESIDUAL: the menu keeps the abandoned world's Lives/Enemies until a board is built", () => {
+      // Not a claim that this is right -- a pin on what deferring the world build costs,
+      // so it is reviewable instead of discovered. `refreshStats` projects both readouts
+      // from a WORLD, and a quit no longer builds one, so the topbar chrome on the menu
+      // reads the session the player just left. Removing gameplay chrome from
+      // application screens is #324, and that is what dissolves this.
+      //
+      // The fixture makes the two values genuinely differ: practice on another board
+      // with fresh lives, quit, and the landing the quit ANNOUNCES is the run's level 1
+      // with 2 lives. The level chip follows the announcement; lives does not.
+      const h = boot(
+        makeDeps({ levelCount: 3, levelStart: 1, savedRun: { level: 1, lives: 2 }, enemiesByLevel: [3, 2, 1] }),
+      );
+      h.hud.pickLevel(2); // practice on level 3, which this fixture gives ONE enemy
+      const practiceEnemies = h.rec.enemies.at(-1);
+      expect(practiceEnemies, 'the fixture must make the two boards differ').toBe(1);
+      h.setState('paused');
+      h.hud.quitToTitle();
+
+      expect(h.rec.hudLevels.at(-1), 'the level chip did NOT follow the landing').toEqual([2, 3]);
+      expect(h.rec.enemies.at(-1), 'enemies was re-projected without a world').toBe(practiceEnemies);
+
+      // ...and it is genuinely stale rather than coincidentally equal: Continue builds
+      // the run's board, and the same `refreshStats` call that pushes Lives pushes this.
+      h.hud.startRestart();
+      expect(h.rec.enemies.at(-1)).toBe(2); // level 2 of the fixture, the run's own board
       h.handle.dispose();
     });
 

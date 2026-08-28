@@ -1169,6 +1169,21 @@ export function startGameWith(
     ? deps.run.active()?.livesRemaining
     : undefined;
   let world = buildWorld(level, bootLives);
+  /**
+   * A landing on this session's home board is OWED but not yet built (issue #317).
+   *
+   * Set by the quit-to-title handler, which used to build that board eagerly. The
+   * application shell now presents the Main Menu over its own ground rather than over a
+   * live world, so navigating there must build nothing, consume no gameplay seed and
+   * mutate no run -- and the board the player would resume onto is built at the moment
+   * they ask for it instead, which is Continue.
+   *
+   * Cleared inside `switchTo` rather than at each of the three call sites that could
+   * satisfy it (Continue, New Game, a Levels pick): ANY world build satisfies a pending
+   * landing, and `switchTo`'s own comment records that its callers' parity became
+   * structural precisely because keeping it by hand did not hold.
+   */
+  let pendingLanding = false;
   let currentDescriptor: SessionDescriptor = descriptorFor(sessionIdentity, ordinalOf(level));
   let currentSession: ResolvedSession = resolveSession(
     currentDescriptor,
@@ -1954,10 +1969,18 @@ export function startGameWith(
     // emitted from the frame loop, which never qualifies.
     audio.unlock();
     if (sm.atMainMenu) {
-      // Continue from the Main Menu enters gameplay on the CURRENT resolved
-      // session -- the world was already built at boot/quit/landOnCampaignBoard,
-      // so this is the pure "start play" gesture. See `currentSession` for the
-      // instance being entered.
+      // Continue from the Main Menu enters gameplay on the CURRENT resolved session --
+      // the world was already built at boot or by whichever gesture last landed on a
+      // board, so this is otherwise the pure "start play" gesture. See `currentSession`
+      // for the instance being entered.
+      //
+      // UNLESS a landing is owed (issue #317): a quit leaves the abandoned world in
+      // place behind the application ground and defers its own board to here, so this
+      // is where it gets built. Ordering matters and is build-then-reveal -- the world
+      // exists, `currentSession` is re-derived from it, and only then does
+      // `enterGameplay` reach the state change that hides the ground. Entering first
+      // would show one frame of the abandoned board.
+      if (pendingLanding) landOnCampaignBoard(false);
       sm.enterGameplay(currentSession);
     } else if (sm.isPaused) {
       // Resume shares the action button with Play Again/Retry, whose branch below
@@ -2038,6 +2061,9 @@ export function startGameWith(
   function switchTo(newLevel: CampaignLevel, lives?: number): void {
     level = newLevel;
     world = buildWorld(level, lives);
+    // The one site that can satisfy an owed landing, because it is the one site that
+    // builds a world -- see `pendingLanding`.
+    pendingLanding = false;
     // THE structural fix for issue #316's finding 4. The descriptor is
     // RE-DERIVED from the session identity and the level actually built, on
     // every world build -- it is never carried forward from a previous
@@ -2295,16 +2321,44 @@ export function startGameWith(
     // this panel is on screen. Leaving from here resumes there, not on the level just
     // beaten.
     if (!sm.isPaused && !sm.presentsAsWin) return;
-    // Quit suspends presentation of the run; it must not create or replenish one
-    // (the spec's rule for quit/refresh/reopen) -- `false` here, unlike the
-    // game-over/completion restart in onStartRestart. Rebuilt NOW rather than
-    // lazily on Continue, so the Main Menu renders over the campaign's own
-    // board, not the abandoned (possibly practice) one. No descriptor bookkeeping is
-    // needed here: `landOnCampaignBoard` resets `sessionIdentity` to
-    // `bootContext.identity` and `switchTo` re-derives the descriptor from it through
-    // `descriptorFor`, the same path New Game takes, so a post-quit Continue enters
-    // gameplay on a real campaign board.
-    landOnCampaignBoard(false);
+    // NAVIGATION ONLY (issue #317): this builds no world, consumes no gameplay seed and
+    // touches no run. It used to call `landOnCampaignBoard(false)` -- `switchTo` ->
+    // `nextSeed()` -> a world build -- for one reason, stated in the comment this
+    // replaces: so the Main Menu rendered over the campaign's own board rather than the
+    // abandoned (possibly practice) one. The shell now owns what is behind the menu, and
+    // an opaque application ground is what is behind it (`.ui-app-ground`, hud.css), so
+    // there is no longer a board to get right there.
+    //
+    // What that eager rebuild ALSO did, and what therefore has to be done deliberately
+    // here, is the split this handler is now written around: a landing has a
+    // PRESENTATION half and a WORLD half, and only the second one needs a world.
+    //
+    // The presentation half runs now, so the menu never advertises the session the
+    // player just left -- the identity reset (issue #316's finding 4 site: a retained
+    // Practice descriptor must not survive onto a campaign board), the session kind, and
+    // the level readout, all derived from `deps.levels.start` without building it.
+    //
+    // The world half is OWED, and `pendingLanding` is that debt. Continue redeems it
+    // immediately before entering gameplay, so a post-quit Continue still resumes on a
+    // real campaign board with the run's own lives -- and reads `deps.levels.start` and
+    // the run LATER than this handler would have, which is strictly more current.
+    //
+    // Quit still suspends presentation of the run and must not create or replenish one
+    // (the spec's rule for quit/refresh/reopen), which is why the deferred call passes
+    // `false` -- unlike the game-over/completion restart in onStartRestart.
+    //
+    // THE ONE STATED RESIDUAL. The topbar's campaign Lives/Enemies readout is projected
+    // from a WORLD (`refreshStats`), so with no world built here it keeps the abandoned
+    // session's numbers until the next build instead of the landing board's. That chrome
+    // does not belong on an application screen at all -- making the gameplay HUD
+    // contextual is #324 -- and this issue's own criterion "gameplay-only HUD elements
+    // must not leak into application screens" is where it goes away. Pinned in
+    // loop.test.ts rather than left for a reader to notice.
+    sessionIdentity = bootContext.identity;
+    const landing = deps.levels.start;
+    hud.setSessionKind(descriptorFor(sessionIdentity, ordinalOf(landing)).kind);
+    hud.setLevel(ordinalOf(landing), deps.levels.levels.length);
+    pendingLanding = true;
     sm.toMainMenu();
   });
 
