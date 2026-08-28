@@ -264,12 +264,44 @@ import { step } from '../../src/sim/world';
  *     changes who is alive and for how long, which is why the two totals differ and why a
  *     single before/after count would have been the wrong shape to quote.
  *
+ *
+ * MOVED (2026-08-28, issue #332): teal no longer re-picks bank-first vs direct-first on a
+ * global tick cycle. The plan is HELD per tank (Tank.aiShotPlan/aiShotPlanTicks) for a
+ * profile span (shotCommitmentTime) and may only turn over on a tick where the held plan
+ * has no solution. Which of the two solutions teal aims at is the tank's turretAngle, and
+ * traceText samples turretAngle to nine decimals for every tank, so a changed preference
+ * moves this hash directly.
+ *
+ * ATTRIBUTION IS EXACT, by the same method as the two entries above. Restoring the ONE
+ * changed term -- `preferBank`, back to the pre-#332 `Math.floor(world.tick / 120) % 2 === 0`
+ * in src/sim/ai/teal.ts, and NOTHING else, so the profile field, its validation, the two
+ * Tank fields, the two AiDecision fields, the stepAi write-back and teal's no-target carry
+ * all stay on the tree -- reproduces the previous hash
+ * cf92a77bc9c5b85600cda0cf6031cc2279ec33bca66cd8c84ff9195436d73bb5 byte for byte, and
+ * trace.test.ts passes green in that state. Run, not reasoned. That control is also what
+ * rules out the plumbing: with every added field present and only the selector reverted,
+ * the hash is unmoved, so none of the additions move it by themselves.
+ *
+ * Exposure MEASURED over exactly this population (5 arenas x 6 seeds x 2500 ticks) by a
+ * throwaway probe at the `preferBank` site, run via vitest and then deleted. The probe run
+ * reproduced the fingerprint below, which is what makes it the traced population rather
+ * than a similar one:
+ *
+ *   - 36421 of 52961 tealDecision calls -- 68.77% -- chose a different preferred shot type
+ *     than the old cycle would have chosen on that tick, across 4 distinct teal tank ids.
+ *
+ * That is a divergence figure, NOT a claim that 68.77% of ticks changed the turret angle:
+ * on any tick where only one of the two shot types has a solution, both rules end up firing
+ * the same angle by fallback. It is quoted as the coupling that makes a moved hash expected,
+ * and it is ample for a fingerprint that moves on a single ULP.
+ *
  * History: 056afe386774790c739f7b28a05bb77abb68e5d07b140f6a798bf7731850024e (issue #347 on
  * PR #348, turret angular acceleration) -> a1df14427a1b6e87c57ec9a72a46b97018ccd79e3cd8ea48a6f901bf27f7dda7
- * (issue #344, the AI aim hold) -> the hash below, confirmed by actually running
+ * (issue #344, the AI aim hold) -> cf92a77bc9c5b85600cda0cf6031cc2279ec33bca66cd8c84ff9195436d73bb5
+ * (issue #367, the reaction clock) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
  */
-export const BASELINE_HASH = 'cf92a77bc9c5b85600cda0cf6031cc2279ec33bca66cd8c84ff9195436d73bb5';
+export const BASELINE_HASH = '37eff51ef55ad4bb3ccda2981a6c4ad8b522ee502ec9a560d8e2467a60ceb787';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
