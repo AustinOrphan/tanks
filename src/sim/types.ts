@@ -131,6 +131,9 @@ export interface Tank {
    */
   aiAimHeld?: number;
   aiAimHeldTicks?: number;
+  /** PROTOTYPE (issue #332): the held bank-first/direct-first shot plan and its countdown. */
+  aiShotPlan?: 'bank' | 'direct';
+  aiShotPlanTicks?: number;
   /**
    * Consecutive ticks the AI has HELD a firing solution (decision.hasSolution),
    * reset the tick it loses one. The dispatcher's reaction gate compares this

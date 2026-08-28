@@ -163,6 +163,14 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // "no held aim" is genuinely absent rather than an angle of 0 that reads as due east.
     tank.aiAimHeld = decision.nextAimHeld ?? undefined;
     tank.aiAimHeldTicks = decision.nextAimHeldTicks;
+    // PROTOTYPE (issue #332). Written only when the decision carried one, so a behaviour
+    // that never evaluates a shot plan leaves whatever it held untouched rather than
+    // clearing it -- the same reason the intent pair above is cleared to undefined only
+    // when the decision genuinely has none.
+    if (decision.nextShotPlan !== undefined) {
+      tank.aiShotPlan = decision.nextShotPlan;
+      tank.aiShotPlanTicks = decision.nextShotPlanTicks;
+    }
 
     // Friendly fire is vetted TWICE, and it has to be. The decision functions check their
     // own firing solution, but the shot below leaves along the post-slew turret angle,

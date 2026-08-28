@@ -12,7 +12,7 @@ import {
 } from './targeting';
 import { roundPhase } from '../round';
 import { configFor } from '../config';
-import { AI_JITTER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR } from '../constants';
+import { AI_JITTER_TICKS, BANK_PREFER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR } from '../constants';
 import { detHypot } from '../math/hypot';
 import type { Vec2, Tank } from '../types';
 import type { World } from '../world';
@@ -100,6 +100,23 @@ interface KindStats {
   aimStep: number[];
   aimHold: number[];
   /**
+   * The same |aim-target change|, for pairs crossing a BANK_PREFER_TICKS boundary --
+   * where teal re-picks bank-first vs direct-first (issue #332). Taken OUT of `aimStep`
+   * rather than left in it, for the same reason `aimStep` is split out of `aimHold`:
+   * plan boundaries are 1-in-BANK_PREFER_TICKS of all pairs and 120 is an exact multiple
+   * of AI_JITTER_TICKS, so every plan boundary is also a jitter boundary and a blended
+   * column reports the jitter step with the plan step hidden inside its tail.
+   */
+  planStep: number[];
+  /**
+   * Live-tick occupancy per held shot plan (issue #332). The plan only turns over when the
+   * held one has no solution, so "both plans occur in representative matches" is not a
+   * property the rule guarantees by construction -- it depends on solutions genuinely
+   * coming and going as the player moves relative to cover, and that is measurable rather
+   * than arguable. A kind that never evaluates a plan contributes nothing here.
+   */
+  planOccupancy: Map<string, number>;
+  /**
    * Reversals bucketed by `prevSource->currSource`, where the source is which branch
    * of decideAi's `avoid ?? seekMove` produced that tick's intent. Without this the
    * reversal percentage says a problem exists but not which mechanism to fix, and the
@@ -119,7 +136,7 @@ interface KindStats {
 }
 
 function emptyStats(): KindStats {
-  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], transitions: new Map(), occupancy: new Map() };
+  return { pairs: 0, reversals: 0, turns: [], aimStep: [], aimHold: [], planStep: [], planOccupancy: new Map(), transitions: new Map(), occupancy: new Map() };
 }
 
 type PlayerPolicy = 'pacifist' | 'shooter';
@@ -204,9 +221,14 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
             const jump = Math.abs(deg(angleDelta(aimed, pa)));
             const crossed =
               Math.floor(w.tick / AI_JITTER_TICKS) !== Math.floor((w.tick - 1) / AI_JITTER_TICKS);
-            (crossed ? s.aimStep : s.aimHold).push(jump);
+            const planCrossed =
+              Math.floor(w.tick / BANK_PREFER_TICKS) !== Math.floor((w.tick - 1) / BANK_PREFER_TICKS);
+            (planCrossed ? s.planStep : crossed ? s.aimStep : s.aimHold).push(jump);
           }
           prevAim.set(t.id, aimed);
+          if (t.aiShotPlan !== undefined) {
+            s.planOccupancy.set(t.aiShotPlan, (s.planOccupancy.get(t.aiShotPlan) ?? 0) + 1);
+          }
         }
       }
 
@@ -252,6 +274,10 @@ function run(arenaIdx: number, policy: PlayerPolicy): string {
         + ` turnMed=${q(s.turns, 0.5).toFixed(1)}deg turnP95=${q(s.turns, 0.95).toFixed(1)}deg`
         + ` | aimStepMed=${q(s.aimStep, 0.5).toFixed(2)}deg aimStepP95=${q(s.aimStep, 0.95).toFixed(2)}deg (n=${s.aimStep.length})`
         + ` aimHoldMed=${q(s.aimHold, 0.5).toFixed(2)}deg aimHoldP95=${q(s.aimHold, 0.95).toFixed(2)}deg`
+        + ` | planStepMed=${q(s.planStep, 0.5).toFixed(2)}deg planStepP95=${q(s.planStep, 0.95).toFixed(2)}deg (n=${s.planStep.length})`
+        + (s.planOccupancy.size > 0
+          ? ` | plan ${[...s.planOccupancy].sort().map(([k, v]) => `${k}=${v}`).join(' ')}`
+          : '')
         + ` (n=${s.aimHold.length})`;
     });
   const trans = new Map<string, number>();

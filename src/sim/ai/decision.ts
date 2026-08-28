@@ -43,4 +43,7 @@ export interface AiDecision {
    */
   nextAimHeld: number | null;
   nextAimHeldTicks: number;
+  /** PROTOTYPE (issue #332): optional so only teal sets them while the design is measured. */
+  nextShotPlan?: 'bank' | 'direct';
+  nextShotPlanTicks?: number;
 }

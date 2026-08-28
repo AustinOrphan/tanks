@@ -2,7 +2,10 @@ import type { World } from '../world';
 import type { Tank } from '../types';
 import { lineOfSight, aimLead, aimJitter, bankShot, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
 import { driveVelocity } from '../collision';
-import { BANK_PREFER_TICKS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS } from '../constants';
+import { AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS } from '../constants';
+
+/** PROTOTYPE span, hardcoded until the profile field and its sweep land (issue #332). */
+const SHOT_PLAN_SPAN_TICKS = 120;
 import { configFor, type ResolvedTankConfig } from '../config';
 import type { AiDecision } from './decision';
 
@@ -96,13 +99,42 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     return shotHitsOwnSide(world, tank, angle, weapon.bulletType) ? null : angle;
   }
 
-  // Alternate which shot type Teal prefers on a deterministic ~2s cycle (user decision:
-  // "alternate/mix"), so it visibly performs both bank shots and direct shots rather than
-  // banking only when the player happens to stand behind cover. Both orderings still fall
-  // through to the other option when the preferred one is unavailable -- a preference, not
-  // an exclusion; Teal never loses a shot it could have taken.
-  const preferBank = Math.floor(world.tick / BANK_PREFER_TICKS) % 2 === 0;
-  const turretAngle = preferBank ? (tryBank() ?? tryDirect()) : (tryDirect() ?? tryBank());
+  // WHICH SHOT TYPE Teal prefers, held per tank instead of alternating on a global cycle
+  // (issue #332). The preference still exists so Teal visibly performs both bank shots and
+  // direct shots rather than banking only when the player happens to stand behind cover
+  // (user decision: "alternate/mix"), and both orderings still fall through to the other
+  // option when the preferred one is unavailable -- a preference, not an exclusion; Teal
+  // never loses a shot it could have taken.
+  //
+  // What changed is WHEN it may turn over. `Math.floor(world.tick / BANK_PREFER_TICKS) % 2`
+  // flipped every tank's preference on the same tick regardless of the engagement, and
+  // because 120 is an exact multiple of the aim-jitter cadence the flip landed on a
+  // boundary tick. Measured on this tree over 60 seeds x 2 arenas x 2 player policies,
+  // isolating plan-boundary ticks from ordinary jitter boundaries: teal's aim-target step
+  // there had a P95 of 52.83-64.91 degrees against 0.01-1.63 for every other kind, while
+  // its MEDIAN was 0.00 -- the flip cost nothing most of the time and swung the gun most
+  // of a half-turn in the tail, which reads as indecision rather than personality.
+  //
+  // THE RULE, and the reason it is not merely a longer cycle: a longer span reduces how
+  // OFTEN the swing happens and does nothing to the size of it, which is what the metric
+  // measures. The window may only turn the plan over at a moment when turning it over
+  // moves no target -- when the held plan has no solution this tick, so the fallback is
+  // already firing the other one. Solutions come and go as the player moves relative to
+  // cover, and that is what keeps both plans in circulation.
+  const heldPlan = tank.aiShotPlan ?? null;
+  const planTicks = tank.aiShotPlanTicks ?? 0;
+  // The held plan is evaluated first, so `tryBank`'s O(walls^2) search is still only paid
+  // when the plan in force is the bank one or the direct one came back empty.
+  const preferBank = heldPlan === null ? true : heldPlan === 'bank';
+  const preferred = preferBank ? tryBank() : tryDirect();
+  const fallback = preferred === null ? (preferBank ? tryDirect() : tryBank()) : null;
+  const turretAngle = preferred ?? fallback;
+  // Lapsed AND unsolvable is the only way the plan turns over. Re-armed on the same plan
+  // otherwise, so a window ending while the gun has a target is a no-op on screen.
+  const lapsed = planTicks <= 1;
+  const switching = lapsed && preferred === null;
+  const nextShotPlan: 'bank' | 'direct' = switching ? (preferBank ? 'direct' : 'bank') : (preferBank ? 'bank' : 'direct');
+  const nextShotPlanTicks = lapsed ? SHOT_PLAN_SPAN_TICKS : planTicks - 1;
 
   // Teal now lays mines too (mirrors Grey's rule). Only while NOT dodging: a mine dropped
   // mid-dodge is wasted and risks self-trapping. MINE_CAP is checked here as
@@ -117,10 +149,10 @@ export function tealDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
     && mineThreatensPlayer(world, tank, AI_MINE_TACTICAL_RADIUS + hazardOffset);
 
   if (turretAngle !== null) {
-    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
+    return { desiredMove: move, turretAngle, fire: true, hasSolution: true, fireType: weapon.bulletType, mine, nextState: 'fire', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan, nextShotPlanTicks };
   }
 
 
   // Neither exists: reposition. Teal never falls back to a direct/rocket shot (spec §7).
-  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
+  return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees || bankSeen, fireType: weapon.bulletType, mine, nextState: 'reposition', nextTimer: 0, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0, nextShotPlan, nextShotPlanTicks };
 }
