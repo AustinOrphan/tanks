@@ -1,4 +1,5 @@
 // VersusConfig's pure helpers: the map filter and the deterministic 'random' resolver.
+import { defaultSlots } from './versus-setup';
 // Both are consumed by createVersusLevelSystem (levels.test.ts), but are pure and
 // node-testable on their own -- no World, no RunStore.
 import { describe, it, expect } from 'vitest';
@@ -55,7 +56,7 @@ describe('versusMapChoices', () => {
 });
 
 describe('pickVersusArena', () => {
-  const base: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+  const base: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
   it('passes a concrete id through unchanged, regardless of seed', () => {
     const concrete: VersusConfig = { ...base, arenaId: 'arena-03' };
@@ -80,7 +81,7 @@ describe('pickVersusArena', () => {
 });
 
 describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => {
-  const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+  const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
   it('a concrete config passes through BY IDENTITY, not a copy', () => {
     // `toBe`, not `toEqual`: `applyVersusToDeps` (loop.ts) relies on this exact
@@ -105,7 +106,7 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
   it("'random' resolution preserves every other field unchanged", () => {
     // Fails if resolution drops or mutates mode/players/stock/friendlyFire while
     // replacing arenaId (e.g. spreads from a fresh default object instead of `config`).
-    const cfg: VersusConfig = { mode: 'teams', players: 4, arenaId: 'random', stock: 5, friendlyFire: true };
+    const cfg: VersusConfig = { mode: 'teams', players: 4, arenaId: 'random', stock: 5, friendlyFire: true, slots: defaultSlots(4) };
     const resolved = resolveVersusConfig(cfg, 1);
     expect(resolved.mode).toBe('teams');
     expect(resolved.players).toBe(4);
@@ -119,7 +120,7 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
     // backstop for a future narrower entry (#271-#273) meeting a stale retained
     // selection -- fail at Start, never launch an unsupported combination.
     const entries = [entryFixture({ id: 'vs-duo', players: [2], modes: ['ffa'] })];
-    const duo: VersusConfig = { mode: 'teams', players: 2, arenaId: 'vs-duo', stock: 3, friendlyFire: false };
+    const duo: VersusConfig = { mode: 'teams', players: 2, arenaId: 'vs-duo', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
     expect(() => resolveVersusConfig(duo, 1, entries))
       .toThrow("versus-config: map 'vs-duo' does not support N=2 mode=teams");
     expect(() => resolveVersusConfig({ ...duo, mode: 'ffa', players: 3 }, 1, entries))
@@ -138,7 +139,7 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
     // exercises this branch -- this synthetic entry is what keeps the translation
     // real for the purpose-built maps (#271-#273) whose ids will not be arena ids.
     const entries = [entryFixture({ id: 'vs-duo', players: [2], modes: ['ffa'] })];
-    const cfg: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'vs-duo', stock: 3, friendlyFire: false };
+    const cfg: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'vs-duo', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
     const resolved = resolveVersusConfig(cfg, 1, entries);
     expect(resolved.arenaId).toBe('arena-02');
     expect(resolved).not.toBe(cfg); // translated => a new object, original untouched

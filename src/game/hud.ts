@@ -63,6 +63,7 @@ import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { VERSUS_STOCK } from '../sim/constants';
 import { versusMapChoices, type VersusConfig } from './versus-config';
+import { defaultSlots, resizeSlots } from './versus-setup';
 import {
   STICK_RADIUS_PX,
   stickVector,
@@ -2133,8 +2134,7 @@ export function createHud(root: HTMLElement): Hud {
     players: 2,
     arenaId: 'random',
     stock: VERSUS_STOCK,
-    friendlyFire: false,
-  };
+    friendlyFire: false, slots: defaultSlots(2) };
 
   function renderVersusModeSelection(): void {
     for (const b of Array.from(versusModeRow.children) as HTMLButtonElement[]) {
@@ -2273,7 +2273,14 @@ export function createHud(root: HTMLElement): Hud {
     b.dataset.players = String(players);
     b.textContent = String(players);
     b.addEventListener('click', () => {
-      versusConfigState = { ...versusConfigState, players };
+      // `slots` MUST follow the count, or Start emits a config whose slot array does not
+      // describe the match being started (issue #260). Resized rather than rebuilt so
+      // going 2 -> 3 -> 2 gives back the roles that were chosen, not fresh defaults.
+      versusConfigState = {
+        ...versusConfigState,
+        players,
+        slots: resizeSlots(versusConfigState.slots, players),
+      };
       renderVersusPlayersSelection();
       renderVersusMapRow(); // REPLACE -- Players filters the map list
       renderVersusControllerRows(); // REPLACE -- the preview row COUNT follows players

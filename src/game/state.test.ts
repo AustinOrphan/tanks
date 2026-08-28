@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { defaultSlots } from './versus-setup';
 import {
   APP_ROUTE_KINDS,
   campaignDescriptor,
@@ -38,8 +39,7 @@ const versusConfigFixture = (overrides: Partial<VersusConfig> = {}): VersusConfi
   arenaId: 'random',
   stock: 3,
   friendlyFire: false,
-  ...overrides,
-});
+  ...overrides, slots: defaultSlots(2) });
 
 const buildCampaignSession = () =>
   resolveSession(campaignDescriptor(), 42, 'plaza');

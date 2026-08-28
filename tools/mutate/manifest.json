@@ -1451,5 +1451,68 @@
       "src/sim/ai/teal.test.ts"
     ],
     "why": "The never-held default is invisible on most geometry: where only one shot type solves, both defaults fall through to the same angle and the same stored plan, so an assertion taken on open ground passes under either value. It is only observable where BOTH types solve -- which is the fixture this entry forces to exist, and the reason that fixture does not reuse the open-field helper the neighbouring tests use."
+  },
+  {
+    "id": "versus-slot-seeding-ignores-the-descriptor",
+    "file": "src/game/loop.ts",
+    "find": "  if (versusSlots) return resolveSources(versusSlots, connectedPads);",
+    "replace": "  if (versusSlots && false) return resolveSources(versusSlots, connectedPads);",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "This exact mutation SURVIVED the whole suite before the seam was extracted -- measured, not supposed. Without the VS branch a versus session falls back to the derived positional rule, so bots land in the LAST slots regardless of where the player put them and the pane's displayed assignment is silently discarded at Start. That is the precise defect issue #260 opens with, and it is invisible to every test that only checks a match starts."
+  },
+  {
+    "id": "versus-bot-count-not-derived-from-slots",
+    "file": "src/game/loop.ts",
+    "find": "      bots: botSlotsOf(config.slots).size,",
+    "replace": "      bots: deps.devFlags.bots,",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Pins 'developer flags and player setup cannot create competing assignment sources'. Left un-derived, a ?bots=3 in the URL and a pane showing one bot are two live answers to one question, and which one a consumer believes depends on whether it reads the count or the roles. Deriving the count from the roles makes them agree by construction rather than by convention."
+  },
+  {
+    "id": "versus-stored-arena-not-validated-against-the-catalog",
+    "file": "src/game/versus-setup.ts",
+    "find": "      : storedArena === RANDOM_ARENA || isArenaAllowed(storedArena, players, mode)",
+    "replace": "      : true",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/versus-setup.test.ts",
+      "src/game/versus-setup-store.test.ts"
+    ],
+    "why": "The highest-risk surface in this change, and the failure is a LAUNCH one rather than a wrong pixel: resolveVersusConfig THROWS both for an id naming no catalog entry and for a real id whose entry does not support the (players, mode) being started. Both are reachable from stored data alone -- an arena retired between builds, or a two-player map stored before four players were chosen -- so an unvalidated read turns a stale save into a game that will not start."
+  },
+  {
+    "id": "versus-random-arena-resolved-on-read",
+    "file": "src/game/versus-setup.ts",
+    "find": "      : storedArena === RANDOM_ARENA || isArenaAllowed(storedArena, players, mode)",
+    "replace": "      : isArenaAllowed(storedArena, players, mode)",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/versus-setup.test.ts",
+      "src/game/versus-setup-store.test.ts"
+    ],
+    "why": "'random' names no catalog entry, so a catalog-backed predicate refuses it. Without the explicit allowance every read converts the draw-for-me sentinel into a concrete board -- permanently, and silently. VersusConfig.arenaId's own doc comment is emphatic that the UNRESOLVED config is what the pane reopens with; this entry is that contract's guard at the persistence boundary."
+  },
+  {
+    "id": "versus-slot-resize-discards-chosen-roles",
+    "file": "src/game/versus-setup.ts",
+    "find": "  for (let i = 0; i < players; i++) out.push(slots[i] ? { ...slots[i] } : defaults[i]);",
+    "replace": "  for (let i = 0; i < players; i++) out.push(defaults[i]);",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/game/versus-setup.test.ts",
+      "src/game/hud.test.ts"
+    ],
+    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing."
   }
 ]

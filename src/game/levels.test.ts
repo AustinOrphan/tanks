@@ -1,4 +1,5 @@
 // The level system: the one object that knows how many levels exist, where a session
+import { defaultSlots } from './versus-setup';
 // starts, and how to build the world for any of them. loop.ts consumes it through
 // GameDeps, so these tests pin the real mapping the game wires in.
 import { describe, it, expect } from 'vitest';
@@ -353,7 +354,7 @@ describe('createLevelSystem: resolves through campaign data, not ARENAS position
 });
 
 describe('createVersusLevelSystem', () => {
-  const ffa3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 4, friendlyFire: false };
+  const ffa3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 4, friendlyFire: false, slots: defaultSlots(3) };
 
   it('is a single synthetic level, never a CAMPAIGN_LEVELS member -- same posture as the sandbox', () => {
     const sys = createVersusLevelSystem(ffa3, noRun());
@@ -366,7 +367,7 @@ describe('createVersusLevelSystem', () => {
   });
 
   it('builds a world with the config\'s mode/players/stock/friendlyFire on a concrete arena', () => {
-    const teams3: VersusConfig = { mode: 'teams', players: 3, arenaId: 'arena-02', stock: 2, friendlyFire: true };
+    const teams3: VersusConfig = { mode: 'teams', players: 3, arenaId: 'arena-02', stock: 2, friendlyFire: true, slots: defaultSlots(3) };
     const sys = createVersusLevelSystem(teams3, noRun());
     const w = sys.world(sys.start, 42, undefined, 3);
     // Deep-equal against the sim's own constructor with identical arguments: fails if
@@ -386,7 +387,7 @@ describe('createVersusLevelSystem', () => {
   });
 
   it('friendlyFire reaches world.friendlyFire -- fails if it is dropped before createWorldFor', () => {
-    const teams: VersusConfig = { mode: 'teams', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: true };
+    const teams: VersusConfig = { mode: 'teams', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: true, slots: defaultSlots(2) };
     const on = createVersusLevelSystem(teams, noRun());
     expect(on.world(on.start, 1, undefined, 3).friendlyFire).toBe(true);
     const off = createVersusLevelSystem({ ...teams, friendlyFire: false }, noRun());
@@ -400,7 +401,7 @@ describe('createVersusLevelSystem', () => {
     // concrete id before this `LevelSystem` is even constructed (`resolveVersusConfig`,
     // versus-config.test.ts), so a `config.arenaId` still `'random'` HERE is a
     // contract violation this function no longer papers over.
-    const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+    const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
     it('throws (arenaById\'s own "Unknown arena id" error), not a silent per-call re-roll', () => {
       // Fails if `world()` reintroduces per-call `'random'` handling (the pre-#278
@@ -423,7 +424,7 @@ describe('createVersusLevelSystem', () => {
       // seed to make correctly -- the exact defect issue #278 is named for), which
       // could disagree with whatever `world()` actually built. Fails if that guessing
       // fallback is reintroduced: this would see a bounds object instead of a throw.
-      const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false };
+      const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
       const sys = createVersusLevelSystem(random3, noRun());
       expect(() => sys.bounds(sys.start)).toThrow('Unknown arena id: random');
     });
@@ -443,7 +444,7 @@ describe('createVersusLevelSystem', () => {
   describe('corpseBlock/muzzleInside dev flags reach the built world (composition, not unit)', () => {
     // Same composition question createLevelSystem's own equivalent block (above) asks:
     // do the dev-flag-derived booleans actually reach World through THIS closure.
-    const cfg: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: false };
+    const cfg: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-01', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
 
     it('omitted flags param keeps the shipped defaults (corpseBlocksShells false, muzzleClearsTanks true)', () => {
       const sys = createVersusLevelSystem(cfg, noRun());

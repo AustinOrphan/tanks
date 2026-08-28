@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { defaultSlots } from './game/versus-setup';
 import { describe, it, expect, vi } from 'vitest';
 import type { GameHandle } from './game/loop';
 import type { VersusConfig } from './game/versus-config';
@@ -211,9 +212,9 @@ describe('boot: the page-scoped settings owner', () => {
     const h = harness();
     boot(h.deps);
     const [, , , requestVersus, requestCampaign] = h.startArgs[0];
-    requestVersus({ mode: 'ffa', players: 2, friendlyFire: false, arenaId: 'random' } as VersusConfig);
+    requestVersus({ mode: 'ffa', players: 2, friendlyFire: false, arenaId: 'random', slots: defaultSlots(2) } as VersusConfig);
     requestCampaign();
-    requestVersus({ mode: 'ffa', players: 2, friendlyFire: false, arenaId: 'random' } as VersusConfig);
+    requestVersus({ mode: 'ffa', players: 2, friendlyFire: false, arenaId: 'random', slots: defaultSlots(2) } as VersusConfig);
 
     expect(h.startArgs).toHaveLength(4);
     expect(h.appSettingsBuilds).toBe(1);
@@ -335,8 +336,8 @@ describe('boot: does not touch the global window', () => {
 });
 
 describe('boot: versus session reboot', () => {
-  const CONFIG_A: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'random', stock: 3, friendlyFire: false };
-  const CONFIG_B: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-01', stock: 5, friendlyFire: true };
+  const CONFIG_A: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+  const CONFIG_B: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-01', stock: 5, friendlyFire: true, slots: defaultSlots(4) };
 
   it('boots the first session with no versus config, and hands it a requestVersusSession', () => {
     const h = harness();
@@ -420,8 +421,8 @@ describe('boot: campaign session reboot (Task 5b)', () => {
   // campaign (its deps carry the versus level system for its whole life) -- this is
   // boot's symmetric counterpart to requestVersusSession above, reached through the
   // versus-kind title screen's Campaign button (hud.ts's onCampaignOpen).
-  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 4, friendlyFire: false };
-  const CONFIG_B: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-03', stock: 2, friendlyFire: true };
+  const CONFIG: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'arena-02', stock: 4, friendlyFire: false, slots: defaultSlots(3) };
+  const CONFIG_B: VersusConfig = { mode: 'teams', players: 4, arenaId: 'arena-03', stock: 2, friendlyFire: true, slots: defaultSlots(4) };
 
   it('the initial boot call is also handed a requestCampaignSession', () => {
     const h = harness();

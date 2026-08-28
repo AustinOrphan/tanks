@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { defaultSlots } from './versus-setup';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHud, type Hud, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
 import { isMuteHotkey, isPauseHotkey } from './loop';
@@ -1543,7 +1544,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     h.onVersusStart((config) => seen.push(config));
     startBtn(root).dispatchEvent(new MouseEvent('click'));
     expect(seen).toEqual([
-      { mode: 'teams', players: 3, arenaId: choices[1], stock: 5, friendlyFire: true },
+      { mode: 'teams', players: 3, arenaId: choices[1], stock: 5, friendlyFire: true, slots: defaultSlots(3) },
     ]);
   });
 
@@ -1609,8 +1610,7 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
       players: 4,
       arenaId: versusMapChoices(4, 'teams')[2],
       stock: 2,
-      friendlyFire: true,
-    };
+      friendlyFire: true, slots: defaultSlots(4) };
     h.showVersusSetup(true, initial);
     expect(modeBtn(root, 'teams').classList.contains('ui-selectable--on')).toBe(true);
     expect(playersBtn(root, 4).classList.contains('ui-selectable--on')).toBe(true);

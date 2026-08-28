@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defaultSlots } from './versus-setup';
 import type { VersusConfig } from './versus-config';
 import type { VersusRules } from './app-state';
 import {
@@ -52,8 +53,7 @@ const versusConfigFixture = (overrides: Partial<VersusConfig> = {}): VersusConfi
   arenaId: 'random',
   stock: 3,
   friendlyFire: false,
-  ...overrides,
-});
+  ...overrides, slots: defaultSlots(2) });
 
 describe('AppRoute constructors', () => {
   it('produces one AppRoute value per kind and no others', () => {
