@@ -39,7 +39,11 @@
 //   delete the EXIT trap or child-process kill   -> cleans up the beacon process tree
 //   restore either old timeout                   -> gives beacon startup and reporting real headroom
 //   restore the pre-#213 raw CI/Pages commands   -> canonical verification command assertions
-//   drop the PR-only Node-22 mutation condition  -> preserves the matrix condition assertion
+//   point the floor smoke at `current`            -> normal-CI mutation split assertion
+//   point the full manifest at `floor`            -> normal-CI mutation split assertion
+//   restore the old node/push mutation condition  -> normal-CI mutation split assertion
+//   add push/pull_request to mutation-floor.yml   -> scheduled-floor trigger assertion
+//   widen 22.13.0 or replace full mutate command  -> scheduled-floor job assertion
 //   parse a comment as an executable run line    -> executable-line extractor negative fixture
 //   delete an issue-metadata trigger              -> issue-metadata trigger assertion
 //   grant write access to the audit job           -> issue-metadata permission assertion
@@ -61,6 +65,7 @@ const read = (p: string): string => readFileSync(new URL(`../${p}`, import.meta.
 
 const PAGES = read('.github/workflows/pages.yml');
 const CI = read('.github/workflows/ci.yml');
+const MUTATION_FLOOR = read('.github/workflows/mutation-floor.yml');
 const ENGINES = read('.github/workflows/engines.yml');
 const ISSUE_METADATA = read('.github/workflows/issue-metadata.yml');
 const BASELINE_RUN = read('tools/baseline/run.mjs');
@@ -87,6 +92,7 @@ const ATOMIC = {
 
 const COMPOSITES = {
   test: 'npm run verify:quick --',
+  'mutate:smoke': 'npm run mutate -- --only capture-prerequisite-error-drops-the-ci-pin',
   'verify:quick': 'npm run typecheck && npm run test:unit --',
   'verify:build': 'npm run build && npm run portability',
   'verify:visual': 'npm run verify:build && npm run test:gl && npm run trace:browser && npm run visual',
@@ -215,6 +221,7 @@ describe('the canonical verification scripts', () => {
 
     expect(expandScript('verify:quick', SCRIPTS)).toEqual(['typecheck', 'test:unit']);
     expect(expandScript('verify:build', SCRIPTS)).toEqual(['build', 'portability']);
+    expect(expandScript('mutate:smoke', SCRIPTS)).toEqual(['mutate']);
     expect(expandScript('verify:full', SCRIPTS)).toEqual([
       'typecheck',
       'test:unit',
@@ -244,6 +251,7 @@ describe('the canonical verification scripts', () => {
       'typecheck',
       'test:unit',
       'build',
+      'mutate:smoke',
       'verify:quick',
       'verify:build',
       'verify:visual',
@@ -283,6 +291,7 @@ describe('the deploy workflow', () => {
     // one. `?raw` returning '' there made every assertion pass on nothing.
     expect(PAGES.length).toBeGreaterThan(1000);
     expect(CI.length).toBeGreaterThan(1000);
+    expect(MUTATION_FLOOR.length).toBeGreaterThan(500);
   });
 
   it('triggers on CI completing, not on the push', () => {
@@ -347,11 +356,13 @@ describe('the deploy workflow', () => {
 describe('canonical verification commands in workflows', () => {
   const ciVerify = jobBlock(CI, 'verify');
   const ciVisual = jobBlock(CI, 'visual');
+  const fullFloor = jobBlock(MUTATION_FLOOR, 'full-floor');
   const pagesBuild = jobBlock(PAGES, 'build');
 
-  it('keeps required jobs and the Pages build available to inspect', () => {
+  it('keeps required jobs, scheduled floor verification, and the Pages build available to inspect', () => {
     expect(ciVerify).toContain('name: verify (${{ matrix.label }})');
     expect(ciVisual).not.toBe('');
+    expect(fullFloor).toContain('name: mutation manifest (floor)');
     expect(pagesBuild).not.toBe('');
   });
 
@@ -359,7 +370,8 @@ describe('canonical verification commands in workflows', () => {
     const expected = {
       Typecheck: 'npm run typecheck',
       Test: 'npm run test:unit',
-      'Mutation manifest': 'npm run mutate',
+      'Mutation harness smoke (floor)': 'npm run mutate:smoke',
+      'Mutation manifest (full, current)': 'npm run mutate',
       Build: 'npm run build',
       'Assert the build is subpath-portable': 'npm run portability',
       'Audit production dependencies': 'npm run audit:prod',
@@ -367,9 +379,11 @@ describe('canonical verification commands in workflows', () => {
     for (const [name, command] of Object.entries(expected)) {
       expect(namedStep(ciVerify, name), name).toContain(`run: ${command}`);
     }
-    expect(namedStep(ciVerify, 'Mutation manifest')).toContain(
-      "if: matrix.node == '24' || github.event_name == 'push'",
-    );
+    expect(namedStep(ciVerify, 'Mutation harness smoke (floor)')).toContain("if: matrix.label == 'floor'");
+    expect(namedStep(ciVerify, 'Mutation manifest (full, current)')).toContain("if: matrix.label == 'current'");
+    expect(ciVerify).not.toContain("matrix.node == '24' || github.event_name == 'push'");
+    expect(ciVerify).toContain("- label: floor\n            node: '22.13.0'");
+    expect(ciVerify).toContain("- label: current\n            node: '24'");
 
     const visualExpected = {
       Build: 'npm run build',
@@ -380,6 +394,24 @@ describe('canonical verification commands in workflows', () => {
     for (const [name, command] of Object.entries(visualExpected)) {
       expect(namedStep(ciVisual, name), name).toContain(`run: ${command}`);
     }
+  });
+
+  it('runs the complete floor manifest only on a daily schedule or manual dispatch', () => {
+    expect(MUTATION_FLOOR).toMatch(/^name: Mutation floor$/m);
+    expect(MUTATION_FLOOR).toMatch(/^\s*schedule:\s*$/m);
+    expect(MUTATION_FLOOR).toMatch(/^\s*workflow_dispatch:\s*$/m);
+    expect(MUTATION_FLOOR).not.toMatch(/^\s*["']?(?:push|pull_request)["']?\s*:/m);
+
+    const cron = /^\s*- cron: '([^']+)'$/m.exec(MUTATION_FLOOR)?.[1].split(/\s+/);
+    expect(cron).toHaveLength(5);
+    expect(cron?.slice(2)).toEqual(['*', '*', '*']);
+    expect(cron?.[0]).toMatch(/^\d{1,2}$/);
+    expect(cron?.[1]).toMatch(/^\d{1,2}$/);
+
+    expect(fullFloor).toContain("node-version: '22.13.0'");
+    expect(fullFloor).toContain('run: npm ci');
+    expect(namedStep(fullFloor, 'Mutation manifest (full, floor)')).toContain('run: npm run mutate');
+    expect(fullFloor).not.toContain('npm run mutate:smoke');
   });
 
   it('routes the ungated manual Pages checks through the same atomic scripts', () => {
@@ -402,6 +434,7 @@ describe('canonical verification commands in workflows', () => {
 
     const commands = [
       ...executableRunCommands(CI),
+      ...executableRunCommands(MUTATION_FLOOR),
       ...executableRunCommands(PAGES),
       ...executableRunCommands(ENGINES),
       ...executableRunCommands(ISSUE_METADATA),
@@ -414,6 +447,7 @@ describe('canonical verification commands in workflows', () => {
       'node tools/baseline/run.mjs',
       'node tools/baseline/safari.mjs',
       'node tools/visual/verify.mjs',
+      'node tools/mutate/run.mjs',
       'npm audit --omit=dev --audit-level=high',
       'node tools/issues/run.mjs',
     ]) {

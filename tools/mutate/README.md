@@ -30,6 +30,24 @@ already correct for the common case -- an `npm run` script's cwd is the director
 holding the `package.json` that defines the script -- and exists as a flag for every
 other caller (a bin invoked from a subdirectory, a script that `cd`s first).
 
+## Repository CI use
+
+The root `npm run mutate:smoke` script selects
+`capture-prerequisite-error-drops-the-ci-pin` for the normal Node 22.13.0 floor lane.
+That entry has a four-test, browser-free scope and drives the real CLI through
+manifest validation, `--only` selection, git cleanliness, Vitest reachability, a green
+baseline, mutation application, real test failure, declared-count matching, and
+byte-verified restoration. The normal unit suite separately runs the harness's own
+fake-dependency and real-subprocess tests in `orchestrate.test.ts`.
+
+This is representative compatibility coverage, not a claim that normal floor CI ran
+every manifest entry. `verify (current)` runs the complete manifest under Node 24 on
+pull requests and pushes to `main`. `.github/workflows/mutation-floor.yml` runs the
+complete manifest under exact Node 22.13.0 daily against `main` and on manual dispatch;
+that complementary workflow is not a required pull-request check. A red scheduled run
+is a floor-runtime or manifest-contract failure that requires investigation in GitHub
+Actions.
+
 ## Runner: vitest only, on purpose
 
 This tool shells out to a real `vitest` binary (`<root>/node_modules/.bin/vitest`) for

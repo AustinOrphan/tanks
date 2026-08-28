@@ -120,7 +120,16 @@ function verificationPolicyProblems(root: string, policy: string): string[] {
     ['current CI context', ci.includes('verify (current)')],
     ['floor CI context', ci.includes('verify (floor)')],
     ['visual CI context', ci.includes('visual')],
-    ['current CI runs the complete manifest', /complete mutation manifest/.test(ci)],
+    ['current CI runs the complete manifest on every change',
+      /`verify \(current\)` runs the complete mutation manifest under Node 24 on pull requests\s+and pushes to `main`/.test(ci)],
+    ['floor CI runs the representative smoke path',
+      /`verify \(floor\)` runs[\s\S]*exact Node 22\.13\.0 plus `npm run mutate:smoke`/.test(ci)],
+    ['floor CI does not claim complete per-change coverage',
+      /it does not run every manifest entry on each change/.test(ci)],
+    ['scheduled CI runs the complete floor manifest',
+      /`Mutation floor` workflow runs the complete manifest under exact Node\s+22\.13\.0 daily against `main` and on manual dispatch/.test(ci)],
+    ['optimized floor CI does not require local compensation',
+      /does not make routine local full-manifest execution necessary/.test(ci)],
     ['pending CI blocks a fully-verified claim', /Do not report the change as fully\s+verified or merge-ready/.test(ci)],
   ];
 
@@ -264,8 +273,20 @@ describe('the instruction files', () => {
       '### Routine full local mutation runs',
     );
     const weakenedCi = policy.replace(
-      'runs the complete mutation manifest on pull requests',
-      'runs selected mutation entries on pull requests',
+      'runs the complete mutation manifest under Node 24 on pull requests',
+      'runs selected mutation entries under Node 24 on pull requests',
+    );
+    const noFloorSmoke = policy.replace(
+      'plus `npm run mutate:smoke`, one representative',
+      'without a representative mutation path; one',
+    );
+    const noScheduledFloor = policy.replace(
+      '22.13.0 daily against `main` and on manual dispatch',
+      '22.13.0 only when a developer remembers to run it',
+    );
+    const localCompensation = policy.replace(
+      'does not make routine local full-manifest execution necessary',
+      'requires routine local full-manifest execution as compensation',
     );
     const prematureCompletion = policy.replace(
       'Do not report the change as fully\nverified or merge-ready',
@@ -277,6 +298,9 @@ describe('the instruction files', () => {
       ['missing targeted mutations', noTargetedRoot, noTargetedPolicy],
       ['missing exception boundary', root, noExceptions],
       ['weakened current CI manifest', root, weakenedCi],
+      ['missing floor smoke', root, noFloorSmoke],
+      ['missing scheduled floor manifest', root, noScheduledFloor],
+      ['local compensation required', root, localCompensation],
       ['premature completion claim', root, prematureCompletion],
     ] as const) {
       expect(verificationPolicyProblems(candidateRoot, candidatePolicy), name).not.toEqual([]);

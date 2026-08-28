@@ -139,7 +139,7 @@ jobs:
       - run: npm ci
 
       # CI now GATES this workflow -- see the `workflow_run` trigger and the conclusion
-      # check on this job -- so on the automatic path all 9 of ci.yml's checking steps
+      # check on this job -- so on the automatic path all 10 of ci.yml's checking steps
       # have already passed for this exact commit before anything below runs.
       #
       # THESE STEPS STAY ANYWAY, AND THE REASON IS THE DISPATCH PATH. `workflow_dispatch`
@@ -151,23 +151,24 @@ jobs:
       # On the automatic path they are genuinely duplicated work (~4 min). That is the
       # price of one workflow serving both paths, and it is paid knowingly.
       #
-      # Be precise about what this is: 5 of ci.yml's 9 checking steps (verify: 6,
+      # Be precise about what this is: 5 of ci.yml's 10 checking steps (verify: 7,
       # visual: 3).
       #
       # Denominator: the named steps of both ci.yml jobs that CHECK -- that can fail
       # because of the tree -- rather than set up the runner, so checkout, setup-node,
       # `npm ci`, BOTH Playwright steps (`Install Playwright` and `Install chromium` are
       # separate named steps), the browser cache and upload-artifact are all
-      # excluded. `verify` contributes 6: Typecheck, Test, Mutation manifest, Build,
-      # portability, audit. `visual` contributes 4 -- Build, GL tests, Baseline trace,
-      # Visual check -- but its Build is the same `npm run build` already counted, so it
-      # adds 3, for 9 distinct. The 5 run below are all of verify's except Mutation
-      # manifest.
+      # excluded. `verify` contributes 7: Typecheck, Test, Mutation harness smoke,
+      # full Mutation manifest, Build, portability, audit. `visual` contributes 4 --
+      # Build, GL tests, Baseline trace, Visual check -- but its Build is the same
+      # `npm run build` already counted, so it adds 3, for 10 distinct. The 5 run below
+      # are all of verify's except both mutation steps.
       #
       # The construction is spelled out because the bare number went stale twice unnoticed.
       # It read "5 of 7", which was CORRECT when #80 wrote it -- the same rule over that
       # ci.yml gives verify 5 and visual 2. Then #104 added `Mutation manifest` (-> 8) and
-      # #128 added `Baseline trace (chromium)` (-> 9), and neither recounted. A denominator
+      # #128 added `Baseline trace (chromium)` (-> 9), and neither recounted. Splitting
+      # floor smoke from current full adds the tenth distinct named check. A denominator
       # nothing recomputes is a denominator that rots; re-derive it from the rule above
       # whenever a step is added to either job.
       #
@@ -177,8 +178,8 @@ jobs:
       # coverage src/render/ has ("a green npm test is not the whole gate for
       # src/render/"). (The baseline trace is the one of the three with a twin here: `npm
       # run test:unit` pins the same hash under Node, so what the browser run adds is a
-      # Node/V8 divergence and the page harness not rotting.) And `Mutation manifest`, so
-      # a stale manifest is not caught here either.
+      # Node/V8 divergence and the page harness not rotting.) And both mutation steps, so
+      # a stale manifest or broken floor smoke path is not caught here either.
       #
       # TWO COSTS OF GATING, WRITTEN DOWN BECAUSE THE BENEFIT WAS.
       #
@@ -197,7 +198,7 @@ jobs:
       # every job SKIPPED -- not a red run, not a notification. If the site looks stale,
       # check whether CI went red before assuming the deploy is broken.
       #
-      # ON THE AUTOMATIC PATH THAT NO LONGER MATTERS: `visual` and `Mutation manifest` are
+      # ON THE AUTOMATIC PATH THAT NO LONGER MATTERS: `visual` and both mutation steps are
       # part of the CI run this workflow now waits on, so a render regression they catch
       # fails CI and the deploy never starts. ON THE DISPATCH PATH IT STILL DOES -- a
       # manual re-deploy runs the five below and nothing else, so it can publish a render

@@ -44,25 +44,30 @@ jobs:
       # checkout a deploy would build from.
       - run: npm ci
 
-      # Keep these as atomic named steps rather than one composite command: the
-      # matrix's mutation condition and each failure's diagnostic boundary stay
-      # visible, while package.json remains the one command source of truth.
+      # Keep these as atomic named steps rather than one composite command: each
+      # failure's diagnostic boundary stays visible, while package.json remains
+      # the one command source of truth.
       - name: Typecheck
         run: npm run typecheck
 
       - name: Test
         run: npm run test:unit
 
+      # The floor lane already runs tools/mutate/orchestrate.test.ts in the unit suite,
+      # including real Vitest subprocess, file-mutation and restore cases. This selected
+      # real manifest entry adds the CLI, git-cleanliness, reachability, baseline,
+      # apply/test/restore and declared-outcome path without duplicating the full manifest.
+      - name: Mutation harness smoke (floor)
+        if: matrix.label == 'floor'
+        run: npm run mutate:smoke
+
       # tools/mutate/manifest.json is hand-verified against a specific commit, and this
       # repo's own history has that go stale: a rebase onto a later main left two `find`
-      # strings no longer matching (a function signature was parameterised, a constant's
-      # value changed) and one entry's declared outcome flipped from a real change
-      # elsewhere. Nothing caught that until it was re-run by hand. This step is what
-      # makes staleness a CI failure instead of a fact nobody re-checks.
-      # On pull requests, Node 24 retains full manifest-staleness detection; the
-      # Node 22 floor still exercises the harness after merge on pushes to main.
-      - name: Mutation manifest
-        if: matrix.node == '24' || github.event_name == 'push'
+      # strings no longer matching and one declared outcome flipped. Node 24 is the
+      # authoritative per-change full-manifest lane; mutation-floor.yml separately runs
+      # the same complete manifest daily and on request under exact Node 22.13.0.
+      - name: Mutation manifest (full, current)
+        if: matrix.label == 'current'
         run: npm run mutate
 
       - name: Build
