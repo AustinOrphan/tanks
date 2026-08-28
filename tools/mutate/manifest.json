@@ -1352,5 +1352,44 @@
     "tests": [
       "src/game/hud.css.test.ts"
     ]
+  },
+  {
+    "id": "reaction-clock-banks-countdown-ticks",
+    "file": "src/sim/ai/index.ts",
+    "find": "    tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;",
+    "replace": "    tank.aimTicks = decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "The shipped behaviour issue #367 reverses, restored exactly: countdown ticks bank toward the profile's reaction delay, so an enemy that watched the player through the announced fire-free phase fires on the first live tick. Measured over the golden trace's population under this mutation: in 12 of the 30 traced runs an enemy stood at or past its full authored span the moment the countdown ended. Not a subtle regression to leave to a reviewer's eye -- it is the difference between a telegraphed first shot and an instant one, and the player has no counterplay to the second.",
+    "tests": [
+      "src/sim/ai/reaction.test.ts",
+      "src/sim/arena.test.ts",
+      "tools/baseline/trace.test.ts"
+    ]
+  },
+  {
+    "id": "reaction-clock-gated-on-firing-rather-than-on-the-phase",
+    "file": "src/sim/ai/index.ts",
+    "find": "    tank.aimTicks = phase === 'live' && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;\n",
+    "replace": "    tank.aimTicks = canAct && decision.hasSolution ? (tank.aimTicks ?? 0) + 1 : 0;\n",
+    "expect": "survives",
+    "expectFailures": 0,
+    "equivalent": true,
+    "why": "EQUIVALENT on the shipped tree, and the entry exists to say which fact makes it so. `canAct` is `phase === 'live'` while GRACE_TICKS is 0 (constants.ts), so today the two expressions are identical and no test can tell them apart -- this entry is the measurement that says so out loud instead of leaving the reader to wonder whether the choice was arbitrary. It stops being equivalent the moment grace is re-enabled, which that constant's own comment describes as a one-number change: grace is a phase in which tanks move and hunt but may not fire, and the rule this implements is 'start at LIVE acquisition', not 'start when firing is allowed'. A test that killed this today would have to fabricate a positive GRACE_TICKS, which pins a phase the game does not currently ship.",
+    "tests": [
+      "src/sim/ai/reaction.test.ts"
+    ]
+  },
+  {
+    "id": "scripted-player-clock-banks-countdown-ticks",
+    "file": "src/sim/ai/player-profile.ts",
+    "find": "  state.aimTicks = roundPhase(world) === 'live' && hasSolution ? state.aimTicks + 1 : 0;",
+    "replace": "  state.aimTicks = hasSolution ? state.aimTicks + 1 : 0;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The same defect at the mirror site. `applyPlayerInput` already refuses the shot during the countdown (world.ts), which is exactly why this clock needed gating separately: the refusal hides the banking, and the scripted player emerges from the countdown entitled to fire on the first live tick. Without an entry here the enemy half is pinned and the player half is not, which is the asymmetry issue #367's own acceptance criterion ('every shipped profile') rules out.",
+    "tests": [
+      "src/sim/ai/player-profile.test.ts"
+    ]
   }
 ]

@@ -191,6 +191,28 @@ describe('the reaction clock starts at LIVE acquisition, not at countdown acquis
     expect(w.bullets).toHaveLength(1); // the 36th LIVE held tick, not the 36th held tick
   });
 
+  it('the same holds for a DIRECT shooter, not only the bank-shot profile', () => {
+    // Teal is the bank-shot kind and carries the cases above because it is the one the
+    // defect was measured on. The gate is one shared assignment in the dispatcher, so it
+    // cannot be kind-specific by construction -- but "cannot by construction" is the kind
+    // of claim this repo asks to be measured, and the issue's acceptance names direct and
+    // bank-shot enemies separately. Grey is the direct one, with a longer span (0.7s).
+    const grey = tank(1, 'grey', { x: 0, y: 0 });
+    const player = tank(2, 'player', { x: 5, y: 0 });
+    const w = opening([grey, player]);
+    for (let t = 0; t < COUNTDOWN_TICKS; t++) tickOn(w);
+    expect(w.tanks[0].aimTicks, 'grey banked the countdown').toBe(0);
+
+    const rt = ticksFor('grey');
+    expect(rt).toBe(42);
+    for (let i = 1; i < rt; i++) {
+      tickOn(w);
+      expect(w.bullets, `live tick ${i}`).toHaveLength(0);
+    }
+    tickOn(w);
+    expect(w.bullets).toHaveLength(1);
+  });
+
   it('turret tracking still happens during the countdown -- the telegraph is preserved', () => {
     // The half of the shipped behaviour issue #367 keeps: the gun visibly follows the
     // player through the countdown, so the shot at the bell is announced rather than
