@@ -9,7 +9,7 @@ import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '.
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
-import { mineWarningFrame, makeMineWarningRing, ringStepFor, makeMineWarningRingMesh, makeMineWarningFillMesh, RING_OUTER_SCALE, FILL_OUTER_SCALE } from './mine-warning';
+import { mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction, makeMineGlowMesh, makeMineLitMesh, glowRadius, glowOpacity } from './mine-warning';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
@@ -1254,36 +1254,25 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   }
 
   /**
-   * BOTH cues sit on the mine's CROWN, just clear of the dome apex (the body spans
-   * 0..2*MINE_Y), not on the ground around it -- owner ruling on PR #396.
+   * The two cues are at DIFFERENT heights now, and the difference is the design.
    *
-   * One height for both, so they occupy the same surface and differ only in shape. Clearing
-   * the apex is what makes them visible at all: laid on the felt they would be under an
-   * opaque body, which is the defect the first revision of this feature shipped.
+   * The fuse glow lies on the felt UNDER the mine, so the body hides its middle and the
+   * player sees light spilling out around the base. The proximity illumination lies on the
+   * mine's CROWN, just clear of the dome apex (the body spans 0..2*MINE_Y), so it reads as
+   * the mine itself lighting up. One is light under the object, the other is light on it.
    */
-  const CUE_Y = MINE_Y * 2 + 0.003;
-  /**
-   * Retained for the record: the fill's height is the whole reason it is visible. On the felt it would be a disc underneath an
-   * opaque 0.28-wide body: hidden until it grew wider than the mine, which is more than half
-   * the reaction window, so the cue would start late and appear to come out from BEHIND the
-   * mine rather than filling it. Clearing the dome (body spans 0..2*MINE_Y) puts it on the
-   * mine's own surface, where it reads as the mine filling up.
-   *
-   * Depth-tested NORMALLY, which is what this height buys over the alternative of drawing
-   * through the body with `depthTest: false`: that version was captured and rejected -- it
-   * also drew over the TANK standing on the mine, which looked like a bug. Here the mine no
-   * longer occludes the fill but a tank still does, which is correct in both directions.
-   */
-  const FILL_Y = CUE_Y;
+  const GLOW_Y = 0.02;
+  const CROWN_Y = MINE_Y * 2 + 0.003;
+
 
   function makeWarningRing(): THREE.Mesh {
-    const mesh = makeMineWarningRingMesh();
+    const mesh = makeMineGlowMesh();
     scene.add(mesh);
     return mesh;
   }
 
   function makeWarningFill(): THREE.Mesh {
-    const mesh = makeMineWarningFillMesh();
+    const mesh = makeMineLitMesh();
     scene.add(mesh);
     return mesh;
   }
@@ -1609,19 +1598,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       const warn = mineWarningFrame(m);
 
       if (warn.fuse) {
-        if (!view.ring) {
-          view.ring = makeWarningRing();
-          view.ringStep = -1;
-        }
-        const step = ringStepFor(warn.fuse.inner);
-        if (step !== view.ringStep) {
-          // Thickness lives in geometry, so it changes at most RING_STEPS times per fuse.
-          view.ring.geometry.dispose();
-          view.ring.geometry = makeMineWarningRing(MINE_R * RING_OUTER_SCALE, step);
-          view.ringStep = step;
-        }
-        view.ring.position.set(m.pos.x, CUE_Y, m.pos.y);
-        view.ring.visible = warn.fuse.on;
+        // The glow is a unit disc, so its growth is pure SCALE -- no geometry churn at all,
+        // unlike the illumination below whose inner edge has to be rebuilt.
+        if (!view.ring) view.ring = makeWarningRing();
+        const r = glowRadius(warn.fuse.growth, MINE_R);
+        view.ring.scale.set(r, r, 1);
+        view.ring.position.set(m.pos.x, GLOW_Y, m.pos.y);
+        (view.ring.material as THREE.MeshBasicMaterial).opacity = glowOpacity(warn.fuse.growth);
       } else if (view.ring) {
         disposeObject(view.ring);
         view.ring = null;
@@ -1629,12 +1612,20 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       }
 
       if (warn.proximity) {
-        if (!view.fill) view.fill = makeWarningFill();
-        // Grows from the middle OUTWARD: a disc of unit radius scaled by the fill fraction.
-        // Zero scale on the trip tick is intentionally invisible rather than a dot.
-        const r = Math.max(1e-4, warn.proximity.fill) * MINE_R * FILL_OUTER_SCALE;
-        view.fill.scale.set(r, r, 1);
-        view.fill.position.set(m.pos.x, FILL_Y, m.pos.y);
+        if (!view.fill) {
+          view.fill = makeWarningFill();
+          view.ringStep = -1;
+        }
+        // Closes in from the OUTSIDE: the annulus keeps the mine's radius as its outer edge
+        // and its INNER edge shrinks to zero, so the last frame is a full disc -- the whole
+        // mine lit. That lives in geometry, so it is rebuilt at most RING_STEPS times.
+        const step = litStepFor(litInnerFraction(warn.proximity.lit));
+        if (step !== view.ringStep) {
+          view.fill.geometry.dispose();
+          view.fill.geometry = makeMineLitRing(MINE_R, step);
+          view.ringStep = step;
+        }
+        view.fill.position.set(m.pos.x, CROWN_Y, m.pos.y);
       } else if (view.fill) {
         disposeObject(view.fill);
         view.fill = null;

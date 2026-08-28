@@ -87,15 +87,23 @@ describe('mine warning cues through createEntityViews (issue #276)', () => {
     v.dispose();
   });
 
-  it('the fill GROWS as the countdown runs, and is largest on the last drawn frame', () => {
+  it('the illumination CLOSES IN as the countdown runs, ending as a full disc', () => {
+    // Geometry-driven, not scale-driven: the annulus keeps the mine's radius as its outer
+    // edge and its inner edge shrinks. An earlier revision grew a scaled disc from the
+    // centre, so asserting `scale.x` here would pass against the design the owner replaced.
     const { scene, v } = views();
-    const sizes: number[] = [];
+    const inners: number[] = [];
     for (const left of [MINE_PROXIMITY_DELAY_TICKS, 20, 10, 1]) {
       const w = world([mine({ proximityDelayLeft: left })]);
       v.sync(w, w, 0);
-      sizes.push((fill(scene) as THREE.Mesh).scale.x);
+      const mesh = fill(scene) as THREE.Mesh;
+      const p = mesh.geometry.getAttribute('position');
+      let min = Infinity;
+      for (let i = 0; i < p.count; i++) min = Math.min(min, Math.hypot(p.getX(i), p.getY(i)));
+      inners.push(min);
     }
-    for (let i = 1; i < sizes.length; i++) expect(sizes[i]).toBeGreaterThan(sizes[i - 1]);
+    for (let i = 1; i < inners.length; i++) expect(inners[i]).toBeLessThan(inners[i - 1]);
+    expect(inners[inners.length - 1]).toBeCloseTo(0, 6); // whole mine lit on the last frame
     v.dispose();
   });
 

@@ -12,38 +12,42 @@ import { DT, MINE_FUSE_WARNING_TICKS, MINE_PROXIMITY_DELAY_TICKS } from '../sim/
  * anything back.
  *
  * WHY A PURE FRAME FUNCTION, the same split spawn-anim.ts uses: the interesting content
- * here is the timing contract (when the ring thickens, when the fill is full), and that is
- * worth testing at exact values without a WebGL context. The mesh factories below are the
- * dumb half.
+ * here is the timing contract (how far the glow has grown, how much of the mine is lit),
+ * and that is worth testing at exact values without a WebGL context. The mesh factories
+ * below are the dumb half.
  *
  * THE TWO STATES ARE ON DIFFERENT CHANNELS ON PURPOSE, which is what makes them
- * distinguishable without relying on colour, and readable in a still frame:
+ * distinguishable without relying on colour and readable in a still frame:
  *
- *   - FUSE URGENCY is an OUTLINE that THICKENS as the fuse runs out, blinking faster as it
- *     goes. Geometry (stroke weight) plus timing (blink rate).
- *   - PROXIMITY TRIP is a FILL that grows from the middle OUTWARD. Geometry (filled area),
- *     monotone in time-to-blast, with no blink at all.
+ *   - FUSE URGENCY is a glow that grows from UNDERNEATH the mine, spilling out around its
+ *     base. Light on the ground, not on the object.
+ *   - PROXIMITY TRIP illuminates the MINE ITSELF, starting at its outer edge and closing
+ *     inward until the whole body is lit.
  *
- * So a single frame with no motion still separates them (outline vs fill), and a player who
- * cannot resolve the outline still gets an accelerating blink. Neither state is carried by
- * hue: both are driven off the same warning colour.
+ * One is light under the mine and the other is light on it, and each encodes its progress
+ * as a SIZE rather than as a flash: a single frame with no motion says both which warning
+ * it is and how far along it is.
  *
- * Both are functions of MINE STATE, never of a wall clock -- two machines replaying the same
- * world draw the same frame, and a paused game stops rather than continuing to flash. That
- * is the same discipline entities.ts's fuse pulse already follows.
+ * NO BLINK, deliberately (owner ruling on PR #396). Two earlier revisions gave the fuse an
+ * accelerating blink, capped at 6 Hz because sustained flashing above ~3 Hz is a
+ * photosensitivity hazard. A monotone glow removes that hazard rather than bounding it, and
+ * costs nothing legible -- the growth already carries the urgency.
+ *
+ * Both are functions of MINE STATE, never of a wall clock: two machines replaying the same
+ * world draw the same frame, and a paused game holds its warning instead of animating on.
  */
 export interface MineWarningFrame {
   /**
-   * The fuse-urgency ring, or null when the mine is not inside its final fuse window.
-   * `inner` is the ring's inner radius as a fraction of its outer radius, so a SMALLER
-   * number is a THICKER stroke; `on` is the blink's square wave.
+   * The under-mine glow, or null when the mine is not inside its final fuse window.
+   * `growth` runs 0 at the moment the window opens to 1 at expiry.
    */
-  fuse: { inner: number; on: boolean } | null;
+  fuse: { growth: number } | null;
   /**
-   * The proximity fill as a fraction of the mine's radius, or null when the mine has not
-   * been tripped. 0 on the tick it is tripped, 1 on the last frame before the blast.
+   * How much of the mine is lit by a proximity trip, or null when it has not been tripped.
+   * 0 on the tick it is tripped, 1 on the last frame before the blast -- at which point the
+   * whole body is illuminated.
    */
-  proximity: { fill: number } | null;
+  proximity: { lit: number } | null;
 }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -51,44 +55,32 @@ const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** The fuse window, in seconds -- the same threshold mines.ts latches its event on. */
 export const FUSE_WARNING_SECONDS = MINE_FUSE_WARNING_TICKS * DT;
 
-/**
- * Ring stroke at window entry and at expiry, as a fraction of the ring's own outer radius,
- * together with how far that outer radius reaches as a multiple of the mine's radius.
- *
- * CONTAINED WITHIN THE MINE (owner ruling on PR #396). An earlier revision put both cues on
- * the GROUND around the mine, at 2.2x and 3.0x its radius, so a warning painted a patch of
- * arena wider than the object it belonged to. The ruling: keep them on or within the mine's
- * visible top surface, accepting that they are smaller and a little harder to see.
- *
- * 0.54 is chosen off the dome's own profile rather than picked. The body is a lathe whose
- * elliptical dome falls away from its apex fast: at 0.5x the mine's radius the surface is
- * 0.008 below the apex, at 0.54x about 0.017, and by 0.79x it is 0.046 -- far enough that a
- * flat disc laid at apex height would visibly float off the curve at its rim. 0.54 keeps the
- * cues inside the flat part of the crown, so they read as markings ON the mine.
- */
-const RING_INNER_THIN = 0.85;
-const RING_INNER_THICK = 0.5;
-export const RING_OUTER_SCALE = 0.54;
+/** Warning colour, shared by both states -- the DISTINCTION is never the hue. */
+export const MINE_WARNING_COLOR = 0xffb43a;
 
 /**
- * Blink cycles across the whole fuse window. Phase is QUADRATIC in urgency, so the rate
- * climbs linearly rather than stepping -- the same shape as entities.ts's body pulse.
+ * How far the fuse glow reaches, as a multiple of the mine's radius, at window entry and at
+ * expiry.
  *
- * Deliberately low. Instantaneous rate peaks at `4 * TURNS` Hz (d/dt of TURNS*u^2 with u
- * running 0->1 over FUSE_WARNING_SECONDS), so 1.5 turns caps the blink at 6 Hz. A faster
- * blink reads as more urgent and is easy to reach for, but photosensitivity guidance treats
- * sustained flashing above ~3 Hz as a real hazard, and this is a small outline rather than a
- * full-screen flash only because it was kept small. #289 owns the global reduced-flash
- * preference; when it lands, this is one of the things it should be able to turn off.
+ * It DOES extend past the mine's footprint, and that is what "emanating from underneath"
+ * means: light spilling out from beneath the object. The owner ruling that pulled an earlier
+ * revision inward was about a hard-edged decal two to three times the mine's width; a soft
+ * additive halo reads as illumination rather than as a patch of painted arena, which is why
+ * the same objection does not apply here.
  */
-const BLINK_TURNS = 1.5;
+export const GLOW_START_SCALE = 0.7;
+export const GLOW_END_SCALE = 1.6;
+
+/** Opacity of the under-mine glow at window entry and at expiry: it brightens as it spreads. */
+const GLOW_OPACITY_MIN = 0.15;
+const GLOW_OPACITY_MAX = 0.85;
 
 /**
  * Project one mine's warning state.
  *
- * A detonated mine has no warning frame: entities.ts stops drawing it entirely, and the
- * blast is its own effect. That is also what ends the proximity fill exactly at the blast
- * rather than letting it linger.
+ * A detonated mine has no warning frame: entities.ts stops drawing it entirely and the blast
+ * is its own effect. That is also what ends the illumination exactly at the blast rather
+ * than letting it linger.
  */
 export function mineWarningFrame(mine: Mine): MineWarningFrame {
   if (mine.detonated) return { fuse: null, proximity: null };
@@ -97,107 +89,107 @@ export function mineWarningFrame(mine: Mine): MineWarningFrame {
   if (mine.timer <= FUSE_WARNING_SECONDS) {
     // 0 the tick the window is entered, 1 at expiry.
     //
-    // The HIGH clamp is the one that does work, and it is not decorative: stepMines
-    // subtracts dt BEFORE it checks expiry, so a mine is observable at a negative timer for
-    // one tick, which drives this ratio past 1. Unclamped, `inner` overshoots
-    // RING_INNER_THICK and the ring starts growing THINNER again at the exact moment it
-    // should be most urgent. The LOW bound is unreachable here -- this branch only runs
-    // while `timer <= FUSE_WARNING_SECONDS`, so the ratio is never negative -- and survives
-    // only because clamp01 is the shared helper. Do not read it as guarding anything;
-    // replacing it with Math.min(1, ...) is an equivalent mutant.
-    const urgency = clamp01(1 - mine.timer / FUSE_WARNING_SECONDS);
-    const inner = RING_INNER_THIN + (RING_INNER_THICK - RING_INNER_THIN) * urgency;
-    const phase = BLINK_TURNS * urgency * urgency;
-    fuse = { inner, on: phase - Math.floor(phase) < 0.5 };
+    // The HIGH clamp is the one that does work: stepMines subtracts dt BEFORE it checks
+    // expiry, so a mine is observable at a negative timer for one tick, which drives this
+    // ratio past 1. Unclamped the glow keeps growing past its authored reach at the exact
+    // moment it should be largest and steadiest. The LOW bound is unreachable here -- this
+    // branch only runs while `timer <= FUSE_WARNING_SECONDS` -- and survives only because
+    // clamp01 is the shared helper.
+    fuse = { growth: clamp01(1 - mine.timer / FUSE_WARNING_SECONDS) };
   }
 
   let proximity: MineWarningFrame['proximity'] = null;
   if (mine.proximityDelayLeft !== undefined) {
     // WHY THE -1: stepMines decrements FIRST and detonates when the counter reaches 0, so
-    // the values that are ever RENDERED run DELAY down to 1 and never 0. Dividing by
-    // DELAY - 1 puts full fill on that last drawn frame, which is the frame the blast
-    // starts on -- the acceptance criterion's "final proximity frame agrees with the
-    // blast-start tick". Dividing by DELAY instead would top out at 29/30 and the fill
-    // would visibly never complete.
+    // the values ever RENDERED run DELAY down to 1 and never 0. Dividing by DELAY - 1 puts
+    // full illumination on that last drawn frame, which is the frame the blast starts on --
+    // the acceptance criterion's "final proximity frame agrees with the blast-start tick".
+    // Dividing by DELAY tops out at 29/30 and the mine visibly never finishes lighting.
     const span = MINE_PROXIMITY_DELAY_TICKS - 1;
-    const fill = span <= 0 ? 1 : clamp01((MINE_PROXIMITY_DELAY_TICKS - mine.proximityDelayLeft) / span);
-    proximity = { fill };
+    const lit = span <= 0 ? 1 : clamp01((MINE_PROXIMITY_DELAY_TICKS - mine.proximityDelayLeft) / span);
+    proximity = { lit };
   }
 
   return { fuse, proximity };
 }
 
-/** Warning colour, shared by both states -- the DISTINCTION is never the hue. */
-export const MINE_WARNING_COLOR = 0xffb43a;
+/** The glow's radius in world units, for a frame's growth and the mine's own radius. */
+export function glowRadius(growth: number, mineRadius: number): number {
+  return mineRadius * (GLOW_START_SCALE + (GLOW_END_SCALE - GLOW_START_SCALE) * clamp01(growth));
+}
+
+/** The glow's opacity for a frame's growth. */
+export function glowOpacity(growth: number): number {
+  return GLOW_OPACITY_MIN + (GLOW_OPACITY_MAX - GLOW_OPACITY_MIN) * clamp01(growth);
+}
 
 /**
- * How far the proximity fill reaches at full, as a multiple of the mine body's radius.
+ * The INNER edge of the proximity illumination, as a fraction of the mine's radius.
  *
- * Matched to RING_OUTER_SCALE so a completed fill exactly reaches the fuse ring's outer
- * edge: the two cues then share one footprint on the crown and cannot be told apart by SIZE,
- * only by their shapes -- an annulus that thickens versus a disc that grows. That is what
- * keeps them distinguishable now that neither may spread onto the arena floor.
- *
- * This replaces a 3.0 reach that deliberately extended past a tank standing on the mine.
- * The owner ruling on PR #396 traded that visibility away for containment; the cost is
- * stated rather than hidden -- see the module comment on what a hull now hides.
+ * Runs 1 (a hairline at the rim) down to 0 (the whole body lit), which is the direction
+ * asked for: the light starts at the OUTSIDE and closes inward. The previous revision grew
+ * a disc from the centre outward -- the same numbers read the other way round -- so this is
+ * the one place a sign error silently reproduces the old behaviour while every timing
+ * assertion still passes.
  */
-export const FILL_OUTER_SCALE = 0.54;
+export function litInnerFraction(lit: number): number {
+  return 1 - clamp01(lit);
+}
 
 const RING_SEGMENTS = 48;
-/** Quantisation of the ring's thickness. Invisible at eight steps across a 0.5 s window. */
+/** Quantisation of the illuminated annulus. Invisible at eight steps across a 0.5 s window. */
 export const RING_STEPS = 8;
 
 /**
- * The ring's thickness lives in GEOMETRY -- RingGeometry bakes both radii, and scaling a
- * ring scales its radius rather than its stroke -- so a changing thickness means a new
- * geometry. Two ways to avoid rebuilding one every frame: share a ladder of geometries
- * across mines, or give each mine its own and rebuild only when its quantised step changes.
+ * The illuminated part of the mine lives in GEOMETRY -- a ring bakes both radii, and scaling
+ * one scales its radius rather than its width -- so a changing inner edge means a new
+ * geometry. Two ways to avoid rebuilding one every frame: share a ladder across mines, or
+ * give each mine its own and rebuild only when its quantised step changes.
  *
- * THE SECOND, deliberately. A shared ladder is fewer objects, but entities.ts disposes a
- * removed mine with `disposeObject`, which TRAVERSES and disposes geometry -- so the first
- * mine to detonate would free a geometry its neighbours were still drawing with. Making the
- * geometry per-mine keeps disposal uniform with every other view in that file, at a cost of
- * at most RING_STEPS small allocations per mine per fuse, and only for mines actually inside
- * their final window.
+ * THE SECOND, deliberately. entities.ts disposes a removed mine with `disposeObject`, which
+ * TRAVERSES and disposes geometry, so the first mine to detonate would free a geometry its
+ * neighbours were still drawing with. Per-mine geometry keeps disposal uniform with every
+ * other view in that file, at a cost of at most RING_STEPS small allocations per mine per
+ * trip, and only for mines actually tripped.
  */
-export function ringInnerForStep(step: number): number {
-  const t = step / (RING_STEPS - 1);
-  return RING_INNER_THIN + (RING_INNER_THICK - RING_INNER_THIN) * t;
-}
-
-/** One ring at a quantised thickness step, owned by the caller and disposed with it. */
-export function makeMineWarningRing(outerRadius: number, step: number): THREE.RingGeometry {
-  return new THREE.RingGeometry(outerRadius * ringInnerForStep(step), outerRadius, RING_SEGMENTS);
-}
-
-/** Which thickness step a frame's `inner` quantises onto. */
-export function ringStepFor(inner: number): number {
-  const t = (inner - RING_INNER_THIN) / (RING_INNER_THICK - RING_INNER_THIN);
-  const step = Math.round(clamp01(t) * (RING_STEPS - 1));
-  // `+ 0` normalises -0 to 0. The divisor above is negative (THICK < THIN), so the thinnest
-  // frame divides 0 by a negative and yields -0, which survives clamp and round. Harmless as
-  // an array index, but it leaks into any test or log that compares with Object.is.
+export function litStepFor(innerFraction: number): number {
+  const step = Math.round((1 - clamp01(innerFraction)) * (RING_STEPS - 1));
   return step + 0;
 }
 
+/** The inner fraction a quantised step represents -- the inverse of `litStepFor`. */
+export function litInnerForStep(step: number): number {
+  return 1 - step / (RING_STEPS - 1);
+}
+
+/** One illuminated annulus at a quantised step, owned by the caller and disposed with it. */
+export function makeMineLitRing(mineRadius: number, step: number): THREE.RingGeometry {
+  const inner = mineRadius * litInnerForStep(step);
+  // A hairline rather than a degenerate zero-width ring at step 0: RingGeometry with
+  // inner === outer produces no visible surface, so the first frame of a trip would show
+  // nothing and the cue would appear to start late.
+  return new THREE.RingGeometry(Math.min(inner, mineRadius * 0.985), mineRadius, RING_SEGMENTS);
+}
+
 /**
- * The fuse ring's mesh. Flat on the ground, depth-tested normally: it lives entirely
- * OUTSIDE the body radius (see RING_INNER_THICK), so ordinary occlusion is correct for it
- * and a tank driving over the mine properly covers it.
+ * The under-mine glow's mesh: an additive disc laid just off the felt, scaled per frame.
  *
- * Geometry is assigned by the caller from the frame's thickness step; the placeholder here
- * is replaced on the first sync rather than being drawn.
+ * ADDITIVE and sitting BELOW the mine rather than above it. It is light spilling out from
+ * underneath, so the mine's own body correctly hides the middle and what the player sees is
+ * a halo around the base -- which is the effect. Additive blending is what makes it read as
+ * light rather than as a painted disc, the same treatment particles.ts uses for sparks and
+ * muzzle flash.
  */
-export function makeMineWarningRingMesh(): THREE.Mesh {
+export function makeMineGlowMesh(): THREE.Mesh {
   const mesh = new THREE.Mesh(
-    new THREE.RingGeometry(0.9, 1, 8),
+    new THREE.CircleGeometry(1, 32),
     new THREE.MeshBasicMaterial({
       color: MINE_WARNING_COLOR,
       transparent: true,
-      opacity: 0.95,
+      opacity: GLOW_OPACITY_MIN,
       side: THREE.DoubleSide,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
     }),
   );
   mesh.rotation.x = -Math.PI / 2;
@@ -206,23 +198,20 @@ export function makeMineWarningRingMesh(): THREE.Mesh {
 }
 
 /**
- * The proximity fill's mesh: a unit disc the caller scales by the frame's fill fraction, and
- * positions just above the mine's dome (see FILL_Y in entities.ts for why the HEIGHT is what
- * makes this cue visible at all).
+ * The proximity illumination's mesh: an annulus on the mine's crown whose geometry the
+ * caller replaces as the lit edge closes inward.
  *
- * Depth-tested normally on purpose. An earlier version cleared the body with
- * `depthTest: false` instead; a normal-speed capture showed it drawing over the TANK that
- * had walked onto the mine, which reads as a rendering bug rather than a warning. Lifting
- * the disc above the dome gets the same visibility without that, and a tank on top of the
- * mine correctly hides it.
+ * Depth-tested normally and laid just clear of the dome apex. Clearing the apex is what
+ * makes it visible at all -- an earlier revision laid this on the felt, where an opaque
+ * 0.28-wide body hid it for more than half the reaction window.
  */
-export function makeMineWarningFillMesh(): THREE.Mesh {
+export function makeMineLitMesh(): THREE.Mesh {
   const mesh = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 32),
+    new THREE.RingGeometry(0.9, 1, 8),
     new THREE.MeshBasicMaterial({
       color: MINE_WARNING_COLOR,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
       side: THREE.DoubleSide,
       depthWrite: false,
     }),
