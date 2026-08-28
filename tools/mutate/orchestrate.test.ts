@@ -46,8 +46,9 @@ import { findOccurrences, applyAt, validateEntry, validateManifest, findUnreacha
 import { runOne, runManifest, computeExitCode, STATUS, RestoreFailedError } from './orchestrate.mjs';
 import {
   parseArgs, formatResult, dirtyReport, unreachableReport, resolveManifestPath, runTestsReal,
-  classifySubprocessFailure, relatedFilesFor,
+  classifySubprocessFailure, readReachabilityReport, relatedFilesForAll,
 } from './run.mjs';
+import { collectReachability } from './reachability.mjs';
 import type { ManifestEntry } from './lib.mjs';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
@@ -631,11 +632,135 @@ describe('findUnreachableEntries + unreachableReport (the scoped-tests-must-reac
     expect(report).toMatch(/none -- nothing tests this file at all/);
   });
 
-  it('propagates (does not swallow) a relatedFilesFor that throws -- run.mjs relies on this to distinguish "interrupted mid-probe" from "genuinely found nothing", see relatedFilesFor\'s signal check', () => {
+  it('propagates (does not swallow) a related-files lookup that throws -- run.mjs relies on this to distinguish "interrupted mid-probe" from "genuinely found nothing"', () => {
     const throwing = () => { throw new Error('vitest related was interrupted (signal SIGINT)'); };
     expect(() => findUnreachableEntries([entry({ file: 'x.ts', tests: ['x.test.ts'] })], throwing))
       .toThrow('interrupted');
   });
+});
+
+describe('shared Vitest reachability graph', () => {
+  const validReport = () => ({
+    version: 1 as const,
+    sourceCount: 2,
+    testSpecificationCount: 17,
+    durationMs: 42,
+    relatedByFile: {
+      'src/a.ts': ['src/a.test.ts'],
+      'src/b.ts': ['src/b.test.ts'],
+    },
+  });
+
+  it('validates and preserves a distinct related-test set for every source (never a union)', () => {
+    const { relatedByFile } = readReachabilityReport(validReport(), ['src/a.ts', 'src/b.ts']);
+    expect(relatedByFile.get('src/a.ts')).toEqual(new Set(['src/a.test.ts']));
+    expect(relatedByFile.get('src/b.ts')).toEqual(new Set(['src/b.test.ts']));
+    expect(relatedByFile.get('src/a.ts')?.has('src/b.test.ts')).toBe(false);
+  });
+
+  it('rejects missing, malformed, and inconsistent worker reports instead of treating them as zero coverage', () => {
+    const missing = validReport();
+    delete (missing.relatedByFile as Partial<typeof missing.relatedByFile>)['src/b.ts'];
+    expect(() => readReachabilityReport(missing, ['src/a.ts', 'src/b.ts']))
+      .toThrow(/no per-source result for src\/b\.ts/);
+
+    const malformed = validReport();
+    (malformed.relatedByFile as Record<string, unknown>)['src/b.ts'] = [null];
+    expect(() => readReachabilityReport(malformed, ['src/a.ts', 'src/b.ts']))
+      .toThrow(/invalid per-source result for src\/b\.ts/);
+
+    expect(() => readReachabilityReport({ ...validReport(), sourceCount: 1 }, ['src/a.ts', 'src/b.ts']))
+      .toThrow(/invalid or inconsistent metadata/);
+    expect(() => readReachabilityReport({ ...validReport(), durationMs: -1 }, ['src/a.ts', 'src/b.ts']))
+      .toThrow(/invalid or inconsistent metadata/);
+  });
+
+  it('creates and closes one context while querying each source separately', async () => {
+    const sourceA = 'src/a.ts';
+    const sourceB = 'src/b.ts';
+    const seenRelated: string[][] = [];
+    const close = vi.fn(async () => {});
+    const context = {
+      config: { related: undefined as string[] | undefined },
+      globTestSpecifications: vi.fn(async () => [
+        { moduleId: join(ROOT, 'src/a.test.ts') },
+        { moduleId: join(ROOT, 'src/b.test.ts') },
+      ]),
+      getRelevantTestSpecifications: vi.fn(async () => {
+        seenRelated.push([...(context.config.related ?? [])]);
+        const moduleId = context.config.related?.[0]?.endsWith('/a.ts')
+          ? join(ROOT, 'src/a.test.ts')
+          : join(ROOT, 'src/b.test.ts');
+        return [{ moduleId }, { moduleId }]; // duplicate proves normalization too
+      }),
+      close,
+    };
+    const createContext = vi.fn(async () => context);
+
+    const report = await collectReachability([sourceA, sourceB, sourceA], ROOT, {
+      createContext: createContext as never,
+    });
+
+    expect(createContext).toHaveBeenCalledTimes(1);
+    expect(context.globTestSpecifications).toHaveBeenCalledTimes(1);
+    expect(context.getRelevantTestSpecifications).toHaveBeenCalledTimes(2);
+    expect(seenRelated).toEqual([
+      [join(ROOT, sourceA)],
+      [join(ROOT, sourceB)],
+    ]);
+    expect(report.sourceCount).toBe(2);
+    expect(report.relatedByFile[sourceA]).toEqual(['src/a.test.ts']);
+    expect(report.relatedByFile[sourceB]).toEqual(['src/b.test.ts']);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('still closes the shared context if a per-source query fails', async () => {
+    const close = vi.fn(async () => {});
+    const context = {
+      config: { related: undefined as string[] | undefined },
+      globTestSpecifications: vi.fn(async () => []),
+      getRelevantTestSpecifications: vi.fn(async () => { throw new Error('graph transform failed'); }),
+      close,
+    };
+    const createContext = vi.fn(async () => context);
+
+    await expect(collectReachability(['src/a.ts'], ROOT, { createContext: createContext as never }))
+      .rejects.toThrow('graph transform failed');
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('matches Vitest\'s real transitive graph independently for two temporary sources', async () => {
+    const id = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const base = `tools/mutate/fixtures/tmp-reachability-${id}`;
+    const sourceA = `${base}-a.ts`;
+    const bridgeA = `${base}-a-bridge.ts`;
+    const sourceB = `${base}-b.ts`;
+    const testA = `${base}-a.test.ts`;
+    const testB = `${base}-b.test.ts`;
+    const paths = [sourceA, bridgeA, sourceB, testA, testB];
+    mkdirSync(join(ROOT, 'tools/mutate/fixtures'), { recursive: true });
+    writeFileSync(join(ROOT, sourceA), 'export const sourceA = 1;\n');
+    writeFileSync(join(ROOT, bridgeA), `export { sourceA } from './tmp-reachability-${id}-a.ts';\n`);
+    writeFileSync(join(ROOT, sourceB), 'export const sourceB = 2;\n');
+    writeFileSync(
+      join(ROOT, testA),
+      `import { expect, it } from 'vitest';\nimport { sourceA } from './tmp-reachability-${id}-a-bridge.ts';\nit('uses source A transitively', () => expect(sourceA).toBe(1));\n`,
+    );
+    writeFileSync(
+      join(ROOT, testB),
+      `import { expect, it } from 'vitest';\nimport { sourceB } from './tmp-reachability-${id}-b.ts';\nit('uses source B directly', () => expect(sourceB).toBe(2));\n`,
+    );
+
+    try {
+      const report = await collectReachability([sourceA, sourceB], ROOT);
+      expect(report.relatedByFile[sourceA]).toContain(testA);
+      expect(report.relatedByFile[sourceA]).not.toContain(testB);
+      expect(report.relatedByFile[sourceB]).toContain(testB);
+      expect(report.relatedByFile[sourceB]).not.toContain(testA);
+    } finally {
+      for (const path of paths) rmSync(join(ROOT, path), { force: true });
+    }
+  }, 30_000);
 });
 
 describe('classifySubprocessFailure (review found this exact gap: a missing report was always read as "found nothing")', () => {
@@ -911,16 +1036,15 @@ describe('end-to-end: real apply -> real vitest subprocess -> real restore', () 
 });
 
 // ---------------------------------------------------------------------------
-// End-to-end: relatedFilesFor against REAL broken subprocesses -- this is the exact
-// function and the exact bug review found live (its own environment mismatch turned
-// out to be a real code defect): a probe that fails for ANY non-signal reason fell
-// through to `related = new Set()`, so it reported "nothing tests this file at all"
-// instead of admitting it could not tell. Reproduced here with real stub binaries,
-// not fakes, to prove the actual spawnSync/existsSync wiring, not just the pure
+// End-to-end: relatedFilesForAll against REAL broken subprocesses -- this preserves
+// the exact failure boundary review found live while replacing many cold Vitest
+// processes with one worker. A failed worker must never fall through to an empty map
+// and claim "nothing tests this file at all." Reproduced with real stub executables,
+// not fakes, to prove the actual spawnSync/existsSync wiring and not just the pure
 // classifier tested above.
 // ---------------------------------------------------------------------------
 
-describe('relatedFilesFor against real broken subprocesses (the exact function and bug review found)', () => {
+describe('relatedFilesForAll against real broken subprocesses', () => {
   const scratchDir = join(tmpdir(), `mutate-relatedFilesFor-test-${process.pid}`);
 
   afterAll(() => {
@@ -935,11 +1059,11 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     return path;
   }
 
-  it('a stub vitest that prints to stderr and exits 1 throws .indeterminate -- NOT an empty (silently "nothing tests this file") Set', () => {
+  it('a worker stub that prints to stderr and exits 1 throws .indeterminate -- NOT an empty (silently "nothing tests this file") map', () => {
     const stub = makeStub('#!/bin/sh\necho "stub vitest: simulated crash" >&2\nexit 1\n');
     let caught: unknown;
     try {
-      relatedFilesFor('src/render/skins.ts::stub-exit-1', ROOT, stub);
+      relatedFilesForAll(['src/render/skins.ts::stub-exit-1'], ROOT, stub, []);
     } catch (e) {
       caught = e;
     }
@@ -949,12 +1073,12 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     expect((caught as Error).message).not.toMatch(/interrupted/);
   });
 
-  it('a missing vitest binary (spawnSync sets res.error, ENOENT) throws .indeterminate too -- proven by literally deleting the target, matching review\'s own reproduction', () => {
+  it('a missing worker executable (spawnSync sets res.error, ENOENT) throws .indeterminate too -- proven by literally deleting the target, matching review\'s own reproduction', () => {
     const missing = join(scratchDir, `does-not-exist-${Date.now()}.sh`);
     expect(existsSync(missing)).toBe(false); // never created
     let caught: unknown;
     try {
-      relatedFilesFor('src/render/skins.ts::missing-binary', ROOT, missing);
+      relatedFilesForAll(['src/render/skins.ts::missing-binary'], ROOT, missing, []);
     } catch (e) {
       caught = e;
     }
@@ -966,7 +1090,7 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     const stub = makeStub('#!/bin/sh\nexit 130\n');
     let caught: unknown;
     try {
-      relatedFilesFor('src/render/skins.ts::stub-130', ROOT, stub);
+      relatedFilesForAll(['src/render/skins.ts::stub-130'], ROOT, stub, []);
     } catch (e) {
       caught = e;
     }
@@ -979,8 +1103,8 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     mkdirSync(join(ROOT, 'tools/mutate/fixtures'), { recursive: true });
     writeFileSync(orphanAbs, 'export const nothingImportsThis = 1;\n');
     try {
-      const related = relatedFilesFor(orphanRel); // real vitest binary (default param)
-      expect(related).toEqual(new Set());
+      const relatedByFile = relatedFilesForAll([orphanRel], ROOT); // real shared worker
+      expect(relatedByFile.get(orphanRel)).toEqual(new Set());
     } finally {
       rmSync(orphanAbs, { force: true });
     }
@@ -994,7 +1118,7 @@ describe('relatedFilesFor against real broken subprocesses (the exact function a
     const outcomes: string[] = [];
     for (const [label, bin] of [['crash', crashStub], ['missing', missing], ['sigint', sigintStub]] as const) {
       try {
-        relatedFilesFor(`src/render/skins.ts::pairwise-${label}`, ROOT, bin);
+        relatedFilesForAll([`src/render/skins.ts::pairwise-${label}`], ROOT, bin, []);
         outcomes.push('ok');
       } catch (e) {
         const err = e as Error & { interrupted?: boolean; indeterminate?: boolean };

@@ -143,9 +143,10 @@ export function validateManifest(entries) {
  * "not measured", and a mutation like that reports SURVIVES no matter what it does.
  *
  * `relatedFilesFor(file)` returns the Set of test files vitest's own dependency graph
- * says are related to `file` (real implementation: `vitest related`, in run.mjs). This
- * function is pure given that collaborator, so it is testable with a fake graph
- * instead of a real vitest subprocess per case.
+ * says are related to `file` (real implementation: a separate per-source query against
+ * one shared Vitest graph, in run.mjs/reachability.mjs). This function is pure given
+ * that collaborator, so it is testable with a fake graph instead of a real Vitest
+ * context per case.
  *
  * Only the three fields this function actually reads are required in the param type --
  * deliberately narrower than the full `ManifestEntry`, so a caller holding some other

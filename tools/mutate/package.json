@@ -11,6 +11,10 @@
     "run.mjs",
     "lib.mjs",
     "orchestrate.mjs",
+    "reachability.mjs",
     "README.md"
-  ]
+  ],
+  "devDependencies": {
+    "vitest": "^3.2.7"
+  }
 }
