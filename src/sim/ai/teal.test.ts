@@ -405,7 +405,7 @@ describe('tealDecision', () => {
   });
 });
 
-describe('teal shot-plan window (issue #332)', () => {
+describe('teal shot-plan span (issue #332)', () => {
   // The span the shipped teal profile authorises, derived the way teal.ts derives it, so
   // these assertions track ai-profiles.json instead of restating a number beside it.
   const SPAN = Math.round(configFor('teal').ai.shotCommitmentTime * TICK_HZ);
@@ -435,25 +435,25 @@ describe('teal shot-plan window (issue #332)', () => {
     expect(d.nextShotPlanTicks).toBe(SPAN);
   });
 
-  it('counts DOWN while the window is live', () => {
+  it('counts DOWN while the span is live', () => {
     const { d } = openField({ aiShotPlan: 'direct', aiShotPlanTicks: 47 });
     expect(d.nextShotPlanTicks).toBe(46);
   });
 
-  it('a lapsed window whose plan still SOLVES re-arms on the same plan -- no turnover', () => {
+  it('a lapsed span whose plan still SOLVES re-arms on the same plan -- no turnover', () => {
     const { d } = openField({ aiShotPlan: 'direct', aiShotPlanTicks: 1 });
     expect(d.nextShotPlan).toBe('direct'); // direct solves in the open
     expect(d.nextShotPlanTicks).toBe(SPAN);
   });
 
-  it('a lapsed window whose plan does NOT solve is the only way the plan turns over', () => {
+  it('a lapsed span whose plan does NOT solve is the only way the plan turns over', () => {
     const { d } = openField({ aiShotPlan: 'bank', aiShotPlanTicks: 1 }); // no walls -> bank unsolvable
     expect(d.nextShotPlan).toBe('direct');
     // ...and it still fires this tick, via the fallback: a turnover is not a lost shot.
     expect(d.fire).toBe(true);
   });
 
-  it('an UNSOLVABLE plan inside a live window does NOT turn over -- the window is what gates it', () => {
+  it('an UNSOLVABLE plan inside a live span does NOT turn over -- the countdown is what gates it', () => {
     // Same unsolvable-bank geometry as the turnover fixture above; only the countdown
     // differs. This is the negative control for that test: without the `lapsed` term in
     // tealDecision both fixtures would report 'direct'.
@@ -486,7 +486,7 @@ describe('teal shot-plan window (issue #332)', () => {
     expect(d.nextShotPlanTicks).toBe(SPAN);
   });
 
-  it('a tank that has never held a plan starts on bank and arms a full window', () => {
+  it('a tank that has never held a plan starts on bank and arms a full span', () => {
     const { d } = openField({}); // aiShotPlan undefined
     // Bank is unsolvable in the open, so the very first decision is also a turnover: the
     // default is visible in the FALLBACK it fires, not in nextShotPlan.
