@@ -16,7 +16,16 @@ export type SlotSource =
   | { kind: 'bot' }
   | { kind: 'none' };
 
-/** Indexed by slot, length === playerCount. Session-only: never written to Storage. */
+/**
+ * Indexed by slot, length === playerCount.
+ *
+ * Still never written to Storage, and now for a sharper reason than the original "session
+ * only" note: a `SlotSource` names a DEVICE (`padIndex`), and a stored pad index is a
+ * hazard -- unplug one controller, plug in another, reload, and honouring it would bind a
+ * slot to a different physical device than the player assigned. Issue #260 persists the
+ * per-slot ROLE instead (versus-setup.ts) and re-resolves the device from what is actually
+ * connected, so there is no stale index to honour.
+ */
 export type Assignment = SlotSource[];
 
 /**

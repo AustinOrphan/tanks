@@ -19,16 +19,17 @@ import { CUSTOM_KEY } from './customization';
 import { SETTINGS_KEY } from './settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
 import { RUN_KEY } from './run';
+import { VERSUS_SETUP_KEY } from './versus-setup-store';
 import { CAMPAIGN_LEVELS } from '../sim/arena';
 
 /** Every key the six stores own, as the wire strings the browser sees. */
-const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY];
+const ALL_KEYS = [PROGRESS_KEY, STATS_KEY, CUSTOM_KEY, SETTINGS_KEY, ACHIEVEMENTS_KEY, RUN_KEY, VERSUS_SETUP_KEY];
 
 /**
  * One write per store in `GameStores`, keyed by that store's own field name.
  *
  * A keyed record rather than a flat function body so `Object.keys` is an INVENTORY.
- * Adding a seventh store to `GameStores` without adding a driver here fails
+ * Adding an eighth store to `GameStores` without adding a driver here fails
  * `covers every store in GameStores` below -- which is the only thing standing between a
  * new store and a silent bypass of the developer namespace (issue #245). A flat function
  * cannot fail that way: it just quietly stops covering the new store.
@@ -40,9 +41,10 @@ const STORE_WRITES: Record<keyof GameStores, (stores: GameStores) => void> = {
   settings: (s) => s.settings.setTouchScheme('point'),
   achievements: (s) => s.achievements.reset(),
   run: (s) => s.run.startNewRun('level-01'),
+  versusSetup: (s) => s.versusSetup.set({ ...s.versusSetup.get(), players: 4 }),
 };
 
-/** Make each of the six stores write, so their keys have to appear somewhere. */
+/** Make each of the seven stores write, so their keys have to appear somewhere. */
 function writeThroughEveryStore(stores: GameStores): void {
   for (const write of Object.values(STORE_WRITES)) write(stores);
 }
@@ -158,7 +160,7 @@ describe('resolveStorage', () => {
 });
 
 describe('createStores', () => {
-  it('puts all six stores on the storage it was handed, and no others', () => {
+  it('puts all seven stores on the storage it was handed, and no others', () => {
     // Population: all six stores in GameStores, each driven through a write.
     // The exact-set assertion is what catches a store wired to its own private
     // storage (its key would be missing) as well as one writing a stray key.

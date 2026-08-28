@@ -8,6 +8,7 @@ import {
 } from './settings';
 import { createAchievementsStore, type AchievementsStore } from './achievements';
 import { createRunStore, type RunStore } from './run';
+import { createVersusSetupStore, type VersusSetupStore } from './versus-setup-store';
 import { parseDeveloperMode } from './devflags';
 
 /**
@@ -250,14 +251,19 @@ export interface GameStores {
   achievements: AchievementsStore;
   /** The active campaign run -- see run.ts. Distinct from `progress`, per the spec. */
   run: RunStore;
+  /**
+   * The retained VS setup -- see versus-setup-store.ts (issue #260). New here: VS setup
+   * used to be session-only by decision, and #260 supersedes that.
+   */
+  versusSetup: VersusSetupStore;
 }
 
 /**
- * All six stores on ONE storage, by signature.
+ * All seven stores on ONE storage, by signature.
  *
  * loop.ts used to call the resolver once per store. With a real localStorage that
  * was harmless (the same object comes back every time); with the shim it would
- * hand each store its OWN private Map, so the six keys would live in six
+ * hand each store its OWN private Map, so the seven keys would live in seven
  * namespaces and an export of "the save" would see one of them. Taking a single
  * `Storage` makes that structural rather than a rule someone has to remember.
  *
@@ -278,5 +284,6 @@ export function createStores(
     settings: createPlayerSettingsStore(storage, { availability }),
     achievements: createAchievementsStore(storage),
     run: createRunStore(storage),
+    versusSetup: createVersusSetupStore(storage),
   };
 }

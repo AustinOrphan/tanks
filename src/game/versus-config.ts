@@ -13,11 +13,17 @@ import type { VersusCatalogEntry, VersusMode } from '../sim/config/versus-catalo
 import { mulberry32 } from '../sim/ai/player-profile';
 
 /**
- * One versus match's session-scoped selections -- what the setup pane (a later task)
- * collects and what `createVersusLevelSystem` (levels.ts) builds a `LevelSystem` from.
- * Deliberately NOT persisted (spec: "no new store, no persistence" -- same posture as
- * controller assignment): this is plain session state, constructed fresh each time the
- * pane is opened and handed straight to `requestVersusSession`.
+ * One versus match's selections -- what the setup pane collects and what
+ * `createVersusLevelSystem` (levels.ts) builds a `LevelSystem` from.
+ *
+ * NO LONGER SESSION-ONLY. This comment used to read "Deliberately NOT persisted (spec: 'no
+ * new store, no persistence' -- same posture as controller assignment)". Issue #260
+ * supersedes that: the retained setup now lives in `versusSetupStore`
+ * (versus-setup-store.ts), because the pane's displayed choices were being discarded at
+ * Start -- Start disposes the session those choices were mutating.
+ *
+ * What persists is the ROLE PATTERN and the match rules; the device behind each human slot
+ * is re-resolved every page-session and never stored. See versus-setup.ts.
  */
 export interface VersusConfig {
   mode: 'ffa' | 'teams';
