@@ -29,6 +29,7 @@ const SKILLS: Record<string, SkillSpec> = {
     commands: [
       'npm run verify:quick',
       'npm run verify:build',
+      'npm run mutate -- --only <id>',
       'npm run verify:visual',
       'npm run verify:full',
     ],
@@ -40,6 +41,7 @@ const SKILLS: Record<string, SkillSpec> = {
       'npm run gallery',
       'npm run test:gl',
       'npm run trace:browser',
+      'npm run mutate -- --only <id>',
       'npm run verify:visual',
       'npm run verify:full',
     ],
@@ -140,6 +142,19 @@ describe('the Claude Code project skills', () => {
       const text = readFileSync(`${SKILLS_DIR}/${name}/SKILL.md`, 'utf8');
       expect(validateSkill(name, text), name).toEqual([]);
     }
+  });
+
+  it('keeps full-manifest local runs exceptional and CI authority explicit', () => {
+    const mutation = readFileSync(`${SKILLS_DIR}/mutation-check/SKILL.md`, 'utf8');
+    const verify = readFileSync(`${SKILLS_DIR}/verify-change/SKILL.md`, 'utf8');
+    const visual = readFileSync(`${SKILLS_DIR}/visual-check/SKILL.md`, 'utf8');
+
+    expect(mutation).toMatch(/For local candidate verification, run each entry relevant/);
+    expect(mutation).toMatch(/only for a concrete exception/);
+    expect(verify).toMatch(/Do not run `npm run verify:full` locally by default/);
+    expect(verify).toMatch(/`verify \(current\)` runs the complete mutation manifest/);
+    expect(verify).toMatch(/Never call a candidate fully verified while required CI is pending/);
+    expect(visual).toMatch(/Do not run `npm run verify:full` merely because/);
   });
 
   it('makes malformed metadata, permission grants, missing procedures, and command drift fail the guard', () => {

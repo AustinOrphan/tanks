@@ -6,7 +6,7 @@ On-demand detail for repository tools, CI, deployment, and branch protection. Fo
 
 The package scripts separate atomic operations from stable composites. CI uses the atomic
 scripts in separate named steps for clear diagnostics and matrix conditions; people and
-agents should normally start with the composites.
+agents should normally start with the risk-appropriate composites and targeted commands.
 
 | Command | Scope | Typical warm local runtime |
 | --- | --- | ---: |
@@ -17,7 +17,7 @@ agents should normally start with the composites.
 | `npm run verify:quick` | Typecheck, then unit tests | about 1 minute |
 | `npm run verify:build` | Production build, then built-output portability | under 10 seconds |
 | `npm run verify:visual` | Build/portability, GL tests, Chromium trace, and screenshot checks | roughly 30–90 seconds after browser setup |
-| `npm run verify:full` | Quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
+| `npm run verify:full` | Complete core composite: quick gate, mutation manifest, build/portability, and production audit | several minutes; mutation dominates |
 
 The figures are approximate measurements/bands from a warm Node 24 Linux checkout on
 2026-08-21; hardware, cache state, mutation selection, audit networking, and browser
@@ -27,12 +27,14 @@ startup move them substantially. The command contract matters more than the exac
 retain a trailing `--` boundary so `npm test -- <Vitest arguments>` reaches Vitest. For a
 focused test without an implicit typecheck, use `npm run test:unit -- <Vitest arguments>`.
 
-`verify:full` is the complete core, non-browser merge gate. It deliberately does not
-silently skip or install browser prerequisites. Run `verify:visual` in addition when a
-change affects user-visible rendering or renderer/WebGL infrastructure. Playwright is not
-a repository dependency: install the version pinned in `.github/workflows/ci.yml` and its
-Chromium browser before running the visual composite locally. Safari and the cross-OS/
-architecture engine matrix remain separate because Linux cannot reproduce them.
+`verify:full` is the complete core, non-browser composite. It is available for exceptional
+local reproduction of the core CI scope, but it is not the routine local candidate gate or
+proof that a change is merge-ready. It deliberately does not silently skip or install
+browser prerequisites. Run `verify:visual` when a change affects user-visible rendering or
+renderer/WebGL infrastructure. Playwright is not a repository dependency: install the
+version pinned in `.github/workflows/ci.yml` and its Chromium browser before running the
+visual composite locally. Safari and the cross-OS/architecture engine matrix remain
+separate because Linux cannot reproduce them.
 
 ### Constrained-machine escape hatches
 
@@ -59,22 +61,52 @@ Raising the repository default would ship one machine's constraint to every cont
 to CI, where a hung test would take proportionally longer to fail and a genuine performance
 regression could stop tripping the timeout.
 
-The mutation phase also refuses to run when a file named by its manifest has uncommitted
-changes. Run `verify:full` against the clean candidate commit in a clean worktree. While
-editing, run the applicable quick, build, and subsystem checks first; do not discard or
-stash unrelated work merely to satisfy the mutation preflight.
+### Local candidate verification
 
-Risk tiers map to the minimum command set as follows:
+Run directly relevant tests during implementation, then choose the candidate floor from the
+complete diff. The risk tier remains a floor rather than a substitute for targeted evidence:
 
-| Risk | Minimum command set |
+| Risk | Minimum local candidate command set |
 | --- | --- |
 | Low | Directly relevant documentation, formatting, link, or generator checks; no universal composite |
-| Standard | `npm run verify:quick`; add `npm run verify:build` when production output can change and `npm run verify:visual` for user-visible rendering |
-| High | `npm run verify:full`, plus every affected subsystem check; renderer/WebGL work adds `npm run verify:visual` |
+| Standard | `npm run verify:quick`; add `npm run verify:build` when production output can change, selected applicable mutation entries when behavior/code/tests change, and `npm run verify:visual` for user-visible rendering |
+| High | `npm run verify:quick`; add `npm run verify:build` when production output can change, every affected subsystem check, and all applicable mutation entries selected for the touched behavior/code/tests; renderer/WebGL work adds `npm run verify:visual` |
 
-The tier is a floor rather than a substitute for targeted evidence. Simulation changes
-still need the applicable browser/Safari trace; persistence changes still need focused
-compatibility coverage; Pages and artifact-path changes still need built-output review.
+Use `npm run mutate -- --only <id>` for each applicable existing or new mutation entry.
+Continue proving a claimed test gap with a real production mutation that passes before the
+test and fails after it. Add, update, and remeasure manifest entries when a change alters the
+coverage contract. Simulation may also need the golden/browser/Safari trace; persistence may
+need focused compatibility coverage; GL, visuals, portability, generators, and documentation
+checks remain required when their subsystem is affected.
+
+### Full local mutation-manifest exceptions
+
+Local full-manifest execution is exceptional and risk-driven, not a routine pre-PR step or
+an automatic consequence of the high-risk tier. Run `npm run mutate`, or `npm run
+verify:full` when the entire core composite is justified, for a concrete reason such as:
+
+- modifying the mutation harness itself
+- making broad changes to the mutation manifest
+- diagnosing or confirming the repair of a CI mutation failure
+- changing cross-cutting behavior for which targeted mutation selection cannot provide
+  reasonable candidate confidence
+- another specifically identified repository-wide risk
+
+The complete mutation phase refuses to run when a file named by its manifest has
+uncommitted changes. When an exception requires it, use a clean candidate commit in a clean
+worktree. Do not discard or stash unrelated work merely to satisfy the preflight.
+
+### CI and merge verification
+
+CI is authoritative for repository-wide verification. On pull requests, `verify (current)`
+runs the complete mutation manifest, `verify (floor)` verifies the supported Node floor,
+and `visual` remains a required independent browser/rendering gate. The push-to-`main`
+mutation behavior is intentionally unchanged by this policy.
+
+Inspect and resolve every CI failure rather than treating local candidate evidence as a
+substitute. Until all three required contexts pass on the candidate commit, report local
+checks as candidate verification only; do not describe the change as fully verified or
+merge-ready.
 
 Specialized commands remain directly available:
 

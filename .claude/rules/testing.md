@@ -10,6 +10,16 @@ paths:
 
 - Prove the gap first: apply the production mutation, observe the old test set stay green,
   add the test, and observe the mutation fail.
+- During local candidate verification, run every existing or new manifest entry relevant to
+  the behavior, code, and tests touched with `npm run mutate -- --only <id>`. Add, update,
+  and remeasure entries when the coverage contract changes.
+- Do not run the complete manifest locally by default. Reserve `npm run mutate` or
+  `npm run verify:full` for mutation-harness changes, broad manifest edits, CI mutation
+  diagnosis, cross-cutting work that targeted selection cannot cover, or another named
+  repository-wide risk. High-risk classification alone is not a reason.
+- CI's `verify (current)` job is authoritative for the complete mutation manifest. Report
+  selected local mutation evidence precisely and do not claim repository-wide mutation
+  verification before that required check passes.
 - Unit tests that call a stage directly cannot prove composition. Pipeline ordering and
   invocation belong in integration/pipeline tests that enter through the public boundary.
 - Event assertions identify the producer/owner and validate payloads; presence-only checks

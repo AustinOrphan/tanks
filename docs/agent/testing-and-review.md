@@ -146,7 +146,14 @@ any defect a LATER call's own no-op path happens to undo: `run.test.ts`'s
 Classify the complete diff before choosing verification. The tier is a minimum, not a
 ceiling. A mixed change inherits the highest tier present, and uncertainty moves the
 change up rather than down. Tests or documentation accompanying a production change do
-not reduce that production change's tier.
+not reduce that production change's tier. These tiers define local candidate evidence;
+required CI defines final merge verification.
+
+Run directly relevant tests throughout implementation. Whenever behavior, code, or tests
+change, select every applicable existing or new mutation entry and run it locally with
+`npm run mutate -- --only <id>`. Add, update, and remeasure entries when the coverage
+contract changes. A claimed testing gap still requires a real failing production mutation
+before the new test is accepted as closing it.
 
 ### Low risk
 
@@ -203,10 +210,12 @@ or cross subsystem boundaries:
 
 Minimum evidence:
 
-- from a clean candidate worktree, run `npm run verify:full`, the complete core
-  non-browser gate; its mutation phase refuses uncommitted changes to manifest targets
+- run `npm run verify:quick` and add `npm run verify:build` when production output can
+  change
 - run every affected subsystem-specific check, such as the golden trace for simulation,
   persistence compatibility tests, WebGL/visual checks, or built-output portability
+- run all mutation entries applicable to the touched behavior, code, and tests; broaden the
+  selection when multiple consumers or contracts are involved
 - adversarially review invariants, failure modes, compatibility, and expected absences
 - independently reproduce material measurements and claims from primary output
 
@@ -214,6 +223,23 @@ High risk requires strong review, not automatic fanout. Delegate only concrete i
 investigations that benefit from isolated context, large-output containment, or useful
 parallelism. The lead agent owns synthesis, adjudicates every finding, and reruns the
 evidence it relies on.
+
+### Full local mutation-manifest exceptions
+
+Do not run the complete mutation manifest locally by default. High-risk classification by
+itself is not a reason. Running `npm run mutate`, or `npm run verify:full` when the whole
+core composite is justified, remains appropriate when:
+
+- the mutation harness itself changes
+- the mutation manifest changes broadly
+- a CI mutation failure needs diagnosis or its repair needs repository-wide confirmation
+- cross-cutting behavior changes and targeted mutation selection cannot provide reasonable
+  candidate confidence
+- another specifically identified repository-wide risk justifies the cost
+
+The full manifest rewrites its declared targets temporarily and refuses uncommitted target
+files. When an exception applies, run it from a clean candidate commit in a clean worktree;
+do not stash or discard unrelated work merely to make the preflight pass.
 
 ### Cross-tier evidence
 
@@ -225,6 +251,19 @@ evidence it relies on.
 - Simulation behavior needs the golden trace in addition to behavioral tests;
   determinism alone proves only self-consistency.
 - Recompute quoted counts and measurements after the final tree changes.
+
+### CI and merge verification
+
+CI is the authoritative repository-wide merge gate:
+
+- `verify (current)` runs the complete mutation manifest on pull requests
+- `verify (floor)` verifies compatibility with the supported Node floor
+- `visual` remains a required independent rendering gate
+
+Agents must inspect and resolve CI failures; local candidate results do not override them.
+Until all required contexts pass on the candidate commit, report the exact local checks as
+candidate verification and state that CI is pending. Do not report the change as fully
+verified or merge-ready before the required CI gate completes.
 
 ### Delegation
 

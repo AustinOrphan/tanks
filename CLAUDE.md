@@ -20,7 +20,7 @@ and research note.
 ```sh
 npm run verify:quick  # typecheck + unit tests; `npm test` is an alias
 npm run verify:build  # production build + subpath-portability check
-npm run verify:full   # clean candidate tree: quick + mutation + build + audit; no browser
+npm run verify:full   # exceptional local full core gate; CI runs this scope authoritatively
 npm run dev           # Vite development server
 ```
 
@@ -67,21 +67,32 @@ Command behavior and CI/deployment details are in
 
 - Classify the complete diff as low, standard, or high risk before choosing checks. Mixed
   changes use the highest tier present; uncertainty escalates rather than downgrades.
+- Local candidate verification and CI/merge verification are distinct. Report local checks
+  as candidate evidence; do not claim full verification until required CI passes.
 - Low risk covers prose-only docs, comments, and non-runtime metadata: inspect the diff, run
   directly relevant documentation/format/generator checks, and perform a concise self-review.
 - Standard risk covers ordinary application code, agent instructions, and focused tests or
-  tooling: run `npm run verify:quick`, add `npm run verify:build` if production output can
-  change, and review the affected subsystem.
+  tooling: run directly relevant tests during implementation, `npm run verify:quick`, add
+  `npm run verify:build` if production output can change, and review the affected subsystem.
 - High risk covers simulation, persistence/campaign compatibility, renderer/WebGL
-  infrastructure, CI/release behavior, and cross-cutting contracts: from a clean candidate
-  worktree, run `npm run verify:full` plus applicable subsystem checks, and adversarially
-  review invariants and failure modes.
+  infrastructure, CI/release behavior, and cross-cutting contracts: run the quick/build
+  candidate floor, every applicable subsystem check, and a wider adversarial review of
+  invariants, consumers, compatibility, and failure modes.
+- For behavior, code, or tests touched, run every applicable mutation entry locally with
+  `npm run mutate -- --only <id>`; add or update entries when the coverage contract changes.
+  Keep using a real failing production mutation to prove a claimed testing gap is closed.
+- Do not run the complete mutation manifest locally by default. `npm run verify:full` is
+  reserved for changes to the mutation harness, broad manifest edits, CI mutation-failure
+  diagnosis, cross-cutting changes that targeted selection cannot cover with reasonable
+  confidence, or another specifically identified repository-wide risk.
 - User-visible visual changes require visual evidence. Build/deploy, entry-point, PWA, and
   asset-path changes require a built-output portability check.
 - Delegate only a concrete, bounded, independent investigation whose isolation or parallelism
   is worth its startup and handoff cost. Mutating workers use separate worktrees.
-- Before merge, apply the full matrix in `docs/agent/testing-and-review.md#merge-bar` and
-  independently reproduce material claims rather than relaying tool output unexamined.
+- Before merge, apply the full matrix in `docs/agent/testing-and-review.md#merge-bar`.
+  `verify (current)` authoritatively runs the complete mutation manifest; `verify (floor)`
+  covers the supported Node floor; `visual` remains independent. Inspect and resolve every
+  CI failure, and independently reproduce material claims rather than relaying output.
 
 ## Git and pull requests
 
