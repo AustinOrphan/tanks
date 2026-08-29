@@ -106,6 +106,11 @@ import {
   type DevConsoleTarget,
 } from './loop';
 import { versusMapChoices, type VersusConfig } from './versus-config';
+import { boot as bootPage } from '../boot';
+import { createGameStateMachine } from './state';
+import type { AppSettings } from './app-settings';
+import { createAppShell } from './app-shell';
+import type { GameHandle } from './loop';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import {
@@ -511,6 +516,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   const harnessSession: ResolvedSession = resolveSession(campaignDescriptor(), 1, 'test-arena');
   // Faithful to state.ts's initial state -- launch route.
   let currentSurface: HarnessSurface = 'launch';
+  /** The harness's page-level Launch gate -- see `launchGate` in the deps below. */
+  let harnessLaunchDismissed = false;
   /**
    * The session production most recently entered, or `null` before the first
    * `enterGameplay`. The harness's AppLocation is built around THIS rather than
@@ -831,6 +838,21 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     // can push into via `setDetectedPadsFixture` below, mirroring `gamepadConnectedNext`'s
     // own closed-over-mutable convention.
     readDetectedPads: () => detectedPadsFixture,
+    // SESSION-owned audio, which is what a single-session test is about: the engine this
+    // harness hands out is rebuilt per session, so releasing it means disposing it. The
+    // PAGE-owned wiring production uses since issue #317 (one engine, released with
+    // `stopMusic`) is `createBrowserDeps`', and `bootPageOn` below reproduces it exactly
+    // for the reboot tests -- the two differ, so neither stands in for the other.
+    releaseAudio: (engine) => engine.dispose(),
+    // Page-scoped, like the shell's: `harnessLaunchDismissed` lives in THIS closure, not
+    // in the returned deps, so a second session built on the same `makeDeps()` sees the
+    // first session's dismissal -- which is the property the reboot tests measure.
+    launchGate: {
+      dismissed: () => harnessLaunchDismissed,
+      dismiss: () => {
+        harnessLaunchDismissed = true;
+      },
+    },
     createAudio: () => ({
       play: () => {},
       startMusic: () => {
@@ -7378,5 +7400,200 @@ describe('versusResultFromWorld', () => {
     // world the answer is still that survivor's SIDE.
     const w = eliminate(versusWorld('teams', 4), [0, 1, 2]);
     expect(versusResultFromWorld(w).kind).toBe('winner-team');
+  });
+});
+
+/**
+ * The composition seam issue #317 needs, and which did not exist before it.
+ *
+ * `boot.test.ts` replaces `startGame` with a fake that returns `{ dispose() {} }`, so the
+ * splash is not observable there; `loop.test.ts`'s own helpers call `startGameWith`
+ * directly and never run `boot()`. Neither file had a single test mentioning launch or
+ * splash, which is why "every Campaign<->Versus switch re-shows the title screen" could be
+ * true in production with the whole suite green.
+ *
+ * This runs the REAL `boot()` against the REAL `startGameWith`, with only the leaf
+ * collaborators faked (`makeDeps`' renderer, HUD, audio and input). `boot()`'s reboot path
+ * is therefore the thing under test, not a stand-in for it: `requestVersusSession` disposes
+ * the live handle and starts a second real session, exactly as it does on the page.
+ */
+function bootPageOn(h: ReturnType<typeof makeDeps>): {
+  h: ReturnType<typeof makeDeps>;
+  /** Fire the CURRENT session's listener -- see `liveListener`. */
+  pointerdown(): void;
+  keydown(e: Partial<KeyboardEvent>): void;
+  requestVersus(config: VersusConfig): void;
+  requestCampaign(): void;
+  pagehide(): void;
+  sessions(): number;
+} {
+  const root = document.createElement('div');
+  let requestVersus: ((config: VersusConfig) => void) | null = null;
+  let requestCampaign: (() => void) | null = null;
+  let sessions = 0;
+  const pagehideFns: Array<(e: { persisted: boolean }) => void> = [];
+
+  /**
+   * The REAL `createAppShell`, over the harness's leaf fakes.
+   *
+   * `settings` is a stand-in because `boot()` only ever calls `.dispose()` on it and the
+   * settings the SESSION reads come from `h.deps` (`settings`/`effectiveSettings`/
+   * `onSettingsNotice`), which `makeDeps` already owns above the session for the same
+   * reason. `audio` is the harness's engine, built ONCE here rather than per session --
+   * which is the production property under test, not a convenience.
+   */
+  const shellAudio = h.deps.createAudio();
+  const shell = createAppShell({
+    settings: { dispose(): void {} } as unknown as AppSettings,
+    audio: shellAudio,
+  });
+
+  bootPage({
+    root,
+    bootCanvas: (r) => {
+      const canvas = document.createElement('canvas');
+      r.appendChild(canvas);
+      return canvas;
+    },
+    createAppShell: () => shell,
+    startGame: (canvas, uiRoot, versus, reqVersus, reqCampaign): GameHandle => {
+      sessions += 1;
+      requestVersus = reqVersus;
+      requestCampaign = reqCampaign;
+      return startGameWith(canvas, uiRoot, {
+        ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
+        // The REAL state machine, not `makeDeps`' fake.
+        //
+        // This override is the entire point of the seam. `makeDeps` fakes
+        // `createStateMachine` over a `currentSurface` variable that lives in ITS closure,
+        // so a second session built on the same deps inherits the first session's surface
+        // and "the reboot did not replay the splash" passes without production doing
+        // anything. Which location a new session opens at is decided by
+        // `createGameStateMachine` alone (`state.ts`'s `locationAtRoute(launchRoute())`),
+        // so a test that replaces it cannot observe this defect at all.
+        createStateMachine: createGameStateMachine,
+        // ...and `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
+        // harness's own default is session-owned (`releaseAudio` disposes), which would
+        // hand the second session an engine the first one had already latched shut.
+        createAudio: () => shellAudio,
+        releaseAudio: (engine) => engine.stopMusic(),
+        launchGate: {
+          dismissed: () => shell.launchDismissed(),
+          dismiss: () => shell.dismissLaunch(),
+        },
+      });
+    },
+    host: {
+      addEventListener: (_t, fn) => pagehideFns.push(fn),
+      removeEventListener: (_t, fn) => {
+        const i = pagehideFns.indexOf(fn);
+        if (i >= 0) pagehideFns.splice(i, 1);
+      },
+    },
+    reportError: (err) => {
+      throw err;
+    },
+  });
+
+  return {
+    h,
+    pointerdown: () => liveListener<void>(h, 'pointerdown')(undefined),
+    keydown: (e) => liveListener<Partial<KeyboardEvent>>(h, 'keydown')(e),
+    requestVersus: (config) => requestVersus!(config),
+    requestCampaign: () => requestCampaign!(),
+    pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
+    sessions: () => sessions,
+  };
+}
+
+/**
+ * The listener the CURRENT session installed.
+ *
+ * `rec.listeners` and `rec.removed` are both append-only logs, so after a reboot the
+ * first session's `pointerdown` is still in `listeners` even though its teardown
+ * unregistered it. Firing that one would drive a disposed state machine and report
+ * "the splash was never dismissed" for the wrong reason entirely.
+ */
+function liveListener<E = never>(h: ReturnType<typeof makeDeps>, type: string): (e: E) => void {
+  const removed = h.rec.removed.filter(([t]) => t === type).map(([, fn]) => fn);
+  const live = h.rec.listeners.filter(([t]) => t === type).map(([, fn]) => fn).filter((fn) => !removed.includes(fn));
+  if (live.length === 0) throw new Error(`no live ${type} listener`);
+  return live[live.length - 1] as unknown as (e: E) => void;
+}
+
+describe('boot + startGameWith: the Launch gate is once per document load (issue #317)', () => {
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  it('a Campaign -> Versus reboot does not replay the splash', () => {
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    // What the HUD was actually TOLD to paint -- `rec.hudStates` -- not the harness's own
+    // surface variable, which no longer tracks the real state machine driving this session.
+    expect(h.rec.hudStates[0], 'the first session should open on the splash').toBe('launch');
+    page.pointerdown();
+    expect(h.rec.hudStates.at(-1), 'the gesture should have dismissed it').toBe('main-menu');
+
+    const before = h.rec.hudStates.length;
+    page.requestVersus(VS);
+
+    expect(page.sessions(), 'the reboot should have started a second session').toBe(2);
+    expect(
+      h.rec.hudStates.slice(before),
+      'the reboot replayed the splash the player already dismissed',
+    ).not.toContain('launch');
+  });
+
+  it('a KEYBOARD dismissal reports to the page too, not just the pointer one', () => {
+    // Both handlers used to call `sm.dismissLaunch()` and nothing else, and only one of
+    // them needs to forget the page for the splash to come back on a reboot. The keyboard
+    // path is the one with an early return, which is where a second call is easiest to
+    // drop.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.keydown({ key: 'x', repeat: false, target: null });
+    expect(h.rec.hudStates.at(-1), 'the key did not dismiss the splash').toBe('main-menu');
+
+    const before = h.rec.hudStates.length;
+    page.requestVersus(VS);
+    expect(
+      h.rec.hudStates.slice(before),
+      'a splash dismissed by key came back on the reboot',
+    ).not.toContain('launch');
+  });
+
+  it('the reboot stops the outgoing bed and leaves the PAGE audio engine alive', () => {
+    // The failure this pins: with a surviving engine, a session that tore down without
+    // stopping its bed would leave the abandoned level's music playing under the new
+    // menu. The opposite failure is disposing it -- `dispose()` LATCHES (engine.ts), so
+    // `ensureCtx` returns null forever afterwards and every later session is silent.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.pointerdown();
+
+    const stopsBefore = h.rec.musicStops;
+    page.requestVersus(VS);
+
+    expect(
+      h.rec.musicStops - stopsBefore,
+      'the abandoned session left its music bed running under the new session',
+    ).toBe(1);
+    expect(
+      h.rec.disposed,
+      'a session disposed the PAGE audio engine, latching it shut for every later one',
+    ).not.toContain('audio');
+  });
+
+  it('the page teardown DOES dispose the engine the sessions only borrowed', () => {
+    // The other end of the same contract: "a session never disposes it" must not become
+    // "nothing ever does". `boot.ts`'s non-persisted pagehide is the one owner.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.pointerdown();
+    page.requestVersus(VS);
+    expect(h.rec.disposed).not.toContain('audio');
+
+    page.pagehide();
+
+    expect(h.rec.disposed, 'the page went away without releasing the audio engine').toContain('audio');
   });
 });

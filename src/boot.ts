@@ -1,6 +1,6 @@
 import type { GameHandle } from './game/loop';
 import type { VersusConfig } from './game/versus-config';
-import type { AppSettings } from './game/app-settings';
+import type { AppShell } from './game/app-shell';
 
 /**
  * Everything main.ts does, with its collaborators handed in.
@@ -43,13 +43,14 @@ export interface BootDeps {
    * is the SAME shape, symmetric: a versus session's Campaign button reboots BACK to
    * a plain campaign session through it, and it too is the SAME function on every call.
    *
-   * `appSettings` is the SAME instance on every call too, and for a sharper reason than
-   * the two callbacks: it is the page's only settings store and only resolved `Storage`
-   * (issue #320). Every other collaborator a session owns -- audio engine, HUD, renderer,
-   * input -- is rebuilt per session, which is exactly why mute and volume used to reset
-   * on the way into a versus match. Handing the same object to every session is what
-   * makes them survive, and handing a NEW one would silently reintroduce the defect while
-   * every unit test kept passing.
+   * `shell` is the SAME instance on every call too, and for a sharper reason than the two
+   * callbacks: it is the page's only settings store and resolved `Storage` (issue #320),
+   * its only audio engine, and the one place that remembers the Launch gate was already
+   * dismissed (issue #317). HUD, renderer and input are still rebuilt per session, which
+   * is exactly why mute and volume used to reset on the way into a versus match -- and why
+   * the splash used to replay on every one. Handing the same object to every session is
+   * what makes all three survive, and handing a NEW one would silently reintroduce all
+   * three defects while every unit test kept passing.
    */
   readonly startGame: (
     canvas: HTMLCanvasElement,
@@ -57,12 +58,12 @@ export interface BootDeps {
     versus: { config: VersusConfig } | null,
     requestVersusSession: (config: VersusConfig) => void,
     requestCampaignSession: () => void,
-    appSettings: AppSettings,
+    shell: AppShell,
   ) => GameHandle;
   readonly host: BootHost;
   readonly reportError: (err: unknown) => void;
   /**
-   * Builds the page's settings/persistence owner, ONCE.
+   * Builds the page's shell -- settings/persistence, audio engine, Launch gate -- ONCE.
    *
    * Injected rather than imported so a test can drive the storage-denied, malformed and
    * future-schema paths without touching the real `localStorage`, and so the
@@ -72,7 +73,7 @@ export interface BootDeps {
    * and a host that throws on either must land on the same error page a missing WebGL
    * context does rather than an unhandled rejection at module scope.
    */
-  readonly createAppSettings: () => AppSettings;
+  readonly createAppShell: () => AppShell;
 }
 
 export const NO_WEBGL_MESSAGE =
@@ -93,7 +94,7 @@ export function boot(deps: BootDeps): void {
 
     // Built once, before the first session, and handed to every session after it. See
     // BootDeps.startGame's own comment for why "once" is the whole point.
-    const appSettings = deps.createAppSettings();
+    const shell = deps.createAppShell();
 
     let lastVersusConfig: VersusConfig | null = null;
     let handle: GameHandle;
@@ -136,7 +137,7 @@ export function boot(deps: BootDeps): void {
         { config: lastVersusConfig },
         requestVersusSession,
         requestCampaignSession,
-        appSettings,
+        shell,
       );
     };
 
@@ -162,10 +163,10 @@ export function boot(deps: BootDeps): void {
       handle.dispose();
       canvas.remove();
       canvas = deps.bootCanvas(deps.root);
-      handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession, appSettings);
+      handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession, shell);
     };
 
-    handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession, appSettings);
+    handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession, shell);
 
     // startGame's teardown was once unreachable: nothing called it, so the
     // frame loop, the window listeners and the GL context outlived the page.
@@ -182,12 +183,13 @@ export function boot(deps: BootDeps): void {
     const onPageHide = (e: PageHideEvent): void => {
       if (e.persisted) return;
       handle.dispose();
-      // The PAGE is going away, so this is the one place `appSettings` may be disposed --
-      // it releases the OS reduced-motion listener the sessions only ever subscribed to.
-      // Ordered after the session teardown so the session's own unregisters run first.
-      // Deliberately NOT in the bfcache branch above: a frozen page comes back intact and
-      // must come back with its settings still live.
-      appSettings.dispose();
+      // The PAGE is going away, so this is the one place the shell may be disposed -- it
+      // releases the OS reduced-motion listener and the audio engine the sessions only
+      // ever borrowed. Ordered after the session teardown so the session's own
+      // unregisters (and its `releaseAudio`) run first. Deliberately NOT in the bfcache
+      // branch above: a frozen page comes back intact and must come back with its
+      // settings, its audio and its dismissed splash all still live.
+      shell.dispose();
       // Only now is the listener spent. Self-removal replaces `{ once: true }`,
       // which would have burned the registration on the first bfcache entry and
       // left a real unload afterwards with no teardown at all.

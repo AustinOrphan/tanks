@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { GameHandle } from './game/loop';
 import type { VersusConfig } from './game/versus-config';
 import { boot, NO_WEBGL_MESSAGE, type BootDeps } from './boot';
-import type { AppSettings } from './game/app-settings';
+import type { AppShell } from './game/app-shell';
 
 type StartArgs = [
   HTMLCanvasElement,
@@ -12,7 +12,7 @@ type StartArgs = [
   { config: VersusConfig } | null,
   (config: VersusConfig) => void,
   () => void,
-  AppSettings,
+  AppShell,
 ];
 
 function harness(
@@ -49,16 +49,17 @@ function harness(
   let nextId = 0;
   const box = { disposals: 0, appSettingsBuilds: 0, appSettingsDisposals: 0 };
   /**
-   * A stand-in for the page's ONE settings owner. Identity is the whole assertion: every
-   * session must be handed this exact object, because a fresh one per session is the
-   * pre-#320 defect (mute and volume reset on the way into a versus match) wearing a new
-   * shape, and nothing in loop.test.ts's own fakes could see it.
+   * A stand-in for the page's ONE shell. Identity is the whole assertion: every session
+   * must be handed this exact object, because a fresh one per session is the pre-#320
+   * defect (mute and volume reset on the way into a versus match) and the pre-#317 one
+   * (the splash replays on every switch) wearing a new shape, and nothing in
+   * loop.test.ts's own fakes could see either.
    */
   const appSettings = {
     dispose(): void {
       box.appSettingsDisposals += 1;
     },
-  } as unknown as AppSettings;
+  } as unknown as AppShell;
 
   const deps: BootDeps = {
     root,
@@ -72,7 +73,7 @@ function harness(
       canvases.push(canvas);
       return canvas;
     },
-    createAppSettings: (): AppSettings => {
+    createAppShell: (): AppShell => {
       box.appSettingsBuilds += 1;
       if ('throwOnAppSettings' in opts) throw opts.throwOnAppSettings;
       return appSettings;
