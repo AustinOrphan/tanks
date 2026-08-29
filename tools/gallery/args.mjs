@@ -65,6 +65,7 @@ export const DEFAULTS = {
    * loads without a build step.
    */
   skin: 'solid',
+  mineWarn: null,
   hull: null,
   accent: null,
   /**
@@ -189,6 +190,9 @@ export function parseArgs(argv) {
     throw new Error(
       `--scene must be 'gallery' or 'game', or a moment (${MOMENT_IDS.join(', ')}), got '${out.scene}'`,
     );
+  }
+  if (out.mineWarn !== null && !['lance', 'slump', 'spike'].includes(out.mineWarn)) {
+    throw new Error(`--mineWarn must be one of lance|slump|spike, got '${out.mineWarn}'`);
   }
   if (!SKIN_IDS.includes(out.skin)) {
     // A typo'd skin would otherwise reach setPlayerStyle, where `PAINTERS[skin]` is

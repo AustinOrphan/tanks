@@ -48,7 +48,7 @@ Notes:
 - **sandboxDisarmed**: The one boolean flag whose OFF state is true: the sandbox defaults to disarmed even with `dev=1` alone, and `disarmed=0` re-arms it.
 - **shellCount**: In the playtest bundle.
 
-## Valued flags (10)
+## Valued flags (11)
 
 | Flag | Param | Values | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -56,6 +56,7 @@ Notes:
 | `bots` | `bots` | an integer 0-4 (0 is an explicit no-op; 1-4 claim that many of the LAST slots) | `null` | Sets how many of the player slots are computer-controlled -- simulated players riding the same substitution mechanism the `autoplay` flag already uses at slot 0. |
 | `level` | `level` | a 1-based integer index into the campaign, or the literal `sandbox` | `null` | Jumps straight to a level, or to the sandbox rig, instead of resuming the active run. |
 | `mineTrigger` | `mineTrigger` | `none`, `proximity`, `bullet`, `both` | `null` | Overrides what may detonate an UNARMED mine (the shipped world default is 'none'). |
+| `mineWarn` | `mineWarn` | `lance`, `slump`, `spike` | `null` | Draws the mine fuse and proximity warnings with a named experimental treatment (issue #276 playtest round); the shipped default is the glow + illumination pair. |
 | `mode` | `mode` | `ffa`, `teams` | `null` | Sets which versus mode a session builds with -- free-for-all or teams -- instead of the shipped campaign-coop rule (win as every enemy dead, or coop's shared lives). |
 | `players` | `players` | an integer 1-4 (1 is an explicit no-op; 2-4 add co-players) | `null` | Sets how many player-controlled tanks share the world -- couch co-op, generalized past two. |
 | `quality` | `quality` | `low`, `medium`, `high` | `null` | Selects a render quality preset (antialiasing, pixel ratio cap, shadow map size and filter) instead of the shipped `high` default. |

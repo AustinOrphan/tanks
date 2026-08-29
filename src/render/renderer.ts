@@ -5,6 +5,7 @@ import type { SimEvent } from '../sim/events';
 import { createScene, type SceneContext } from './scene';
 import type { RenderQuality } from './quality';
 import { createEntityViews, type EntityViews } from './entities';
+import type { MineWarnStyle } from './mine-warning';
 import { createParticleSystem, type ParticleSystem } from './particles';
 import { createDeathPulseSystem, type DeathPulseSystem } from './death-pulse';
 import { createTreadTrailSystem, type TreadTrailSystem } from './tread-trails';
@@ -36,6 +37,8 @@ export interface RendererOptions {
   readonly mineReach?: boolean;
   /** Dev overlay: print each mine's remaining fuse beside it. */
   readonly mineTimer?: boolean;
+  /** Experimental mine-warning treatment (`mineWarn` dev flag); absent = shipped default. */
+  readonly mineWarn?: MineWarnStyle | null;
   /** The paint shop's saved hull colour, applied from the first frame. */
   readonly playerColor?: string;
   /** The paint shop's saved skin, applied from the first frame. */
@@ -70,7 +73,7 @@ export function createRenderer(
   // pointing at the CURRENT arena's centre.
   let centre: Vec2 = { x: worldWidth / 2, y: worldHeight / 2 };
   const ctx: SceneContext = createScene(canvas, worldWidth, worldHeight, boundary, options.quality);
-  const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures);
+  const entities: EntityViews = createEntityViews(ctx.scene, ctx.textures, options.mineWarn ?? null);
   if (options.playerColor || options.playerSkin || options.playerAccent) {
     entities.setPlayerStyle(
       options.playerColor ?? null,
