@@ -28,6 +28,7 @@
     "trace:beacon:check": "node tools/baseline/beacon-check.mjs",
     "gallery": "node tools/gallery/run.mjs",
     "capture": "node tools/capture/run.mjs",
+    "capture:compare": "node tools/compare/run.mjs",
     "audio": "node tools/audio/render.mjs",
     "issues:audit": "node tools/issues/run.mjs audit",
     "issues:maintain": "node tools/issues/run.mjs event",
