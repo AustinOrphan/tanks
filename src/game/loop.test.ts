@@ -106,6 +106,10 @@ import {
   type DevConsoleTarget,
 } from './loop';
 import { versusMapChoices, type VersusConfig } from './versus-config';
+import { boot as bootPage } from '../boot';
+import { createGameStateMachine } from './state';
+import type { AppSettings } from './app-settings';
+import type { GameHandle } from './loop';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import {
@@ -7378,5 +7382,123 @@ describe('versusResultFromWorld', () => {
     // world the answer is still that survivor's SIDE.
     const w = eliminate(versusWorld('teams', 4), [0, 1, 2]);
     expect(versusResultFromWorld(w).kind).toBe('winner-team');
+  });
+});
+
+/**
+ * The composition seam issue #317 needs, and which did not exist before it.
+ *
+ * `boot.test.ts` replaces `startGame` with a fake that returns `{ dispose() {} }`, so the
+ * splash is not observable there; `loop.test.ts`'s own helpers call `startGameWith`
+ * directly and never run `boot()`. Neither file had a single test mentioning launch or
+ * splash, which is why "every Campaign<->Versus switch re-shows the title screen" could be
+ * true in production with the whole suite green.
+ *
+ * This runs the REAL `boot()` against the REAL `startGameWith`, with only the leaf
+ * collaborators faked (`makeDeps`' renderer, HUD, audio and input). `boot()`'s reboot path
+ * is therefore the thing under test, not a stand-in for it: `requestVersusSession` disposes
+ * the live handle and starts a second real session, exactly as it does on the page.
+ */
+function bootPageOn(h: ReturnType<typeof makeDeps>): {
+  h: ReturnType<typeof makeDeps>;
+  /** Fire the CURRENT session's listener -- see `liveListener`. */
+  pointerdown(): void;
+  requestVersus(config: VersusConfig): void;
+  requestCampaign(): void;
+  pagehide(): void;
+  sessions(): number;
+} {
+  const root = document.createElement('div');
+  let requestVersus: ((config: VersusConfig) => void) | null = null;
+  let requestCampaign: (() => void) | null = null;
+  let sessions = 0;
+  const pagehideFns: Array<(e: { persisted: boolean }) => void> = [];
+
+  bootPage({
+    root,
+    bootCanvas: (r) => {
+      const canvas = document.createElement('canvas');
+      r.appendChild(canvas);
+      return canvas;
+    },
+    // `boot()` only ever calls `.dispose()` on this; the settings the SESSION reads come
+    // from `h.deps` (`settings`/`effectiveSettings`/`onSettingsNotice`), which `makeDeps`
+    // already owns above the session for exactly the same reason.
+    createAppSettings: () => ({ dispose(): void {} }) as unknown as AppSettings,
+    startGame: (canvas, uiRoot, versus, reqVersus, reqCampaign): GameHandle => {
+      sessions += 1;
+      requestVersus = reqVersus;
+      requestCampaign = reqCampaign;
+      return startGameWith(canvas, uiRoot, {
+        ...applyVersusToDeps(h.deps, versus, reqVersus, reqCampaign),
+        // The REAL state machine, not `makeDeps`' fake.
+        //
+        // This override is the entire point of the seam. `makeDeps` fakes
+        // `createStateMachine` over a `currentSurface` variable that lives in ITS closure,
+        // so a second session built on the same deps inherits the first session's surface
+        // and "the reboot did not replay the splash" passes without production doing
+        // anything. Which location a new session opens at is decided by
+        // `createGameStateMachine` alone (`state.ts`'s `locationAtRoute(launchRoute())`),
+        // so a test that replaces it cannot observe this defect at all.
+        createStateMachine: createGameStateMachine,
+      });
+    },
+    host: {
+      addEventListener: (_t, fn) => pagehideFns.push(fn),
+      removeEventListener: (_t, fn) => {
+        const i = pagehideFns.indexOf(fn);
+        if (i >= 0) pagehideFns.splice(i, 1);
+      },
+    },
+    reportError: (err) => {
+      throw err;
+    },
+  });
+
+  return {
+    h,
+    pointerdown: () => liveListener(h, 'pointerdown')(),
+    requestVersus: (config) => requestVersus!(config),
+    requestCampaign: () => requestCampaign!(),
+    pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
+    sessions: () => sessions,
+  };
+}
+
+/**
+ * The listener the CURRENT session installed.
+ *
+ * `rec.listeners` and `rec.removed` are both append-only logs, so after a reboot the
+ * first session's `pointerdown` is still in `listeners` even though its teardown
+ * unregistered it. Firing that one would drive a disposed state machine and report
+ * "the splash was never dismissed" for the wrong reason entirely.
+ */
+function liveListener(h: ReturnType<typeof makeDeps>, type: string): (e?: never) => void {
+  const removed = h.rec.removed.filter(([t]) => t === type).map(([, fn]) => fn);
+  const live = h.rec.listeners.filter(([t]) => t === type).map(([, fn]) => fn).filter((fn) => !removed.includes(fn));
+  if (live.length === 0) throw new Error(`no live ${type} listener`);
+  return live[live.length - 1] as (e?: never) => void;
+}
+
+describe('boot + startGameWith: the Launch gate is once per document load (issue #317)', () => {
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  it('a Campaign -> Versus reboot does not replay the splash', () => {
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    // What the HUD was actually TOLD to paint -- `rec.hudStates` -- not the harness's own
+    // surface variable, which no longer tracks the real state machine driving this session.
+    expect(h.rec.hudStates[0], 'the first session should open on the splash').toBe('launch');
+    page.pointerdown();
+    expect(h.rec.hudStates.at(-1), 'the gesture should have dismissed it').toBe('main-menu');
+
+    const before = h.rec.hudStates.length;
+    page.requestVersus(VS);
+
+    expect(page.sessions(), 'the reboot should have started a second session').toBe(2);
+    expect(
+      h.rec.hudStates.slice(before),
+      'the reboot replayed the splash the player already dismissed',
+    ).not.toContain('launch');
   });
 });
