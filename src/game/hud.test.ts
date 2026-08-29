@@ -165,8 +165,17 @@ describe('createHud panel', () => {
   });
 
   it('shows the title panel once the splash screen is dismissed', () => {
+    // Fake timers because the title screen now CROSSFADES into the menu rather than
+    // cutting (issue #364): the outgoing surface keeps its `--hidden` off until the
+    // transition settles, so the assertion below reads the settled state rather than the
+    // frame the navigation started on. Which screen a player lands on is unchanged, and
+    // that is what this test is for -- `createHud application transition contract` owns
+    // the mid-transition frame.
+    vi.useFakeTimers();
+    try {
     const { hud: h, root } = mount();
     h.setState('main-menu');
+    vi.advanceTimersByTime(1000);
     const splash = root.querySelector('.hud-splash') as HTMLElement;
     expect(splash.classList.contains('hud-splash--hidden')).toBe(true);
     const topbar = root.querySelector('.hud-topbar') as HTMLElement;
@@ -178,6 +187,9 @@ describe('createHud panel', () => {
     expect(action(root).classList.contains('hud-action--hidden'), 'the old action button must hide at title').toBe(true);
     expect(root.querySelector('.hud-new-game')!.classList.contains('hud-new-game--hidden'), 'New Game must show with no progress').toBe(false);
     expect(root.querySelector('.hud-continue')!.classList.contains('hud-continue--hidden'), 'Continue must stay hidden with no progress').toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('leaves the menu hotkeys alive after the title screen is dismissed', () => {
@@ -573,15 +585,33 @@ describe('createHud panel', () => {
     // sweep above is: one sample cannot tell "only on the Main Menu" from "always", and
     // the two surfaces most easily got wrong are the two the Quit button is reachable
     // from -- 'paused' and 'outcome-win', where the arena MUST stay visible.
-    const { hud: h, root } = mount();
-    const ground = root.querySelector('.ui-app-ground') as HTMLElement;
-    const hidden = (): boolean => ground.classList.contains('ui-app-ground--hidden');
+    //
+    // Fake timers because the ground CROSSFADES with the screen above it now (issue
+    // #364) instead of cutting: it stays painted for the transition it is leaving on, so
+    // each leg of the sweep is read at its settled state. The sweep itself is unchanged
+    // and is the point -- one sample cannot tell "only on the Main Menu" from "always".
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      const ground = root.querySelector('.ui-app-ground') as HTMLElement;
+      const hidden = (): boolean => ground.classList.contains('ui-app-ground--hidden');
 
-    h.setState('main-menu');
-    expect(hidden(), 'the menu has no ground under it').toBe(false);
-    for (const s of ['launch', 'playing', 'paused', 'outcome-win', 'outcome-lose'] as const) {
-      h.setState(s);
-      expect(hidden(), `the application ground is covering ${s}`).toBe(true);
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      expect(hidden(), 'the menu has no ground under it').toBe(false);
+      for (const s of ['launch', 'playing', 'paused', 'outcome-win', 'outcome-lose'] as const) {
+        h.setState(s);
+        vi.advanceTimersByTime(1000);
+        expect(hidden(), `the application ground is covering ${s}`).toBe(true);
+        // Back to the menu between legs, so each surface is entered FROM the ground
+        // being up -- otherwise every leg after the first would assert that a ground
+        // which was already down stayed down, and the sweep would stop discriminating.
+        h.setState('main-menu');
+        vi.advanceTimersByTime(1000);
+        expect(hidden(), 'the menu lost its ground on the way back').toBe(false);
+      }
+    } finally {
+      vi.useRealTimers();
     }
   });
 
@@ -3658,5 +3688,258 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     expect(preview.every((b) => b.disabled), 'a preview button is still clickable').toBe(true);
     expect(new Set(preview.map((b) => b.getAttribute('aria-describedby'))))
       .toEqual(new Set(['hud-versus-assignment-note']));
+  });
+});
+
+/*
+ * The one interruptible transition contract (issue #364).
+ *
+ * These run with FAKE TIMERS on purpose. `hud.ts` imports `./hud.css` and vitest is
+ * configured with `css: true`, so the stylesheet IS in the jsdom document here and
+ * `--ui-transition-duration` reads `150ms` -- every transition below is genuinely
+ * deferred, not accidentally synchronous. That was measured before these were written,
+ * not assumed: a suite where the duration resolved to 0 would let every "instant"
+ * assertion pass against unfixed production.
+ */
+describe('createHud application transition contract', () => {
+  const surface = (root: HTMLElement, sel: string): HTMLElement =>
+    root.querySelector(sel) as HTMLElement;
+  const hidden = (root: HTMLElement, sel: string, cls: string): boolean =>
+    surface(root, sel).classList.contains(cls);
+  /** Through the REAL control, like the rest of this suite -- the show* helpers the
+   * contract routes through are internal to createHud and not on the Hud interface. */
+  const click = (root: HTMLElement, sel: string): void => {
+    (root.querySelector(sel) as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
+  };
+
+  it('reads its duration from the stylesheet rather than mirroring it', () => {
+    // Criterion 1, as a BEHAVIOUR rather than a string comparison: "one place defines the
+    // duration" is only true if moving that one place moves the timer. A `const 150` in
+    // hud.ts would satisfy any assertion that merely compared two numbers, and would fail
+    // this.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      document.documentElement.style.setProperty('--ui-transition-duration', '400ms');
+      hud.setState('main-menu');
+      click(root, '.hud-stats-open');
+
+      vi.advanceTimersByTime(399);
+      expect(
+        hidden(root, '.hud-panel', 'hud-panel--hidden'),
+        'the outgoing panel settled on the OLD 150ms, so the stylesheet is not the source',
+      ).toBe(false);
+      vi.advanceTimersByTime(2);
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(true);
+    } finally {
+      document.documentElement.style.removeProperty('--ui-transition-duration');
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves focus at the START of the transition, not at its end', () => {
+    // Criterion 4, asserted at transition start with NO timer advance.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      click(root, '.hud-stats-open');
+      expect(document.activeElement).toBe(surface(root, '.hud-stats'));
+      // ...and the animation has demonstrably not finished, or "at the start" is vacuous.
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves an interrupted transition to the SECOND destination only', () => {
+    // Criterion 3. Two navigations inside one transition window.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      click(root, '.hud-stats-open');
+      click(root, '.hud-achievements-open'); // interrupts, before any timer runs
+      vi.advanceTimersByTime(1000);
+
+      expect(hidden(root, '.hud-achievements', 'hud-achievements--hidden')).toBe(false);
+      expect(
+        hidden(root, '.hud-stats', 'hud-stats--hidden'),
+        'the intermediate screen was left visible',
+      ).toBe(true);
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(true);
+      // No half-applied transition state survives the interruption.
+      for (const sel of ['.hud-panel', '.hud-stats', '.hud-achievements']) {
+        expect(surface(root, sel).classList.contains('ui-surface--leaving'), sel).toBe(false);
+        expect(surface(root, sel).classList.contains('ui-surface--entering'), sel).toBe(false);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('makes every transition instant under the RESOLVED reduced-motion policy', () => {
+    // Criterion 5, with its own negative control in the same test: the `false` branch must
+    // leave the outgoing surface displayed and a timer pending, or the `true` branch is
+    // measuring a suite that was synchronous anyway.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      vi.advanceTimersByTime(1000); // settle the mount, so the counts below start from rest
+
+      // The SAME click, measured on both branches. A raw count would not isolate the
+      // transition: opening this panel also schedules one unrelated 0ms timer that is
+      // there either way, so the honest quantity is the DIFFERENCE the policy makes.
+      hud.setReducedMotion(false);
+      const before = vi.getTimerCount();
+      click(root, '.hud-stats-open');
+      const withMotion = vi.getTimerCount() - before;
+      expect(
+        hidden(root, '.hud-panel', 'hud-panel--hidden'),
+        'NEGATIVE CONTROL: motion on, the outgoing panel must still be displayed',
+      ).toBe(false);
+      vi.advanceTimersByTime(1000);
+      click(root, '.hud-stats-back');
+      vi.advanceTimersByTime(1000);
+
+      hud.setReducedMotion(true);
+      const armed = vi.getTimerCount();
+      click(root, '.hud-stats-open');
+      const reduced = vi.getTimerCount() - armed;
+
+      // The outgoing surface is gone in the same frame -- no advance between.
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(true);
+      expect(hidden(root, '.hud-stats', 'hud-stats--hidden')).toBe(false);
+      expect(surface(root, '.hud-panel').classList.contains('ui-surface--leaving')).toBe(false);
+      expect(
+        withMotion - reduced,
+        'reduced motion did not remove exactly the transition timer',
+      ).toBe(1);
+      // Criterion 5's "and every criterion above still holds" -- focus, at zero duration.
+      expect(document.activeElement).toBe(surface(root, '.hud-stats'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaks no timers and fires no duplicate callbacks under repeated fast navigation', () => {
+    // Criterion 6, asserted rather than observed. The timer count is a DELTA: the HUD
+    // arms an unrelated 4000ms reset and its toast timers, so an absolute count would be
+    // measuring those. The callback halves are the "no listener left attached" half --
+    // Customize's callbacks build and dispose a live WebGL preview in loop.ts, so an
+    // unbalanced pair is a real leak that no timer count would show.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      let opens = 0;
+      let closes = 0;
+      hud.onCustomizeOpen(() => void opens++);
+      hud.onCustomizeClose(() => void closes++);
+
+      vi.advanceTimersByTime(1000); // from rest: the mount's own timers are not the subject
+      const idle = vi.getTimerCount();
+      expect(idle, 'the baseline itself was not at rest').toBe(0);
+      for (let i = 0; i < 4; i++) {
+        click(root, '.hud-customize-open');
+        click(root, '.hud-customize-back');
+      }
+      vi.advanceTimersByTime(1000);
+
+      expect(vi.getTimerCount(), 'a transition timer outlived the burst').toBe(idle);
+      expect(opens, 'open fired a different number of times than close').toBe(closes);
+      expect(opens).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('settles rather than orphans an outstanding transition when the HUD is disposed', () => {
+    // The other half of criterion 6: a HUD torn down mid-transition must leave no timer
+    // behind. `dispose` settles rather than drops, so the surface it was hiding is hidden
+    // -- an element about to be reused must not keep a `--leaving` class.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      // Held BEFORE the teardown: dispose empties the root, so querying after it returns
+      // null and every assertion below would throw rather than measure.
+      const panelEl = surface(root, '.hud-panel');
+      const statsEl = surface(root, '.hud-stats');
+
+      click(root, '.hud-stats-open');
+      expect(panelEl.classList.contains('ui-surface--leaving'), 'nothing was in flight').toBe(
+        true,
+      );
+
+      // Again a CONTRAST, not an absolute: the same unrelated 0ms timer the criterion-5
+      // test accounts for is still outstanding here and is not this teardown's to clear.
+      // What dispose owes is the transition timer, and that is exactly one.
+      const armed = vi.getTimerCount();
+      hud.dispose();
+      expect(armed - vi.getTimerCount(), 'dispose orphaned the transition timer').toBe(1);
+      // SETTLED, not dropped: the surface the transition was hiding is hidden, and no
+      // half-applied class rides on an element that is about to be reused.
+      expect(panelEl.classList.contains('hud-panel--hidden')).toBe(true);
+      expect(panelEl.classList.contains('ui-surface--leaving')).toBe(false);
+      expect(statsEl.classList.contains('ui-surface--entering')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('crossfades the title screen into the menu, and the backdrop with it', () => {
+    // Criterion 2's screen-to-screen and backdrop halves, in the one navigation that
+    // actually moves between two DIFFERENT elements: launch -> main-menu. The four
+    // panel-family states share the single `.hud-panel` element, so they are a content
+    // change rather than a surface change; see setState's own comment.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('launch');
+      vi.advanceTimersByTime(1000);
+      expect(hidden(root, '.hud-splash', 'hud-splash--hidden')).toBe(false);
+
+      hud.setState('main-menu');
+      // Mid-transition: the title screen is still painted, and both it and the arriving
+      // menu carry the contract's classes. This is the crossfade, not a cut.
+      expect(hidden(root, '.hud-splash', 'hud-splash--hidden')).toBe(false);
+      expect(surface(root, '.hud-splash').classList.contains('ui-surface--leaving')).toBe(true);
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(false);
+      expect(surface(root, '.hud-panel').classList.contains('ui-surface--entering')).toBe(true);
+      // The backdrop arrives on the SAME transition rather than cutting in under it.
+      expect(hidden(root, '.ui-app-ground', 'ui-app-ground--hidden')).toBe(false);
+      expect(surface(root, '.ui-app-ground').classList.contains('ui-surface--entering')).toBe(true);
+
+      vi.advanceTimersByTime(1000);
+      expect(hidden(root, '.hud-splash', 'hud-splash--hidden')).toBe(true);
+      expect(surface(root, '.hud-splash').classList.contains('ui-surface--leaving')).toBe(false);
+      expect(surface(root, '.hud-panel').classList.contains('ui-surface--entering')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never runs a transition on gameplay entry', () => {
+    // Criterion 2's boundary, and the issue's explicit rule: no transition may run during
+    // gameplay entry or exit in a way that delays the countdown or the first input. The
+    // menu is gone in the same frame the game starts, with nothing left painted over it.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+
+      const idle = vi.getTimerCount();
+      hud.setState('playing');
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(true);
+      expect(hidden(root, '.ui-app-ground', 'ui-app-ground--hidden')).toBe(true);
+      expect(surface(root, '.hud-panel').classList.contains('ui-surface--leaving')).toBe(false);
+      expect(vi.getTimerCount() - idle, 'gameplay entry scheduled a transition').toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

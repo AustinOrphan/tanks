@@ -242,6 +242,14 @@ interface Recorder {
   /** Every value passed to hud.setBackdrop, in order -- WHICH GROUND the menu stands on. */
   backdrops: HudBackdrop[];
   /**
+   * Every value passed to hud.setReducedMotion, in order (issue #364).
+   *
+   * Recorded rather than swallowed by a no-op fake: the HUD's own suite proves that the
+   * flag makes transitions instant, but only this file can prove loop.ts ever PUSHES it,
+   * and a fake that accepted the call silently would leave that half untested.
+   */
+  reducedMotions: boolean[];
+  /**
    * A SINGLE shared log of every hud.setState and hud.showVersusSetup call, in the
    * exact order loop.ts made them -- unlike hudStates/versusSetupPushes (each its own
    * array), this is what lets a test tell "setState('title') ran before
@@ -453,6 +461,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     sessionKinds: [],
     relaunchTargets: [],
     backdrops: [],
+    reducedMotions: [],
     hudCallLog: [],
     levelSelects: [],
     continueAvailable: [],
@@ -1182,6 +1191,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setBackdrop: (treatment: HudBackdrop) => {
           rec.backdrops.push(treatment);
+        },
+        setReducedMotion: (on: boolean) => {
+          rec.reducedMotions.push(on);
         },
         onCampaignOpen: (cb: () => void) => {
           onCampaignOpenCb = cb;

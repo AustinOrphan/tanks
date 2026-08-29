@@ -1645,6 +1645,12 @@ export function startGameWith(
     hud.setTouchScheme(effective.touchScheme);
     hud.setFireMode(effective.fireMode);
     hud.setHaptics(stored.input.deviceHaptics);
+    // The RESOLVED policy, and the reason this is here rather than a createHud argument:
+    // application transitions must become instant the moment the player picks reduced
+    // motion, with the menu already open (issue #364, criterion 5). This subscription
+    // republishes on a stored preference, a capability, OR the OS motion preference, so
+    // both halves of `'system'` reach the HUD through the one call.
+    hud.setReducedMotion(effective.reducedMotion);
   }
 
   /**
