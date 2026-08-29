@@ -95,6 +95,14 @@ questions: `changedPixels` is how much of the image moved, and `maxChannelDelta`
 Antialiasing noise is many pixels at delta 1; a moved object is fewer pixels at a large
 delta.
 
+A tool-version difference between the two sides is reported, with a warning, rather than
+refused. Every version `capture.json` records is the *caller's* — Node from the process that
+ran the capture, Playwright and Chromium through the symlink to your `node_modules`, FFmpeg
+and ffprobe from your PATH — so in the supported path the two sides cannot actually differ.
+A reported difference means the two refs *record* tool versions differently, not that two
+toolchains ran, and throwing away a real comparison over that would be the wrong trade.
+`compare.json` names the differing keys.
+
 **A zero-difference result is evidence.** It is reported as `IDENTICAL`, exits zero, and
 means what it says — a change that was expected to move pixels and did not is a finding, not
 a tool failure.
