@@ -161,6 +161,14 @@ publication, and `.capture.lock`; exit status is 130 for SIGINT or 143 for SIGTE
 repeated signal force-kills active groups and imposes a bounded hard-exit fallback rather
 than hanging indefinitely.
 
+## Comparing two refs
+
+`npm run capture:compare` runs this command at two refs in throwaway worktrees and assembles
+labelled before/after evidence from the raw frames. It requires the recipe to be identical
+on both sides -- fixture first, behaviour second -- so that a difference image cannot
+confuse a change in the measurement with a change in the code. See
+[`tools/compare/README.md`](../compare/README.md).
+
 ## Determinism boundary
 
 For the same recipe and source, capture preserves the declared scenario inputs, effective

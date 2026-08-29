@@ -178,14 +178,20 @@ describe('compareRefs: refusing before it spends anything', () => {
 
 describe('compareRefs: comparability of the two captures', () => {
   it.each([
-    ['dimensions', { width: 800 }, /different dimensions/],
-    ['device pixel ratio', { dpr: 2 }, /different dimensions/],
-    ['frame count', { kind: 'frames', frameCount: 30 }, /different frame counts|different frame counts|'frames' schedule/],
-  ])('refuses two captures that differ in %s, rather than scaling or padding', async (_label, headShape, message) => {
+    ['dimensions', { width: 640 }, { width: 800 }, /different dimensions/],
+    ['device pixel ratio', { dpr: 1 }, { dpr: 2 }, /different dimensions/],
+    ['schedule kind', { kind: 'still' }, { kind: 'frames', frameCount: 1 }, /captured a 'still' schedule and head captured a 'frames' schedule/],
+    // Same KIND on both sides, so this reaches the frame-count check instead of being
+    // short-circuited by the kind check. The first version of this case set head to
+    // `{kind:'frames', frameCount:30}` against a `still` base and matched a loose regex:
+    // the kind check fired first, the count check was never reached, and a mutation
+    // deleting it outright SURVIVED the whole suite.
+    ['frame count', { kind: 'frames', frameCount: 47 }, { kind: 'frames', frameCount: 30 }, /different frame counts -- base 47, head 30/],
+  ])('refuses two captures that differ in %s, rather than scaling or padding', async (_label, baseShape, headShape, message) => {
     const root = await freshRoot();
     const { deps, events } = harness({
       runCaptureAtRef: async ({ worktree }: { worktree: string }) => ({
-        manifest: worktree.endsWith('head') ? manifest(headShape as object) : manifest(),
+        manifest: manifest((worktree.endsWith('head') ? headShape : baseShape) as object),
         directory: `${worktree}/out`,
       }),
     });
