@@ -5,6 +5,7 @@ import { TOUCH_SETTINGS_KEY } from './touch-settings';
 import { SETTINGS_KEY } from './settings';
 import { ACHIEVEMENTS_KEY } from './achievements';
 import { RUN_KEY } from './run';
+import type { StorageNamespace } from './storage';
 
 /**
  * Serialise and restore the whole save: the six `tanks.*` keys an export carries, as one
@@ -85,8 +86,34 @@ export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS, 
 export interface SaveBlob {
   format: string;
   version: number;
+  /**
+   * Which namespace this data was read from (issue #250).
+   *
+   * OPTIONAL, and its absence is meaningful: a blob written before this field existed
+   * cannot say. That is not the same as "production" -- the namespaced adapter shipped in
+   * #245 on 2026-08-25 while `save.ts` was last touched earlier the same day, so
+   * `?dev=1&saveIo=1` has been exporting DEVELOPER data into unlabelled blobs ever since.
+   * An absent field therefore means genuinely unknown, and `importSave` treats it as
+   * foreign rather than guessing. See `ImportOptions.allowForeignNamespace`.
+   *
+   * Adding it does NOT bump `SAVE_VERSION`, on the precedent already recorded in
+   * `importSave`'s comment for `tanks.settings.v1`: the blob SCHEMA gains an optional
+   * field, and an old build reading a new export ignores what it does not know.
+   */
+  namespace?: StorageNamespace;
   /** Only keys from SAVE_KEYS, each holding the RAW string the browser stored. */
   keys: Record<string, string>;
+}
+
+export interface ImportOptions {
+  /**
+   * Import a blob whose namespace is not this session's -- or which does not state one.
+   *
+   * The deliberate, warned action issue #250 requires. Default false: without it, the
+   * only imports that proceed are the ones provably taken from the namespace they are
+   * going back into.
+   */
+  readonly allowForeignNamespace?: boolean;
 }
 
 export interface ImportResult {
@@ -100,6 +127,17 @@ export interface ImportResult {
   ignored: string[];
   /** Keys whose write THREW -- a full or read-only storage. Distinct from ignored. */
   failed: string[];
+  /**
+   * The namespace the blob declared, or `null` for a blob written before issue #250.
+   * Reported even when the import is refused, so a caller can say WHICH namespace the
+   * player would be crossing into.
+   */
+  sourceNamespace: StorageNamespace | null;
+  /**
+   * Keys restored to their previous value after a failed write, so a partial import does
+   * not survive. See `importSave` for the residual: a restore can itself throw.
+   */
+  rolledBack: string[];
 }
 
 /**
@@ -109,7 +147,7 @@ export interface ImportResult {
  * before a store existed must not blank that store, and "absent" and "empty" are
  * different states to every one of the six readers.
  */
-export function exportSave(storage: Storage): string {
+export function exportSave(storage: Storage, namespace: StorageNamespace): string {
   const keys: Record<string, string> = {};
   for (const key of SAVE_KEYS) {
     let raw: string | null = null;
@@ -121,7 +159,10 @@ export function exportSave(storage: Storage): string {
     }
     if (raw !== null) keys[key] = raw;
   }
-  const blob: SaveBlob = { format: SAVE_FORMAT, version: SAVE_VERSION, keys };
+  // `namespace` before `keys`: the provenance is the first thing a human reading a
+  // pasted blob should see, and the field order is what makes two exports of the same
+  // state byte-identical (see SAVE_KEYS on why the key order is fixed).
+  const blob: SaveBlob = { format: SAVE_FORMAT, version: SAVE_VERSION, namespace, keys };
   return JSON.stringify(blob, null, 2);
 }
 
@@ -143,8 +184,19 @@ export function exportSave(storage: Storage): string {
  * the unknown key exactly as its own allow-list already required. Bumping would have made
  * every new export unreadable by an old build for no wire-format reason.
  */
-export function importSave(storage: Storage, text: string): ImportResult {
-  const empty = { applied: [] as string[], ignored: [] as string[], failed: [] as string[] };
+export function importSave(
+  storage: Storage,
+  text: string,
+  active: StorageNamespace,
+  opts: ImportOptions = {},
+): ImportResult {
+  const empty = {
+    applied: [] as string[],
+    ignored: [] as string[],
+    failed: [] as string[],
+    sourceNamespace: null as StorageNamespace | null,
+    rolledBack: [] as string[],
+  };
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -171,14 +223,48 @@ export function importSave(storage: Storage, text: string): ImportResult {
     return { ok: false, reason: 'missing keys object', ...empty };
   }
 
+  // Provenance, resolved BEFORE anything is written. An unrecognised string is treated as
+  // unknown rather than rejected outright: a future namespace this build has never heard
+  // of is exactly as foreign as a missing field, and refusing on that basis alone would
+  // report "malformed" for a blob that is merely newer.
+  const declared = blob.namespace;
+  const source: StorageNamespace | null =
+    declared === 'production' || declared === 'developer' ? declared : null;
+  const withSource = { ...empty, sourceNamespace: source };
+  if (source !== active && opts.allowForeignNamespace !== true) {
+    // Two distinct reasons, because they are two distinct situations for the player: one
+    // is a save from the OTHER namespace, the other is a save that cannot say. Both are
+    // refused by the same opt-in, and neither writes anything.
+    const reason =
+      source === null
+        ? 'save does not state its namespace; pass allowForeignNamespace to import it anyway'
+        : `save came from the ${source} namespace, not ${active}; pass allowForeignNamespace to import it anyway`;
+    return { ok: false, reason, ...withSource };
+  }
+
   const applied: string[] = [];
   const ignored: string[] = [];
   const failed: string[] = [];
+  const rolledBack: string[] = [];
+  /**
+   * What each key held before this import, captured as it is written.
+   *
+   * `Storage` has no transaction, so "failed imports leave the namespace unchanged"
+   * (issue #250) is implemented as snapshot-and-restore. Captured per key immediately
+   * before its write rather than all up front, because a `getItem` can throw too and a
+   * blob whose first key writes fine should not be refused by a read of its last.
+   */
+  const previous = new Map<string, string | null>();
   for (const key of Object.keys(keys)) {
     const value = (keys as Record<string, unknown>)[key];
     if (!SAVE_IMPORT_KEYS.includes(key) || typeof value !== 'string') {
       ignored.push(key);
       continue;
+    }
+    try {
+      previous.set(key, storage.getItem(key));
+    } catch {
+      previous.set(key, null);
     }
     try {
       storage.setItem(key, value);
@@ -187,7 +273,33 @@ export function importSave(storage: Storage, text: string): ImportResult {
       failed.push(key);
     }
   }
-  return { ok: failed.length === 0, reason: failed.length === 0 ? null : 'storage refused a write', applied, ignored, failed };
+
+  if (failed.length > 0) {
+    // Roll the applied keys back, newest first, so a storage that is full frees space in
+    // the reverse of the order it was consumed.
+    for (const key of [...applied].reverse()) {
+      const before = previous.get(key) ?? null;
+      try {
+        if (before === null) storage.removeItem(key);
+        else storage.setItem(key, before);
+        rolledBack.push(key);
+      } catch {
+        // A restore can itself throw -- see this function's own residual note. The key
+        // stays in `applied`, so the caller can see exactly what survived.
+      }
+    }
+    return {
+      ok: false,
+      reason: 'storage refused a write',
+      applied,
+      ignored,
+      failed,
+      sourceNamespace: source,
+      rolledBack,
+    };
+  }
+
+  return { ok: true, reason: null, applied, ignored, failed, sourceNamespace: source, rolledBack };
 }
 
 /**
@@ -206,18 +318,27 @@ export function importSave(storage: Storage, text: string): ImportResult {
 export interface SaveApi {
   /** The whole save as pretty JSON, ready to copy out of the console. */
   export(): string;
-  /** Restore a blob. Reload the page afterwards: see the note above. */
-  import(text: string): ImportResult;
+  /**
+   * Restore a blob. Reload the page afterwards: see the note above.
+   *
+   * Refuses a blob from another namespace, or one that does not state its namespace,
+   * unless `allowForeignNamespace` is passed -- the deliberate action issue #250 requires
+   * before developer data can land on a production save or the reverse.
+   */
+  import(text: string, opts?: ImportOptions): ImportResult;
+  /** Which namespace this session reads and writes. Shown by the console alongside `keys`. */
+  namespace: StorageNamespace;
   /** The keys an export covers, so the console can show them. */
   keys: readonly string[];
   /** The wider set an import will accept -- `keys` plus the legacy compatibility key. */
   importKeys: readonly string[];
 }
 
-export function createSaveApi(storage: Storage): SaveApi {
+export function createSaveApi(storage: Storage, namespace: StorageNamespace): SaveApi {
   return {
-    export: () => exportSave(storage),
-    import: (text: string) => importSave(storage, text),
+    export: () => exportSave(storage, namespace),
+    import: (text: string, opts?: ImportOptions) => importSave(storage, text, namespace, opts),
+    namespace,
     keys: SAVE_KEYS,
     importKeys: SAVE_IMPORT_KEYS,
   };

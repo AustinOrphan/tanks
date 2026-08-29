@@ -94,7 +94,7 @@ describe('SAVE_IMPORT_KEYS', () => {
 
 describe('exportSave', () => {
   it('carries every present key, with the raw stored strings', () => {
-    const blob = parse(exportSave(seeded()));
+    const blob = parse(exportSave(seeded(), 'production'));
     expect(blob.format).toBe(SAVE_FORMAT);
     expect(blob.version).toBe(SAVE_VERSION);
     expect(Object.keys(blob.keys).sort()).toEqual(SAVE_KEYS.slice().sort());
@@ -107,7 +107,7 @@ describe('exportSave', () => {
   it('omits a key that is absent, rather than exporting null', () => {
     const s = seeded();
     s.removeItem('tanks.achievements.v1');
-    const blob = parse(exportSave(s));
+    const blob = parse(exportSave(s, 'production'));
     expect('tanks.achievements.v1' in blob.keys).toBe(false);
     expect(Object.keys(blob.keys)).toHaveLength(5);
   });
@@ -118,7 +118,7 @@ describe('exportSave', () => {
     // neighbouring app's data in a blob the player pastes into a bug report.
     const s = seeded();
     s.setItem('portfolio.session', 'secret');
-    const blob = parse(exportSave(s));
+    const blob = parse(exportSave(s, 'production'));
     expect('portfolio.session' in blob.keys).toBe(false);
   });
 
@@ -134,7 +134,7 @@ describe('exportSave', () => {
         return s.getItem(key);
       },
     } as Storage;
-    const blob = parse(exportSave(flaky));
+    const blob = parse(exportSave(flaky, 'production'));
     expect(calls).toBe(SAVE_KEYS.length); // it kept going rather than bailing out
     expect(blob.keys['tanks.progress.v1']).toBe('2');
     expect('tanks.stats.v1' in blob.keys).toBe(false);
@@ -143,8 +143,8 @@ describe('exportSave', () => {
   it('is stable: the same state exports byte-identically twice', () => {
     // Fixed key order, so two exports are diffable. Object.keys order would follow
     // insertion order into the storage otherwise.
-    const a = exportSave(seeded());
-    const b = exportSave(seeded());
+    const a = exportSave(seeded(), 'production');
+    const b = exportSave(seeded(), 'production');
     expect(a).toBe(b);
   });
 });
@@ -153,7 +153,7 @@ describe('importSave', () => {
   it('round-trips the whole save into an empty storage', () => {
     const from = seeded();
     const to = createMemoryStorage();
-    const result = importSave(to, exportSave(from));
+    const result = importSave(to, exportSave(from, 'production'), 'production');
     expect(result.ok).toBe(true);
     expect(result.applied.slice().sort()).toEqual(SAVE_KEYS.slice().sort());
     for (const key of SAVE_KEYS) expect(to.getItem(key)).toBe(from.getItem(key));
@@ -164,7 +164,7 @@ describe('importSave', () => {
     // with the imported progress and paint". Reads through the real stores, which
     // is the only thing that proves the blob is still valid to THEM.
     const to = createMemoryStorage();
-    importSave(to, exportSave(seeded()));
+    importSave(to, exportSave(seeded(), 'production'), 'production');
     const stores = createStores(to);
     expect(stores.progress.highestCleared()).toBe(3);
     expect(stores.customization.hull()).toBe('green');
@@ -244,31 +244,31 @@ describe('importSave', () => {
       ],
       [
         'keys is a string',
-        JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: 'nope' }),
+        JSON.stringify({ format: SAVE_FORMAT, version: 1, namespace: 'production', keys: 'nope' }),
         'missing keys object',
       ],
       [
         'keys is null',
-        JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: null }),
+        JSON.stringify({ format: SAVE_FORMAT, version: 1, namespace: 'production', keys: null }),
         'missing keys object',
       ],
       [
         // Not empty: an array carrying something makes the mutant's behaviour
         // visible as a WRITE attempt rather than as a no-op that happens to be ok.
         'keys is an array',
-        JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: ['tanks.progress.v1'] }),
+        JSON.stringify({ format: SAVE_FORMAT, version: 1, namespace: 'production', keys: ['tanks.progress.v1'] }),
         'missing keys object',
       ],
     ];
     for (const [what, text, reason] of cases) {
       const to = seeded();
-      const before = exportSave(to);
-      const result = importSave(to, text);
+      const before = exportSave(to, 'production');
+      const result = importSave(to, text, 'production');
       expect(result.ok, what).toBe(false);
       expect(result.reason, what).toBe(reason);
       expect(result.applied, what).toEqual([]);
       // and the existing save is untouched
-      expect(exportSave(to), what).toBe(before);
+      expect(exportSave(to, 'production'), what).toBe(before);
     }
   });
 
@@ -276,7 +276,8 @@ describe('importSave', () => {
     const to = createMemoryStorage();
     const result = importSave(
       to,
-      JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: { 'tanks.progress.v1': '5' } }),
+      JSON.stringify({ format: SAVE_FORMAT, version: 1, namespace: 'production', keys: { 'tanks.progress.v1': '5' } }),
+      'production',
     );
     expect(result.ok).toBe(true);
     expect(to.getItem('tanks.progress.v1')).toBe('5');
@@ -291,8 +292,10 @@ describe('importSave', () => {
       JSON.stringify({
         format: SAVE_FORMAT,
         version: 1,
+        namespace: 'production',
         keys: { 'tanks.progress.v1': '4', 'portfolio.session': 'stolen', 'tanks.progress.v2': 'x' },
       }),
+      'production',
     );
     expect(result.applied).toEqual(['tanks.progress.v1']);
     expect(result.ignored.sort()).toEqual(['portfolio.session', 'tanks.progress.v2']);
@@ -312,11 +315,13 @@ describe('importSave', () => {
       JSON.stringify({
         format: SAVE_FORMAT,
         version: 1,
+        namespace: 'production',
         keys: {
           'tanks.progress.v1': '4',
           [TOUCH_SETTINGS_KEY]: JSON.stringify({ scheme: 'point', fireMode: 'button', haptics: false }),
         },
       }),
+      'production',
     );
     expect(result.ok).toBe(true);
     expect(result.applied.slice().sort()).toEqual([TOUCH_SETTINGS_KEY, 'tanks.progress.v1'].sort());
@@ -358,11 +363,13 @@ describe('importSave', () => {
       JSON.stringify({
         format: SAVE_FORMAT,
         version: 1,
+        namespace: 'production',
         keys: {
           [SETTINGS_KEY]: canonical,
           [TOUCH_SETTINGS_KEY]: JSON.stringify({ scheme: 'point', fireMode: 'button', haptics: false }),
         },
       }),
+      'production',
     );
     expect(result.ok).toBe(true);
     const settings = createStores(to).settings.snapshot();
@@ -389,7 +396,7 @@ describe('importSave', () => {
     // original bytes.
     createStores(from);
     expect(from.getItem(SETTINGS_KEY)).toBe(future);
-    expect(parse(exportSave(from)).keys[SETTINGS_KEY]).toBe(future);
+    expect(parse(exportSave(from, 'production')).keys[SETTINGS_KEY]).toBe(future);
   });
 
   it('ignores a known key whose value is not a string', () => {
@@ -398,7 +405,8 @@ describe('importSave', () => {
     const to = createMemoryStorage();
     const result = importSave(
       to,
-      JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: { 'tanks.progress.v1': 7 } }),
+      JSON.stringify({ format: SAVE_FORMAT, version: 1, namespace: 'production', keys: { 'tanks.progress.v1': 7 } }),
+      'production',
     );
     expect(result.applied).toEqual([]);
     expect(result.ignored).toEqual(['tanks.progress.v1']);
@@ -411,7 +419,8 @@ describe('importSave', () => {
     const to = seeded();
     const result = importSave(
       to,
-      JSON.stringify({ format: SAVE_FORMAT, version: 1, keys: { 'tanks.progress.v1': '9' } }),
+      JSON.stringify({ format: SAVE_FORMAT, version: 1, namespace: 'production', keys: { 'tanks.progress.v1': '9' } }),
+      'production',
     );
     expect(result.ok).toBe(true);
     expect(to.getItem('tanks.progress.v1')).toBe('9');
@@ -434,8 +443,10 @@ describe('importSave', () => {
       JSON.stringify({
         format: SAVE_FORMAT,
         version: 1,
+        namespace: 'production',
         keys: { 'tanks.progress.v1': '1', 'tanks.stats.v1': '{}' },
       }),
+      'production',
     );
     expect(result.applied).toEqual(['tanks.progress.v1']);
     expect(result.failed).toEqual(['tanks.stats.v1']);
@@ -448,11 +459,11 @@ describe('createSaveApi', () => {
   it('exports and imports through the storage it was built with', () => {
     const from = seeded();
     const to = createMemoryStorage();
-    const api = createSaveApi(to);
+    const api = createSaveApi(to, 'production');
     expect(api.keys).toEqual(SAVE_KEYS);
     // Empty to start: proves `export` reads `to`, not some other storage.
     expect(Object.keys(parse(api.export()).keys)).toEqual([]);
-    api.import(createSaveApi(from).export());
+    api.import(createSaveApi(from, 'production').export());
     expect(Object.keys(parse(api.export()).keys).sort()).toEqual(SAVE_KEYS.slice().sort());
     expect(to.getItem('tanks.progress.v1')).toBe('3');
   });
