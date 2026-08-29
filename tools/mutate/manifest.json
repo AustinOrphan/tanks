@@ -1521,7 +1521,7 @@
     "find": "  return SHELL_MUZZLE_FORWARD - bulletRadius * SHELL_NOSE_REACH_RADII;",
     "replace": "  return SHELL_MUZZLE_FORWARD - bulletRadius;",
     "expect": "killed",
-    "expectFailures": 7,
+    "expectFailures": 8,
     "tests": [
       "src/sim/bullets.test.ts",
       "src/render/entities.test.ts"
@@ -1547,7 +1547,7 @@
     "find": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))",
     "replace": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD))",
     "expect": "killed",
-    "expectFailures": 7,
+    "expectFailures": 8,
     "tests": [
       "src/sim/bullets.test.ts"
     ],
