@@ -298,10 +298,25 @@ import { step } from '../../src/sim/world';
  * History: 056afe386774790c739f7b28a05bb77abb68e5d07b140f6a798bf7731850024e (issue #347 on
  * PR #348, turret angular acceleration) -> a1df14427a1b6e87c57ec9a72a46b97018ccd79e3cd8ea48a6f901bf27f7dda7
  * (issue #344, the AI aim hold) -> cf92a77bc9c5b85600cda0cf6031cc2279ec33bca66cd8c84ff9195436d73bb5
- * (issue #367, the reaction clock) -> the hash below, confirmed by actually running
+ * (issue #367, the reaction clock) -> 37eff51ef55ad4bb3ccda2981a6c4ad8b522ee502ec9a560d8e2467a60ceb787
+ * (issue #237, the muzzle inset) -> the hash below, confirmed by actually running
  * trace.test.ts rather than by computing it a second way.
+ *
+ * MOVED (issue #237, the muzzle inset): SHELL_SPAWN_FORWARD went 0.85 -> 0.525, so every
+ * shell in the trace is born a third of a unit closer to its firer and reaches everything
+ * it hits about three ticks later. `step` -> `stepBullets`/`resolveBulletHits` is squarely
+ * in the traced path, so this fingerprint had to move; a change that left it alone would
+ * have meant the inset was not reaching the sim.
+ *
+ * The old value was re-confirmed to still be reachable before it was replaced: with
+ * SHELL_NOSE_REACH_RADII set to 0 -- the pre-#237 spawn, with every other line of this
+ * change still in place -- trace.test.ts reproduces
+ * 37eff51ef55ad4bb3ccda2981a6c4ad8b522ee502ec9a560d8e2467a60ceb787 exactly. That is the
+ * evidence that the rest of the change (muzzlePoint returning two points, the `fire`
+ * event carrying the muzzle plane) is behaviour-neutral, and that the spawn distance is
+ * the only thing in it that moves the sim.
  */
-export const BASELINE_HASH = '37eff51ef55ad4bb3ccda2981a6c4ad8b522ee502ec9a560d8e2467a60ceb787';
+export const BASELINE_HASH = '5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
