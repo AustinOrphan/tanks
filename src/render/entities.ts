@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind, Tank } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { BULLET_RADIUS, SHELL_SPAWN_FORWARD, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
+import { BULLET_RADIUS, SHELL_MUZZLE_FORWARD, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../game/customization';
@@ -319,15 +319,21 @@ export const BULLET_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
  * does not silently shorten the gun -- at a fixed position, going 0.26 -> 0.38 ate a
  * third of the visible barrel.
  *
- * DERIVED from the sim's SHELL_SPAWN_FORWARD: the sim decides where a shell is born,
- * and the drawn muzzle has to be that same point or the render lies about where the
- * gun fires from. To lengthen the gun, change SHELL_SPAWN_FORWARD -- which correctly
- * moves the spawn point with it. The reach was chosen at PLAY distance, not in
+ * DERIVED from the sim's SHELL_MUZZLE_FORWARD -- the muzzle PLANE, not the shell's spawn
+ * centre. The sim decides where the gun ends, and the drawn opening has to be that same
+ * plane or the render lies about where the gun fires from. To lengthen the gun, change
+ * SHELL_MUZZLE_FORWARD, which moves the opening, the spawn and the flash together.
+ *
+ * DELIBERATELY NOT SHELL_SPAWN_FORWARD (issue #237). That constant is now the shell's
+ * CENTRE, one bullet-radius behind the opening, so deriving the barrel from it would
+ * silently shorten the drawn gun by exactly that radius -- the regression this comment
+ * used to warn about, arriving through the fix rather than through a retune. The reach
+ * was chosen at PLAY distance, not in
  * close-up: the barrel is the shipped aim indicator (aimRay is a dev flag precisely
  * because of that), and a shorter one read as a nub from the real camera even though
  * it looked generous up close.
  */
-export const BARREL_OUT = SHELL_SPAWN_FORWARD - TURRET_R;
+export const BARREL_OUT = SHELL_MUZZLE_FORWARD - TURRET_R;
 /** Length of the flared muzzle at the tip. */
 export const MUZZLE_LEN = 0.18;
 /** How much wider the muzzle is than the barrel behind it. */
