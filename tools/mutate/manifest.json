@@ -1929,5 +1929,113 @@
     "tests": [
       "src/game/hud.css.test.ts"
     ]
+  },
+  {
+    "id": "transition-runs-on-gameplay-entry",
+    "file": "src/game/hud.ts",
+    "find": "      ],\n      undefined,\n      s === 'playing',\n    );",
+    "replace": "      ],\n      undefined,\n      false,\n    );",
+    "expect": "killed",
+    "why": "setState's gameplay-entry exemption, deleted. Issue #364 is explicit that no transition may run during gameplay entry or exit in a way that delays the countdown or the first input; this is the single argument that enforces it, and `false` is what the line would say if that rule had never been read. The failure is silent in every other check: the menu still ends up hidden, the ground still ends up covering the board, and every settled-state assertion in this suite still passes -- only the frames BETWEEN the click and the countdown differ, with the panel painted over the live game for the whole duration and `--leaving` still on it. `never runs a transition on gameplay entry` is the case that measures it, and it measures the timer DELTA rather than an absolute count, so the HUD's unrelated toast and armed-reset timers cannot satisfy it. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 3
+  },
+  {
+    "id": "transition-instant-consults-the-duration",
+    "file": "src/game/transitions.ts",
+    "find": "      const ms = instant ? 0 : deps.durationMs();",
+    "replace": "      const ms = deps.durationMs();",
+    "expect": "killed",
+    "why": "The other half of the gameplay-entry exemption, one level down: the runner honours the caller's `instant` rather than consulting the configured duration. Mutated here the flag still threads through every call site and still typechecks, so `transition-runs-on-gameplay-entry` above -- which pins the ARGUMENT -- cannot see it, and neither can transitions.test.ts, which never passes `instant` (0 call sites, checked). `instant` is a property of WHICH change this is, not of how long transitions happen to be configured to take, so a build that merely set the duration low would not restore the guarantee. `never runs a transition on gameplay entry` is again the case that measures it, through hud.ts's two `showCustomize(false, true)` / `showControllers(false, true)` cleanup closes and setState's own call. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 3
+  },
+  {
+    "id": "interrupted-transition-not-settled-at-all",
+    "file": "src/game/transitions.ts",
+    "find": "      // spin the loop; one level is what a chained navigation actually produces.\n      for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {\n        settleNow();\n      }\n      begin();",
+    "replace": "      // spin the loop; one level is what a chained navigation actually produces.\n      begin();",
+    "expect": "killed",
+    "why": "The interrupt rule removed outright: a second navigation begins without settling the first, so the outgoing screen keeps its `--leaving` class and stays painted underneath the arriving one -- issue #364's third criterion (\"no intermediate screen left visible\") failing in exactly the shape the criterion names. The superseded timer also still fires later and applies its end state on top of a screen that has moved on. Note what CANNOT see this: every settled-state assertion in hud.test.ts advances its timers, and the orphaned settle eventually hides the same element, so the tree converges to the right place a beat late. `a second transition settles the first IMMEDIATELY, leaving nothing intermediate` is the case that measures it, at the frame before any timer runs. Scoped to transitions.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/transitions.test.ts"
+    ],
+    "expectFailures": 2
+  },
+  {
+    "id": "interrupted-transition-settled-once-not-drained",
+    "file": "src/game/transitions.ts",
+    "find": "      // spin the loop; one level is what a chained navigation actually produces.\n      for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {\n        settleNow();\n      }\n      begin();",
+    "replace": "      // spin the loop; one level is what a chained navigation actually produces.\n      settleNow();\n      begin();",
+    "expect": "killed",
+    "why": "The subtler half, and a bug this branch actually measured before fixing: settling ONCE rather than draining. A settle may itself start a transition -- a screen that navigates on arrival -- and that chained one is already superseded by the call in progress; settling once leaves its timer live, then `handle` is overwritten below and the timer is orphaned. Measured at 2 live timers while `pending` reported 1, with the chained transition's end state never applied: both of issue #364's failure modes at once, in the very field its leak criterion is asserted on. The single-settle shape is what a careful reader would write, and `interrupted-transition-not-settled-at-all` above cannot distinguish it from the drain. `a transition started from an INTERRUPTED settle is settled, not orphaned` is the case that measures it. Scoped to transitions.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/transitions.test.ts"
+    ],
+    "expectFailures": 1
+  },
+  {
+    "id": "transition-duration-mirrored-in-typescript",
+    "file": "src/game/hud.ts",
+    "find": "    const raw = getComputedStyle(el).getPropertyValue('--ui-transition-duration').trim();",
+    "replace": "    const raw = '150ms';",
+    "expect": "killed",
+    "why": "Issue #364's FIRST acceptance criterion, inverted into the exact shape it forbids: a second copy of the duration living in the TypeScript, agreeing with the stylesheet today and free to drift from it tomorrow. Everything else stays green -- the transition still runs, still lasts 150ms, and hud.css.test.ts's textual checks still find one declaration of the token in the stylesheet, because this copy is not IN the stylesheet. That is the point: \"one place defines the duration\" is only testable as a BEHAVIOUR, by moving that one place and watching the timer move with it. `reads its duration from the stylesheet rather than mirroring it` is the case that measures it, by setting the token to 400ms and asserting the outgoing surface is still displayed at 399ms. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1
+  },
+  {
+    "id": "reduced-motion-never-shortens-a-transition",
+    "file": "src/game/hud.ts",
+    "find": "  function transitionMs(): number {\n    if (reducedMotion) return 0;",
+    "replace": "  function transitionMs(): number {",
+    "expect": "killed",
+    "why": "The resolved reduced-motion policy reaching the HUD but never reaching the clock. `hud.setReducedMotion` still exists, loop.ts still pushes it on every `effectiveSettings` change, and the field is still assigned -- so the wiring entries in loop.test.ts (`pushes the same resolved policy to the HUD, and again when it changes`) all still pass; only the effect is gone. Issue #364's fifth criterion asks that a player who resolved reduced motion gets instant transitions, and this is the one line that makes the duration zero rather than merely recorded. `makes every transition instant under the RESOLVED reduced-motion policy` is the case that measures it, and it carries its own negative control in the same test: the motion-ON branch asserts the outgoing surface is still displayed and one extra timer is armed, so a suite that had been accidentally synchronous would fail there rather than pass here. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1
+  },
+  {
+    "id": "leaving-surface-still-counted-as-open",
+    "file": "src/game/hud.ts",
+    "find": "    return !surface.el.classList.contains(surface.hidden) && !surface.el.classList.contains(LEAVING);",
+    "replace": "    return !surface.el.classList.contains(surface.hidden);",
+    "expect": "killed",
+    "why": "\"Is this panel open?\" reduced to \"does it lack its hidden class\" -- true before this contract, and wrong the moment a surface keeps that class off for the whole crossfade out. This is a real defect this branch hit and fixed, not a hypothetical: during those 150ms the bare check answers \"open\" for a screen the player has already left, which fired Customize's and Controllers' close callbacks a SECOND time when setState's unconditional close followed a Back button through the same window. Those callbacks build and dispose a live WebGL preview and add/remove window gamepad listeners, so a duplicate is a leak rather than a cosmetic slip -- and no timer count can see it, because the extra work is callbacks, not timers. `leaks no timers and fires no duplicate callbacks under repeated fast navigation` is the case that measures it, asserting opens equals closes equals 4 across a four-round burst. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 4
+  },
+  {
+    "id": "contract-rules-hardcode-their-own-duration",
+    "file": "src/game/hud.css",
+    "find": "  animation: ui-surface-in var(--ui-transition-duration) var(--ui-transition-ease);",
+    "replace": "  animation: ui-surface-in 150ms cubic-bezier(0.2, 0, 0, 1);",
+    "expect": "killed",
+    "why": "The stylesheet half of criterion 1: the entering rule stops reading the tokens and writes the numbers itself. Nothing about the animation changes on screen -- same 150ms, same curve -- which is precisely why a screenshot, a frame capture and every behavioural timing assertion in hud.test.ts stay green: hud.ts reads the TOKEN for its timer, and the token is still declared. What breaks is the criterion, silently: the leaving rule and the entering rule now have separate definitions, and moving `--ui-transition-duration` moves only one of them. `declares the duration and the easing exactly once each, and nowhere as a literal` is the case that measures it, matching a literal duration and a literal `cubic-bezier` inside each contract rule's own body, with a preceding null-check so a renamed rule fails rather than vacuously passes. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ],
+    "expectFailures": 2
+  },
+  {
+    "id": "leaving-surface-keeps-the-keyboard",
+    "file": "src/game/hud.ts",
+    "find": "      if (c.classList.contains(LEAVING)) continue;\n      if (getComputedStyle(c).display !== 'none') return c;",
+    "replace": "      if (getComputedStyle(c).display !== 'none') return c;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "The roving keyboard order following a surface the player has already left. Before this contract exactly one panel-family element was ever displayed, so `activePanelContainer` could return the first one it found; a crossfade deliberately paints two at once for its duration, and the outgoing one is listed FIRST (`panel`), so without this line the arrow keys walked the screen the player just left for the whole 150ms. Nothing about the visible result changes -- both surfaces are painted either way, the destination still arrives, and every settled-state assertion still passes -- which is why this needs a mutation rather than a screenshot. It is the KEYBOARD half of a rule the stylesheet only covers for the mouse (`.ui-surface--leaving` sets `pointer-events: none`), and it is the reachable half of that rule: `isHiddenWithin`'s sibling check is not, because `--leaving` lands only on the seven surface elements, which are exactly the containers that walk excludes. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
   }
 ]
