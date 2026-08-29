@@ -37,7 +37,7 @@ export interface TransitionRunner {
    * `settle` runs after the current duration, or synchronously when that duration is 0
    * (reduced motion, or a build with no stylesheet -- see `durationMs`).
    */
-  run(begin: () => void, settle: () => void): void;
+  run(begin: () => void, settle: () => void, instant?: boolean): void;
   /**
    * Outstanding timers. Structurally 0 or 1, never more: a second `run` settles the first
    * before scheduling its own. Exposed so a test can ASSERT the absence of a leak after
@@ -90,7 +90,7 @@ export function createTransitionRunner(deps: TransitionRunnerDeps): TransitionRu
   }
 
   return {
-    run(begin: () => void, settle: () => void): void {
+    run(begin: () => void, settle: () => void, instant = false): void {
       if (disposed) return;
       // The interrupt rule, and the whole reason this is one owner rather than six
       // independent helpers: the outgoing transition finishes its job first, so the
@@ -120,7 +120,10 @@ export function createTransitionRunner(deps: TransitionRunnerDeps): TransitionRu
       for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {
         settleNow();
       }
-      const ms = deps.durationMs();
+      // `instant` overrides the duration rather than consulting it: issue #364 forbids a
+      // transition during gameplay entry or exit, and that is a property of WHICH change
+      // this is, not of how long transitions happen to be configured to take.
+      const ms = instant ? 0 : deps.durationMs();
       if (ms <= 0) {
         settle();
         return;

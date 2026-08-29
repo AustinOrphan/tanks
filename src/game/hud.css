@@ -97,6 +97,24 @@
   /* Motion. The two durations this file already animates at. */
   --hud-duration-fast: 220ms;
   --hud-duration-slow: 700ms;
+
+  /* Application transitions (issue #364). THE definition of how long a screen change
+   * takes and how it eases -- screen to screen, panel open and close, and backdrop
+   * change all read it, and no screen carries its own copy. 150ms sits mid-range of the
+   * UI/UX direction's 120-180ms budget (section 6).
+   *
+   * `hud.ts` READS this value rather than mirroring it, and treats an unreadable value as
+   * zero -- so a build whose stylesheet did not load degrades to instant rather than to a
+   * second, drifting constant. That is why there is no fallback duration in the
+   * TypeScript.
+   *
+   * Deliberately NOT added to the `prefers-reduced-motion` block below. Issue #364 is
+   * explicit that transitions follow the RESOLVED policy (`effective-settings.ts`'s
+   * `reducedMotion`), not the raw media query: a player who has chosen `full` motion
+   * against an OS that asks for `reduce` must still get their transitions, and a media
+   * query cannot see that choice. `hud.setReducedMotion` drives the duration to zero. */
+  --ui-transition-duration: 150ms;
+  --ui-transition-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ---- Primitives (issue #321) -----------------------------------------------------
@@ -1850,5 +1868,52 @@
     flex: 0 1 40vw;
     min-width: 0;
     box-sizing: border-box;
+  }
+}
+
+/*
+ * The one motion contract (issue #364).
+ *
+ * KEYFRAMES, not `transition`. Every surface's `--hidden` modifier is `display: none`,
+ * and a transition cannot animate out of that: the element has no previous computed
+ * opacity to move from, so the change lands in a single frame however long the duration
+ * says. An animation runs the moment its class is applied, with no starting-value reflow
+ * and no `requestAnimationFrame` dance to force one.
+ *
+ * The leaving surface keeps its `--hidden` OFF for the whole transition -- `hud.ts` adds
+ * it when the transition settles, not when it begins -- so it stays displayed while it
+ * fades. `forwards` holds it at zero for the gap between the animation ending and the
+ * settle, which is what stops a one-frame flash back to full opacity.
+ */
+.ui-surface--entering {
+  animation: ui-surface-in var(--ui-transition-duration) var(--ui-transition-ease);
+}
+
+.ui-surface--leaving {
+  animation: ui-surface-out var(--ui-transition-duration) var(--ui-transition-ease) forwards;
+  /* Out of the layout for the whole fade. Two application surfaces are siblings in the
+   * same centred container, so a leaving one that still occupied space would shove the
+   * arriving one sideways for exactly the duration of the crossfade. */
+  position: absolute;
+  inset: 0;
+  /* It is on its way out and must not eat a click meant for what is arriving underneath. */
+  pointer-events: none;
+}
+
+@keyframes ui-surface-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ui-surface-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }

@@ -57,6 +57,7 @@ import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { teamOf } from '../sim/arena';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { createTransitionRunner } from './transitions';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
 import type { RoundPhase } from '../sim/round';
@@ -1377,6 +1378,112 @@ export function createHud(root: HTMLElement): Hud {
    */
   let armedReset: { btn: HTMLButtonElement; timer: ReturnType<typeof setTimeout> } | null = null;
 
+  /**
+   * The resolved reduced-motion policy (issue #364), pushed by `hud.setReducedMotion`.
+   *
+   * A SETTER, not a construction argument, and not the raw media query. The player can
+   * change this in Settings while the menu is open, and `effective-settings.ts` is the
+   * only place allowed to resolve `'system'` against the OS -- a `createHud` parameter
+   * would freeze whichever answer was true at boot, which for this setting means the
+   * change appears to do nothing until a reboot.
+   */
+  let reducedMotion = false;
+
+  /**
+   * How long one transition lasts, in milliseconds, READ FRESH each time.
+   *
+   * The value comes from `--ui-transition-duration` in `hud.css`, which is its single
+   * definition (issue #364, criterion 1). Nothing here mirrors that number: an unreadable
+   * or unparseable value yields 0, which the runner treats as instant. So a build whose
+   * stylesheet failed to load loses the animation rather than gaining a second constant
+   * that can drift from the one in the stylesheet -- and, usefully, every existing
+   * `hud.test.ts` fixture (which mounts no stylesheet) keeps its original synchronous
+   * behaviour for free.
+   */
+  function transitionMs(): number {
+    if (reducedMotion) return 0;
+    const raw = getComputedStyle(el).getPropertyValue('--ui-transition-duration').trim();
+    if (raw === '') return 0;
+    // `150ms` or `0.15s`; anything else is a stylesheet this build does not understand,
+    // and instant is the safe reading of that.
+    const ms = /^([\d.]+)ms$/.exec(raw);
+    if (ms) return Number(ms[1]);
+    const sec = /^([\d.]+)s$/.exec(raw);
+    if (sec) return Number(sec[1]) * 1000;
+    return 0;
+  }
+
+  const transitions = createTransitionRunner({
+    durationMs: transitionMs,
+    setTimeout: (fn, ms) => setTimeout(fn, ms) as unknown as number,
+    clearTimeout: (h) => clearTimeout(h),
+  });
+
+  /**
+   * The application surfaces this contract moves between. One entry per screen, so a
+   * screen's hidden-class name is written once rather than at each of its call sites.
+   */
+  const PANEL_SURFACE = { el: panel, hidden: 'hud-panel--hidden' };
+  const STATS_SURFACE = { el: statsView, hidden: 'hud-stats--hidden' };
+  const CUSTOMIZE_SURFACE = { el: customizeView, hidden: 'hud-customize--hidden' };
+  const ACH_SURFACE = { el: achView, hidden: 'hud-achievements--hidden' };
+  const LEVELSELECT_SURFACE = { el: levelSelectView, hidden: 'hud-levelselect--hidden' };
+  const CONTROLLERS_SURFACE = { el: controllersView, hidden: 'hud-controllers--hidden' };
+  const VERSUS_SETUP_SURFACE = { el: versusSetupView, hidden: 'hud-versus-setup--hidden' };
+
+  const ENTERING = 'ui-surface--entering';
+  const LEAVING = 'ui-surface--leaving';
+
+  /**
+   * Replace one application surface with another, through the one contract.
+   *
+   * Every panel helper below is this call plus its own render step: they all had the
+   * identical two `classList.toggle` lines and a focus, written out six times, which is
+   * exactly what made "no screen has its own copy" false and left nothing able to
+   * interrupt a transition already in flight.
+   *
+   * `onBegin` runs at the START -- so focus lands on the destination before the animation
+   * ends (criterion 4) rather than racing it, and a panel that renders its contents does
+   * so while it is fading in rather than popping afterwards.
+   */
+  /**
+   * Is this surface currently the open one?
+   *
+   * NOT just "lacks its hidden class". A surface keeps that class off for the whole
+   * crossfade out, so during those 150ms the bare check answers "open" for a screen the
+   * player has already left -- which fired Customize's and Controllers' close callbacks a
+   * second time when `setState`'s unconditional close followed a Back button through the
+   * same window. Those callbacks build and dispose a live WebGL preview, so a duplicate is
+   * not cosmetic.
+   */
+  function isSurfaceOpen(surface: { el: HTMLElement; hidden: string }): boolean {
+    return !surface.el.classList.contains(surface.hidden) && !surface.el.classList.contains(LEAVING);
+  }
+
+  function swapSurface(
+    from: { el: HTMLElement; hidden: string },
+    to: { el: HTMLElement; hidden: string },
+    onBegin?: () => void,
+    instant = false,
+  ): void {
+    transitions.run(
+      () => {
+        to.el.classList.remove(to.hidden);
+        to.el.classList.add(ENTERING);
+        // The outgoing surface keeps its `--hidden` OFF until the settle below: it has to
+        // stay displayed to be seen fading, and `display: none` cannot be animated out of.
+        from.el.classList.add(LEAVING);
+        onBegin?.();
+      },
+      () => {
+        from.el.classList.add(from.hidden);
+        from.el.classList.remove(LEAVING);
+        to.el.classList.remove(ENTERING);
+      },
+      instant,
+    );
+  }
+
   function disarmReset(): void {
     if (!armedReset) return;
     clearTimeout(armedReset.timer);
@@ -1399,13 +1506,15 @@ export function createHud(root: HTMLElement): Hud {
 
   function showStats(show: boolean): void {
     disarmReset(); // entering OR leaving, no reset stays one click from firing
-    statsView.classList.toggle('hud-stats--hidden', !show);
-    panel.classList.toggle('hud-panel--hidden', show);
     if (show) {
-      renderStatsTable();
-      // The PANE, not its first button -- see the roving-focus doc comment below on why
-      // every panel-open transition focuses the container rather than a control.
-      statsView.focus();
+      swapSurface(PANEL_SURFACE, STATS_SURFACE, () => {
+        renderStatsTable();
+        // The PANE, not its first button -- see the roving-focus doc comment below on why
+        // every panel-open transition focuses the container rather than a control.
+        statsView.focus();
+      });
+    } else {
+      swapSurface(STATS_SURFACE, PANEL_SURFACE);
     }
   }
 
@@ -1413,18 +1522,27 @@ export function createHud(root: HTMLElement): Hud {
   // unconditional close (below) -- see onCustomizeOpen/onCustomizeClose's doc comment.
   // Guarded on the ACTUAL transition so a caller building/disposing the live preview
   // off these never sees a redundant open or a redundant dispose.
-  function showCustomize(show: boolean): void {
-    const wasOpen = !customizeView.classList.contains('hud-customize--hidden');
-    customizeView.classList.toggle('hud-customize--hidden', !show);
-    panel.classList.toggle('hud-panel--hidden', show);
+  function showCustomize(show: boolean, instant = false): void {
+    // Read BEFORE the transition begins -- see `isSurfaceOpen` for why "not hidden" alone
+    // is the wrong question during a crossfade.
+    const wasOpen = isSurfaceOpen(CUSTOMIZE_SURFACE);
     if (show) {
-      renderSwatchSelection();
-      renderSkinSelection();
-      renderAccentSelection();
-      customizeView.focus(); // the pane, not the canvas -- see the roving-focus comment below
-      if (!wasOpen) for (const cb of customizeOpenCbs) cb();
-    } else if (wasOpen) {
-      for (const cb of customizeCloseCbs) cb();
+      swapSurface(PANEL_SURFACE, CUSTOMIZE_SURFACE, () => {
+        renderSwatchSelection();
+        renderSkinSelection();
+        renderAccentSelection();
+        customizeView.focus(); // the pane, not the canvas -- see the roving-focus comment below
+        if (!wasOpen) for (const cb of customizeOpenCbs) cb();
+      });
+    } else {
+      swapSurface(
+        CUSTOMIZE_SURFACE,
+        PANEL_SURFACE,
+        () => {
+          if (wasOpen) for (const cb of customizeCloseCbs) cb();
+        },
+        instant,
+      );
     }
   }
 
@@ -1452,11 +1570,13 @@ export function createHud(root: HTMLElement): Hud {
   }
 
   function showAchievements(show: boolean): void {
-    achView.classList.toggle('hud-achievements--hidden', !show);
-    panel.classList.toggle('hud-panel--hidden', show);
     if (show) {
-      renderAchievements();
-      achView.focus();
+      swapSurface(PANEL_SURFACE, ACH_SURFACE, () => {
+        renderAchievements();
+        achView.focus();
+      });
+    } else {
+      swapSurface(ACH_SURFACE, PANEL_SURFACE);
     }
   }
 
@@ -1464,9 +1584,8 @@ export function createHud(root: HTMLElement): Hud {
   // context the way Customize does), and no re-render on open -- setLevelSelect already
   // keeps `.hud-levels` current regardless of visibility ("REPLACE, never append").
   function showLevelSelect(show: boolean): void {
-    levelSelectView.classList.toggle('hud-levelselect--hidden', !show);
-    panel.classList.toggle('hud-panel--hidden', show);
-    if (show) levelSelectView.focus();
+    if (show) swapSurface(PANEL_SURFACE, LEVELSELECT_SURFACE, () => levelSelectView.focus());
+    else swapSurface(LEVELSELECT_SURFACE, PANEL_SURFACE);
   }
 
   /**
@@ -1601,32 +1720,43 @@ export function createHud(root: HTMLElement): Hud {
    * Guarded on the ACTUAL transition, same as showCustomize, so loop.ts's window
    * listener add/remove never sees a redundant open or close.
    */
-  function showControllers(show: boolean): void {
-    const wasOpen = !controllersView.classList.contains('hud-controllers--hidden');
-    controllersView.classList.toggle('hud-controllers--hidden', !show);
-    panel.classList.toggle('hud-panel--hidden', show);
+  function showControllers(show: boolean, instant = false): void {
+    // Read before the transition begins -- same reason as showCustomize.
+    const wasOpen = isSurfaceOpen(CONTROLLERS_SURFACE);
     if (show) {
-      // The only copy that differs between the two entry points -- see this panel's own
-      // markup comment.
-      controllersTitleEl.textContent =
-        shownState === 'paused' ? 'Controllers' : "Choose who's playing";
-      renderControllerRows();
-      controllersView.focus();
-      if (!wasOpen) for (const cb of controllersOpenCbs) cb();
-    } else if (wasOpen) {
-      for (const cb of controllersCloseCbs) cb();
+      swapSurface(PANEL_SURFACE, CONTROLLERS_SURFACE, () => {
+        // The only copy that differs between the two entry points -- see this panel's own
+        // markup comment.
+        controllersTitleEl.textContent =
+          shownState === 'paused' ? 'Controllers' : "Choose who's playing";
+        renderControllerRows();
+        controllersView.focus();
+        if (!wasOpen) for (const cb of controllersOpenCbs) cb();
+      });
+    } else {
+      swapSurface(
+        CONTROLLERS_SURFACE,
+        PANEL_SURFACE,
+        () => {
+          if (wasOpen) for (const cb of controllersCloseCbs) cb();
+        },
+        instant,
+      );
     }
   }
 
   /**
    * Roving-tabindex keyboard (and future D-pad) navigation between the HUD's panels.
    *
-   * Only ONE of `panel`/`customizeView`/`statsView`/`achView`/`levelSelectView`/
-   * `controllersView`/`versusSetupView` is ever visible at a time -- every showX(true)
-   * hides `panel`, and setState's top unconditionally closes every subpanel that does
-   * not own a hide chokepoint of its own (Customize and Controllers route through
-   * their own showX(false) instead, to fire their close callbacks), so
-   * `activePanelContainer` can just return the first one found visible.
+   * Exactly one of `panel`/`customizeView`/`statsView`/`achView`/`levelSelectView`/
+   * `controllersView`/`versusSetupView` is displayed AND not leaving at a time -- every
+   * showX(true) hides `panel`, and setState's top unconditionally closes every subpanel
+   * that does not own a hide chokepoint of its own (Customize and Controllers route
+   * through their own showX(false) instead, to fire their close callbacks), so
+   * `activePanelContainer` can return the first one that qualifies. The "and not leaving"
+   * half arrived with issue #364's transition contract: a crossfade deliberately paints
+   * two surfaces at once for its duration, and the one being replaced must not keep the
+   * keyboard.
    * `null` (nothing visible, i.e. `splash` or `playing`) is the signal to do nothing and
    * let the key fall through to `input.ts` -- arrows must keep driving the tank while
    * playing, which this file must not regress.
@@ -1661,6 +1791,13 @@ export function createHud(root: HTMLElement): Hud {
    */
   function activePanelContainer(): HTMLElement | null {
     for (const c of [panel, customizeView, statsView, achView, levelSelectView, controllersView, versusSetupView]) {
+      // A surface fading OUT is displayed but no longer active (issue #364). Before the
+      // transition contract exactly one of these was ever displayed, and this loop could
+      // return the first one it found; a crossfade puts two on screen at once for the
+      // duration, and the outgoing one is listed first (`panel`), so without this the
+      // arrow keys walked the screen the player just left. Restated invariant: exactly
+      // one surface is displayed AND not leaving.
+      if (c.classList.contains(LEAVING)) continue;
       if (getComputedStyle(c).display !== 'none') return c;
     }
     return null;
@@ -1680,6 +1817,13 @@ export function createHud(root: HTMLElement): Hud {
   function isHiddenWithin(el: HTMLElement, container: HTMLElement): boolean {
     for (let node: HTMLElement | null = el; node && node !== container; node = node.parentElement) {
       if (getComputedStyle(node).display === 'none') return true;
+      // A surface on its way out is out of the focus order IMMEDIATELY, not when its
+      // animation ends (issue #364). It keeps `display` for the whole fade -- that is what
+      // makes it visible enough to fade at all -- so `display: none` cannot see it, and
+      // without this the arrow keys walked onto the outgoing screen's buttons for the
+      // 150ms it was still painted. `pointer-events: none` in the stylesheet covers the
+      // mouse; this is the keyboard and controller half of the same rule.
+      if (node.classList.contains(LEAVING)) return true;
     }
     return false;
   }
@@ -2371,17 +2515,20 @@ export function createHud(root: HTMLElement): Hud {
    * guarded firing the way showCustomize/showControllers need.
    */
   function showVersusSetup(show: boolean, initial?: VersusConfig | null): void {
-    versusSetupView.classList.toggle('hud-versus-setup--hidden', !show);
-    panel.classList.toggle('hud-panel--hidden', show);
-    if (!show) return;
-    if (initial) versusConfigState = { ...initial };
-    renderVersusModeSelection();
-    renderVersusPlayersSelection();
-    renderVersusStockSelection();
-    renderVersusMapRow();
-    renderVersusFriendlyFireRow();
-    renderVersusControllerRows();
-    versusSetupView.focus();
+    if (!show) {
+      swapSurface(VERSUS_SETUP_SURFACE, PANEL_SURFACE);
+      return;
+    }
+    swapSurface(PANEL_SURFACE, VERSUS_SETUP_SURFACE, () => {
+      if (initial) versusConfigState = { ...initial };
+      renderVersusModeSelection();
+      renderVersusPlayersSelection();
+      renderVersusStockSelection();
+      renderVersusMapRow();
+      renderVersusFriendlyFireRow();
+      renderVersusControllerRows();
+      versusSetupView.focus();
+    });
   }
 
   // Continue shares the Resume/Next Level/Play Again/Retry button's own handler: it IS
@@ -2407,7 +2554,13 @@ export function createHud(root: HTMLElement): Hud {
     // Routed through showCustomize (not a bare class add, unlike its stats/achievements
     // siblings above/below) so this path fires onCustomizeClose too -- the common exit
     // from the panel is Start, which arrives here, not through the Back button.
-    showCustomize(false);
+    // INSTANT. This is `setState`'s unconditional cleanup, not a navigation the player
+    // asked for -- three of the five closes around it are already bare class adds -- and
+    // issue #364 forbids a transition during gameplay entry or exit, which this path is
+    // on every time. Animating it also left the panel painted over the live game for the
+    // duration, and its close callbacks (which tear down window listeners) landed a frame
+    // late.
+    showCustomize(false, true);
     achView.classList.add('hud-achievements--hidden');
     levelSelectView.classList.add('hud-levelselect--hidden');
     // Routed through showControllers for the same reason as showCustomize above -- it
@@ -2415,7 +2568,7 @@ export function createHud(root: HTMLElement): Hud {
     // not only the panel's own Back button. Omitted, the panel -- and its live
     // gamepadconnected/disconnected listeners -- would leak onto the live game on
     // Resume, since 'paused' -> 'playing' is one of this function's own early returns.
-    showControllers(false);
+    showControllers(false, true); // instant, same reason as showCustomize above
     // A bare class add, not routed through showVersusSetup(false) -- unlike Customize/
     // Controllers just above, this pane has no onVersusClose to fire (see its own doc
     // comment), so there is nothing a transition-guarded call would buy here that a
