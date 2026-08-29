@@ -66,6 +66,17 @@ describe('the shared heat ramp', () => {
     expect(end.g).toBeGreaterThan(0.9);
     expect(end.b).toBeGreaterThan(0.8);
   });
+
+  it('cook-off swells to 1.10 and slump spreads to 1.45 wide by 0.5 flat, exactly', () => {
+    // The judged magnitudes, pinned: the sync tests only bound these loosely (>1, <0.8),
+    // so a quiet retune toward imperceptible would pass them while gutting the 25px read
+    // the slump won its slot on.
+    expect(cookoffScale(0)).toBe(1);
+    expect(cookoffScale(1)).toBeCloseTo(1.10, 9);
+    expect(slumpScale(0)).toEqual({ xz: 1, y: 1 });
+    expect(slumpScale(1).xz).toBeCloseTo(1.45, 9);
+    expect(slumpScale(1).y).toBeCloseTo(0.5, 9);
+  });
 });
 
 describe('frozenFuseGrowth: pure function of mine state, no view memory', () => {
