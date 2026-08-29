@@ -39,6 +39,8 @@ export interface MomentSceneOptions {
   skin: SkinId;
   hull: string | null;
   accent: string | null;
+  /** Experimental mine-warning treatment (issue #276 playtest round); null = default. */
+  mineWarn?: import('../../src/render/mine-warning').MineWarnStyle | null;
   /**
    * Dressing for the entrance the moment stages -- required here, unlike
    * `GalleryOptions.spawnAnim` (subjects.ts), which is optional and only reaches
@@ -125,7 +127,7 @@ export function buildMomentScene(
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  const views = createEntityViews(scene);
+  const views = createEntityViews(scene, undefined, opts.mineWarn ?? null);
   // Same call the game makes (renderer.ts's setPlayerStyle) -- unconditional here,
   // unlike buildGallery's guarded call, because opts.spawnAnim is always meaningful
   // for a moment (see the field doc above). Slot 0 carries the CLI's hull/skin/accent

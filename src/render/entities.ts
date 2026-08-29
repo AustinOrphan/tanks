@@ -9,6 +9,13 @@ import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '.
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
+import {
+  FUSE_WARNING_SECONDS, mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction,
+  makeMineGlowMesh, makeMineLitMesh, disposeMineGlowMesh, glowRadius, glowOpacity,
+  type MineWarnStyle, heatColor, heatIntensity, cookoffScale, slumpScale,
+  styleBodyGrowthDuringTrip, beadHeight, spikeHeight, mastHeight, LANCE_HEIGHT,
+  makeLanceMesh, makeBeadSprite, makeSpikeMesh, makeMastMesh, disposeMineVert,
+} from './mine-warning';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
@@ -422,9 +429,20 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-const MINE_Y = 0.09;
+/** Mine body centre height; the body spans 0..2*MINE_Y. Exported for the #276 fill's height. */
+export const MINE_Y = 0.09;
 /** How many full bright/dark cycles a mine goes through over its whole fuse. */
 const MINE_PULSE_TURNS = 6;
+/**
+ * The pre-#276 fuse pulse: quadratic phase, so the RATE climbs linearly and a mine that
+ * ticks lazily when dropped is strobing by the time its window opens. Extracted so the
+ * warning window can ramp on FROM its value rather than cutting to a different brightness.
+ */
+function fusePulseAt(elapsed: number): number {
+  return 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
+}
+/** The mine body's radius. Exported because the #276 warning geometry is sized against it. */
+export const MINE_R = 0.28;
 const MINE_ARMED_LO = new THREE.Color(0x3a0a0a);
 const MINE_ARMED_HI = new THREE.Color(0xff3322);
 const MINE_IDLE_LO = new THREE.Color(0x000000);
@@ -446,6 +464,19 @@ function disposeObject(obj: THREE.Object3D): void {
     else if (mat) mat.dispose();
   });
   obj.parent?.remove(obj);
+}
+
+/** A mine's body plus its two lazily-created warning cues (issue #276). */
+interface MineView {
+  mesh: THREE.Mesh;
+  /** Fuse-urgency outline. Its geometry is rebuilt only when the thickness step changes. */
+  ring: THREE.Mesh | null;
+  ringStep: number;
+  /** Proximity-trip fill, scaled from the middle outward. */
+  fill: THREE.Mesh | null;
+  /** A style variant's vertical proximity element (lance/spike/mast) plus its bead. */
+  vert: THREE.Object3D | null;
+  bead: THREE.Sprite | null;
 }
 
 /** A player tank's live entrance/invincibility animation -- see spawn-anim.ts. */
@@ -521,7 +552,15 @@ function applyRingArc(mesh: THREE.Mesh, arc: number): void {
   old.dispose();
 }
 
-export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): EntityViews {
+export function createEntityViews(
+  scene: THREE.Scene,
+  textures?: TextureSet,
+  /**
+   * Experimental mine-warning variant (the `mineWarn` dev flag); null/absent =
+   * the shipped default treatment. See mine-warning.ts's style section.
+   */
+  mineWarnStyle: MineWarnStyle | null = null,
+): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
   // draws the old tank's mesh and colour under the new tank's position. `gen` is the
@@ -613,7 +652,13 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
   }
   const bulletViews = new Map<number, THREE.Group>();
   const blastViews = new Map<number, THREE.Mesh>();
-  const mineViews = new Map<number, THREE.Mesh>();
+  /**
+   * A mine's view is three objects now, not one: the body, plus the two warning cues from
+   * issue #276. `ring` and `fill` are created LAZILY -- most mines spend most of their life
+   * in neither state, and an always-present pair would be two invisible draw calls per mine
+   * per frame for the sake of avoiding one allocation.
+   */
+  const mineViews = new Map<number, MineView>();
   const wallViews = new Map<number, { mesh: THREE.Mesh; signature: string }>();
 
   /**
@@ -1177,7 +1222,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     return mesh;
   }
 
-  const MINE_R = 0.28;
+
   /**
    * Height of the straight side wall, before the dome starts.
    *
@@ -1229,6 +1274,30 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.45, metalness: 0.55 }),
     );
     mesh.castShadow = true;
+    scene.add(mesh);
+    return mesh;
+  }
+
+  /**
+   * The two cues are at DIFFERENT heights now, and the difference is the design.
+   *
+   * The fuse glow lies on the felt UNDER the mine, so the body hides its middle and the
+   * player sees light spilling out around the base. The proximity illumination lies on the
+   * mine's CROWN, just clear of the dome apex (the body spans 0..2*MINE_Y), so it reads as
+   * the mine itself lighting up. One is light under the object, the other is light on it.
+   */
+  const GLOW_Y = 0.02;
+  const CROWN_Y = MINE_Y * 2 + 0.003;
+
+
+  function makeWarningRing(): THREE.Mesh {
+    const mesh = makeMineGlowMesh();
+    scene.add(mesh);
+    return mesh;
+  }
+
+  function makeWarningFill(): THREE.Mesh {
+    const mesh = makeMineLitMesh();
     scene.add(mesh);
     return mesh;
   }
@@ -1522,11 +1591,12 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     for (const m of curr.mines) {
       if (m.detonated) continue;
       seen.add(m.id);
-      let mesh = mineViews.get(m.id);
-      if (!mesh) {
-        mesh = makeMine();
-        mineViews.set(m.id, mesh);
+      let view = mineViews.get(m.id);
+      if (!view) {
+        view = { mesh: makeMine(), ring: null, ringStep: -1, fill: null, vert: null, bead: null };
+        mineViews.set(m.id, view);
       }
+      const mesh = view.mesh;
       mesh.position.set(m.pos.x, MINE_Y, m.pos.y);
       // The fuse, made visible: the mine pulses, and pulses FASTER as it runs out.
       //
@@ -1538,7 +1608,29 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       // Phase is quadratic in elapsed fuse, which makes the RATE climb linearly: the
       // mine ticks lazily when dropped and is strobing by the time it goes off.
       const elapsed = clamp01(1 - m.timer / MINE_TIMER);
-      const pulse = 0.5 - 0.5 * Math.cos(2 * Math.PI * MINE_PULSE_TURNS * elapsed * elapsed);
+      // The two #276 warnings, projected from the same mine state (render/mine-warning.ts).
+      // Both are driven by the SIM's countdowns, never a wall clock, so a paused game holds
+      // its warning frame instead of animating on.
+      const warn = mineWarningFrame(m);
+      /**
+       * INSIDE THE FINAL FUSE WINDOW THE BODY STOPS PULSING and ramps to its brightest
+       * instead (owner ruling on PR #396: "drop the blinking").
+       *
+       * Not an aesthetic tidy-up -- without it the ruling cannot be honoured. The pulse
+       * above is six accelerating cycles across the whole fuse, so by the last half second
+       * it is a strobe, and it is on the mine BODY rather than on any cue this issue added.
+       * Captured frames made that concrete: 25 ticks before detonation the mine was a
+       * full-brightness flash and 1 tick before it was a dark trough. Whatever the warning
+       * cue does, the warning READS as blinking while the body behind it is doing that.
+       *
+       * So the window's own ramp takes over: monotone, brightest at expiry, and continuous
+       * with wherever the pulse happened to be when the window opened, so the handover is
+       * not itself a visible jump. Outside the window the accelerating pulse is untouched --
+       * that is the mine's pre-existing "armed and counting" language, not this issue's.
+       */
+      const pulse = warn.fuse
+        ? 1 - (1 - fusePulseAt(1 - FUSE_WARNING_SECONDS / MINE_TIMER)) * (1 - warn.fuse.growth)
+        : fusePulseAt(elapsed);
       const mat = mesh.material as THREE.MeshStandardMaterial;
       // Armed stays the loud one. An unarmed mine still burns its fuse -- it detonates on
       // expiry whether or not it ever armed -- so it pulses too, but dimly, and the
@@ -1546,13 +1638,132 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       const lo = m.armed ? MINE_ARMED_LO : MINE_IDLE_LO;
       const hi = m.armed ? MINE_ARMED_HI : MINE_IDLE_HI;
       mat.emissive.copy(lo).lerp(hi, pulse);
+
+      if (mineWarnStyle) {
+        // STYLE VARIANT BODY (playtest round -- see mine-warning.ts). The fuse channel is
+        // the body itself: heat (all styles) plus a silhouette change (swell or slump).
+        // During a trip the fuse channel FREEZES (or slams to max, for spike) so the
+        // vertical below is the sole moving channel -- frozenFuseGrowth's rationale.
+        const bodyGrowth = warn.proximity
+          ? styleBodyGrowthDuringTrip(mineWarnStyle, m)
+          : warn.fuse
+            ? warn.fuse.growth
+            : null;
+        if (bodyGrowth !== null) {
+          heatColor(bodyGrowth, mat.emissive);
+          mat.emissiveIntensity = heatIntensity(bodyGrowth);
+          if (mineWarnStyle === 'slump') {
+            const sl = slumpScale(bodyGrowth);
+            mesh.scale.set(sl.xz, sl.y, sl.xz);
+            // The lathe spans +/-MINE_Y about its origin; without this the squashed base
+            // floats and the swollen base sinks. position.y follows the Y scale exactly.
+            mesh.position.y = MINE_Y * sl.y;
+          } else {
+            const sc = cookoffScale(bodyGrowth);
+            mesh.scale.set(sc, sc, sc);
+            mesh.position.y = MINE_Y * sc;
+          }
+        } else {
+          mat.emissiveIntensity = 1;
+          mesh.scale.set(1, 1, 1);
+          mesh.position.y = MINE_Y;
+        }
+      } else {
+        mat.emissiveIntensity = 1;
+        mesh.scale.set(1, 1, 1);
+      }
+
+      if (warn.fuse && !mineWarnStyle) {
+        // The glow is a unit disc, so its growth is pure SCALE -- no geometry churn at all,
+        // unlike the illumination below whose inner edge has to be rebuilt.
+        if (!view.ring) view.ring = makeWarningRing();
+        const r = glowRadius(warn.fuse.growth, MINE_R);
+        view.ring.scale.set(r, r, 1);
+        view.ring.position.set(m.pos.x, GLOW_Y, m.pos.y);
+        (view.ring.material as THREE.MeshBasicMaterial).opacity = glowOpacity(warn.fuse.growth);
+      } else if (view.ring) {
+        // disposeMineGlowMesh, not disposeObject: the glow's falloff texture is bound to
+        // `map`, and Material.dispose() does not release it.
+        disposeMineGlowMesh(view.ring);
+        view.ring = null;
+      }
+
+      if (warn.proximity && !mineWarnStyle) {
+        if (!view.fill) {
+          view.fill = makeWarningFill();
+          view.ringStep = -1;
+        }
+        // Closes in from the OUTSIDE: the annulus keeps the mine's radius as its outer edge
+        // and its INNER edge shrinks to zero, so the last frame is a full disc -- the whole
+        // mine lit. That lives in geometry, so it is rebuilt at most RING_STEPS times.
+        const step = litStepFor(litInnerFraction(warn.proximity.lit));
+        if (step !== view.ringStep) {
+          view.fill.geometry.dispose();
+          view.fill.geometry = makeMineLitRing(MINE_R, step);
+          view.ringStep = step;
+        }
+        view.fill.position.set(m.pos.x, CROWN_Y, m.pos.y);
+      } else if (view.fill) {
+        disposeObject(view.fill);
+        view.fill = null;
+      }
+
+      if (mineWarnStyle && warn.proximity) {
+        // The vertical proximity element. Appears in ONE step at the trip tick (a one-way
+        // appearance, not an oscillation) and is torn down with the mine at the blast.
+        if (!view.vert) {
+          view.vert = mineWarnStyle === 'lance' ? makeLanceMesh()
+            : mineWarnStyle === 'spike' ? makeSpikeMesh()
+            : makeMastMesh();
+          scene.add(view.vert);
+          if (mineWarnStyle === 'lance') {
+            view.bead = makeBeadSprite();
+            scene.add(view.bead);
+          }
+        }
+        const q = warn.proximity.lit;
+        if (mineWarnStyle === 'lance') {
+          // Fixed denominator: the lance stands full height from tick one; only the bead
+          // moves, touching the crown exactly on the last frame before the blast.
+          view.vert.position.set(m.pos.x, LANCE_HEIGHT / 2, m.pos.y);
+          view.bead!.position.set(m.pos.x, beadHeight(q, MINE_Y * 2), m.pos.y);
+        } else if (mineWarnStyle === 'spike') {
+          const h = Math.max(1e-4, spikeHeight(q));
+          view.vert.scale.set(1, h, 1);
+          view.vert.position.set(m.pos.x, MINE_Y * 2, m.pos.y);
+        } else {
+          const h = Math.max(1e-4, mastHeight(q));
+          const rod = view.vert.getObjectByName('mast-rod')!;
+          const tip = view.vert.getObjectByName('mast-tip')!;
+          rod.scale.set(1, h, 1);
+          rod.position.y = h / 2;
+          tip.position.y = h;
+          view.vert.position.set(m.pos.x, MINE_Y * 2, m.pos.y);
+        }
+      } else if (view.vert) {
+        disposeMineVert(view.vert);
+        view.vert = null;
+        if (view.bead) {
+          disposeMineVert(view.bead);
+          view.bead = null;
+        }
+      }
     }
-    for (const [id, mesh] of mineViews) {
+    for (const [id, view] of mineViews) {
       if (!seen.has(id)) {
-        disposeObject(mesh);
+        disposeMineView(view);
         mineViews.delete(id);
       }
     }
+  }
+
+  /** Removes a mine's body AND both warning cues -- see MineView on why they are separate. */
+  function disposeMineView(view: MineView): void {
+    disposeObject(view.mesh);
+    if (view.ring) disposeMineGlowMesh(view.ring);
+    if (view.fill) disposeObject(view.fill);
+    if (view.vert) disposeMineVert(view.vert);
+    if (view.bead) disposeMineVert(view.bead);
   }
 
   /**
@@ -1642,7 +1853,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     enemySkinMaps.clear();
     for (const v of tankViews.values()) disposeObject(v.group);
     for (const m of bulletViews.values()) disposeObject(m);
-    for (const m of mineViews.values()) disposeObject(m);
+    for (const v of mineViews.values()) disposeMineView(v);
     for (const m of blastViews.values()) disposeObject(m);
     for (const v of wallViews.values()) disposeObject(v.mesh);
     tankViews.clear();

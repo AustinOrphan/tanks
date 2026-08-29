@@ -175,6 +175,7 @@ async function run(browser) {
     if (args.timer) p.set('timer', '1');
     if (args.fill) p.set('fill', '1');
     if (args.skin !== 'solid') p.set('skin', args.skin);
+    if (args.mineWarn !== null) p.set('mineWarn', args.mineWarn);
     if (args.hull) p.set('hull', args.hull);
     if (args.accent) p.set('accent', args.accent);
     if (args.frames !== null) p.set('frames', String(args.frames));

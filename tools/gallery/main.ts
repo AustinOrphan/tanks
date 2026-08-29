@@ -20,6 +20,7 @@ const skin = (params.get('skin') ?? 'solid') as SkinId;
 const hull = params.get('hull');
 const accent = params.get('accent');
 const spawnAnimParam = params.get('spawn-anim') as SpawnAnimId | null;
+const mineWarnParam = params.get('mineWarn') as import('../../src/render/mine-warning').MineWarnStyle | null;
 
 // `scene` selects one of MOMENTS's scripted timelines over the default posed gallery.
 // Looking the id up directly in MOMENTS (rather than checking against a hardcoded list)
@@ -42,6 +43,7 @@ const g = moment
       // omitted ?spawn-anim= (the common case: run.mjs only emits it when non-default)
       // reads the same as an un-decorated --scene <moment> invocation.
       spawnAnim: spawnAnimParam ?? DEFAULT_SPAWN_ANIM,
+      mineWarn: mineWarnParam,
     })
   : buildGallery(canvas, W, H, {
       elements: (params.get('elements') ?? 'mine').split(',').map((x) => x.trim()).filter(Boolean),

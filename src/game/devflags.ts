@@ -11,6 +11,7 @@
 import type { TankKind, UnarmedTrigger, GameMode } from '../sim/types';
 import { TANK_KINDS as ALL_TANK_KINDS } from '../sim/config';
 import type { QualityPreset } from '../render/quality';
+import { MINE_WARN_STYLES, type MineWarnStyle } from '../render/mine-warning';
 
 export interface DevFlags {
   /**
@@ -279,6 +280,17 @@ export interface DevFlags {
    * leaves the default rather than guessing at a treatment that does not exist.
    */
   backdrop: BackdropTreatment | null;
+  /**
+   * Which experimental mine-warning treatment the renderer draws (issue #276, PR #396
+   * playtest round). `null` -- absent or unrecognised -- keeps the shipped default
+   * (under-mine glow + outside-in illumination). The named styles are the three
+   * survivors of a judged design pass, kept switchable so the owner can compare them
+   * in one session; the losers are deleted once a ruling lands.
+   *
+   * Reject-to-null, the same idiom as `backdrop`: `?mineWarn=confetti` keeps the
+   * default rather than guessing.
+   */
+  mineWarn: MineWarnStyle | null;
 }
 
 /**
@@ -316,6 +328,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   friendlyFire: false,
   enemyDeathPulse: false,
   backdrop: null,
+  mineWarn: null,
 };
 
 /** Values that read as "off" when a flag is present but negative. */
@@ -358,6 +371,13 @@ function asBackdrop(params: URLSearchParams): BackdropTreatment | null {
   const raw = params.get('backdrop');
   if (raw === null) return null;
   return BACKDROP_TREATMENTS.has(raw) ? (raw as BackdropTreatment) : null;
+}
+
+/** One of the named experimental treatments, or null when absent or unrecognised. */
+function asMineWarn(params: URLSearchParams): MineWarnStyle | null {
+  const raw = params.get('mineWarn');
+  if (raw === null) return null;
+  return MINE_WARN_STYLES.has(raw) ? (raw as MineWarnStyle) : null;
 }
 
 /** A positive integer flag, or null when absent, empty, or not one. */
@@ -488,6 +508,7 @@ export function parseDevFlags(search: string): DevFlags {
     friendlyFire: isOn(params, 'friendlyFire'),
     enemyDeathPulse: isOn(params, 'enemyDeathPulse'),
     backdrop: asBackdrop(params),
+    mineWarn: asMineWarn(params),
   };
   // `playtest` is a BUNDLE, not a field: it expands here into the flags a playtest
   // session always wants, so the one-flag-flips-one-field test on DEV_FLAGS_OFF keeps
@@ -780,6 +801,13 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     description:
       'Draws the application backdrop with a named alternative treatment; the shipped ' +
       'default is the flat application ground.',
+  },
+  mineWarn: {
+    kind: 'valued',
+    values: [...MINE_WARN_STYLES],
+    description:
+      'Draws the mine fuse and proximity warnings with a named experimental treatment ' +
+      '(issue #276 playtest round); the shipped default is the glow + illumination pair.',
   },
 };
 

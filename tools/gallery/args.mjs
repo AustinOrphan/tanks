@@ -65,6 +65,7 @@ export const DEFAULTS = {
    * loads without a build step.
    */
   skin: 'solid',
+  mineWarn: null,
   hull: null,
   accent: null,
   /**
@@ -117,6 +118,9 @@ export const SPAWN_ANIM_IDS = ['warp', 'rise', 'beacon'];
  */
 export const MOMENT_IDS = [
   'fire', 'destroyed', 'respawn', 'ricochet', 'wall-break', 'mine-cycle',
+  // Issue #276's proximity half: the reaction window between tripping an armed mine and
+  // its blast, which no other moment stages (mine-cycle runs a fuse out, wall-break shoots).
+  'mine-proximity',
   'drive', 'pivot', 'traverse',
   // Issue #231's fix-round captures: stopping, overlapping paths, and multiple
   // skins/colors, the three acceptance-criterion states `drive`/`pivot` above did not
@@ -186,6 +190,9 @@ export function parseArgs(argv) {
     throw new Error(
       `--scene must be 'gallery' or 'game', or a moment (${MOMENT_IDS.join(', ')}), got '${out.scene}'`,
     );
+  }
+  if (out.mineWarn !== null && !['lance', 'slump', 'spike'].includes(out.mineWarn)) {
+    throw new Error(`--mineWarn must be one of lance|slump|spike, got '${out.mineWarn}'`);
   }
   if (!SKIN_IDS.includes(out.skin)) {
     // A typo'd skin would otherwise reach setPlayerStyle, where `PAINTERS[skin]` is

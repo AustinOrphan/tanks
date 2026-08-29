@@ -1588,5 +1588,80 @@
       "src/sim/bullets.test.ts"
     ],
     "why": "Inverts resolveBulletHits' outbound exemption, so a tank is immune to its own returning ricochet and vulnerable to the shell it is currently firing. Load-bearing since issue #237: the spawn circle now overlaps the firer's own hull, and this guard is the only thing stopping a tank killing itself on the trigger pull."
+  },
+  {
+    "id": "mine-proximity-fill-never-completes",
+    "file": "src/render/mine-warning.ts",
+    "find": "    const span = MINE_PROXIMITY_DELAY_TICKS - 1;",
+    "replace": "    const span = MINE_PROXIMITY_DELAY_TICKS;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/mine-warning.test.ts"
+    ],
+    "why": "stepMines decrements BEFORE it checks expiry, so the rendered countdown runs DELAY down to 1 and never 0. Dividing by DELAY tops the fill out at 29/30: the cue visibly never completes, and the acceptance criterion 'the final proximity-warning frame agrees with the blast-start tick' is violated by one tick in a way no screenshot review would reliably catch."
+  },
+  {
+    "id": "mine-warning-audio-cues-collapse-to-one",
+    "file": "src/audio/director.ts",
+    "find": "        engine.play('mine-fuse-warn');",
+    "replace": "        engine.play('mine-trip');",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/audio/director.test.ts"
+    ],
+    "why": "Both events would still make a sound, so 'the warnings are audible' stays true while the ONE thing issue #276 is about -- that a player can tell 'you tripped this' from 'time is running out' -- is destroyed. Pins the distinction rather than the presence."
+  },
+  {
+    "id": "mine-warning-haptics-lose-their-distance-gate",
+    "file": "src/game/haptics.ts",
+    "find": "        if (playerPos !== null && distance(e.pos, playerPos) <= MINE_DANGER_RADIUS) {\n          vibrate(MINE_TRIP_PATTERN_MS);",
+    "replace": "        if (playerPos !== null) {\n          vibrate(MINE_TRIP_PATTERN_MS);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/game/haptics.test.ts"
+    ],
+    "why": "Ungated, a mine tripped anywhere on the map buzzes this player's device -- the presence-only anti-pattern CLAUDE.md names, and the mechanism by which several simultaneous mines become the unbounded spam the issue asks us to prevent. The gate is also what makes the cue mean 'near YOU'."
+  },
+  {
+    "id": "mine-fuse-glow-growth-frozen",
+    "file": "src/render/mine-warning.ts",
+    "find": "  return mineRadius * (GLOW_START_SCALE + (GLOW_END_SCALE - GLOW_START_SCALE) * clamp01(growth));",
+    "replace": "  return mineRadius * GLOW_START_SCALE;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/render/mine-warning.test.ts",
+      "src/render/mine-warning.sync.test.ts"
+    ],
+    "why": "Growth IS the fuse cue now that the blink is gone (owner ruling on PR #396): with the radius frozen the glow still appears, still brightens, and still ends exactly at the blast, so every timing assertion stays green while the thing that communicates urgency has stopped moving. Replaces the retired mine-fuse-ring-thickness-frozen, which anchored on a ring that no longer exists."
+  },
+  {
+    "id": "mine-proximity-lights-from-the-inside-out",
+    "file": "src/render/mine-warning.ts",
+    "find": "  return 1 - clamp01(lit);",
+    "replace": "  return clamp01(lit);",
+    "expect": "killed",
+    "expectFailures": 4,
+    "tests": [
+      "src/render/mine-warning.test.ts",
+      "src/render/mine-warning.sync.test.ts"
+    ],
+    "why": "THE DIRECTION IS THE RULING. Inverting this reproduces the previous revision exactly -- a lit region growing from the centre outward instead of closing in from the rim -- using the same numbers read the other way round. Every timing assertion (starts empty, full on the blast frame, monotone) passes under both, so only an assertion about which EDGE moves can tell them apart."
+  },
+  {
+    "id": "mine-fuse-glow-blinks-again",
+    "file": "src/render/mine-warning.ts",
+    "find": "    fuse = { growth: clamp01(1 - mine.timer / FUSE_WARNING_SECONDS) };",
+    "replace": "    { const g = clamp01(1 - mine.timer / FUSE_WARNING_SECONDS); fuse = { growth: Math.floor(g * 12) % 2 === 0 ? g : g * 0.4 }; }",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/render/mine-warning.test.ts",
+      "src/render/mine-warning.sync.test.ts"
+    ],
+    "why": "The blink was removed for a reason that outlives the aesthetic preference: sustained flashing above ~3 Hz is a photosensitivity hazard, and the previous revision could only BOUND it at 6 Hz rather than remove it. This entry reintroduces an oscillation and must fail, so the monotone guarantee is enforced rather than merely intended."
   }
 ]

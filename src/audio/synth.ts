@@ -38,6 +38,8 @@ export type SfxKey =
   | 'explosion'
   | 'mine-drop'
   | 'mine-arm'
+  | 'mine-fuse-warn'
+  | 'mine-trip'
   | 'mine-boom'
   | 'victory'
   | 'defeat';
@@ -192,6 +194,34 @@ const RECIPES: Record<
   'mine-arm': (c, t, r) => [
     toneVoice(c, t, { from: 620, duration: 0.07, peak: 0.16, type: 'square' }, r),
     toneVoice(c, t + 0.08 / r, { from: 930, duration: 0.09, peak: 0.16, type: 'square' }, r),
+  ],
+  /**
+   * "Time is running out" (issue #276, `mine-fuse-warning`). A thin, high double tick --
+   * a clock, not an impact -- so it sits above the mix without competing with a shot.
+   *
+   * ONE-SHOT on purpose. The sim latches this event once, when the fuse crosses into its
+   * final window, and the ONGOING urgency is carried by the ring's accelerating blink. A
+   * repeating beep would have to be driven by the presentation layer's own clock, which is
+   * both a spam risk with several mines down and the sort of feedback loop the render layer
+   * is not allowed to have.
+   *
+   * TIMBRE IS PROVISIONAL and wants an ear on it. The alignment and the one-shot behaviour
+   * are pinned by tests; that this is the RIGHT sound is not a claim measurement can make.
+   */
+  'mine-fuse-warn': (c, t, r) => [
+    toneVoice(c, t, { from: 1560, duration: 0.045, peak: 0.13, type: 'square' }, r),
+    toneVoice(c, t + 0.075 / r, { from: 1560, duration: 0.045, peak: 0.13, type: 'square' }, r),
+  ],
+  /**
+   * "You tripped this" (issue #276, `mine-triggered`). Deliberately the INVERSE of
+   * 'mine-arm': that one rises 620 -> 930 to say a mine became dangerous, this one falls to
+   * say a dangerous mine is now committed to going off. Two cues about the same object that
+   * must never be confused, so they move in opposite directions rather than differing only
+   * in pitch. Also provisional in timbre.
+   */
+  'mine-trip': (c, t, r) => [
+    toneVoice(c, t, { from: 880, to: 300, duration: 0.14, peak: 0.24, type: 'square' }, r),
+    noiseVoice(c, t, { duration: 0.05, peak: 0.16, type: 'bandpass', from: 1400, to: 700, q: 2 }, r),
   ],
   // The biggest sound in the game: lower, longer and wider than a shell hit.
   'mine-boom': (c, t, r) => [
