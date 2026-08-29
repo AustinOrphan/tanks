@@ -9,7 +9,13 @@ import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '.
 import { angleOf } from '../sim/types';
 import type { TextureSet } from './textures';
 import { blastRadiusAt } from '../sim/mines';
-import { FUSE_WARNING_SECONDS, mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction, makeMineGlowMesh, makeMineLitMesh, disposeMineGlowMesh, glowRadius, glowOpacity } from './mine-warning';
+import {
+  FUSE_WARNING_SECONDS, mineWarningFrame, makeMineLitRing, litStepFor, litInnerFraction,
+  makeMineGlowMesh, makeMineLitMesh, disposeMineGlowMesh, glowRadius, glowOpacity,
+  type MineWarnStyle, heatColor, heatIntensity, cookoffScale, slumpScale,
+  styleBodyGrowthDuringTrip, beadHeight, spikeHeight, mastHeight, LANCE_HEIGHT,
+  makeLanceMesh, makeBeadSprite, makeSpikeMesh, makeMastMesh, disposeMineVert,
+} from './mine-warning';
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
@@ -468,6 +474,9 @@ interface MineView {
   ringStep: number;
   /** Proximity-trip fill, scaled from the middle outward. */
   fill: THREE.Mesh | null;
+  /** A style variant's vertical proximity element (lance/spike/mast) plus its bead. */
+  vert: THREE.Object3D | null;
+  bead: THREE.Sprite | null;
 }
 
 /** A player tank's live entrance/invincibility animation -- see spawn-anim.ts. */
@@ -543,7 +552,15 @@ function applyRingArc(mesh: THREE.Mesh, arc: number): void {
   old.dispose();
 }
 
-export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): EntityViews {
+export function createEntityViews(
+  scene: THREE.Scene,
+  textures?: TextureSet,
+  /**
+   * Experimental mine-warning variant (the `mineWarn` dev flag); null/absent =
+   * the shipped default treatment. See mine-warning.ts's style section.
+   */
+  mineWarnStyle: MineWarnStyle | null = null,
+): EntityViews {
   // `kind` travels with the view: loadArena numbers ids by grid scan, so a level
   // switch can hand the same id to a DIFFERENT kind, and a view reused on id alone
   // draws the old tank's mesh and colour under the new tank's position. `gen` is the
@@ -1576,7 +1593,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       seen.add(m.id);
       let view = mineViews.get(m.id);
       if (!view) {
-        view = { mesh: makeMine(), ring: null, ringStep: -1, fill: null };
+        view = { mesh: makeMine(), ring: null, ringStep: -1, fill: null, vert: null, bead: null };
         mineViews.set(m.id, view);
       }
       const mesh = view.mesh;
@@ -1622,7 +1639,41 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
       const hi = m.armed ? MINE_ARMED_HI : MINE_IDLE_HI;
       mat.emissive.copy(lo).lerp(hi, pulse);
 
-      if (warn.fuse) {
+      if (mineWarnStyle) {
+        // STYLE VARIANT BODY (playtest round -- see mine-warning.ts). The fuse channel is
+        // the body itself: heat (all styles) plus a silhouette change (swell or slump).
+        // During a trip the fuse channel FREEZES (or slams to max, for spike) so the
+        // vertical below is the sole moving channel -- frozenFuseGrowth's rationale.
+        const bodyGrowth = warn.proximity
+          ? styleBodyGrowthDuringTrip(mineWarnStyle, m)
+          : warn.fuse
+            ? warn.fuse.growth
+            : null;
+        if (bodyGrowth !== null) {
+          heatColor(bodyGrowth, mat.emissive);
+          mat.emissiveIntensity = heatIntensity(bodyGrowth);
+          if (mineWarnStyle === 'slump') {
+            const sl = slumpScale(bodyGrowth);
+            mesh.scale.set(sl.xz, sl.y, sl.xz);
+            // The lathe spans +/-MINE_Y about its origin; without this the squashed base
+            // floats and the swollen base sinks. position.y follows the Y scale exactly.
+            mesh.position.y = MINE_Y * sl.y;
+          } else {
+            const sc = cookoffScale(bodyGrowth);
+            mesh.scale.set(sc, sc, sc);
+            mesh.position.y = MINE_Y * sc;
+          }
+        } else {
+          mat.emissiveIntensity = 1;
+          mesh.scale.set(1, 1, 1);
+          mesh.position.y = MINE_Y;
+        }
+      } else {
+        mat.emissiveIntensity = 1;
+        mesh.scale.set(1, 1, 1);
+      }
+
+      if (warn.fuse && !mineWarnStyle) {
         // The glow is a unit disc, so its growth is pure SCALE -- no geometry churn at all,
         // unlike the illumination below whose inner edge has to be rebuilt.
         if (!view.ring) view.ring = makeWarningRing();
@@ -1637,7 +1688,7 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         view.ring = null;
       }
 
-      if (warn.proximity) {
+      if (warn.proximity && !mineWarnStyle) {
         if (!view.fill) {
           view.fill = makeWarningFill();
           view.ringStep = -1;
@@ -1656,6 +1707,47 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
         disposeObject(view.fill);
         view.fill = null;
       }
+
+      if (mineWarnStyle && warn.proximity) {
+        // The vertical proximity element. Appears in ONE step at the trip tick (a one-way
+        // appearance, not an oscillation) and is torn down with the mine at the blast.
+        if (!view.vert) {
+          view.vert = mineWarnStyle === 'lance' ? makeLanceMesh()
+            : mineWarnStyle === 'spike' ? makeSpikeMesh()
+            : makeMastMesh();
+          scene.add(view.vert);
+          if (mineWarnStyle === 'lance') {
+            view.bead = makeBeadSprite();
+            scene.add(view.bead);
+          }
+        }
+        const q = warn.proximity.lit;
+        if (mineWarnStyle === 'lance') {
+          // Fixed denominator: the lance stands full height from tick one; only the bead
+          // moves, touching the crown exactly on the last frame before the blast.
+          view.vert.position.set(m.pos.x, LANCE_HEIGHT / 2, m.pos.y);
+          view.bead!.position.set(m.pos.x, beadHeight(q, MINE_Y * 2), m.pos.y);
+        } else if (mineWarnStyle === 'spike') {
+          const h = Math.max(1e-4, spikeHeight(q));
+          view.vert.scale.set(1, h, 1);
+          view.vert.position.set(m.pos.x, MINE_Y * 2, m.pos.y);
+        } else {
+          const h = Math.max(1e-4, mastHeight(q));
+          const rod = view.vert.getObjectByName('mast-rod')!;
+          const tip = view.vert.getObjectByName('mast-tip')!;
+          rod.scale.set(1, h, 1);
+          rod.position.y = h / 2;
+          tip.position.y = h;
+          view.vert.position.set(m.pos.x, MINE_Y * 2, m.pos.y);
+        }
+      } else if (view.vert) {
+        disposeMineVert(view.vert);
+        view.vert = null;
+        if (view.bead) {
+          disposeMineVert(view.bead);
+          view.bead = null;
+        }
+      }
     }
     for (const [id, view] of mineViews) {
       if (!seen.has(id)) {
@@ -1670,6 +1762,8 @@ export function createEntityViews(scene: THREE.Scene, textures?: TextureSet): En
     disposeObject(view.mesh);
     if (view.ring) disposeMineGlowMesh(view.ring);
     if (view.fill) disposeObject(view.fill);
+    if (view.vert) disposeMineVert(view.vert);
+    if (view.bead) disposeMineVert(view.bead);
   }
 
   /**
