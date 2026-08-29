@@ -106,7 +106,11 @@ describe('requireRecipe', () => {
     // The actionable half: "missing" alone leaves the reader guessing whether they typo'd
     // the ID or picked a ref that predates it.
     expect(() => requireRecipe(registry, side, 'gallery.nope.still'))
-      .toThrow(/does not exist at head HEAD \(bbbbbbb\)\. That ref knows: gallery\.ai-tracking\.normal, gallery\.fire\.still/);
+      .toThrow(new RegExp(
+        String.raw`does not exist at head HEAD \(bbbbbbb\)\. That ref knows: `
+        + String.raw`gallery\.ai-tracking\.normal, gallery\.drive\.normal, `
+        + String.raw`gallery\.fire\.still, gallery\.ricochet\.still`,
+      ));
   });
 });
 

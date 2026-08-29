@@ -121,5 +121,133 @@
     "altText": "A stationary brown tank rotates its turret to follow a blue tank driving laterally across the felt arena.",
     "timeoutMs": 180000,
     "outputBudgetBytes": 20000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "gallery.ricochet.still",
+    "producer": {
+      "kind": "moment",
+      "scenarioId": "ricochet"
+    },
+    "fixture": {
+      "id": "gallery.ricochet",
+      "seed": 7
+    },
+    "variant": {
+      "view": "game",
+      "skin": "solid",
+      "hull": null,
+      "accent": null,
+      "spawnAnimation": "warp"
+    },
+    "viewport": {
+      "width": 640,
+      "height": 480,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "still",
+      "tick": 36,
+      "alpha": 0
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": null
+    },
+    "artifacts": [
+      {
+        "format": "png",
+        "filename": "capture.png"
+      }
+    ],
+    "expectations": {
+      "events": [
+        {
+          "type": "fire",
+          "tick": 10,
+          "count": 1
+        },
+        {
+          "type": "ricochet",
+          "tick": 36,
+          "count": 1
+        }
+      ],
+      "allowUnexpectedEvents": false
+    },
+    "title": "Gallery ricochet still",
+    "description": "The deterministic ricochet moment at the tick the shell leaves the wall. A second still recipe on a different scenario, so the still path is not exercised by gallery.fire.still alone -- and one whose captured tick is not the tick of its first expected event, which the fire recipe cannot show.",
+    "altText": "A blue tank on the felt arena floor, its shell against the dark angled wall it is bouncing off.",
+    "timeoutMs": 120000,
+    "outputBudgetBytes": 5000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "gallery.drive.normal",
+    "producer": {
+      "kind": "moment",
+      "scenarioId": "drive"
+    },
+    "fixture": {
+      "id": "gallery.drive",
+      "seed": 7
+    },
+    "variant": {
+      "view": "game",
+      "skin": "solid",
+      "hull": null,
+      "accent": null,
+      "spawnAnimation": "warp"
+    },
+    "viewport": {
+      "width": 640,
+      "height": 480,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "ticks",
+      "startTick": 0,
+      "endTick": "scenario",
+      "step": 1,
+      "subdivisions": 1,
+      "tickRate": 60
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 60
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      },
+      {
+        "format": "gif",
+        "filename": "preview.gif"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": false
+    },
+    "title": "Gallery drive at normal speed",
+    "description": "A tank driving across the arena at normal simulation speed. A second temporal recipe on a different scenario, so the clip path is not exercised by gallery.ai-tracking.normal alone; the motion here is a translating hull rather than a rotating turret.",
+    "altText": "A blue tank driving across the felt arena floor, laying a tread trail.",
+    "timeoutMs": 180000,
+    "outputBudgetBytes": 20000000
   }
 ]

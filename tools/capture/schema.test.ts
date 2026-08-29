@@ -19,12 +19,33 @@ function reverseKeys(value: any): any {
 }
 
 describe('capture recipe schema', () => {
-  it('validates every registered recipe and keeps the initial IDs intentional', () => {
+  it('validates every registered recipe and keeps the shipped IDs intentional', () => {
     expect(CAPTURE_RECIPES.map((entry: any) => entry.recipe.id)).toEqual([
       'gallery.fire.still',
       'gallery.ai-tracking.normal',
+      'gallery.ricochet.still',
+      'gallery.drive.normal',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
+  });
+
+  it('ships more than one recipe of each media kind, on distinct scenarios', () => {
+    // Not catalogue trivia. With one still and one clip, "the still path works" and "this
+    // one recipe works" are the same statement, and a pipeline coupled to `fire` or to
+    // `ai-tracking` -- a hardcoded scenario ID, a tick that only that moment reaches --
+    // would look exactly like a pipeline that works. Distinct SCENARIOS are what make the
+    // second recipe evidence rather than a copy: two stills of the same moment would
+    // satisfy a bare count and prove nothing.
+    const kinds = new Map<string, Set<string>>();
+    for (const entry of CAPTURE_RECIPES) {
+      const kind = entry.recipe.schedule.kind === 'still' ? 'still' : 'temporal';
+      if (!kinds.has(kind)) kinds.set(kind, new Set());
+      kinds.get(kind)!.add(entry.recipe.producer.scenarioId);
+    }
+    expect([...kinds.keys()].sort()).toEqual(['still', 'temporal']);
+    for (const [kind, scenarios] of kinds) {
+      expect(`${kind}: ${scenarios.size} scenario(s)`).toBe(`${kind}: 2 scenario(s)`);
+    }
   });
 
   it('rejects duplicate IDs instead of making lookup order decide which recipe runs', () => {
