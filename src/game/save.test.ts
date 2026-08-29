@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createMemoryStorage, createStores } from './storage';
+import { createMemoryStorage, createNamespacedStorage, createStores } from './storage';
 import {
   exportSave,
   importSave,
@@ -700,5 +700,79 @@ describe('importSave atomicity (issue #250)', () => {
     expect(r.ok).toBe(true);
     expect(r.rolledBack).toEqual([]);
     expect(to.getItem('tanks.progress.v1')).toBe('5');
+  });
+});
+
+describe('save round trip in both namespaces (issue #250)', () => {
+  /** Every key a round trip should carry, with a value that identifies its namespace. */
+  function seedThrough(storage: Storage, tag: string): void {
+    storage.setItem('tanks.progress.v1', `${tag}-progress`);
+    storage.setItem('tanks.stats.v1', `${tag}-stats`);
+    storage.setItem('tanks.custom.v1', `${tag}-custom`);
+  }
+
+  it('production: export then import into a fresh session restores every key', () => {
+    const from = createMemoryStorage();
+    seedThrough(from, 'prod');
+    const to = createMemoryStorage();
+
+    const result = importSave(to, exportSave(from, 'production'), 'production');
+
+    expect(result.ok).toBe(true);
+    expect(result.sourceNamespace).toBe('production');
+    for (const key of ['tanks.progress.v1', 'tanks.stats.v1', 'tanks.custom.v1']) {
+      expect(to.getItem(key), key).toBe(from.getItem(key));
+    }
+  });
+
+  it('developer: the round trip stays on the prefixed keys and never touches production', () => {
+    // The whole point of the namespace, exercised end to end through the REAL adapter
+    // rather than a stand-in: a developer export re-imported into a developer session
+    // must leave the player's production keys byte-identical.
+    const base = createMemoryStorage();
+    seedThrough(base, 'REAL-PLAYER');
+    const dev = createNamespacedStorage(base, 'developer');
+    seedThrough(dev, 'dev');
+
+    const blob = exportSave(dev, 'developer');
+    expect(JSON.parse(blob).namespace).toBe('developer');
+
+    // A fresh developer session over the SAME production data.
+    const base2 = createMemoryStorage();
+    seedThrough(base2, 'REAL-PLAYER');
+    const dev2 = createNamespacedStorage(base2, 'developer');
+
+    const result = importSave(dev2, blob, 'developer');
+
+    expect(result.ok).toBe(true);
+    for (const key of ['tanks.progress.v1', 'tanks.stats.v1', 'tanks.custom.v1']) {
+      expect(dev2.getItem(key), `developer ${key}`).toBe(`dev-${key.split('.')[1]}`);
+      expect(base2.getItem(key), `production ${key} was written by a developer import`).toBe(
+        `REAL-PLAYER-${key.split('.')[1]}`,
+      );
+    }
+  });
+
+  it('the legacy touch key still migrates, in BOTH namespaces', () => {
+    // `tanks.touch.v1` is import-only (SAVE_IMPORT_KEYS): no build writes it, but an old
+    // blob carrying it must still restore. The namespace gate must not have quietly
+    // narrowed the allow-list to the export set.
+    for (const ns of ['production', 'developer'] as const) {
+      const base = createMemoryStorage();
+      const storage = createNamespacedStorage(base, ns);
+      const result = importSave(
+        storage,
+        JSON.stringify({
+          format: SAVE_FORMAT,
+          version: SAVE_VERSION,
+          namespace: ns,
+          keys: { [TOUCH_SETTINGS_KEY]: '{"scheme":"point"}' },
+        }),
+        ns,
+      );
+      expect(result.ok, ns).toBe(true);
+      expect(result.applied, ns).toEqual([TOUCH_SETTINGS_KEY]);
+      expect(storage.getItem(TOUCH_SETTINGS_KEY), ns).toBe('{"scheme":"point"}');
+    }
   });
 });
