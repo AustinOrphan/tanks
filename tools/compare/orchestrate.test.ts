@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtemp, mkdir, readFile, stat } from 'node:fs/promises';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -9,6 +9,12 @@ import { compareRefs } from './orchestrate.mjs';
 import { createRegistry } from '../capture/registry.mjs';
 // @ts-expect-error -- plain-node ESM module, no types
 import { RECIPES_PATH } from './refs.mjs';
+// @ts-expect-error -- plain-node ESM module, no types
+import { inspectPrerequisites, CI_PLAYWRIGHT_VERSION } from '../capture/prerequisites.mjs';
+// @ts-expect-error -- plain-node ESM module, no types
+import {
+  failsWith, playwrightThatResolves, respondsToVersion, toolDirectory, writesOutputOfBytes,
+} from '../capture/test-fixtures/toolchain.mjs';
 
 const SHIPPED = JSON.parse(readFileSync(new URL(`../../${RECIPES_PATH}`, import.meta.url), 'utf8'));
 
@@ -321,5 +327,127 @@ describe('compareRefs: cleanup', () => {
     });
     const { cleanupFailures } = await compareRefs(options(root), deps);
     expect(cleanupFailures).toEqual([{ path: '/ws/base', reason: 'is locked' }]);
+  });
+});
+
+/**
+ * The same cleanup contract, driven by an external toolchain that is really broken.
+ *
+ * The injected-failure cases above prove the orchestrator reacts to a rejected stage. They
+ * cannot prove that a real `spawn` failure becomes that rejection, because every one of
+ * them replaces the code that would do the spawning. These run the REAL prerequisite check,
+ * the REAL frame decode and the REAL still compositor against shell shims on a private
+ * PATH -- so FFmpeg is genuinely absent, or genuinely present and failing, and the error
+ * that reaches the cleanup path is the one `runProcess` built from a real exit status.
+ *
+ * A real crashed BROWSER is deliberately not attempted: launching one needs Playwright,
+ * which is not a repository dependency, so such a test could not run in `verify:quick` at
+ * all. That half of the capture stage remains covered by injection only.
+ */
+describe.skipIf(process.platform === 'win32')('compareRefs against a really broken toolchain', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  /** A capture directory with the files the real decode and compositor stages read. */
+  async function captureSide(root: string, label: string, frameCount: number) {
+    const directory = resolve(root, 'sides', label);
+    await mkdir(resolve(directory, 'frames'), { recursive: true });
+    // 24 bytes is exactly what `readPngSize` reads: signature, length, IHDR, w, h. The
+    // decode never gets far enough to need pixel data, and inventing valid ones would only
+    // hide which stage failed.
+    const png = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+    png.writeUInt32BE(13, 8);
+    png.write('IHDR', 12, 'latin1');
+    png.writeUInt32BE(640, 16);
+    png.writeUInt32BE(480, 20);
+    await writeFile(resolve(directory, 'capture.png'), png);
+    for (let index = 0; index < frameCount; index++) {
+      await writeFile(resolve(directory, 'frames', `frame-${String(index).padStart(4, '0')}.png`), png);
+    }
+    return directory;
+  }
+
+  /** Everything the fake harness stubs out with paths that do not exist, made real. */
+  async function onDisk(root: string, overrides: Record<string, unknown> = {}) {
+    const workspace = await mkdtemp(resolve(tmpdir(), 'compare-ws-'));
+    return harness({
+      createCompareWorkspace: async () => workspace,
+      runCaptureAtRef: async ({ worktree }: { worktree: string }) => ({
+        manifest: manifest(),
+        directory: await captureSide(root, worktree.endsWith('head') ? 'head' : 'base', 1),
+      }),
+      ...overrides,
+    });
+  }
+
+  const outputOf = (root: string) => resolve(root, 'artifacts/compare/x');
+
+  it('spends nothing when a real prerequisite check meets a genuinely missing FFmpeg', async () => {
+    // The refusal that has to come first. `resolveRef` is the very next thing the
+    // orchestrator would do, so watching it stay uncalled is what distinguishes "checked
+    // prerequisites before spending" from "checked them at some point": moving the check
+    // below `worktrees.add` leaves the message identical and fails this.
+    const root = await freshRoot();
+    const { deps, events } = harness({
+      inspectPrerequisites,
+      env: {
+        PATH: await toolDirectory({ ffprobe: respondsToVersion('ffprobe') }),
+        PLAYWRIGHT_MODULE: await playwrightThatResolves(CI_PLAYWRIGHT_VERSION),
+        PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: process.execPath,
+      },
+    });
+    let resolved = false;
+    (deps.resolveRef as unknown) = async () => { resolved = true; return {}; };
+    await expect(compareRefs(options(root), deps))
+      .rejects.toThrow('ffmpeg is required for capture but was not found on PATH');
+    expect(resolved).toBe(false);
+    expect(events).toEqual([]);
+    await expect(stat(outputOf(root))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('cleans up and removes the partial output when the real frame decode fails', async () => {
+    // Reached through the real `analyseFrames` -> `decodeRgba` -> `runProcess('ffmpeg')`.
+    // Unlike the prerequisite case this one happens AFTER the output directory exists, so
+    // "removed" is a claim that can fail: deleting the `rm` from the orchestrator's catch
+    // leaves the directory behind and fails this line rather than the rejection above it.
+    const root = await freshRoot();
+    vi.stubEnv('PATH', await toolDirectory({ ffmpeg: failsWith('Invalid data found when processing input') }));
+    const { deps, events } = await onDisk(root, { analyseFrames: undefined });
+    await expect(compareRefs(options(root), deps))
+      .rejects.toThrow(/ffmpeg failed: Invalid data found when processing input/);
+    expect(events).toContain('cleanup');
+    await expect(stat(outputOf(root))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('cleans up and removes the partial output when the real still compositor fails', async () => {
+    // The encoder, not the decoder. A globally broken FFmpeg fails at decode first, so
+    // frame analysis is held out to let the failure land in `composeStill` -- which by then
+    // has already written label files into the workspace and is mid-way through four
+    // separate FFmpeg invocations, i.e. exactly the partially-written state that must not
+    // survive as something a reader could mistake for a finished comparison.
+    const root = await freshRoot();
+    vi.stubEnv('PATH', await toolDirectory({ ffmpeg: failsWith("Unknown encoder 'libx264'") }));
+    const { deps, events } = await onDisk(root, { composeStill: undefined });
+    await expect(compareRefs(options(root), deps))
+      .rejects.toThrow(/ffmpeg failed: Unknown encoder 'libx264'/);
+    expect(events).toContain('cleanup');
+    await expect(stat(outputOf(root))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('completes the same two real stages when FFmpeg works, so the failures above are the tool', async () => {
+    // The control. Without it, all three cases above would still pass if the real decode
+    // and compositor were unreachable for some unrelated reason -- a wrong path, an absent
+    // frame, a stage the harness never enters. This runs the identical wiring with shims
+    // that answer instead of failing, and requires a published comparison out of it.
+    const root = await freshRoot();
+    // Decode's byte-length check is not being tested here, so the shim must produce the
+    // 640x480 RGBA it was asked for: 640 * 480 * 4.
+    vi.stubEnv('PATH', await toolDirectory({ ffmpeg: writesOutputOfBytes(640 * 480 * 4) }));
+    const { deps } = await onDisk(root, { analyseFrames: undefined, composeStill: undefined });
+    const { report } = await compareRefs(options(root), deps);
+    expect(report.status).toBe('success');
+    expect(report.identical).toBe(true);
+    expect(report.outputs.files).toContain('side-by-side.png');
+    await expect(stat(resolve(outputOf(root), 'compare.json'))).resolves.toBeTruthy();
   });
 });
