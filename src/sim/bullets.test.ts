@@ -847,6 +847,37 @@ describe('spawnBullet: the muzzle plane vs the shell centre (issue #237)', () =>
     expect(SHELL_SPAWN_FORWARD).toBeCloseTo(shellSpawnForward(BULLET_RADIUS), 12)
   })
 
+  it('holds the nose on the plane at every firing angle, and off a moving tank', () => {
+    // #237 asks for this explicitly ("correct for every firing angle, and while the
+    // tank/turret is moving between simulation ticks"). Both fall out of the offset being
+    // applied along `dir` from `owner.pos`, but "falls out of the construction" is the
+    // kind of claim that stops being true the moment someone special-cases an axis --
+    // which is exactly what `spawns at the muzzle, offset along the FIRING angle not the
+    // body` above was written to catch, at a single angle.
+    //
+    // 16 angles rather than the 2 on-axis ones the tree had. The diagonals are the point:
+    // an offset applied per-axis instead of along the heading puts the spawn a MEASURED
+    // 1.4142x too far out there (0.7425 against 0.525), an error the axis-aligned
+    // fixtures cannot size even when they do notice it.
+    for (let i = 0; i < 16; i++) {
+      const angle = (i * Math.PI * 2) / 16
+      // A tank that has MOVED, and whose body faces somewhere other than its gun: the
+      // spawn must key off the firing angle and the CURRENT position, not the spawn point
+      // or the hull's heading.
+      const owner = mkTank({
+        id: 1, kind: 'player', pos: { x: 3.25, y: -1.75 }, bodyAngle: 1.1, turretAngle: angle,
+      })
+      const world = createWorld({ walls: [], tanks: [owner], spawns: [], lives: 3 })
+      expect(spawnBullet(world, 1, angle, 'normal', [])).toBe(true)
+      const b = world.bullets[world.bullets.length - 1]
+      const along = (b.pos.x - owner.pos.x) * Math.cos(angle) + (b.pos.y - owner.pos.y) * Math.sin(angle)
+      const across = -(b.pos.x - owner.pos.x) * Math.sin(angle) + (b.pos.y - owner.pos.y) * Math.cos(angle)
+      // The nose lands on the plane, and the shell is dead on the firing line.
+      expect(along + BULLET_RADIUS * SHELL_NOSE_REACH_RADII).toBeCloseTo(SHELL_MUZZLE_FORWARD, 9)
+      expect(across).toBeCloseTo(0, 9)
+    }
+  })
+
   it('tests clearance where the SHELL will be, not at the barrel opening', () => {
     // The semantic half of #237, and the half no other test would notice. When the plane
     // and the spawn were one number these were the same question; they no longer are, and
