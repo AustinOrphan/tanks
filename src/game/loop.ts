@@ -22,7 +22,7 @@ import type {
   SettingsStatus,
 } from './settings';
 import type { EffectiveSettings, EffectiveSettingsHandle } from './effective-settings';
-import { createBrowserAppSettings, type AppSettings } from './app-settings';
+import { createBrowserAppShell, type AppShell } from './app-shell';
 import type { AchievementsStore, AchievementContext } from './achievements';
 import type { RunStore } from './run';
 
@@ -51,8 +51,7 @@ import {
 } from '../input/assignment';
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
-import { createAudioEngine, type AudioEngine } from '../audio/engine';
-import { AUDIO_MANIFEST } from '../audio/manifest';
+import type { AudioEngine } from '../audio/engine';
 import type { SuiteContext } from '../audio/suites';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
@@ -193,6 +192,31 @@ export interface GameDeps {
    */
   readonly readDetectedPads: () => DetectedPad[];
   readonly createAudio: () => AudioEngine;
+  /**
+   * Release the engine `createAudio` handed this session, at session teardown.
+   *
+   * REQUIRED, and deliberately a sibling of `createAudio` rather than a `dispose()` call
+   * hard-coded into the teardown: since issue #317 the engine is owned by the PAGE
+   * (`app-shell.ts`), so who may dispose it is a property of who created it. A session
+   * that disposed a shell-owned engine would leave every later session with a dead
+   * `AudioContext` and no sound at all -- silently, because `dispose()` latches and
+   * `ensureCtx` then returns null rather than throwing.
+   *
+   * Required, not optional-with-a-`dispose()`-default, for that exact reason: the two
+   * fields must agree, and a caller that wires a shared `createAudio` and forgets this
+   * one would half-wire the pair. `tsc` refuses instead.
+   */
+  readonly releaseAudio: (engine: AudioEngine) => void;
+  /**
+   * The PAGE's Launch gate, not this session's (issue #317).
+   *
+   * `boot.ts` builds a fresh session on every Campaign<->Versus switch, and
+   * `createGameStateMachine` opens at the Launch route, so before this every switch
+   * re-showed "Press any key or tap to begin" to a player who had already dismissed it.
+   * `startGameWith` reads `dismissed()` to decide where its state machine opens, and calls
+   * `dismiss()` from the same gesture handler that dismisses it in the state machine.
+   */
+  readonly launchGate: LaunchGate;
   /**
    * playerId is required here even though createAudioDirector defaults it. The
    * default is DEFAULT_PLAYER_ID = 0 and no live tank is ever id 0, so taking
@@ -345,6 +369,18 @@ export interface GameDeps {
    * point.
    */
   readonly initialVersusConfig?: VersusConfig | null;
+}
+
+/**
+ * Page-level Launch state, as a session sees it.
+ *
+ * Two methods rather than a boolean field so a session cannot hold a STALE answer across
+ * its own lifetime: `dismissed()` is asked at construction, and `dismiss()` is what the
+ * splash gesture reports back to the page.
+ */
+export interface LaunchGate {
+  dismissed(): boolean;
+  dismiss(): void;
 }
 
 export interface GameHandle {
@@ -845,7 +881,7 @@ function countEnemies(world: World): number {
  * read off globalThis so that a mis-call under node yields undefined at the use
  * site rather than a ReferenceError at import.
  */
-export function createBrowserDeps(appSettings: AppSettings = createBrowserAppSettings()): GameDeps {
+export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): GameDeps {
   const search = globalThis.location?.search ?? '';
   const devFlags = parseDevFlags(search);
   // Resolved ONCE and shared by all six stores. It used to be resolved per
@@ -859,6 +895,7 @@ export function createBrowserDeps(appSettings: AppSettings = createBrowserAppSet
   // the SAME objects across the campaign/versus reboot that rebuilds these deps. The
   // default argument keeps `createBrowserDeps()` callable on its own, which is what the
   // tests that exercise dev-flag parsing against a real `location` rely on.
+  const appSettings = shell.settings;
   const { storage, stores } = appSettings;
   const { progress, stats, customization, settings, achievements, run } = stores;
   return {
@@ -867,7 +904,18 @@ export function createBrowserDeps(appSettings: AppSettings = createBrowserAppSet
     createInput: createInputController,
     createGamepadSource: (padIndex) => createGamepadInputSource(readNavigatorGamepads, padIndex),
     readDetectedPads: () => readDetectedPads(readNavigatorGamepads),
-    createAudio: () => createAudioEngine(AUDIO_MANIFEST),
+    // The PAGE's engine, the same instance on every session (issue #317) -- so the
+    // context a session resumed is still resumed for the next one, which is what keeps
+    // skipping the splash from trading a redundant screen for a silent menu.
+    createAudio: () => shell.audio,
+    // ...and therefore NOT `dispose()`. Stopping the bed is the whole release: it ends the
+    // outgoing session's music (without which the abandoned level's bed would play on
+    // under the new menu) and leaves the engine and its resumed context alive.
+    releaseAudio: (engine) => engine.stopMusic(),
+    launchGate: {
+      dismissed: () => shell.launchDismissed(),
+      dismiss: () => shell.dismissLaunch(),
+    },
     createDirector: createAudioDirector,
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
     createStateMachine: createGameStateMachine,
@@ -996,15 +1044,16 @@ export function versusAwareDeps(
   requestVersusSession: (config: VersusConfig) => void,
   requestCampaignSession?: () => void,
   /**
-   * The page's ONE settings/persistence owner (app-settings.ts), created once by
-   * `boot.ts` and handed to every session it starts. Optional so an existing caller that
-   * has none still builds a working session with its own; production always passes it,
-   * which is what makes settings survive a reboot.
+   * The page's ONE shell (app-shell.ts), created once by `boot.ts` and handed to every
+   * session it starts: settings, the audio engine and the Launch gate. Optional so an
+   * existing caller that has none still builds a working session with its own; production
+   * always passes it, which is what makes settings, audio and the dismissed splash all
+   * survive a reboot.
    */
-  appSettings?: AppSettings,
+  shell?: AppShell,
 ): GameDeps {
   return applyVersusToDeps(
-    createBrowserDeps(appSettings),
+    createBrowserDeps(shell),
     versus,
     requestVersusSession,
     requestCampaignSession,
@@ -1533,6 +1582,10 @@ export function startGameWith(
       isFinalCampaignLevel: () => nextInSession(level) === null,
       versusResult: () => versusResultFromWorld(driver.world),
     }),
+    // Asked ONCE, here, rather than wired inside `createBrowserDeps`: this is the line
+    // that decides whether a reboot replays the splash, and `createBrowserDeps` is
+    // unpinned wiring no test enters. See `GameDeps.launchGate`.
+    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',
   });
   const hud = deps.createHud(uiRoot);
 
@@ -2692,6 +2745,10 @@ export function startGameWith(
   // now guaranteed to have happened before the menu is on screen.
   const onSplashGesture = (): void => {
     sm.dismissLaunch();
+    // The PAGE remembers, not just this state machine: the next session is a different
+    // one entirely (boot.ts rebuilds everything on a Campaign<->Versus switch), and it is
+    // this call that stops it opening on the splash again.
+    deps.launchGate.dismiss();
   };
   deps.host.addEventListener('pointerdown', onSplashGesture);
 
@@ -2705,7 +2762,10 @@ export function startGameWith(
     // alone -- pause() no-ops from 'title' -- which is not a property to rely on as
     // more hotkeys arrive.
     if (sm.atLaunch) {
-      sm.dismissLaunch();
+      // The SAME handler the pointer path uses, not a second `sm.dismissLaunch()`: both
+      // must also report the dismissal to the page (issue #317), and two call sites that
+      // each had to remember to is how one of them stops doing it.
+      onSplashGesture();
       return;
     }
     if (isMuteHotkey(e)) toggleMute();
@@ -2796,7 +2856,7 @@ export function startGameWith(
       // any time) -- dispose whatever live preview context is holding, same as the
       // main renderer just above.
       preview?.dispose();
-      audio.dispose();
+      deps.releaseAudio(audio);
       hud.dispose();
     },
   };

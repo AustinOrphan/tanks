@@ -72,6 +72,24 @@ export interface GameStateMachineConfig {
    * Build one with `createOutcomeClassifier`.
    */
   readonly classifyOutcome: OutcomeClassifier;
+  /**
+   * Where this session OPENS. Defaults to the Launch route, which is what every session
+   * did unconditionally before issue #317.
+   *
+   * The Launch gate ("Press any key or tap to begin") is a PAGE-level handoff, not a
+   * session-level one, and this is the field that lets those two disagree. `boot.ts`
+   * disposes the whole handle and builds a fresh session on every Campaign<->Versus
+   * switch, so a state machine that can only start at `launch` re-shows the splash on
+   * every one of them -- the acceptance criterion issue #317 calls "the Launch gate
+   * appears at most once per document load".
+   *
+   * Deliberately OPTIONAL, unlike `classifyOutcome` above. That one is required because a
+   * default silently shipped un-typed outcomes to production; this one's default is the
+   * conservative direction -- a caller that forgets it shows the splash, which is the
+   * pre-#317 behavior and is merely redundant, not wrong. The page-scoped owner
+   * (`app-shell.ts`) is what actually answers it in production.
+   */
+  readonly initialRoute?: 'launch' | 'main-menu';
 }
 
 export interface GameStateMachine {
@@ -247,7 +265,9 @@ function firstTerminalEvent(events: SimEvent[]): { type: 'win' } | { type: 'lose
 export function createGameStateMachine(config: GameStateMachineConfig): GameStateMachine {
   const classify = config.classifyOutcome;
   const subscribers: Array<(location: AppLocation) => void> = [];
-  let current: AppLocation = locationAtRoute(launchRoute());
+  let current: AppLocation = locationAtRoute(
+    config.initialRoute === 'main-menu' ? mainMenuRoute() : launchRoute(),
+  );
 
   function emit(): void {
     for (const cb of subscribers) cb(current);

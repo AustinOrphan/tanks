@@ -109,6 +109,7 @@ import { versusMapChoices, type VersusConfig } from './versus-config';
 import { boot as bootPage } from '../boot';
 import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
+import { createAppShell } from './app-shell';
 import type { GameHandle } from './loop';
 import { createMemoryStorage } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
@@ -515,6 +516,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   const harnessSession: ResolvedSession = resolveSession(campaignDescriptor(), 1, 'test-arena');
   // Faithful to state.ts's initial state -- launch route.
   let currentSurface: HarnessSurface = 'launch';
+  /** The harness's page-level Launch gate -- see `launchGate` in the deps below. */
+  let harnessLaunchDismissed = false;
   /**
    * The session production most recently entered, or `null` before the first
    * `enterGameplay`. The harness's AppLocation is built around THIS rather than
@@ -835,6 +838,21 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     // can push into via `setDetectedPadsFixture` below, mirroring `gamepadConnectedNext`'s
     // own closed-over-mutable convention.
     readDetectedPads: () => detectedPadsFixture,
+    // SESSION-owned audio, which is what a single-session test is about: the engine this
+    // harness hands out is rebuilt per session, so releasing it means disposing it. The
+    // PAGE-owned wiring production uses since issue #317 (one engine, released with
+    // `stopMusic`) is `createBrowserDeps`', and `bootPageOn` below reproduces it exactly
+    // for the reboot tests -- the two differ, so neither stands in for the other.
+    releaseAudio: (engine) => engine.dispose(),
+    // Page-scoped, like the shell's: `harnessLaunchDismissed` lives in THIS closure, not
+    // in the returned deps, so a second session built on the same `makeDeps()` sees the
+    // first session's dismissal -- which is the property the reboot tests measure.
+    launchGate: {
+      dismissed: () => harnessLaunchDismissed,
+      dismiss: () => {
+        harnessLaunchDismissed = true;
+      },
+    },
     createAudio: () => ({
       play: () => {},
       startMusic: () => {
@@ -7414,6 +7432,21 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   let sessions = 0;
   const pagehideFns: Array<(e: { persisted: boolean }) => void> = [];
 
+  /**
+   * The REAL `createAppShell`, over the harness's leaf fakes.
+   *
+   * `settings` is a stand-in because `boot()` only ever calls `.dispose()` on it and the
+   * settings the SESSION reads come from `h.deps` (`settings`/`effectiveSettings`/
+   * `onSettingsNotice`), which `makeDeps` already owns above the session for the same
+   * reason. `audio` is the harness's engine, built ONCE here rather than per session --
+   * which is the production property under test, not a convenience.
+   */
+  const shellAudio = h.deps.createAudio();
+  const shell = createAppShell({
+    settings: { dispose(): void {} } as unknown as AppSettings,
+    audio: shellAudio,
+  });
+
   bootPage({
     root,
     bootCanvas: (r) => {
@@ -7421,10 +7454,7 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
       r.appendChild(canvas);
       return canvas;
     },
-    // `boot()` only ever calls `.dispose()` on this; the settings the SESSION reads come
-    // from `h.deps` (`settings`/`effectiveSettings`/`onSettingsNotice`), which `makeDeps`
-    // already owns above the session for exactly the same reason.
-    createAppSettings: () => ({ dispose(): void {} }) as unknown as AppSettings,
+    createAppShell: () => shell,
     startGame: (canvas, uiRoot, versus, reqVersus, reqCampaign): GameHandle => {
       sessions += 1;
       requestVersus = reqVersus;
@@ -7441,6 +7471,15 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
         // `createGameStateMachine` alone (`state.ts`'s `locationAtRoute(launchRoute())`),
         // so a test that replaces it cannot observe this defect at all.
         createStateMachine: createGameStateMachine,
+        // ...and `createBrowserDeps`' PAGE-owned audio wiring, reproduced exactly. The
+        // harness's own default is session-owned (`releaseAudio` disposes), which would
+        // hand the second session an engine the first one had already latched shut.
+        createAudio: () => shellAudio,
+        releaseAudio: (engine) => engine.stopMusic(),
+        launchGate: {
+          dismissed: () => shell.launchDismissed(),
+          dismiss: () => shell.dismissLaunch(),
+        },
       });
     },
     host: {

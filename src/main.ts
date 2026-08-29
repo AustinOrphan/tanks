@@ -1,7 +1,7 @@
 import { bootCanvas } from './render/canvas';
 import { startGameWith, versusAwareDeps } from './game/loop';
 import { boot } from './boot';
-import { createBrowserAppSettings } from './game/app-settings';
+import { createBrowserAppShell } from './game/app-shell';
 
 // Wiring only. Everything this file used to do -- the WebGL error page, the
 // teardown registration -- lives in boot.ts, which can be called with fakes.
@@ -16,16 +16,17 @@ boot({
   // with, and threads the reboot callback boot.ts hands back on every call. No
   // branching here -- that logic lives in versusAwareDeps/applyVersusToDeps, which
   // a test can reach directly.
-  startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession, appSettings) =>
+  startGame: (canvas, uiRoot, versus, requestVersusSession, requestCampaignSession, shell) =>
     startGameWith(
       canvas,
       uiRoot,
-      versusAwareDeps(versus, requestVersusSession, requestCampaignSession, appSettings),
+      versusAwareDeps(versus, requestVersusSession, requestCampaignSession, shell),
     ),
   host: window,
   reportError: (err) => console.error('Tanks! failed to start:', err),
-  // The page's one settings/persistence owner (issue #320). boot.ts calls this exactly
-  // once and hands the result to every session, which is what keeps mute, volume and the
-  // rest alive across a campaign/versus reboot.
-  createAppSettings: createBrowserAppSettings,
+  // The page's one shell (issues #320, #317): settings/persistence, the audio engine and
+  // the Launch gate. boot.ts calls this exactly once and hands the result to every
+  // session, which is what keeps mute, volume, the resumed audio context and the
+  // already-dismissed splash alive across a campaign/versus reboot.
+  createAppShell: createBrowserAppShell,
 });
