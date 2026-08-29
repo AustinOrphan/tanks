@@ -40,17 +40,27 @@ workspace is created and reports the relevant setup action. Capture reads the Pl
 version from CI's install command when constructing that error; an automated consistency
 test also pins this documentation and CI's browser-cache key to the same version.
 
-## Initial registry
+## Registry
 
-The canonical registry is [`recipes.json`](recipes.json). Its initial entries are:
+The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 
 | Recipe ID | Existing gallery moment | Output | Schedule |
 | --- | --- | --- | --- |
 | `gallery.fire.still` | `fire` | `capture.png` | tick 10 |
+| `gallery.ricochet.still` | `ricochet` | `capture.png` | tick 36 |
 | `gallery.ai-tracking.normal` | `ai-tracking` | `capture.mp4`, `preview.gif` | ticks 0–46, one frame per 60 Hz tick |
+| `gallery.drive.normal` | `drive` | `capture.mp4`, `preview.gif` | ticks 0–29, one frame per 60 Hz tick |
 
 `gallery.ai-tracking.normal` is a generic tracking/capture fixture. It is not evidence of
 turret shimmer and does not encode or evaluate an AI deadband choice.
+
+Two recipes per media kind, on different scenarios, is deliberate rather than a coincidence
+of what was needed first: with one of each, "the still path works" and "this one recipe
+works" are indistinguishable, and a pipeline coupled to a single scenario ID or to a tick
+only one moment reaches would pass either way. `schema.test.ts` pins the property, so
+deleting a recipe fails rather than quietly narrowing the evidence. `gallery.ricochet.still`
+additionally captures a tick that is *not* the tick of its first expected event, which a
+single-event recipe cannot exercise.
 
 Each recipe declares a schema and recipe version, producer/scenario, deterministic fixture
 and seed, structured render variants, viewport/DPR, visual-motion-capability profile,
