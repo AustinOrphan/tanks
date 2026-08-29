@@ -1861,8 +1861,8 @@
   {
     "id": "save-rollback-restores-without-freeing-space",
     "file": "src/game/save.ts",
-    "find": "    for (const key of applied) {\n      try {\n        storage.removeItem(key);\n      } catch {\n        // Nothing to do: the restore below will simply overwrite it if it can.\n      }\n    }\n",
-    "replace": "",
+    "find": "    for (const key of applied) {\n      try {\n        storage.removeItem(key);",
+    "replace": "    for (const key of [] as string[]) {\n      try {\n        storage.removeItem(key);",
     "expect": "killed",
     "expectFailures": 2,
     "why": "Rolls a failed import back by writing each previous value straight back -- the same setItem that just threw, on a storage no emptier than when it threw. A full storage therefore restores nothing. Also leaves keys the save never had sitting in storage, because the restore pass delegates the absent-key case to this removal. Pinned by a byte-quota fixture; a throw-after-N-writes stub cannot see this, because it refuses the rollback's writes too.",
