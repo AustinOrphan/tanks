@@ -654,6 +654,35 @@ describe('importSave atomicity (issue #250)', () => {
     expect(to.getItem('tanks.stats.v1')).toBe('OLD-STATS');
   });
 
+  it('frees the space the failed import consumed, so a LONGER previous value fits again', () => {
+    // The reason the rollback removes every applied key before restoring any of them.
+    // Here the old value is longer than the one that replaced it, and a second key the
+    // import added is still occupying the difference -- so restoring in place needs room
+    // that only the removal pass creates. Deleting that pass makes this test fail with a
+    // quota error, not merely with a key left behind.
+    const OLD = 'X'.repeat(30);
+    const to = quotaCapped(60, { 'tanks.progress.v1': OLD });
+    const r = importSave(
+      to,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: SAVE_VERSION,
+        namespace: 'production',
+        keys: {
+          'tanks.progress.v1': 'a',
+          'tanks.stats.v1': 'Y'.repeat(25),
+          'tanks.custom.v1': 'Z'.repeat(20),
+        },
+      }),
+      'production',
+    );
+    expect(r.ok).toBe(false);
+    expect(r.failed, 'the third key should be the one that overflows').toEqual(['tanks.custom.v1']);
+    expect(r.rolledBack.sort()).toEqual(['tanks.progress.v1', 'tanks.stats.v1']);
+    expect(to.getItem('tanks.progress.v1'), 'the longer previous value did not fit back').toBe(OLD);
+    expect(to.getItem('tanks.stats.v1'), 'a key the import added survived').toBeNull();
+  });
+
   it('a fully successful import rolls nothing back', () => {
     // The negative control: `rolledBack` must be empty on the happy path, or the two
     // assertions above would pass against an implementation that always restores.
