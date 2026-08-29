@@ -41,7 +41,10 @@ describe('fire moment specifics', () => {
     if (ev?.type !== 'fire') throw new Error('narrowed above');
     // ownerId: events sourced from a different tank would fail this
     expect(ev.ownerId).toBe(1);
-    // pos.x: muzzle offset pin (SHELL_SPAWN_FORWARD = 0.85); different tank id or spawn point would fail this
+    // pos.x: muzzle PLANE pin (SHELL_MUZZLE_FORWARD = 0.85, where the flash goes) --
+    // NOT the shell's spawn centre, which issue #237 moved back to 0.525. The number did
+    // not move because the plane did not; only the constant it belongs to changed.
+    // Different tank id or spawn point would fail this
     expect(ev.pos.x).toBeCloseTo(0.85, 2);
     // pos.y: tank centre y-coordinate; different tank position would fail this
     expect(ev.pos.y).toBe(0);

@@ -312,9 +312,17 @@ import { step } from '../../src/sim/world';
  * SHELL_NOSE_REACH_RADII set to 0 -- the pre-#237 spawn, with every other line of this
  * change still in place -- trace.test.ts reproduces
  * 37eff51ef55ad4bb3ccda2981a6c4ad8b522ee502ec9a560d8e2467a60ceb787 exactly. That is the
- * evidence that the rest of the change (muzzlePoint returning two points, the `fire`
- * event carrying the muzzle plane) is behaviour-neutral, and that the spawn distance is
- * the only thing in it that moves the sim.
+ * evidence that muzzlePoint's restructuring (one return value became two) is
+ * behaviour-neutral, and that the spawn distance is the only thing in this change that
+ * moves what the trace records.
+ *
+ * IT IS NOT EVIDENCE ABOUT THE `fire` EVENT, in either direction, and the control cannot
+ * be read that way: at SHELL_NOSE_REACH_RADII 0 the muzzle plane and the spawn are the
+ * same point, so a flash pinned to either one produces identical output. The trace could
+ * not see the difference regardless -- traceText records tank pose, liveness and terminal
+ * status only, never events or bullets. The flash's position is pinned by tests instead
+ * (bullets.test.ts, step-contract.test.ts, and the `muzzle-flash-collapses-onto-the-shell`
+ * manifest entry), not here.
  */
 export const BASELINE_HASH = '5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c';
 

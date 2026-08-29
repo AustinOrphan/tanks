@@ -228,14 +228,14 @@ export const MOMENTS: Record<string, MomentDef> = {
     // MomentDef.ticks's doc comment for the particle-decay math.
     ticks: 60,
     // RE-MEASURED for issue #237's muzzle inset (buildKillWorld, fire at input(9) ->
-    // events[10]): the shell (speed 6 = 0.1 unit/tick) is now born at (4.125, 4.5) rather
-    // than a third of a unit further out, 1.375 units from the victim's centre at
-    // (5.5, 4.5), and closes to the TANK_RADIUS + BULLET_RADIUS = 0.6 hit threshold 8
-    // ticks later, landing the kill at tick 18. The whole 3-tick slip is the inset
+    // events[10]): the shooter sits at (3.5, 4.5) and the shell (speed 6 = 0.1 unit/tick)
+    // is now born at (4.025, 4.5) rather than a third of a unit further out. events[10]'s
+    // world already shows it one step along at (4.125, 4.5) -- world.ts spawns in
+    // applyPlayerInputs and moves in stepBullets within the same tick -- which is 1.375
+    // units from the victim's centre at (5.5, 4.5). It closes to the TANK_RADIUS +
+    // BULLET_RADIUS = 0.6 hit threshold 8 ticks after that, landing the kill at tick 18. The whole 3-tick slip is the inset
     // divided by the shell's speed (0.325 / 0.1), which is why every shell-driven pin in
-    // this file moved by the same amount. (4.125, not the 4.025 the shooter at (3.5, 4.5)
-    // gives birth to: world.ts spawns the shell in applyPlayerInputs and then moves it in
-    // stepBullets within the same tick, so events[10]'s world already shows one step.) `destroyed` intentionally stops well short of
+    // this file moved by the same amount. `destroyed` intentionally stops well short of
     // RESPAWN_DELAY_TICKS later (tick 138), so the revival never enters this shorter clip.
     expect: [
       { type: 'tank-destroyed', tick: 18 },
