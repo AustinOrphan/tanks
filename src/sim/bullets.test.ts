@@ -13,6 +13,9 @@ import {
   bulletConfig,
   BULLET_RADIUS,
   SHELL_SPAWN_FORWARD,
+  SHELL_MUZZLE_FORWARD,
+  SHELL_NOSE_REACH_RADII,
+  shellSpawnForward,
   TANK_RADIUS,
 } from './constants'
 
@@ -101,9 +104,15 @@ describe('spawnBullet + ownerShellCount', () => {
     expect(b.vel.x).toBeCloseTo(NORMAL_SPEED, 6)
     expect(b.vel.y).toBeCloseTo(0, 6)
     const fire = events.find((e) => e.type === 'fire')
+    // The event carries the MUZZLE PLANE, not the shell (issue #237): the flash belongs on
+    // the barrel opening, while the shell itself is born a nose-length behind it.
     expect(fire).toMatchObject({
-      type: 'fire', ownerId: 1, bulletType: 'normal', angle: 0, pos: { x: 2 + SHELL_SPAWN_FORWARD, y: 3 },
+      type: 'fire', ownerId: 1, bulletType: 'normal', angle: 0, pos: { x: 2 + SHELL_MUZZLE_FORWARD, y: 3 },
     })
+    // And the two are genuinely different points. Without this, a mutation collapsing
+    // `flash` back onto `spawn` passes both assertions above the moment the inset is
+    // zero, which is exactly the regression the inset exists to prevent.
+    expect((fire as { pos: { x: number } }).pos.x).not.toBeCloseTo(b.pos.x, 9)
   })
 })
 
@@ -816,6 +825,83 @@ describe('spawnBullet: where the shell is born', () => {
     const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
     expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
     expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+  })
+})
+
+describe('spawnBullet: the muzzle plane vs the shell centre (issue #237)', () => {
+  it('lands the shell nose on the plane for ANY shell radius, not just the shipped one', () => {
+    // The property the inset IS, stated so it cannot be satisfied by a pin. A test that
+    // only checked the shipped number would keep passing if shellSpawnForward were
+    // replaced by `return 0.525`, and would say nothing about why 0.525 is the answer.
+    //
+    // Named negative controls, both run: `return SHELL_MUZZLE_FORWARD` (no inset at all)
+    // fails at every radius below, and `return SHELL_MUZZLE_FORWARD - bulletRadius`
+    // (inset by the COLLISION radius, the intuitive-but-wrong fix) fails at every radius
+    // except a hypothetical SHELL_NOSE_REACH_RADII of 1.
+    for (const r of [0.05, BULLET_RADIUS, 0.2]) {
+      expect(shellSpawnForward(r) + r * SHELL_NOSE_REACH_RADII).toBeCloseTo(SHELL_MUZZLE_FORWARD, 9)
+    }
+    // A bigger shell is inset further -- the relationship is live, not incidental.
+    expect(shellSpawnForward(0.2)).toBeLessThan(shellSpawnForward(0.05))
+    // And the shipped constant is DERIVED through it rather than written beside it.
+    expect(SHELL_SPAWN_FORWARD).toBeCloseTo(shellSpawnForward(BULLET_RADIUS), 12)
+  })
+
+  it('tests clearance where the SHELL will be, not at the barrel opening', () => {
+    // The semantic half of #237, and the half no other test would notice. When the plane
+    // and the spawn were one number these were the same question; they no longer are, and
+    // asking it at the plane checks a region the shell does not occupy.
+    //
+    // This wall covers the muzzle PLANE (0.85) and misses the shell's span entirely
+    // (spawn 0.525 +/- BULLET_RADIUS = [0.425, 0.625]). The shell fits, so it must be
+    // born at the muzzle. A plane-based clearance test retreats to the tank centre here
+    // -- refusing a shot that fits -- which is what this fails on.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const wall = mkWall(1, { minX: 0.75, minY: -2, maxX: 1.5, maxY: 2 }, 'solid')
+    const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos.x).toBeCloseTo(SHELL_SPAWN_FORWARD, 9)
+  })
+
+  it('retreats for a wall that covers the shell but NOT the barrel opening', () => {
+    // The other direction, and the one that matters: this wall sits inside the shell's
+    // span and clear of the plane, so a plane-based test MISSES it and spawns a live
+    // shell inside solid geometry -- the embedded projectile #237 calls out by name.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const wall = mkWall(1, { minX: 0.45, minY: -2, maxX: 0.6, maxY: 2 }, 'solid')
+    const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(world.bullets[0].pos).toEqual({ x: 0, y: 0 })
+  })
+
+  it('drags the muzzle flash back to the tank when the shell could not be born at the barrel', () => {
+    // The flash carries the PLANE, so the retreat has to move it too. Left on the plane
+    // it would burst inside the wall that caused the retreat, off a gun that produced
+    // nothing there this tick.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const wall = mkWall(1, { minX: 0.45, minY: -2, maxX: 1.5, maxY: 2 }, 'solid')
+    const world = createWorld({ walls: [wall], tanks: [player], spawns: [], lives: 3 })
+    const events: SimEvent[] = []
+    expect(spawnBullet(world, 1, 0, 'normal', events)).toBe(true)
+    const fire = events.find((e) => e.type === 'fire') as { pos: { x: number; y: number } }
+    expect(fire.pos).toEqual({ x: 0, y: 0 })
+  })
+
+  it('does not let a tank shoot itself on the way out, though the shell is born inside its hull', () => {
+    // #237's safety criterion, and it is load-bearing NOW in a way it was not before: at
+    // spawn 0.525 against TANK_RADIUS 0.5 the shell's collision circle overlaps its own
+    // firer, so the outbound exemption in resolveBulletHits is the only thing between
+    // this change and a tank that kills itself the instant it pulls the trigger.
+    //
+    // Negative control: deleting the `vdot(b.vel, toOwner) <= 0` guard fails this on the
+    // first stepped tick.
+    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
+    expect(SHELL_SPAWN_FORWARD - BULLET_RADIUS).toBeLessThan(TANK_RADIUS) // it really does overlap
+    for (let i = 0; i < 5; i++) stepBullets(world, 1 / 60, [])
+    expect(world.tanks[0].alive).toBe(true)
+    expect(world.bullets[0]?.alive).toBe(true)
   })
 })
 
