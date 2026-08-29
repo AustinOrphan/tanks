@@ -1747,5 +1747,43 @@
       "tools/compare/capture-runner.test.ts"
     ],
     "why": "Stops asking capture to keep its raw PNGs, which is what the entire comparison is computed from -- analyseFrames reads <dir>/frames/ and would find nothing. Pinned because it genuinely survived: capture-runner is the seam every orchestrator test replaces with a fake, so dropping this flag left all 100 other tests green until the module got a test of its own."
+  },
+  {
+    "id": "capture-prerequisites-probes-every-required-tool",
+    "file": "tools/capture/prerequisites.mjs",
+    "find": "  const [playwright, ffmpeg, ffprobe] = await Promise.all([\n    loadPlaywright(env, options),\n    toolVersion('ffmpeg', env, options),\n    toolVersion('ffprobe', env, options),\n  ]);\n  return { playwright, ffmpeg, ffprobe };",
+    "replace": "  const [playwright, ffmpeg] = await Promise.all([\n    loadPlaywright(env, options),\n    toolVersion('ffmpeg', env, options),\n  ]);\n  return { playwright, ffmpeg, ffprobe: ffmpeg };",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "`inspectPrerequisites` is the function capture and compare actually call, and until the broken-toolchain cases it had no test of its own: `prerequisites.test.ts` exercised `toolVersion` and `loadPlaywright` directly, while `orchestrate.test.ts` and `runner.test.ts` both replace `inspectPrerequisites` with a fake. The composition -- which tools get probed at all -- was the seam every caller stubs, so nothing covered it. Dropping the ffprobe probe and reporting FFmpeg's version in its place is what that hole looks like from the outside: the command claims to have verified an encoder it never ran. MEASURED: 2 of the 8 tests in prerequisites.test.ts fail -- 'names ffprobe specifically when that one is genuinely absent from PATH' (the mutant probes only ffmpeg, which the fixture PATH does supply, so nothing is rejected) and 'accepts the same toolchain once both encoders are on PATH, and reports what it found' (ffprobe comes back reading 'ffmpeg version 0.0-fixture'). Against the pre-existing tests for this file the same mutation SURVIVES.",
+    "tests": [
+      "tools/capture/prerequisites.test.ts"
+    ]
+  },
+  {
+    "id": "compare-checks-prerequisites-in-the-callers-environment",
+    "file": "tools/compare/orchestrate.mjs",
+    "find": "await io.inspectPrerequisites(deps.env ?? process.env, { signal: deps.signal })",
+    "replace": "await io.inspectPrerequisites(process.env, { signal: deps.signal })",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Compare must check prerequisites in the environment it was HANDED, not the ambient one. In production those are the same object, which is exactly why dropping `deps.env ??` reads as a harmless simplification -- and why every test that injects a fake `inspectPrerequisites` is blind to it, since a fake ignores the argument. MEASURED: 1 of the 28 tests in orchestrate.test.ts fails, 'spends nothing when a real prerequisite check meets a genuinely missing FFmpeg'. That case stubs the AMBIENT PATH with working shims and passes a short-an-FFmpeg PATH through `deps.env`, so the two disagree deliberately: the mutant reads the working one, gets past the check, and reaches `resolveRef`. Stubbing the ambient PATH rather than trusting the real one is what makes this a measurement -- on a machine with no FFmpeg installed the mutant would refuse for the right reason by accident and survive. Against the pre-existing tests for this file it SURVIVES.",
+    "tests": [
+      "tools/compare/orchestrate.test.ts"
+    ]
+  },
+  {
+    "id": "run-process-refuses-a-nonzero-exit",
+    "file": "tools/capture/process.mjs",
+    "find": "      else if (code !== 0) {",
+    "replace": "      else if (false) {",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "A subprocess that fails must not be read as a result. `toolVersion` returns the first line of STDOUT, so without this check an encoder that prints a plausible banner and then exits nonzero is accepted as an installed tool, and a decode or compose step that failed is treated as having produced its output file. Every pre-existing test of these paths replaced `runProcess` or the stage above it with a fake that resolves or throws on demand, so no test ran a real process that really failed. MEASURED: 3 of the 52 tests across the three listed files fail -- prerequisites' 'refuses a tool that is installed and broken, rather than reading its failure as a version', and the two orchestrate cases 'cleans up and removes the partial output when the real frame decode fails' and '... when the real still compositor fails', which then report an ENOENT on the file the failed shim never wrote instead of the tool's own failure. pixels' short-decode case is untouched: its shim exits 0 by design, and the byte-length guard is what catches it. Against the pre-existing tests for these three files the same mutation SURVIVES.",
+    "tests": [
+      "tools/capture/prerequisites.test.ts",
+      "tools/compare/orchestrate.test.ts",
+      "tools/compare/pixels.test.ts"
+    ]
   }
 ]

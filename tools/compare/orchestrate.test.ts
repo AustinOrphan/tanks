@@ -387,7 +387,19 @@ describe.skipIf(process.platform === 'win32')('compareRefs against a really brok
     // orchestrator would do, so watching it stay uncalled is what distinguishes "checked
     // prerequisites before spending" from "checked them at some point": moving the check
     // below `worktrees.add` leaves the message identical and fails this.
+    //
+    // The two environments disagree ON PURPOSE, and which one the orchestrator reads is the
+    // second thing under test. `deps.env` is short an FFmpeg and the ambient one is not, so
+    // dropping the `deps.env ??` and checking `process.env` instead -- the natural
+    // simplification, since they are the same object in production -- makes this pass
+    // through to `resolveRef`. Stubbing the ambient PATH rather than trusting the real one
+    // is what keeps that a measurement: on a machine with no FFmpeg installed, the mutant
+    // would refuse for the right reason by accident and survive.
     const root = await freshRoot();
+    vi.stubEnv('PATH', await toolDirectory({
+      ffmpeg: respondsToVersion('ffmpeg'),
+      ffprobe: respondsToVersion('ffprobe'),
+    }));
     const { deps, events } = harness({
       inspectPrerequisites,
       env: {
