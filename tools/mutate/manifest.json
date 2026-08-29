@@ -1514,5 +1514,79 @@
       "src/game/hud.test.ts"
     ],
     "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing."
+  },
+  {
+    "id": "shell-spawn-ignores-drawn-nose-reach",
+    "file": "src/sim/constants.ts",
+    "find": "  return SHELL_MUZZLE_FORWARD - bulletRadius * SHELL_NOSE_REACH_RADII;",
+    "replace": "  return SHELL_MUZZLE_FORWARD - bulletRadius;",
+    "expect": "killed",
+    "expectFailures": 7,
+    "tests": [
+      "src/sim/bullets.test.ts",
+      "src/render/entities.test.ts"
+    ],
+    "why": "Insets the shell by its COLLISION radius instead of its DRAWN nose reach -- the intuitive fix for issue #237, and the one that does not work: it leaves the visible nose 0.225 past the barrel opening, so the daylight pop the issue is about survives untouched. Worth pinning because the shell still spawns behind the plane, so every symbolic SHELL_SPAWN_FORWARD assertion in the tree stays green; only the two assertions that constrain the inset's SIZE can see it."
+  },
+  {
+    "id": "muzzle-flash-collapses-onto-the-shell",
+    "file": "src/sim/bullets.ts",
+    "find": "  return { spawn, flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)) }",
+    "replace": "  return { spawn, flash: spawn }",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/bullets.test.ts",
+      "src/sim/step-contract.test.ts"
+    ],
+    "why": "Drags the muzzle flash inward with the shell, so the gun visibly discharges from inside itself -- particles.ts bursts on the fire event's pos and is the only consumer that reads it. Pinned because the event still carries a plausible point on the firing line, which no shape or type check can distinguish from the right one."
+  },
+  {
+    "id": "muzzle-clearance-tested-at-the-plane",
+    "file": "src/sim/bullets.ts",
+    "find": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))",
+    "replace": "  const spawn = vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD))",
+    "expect": "killed",
+    "expectFailures": 7,
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "Asks whether the BARREL OPENING is clear rather than whether the region the shell will occupy is -- the exact confusion splitting the two constants introduced. It both refuses shots that fit and, worse, misses a wall sitting in the span the shell is actually born into, which spawns a live shell inside solid geometry."
+  },
+  {
+    "id": "blocked-shot-leaves-its-flash-on-the-barrel",
+    "file": "src/sim/bullets.ts",
+    "find": "    flash: { x: owner.pos.x, y: owner.pos.y },",
+    "replace": "    flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)),",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "When the shell cannot be born at the barrel and retreats to the tank centre, this leaves the flash out on the opening -- bursting inside the wall that caused the retreat, off a gun that produced nothing there this tick. The retreat still happens and the shell still spawns safely, so only an assertion on the event's position sees it."
+  },
+  {
+    "id": "drawn-shell-retuned-without-the-sim-following",
+    "file": "src/render/entities.ts",
+    "find": "  const SHELL_BODY_LEN = BULLET_RADIUS * 4.5;",
+    "replace": "  const SHELL_BODY_LEN = BULLET_RADIUS * 3.0;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/render/entities.test.ts"
+    ],
+    "why": "The failure mode SHELL_NOSE_REACH_RADII exists to catch: src/sim may not import src/render, so a renderer retune can silently desynchronise the spawn depth from the drawn geometry. Stands in for the next person shortening the shell without knowing the sim keyed an inset to its length."
+  },
+  {
+    "id": "owner-exempt-returning-instead-of-outbound",
+    "file": "src/sim/bullets.ts",
+    "find": "        if (vdot(b.vel, toOwner) <= 0) continue",
+    "replace": "        if (vdot(b.vel, toOwner) > 0) continue",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "Inverts resolveBulletHits' outbound exemption, so a tank is immune to its own returning ricochet and vulnerable to the shell it is currently firing. Load-bearing since issue #237: the spawn circle now overlaps the firer's own hull, and this guard is the only thing stopping a tank killing itself on the trigger pull."
   }
 ]
