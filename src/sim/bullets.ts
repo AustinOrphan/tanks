@@ -4,16 +4,25 @@ import { circleVsAABB, reflectSweep, circleVsCircle } from './collision'
 import { detonateMine, shellMayDetonate } from './mines'
 import type { World } from './world'
 import type { SimEvent } from './events'
-import { bulletConfig, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD } from './constants'
+import { bulletConfig, BULLET_RADIUS, TANK_RADIUS, MINE_TRIGGER_RADIUS, SHELL_SPAWN_FORWARD, SHELL_MUZZLE_FORWARD } from './constants'
 import { configFor } from './config'
 import { detHypot } from './math/hypot'
 
 /**
- * Where the shell is born: at the muzzle, unless the muzzle is inside a wall or
- * (when World.muzzleClearsTanks is on) inside a live neighbour's hit circle.
+ * Where the shell is born: CENTRED one bullet-radius behind the muzzle plane, so its nose
+ * starts at the opening rather than past it (issue #237), unless that position is inside a
+ * wall or (when World.muzzleClearsTanks is on) inside a live neighbour's hit circle.
  *
- * SHELL_SPAWN_FORWARD reaches past the tank's own collision radius, so a tank
- * nose-to-wall has its muzzle INSIDE that wall. Spawning there would put a live shell
+ * THE CLEARANCE TEST FOLLOWS THE SHELL, NOT THE PLANE, and that is the whole point of
+ * moving it. It asks whether the circle the shell will actually OCCUPY at birth overlaps
+ * solid geometry -- centre `SHELL_SPAWN_FORWARD`, radius `BULLET_RADIUS`, i.e. the span
+ * from `SHELL_SPAWN_FORWARD - BULLET_RADIUS` out to the muzzle plane. Testing at the plane
+ * instead, as this did when the two were one number, now checks a region the shell does not
+ * occupy: it would refuse shots that fit and, worse, would MISS a wall sitting in the span
+ * the shell is actually born into. An embedded projectile is the failure that matters here.
+ *
+ * SHELL_SPAWN_FORWARD still reaches past the tank's own collision radius, so a tank
+ * nose-to-wall has its shell INSIDE that wall. Spawning there would put a live shell
  * in solid geometry -- the state stepBullets already has to retire on sight -- and
  * firing while touching a wall would silently burn a SHELL_CAP slot.
  *
@@ -22,27 +31,41 @@ import { detHypot } from './math/hypot'
  * the way it always has rather than inventing a new one.
  *
  * The tank check is the same fallback shape, gated on World.muzzleClearsTanks (see
- * its doc comment for the ruling): a muzzle landing inside a LIVE non-owner tank's
+ * its doc comment for the ruling): a spawn circle overlapping a LIVE non-owner tank's
  * hit circle -- TANK_RADIUS + BULLET_RADIUS, resolveBulletHits' own threshold --
  * falls back to owner.pos exactly as the wall case does.
+ *
+ * BOTH POINTS COME BACK TOGETHER because the fallback has to move them together. When the
+ * shell retreats to the tank centre, a flash left out on the barrel would advertise a gun
+ * that produced nothing there this tick. Returning one point and re-deriving the other at
+ * the call site meant comparing the returned point against `owner.pos` to infer which
+ * branch ran -- an inference, and one whose identity half (`pos === owner.pos`) could
+ * never be true, since the fallback built a fresh object. The branch now says which case
+ * it took instead of leaving the caller to guess.
  */
-function muzzlePoint(world: World, owner: Tank, dir: Vec2): Vec2 {
-  const muzzle = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))
+interface MuzzleSolution {
+  /** Shell centre at birth: the plane less BULLET_RADIUS, or the tank centre on retreat. */
+  spawn: Vec2
+  /** Where the gun visibly went off: the barrel opening, or the tank centre on retreat. */
+  flash: Vec2
+}
+function muzzlePoint(world: World, owner: Tank, dir: Vec2): MuzzleSolution {
+  const spawn = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))
+  const retreat = (): MuzzleSolution => ({
+    spawn: { x: owner.pos.x, y: owner.pos.y },
+    flash: { x: owner.pos.x, y: owner.pos.y },
+  })
   for (const w of world.walls) {
     if (w.destroyed) continue
-    if (circleVsAABB(muzzle, BULLET_RADIUS, w.aabb).hit) {
-      return { x: owner.pos.x, y: owner.pos.y }
-    }
+    if (circleVsAABB(spawn, BULLET_RADIUS, w.aabb).hit) return retreat()
   }
   if (world.muzzleClearsTanks) {
     for (const t of world.tanks) {
       if (t.id === owner.id || !t.alive) continue
-      if (circleVsCircle(muzzle, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
-        return { x: owner.pos.x, y: owner.pos.y }
-      }
+      if (circleVsCircle(spawn, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) return retreat()
     }
   }
-  return muzzle
+  return { spawn, flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)) }
 }
 
 export function ownerShellCount(world: World, ownerId: number): number {
@@ -72,7 +95,17 @@ export function spawnBullet(
   }
   const cfg = bulletConfig[type]
   const dir = fromAngle(angle)
-  const pos = muzzlePoint(world, owner, dir)
+  /**
+   * The FLASH goes on the barrel opening, not on the shell's centre (issue #237).
+   *
+   * `spawn` is the shell's centre, one bullet-radius behind the plane; emitting that as the
+   * fire event's position would drag the muzzle flash inward with the shell and make the
+   * gun look like it discharges from inside itself. Consumers of this event treat the
+   * event's `pos` as "where the gun went off" -- particles.ts bursts on it -- so it
+   * carries `flash`, which muzzlePoint has already retreated to the tank centre in the
+   * case where the shell could not be born at the barrel at all.
+   */
+  const { spawn: pos, flash } = muzzlePoint(world, owner, dir)
   const bullet: Bullet = {
     id: world.nextId++,
     ownerId,
@@ -83,7 +116,7 @@ export function spawnBullet(
     alive: true,
   }
   world.bullets.push(bullet)
-  events.push({ type: 'fire', ownerId, bulletType: type, pos: { x: pos.x, y: pos.y }, angle })
+  events.push({ type: 'fire', ownerId, bulletType: type, pos: { x: flash.x, y: flash.y }, angle })
   return true
 }
 

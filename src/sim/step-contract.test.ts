@@ -3,7 +3,7 @@ import { createWorld, step } from './world';
 import type { World } from './world';
 import type { Tank, Spawn, InputState } from './types';
 import type { SimEvent } from './events';
-import { COUNTDOWN_TICKS, GRACE_TICKS, SHELL_SPAWN_FORWARD } from './constants';
+import { COUNTDOWN_TICKS, GRACE_TICKS, SHELL_MUZZLE_FORWARD } from './constants';
 
 /**
  * Pins step()'s CONTRACT WITH ITS CALLER -- the parts of step() that are not about which
@@ -131,7 +131,9 @@ describe('step() hands its events back to the caller', () => {
     expect(fire!.bulletType).toBe('normal');
     expect(fire!.angle).toBeCloseTo(Math.PI / 2, 9);
     expect(fire!.pos.x).toBeCloseTo(5, 9);
-    expect(fire!.pos.y).toBeCloseTo(5 + SHELL_SPAWN_FORWARD, 9);
+    // The muzzle PLANE, not the shell's spawn centre (issue #237) -- the event positions
+    // the muzzle flash, and the shell is born a drawn-nose-length behind the opening.
+    expect(fire!.pos.y).toBeCloseTo(5 + SHELL_MUZZLE_FORWARD, 9);
   });
 
   it('pressing the mine key drops a mine, and the mine-dropped event reaches the caller', () => {

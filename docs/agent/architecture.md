@@ -264,7 +264,13 @@ parallel plumbing. The **authoritative balance scalars live in
 `config/data/balance.json`**; `constants.ts` derives from it and stays the
 sim's one import site, so retuning is a two-file edit — the JSON entry and its
 literal pin in `constants.test.ts` (every balance.json value is pinned;
-`SHELL_SPAWN_FORWARD` stays a TS literal, render-coupled).
+`SHELL_MUZZLE_FORWARD` stays a TS literal, render-coupled). The muzzle **plane** and
+the shell's **spawn centre** are two numbers, not one (#237): `SHELL_SPAWN_FORWARD` is
+derived from the plane by `shellSpawnForward()`, insetting by the shell's *drawn* nose
+reach (`SHELL_NOSE_REACH_RADII`, a render measurement the sim may not import) so the
+visible round starts at the barrel opening rather than past it. `entities.test.ts` pins
+that constant both ways against the shell mesh's built geometry; the `fire` event
+carries the plane, so the muzzle flash does not follow the shell inward.
 `decideAi` routes by the resolved profile's `behavior`; grey's dodge patience is
 `(1 − aggression) · TICK_HZ`, rounded, pinned equal to `DODGE_PATIENCE_TICKS` in
 `config/roster.test.ts`. Profile fields consumed today: `behavior`, `aggression`,

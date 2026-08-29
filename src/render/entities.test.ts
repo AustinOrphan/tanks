@@ -14,7 +14,7 @@ import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
-import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
+import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD, SHELL_MUZZLE_FORWARD, SHELL_NOSE_REACH_RADII } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor } from '../sim/config';
@@ -624,16 +624,76 @@ describe('tank geometry', () => {
     views.dispose();
   });
 
-  it('draws the muzzle exactly where the SIM spawns shells', () => {
+  it('draws the muzzle opening exactly at the SIM muzzle plane', () => {
     // The bug this closes: shells were born at the tank's centre and flew out through
     // the hull, because the render's barrel length and the sim's spawn point were
     // unrelated numbers. Asserted against the sim constant, so re-hardcoding
     // BARREL_OUT fails here instead of showing up as shells appearing out of the
-    // turret. (Retuning SHELL_SPAWN_FORWARD stays green -- BARREL_OUT follows it,
+    // turret. (Retuning SHELL_MUZZLE_FORWARD stays green -- BARREL_OUT follows it,
     // which is the point.)
+    //
+    // The PLANE, not SHELL_SPAWN_FORWARD (issue #237): the spawn is now one bullet-radius
+    // behind the opening, so deriving the drawn barrel from it would shorten the gun by
+    // exactly that radius. Swapping this symbol back to SHELL_SPAWN_FORWARD is the
+    // regression, and it fails here.
     const { scene, views } = build();
     const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
-    expect(tip).toBeCloseTo(SHELL_SPAWN_FORWARD, 9);
+    expect(tip).toBeCloseTo(SHELL_MUZZLE_FORWARD, 9);
+    views.dispose();
+  });
+
+  /**
+   * Measure how far the BUILT shell mesh reaches ahead of the point the sim puts it at.
+   *
+   * Read off the geometry the renderer actually constructed -- the nose sphere's centre
+   * offset plus its radius -- rather than recomputed from SHELL_BODY_LEN / SHELL_R. Those
+   * are module-private, and a test that recomputes them is a test that agrees with itself:
+   * it would keep passing if makeBullet stopped using them.
+   */
+  function drawnNoseReach(): number {
+    const scene = new THREE.Scene();
+    const views = createEntityViews(scene);
+    const w = makeWorld();
+    w.bullets.push(mkBullet(50, { x: 1, y: 1 }, { x: NORMAL_SPEED, y: 0 }));
+    views.sync(w, w, 0);
+    const shell = shellGroup(scene);
+    const nose = shell.children.find(
+      (c) => (c as THREE.Mesh).geometry instanceof THREE.SphereGeometry,
+    ) as THREE.Mesh;
+    const reach = nose.position.x + (nose.geometry as THREE.SphereGeometry).parameters.radius;
+    views.dispose();
+    return reach;
+  }
+
+  it('agrees with the sim about how far a drawn shell reaches ahead of its position', () => {
+    // THE TWO-WAY PIN, and the only thing keeping constants.ts honest about the renderer.
+    //
+    // src/sim may not import src/render, so SHELL_NOSE_REACH_RADII is a bare 3.25 in the
+    // sim carrying a measurement that lives here. Nothing but this assertion connects
+    // them: retune SHELL_BODY_LEN or SHELL_R without moving the sim constant and the
+    // shell spawns at the wrong depth in the barrel, silently, with every other test in
+    // this file green -- they all check the shell's SHAPE, not where it is born.
+    //
+    // Fails in both directions by construction: the left side is measured off the built
+    // mesh, the right side is the sim's number.
+    expect(drawnNoseReach()).toBeCloseTo(BULLET_RADIUS * SHELL_NOSE_REACH_RADII, 9);
+  });
+
+  it('starts the shell nose flush with the drawn muzzle opening, not past it', () => {
+    // Issue #237's headline criterion, as a coupling rather than as two constants that
+    // happen to agree today: the shell's DRAWN nose, at the moment the sim gives birth to
+    // it, lands exactly on the barrel opening. Further out is the daylight pop this issue
+    // exists to remove; further in is a shell that starts buried in the turret.
+    //
+    // Named negative control, both halves run: setting SHELL_NOSE_REACH_RADII to 0
+    // (the pre-#237 behaviour) leaves the nose 0.325 past the tip and fails here, and
+    // setting it to 1.0 (inset by the COLLISION radius, the intuitive-but-wrong fix)
+    // leaves it 0.225 past and also fails here. Everything else that mentions
+    // SHELL_SPAWN_FORWARD refers to it symbolically and so holds for any inset at all,
+    // including zero -- this is the one assertion that constrains the inset's SIZE.
+    const { scene, views } = build();
+    const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
+    expect(SHELL_SPAWN_FORWARD + drawnNoseReach()).toBeCloseTo(tip, 9);
     views.dispose();
   });
 

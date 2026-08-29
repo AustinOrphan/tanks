@@ -227,18 +227,23 @@ export const MOMENTS: Record<string, MomentDef> = {
     // the original 20-tick window cut the explosion burst off mid-fade). See
     // MomentDef.ticks's doc comment for the particle-decay math.
     ticks: 60,
-    // MEASURED (buildKillWorld, fire at input(9) -> events[10]): the shell (speed
-    // 6 = 0.1 unit/tick) leaves the muzzle at (4.35, 4.5), 1.15 units from the victim's
-    // centre, and closes to the TANK_RADIUS + BULLET_RADIUS = 0.6 hit threshold 5 ticks
-    // later, landing the kill at tick 15. `destroyed` intentionally stops well short of
-    // RESPAWN_DELAY_TICKS later (tick 135), so the revival never enters this shorter clip.
+    // RE-MEASURED for issue #237's muzzle inset (buildKillWorld, fire at input(9) ->
+    // events[10]): the shooter sits at (3.5, 4.5) and the shell (speed 6 = 0.1 unit/tick)
+    // is now born at (4.025, 4.5) rather than a third of a unit further out. events[10]'s
+    // world already shows it one step along at (4.125, 4.5) -- world.ts spawns in
+    // applyPlayerInputs and moves in stepBullets within the same tick -- which is 1.375
+    // units from the victim's centre at (5.5, 4.5). It closes to the TANK_RADIUS +
+    // BULLET_RADIUS = 0.6 hit threshold 8 ticks after that, landing the kill at tick 18. The whole 3-tick slip is the inset
+    // divided by the shell's speed (0.325 / 0.1), which is why every shell-driven pin in
+    // this file moved by the same amount. `destroyed` intentionally stops well short of
+    // RESPAWN_DELAY_TICKS later (tick 138), so the revival never enters this shorter clip.
     expect: [
-      { type: 'tank-destroyed', tick: 15 },
+      { type: 'tank-destroyed', tick: 18 },
       // MEASURED alongside tank-destroyed, same tick, no ricochet: point-blank range
       // means the shell's lethal hit and its explosion fire on the SAME tick,
       // unconditionally, in resolveBulletHits (bullets.ts) -- every fatal shell impact
       // emits `tank-destroyed` then `explosion` before the loop breaks.
-      { type: 'explosion', tick: 15 },
+      { type: 'explosion', tick: 18 },
     ],
     focus: [4.5, 0.3, 4.5], span: 4,
     build: buildKillWorld,
@@ -247,31 +252,33 @@ export const MOMENTS: Record<string, MomentDef> = {
 
   /** Kill then stock respawn: #201's before/after and three-up media source. */
   respawn: {
-    // MEASURED kill tick (15, see `destroyed` above) + RESPAWN_DELAY_TICKS (the shipped
+    // MEASURED kill tick (18, see `destroyed` above) + RESPAWN_DELAY_TICKS (the shipped
     // revival delay) + 45 ticks so the entrance animation has room to play out after the
     // revival tick. Deriving the WINDOW size from RESPAWN_DELAY_TICKS is fine here --
     // it only decides how long simulateMoment runs, not what a pin claims happened --
     // the tautology risk the comment below guards against is specific to `expect[]`
     // tick literals, which moments.test.ts's own delay assertion re-derives against.
-    ticks: 15 + RESPAWN_DELAY_TICKS + 45,
+    ticks: 18 + RESPAWN_DELAY_TICKS + 45,
     expect: [
-      { type: 'tank-destroyed', tick: 15 },
+      { type: 'tank-destroyed', tick: 18 },
       // MEASURED alongside tank-destroyed, same tick, same point-blank shot `destroyed`
       // documents: the kill also emits `explosion` unconditionally (resolveBulletHits,
       // bullets.ts). Pinned here too, deliberately, rather than left to `destroyed`
       // alone -- the generic per-moment purity check runs independently per moment
       // over EACH one's own window, so `destroyed` pinning it says nothing about
       // whether `explosion` also fires again somewhere inside respawn's much longer
-      // 0..180 window; pinning it here confirms it does not.
-      { type: 'explosion', tick: 15 },
-      // MEASURED: tick 135. Pinned as a literal, deliberately NOT `15 +
-      // RESPAWN_DELAY_TICKS` -- moments.test.ts's own delay assertion computes
-      // `revived - killed` and compares it to the SAME imported RESPAWN_DELAY_TICKS
-      // constant, so a derived expression here would make that comparison
-      // `(15 + C) - 15 === C`, true for every value of C and incapable of failing. A
-      // literal is what lets a future balance change to RESPAWN_DELAY_TICKS actually
-      // red both that assertion and the generic per-tick pin below, independently.
-      { type: 'respawn', tick: 135 },
+      // 0..183 window; pinning it here confirms it does not.
+      { type: 'explosion', tick: 18 },
+      // MEASURED: tick 138 (was 135 before issue #237's muzzle inset pushed the kill
+      // from 15 to 18; the revival delay itself is unchanged). Pinned as a literal,
+      // deliberately NOT `18 + RESPAWN_DELAY_TICKS` -- moments.test.ts's own delay
+      // assertion computes `revived - killed` and compares it to the SAME imported
+      // RESPAWN_DELAY_TICKS constant, so a derived expression here would make that
+      // comparison `(18 + C) - 18 === C`, true for every value of C and incapable of
+      // failing. A literal is what lets a future balance change to RESPAWN_DELAY_TICKS
+      // actually red both that assertion and the generic per-tick pin below,
+      // independently.
+      { type: 'respawn', tick: 138 },
     ],
     // Landmine (versus-respawn.test.ts:8-33): stepRespawns routes the revival through
     // pickVersusSpawnCell, scored against every LIVING tank -- here, only the shooter,
@@ -313,17 +320,19 @@ export const MOMENTS: Record<string, MomentDef> = {
       fire: false, mine: false,
     };
     return {
-      // MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit):
-      // fire lands at events[10] (input(9) -> events[10], the shared convention every
-      // other moment uses); the shell (0.1 unit/tick) reaches the wall and ricochets at
-      // events[33], with no second bounce anywhere in a 60-tick probe -- consistent with
+      // MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit;
+      // RE-MEASURED for issue #237's muzzle inset): fire lands at events[10] (input(9) ->
+      // events[10], the shared convention every other moment uses); the shell (0.1
+      // unit/tick) reaches the wall and ricochets at events[36] -- 3 ticks later than
+      // before, the inset over the shell's speed -- with no second bounce anywhere in a
+      // 60-tick probe, consistent with
       // the normal shell's 1-bounce budget: after the first ricochet event bouncesLeft
       // is 0, so a later wall hit would stop the shell dead rather than emit a second
       // ricochet event.
       ticks: 45,
       expect: [
         { type: 'fire', tick: 10 },
-        { type: 'ricochet', tick: 33 },
+        { type: 'ricochet', tick: 36 },
       ],
       focus: [1.5, 0.3, 0.5], span: 5,
       build: () => buildSoloWorld([RICOCHET_WALL]),
@@ -362,20 +371,27 @@ export const MOMENTS: Record<string, MomentDef> = {
     // this moment stays a pure wall-break with no incidental self-kill to also pin.
     const WALLBREAK_IDLE: InputState = { move: { x: 0, y: 0 }, aim: { x: 1000, y: 0 }, fire: false, mine: false };
     return {
-      // MEASURED (throwaway vite-node probe): fire at events[10]; the shell reaches the
-      // mine's trigger radius (MINE_TRIGGER_RADIUS + BULLET_RADIUS = 0.45) and detonates
-      // it at events[26] -- IMMEDIATELY, by owner direction on PR #311 (shooting a mine
-      // is deliberately setting it off; no reaction window) -- and the age-0 blast
-      // (already ~0.72 radius, comfortably past the wall's 0.3-unit gap from the mine)
-      // destroys the wall on that SAME tick -- `mine-detonate` and `wall-destroyed`
-      // both land at events[26], not two ticks.
+      // MEASURED (throwaway vite-node probe; RE-MEASURED for issue #237's muzzle inset):
+      // fire at events[10]; the shell reaches the mine's trigger radius
+      // (MINE_TRIGGER_RADIUS + BULLET_RADIUS = 0.45) and detonates it at events[30] --
+      // IMMEDIATELY, by owner direction on PR #311 (shooting a mine is deliberately
+      // setting it off; no reaction window) -- and the age-0 blast (already ~0.72 radius,
+      // comfortably past the wall's 0.3-unit gap from the mine) destroys the wall on that
+      // SAME tick -- `mine-detonate` and `wall-destroyed` both land at events[30], not
+      // two ticks.
+      // FOUR ticks later than the old pin of 26, where the other shell-driven moments in
+      // this file moved three. The inset is 3.25 ticks of flight at 0.1 unit/tick, so
+      // whether it costs 3 ticks or 4 depends on which side of a tick boundary the
+      // threshold crossing already sat on -- this one sat close enough to the boundary to
+      // be pushed over it. Both numbers are measured, not derived; do not "correct" one
+      // to match the other.
       // 66, not 36 (final-review finding I2): the wall-destroyed particle burst
-      // (particles.ts's `burst()`) needs room past tick 26 to decay, same reasoning as
+      // (particles.ts's `burst()`) needs room past tick 30 to decay, same reasoning as
       // `destroyed` above -- see MomentDef.ticks's doc comment.
       ticks: 66,
       expect: [
-        { type: 'mine-detonate', tick: 26 },
-        { type: 'wall-destroyed', tick: 26 },
+        { type: 'mine-detonate', tick: 30 },
+        { type: 'wall-destroyed', tick: 30 },
       ],
       focus: [2, 0.3, 0], span: 5,
       build: () => {

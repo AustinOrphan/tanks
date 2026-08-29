@@ -6,7 +6,7 @@ import type { BulletType } from './types';
 // pin in constants.test.ts, which covers every balance.json value -- and the
 // JSON is a build-time static import, so the sim stays pure and replays stay
 // exact functions of their inputs. Everything else (epsilons, derived radii,
-// tick counts, and SHELL_SPAWN_FORWARD, whose value is coupled to the rendered
+// tick counts, and SHELL_MUZZLE_FORWARD, whose value is coupled to the rendered
 // barrel geometry) remains TypeScript below.
 import data from './config/data/balance.json';
 
@@ -21,15 +21,76 @@ export const TANK_SPEED = data.tank.speed;
 // ---- Bullets ----
 export const BULLET_RADIUS = data.shells.radius;
 /**
- * Horizontal spawn offset from tank centre to shell centre, in the firing direction.
- * Tuned to match the rendered muzzle reach from the gameplay camera.
+ * THE MUZZLE PLANE: distance from tank centre to the barrel OPENING, in the firing
+ * direction. Tuned to match the rendered muzzle reach from the gameplay camera.
  *
- * This lives in the sim because the sim decides where a shell exists. The render derives
- * its barrel length from it (entities.ts: BARREL_OUT = SHELL_SPAWN_FORWARD - TURRET_R),
- * so the drawn muzzle is exactly the point shells come out of -- lengthening the gun
- * moves the spawn with it. Nothing related the two before, which is how they drifted.
+ * This lives in the sim because the sim decides where the gun ends. The render derives
+ * its barrel length from it (entities.ts: BARREL_OUT = SHELL_MUZZLE_FORWARD - TURRET_R),
+ * so the drawn muzzle is exactly the plane the sim fires from -- lengthening the gun
+ * moves everything with it. Nothing related the two before, which is how they drifted.
+ *
+ * FIRING EFFECTS BELONG HERE, not at the shell's centre: the `fire` event carries this
+ * point, so the muzzle flash stays on the barrel opening even though the shell itself is
+ * born behind it (issue #237).
  */
-export const SHELL_SPAWN_FORWARD = 0.85;
+export const SHELL_MUZZLE_FORWARD = 0.85;
+
+/**
+ * How far the DRAWN shell reaches ahead of its simulated centre, in bullet-radii.
+ *
+ * THIS IS A RENDER MEASUREMENT THAT THE SIM HAS TO KNOW, which is why it is a bare number
+ * here rather than an import: `src/sim` may not read `src/render`. It is 3.25 because
+ * entities.ts builds a shell as a cylinder of SHELL_BODY_LEN = BULLET_RADIUS * 4.5 centred
+ * on the shell's position, capped with a nose sphere of SHELL_R = BULLET_RADIUS * 1.0
+ * centred on the cylinder's end -- so the nose reaches BULLET_RADIUS * (4.5 / 2 + 1).
+ *
+ * KEYED TO THE DRAWN LENGTH, NOT TO BULLET_RADIUS ALONE. The obvious inset is one
+ * collision radius, and it is wrong: the renderer deliberately draws a shell far larger
+ * than it collides ("drawn dead-on it is nearly invisible, so the body is scaled up and
+ * given length" -- entities.ts), and it is that exaggerated body, not the 0.1-radius
+ * collision circle, that the player sees clear the barrel. Insetting by BULLET_RADIUS
+ * leaves the visible nose 0.225 past the opening and the pop entirely intact.
+ *
+ * Because the justification lives in the renderer, entities.test.ts pins this BOTH WAYS
+ * against the shell mesh's measured bounding box: retuning SHELL_BODY_LEN or SHELL_R
+ * without moving this number fails there. That pin is the only thing keeping the two
+ * files honest, since the dependency cannot be expressed as an import.
+ */
+export const SHELL_NOSE_REACH_RADII = 3.25;
+
+/**
+ * Distance from tank centre to the shell's CENTRE at spawn -- the muzzle plane less the
+ * shell's drawn nose reach, so its VISIBLE nose begins at the opening rather than past it
+ * (issue #237).
+ *
+ * WHY THE TWO ARE SEPARATE NUMBERS. They used to be one, and that one number meant "shell
+ * centre". A shell has visible length, so a centre at the muzzle plane put its nose clear
+ * of the barrel on its very first frame, which reads as a pop rather than as something
+ * emerging. Insetting the CENTRE while leaving the PLANE alone fixes the pop without
+ * shortening the drawn gun -- the failure mode of the obvious one-number fix, and the
+ * reason BARREL_OUT derives from the plane rather than from the spawn.
+ *
+ * THE SHELL STARTS INSIDE THE BARREL AND THAT IS THE POINT. At 0.525 the drawn body spans
+ * [0.3, 0.85] against a barrel tube running [TURRET_R = 0.36, 0.85] of radius
+ * BULLET_RADIUS * 1.3 -- wider than the shell -- so the round is sheathed by the gun at
+ * birth and slides out of it over the next few ticks (5.5 at NORMAL_SPEED, 2.8 at
+ * FAST_SPEED) instead of appearing in daylight. The tail's last 0.06 sits inside the
+ * turret dome, which is radius TURRET_R and opaque.
+ *
+ * SELF-COLLISION IS NOT A CONCERN AT THIS DEPTH even though the spawn circle now overlaps
+ * the owner's own hull (0.425 against TANK_RADIUS = 0.5): resolveBulletHits exempts the
+ * owner while `vdot(b.vel, toOwner) <= 0`, i.e. for exactly as long as the shell is
+ * travelling away, and a shell leaving the muzzle always is. The exemption predates this
+ * change; what is new is that it is now load-bearing rather than belt-and-braces.
+ *
+ * Derived through `shellSpawnForward` rather than written as a literal so the relationship
+ * is the thing that ships: a shell type with a different radius insets by its own drawn
+ * reach, and a test can vary the radius to prove the derivation is live rather than pinned.
+ */
+export function shellSpawnForward(bulletRadius: number): number {
+  return SHELL_MUZZLE_FORWARD - bulletRadius * SHELL_NOSE_REACH_RADII;
+}
+export const SHELL_SPAWN_FORWARD = shellSpawnForward(BULLET_RADIUS);
 
 export const NORMAL_SPEED = data.shells.normal.speed;
 export const FAST_SPEED = data.shells.fast.speed;
