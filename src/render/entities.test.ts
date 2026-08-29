@@ -14,7 +14,7 @@ import { ARENAS, createWorldFor } from '../sim/arena';
 import type { Tank, Spawn, Bullet, Vec2 } from '../sim/types';
 import { blastRadiusAt } from '../sim/mines';
 import { MINE_TIMER } from '../sim/constants';
-import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD } from '../sim/constants';
+import { BULLET_RADIUS, TANK_RADIUS, SHELL_SPAWN_FORWARD, SHELL_MUZZLE_FORWARD } from '../sim/constants';
 import { NORMAL_SPEED, MINE_BLAST_RADIUS, MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor } from '../sim/config';
@@ -624,16 +624,39 @@ describe('tank geometry', () => {
     views.dispose();
   });
 
-  it('draws the muzzle exactly where the SIM spawns shells', () => {
+  it('draws the muzzle opening exactly at the SIM muzzle plane', () => {
     // The bug this closes: shells were born at the tank's centre and flew out through
     // the hull, because the render's barrel length and the sim's spawn point were
     // unrelated numbers. Asserted against the sim constant, so re-hardcoding
     // BARREL_OUT fails here instead of showing up as shells appearing out of the
-    // turret. (Retuning SHELL_SPAWN_FORWARD stays green -- BARREL_OUT follows it,
+    // turret. (Retuning SHELL_MUZZLE_FORWARD stays green -- BARREL_OUT follows it,
     // which is the point.)
+    //
+    // The PLANE, not SHELL_SPAWN_FORWARD (issue #237): the spawn is now one bullet-radius
+    // behind the opening, so deriving the drawn barrel from it would shorten the gun by
+    // exactly that radius. Swapping this symbol back to SHELL_SPAWN_FORWARD is the
+    // regression, and it fails here.
     const { scene, views } = build();
     const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
-    expect(tip).toBeCloseTo(SHELL_SPAWN_FORWARD, 9);
+    expect(tip).toBeCloseTo(SHELL_MUZZLE_FORWARD, 9);
+    views.dispose();
+  });
+
+  it('starts the shell nose flush with the drawn muzzle opening, not past it', () => {
+    // Issue #237's headline, as a render/sim coupling rather than as two constants that
+    // happen to agree today. The shell is drawn as a sphere of BULLET_RADIUS centred on
+    // the sim's spawn point, so its nose reaches SHELL_SPAWN_FORWARD + BULLET_RADIUS.
+    // That has to land on the barrel tip: further out is the daylight pop this issue
+    // exists to remove, further in is a shell born inside the gun.
+    //
+    // Negative control -- this fails if shellSpawnForward stops subtracting the radius
+    // (nose lands a radius past the tip) and if it subtracts the wrong radius. It is the
+    // only assertion in the tree that ties the inset's SIZE to the drawn geometry;
+    // everything else in bullets.test.ts refers to SHELL_SPAWN_FORWARD symbolically and
+    // therefore holds for any inset at all, including zero.
+    const { scene, views } = build();
+    const tip = Math.max(...profile(part(scene, 'barrel')).map((p) => p.y));
+    expect(SHELL_SPAWN_FORWARD + BULLET_RADIUS).toBeCloseTo(tip, 9);
     views.dispose();
   });
 

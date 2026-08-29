@@ -31,27 +31,41 @@ import { detHypot } from './math/hypot'
  * the way it always has rather than inventing a new one.
  *
  * The tank check is the same fallback shape, gated on World.muzzleClearsTanks (see
- * its doc comment for the ruling): a muzzle landing inside a LIVE non-owner tank's
+ * its doc comment for the ruling): a spawn circle overlapping a LIVE non-owner tank's
  * hit circle -- TANK_RADIUS + BULLET_RADIUS, resolveBulletHits' own threshold --
  * falls back to owner.pos exactly as the wall case does.
+ *
+ * BOTH POINTS COME BACK TOGETHER because the fallback has to move them together. When the
+ * shell retreats to the tank centre, a flash left out on the barrel would advertise a gun
+ * that produced nothing there this tick. Returning one point and re-deriving the other at
+ * the call site meant comparing the returned point against `owner.pos` to infer which
+ * branch ran -- an inference, and one whose identity half (`pos === owner.pos`) could
+ * never be true, since the fallback built a fresh object. The branch now says which case
+ * it took instead of leaving the caller to guess.
  */
-function muzzlePoint(world: World, owner: Tank, dir: Vec2): Vec2 {
-  const muzzle = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))
+interface MuzzleSolution {
+  /** Shell centre at birth: the plane less BULLET_RADIUS, or the tank centre on retreat. */
+  spawn: Vec2
+  /** Where the gun visibly went off: the barrel opening, or the tank centre on retreat. */
+  flash: Vec2
+}
+function muzzlePoint(world: World, owner: Tank, dir: Vec2): MuzzleSolution {
+  const spawn = vadd(owner.pos, vscale(dir, SHELL_SPAWN_FORWARD))
+  const retreat = (): MuzzleSolution => ({
+    spawn: { x: owner.pos.x, y: owner.pos.y },
+    flash: { x: owner.pos.x, y: owner.pos.y },
+  })
   for (const w of world.walls) {
     if (w.destroyed) continue
-    if (circleVsAABB(muzzle, BULLET_RADIUS, w.aabb).hit) {
-      return { x: owner.pos.x, y: owner.pos.y }
-    }
+    if (circleVsAABB(spawn, BULLET_RADIUS, w.aabb).hit) return retreat()
   }
   if (world.muzzleClearsTanks) {
     for (const t of world.tanks) {
       if (t.id === owner.id || !t.alive) continue
-      if (circleVsCircle(muzzle, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) {
-        return { x: owner.pos.x, y: owner.pos.y }
-      }
+      if (circleVsCircle(spawn, BULLET_RADIUS, t.pos, TANK_RADIUS).hit) return retreat()
     }
   }
-  return muzzle
+  return { spawn, flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)) }
 }
 
 export function ownerShellCount(world: World, ownerId: number): number {
@@ -81,22 +95,17 @@ export function spawnBullet(
   }
   const cfg = bulletConfig[type]
   const dir = fromAngle(angle)
-  const pos = muzzlePoint(world, owner, dir)
   /**
    * The FLASH goes on the barrel opening, not on the shell's centre (issue #237).
    *
-   * `pos` is the shell's centre, one bullet-radius behind the plane; emitting that as the
+   * `spawn` is the shell's centre, one bullet-radius behind the plane; emitting that as the
    * fire event's position would drag the muzzle flash inward with the shell and make the
-   * gun look like it discharges from inside itself. Consumers of this event treat `pos` as
-   * "where the gun went off" -- particles.ts bursts on it -- so it carries the plane.
-   *
-   * Reuses `muzzlePoint`'s fallback rather than recomputing: when the spawn was pushed back
-   * to the tank centre because the shell would not fit, the flash belongs at the tank too.
-   * Otherwise it would fire off a barrel that, this tick, produced nothing there.
+   * gun look like it discharges from inside itself. Consumers of this event treat the
+   * event's `pos` as "where the gun went off" -- particles.ts bursts on it -- so it
+   * carries `flash`, which muzzlePoint has already retreated to the tank centre in the
+   * case where the shell could not be born at the barrel at all.
    */
-  const flashPos = pos === owner.pos || (pos.x === owner.pos.x && pos.y === owner.pos.y)
-    ? pos
-    : vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD))
+  const { spawn: pos, flash } = muzzlePoint(world, owner, dir)
   const bullet: Bullet = {
     id: world.nextId++,
     ownerId,
@@ -107,7 +116,7 @@ export function spawnBullet(
     alive: true,
   }
   world.bullets.push(bullet)
-  events.push({ type: 'fire', ownerId, bulletType: type, pos: { x: flashPos.x, y: flashPos.y }, angle })
+  events.push({ type: 'fire', ownerId, bulletType: type, pos: { x: flash.x, y: flash.y }, angle })
   return true
 }
 
