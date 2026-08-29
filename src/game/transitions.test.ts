@@ -130,6 +130,40 @@ describe('createTransitionRunner: interruption', () => {
     expect(h.log.length, 'every transition settled exactly once').toBe(20);
   });
 
+  it('a transition started from an INTERRUPTED settle is settled, not orphaned', () => {
+    // Found by mutating `settleNow`'s clear-before-run ordering and watching all ten
+    // other tests stay green: they only ever exercised the TIMER path, so the interrupt
+    // path's bookkeeping was unpinned. Probing it showed the real defect -- two live
+    // timers while `pending` reported 1, and the chained transition's end state never
+    // applied. `pending` is the field criterion 6 is asserted on, so a leak it cannot see
+    // is the worst shape this bug could take.
+    const h = harness(150);
+    let chained = false;
+    h.runner.run(
+      () => h.log.push('begin-A'),
+      () => {
+        h.log.push('settle-A');
+        if (chained) return;
+        chained = true;
+        h.runner.run(() => h.log.push('begin-C'), () => h.log.push('settle-C'));
+      },
+    );
+    // B interrupts A. A's settle starts C; C is superseded by B before it can run.
+    h.runner.run(() => h.log.push('begin-B'), () => h.log.push('settle-B'));
+
+    expect(h.timersLive(), 'the chained transition orphaned a timer').toBe(1);
+    expect(h.runner.pending, 'pending disagreed with the live timer count').toBe(h.timersLive());
+    // The old chain resolves COMPLETELY before the new transition begins, so the
+    // superseded end state cannot land on top of the arriving screen.
+    expect(h.log, "the superseded transition's end state was never applied").toEqual([
+      'begin-A', 'settle-A', 'begin-C', 'settle-C', 'begin-B',
+    ]);
+
+    h.advance(150);
+    expect(h.log.at(-1)).toBe('settle-B');
+    expect(h.timersLive(), 'a timer outlived the whole sequence').toBe(0);
+  });
+
   it('a settle that starts another transition is not cancelled by its own predecessor', () => {
     // A screen that navigates on arrival. `settleNow` clears its bookkeeping BEFORE
     // running the callback; doing it after would have the finished transition wipe the

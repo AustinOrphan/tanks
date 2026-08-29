@@ -95,8 +95,31 @@ export function createTransitionRunner(deps: TransitionRunnerDeps): TransitionRu
       // The interrupt rule, and the whole reason this is one owner rather than six
       // independent helpers: the outgoing transition finishes its job first, so the
       // screen it was hiding is hidden rather than left half-visible underneath.
-      settleNow();
+      // DRAINED, not just settled once, and drained BEFORE `begin`.
+      //
+      // A settle may itself start a transition -- a screen that navigates on arrival --
+      // and that one is already superseded by this call. Settling only once orphans its
+      // timer when `handle` is overwritten below: measured at 2 live timers while
+      // `pending` reported 1, with the chained transition's end state never applied. Both
+      // of issue #364's failure modes at once, in the very field its leak criterion is
+      // asserted on.
+      //
+      // Before `begin`, because the alternative was measured too: draining afterwards
+      // settles the superseded transition AFTER the new screen is already revealed, so its
+      // end state lands on top of the arriving one. Everything from the old chain resolves
+      // first, then the new transition begins.
+      //
+      // Bounded rather than `while`, so a settle that unconditionally re-navigates cannot
+      // spin the loop; one level is what a chained navigation actually produces.
+      for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {
+        settleNow();
+      }
       begin();
+      // The pathological other half: `begin` itself starting a transition would orphan the
+      // same way. Superseded identically, and cheap when there is nothing to do.
+      for (let drain = 0; drain < 8 && (outstanding !== null || handle !== null); drain++) {
+        settleNow();
+      }
       const ms = deps.durationMs();
       if (ms <= 0) {
         settle();
