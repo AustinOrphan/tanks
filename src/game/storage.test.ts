@@ -468,22 +468,27 @@ describe('a developer session cannot reach production data', () => {
   it('exports and imports through save.ts inside its own namespace', () => {
     // save.ts is the one path that reads and writes raw keys without going through a
     // store. It gets `AppSettings.storage`, so it inherits the namespace -- this pins that
-    // the adapter is enough, with no save.ts change.
+    // the adapter is what scopes the KEYS. Since issue #250 save.ts also carries the
+    // namespace as data, because the adapter cannot be asked which one it is: the keys it
+    // exposes are the store-facing names either way, so a blob taken through it would
+    // otherwise carry no trace of where it came from.
     const base = createMemoryStorage();
     for (const key of ALL_KEYS) base.setItem(key, `production:${key}`);
     const storage = createNamespacedStorage(base, 'developer');
     writeThroughEveryStore(createStores(storage));
 
-    expect(exportSave(storage)).not.toContain('production:');
-    expect(exportSave(base)).toContain('production:');
+    expect(exportSave(storage, 'developer')).not.toContain('production:');
+    expect(exportSave(base, 'production')).toContain('production:');
 
     importSave(
       storage,
       JSON.stringify({
         format: SAVE_FORMAT,
         version: SAVE_VERSION,
+        namespace: 'developer',
         keys: { [PROGRESS_KEY]: 'imported' },
       }),
+      'developer',
     );
     expect(storage.getItem(PROGRESS_KEY)).toBe('imported');
     expect(base.getItem(PROGRESS_KEY)).toBe(`production:${PROGRESS_KEY}`);

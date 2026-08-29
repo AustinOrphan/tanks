@@ -52,6 +52,7 @@ import {
 import { createRenderer, type Renderer3D } from '../render/renderer';
 import { createTankPreview, type TankPreview } from '../render/preview';
 import type { AudioEngine } from '../audio/engine';
+import type { StorageNamespace } from './storage';
 import type { SuiteContext } from '../audio/suites';
 import { createAudioDirector, type AudioDirector } from '../audio/director';
 import { createHapticsDirector, resolveVibrate, type HapticsDirector } from './haptics';
@@ -303,6 +304,18 @@ export interface GameDeps {
    * data an export exists to preserve). Nothing else in this file touches it.
    */
   readonly storage: Storage;
+  /**
+   * Which namespace `storage` above is already applying (issue #250).
+   *
+   * REQUIRED, and paired with `storage` for the same reason `releaseAudio` is paired with
+   * `createAudio` (issue #317): the two must agree. `storage` is the NAMESPACED adapter,
+   * but the keys it exposes are the store-facing names -- `createNamespacedStorage`
+   * prefixes underneath -- so a save blob taken through it carries no trace of where it
+   * came from. That is precisely why the namespace has to travel beside it rather than be
+   * recoverable from it, and why a default here would silently label every developer
+   * export `production`, which is the defect issue #250 exists to close.
+   */
+  readonly storageNamespace: StorageNamespace;
   /**
    * Where the dev console surface is published, when a dev flag asks for one.
    * `globalThis` in the browser. Injected so the publish/teardown is assertable
@@ -930,6 +943,9 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
     onSettingsNotice: appSettings.onNotice,
     achievements,
     storage,
+    // The namespace `storage` already applies -- read from the same object, so the two
+    // cannot disagree about which keys this session is on.
+    storageNamespace: appSettings.namespace,
     devConsole: globalThis as unknown as DevConsoleTarget,
     now: () => performance.now(),
     wallMs: () => Date.now(),
@@ -2806,7 +2822,7 @@ export function startGameWith(
    */
   const devApi: DevConsole = {};
   if (deps.devFlags.saveIo) {
-    devApi.save = createSaveApi(deps.storage);
+    devApi.save = createSaveApi(deps.storage, deps.storageNamespace);
     devApi.settings = {
       snapshot: () => deps.settings.snapshot(),
       effective: () => deps.effectiveSettings.current(),

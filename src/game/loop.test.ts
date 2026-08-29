@@ -111,7 +111,7 @@ import { createGameStateMachine } from './state';
 import type { AppSettings } from './app-settings';
 import { createAppShell } from './app-shell';
 import type { GameHandle } from './loop';
-import { createMemoryStorage } from './storage';
+import { createMemoryStorage, type StorageNamespace } from './storage';
 import { SAVE_KEYS, SAVE_FORMAT, exportSave, type SaveBlob } from './save';
 import {
   createPlayerSettingsStore,
@@ -335,7 +335,7 @@ interface Recorder {
   detectedPadsPushes: DetectedPad[][];
 }
 
-function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean } = {}): {
+function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<DevFlags>; levelCount?: number; levelStart?: number; isDevJump?: boolean; staticRoundStart?: boolean; tracksProgress?: boolean; progressHighest?: number; boundsByLevel?: Array<{ width: number; height: number; cellSize: number }>; savedHull?: string; savedSkin?: string; savedAccent?: string; savedScheme?: string; savedFireMode?: string; savedHaptics?: boolean; savedMuted?: boolean; savedVolume?: number; savedControllerRumble?: boolean; capabilities?: Partial<PlatformCapabilities>; systemReducedMotion?: boolean; settingsStorage?: Storage; earnsOn?: Array<{ id: string; when: (c: AchievementContext) => boolean }>; savedAchievements?: string[]; enemiesByLevel?: number[]; previewUnavailable?: boolean; savedKeys?: Record<string, string>; savedRun?: { level: number; lives: number }; developerMode?: boolean; storageNamespace?: StorageNamespace } = {}): {
   deps: GameDeps;
   rec: Recorder;
   storage: Storage;
@@ -1456,6 +1456,11 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     // mock: the save export/import writes and reads whole strings, and a mock
     // would let a wiring bug that never touches storage look correct.
     storage,
+    // The harness's `storage` is a bare in-memory store with no namespace prefix applied,
+    // which is what a PRODUCTION session gets (`createNamespacedStorage` returns the base
+    // object itself for `production`). Fixtures that want the developer side pass
+    // `storageNamespace` through `opts`.
+    storageNamespace: opts.storageNamespace ?? 'production',
     devConsole,
     devFlags: { ...DEV_FLAGS_OFF, ...opts.devFlags },
     // Any fixture that sets a developer flag is by definition a `?dev=1`
@@ -6468,7 +6473,7 @@ describe('startGameWith: save export/import reaches the real storage', () => {
     const save = (h.devConsole[DEV_CONSOLE_KEY] as DevConsole).save!;
     const other = createMemoryStorage();
     other.setItem('tanks.progress.v1', '4');
-    const result = save.import(exportSave(other));
+    const result = save.import(exportSave(other, 'production'));
     expect(result.ok).toBe(true);
     // Read back off the storage the deps were built with, not off the API.
     expect(h.storage.getItem('tanks.progress.v1')).toBe('4');
