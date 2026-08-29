@@ -10,6 +10,7 @@ dist
 visual-out/
 gallery-out/
 /artifacts/capture/
+/artifacts/compare/
 *.gif
 audio-out/
 

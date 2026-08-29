@@ -1663,5 +1663,89 @@
       "src/render/mine-warning.sync.test.ts"
     ],
     "why": "The blink was removed for a reason that outlives the aesthetic preference: sustained flashing above ~3 Hz is a photosensitivity hazard, and the previous revision could only BOUND it at 6 Hz rather than remove it. This entry reintroduces an oscillation and must fail, so the monotone guarantee is enforced rather than merely intended."
+  },
+  {
+    "id": "compare-compatibility-ignores-the-recipe-hash",
+    "file": "tools/compare/compatibility.mjs",
+    "find": "    compatible: base.hash === head.hash,",
+    "replace": "    compatible: differing.length === 0,",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/refs.test.ts"
+    ],
+    "why": "Decides compatibility from the field table instead of the content hash, so a recipe differing only outside that table -- its title, budget, timeout, or any field added since the table was written -- is accepted as the same measuring instrument. The hash is what identifies the reviewed configuration; this is the plausible-looking implementation that silently compares against an unreviewed recipe."
+  },
+  {
+    "id": "compare-pads-a-shorter-capture",
+    "file": "tools/compare/orchestrate.mjs",
+    "find": "  if (bs.frameCount !== hs.frameCount) {",
+    "replace": "  if (false) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/orchestrate.test.ts"
+    ],
+    "why": "Drops the frame-count check, so two clips of different lengths are compared positionally and the surplus frames on the longer side are simply ignored. The issue rules this out by name: a comparison must not silently freeze, pad, truncate, or retime one side to conceal a mismatch, because the result looks exactly like a successful one."
+  },
+  {
+    "id": "compare-reports-cleanup-clean-before-it-ran",
+    "file": "tools/compare/orchestrate.mjs",
+    "find": "  return { ...result, cleanupFailures };",
+    "replace": "  return { ...result, cleanupFailures: [] };",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/orchestrate.test.ts"
+    ],
+    "why": "Reports every run as having cleaned up. A leaked worktree needs a human and makes the command exit non-zero, so swallowing that is the failure mode this tool can least afford -- and it is the exact bug the original code had by returning from inside the try block, where the value was fixed before the finally block ran."
+  },
+  {
+    "id": "compare-worktree-cleanup-loses-its-ownership-guard",
+    "file": "tools/compare/worktrees.mjs",
+    "find": "        if (!inside(workspace, path)) {",
+    "replace": "        if (false) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/worktrees.test.ts"
+    ],
+    "why": "Removes the backstop behind 'never delete or reuse an existing user worktree': any path in the owned set is force-removed, wherever it points. With fifteen live worktrees on a development box, a poisoned or stale entry then destroys another session's work rather than being reported."
+  },
+  {
+    "id": "compare-label-truncation-eats-the-sha",
+    "file": "tools/compare/compose.mjs",
+    "find": "  const prefix = `${side}  ${sha.slice(0, 7)}  `;",
+    "replace": "  const prefix = `${side}  `;",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "tools/compare/compose.test.ts"
+    ],
+    "why": "Puts the ref before the SHA again, so a long branch name pushes the commit identity off the right edge of the panel while the caption still looks plausible. Found by looking at a rendered frame rather than by reasoning about the code, which is why it is pinned rather than trusted to review."
+  },
+  {
+    "id": "compare-differences-the-labelled-frames",
+    "file": "tools/compare/compose.mjs",
+    "find": "  await ffmpeg(['-i', basePng, '-i', headPng, '-filter_complex', '[0:v][1:v]blend=all_mode=difference', difference], deps);",
+    "replace": "  await ffmpeg(['-i', labelledBase, '-i', labelledHead, '-filter_complex', '[0:v][1:v]blend=all_mode=difference', difference], deps);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/compose.test.ts"
+    ],
+    "why": "Differences the captioned frames instead of the originals. The two captions always differ -- they name different refs -- so the brightest region of every difference image becomes the label text, burying whatever actually changed in the render."
+  },
+  {
+    "id": "compare-capture-stops-retaining-its-frames",
+    "file": "tools/compare/capture-runner.mjs",
+    "find": "      ['run', 'capture', '--', '--recipe', recipeId, '--out', CAPTURE_OUT, '--retain-frames'],",
+    "replace": "      ['run', 'capture', '--', '--recipe', recipeId, '--out', CAPTURE_OUT],",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/capture-runner.test.ts"
+    ],
+    "why": "Stops asking capture to keep its raw PNGs, which is what the entire comparison is computed from -- analyseFrames reads <dir>/frames/ and would find nothing. Pinned because it genuinely survived: capture-runner is the seam every orchestrator test replaces with a fake, so dropping this flag left all 100 other tests green until the module got a test of its own."
   }
 ]
