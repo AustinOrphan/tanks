@@ -26,6 +26,7 @@ import { WIDE_ARENA } from '../../src/sim/config/arena-fixtures';
 import { createTankPreview } from '../../src/render/preview';
 import { buildGallery, type GalleryOptions } from '../gallery/subjects';
 import { buildMomentScene } from '../gallery/moment-scene';
+import { MOMENTS } from '../gallery/moments';
 import { QUALITY_PRESETS } from '../../src/render/quality';
 
 interface Result { name: string; pass: boolean; detail: string }
@@ -1345,16 +1346,26 @@ check('a moment scene applies --spawn-anim to the tank that actually respawns, n
       moment: 'respawn', view: 'low', skin: 'solid', hull: null, accent: null, spawnAnim,
     });
     const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext;
-    // First draw ever for this instance: age held at 135, MOMENTS.respawn's pinned
-    // revival tick, so `clock === null` clamps dt to 0 and entities.ts's
-    // `enteredRespawn` edge (prev dead, curr alive) fires with the entrance starting
-    // at elapsed 0 -- same shape as the fire-tick check above, moved from the muzzle
-    // tick to the revival tick.
-    g.draw(135, 0);
+    // First draw ever for this instance: age held at MOMENTS.respawn's pinned revival
+    // tick, so `clock === null` clamps dt to 0 and entities.ts's `enteredRespawn` edge
+    // (prev dead, curr alive) fires with the entrance starting at elapsed 0 -- same
+    // shape as the fire-tick check above, moved from the muzzle tick to the revival
+    // tick.
+    //
+    // READ FROM THE MOMENT, not written as a literal. This was hardcoded 135 and issue
+    // #237's muzzle inset moved the revival to 138; drawing the old tick put the
+    // entrance edge outside the frame entirely, so warp and rise came back
+    // byte-identical and this check failed reporting "spawn-anim is not reaching the
+    // tank" -- a true statement about the wrong frame. The tick is SETUP here (which
+    // frame to look at), not the thing being asserted, so following the moment costs
+    // this check nothing: it still fails if the entrance is not styled, and now it
+    // fails for that reason rather than for a stale number.
+    const revival = MOMENTS.respawn.expect.find((e) => e.type === 'respawn')!.tick;
+    g.draw(revival, 0);
     // Same age (world pose held fixed, same reason the fire-tick check holds age
     // fixed): alpha advances the clock 15 ticks, dt = 15 * DT = 0.25s =
     // ENTRANCE_SECONDS / 2.
-    g.draw(135, 15);
+    g.draw(revival, 15);
     const px = grab(gl, c.width, c.height);
     g.dispose();
     c.remove();
@@ -1370,8 +1381,10 @@ check('a moment scene applies --spawn-anim to the tank that actually respawns, n
   const control = bytesDiffering(rise, rise2);
   if (control !== 0) return `control failed: two identical rise renders of the respawn moment differ by ${control} of ${rise.length} bytes -- the check cannot discriminate`;
   const moved = bytesDiffering(warp, rise);
-  // MEASURED on this exact fixture (200x150 canvas, 120000 bytes): 241 as shipped
-  // (fixed), and EXACTLY 0 under the mutation this check exists to catch (reverting
+  // MEASURED on this exact fixture (200x150 canvas, 120000 bytes): 244 as shipped
+  // (241 before issue #237's muzzle inset moved the revival tick 135 -> 138; re-measured
+  // on the new tick, not carried over), and EXACTLY 0 under the mutation this check
+  // exists to catch (reverting
   // moment-scene.ts's slots 1-3 loop back to the slot-0-only call -- verified live and
   // reverted, see this task's report). 0 is not a margin call here: `respawn`'s revived
   // tank is slot 1, so with no slot-1 style ever written, entities.ts's `styleFor(1)`
@@ -1380,7 +1393,7 @@ check('a moment scene applies --spawn-anim to the tank that actually respawns, n
   // frame rather than merely close. `respawn`'s span (13, far wider than the
   // `--spawn-anim reaches pixels` check's `entrant` element) puts the revived tank far
   // from camera, so the shipped delta is two orders of magnitude smaller than that
-  // check's 9024/49152 -- the threshold below is set well under the measured 241 and
+  // check's 9024/49152 -- the threshold below is set well under the measured 244 and
   // well over the mutated 0.
   if (moved < 40) return `only ${moved} of ${warp.length} bytes differ between warp and rise at the revived tank's entrance -- --spawn-anim is not reaching the tank that actually respawns`;
   return null;
