@@ -120,8 +120,10 @@ describe('the vertical progress channels', () => {
     }
   });
 
-  it('spike: rises monotonically from nothing to full height', () => {
-    expect(spikeHeight(0)).toBe(0);
+  it('spike: appears at a visible floor in ONE step, then rises to full height', () => {
+    // The floor came from a capture: grown from zero the soft vent was illegible against
+    // the hull until past mid-window, and presence is this style's state discriminator.
+    expect(spikeHeight(0)).toBeCloseTo(0.45, 9);
     expect(spikeHeight(1)).toBeCloseTo(1.4, 9);
     expect(spikeHeight(0.5)).toBeGreaterThan(spikeHeight(0.25));
   });

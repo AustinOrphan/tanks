@@ -435,9 +435,17 @@ export function makeBeadSprite(): THREE.Sprite {
 
 // ---- spike: a soft vertical light vent RISES out of the mine ----
 
-/** Vent height for a lit fraction: 0 at the trip, 1.4 world units at the blast. */
+/**
+ * Vent height for a lit fraction: a 0.45-unit floor from the trip tick, 1.4 at the blast.
+ *
+ * The floor is calibration from a capture, not taste: grown from zero, the vent's soft
+ * radial falloff kept it illegible against the hull until past mid-window -- but
+ * spike-presence is this style's binary state discriminator, so it must be readable from
+ * the FIRST tripped frame. A one-step appearance is the same one-way step the lance makes
+ * and is not an oscillation; growth above the floor stays the monotone progress channel.
+ */
 export function spikeHeight(lit: number): number {
-  return 1.4 * clamp01(lit);
+  return 0.45 + 0.95 * clamp01(lit);
 }
 
 /**
