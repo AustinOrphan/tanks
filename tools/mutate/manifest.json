@@ -1881,5 +1881,53 @@
     "tests": [
       "src/game/app-shell.test.ts"
     ]
+  },
+  {
+    "id": "backdrop-flag-never-reaches-the-hud",
+    "file": "src/game/loop.ts",
+    "find": "\n  hud.setBackdrop(deps.devFlags.backdrop === 'felt' ? 'felt' : 'default');\n",
+    "replace": "\n  hud.setBackdrop('default');\n",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The one wire between `?dev=1&backdrop=felt` and the screen, cut. Every `.ui-app-ground--felt` rule in hud.css becomes unreachable -- exactly the dead CSS the adopted ruling refused (\"B stays in the code as a switchable alternative ... reachable through a `dev=1` development flag rather than left as dead CSS\") -- and it goes silently: the flag still parses, `FLAG_REGISTRY` still generates its row in docs/dev-flags.md, hud.css.test.ts's presence sweep still finds both felt selectors, and `setBackdrop` is still called once on every boot. Same class as `devflags-developer-mode-gate-always-off` above -- a development gate that goes permanently off for the real browser while the suite stays green. Deliberately NOT mutated to the defensive shape (`if (deps.devFlags.backdrop === 'felt') hud.setBackdrop('felt')`, which drops only the UNCONDITIONAL default push): the markup ships no `--felt` class today, so that edit changes nothing on screen, and pinning it would pin a property whose defect is currently invisible. Anchored on the call line delimited by its own newlines -- the shape `session-title-policy-reused-as-identity` above had to be re-cut to after this very statement was inserted beside it. `pushes the felt treatment for ?dev=1&backdrop=felt, and nothing else does` is the case that measures it, and that case's `mineReach` half is the negative control keeping an unrelated developer flag from satisfying this line. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "quit-announces-the-abandoned-session-kind",
+    "file": "src/game/loop.ts",
+    "find": "    hud.setSessionKind(descriptorFor(sessionIdentity, ordinalOf(landing)).kind);",
+    "replace": "    hud.setSessionKind(currentDescriptor.kind);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The THIRD `hud.setSessionKind` push, added by issue #317 when Quit stopped riding a world build to get its identity onto the menu -- and the mistake that site invites, because `currentDescriptor` is in scope and reads correct. It is precisely what the handler's own comment marks as DELIBERATELY STALE: after a quit, `currentDescriptor` still describes the world the player abandoned, so reusing it tells the HUD PRACTICE for a session whose Continue lands on the campaign board. WHAT THIS DOES AND DOES NOT PIN, stated because the difference is easy to overstate: today's hud.ts branches only on `sessionKind === 'versus'` (applySessionKindSurfaces), so practice and campaign render identically and this mutation changes nothing on screen. It is a contract violation at loop.ts's composition boundary -- the same contract `session-dev-flag-versus-reported-as-campaign` and `session-title-policy-reused-as-identity` pin from the OTHER two push sites, neither of which can reach this one -- and the one #324's contextual HUD would start reading. Nothing about the world, the seed or the run moves either, so none of the navigation-only counting assertions can see it. `a Levels pick reports PRACTICE, and leaving restores CAMPAIGN before the board is built` is the case that measures it, at its post-quit `lastKind` assertion. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "quit-announces-the-abandoned-level",
+    "file": "src/game/loop.ts",
+    "find": "    hud.setLevel(ordinalOf(landing), deps.levels.levels.length);",
+    "replace": "    hud.setLevel(ordinalOf(level), deps.levels.levels.length);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The other half of the quit's presentation claim, and the half that is visibly wrong. The topbar level chip is on screen at the Main Menu -- `setState` hides the topbar for `launch` alone -- so reading the ABANDONED `level` instead of the `landing` makes the menu announce the level the player just left while Continue resumes onto `deps.levels.start`. The slip is one word: `level` is module-scoped and in scope at this line, `landing` is the local this handler introduced, and the readout is exactly what the eager `landOnCampaignBoard(false)` rebuild used to get right for free -- which is what makes it the thing a deferral is most likely to drop. No world, seed or run moves, so none of the navigation-only counting assertions can see it; neither can the level-chip assertion in `Quit to Title returns to the title having built NOTHING`, whose fixture gives the abandoned level and the landing the SAME ordinal. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "app-ground-hidden-modifier-does-nothing",
+    "file": "src/game/hud.css",
+    "find": ".ui-app-ground--hidden {\n  display: none;\n}",
+    "replace": ".ui-app-ground--hidden {\n}",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The modifier reduced to a class that does nothing -- the failure `.hud-splash--hidden` carries its own comment about (\"the class does nothing on its own\"). Same OUTCOME as this file's two historical losses, by a different mechanism: those were rules SWALLOWED by an unbalanced brace in a merge -- the losing-a-life vignette, then the round banner -- which the brace-balance check above now catches; this is a rule that is still syntactically whole and styles nothing, which that check cannot see. `.ui-app-ground` is `position: absolute; inset: 0` with an OPAQUE background inside a `position: fixed; inset: 0` HUD, so with nothing to hide it the ground covers the whole viewport from page load and never leaves: the arena is never visible again in any state, which is strictly worse than the scrim `app-ground-becomes-a-scrim` above catches. Nothing else in the suite can see it -- the presence sweep asserts `css` CONTAINS `.ui-app-ground--hidden`, which an empty rule satisfies; the brace-balance and no-block-inside-a-plain-rule checks both still pass on it; and hud.test.ts asserts only that the CLASS is toggled, which it still is. `hides the ground with display, not with a colour` is the one case that measures it, and it re-measures the same element with the modifier removed as its own control, so a stylesheet that hid the ground unconditionally would fail there too. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
