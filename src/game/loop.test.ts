@@ -7497,8 +7497,8 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
 
   return {
     h,
-    pointerdown: () => liveListener(h, 'pointerdown')(),
-    keydown: (e) => (liveListener(h, 'keydown') as (ev: Partial<KeyboardEvent>) => void)(e),
+    pointerdown: () => liveListener<void>(h, 'pointerdown')(undefined),
+    keydown: (e) => liveListener<Partial<KeyboardEvent>>(h, 'keydown')(e),
     requestVersus: (config) => requestVersus!(config),
     requestCampaign: () => requestCampaign!(),
     pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
@@ -7514,11 +7514,11 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
  * unregistered it. Firing that one would drive a disposed state machine and report
  * "the splash was never dismissed" for the wrong reason entirely.
  */
-function liveListener(h: ReturnType<typeof makeDeps>, type: string): (e?: never) => void {
+function liveListener<E = never>(h: ReturnType<typeof makeDeps>, type: string): (e: E) => void {
   const removed = h.rec.removed.filter(([t]) => t === type).map(([, fn]) => fn);
   const live = h.rec.listeners.filter(([t]) => t === type).map(([, fn]) => fn).filter((fn) => !removed.includes(fn));
   if (live.length === 0) throw new Error(`no live ${type} listener`);
-  return live[live.length - 1] as (e?: never) => void;
+  return live[live.length - 1] as unknown as (e: E) => void;
 }
 
 describe('boot + startGameWith: the Launch gate is once per document load (issue #317)', () => {
