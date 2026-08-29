@@ -887,22 +887,39 @@ describe('spawnBullet: the muzzle plane vs the shell centre (issue #237)', () =>
     expect(fire.pos).toEqual({ x: 0, y: 0 })
   })
 
-  it('does not let a tank shoot itself on the way out, though the shell is born inside its hull', () => {
-    // #237's safety criterion, and it is load-bearing NOW in a way it was not before: at
-    // spawn 0.525 against TANK_RADIUS 0.5 the shell's collision circle overlaps its own
-    // firer, so the outbound exemption in resolveBulletHits is the only thing between
-    // this change and a tank that kills itself the instant it pulls the trigger.
-    //
-    // Negative control: deleting the `vdot(b.vel, toOwner) <= 0` guard fails this on the
-    // first stepped tick.
-    const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
-    const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
-    expect(spawnBullet(world, 1, 0, 'normal', [])).toBe(true)
-    expect(SHELL_SPAWN_FORWARD - BULLET_RADIUS).toBeLessThan(TANK_RADIUS) // it really does overlap
-    for (let i = 0; i < 5; i++) stepBullets(world, 1 / 60, [])
-    expect(world.tanks[0].alive).toBe(true)
-    expect(world.bullets[0]?.alive).toBe(true)
-  })
+  it.each(['normal', 'fast', 'ricochet'] as const)(
+    'does not let a tank shoot itself on the way out with a %s shell, born inside its own hull',
+    (type) => {
+      // #237's safety criterion, and it is load-bearing NOW in a way it was not before:
+      // at spawn 0.525 against TANK_RADIUS 0.5 the shell's collision circle overlaps its
+      // own firer, so resolveBulletHits' outbound exemption is the only thing between
+      // this change and a tank that kills itself the instant it pulls the trigger.
+      //
+      // ALL THREE TYPES, because only the slowest one actually exercises the exemption,
+      // and a single-type test here was vacuous when I first wrote it. World order is
+      // move-then-resolve, so what matters is where the shell sits AFTER its first step:
+      //   normal   0.525 + 6/60   = 0.6250  -- clear of the 0.6 kill threshold by 0.025
+      //   fast     0.525 + 12/60  = 0.7250  -- clear
+      //   ricochet 0.525 + 4/60   = 0.5917  -- INSIDE it; the exemption is what saves it
+      // Deleting the `vdot(b.vel, toOwner) <= 0` guard kills the firer on tick 1 of the
+      // ricochet case (verified), and leaves the other two green -- which is exactly why
+      // the fast shells alone could not stand in for this.
+      const player = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 } })
+      const world = createWorld({ walls: [], tanks: [player], spawns: [], lives: 3 })
+      expect(spawnBullet(world, 1, 0, type, [])).toBe(true)
+      expect(SHELL_SPAWN_FORWARD - BULLET_RADIUS).toBeLessThan(TANK_RADIUS) // it really does overlap
+      // stepBullets alone would make this vacuous: it moves and bounces shells but never
+      // touches tanks. resolveBulletHits is where a shell kills, and world.ts runs the
+      // two in exactly this order -- so the pair, not the mover, is what to drive.
+      const ev: SimEvent[] = []
+      for (let i = 0; i < 5; i++) {
+        stepBullets(world, DT, ev)
+        resolveBulletHits(world, ev)
+      }
+      expect(world.tanks[0].alive).toBe(true)
+      expect(ev.filter((e) => e.type === 'tank-destroyed')).toHaveLength(0)
+    },
+  )
 })
 
 describe('spawnBullet: muzzleClearsTanks (adopted ruling, 2026-08-14: "spawn at hull centre" switch)', () => {
