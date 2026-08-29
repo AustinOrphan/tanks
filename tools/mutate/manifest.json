@@ -897,8 +897,8 @@
     "find": "export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS, TOUCH_SETTINGS_KEY]);",
     "replace": "export const SAVE_IMPORT_KEYS: readonly string[] = Object.freeze([...SAVE_KEYS]);",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Narrows the IMPORT allow-list back to the export list, which is what makes an old save's touch preferences disappear on restore. This is the half that motivates two lists instead of one: the export list must NOT carry the legacy key and the import list MUST accept it. Killed by save.test.ts's set-equality assertion on SAVE_IMPORT_KEYS and by 'accepts an OLD export that still carries tanks.touch.v1'. 2 of 21.",
+    "expectFailures": 3,
+    "why": "Narrows the IMPORT allow-list back to the export list, which is what makes an old save's touch preferences disappear on restore. This is the half that motivates two lists instead of one: the export list must NOT carry the legacy key and the import list MUST accept it. Killed by save.test.ts's set-equality assertion on SAVE_IMPORT_KEYS and by 'accepts an OLD export that still carries tanks.touch.v1'. 2 of 21. Re-measured 2026-08-29 for issue #250: a third test now kills it -- save.test.ts's 'the legacy touch key still migrates, in BOTH namespaces', which imports the key through a real namespaced adapter on each side. Growing a test file drifts this count even when the mutated file is untouched, which is why the entry is re-run whenever save.test.ts changes.",
     "tests": [
       "src/game/save.test.ts"
     ]
@@ -1818,6 +1818,66 @@
     "expect": "killed",
     "expectFailures": 1,
     "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. 1 of 6.",
+    "tests": [
+      "src/game/app-shell.test.ts"
+    ]
+  },
+  {
+    "id": "save-export-omits-the-namespace",
+    "file": "src/game/save.ts",
+    "find": "  const blob: SaveBlob = { format: SAVE_FORMAT, version: SAVE_VERSION, namespace, keys };",
+    "replace": "  const blob: SaveBlob = { format: SAVE_FORMAT, version: SAVE_VERSION, keys };",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "Exports a blob that does not say which namespace it came from (issue #250). The blob's KEYS are the store-facing names in either namespace, so two exports of different namespaces are otherwise byte-identical and nothing downstream can tell them apart. Every later guard depends on this field existing, so dropping it defeats the whole feature while leaving the export apparently working.",
+    "tests": [
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "save-import-accepts-a-foreign-namespace",
+    "file": "src/game/save.ts",
+    "find": "  if (source !== active && opts.allowForeignNamespace !== true) {",
+    "replace": "  if (false) {",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "Removes the namespace gate, restoring the pre-#250 behaviour: a developer save imports straight over the player's real production save, silently and completely. This is the defect the issue exists to close, and nothing outside save.test.ts can see it because the keys written are identical either way.",
+    "tests": [
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "save-import-assumes-legacy-is-production",
+    "file": "src/game/save.ts",
+    "find": "    declared === 'production' || declared === 'developer' ? declared : null;",
+    "replace": "    declared === 'developer' ? declared : 'production';",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Reads a blob with no namespace field as production. That is the intuitive rule and it is wrong: the namespaced adapter shipped in #245 on 2026-08-25 at 18:13 while save.ts was last changed at 08:45 the same day, so ?dev=1&saveIo=1 has been exporting DEVELOPER data into unlabelled blobs ever since. Under this mutation such a blob imports into production without the warned action.",
+    "tests": [
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "save-rollback-restores-without-freeing-space",
+    "file": "src/game/save.ts",
+    "find": "    for (const key of applied) {\n      try {\n        storage.removeItem(key);\n      } catch {\n        // Nothing to do: the restore below will simply overwrite it if it can.\n      }\n    }\n",
+    "replace": "",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Rolls a failed import back by writing each previous value straight back -- the same setItem that just threw, on a storage no emptier than when it threw. A full storage therefore restores nothing. Also leaves keys the save never had sitting in storage, because the restore pass delegates the absent-key case to this removal. Pinned by a byte-quota fixture; a throw-after-N-writes stub cannot see this, because it refuses the rollback's writes too.",
+    "tests": [
+      "src/game/save.test.ts"
+    ]
+  },
+  {
+    "id": "browser-deps-hardcodes-the-storage-namespace",
+    "file": "src/game/loop.ts",
+    "find": "    storageNamespace: appSettings.namespace,",
+    "replace": "    storageNamespace: 'production',",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Labels every export 'production' regardless of the session, which is the issue #250 defect reintroduced in the wiring rather than the logic. createBrowserDeps is unpinned wiring that no gameplay test enters, so this is caught only by app-shell.test.ts calling it directly against a shell built on each namespace.",
     "tests": [
       "src/game/app-shell.test.ts"
     ]

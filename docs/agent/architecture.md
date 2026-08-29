@@ -102,8 +102,28 @@ nothing in `src/` enumerates a `Storage` today, but an unscoped `clear()` on a d
 session would wipe the player's real save. The adapter deliberately does **not** catch —
 every store already degrades on its own — and because `AppSettings.storage` is the same
 adapter instance the stores got, `save.ts` and the `__tanks` dev console inherit the
-namespace with no change of their own. Legacy migration follows: a developer session neither
-adopts nor deletes the production `tanks.touch.v1` or `tanks.run.v1`.
+namespace for KEY SCOPING with no change of their own. Legacy migration follows: a developer
+session neither adopts nor deletes the production `tanks.touch.v1` or `tanks.run.v1`.
+
+Key scoping is not the whole problem, which is what issue #250 added to `save.ts`. The
+adapter cannot be asked which namespace it is — `production` returns the base object itself,
+and both namespaces expose the same store-facing key names — so a save blob taken through it
+carried no trace of its origin, and importing a developer blob into a production session
+silently overwrote the player's real save with developer data. The namespace therefore
+travels as DATA beside the adapter: `SaveBlob.namespace` records it, `GameDeps.storageNamespace`
+carries it to `createSaveApi`, and `importSave` refuses a blob whose namespace is not the
+active one unless `allowForeignNamespace` is passed. An ABSENT namespace is treated as
+foreign rather than assumed production, because the adapter shipped after `save.ts`'s last
+change on the same day and unlabelled developer exports have been possible ever since.
+`GameDeps.storageNamespace` is required rather than defaulted for the same reason
+`releaseAudio` is: a default would label every developer export `production`.
+
+Imports are all-or-nothing. `Storage` has no transaction, so `importSave` captures each
+key's previous value and, on any failed write, removes every applied key **before**
+restoring — the failure is almost always a full storage, and restoring in place would
+attempt the operation that just failed on a storage no emptier than when it failed. The
+residual is real and reported rather than argued away: a restore write can itself throw, and
+the keys that survive are exactly those absent from `ImportResult.rolledBack`.
 
 **`AppSettings` owns persistence for the PAGE, not the session.** `boot.ts` builds
 `createBrowserAppSettings()` once and hands the same instance to every `startGame` call.

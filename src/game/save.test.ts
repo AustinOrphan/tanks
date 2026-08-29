@@ -776,3 +776,21 @@ describe('save round trip in both namespaces (issue #250)', () => {
     }
   });
 });
+
+describe('createSaveApi: the namespace it was built with (issue #250)', () => {
+  it('exports under that namespace and reports it, without the caller passing one', () => {
+    // The console surface is the only caller in production (`?dev=1&saveIo=1`), and it
+    // has no namespace of its own to pass -- so binding it here is what makes every
+    // export from a developer session say so.
+    const api = createSaveApi(seeded(), 'developer');
+    expect(api.namespace).toBe('developer');
+    expect((JSON.parse(api.export()) as SaveBlob).namespace).toBe('developer');
+  });
+
+  it('refuses a foreign blob through the API, and takes the same opt-in', () => {
+    const api = createSaveApi(createMemoryStorage(), 'production');
+    const devBlob = exportSave(seeded(), 'developer');
+    expect(api.import(devBlob).ok, 'the API skipped the gate importSave applies').toBe(false);
+    expect(api.import(devBlob, { allowForeignNamespace: true }).ok).toBe(true);
+  });
+});
