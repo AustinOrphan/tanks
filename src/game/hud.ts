@@ -1948,17 +1948,17 @@ export function createHud(root: HTMLElement): Hud {
    * per-element, not "as rendered" -- so `focusableControls` checking only the control
    * itself would have walked the roving order onto three invisible buttons on every
    * win/lose screen.
+   *
+   * Deliberately does NOT also check for issue #364's `--leaving`. That was written here
+   * first and removed after measuring: the class lands only on the seven surface
+   * elements, and those are exactly the CONTAINERS this walk stops before, so the branch
+   * cannot be taken. Proved rather than argued -- with it replaced by a `throw`, all 212
+   * cases in hud.test.ts still pass. Keeping a surface that is fading out from taking the
+   * keyboard is `activePanelContainer`'s job, one level up, where it is reachable.
    */
   function isHiddenWithin(el: HTMLElement, container: HTMLElement): boolean {
     for (let node: HTMLElement | null = el; node && node !== container; node = node.parentElement) {
       if (getComputedStyle(node).display === 'none') return true;
-      // A surface on its way out is out of the focus order IMMEDIATELY, not when its
-      // animation ends (issue #364). It keeps `display` for the whole fade -- that is what
-      // makes it visible enough to fade at all -- so `display: none` cannot see it, and
-      // without this the arrow keys walked onto the outgoing screen's buttons for the
-      // 150ms it was still painted. `pointer-events: none` in the stylesheet covers the
-      // mouse; this is the keyboard and controller half of the same rule.
-      if (node.classList.contains(LEAVING)) return true;
     }
     return false;
   }
