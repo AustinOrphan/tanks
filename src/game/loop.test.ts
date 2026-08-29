@@ -7421,6 +7421,7 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   h: ReturnType<typeof makeDeps>;
   /** Fire the CURRENT session's listener -- see `liveListener`. */
   pointerdown(): void;
+  keydown(e: Partial<KeyboardEvent>): void;
   requestVersus(config: VersusConfig): void;
   requestCampaign(): void;
   pagehide(): void;
@@ -7497,6 +7498,7 @@ function bootPageOn(h: ReturnType<typeof makeDeps>): {
   return {
     h,
     pointerdown: () => liveListener(h, 'pointerdown')(),
+    keydown: (e) => (liveListener(h, 'keydown') as (ev: Partial<KeyboardEvent>) => void)(e),
     requestVersus: (config) => requestVersus!(config),
     requestCampaign: () => requestCampaign!(),
     pagehide: () => pagehideFns.forEach((fn) => fn({ persisted: false })),
@@ -7539,5 +7541,59 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
       h.rec.hudStates.slice(before),
       'the reboot replayed the splash the player already dismissed',
     ).not.toContain('launch');
+  });
+
+  it('a KEYBOARD dismissal reports to the page too, not just the pointer one', () => {
+    // Both handlers used to call `sm.dismissLaunch()` and nothing else, and only one of
+    // them needs to forget the page for the splash to come back on a reboot. The keyboard
+    // path is the one with an early return, which is where a second call is easiest to
+    // drop.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.keydown({ key: 'x', repeat: false, target: null });
+    expect(h.rec.hudStates.at(-1), 'the key did not dismiss the splash').toBe('main-menu');
+
+    const before = h.rec.hudStates.length;
+    page.requestVersus(VS);
+    expect(
+      h.rec.hudStates.slice(before),
+      'a splash dismissed by key came back on the reboot',
+    ).not.toContain('launch');
+  });
+
+  it('the reboot stops the outgoing bed and leaves the PAGE audio engine alive', () => {
+    // The failure this pins: with a surviving engine, a session that tore down without
+    // stopping its bed would leave the abandoned level's music playing under the new
+    // menu. The opposite failure is disposing it -- `dispose()` LATCHES (engine.ts), so
+    // `ensureCtx` returns null forever afterwards and every later session is silent.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.pointerdown();
+
+    const stopsBefore = h.rec.musicStops;
+    page.requestVersus(VS);
+
+    expect(
+      h.rec.musicStops - stopsBefore,
+      'the abandoned session left its music bed running under the new session',
+    ).toBe(1);
+    expect(
+      h.rec.disposed,
+      'a session disposed the PAGE audio engine, latching it shut for every later one',
+    ).not.toContain('audio');
+  });
+
+  it('the page teardown DOES dispose the engine the sessions only borrowed', () => {
+    // The other end of the same contract: "a session never disposes it" must not become
+    // "nothing ever does". `boot.ts`'s non-persisted pagehide is the one owner.
+    const h = makeDeps();
+    const page = bootPageOn(h);
+    page.pointerdown();
+    page.requestVersus(VS);
+    expect(h.rec.disposed).not.toContain('audio');
+
+    page.pagehide();
+
+    expect(h.rec.disposed, 'the page went away without releasing the audio engine').toContain('audio');
   });
 });
