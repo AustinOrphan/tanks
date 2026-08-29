@@ -906,11 +906,11 @@
   {
     "id": "settings-owner-rebuilt-per-session",
     "file": "src/boot.ts",
-    "find": "        requestCampaignSession,\n        appSettings,\n      );",
-    "replace": "        requestCampaignSession,\n        deps.createAppSettings(),\n      );",
+    "find": "        requestCampaignSession,\n        shell,\n      );",
+    "replace": "        requestCampaignSession,\n        deps.createAppShell(),\n      );",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Rebuilds the page's settings owner on every versus reboot instead of reusing the one boot.ts created. This is the pre-#320 defect in its structural form: a fresh owner means a fresh store, a fresh in-memory storage shim, and a persistence notice that can fire once per navigation. It is invisible to every session-level test, because each session in isolation looks perfectly healthy. Killed by boot.test.ts's 'hands every session the SAME instance across both reboot paths', which asserts IDENTITY rather than equality. 1 of 36.",
+    "why": "Rebuilds the page's shell on every versus reboot instead of reusing the one boot.ts created. This is the pre-#320 defect in its structural form, and since issue #317 the shell carries the audio engine and the Launch gate as well as the settings owner: a fresh one means a fresh store, a fresh in-memory storage shim, a persistence notice that can fire once per navigation, a suspended audio context, and a splash the player already dismissed. It is invisible to every session-level test, because each session in isolation looks perfectly healthy. Killed by boot.test.ts's 'hands every session the SAME instance across both reboot paths', which asserts IDENTITY rather than equality. 1 of 36.",
     "tests": [
       "src/boot.test.ts"
     ]
@@ -1784,6 +1784,42 @@
       "tools/capture/prerequisites.test.ts",
       "tools/compare/orchestrate.test.ts",
       "tools/compare/pixels.test.ts"
+    ]
+  },
+  {
+    "id": "launch-gate-ignored-on-reboot",
+    "file": "src/game/loop.ts",
+    "find": "    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',",
+    "replace": "    initialRoute: 'launch',",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Opens every session on the Launch route, which is what production did before issue #317. boot.ts rebuilds the whole session on a Campaign<->Versus switch, so this re-shows 'press any key or tap to begin' to a player who already dismissed it -- the acceptance criterion 'the Launch gate appears at most once per document load'. Invisible to every session-level test in loop.test.ts, because one session in isolation SHOULD open at Launch, and invisible to boot.test.ts, which fakes startGame. Killed only by the boot+startGameWith seam, which composes the real boot() with the real startGameWith over the REAL state machine. 1 of 4 in that suite.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "splash-gesture-not-reported-to-the-page",
+    "file": "src/game/loop.ts",
+    "find": "    deps.launchGate.dismiss();\n  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
+    "replace": "  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "session-disposes-the-page-audio-engine",
+    "file": "src/game/loop.ts",
+    "find": "    releaseAudio: (engine) => engine.stopMusic(),",
+    "replace": "    releaseAudio: (engine) => engine.dispose(),",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Lets a session dispose the engine the PAGE owns (issue #317). engine.ts's dispose() LATCHES -- ensureCtx returns null once disposed -- so the first Campaign<->Versus switch leaves every later session silent, with nothing thrown and no test failing at the session level. This is wiring inside createBrowserDeps, which the boot+startGameWith seam reproduces rather than enters, so it is pinned by app-shell.test.ts calling createBrowserDeps directly against a recording engine. 1 of 6.",
+    "tests": [
+      "src/game/app-shell.test.ts"
     ]
   }
 ]

@@ -37,9 +37,11 @@ import { createEffectiveSettings, type EffectiveSettingsHandle } from './effecti
  *  - the persistence notice can fire at most once per page, rather than once per
  *    navigation, without a module-level latch nothing can reset between tests.
  *
- * This is deliberately NOT the persistent app shell of issue #317. It owns no routes, no
- * canvas, no HUD and no lifecycle; it is the settings/persistence slice that a shell will
- * later hold, in the shape it will hold it. #317 moves the construction, not the model.
+ * This is deliberately NOT the persistent app shell of issue #317, and still is not: it
+ * owns no routes, no canvas, no HUD and no lifecycle. Issue #317 did what this comment
+ * said it would -- `app-shell.ts` now HOLDS this object rather than `boot.ts` holding it
+ * directly, and adds the audio engine and the Launch gate beside it -- and it moved the
+ * construction without changing the model here. Nothing in this file changed.
  */
 export interface AppSettings {
   /**

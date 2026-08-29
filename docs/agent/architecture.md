@@ -113,8 +113,25 @@ default — which is why mute and volume used to reset on the way into a versus 
 owner also means one settings store per page (no second writable shadow), one resolved
 `Storage` (the in-memory shim is not re-created per session), and a persistence notice that
 can fire at most once per document load. A session subscribes and unsubscribes on teardown;
-only the page's `pagehide` disposes the owner. This is the slice #317's app shell will take
-over, in the shape it will take it over.
+only the page's `pagehide` disposes the owner.
+
+Issue #317 took that slice, in that shape. `app-shell.ts` now owns `AppSettings` rather
+than `boot.ts` owning it directly, and two more page-scoped things sit beside it: the
+**audio engine** and the **Launch gate**. Both were session-owned for the same reason
+settings used to be, and cost the same way. A rebuilt engine starts with a suspended
+`AudioContext`; it self-heals, because the engine keeps its own document-level gesture
+listener and `tryResume` retries rather than latching, so what a reboot actually lost was
+ORDERING -- the guarantee that a gesture had happened before the menu was on screen. A
+rebuilt state machine can only open at the Launch route, so every Campaign/Versus switch
+replayed the splash. Those two are why the engine and the gate had to move together:
+skipping the splash is only correct once the engine outlives the session that unlocked it.
+
+A session borrows the engine and must never dispose it -- `dispose()` latches, and
+`ensureCtx` returns null forever afterwards, so one session's teardown would silence every
+later one with nothing thrown. `GameDeps.releaseAudio` is what a session calls instead
+(`stopMusic`, so the abandoned level's bed does not play on under the new menu), and it is
+required rather than defaulted precisely so a shared `createAudio` cannot be wired without
+it.
 
 `tanks.touch.v1` is now a migration READ only (`readLegacyTouchSettings`). When there is no
 usable canonical payload, each legacy field is validated independently, merged over the
