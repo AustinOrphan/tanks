@@ -275,17 +275,35 @@ export function importSave(
   }
 
   if (failed.length > 0) {
-    // Roll the applied keys back, newest first, so a storage that is full frees space in
-    // the reverse of the order it was consumed.
-    for (const key of [...applied].reverse()) {
-      const before = previous.get(key) ?? null;
+    // Roll back in TWO passes, and the order is the whole point.
+    //
+    // The overwhelmingly likely reason a write threw is that the storage is full, so a
+    // rollback that simply wrote each previous value back would attempt the very
+    // operation that just failed, on a storage no emptier than when it failed. Removing
+    // every applied key FIRST frees at least as much space as the import consumed, which
+    // is what makes the restore pass able to succeed at all. Written the obvious
+    // one-key-at-a-time way, this rolled back nothing on a full storage and reported it
+    // honestly -- which is a guarantee not worth having.
+    for (const key of applied) {
       try {
-        if (before === null) storage.removeItem(key);
-        else storage.setItem(key, before);
+        storage.removeItem(key);
+      } catch {
+        // Nothing to do: the restore below will simply overwrite it if it can.
+      }
+    }
+    for (const key of applied) {
+      const before = previous.get(key) ?? null;
+      // An absent key is restored by staying absent -- the removal above already did it.
+      if (before === null) {
+        rolledBack.push(key);
+        continue;
+      }
+      try {
+        storage.setItem(key, before);
         rolledBack.push(key);
       } catch {
-        // A restore can itself throw -- see this function's own residual note. The key
-        // stays in `applied`, so the caller can see exactly what survived.
+        // A restore can still throw -- see this function's own residual note. The key is
+        // absent from `rolledBack`, so the caller can see exactly what was not restored.
       }
     }
     return {

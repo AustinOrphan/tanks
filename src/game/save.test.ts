@@ -468,3 +468,208 @@ describe('createSaveApi', () => {
     expect(to.getItem('tanks.progress.v1')).toBe('3');
   });
 });
+
+describe('save namespaces (issue #250)', () => {
+  /** A blob exactly as some session would have written it. */
+  function blobFrom(namespace: 'production' | 'developer' | undefined, keys: Record<string, string>): string {
+    return JSON.stringify(
+      namespace === undefined
+        ? { format: SAVE_FORMAT, version: SAVE_VERSION, keys }
+        : { format: SAVE_FORMAT, version: SAVE_VERSION, namespace, keys },
+    );
+  }
+
+  it('every export states which namespace it came from', () => {
+    // Acceptance criterion 1. The blob's KEYS are identical either way -- the adapter
+    // prefixes underneath the store-facing names -- so this field is the only thing that
+    // can tell two otherwise byte-identical exports apart.
+    const dev = JSON.parse(exportSave(seeded(), 'developer')) as SaveBlob;
+    const prod = JSON.parse(exportSave(seeded(), 'production')) as SaveBlob;
+    expect(dev.namespace).toBe('developer');
+    expect(prod.namespace).toBe('production');
+    expect(Object.keys(dev.keys)).toEqual(Object.keys(prod.keys));
+  });
+
+  it('a matching namespace imports with no ceremony', () => {
+    // Acceptance criterion 2, and the control for every refusal below: the gate must not
+    // be refusing everything.
+    const to = createMemoryStorage();
+    const r = importSave(to, blobFrom('developer', { 'tanks.progress.v1': '5' }), 'developer');
+    expect(r.ok).toBe(true);
+    expect(r.sourceNamespace).toBe('developer');
+    expect(to.getItem('tanks.progress.v1')).toBe('5');
+  });
+
+  it('a developer save is refused by a production session, and writes NOTHING', () => {
+    // The defect itself: this is the import that used to silently overwrite the player's
+    // real save with developer junk.
+    const to = createMemoryStorage();
+    to.setItem('tanks.progress.v1', 'REAL');
+    const r = importSave(to, blobFrom('developer', { 'tanks.progress.v1': '5' }), 'production');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('developer');
+    expect(r.sourceNamespace).toBe('developer');
+    expect(r.applied).toEqual([]);
+    expect(to.getItem('tanks.progress.v1'), 'the refused import still wrote').toBe('REAL');
+  });
+
+  it('...and a production save is refused by a developer session, the other direction', () => {
+    const to = createMemoryStorage();
+    const r = importSave(to, blobFrom('production', { 'tanks.progress.v1': '5' }), 'developer');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('production');
+    expect(to.getItem('tanks.progress.v1')).toBeNull();
+  });
+
+  it('a blob with NO namespace is foreign, not assumed production', () => {
+    // Acceptance criterion 5. `?dev=1&saveIo=1` has been exporting developer data into
+    // unlabelled blobs since #245 landed after save.ts's last change on the same day, so
+    // "no field" cannot be read as "production" -- it is genuinely unknown.
+    const to = createMemoryStorage();
+    to.setItem('tanks.progress.v1', 'REAL');
+    const r = importSave(to, blobFrom(undefined, { 'tanks.progress.v1': '5' }), 'production');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('does not state its namespace');
+    expect(r.sourceNamespace).toBeNull();
+    expect(to.getItem('tanks.progress.v1')).toBe('REAL');
+  });
+
+  it('allowForeignNamespace is the explicit action that lets either through', () => {
+    // Acceptance criterion 3: possible, but never by accident.
+    const cross = createMemoryStorage();
+    const crossResult = importSave(
+      cross,
+      blobFrom('developer', { 'tanks.progress.v1': '5' }),
+      'production',
+      { allowForeignNamespace: true },
+    );
+    expect(crossResult.ok).toBe(true);
+    expect(crossResult.sourceNamespace, 'the provenance is still reported').toBe('developer');
+    expect(cross.getItem('tanks.progress.v1')).toBe('5');
+
+    const legacy = createMemoryStorage();
+    const legacyResult = importSave(
+      legacy,
+      blobFrom(undefined, { 'tanks.progress.v1': '7' }),
+      'production',
+      { allowForeignNamespace: true },
+    );
+    expect(legacyResult.ok).toBe(true);
+    expect(legacyResult.sourceNamespace).toBeNull();
+    expect(legacy.getItem('tanks.progress.v1')).toBe('7');
+  });
+
+  it('an unrecognised namespace string is unknown, not malformed', () => {
+    // A namespace a future build adds is exactly as foreign as a missing field, and
+    // reporting it as a malformed blob would be a wrong diagnosis for a newer save.
+    const to = createMemoryStorage();
+    const r = importSave(
+      to,
+      JSON.stringify({ format: SAVE_FORMAT, version: SAVE_VERSION, namespace: 'staging', keys: { 'tanks.progress.v1': '5' } }),
+      'production',
+    );
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain('does not state its namespace');
+    expect(r.sourceNamespace).toBeNull();
+  });
+});
+
+describe('importSave atomicity (issue #250)', () => {
+  /**
+   * A storage with a real BYTE QUOTA, seeded past nothing and capped at `capacity`.
+   *
+   * Modelled on how `localStorage` actually fails rather than as "throw after N writes":
+   * a write that would exceed the cap throws, and a removal frees its bytes. That
+   * distinction is load-bearing here — a throw-after-N fixture can never accept the
+   * rollback's restore write either, so it reports a failed rollback for a reason no real
+   * storage has, and it cannot tell a rollback that frees space first from one that does
+   * not. `initial` is seeded through the underlying store so it cannot overflow the cap.
+   */
+  function quotaCapped(capacity: number, initial: Record<string, string> = {}): Storage {
+    const real = createMemoryStorage();
+    for (const [k, v] of Object.entries(initial)) real.setItem(k, v);
+    const used = (): number => {
+      let n = 0;
+      for (let i = 0; i < real.length; i++) {
+        const k = real.key(i)!;
+        n += k.length + (real.getItem(k)?.length ?? 0);
+      }
+      return n;
+    };
+    return {
+      get length(): number { return real.length; },
+      key: (i: number) => real.key(i),
+      getItem: (k: string) => real.getItem(k),
+      removeItem: (k: string) => real.removeItem(k),
+      clear: () => real.clear(),
+      setItem: (k: string, v: string) => {
+        const replacing = real.getItem(k);
+        const after = used() - (replacing === null ? 0 : k.length + replacing.length) + k.length + v.length;
+        if (after > capacity) throw new Error('quota exceeded');
+        real.setItem(k, v);
+      },
+    } as Storage;
+  }
+
+  it('a write that throws part-way rolls the earlier keys back to what they held', () => {
+    // Acceptance criterion 4. Before this, a failed import left the storage holding some
+    // of the incoming save and some of the outgoing one -- a state neither export
+    // describes, and the one thing a restore must never produce.
+    // Cap admits the first replacement but not the second, which GROWS: 'tanks.stats.v1'
+    // (14) + 'NEW-STATS-THAT-IS-LONGER' (24) needs 38 where the old value needed 23.
+    const to = quotaCapped(55, { 'tanks.progress.v1': 'OLD-PROGRESS', 'tanks.stats.v1': 'OLD-STATS' });
+    const r = importSave(
+      to,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: SAVE_VERSION,
+        namespace: 'production',
+        keys: { 'tanks.progress.v1': 'NEW-PROGRESS', 'tanks.stats.v1': 'NEW-STATS-THAT-IS-LONGER' },
+      }),
+      'production',
+    );
+    expect(r.ok).toBe(false);
+    expect(r.failed).toEqual(['tanks.stats.v1']);
+    expect(r.rolledBack).toEqual(['tanks.progress.v1']);
+    expect(to.getItem('tanks.progress.v1'), 'the first key kept the failed import').toBe('OLD-PROGRESS');
+    expect(to.getItem('tanks.stats.v1')).toBe('OLD-STATS');
+  });
+
+  it('a key that had NO previous value is removed rather than left behind', () => {
+    // The other half of "unchanged": restoring absent keys to their old value means
+    // deleting them, not writing an empty string.
+    const to = quotaCapped(55, { 'tanks.stats.v1': 'OLD-STATS' });
+    const r = importSave(
+      to,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: SAVE_VERSION,
+        namespace: 'production',
+        keys: { 'tanks.progress.v1': 'NEW-PROGRESS', 'tanks.stats.v1': 'NEW-STATS-THAT-IS-LONGER' },
+      }),
+      'production',
+    );
+    expect(r.ok).toBe(false);
+    expect(to.getItem('tanks.progress.v1'), 'a key the save never had survived the rollback').toBeNull();
+    expect(to.getItem('tanks.stats.v1')).toBe('OLD-STATS');
+  });
+
+  it('a fully successful import rolls nothing back', () => {
+    // The negative control: `rolledBack` must be empty on the happy path, or the two
+    // assertions above would pass against an implementation that always restores.
+    const to = createMemoryStorage();
+    const r = importSave(
+      to,
+      JSON.stringify({
+        format: SAVE_FORMAT,
+        version: SAVE_VERSION,
+        namespace: 'production',
+        keys: { 'tanks.progress.v1': '5' },
+      }),
+      'production',
+    );
+    expect(r.ok).toBe(true);
+    expect(r.rolledBack).toEqual([]);
+    expect(to.getItem('tanks.progress.v1')).toBe('5');
+  });
+});
