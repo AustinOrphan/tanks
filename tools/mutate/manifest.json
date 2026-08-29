@@ -1828,8 +1828,8 @@
     "find": "  const blob: SaveBlob = { format: SAVE_FORMAT, version: SAVE_VERSION, namespace, keys };",
     "replace": "  const blob: SaveBlob = { format: SAVE_FORMAT, version: SAVE_VERSION, keys };",
     "expect": "killed",
-    "expectFailures": 4,
-    "why": "Exports a blob that does not say which namespace it came from (issue #250). The blob's KEYS are the store-facing names in either namespace, so two exports of different namespaces are otherwise byte-identical and nothing downstream can tell them apart. Every later guard depends on this field existing, so dropping it defeats the whole feature while leaving the export apparently working.",
+    "expectFailures": 7,
+    "why": "Exports a blob that does not say which namespace it came from (issue #250). The blob's KEYS are the store-facing names in either namespace, so two exports of different namespaces are otherwise byte-identical and nothing downstream can tell them apart. Every later guard depends on this field existing, so dropping it defeats the whole feature while leaving the export apparently working. Measured, not estimated: 7 of 37 in save.test.ts.",
     "tests": [
       "src/game/save.test.ts"
     ]
@@ -1840,8 +1840,8 @@
     "find": "  if (source !== active && opts.allowForeignNamespace !== true) {",
     "replace": "  if (false) {",
     "expect": "killed",
-    "expectFailures": 4,
-    "why": "Removes the namespace gate, restoring the pre-#250 behaviour: a developer save imports straight over the player's real production save, silently and completely. This is the defect the issue exists to close, and nothing outside save.test.ts can see it because the keys written are identical either way.",
+    "expectFailures": 5,
+    "why": "Removes the namespace gate, restoring the pre-#250 behaviour: a developer save imports straight over the player's real production save, silently and completely. This is the defect the issue exists to close, and nothing outside save.test.ts can see it because the keys written are identical either way. Measured, not estimated: 5 of 37 in save.test.ts.",
     "tests": [
       "src/game/save.test.ts"
     ]
