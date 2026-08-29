@@ -7,11 +7,11 @@ import { createCapabilitySource, createStaticReducedMotionSource, NO_CAPABILITIE
 import { createBrowserDeps } from './loop';
 import type { AudioEngine } from '../audio/engine';
 
-function realSettings(): AppSettings {
+function realSettings(namespace: 'production' | 'developer' = 'production'): AppSettings {
   const storage = createMemoryStorage();
   return createAppSettings({
     storage,
-    namespace: 'production',
+    namespace,
     stores: createStores(storage, 'persistent'),
     capabilities: createCapabilitySource(() => NO_CAPABILITIES),
     motion: createStaticReducedMotionSource(false),
@@ -28,10 +28,10 @@ function recordingAudio(): { engine: AudioEngine; calls: string[] } {
   return { engine, calls };
 }
 
-function build(): { shell: AppShell; audio: string[]; settingsDisposals: () => number } {
+function build(namespace: 'production' | 'developer' = 'production'): { shell: AppShell; audio: string[]; settingsDisposals: () => number } {
   const { engine, calls } = recordingAudio();
   let settingsDisposals = 0;
-  const settings = realSettings();
+  const settings = realSettings(namespace);
   const wrapped = {
     ...settings,
     dispose: () => {
@@ -107,5 +107,25 @@ describe('createBrowserDeps: the page-owned audio wiring (issue #317)', () => {
     // The READ side is separately wrong if it is wired to a snapshot taken at deps
     // construction, which is why this asks the SAME deps object again rather than a new one.
     expect(deps.launchGate.dismissed(), 'the gate read a stale snapshot').toBe(true);
+  });
+});
+
+describe('createBrowserDeps: the storage namespace reaches the save API (issue #250)', () => {
+  it('carries the namespace the settings owner resolved, both values', () => {
+    // The wiring `main.ts` ships and nothing else enters. A hard-coded 'production' here
+    // would label every developer export as production -- silently, since the blob's KEYS
+    // are the store-facing names in either namespace and so look identical. That is the
+    // exact defect issue #250 closes, reintroduced one line lower down.
+    expect(createBrowserDeps(build('production').shell).storageNamespace).toBe('production');
+    expect(createBrowserDeps(build('developer').shell).storageNamespace).toBe('developer');
+  });
+
+  it('is the SAME namespace the storage adapter is applying, not a second answer', () => {
+    // `storage` and `storageNamespace` are a pair; read from one object so they cannot
+    // disagree about which keys this session is on.
+    const { shell } = build('developer');
+    const deps = createBrowserDeps(shell);
+    expect(deps.storageNamespace).toBe(shell.settings.namespace);
+    expect(deps.storage).toBe(shell.settings.storage);
   });
 });
