@@ -3,10 +3,17 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import {
   CI_PLAYWRIGHT_VERSION,
+  inspectPrerequisites,
   loadPlaywright,
   playwrightVersionFromCi,
   toolVersion,
 } from './prerequisites.mjs';
+// @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
+import {
+  playwrightThatResolves,
+  respondsToVersion,
+  toolDirectory,
+} from './test-fixtures/toolchain.mjs';
 
 describe('capture prerequisites', () => {
   it('reports a missing command as an actionable prerequisite error', async () => {
@@ -65,5 +72,61 @@ describe('capture prerequisites', () => {
       PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: '/missing/chromium',
     }))
       .rejects.toThrow(/Tried:\n {2}\/missing\/playwright: [^\n]*\n {2}playwright: /);
+  });
+});
+
+/**
+ * The same refusals, produced by an external toolchain that is really broken.
+ *
+ * The cases above establish the refusal text from a missing command name and a data-URI
+ * module. These run `inspectPrerequisites` -- the function compare and capture actually
+ * call -- against a private PATH holding real executables, so the ENOENT comes out of a
+ * real `spawn` and travels the real mapping in `runProcess` and `toolVersion`.
+ *
+ * Which command is missing is chosen by which shim EXISTS: the three probes run under
+ * `Promise.all`, so leaving both encoders off PATH would make the rejection a race between
+ * two identically shaped messages. Playwright is held resolvable throughout for the same
+ * reason -- it is the variable these cases are not testing.
+ */
+describe.skipIf(process.platform === 'win32')('capture prerequisites against a really broken toolchain', () => {
+  async function environment(commands: Record<string, string>) {
+    return {
+      PATH: await toolDirectory(commands),
+      PLAYWRIGHT_MODULE: await playwrightThatResolves(CI_PLAYWRIGHT_VERSION),
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: process.execPath,
+    };
+  }
+
+  it.each([
+    ['ffmpeg', { ffprobe: respondsToVersion('ffprobe') }],
+    ['ffprobe', { ffmpeg: respondsToVersion('ffmpeg') }],
+  ])('names %s specifically when that one is genuinely absent from PATH', async (missing, present) => {
+    await expect(inspectPrerequisites(await environment(present)))
+      .rejects.toThrow(`${missing} is required for capture but was not found on PATH`);
+  });
+
+  it('accepts the same toolchain once both encoders are on PATH, and reports what it found', async () => {
+    // The control for the two cases above. Without it they would still pass if
+    // `inspectPrerequisites` rejected unconditionally, or if the PATH were being ignored
+    // and some ambient failure were producing the message.
+    const result = await inspectPrerequisites(await environment({
+      ffmpeg: respondsToVersion('ffmpeg'),
+      ffprobe: respondsToVersion('ffprobe'),
+    }));
+    expect(result.ffmpeg).toBe('ffmpeg version 0.0-fixture');
+    expect(result.ffprobe).toBe('ffprobe version 0.0-fixture');
+    expect(result.playwright.version).toBe(CI_PLAYWRIGHT_VERSION);
+  });
+
+  it('refuses a tool that is installed and broken, rather than reading its failure as a version', async () => {
+    // A present-but-failing encoder is not the same defect as a missing one, and it is the
+    // one an exit code alone would wave through: `toolVersion` returns the first line of
+    // STDOUT, so a shim that prints a plausible banner and then exits nonzero would be
+    // accepted if the exit status were not checked.
+    await expect(inspectPrerequisites(await environment({
+      ffmpeg: 'echo "ffmpeg version 7.1.5"\nexit 1',
+      ffprobe: respondsToVersion('ffprobe'),
+    })))
+      .rejects.toThrow(/could not inspect ffmpeg: ffmpeg failed: ffmpeg version 7\.1\.5/);
   });
 });

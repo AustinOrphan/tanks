@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 // @ts-expect-error -- plain-node ESM module, no types
 import { readPngSize, comparePixels, summariseFrames, decodeRgba } from './pixels.mjs';
+// @ts-expect-error -- plain-node ESM module, no types
+import { toolDirectory, writesOutputOfBytes } from '../capture/test-fixtures/toolchain.mjs';
 
 /** A PNG header with the given dimensions; enough for readPngSize, which reads only IHDR. */
 function pngHeader(width: number, height: number, { signature = true, type = 'IHDR' } = {}) {
@@ -140,5 +145,43 @@ describe('decodeRgba', () => {
     // differently laid out buffer and reported as an enormous pixel difference.
     await expect(decodeRgba('/w/base.png', '/w/base.raw', fakeDeps(10)))
       .rejects.toThrow(/decoded \/w\/base\.png to 10 bytes, expected 24 for 2x3 RGBA/);
+  });
+});
+
+/**
+ * The same byte-length refusal, produced by a real FFmpeg process that exits 0.
+ *
+ * The case above establishes the message with an injected `runProcess`, which is the fast
+ * way to pin the arithmetic. It cannot show the check is reachable through a real spawn --
+ * and reachability is the whole point of this guard, because the defect it exists for looks
+ * like SUCCESS from the outside: a tool that substitutes a pixel format or truncates its
+ * output still exits 0, and only the byte count says so.
+ */
+describe.skipIf(process.platform === 'win32')('decodeRgba against a real process that exits 0', () => {
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  /** 2x3 RGBA is 24 bytes; the shim decides how many it actually writes. */
+  async function decodeWith(bytes: number) {
+    const directory = await mkdtemp(resolve(tmpdir(), 'decode-'));
+    const png = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+    png.writeUInt32BE(13, 8);
+    png.write('IHDR', 12, 'latin1');
+    png.writeUInt32BE(2, 16);
+    png.writeUInt32BE(3, 20);
+    await writeFile(resolve(directory, 'in.png'), png);
+    vi.stubEnv('PATH', await toolDirectory({ ffmpeg: writesOutputOfBytes(bytes) }));
+    return decodeRgba(resolve(directory, 'in.png'), resolve(directory, 'out.raw'));
+  }
+
+  it('refuses a short decode even though FFmpeg reported success', async () => {
+    await expect(decodeWith(10)).rejects.toThrow(/to 10 bytes, expected 24 for 2x3 RGBA/);
+  });
+
+  it('accepts the full-length decode from the same shim, so the refusal is the byte count', async () => {
+    // The control. Only the byte count differs between these two cases, so a check that
+    // rejected every real decode -- or one deleted outright, which would make the case
+    // above pass on the resolved value -- cannot satisfy both.
+    await expect(decodeWith(24)).resolves.toMatchObject({ width: 2, height: 3 });
   });
 });

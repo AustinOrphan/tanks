@@ -97,9 +97,33 @@ export function describeIncompatibility(recipeId, base, head, result) {
  * The environment half of the contract, checked AFTER both captures.
  *
  * Not knowable up front: it is read out of each `capture.json`'s recorded tool versions.
- * A mismatch here is reported rather than refused -- both captures already exist and are
- * honest recordings, and a reader comparing across two Chromium builds is better served by
- * evidence carrying a loud caveat than by a tool that throws the evidence away.
+ * A mismatch here is reported rather than refused, and that reading of the contract is
+ * deliberate. The issue lists the capture environment among the things to validate and
+ * elsewhere says an incompatible recipe must FAIL, so refusing here is a defensible reading
+ * too. What settles it is where the five recorded keys come from:
+ *
+ *   node        the process `runCaptureAtRef` spawned -- the caller's node, both sides
+ *   playwright  resolved through the symlink `linkSharedModules` makes to the caller's
+ *               node_modules -- the caller's install, both sides
+ *   ffmpeg      the caller's PATH, both sides
+ *   ffprobe     the caller's PATH, both sides
+ *   producer    `{ chromium }`, the browser that same symlink resolves to -- one Chromium
+ *
+ * Every one of them is the CALLER's, by the same symlink that makes "one Playwright, one
+ * Chromium, one FFmpeg produce both halves" true in the first place. In the supported path
+ * the two sides therefore cannot differ, and a real two-ref run bears that out: all five
+ * compare equal.
+ *
+ * So a reported difference does not mean two environments. It means the RECORDING CODE
+ * changed between the refs -- a key added, renamed, or formatted differently by whichever
+ * side is newer. Refusing would discard a perfectly good comparison over a manifest-schema
+ * edit, which is the opposite of what the refusal clause is for. Both captures already
+ * exist and are honest recordings; a loud caveat serves the reader, and `compare.json`
+ * names the differing keys so they can see for themselves which it was.
+ *
+ * The caveat is not decoration: if a future capture ever sources a tool version from the
+ * REF's own tree rather than the caller's, this stops being unreachable and the ruling
+ * above has to be revisited.
  */
 export function checkEnvironmentParity(baseManifest, headManifest) {
   const names = [...new Set([...Object.keys(baseManifest.tools ?? {}), ...Object.keys(headManifest.tools ?? {})])].sort();
