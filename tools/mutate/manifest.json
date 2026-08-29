@@ -1644,7 +1644,7 @@
     "find": "  return 1 - clamp01(lit);",
     "replace": "  return clamp01(lit);",
     "expect": "killed",
-    "expectFailures": 23,
+    "expectFailures": 4,
     "tests": [
       "src/render/mine-warning.test.ts",
       "src/render/mine-warning.sync.test.ts"
@@ -1657,7 +1657,7 @@
     "find": "    fuse = { growth: clamp01(1 - mine.timer / FUSE_WARNING_SECONDS) };",
     "replace": "    { const g = clamp01(1 - mine.timer / FUSE_WARNING_SECONDS); fuse = { growth: Math.floor(g * 12) % 2 === 0 ? g : g * 0.4 }; }",
     "expect": "killed",
-    "expectFailures": 23,
+    "expectFailures": 2,
     "tests": [
       "src/render/mine-warning.test.ts",
       "src/render/mine-warning.sync.test.ts"
