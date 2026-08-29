@@ -1735,5 +1735,17 @@
       "tools/compare/compose.test.ts"
     ],
     "why": "Differences the captioned frames instead of the originals. The two captions always differ -- they name different refs -- so the brightest region of every difference image becomes the label text, burying whatever actually changed in the render."
+  },
+  {
+    "id": "compare-capture-stops-retaining-its-frames",
+    "file": "tools/compare/capture-runner.mjs",
+    "find": "      ['run', 'capture', '--', '--recipe', recipeId, '--out', CAPTURE_OUT, '--retain-frames'],",
+    "replace": "      ['run', 'capture', '--', '--recipe', recipeId, '--out', CAPTURE_OUT],",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "tools/compare/capture-runner.test.ts"
+    ],
+    "why": "Stops asking capture to keep its raw PNGs, which is what the entire comparison is computed from -- analyseFrames reads <dir>/frames/ and would find nothing. Pinned because it genuinely survived: capture-runner is the seam every orchestrator test replaces with a fake, so dropping this flag left all 100 other tests green until the module got a test of its own."
   }
 ]

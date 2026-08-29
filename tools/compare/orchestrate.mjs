@@ -22,6 +22,7 @@ import { runCaptureAtRef } from './capture-runner.mjs';
 import { decodeRgba, comparePixels, summariseFrames } from './pixels.mjs';
 import { composeStill, composeTemporal, fitLabel } from './compose.mjs';
 import { resolveOutputPath } from '../capture/paths.mjs';
+import { inspectPrerequisites } from '../capture/prerequisites.mjs';
 
 export const COMPARE_SCHEMA_VERSION = 1;
 
@@ -120,12 +121,21 @@ export async function compareRefs(options, deps = {}) {
     composeStill: deps.composeStill ?? composeStill,
     composeTemporal: deps.composeTemporal ?? composeTemporal,
     analyseFrames: deps.analyseFrames ?? analyseFrames,
+    inspectPrerequisites: deps.inspectPrerequisites ?? inspectPrerequisites,
     mkdir: deps.mkdir ?? mkdir,
     rm: deps.rm ?? rm,
     writeFile: deps.writeFile ?? writeFile,
   };
 
   // ---- Phase 1: everything the object database can answer, before any worktree ----
+  //
+  // Prerequisites come FIRST, and compare checks them itself rather than inheriting
+  // capture's check. Capture's fires inside a worktree, which for this command means after
+  // two checkouts already exist -- and compare additionally shells out to FFmpeg for the
+  // composition step, a dependency it owns rather than borrows. Learning that ffmpeg is
+  // missing should not cost two checkouts and two browser runs.
+  const prerequisites = await io.inspectPrerequisites(deps.env ?? process.env, { signal: deps.signal });
+
   const [base, head] = await Promise.all([
     io.resolveRef(root, 'base', options.base, deps),
     io.resolveRef(root, 'head', options.head, deps),
@@ -226,6 +236,11 @@ export async function compareRefs(options, deps = {}) {
         sourceManifests: { base: sides.base.manifest, head: sides.head.manifest },
       },
       environment,
+      prerequisites: {
+        playwright: prerequisites.playwright?.version ?? null,
+        ffmpeg: prerequisites.ffmpeg,
+        ffprobe: prerequisites.ffprobe,
+      },
       analysis: {
         pairing: 'positional over each side\'s sorted retained frames',
         frameCount: analysis.frameCount,

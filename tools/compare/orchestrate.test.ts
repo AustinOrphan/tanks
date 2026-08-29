@@ -39,6 +39,7 @@ function harness(overrides: Record<string, unknown> = {}) {
   };
   const deps: Record<string, unknown> = {
     log: () => {},
+    inspectPrerequisites: async () => ({ playwright: { version: '1.62.0' }, ffmpeg: 'n7.1', ffprobe: 'n7.1' }),
     resolveRef: async (_root: string, label: string, ref: string) => ({
       label, requestedRef: ref, commitSha: label === 'base' ? BASE_SHA : HEAD_SHA,
     }),
@@ -165,6 +166,29 @@ describe('compareRefs: refusing before it spends anything', () => {
     });
     await expect(compareRefs(options(root), deps)).rejects.toThrow(/not the same instrument at both refs/);
     expect(events).toEqual([]);
+  });
+
+  it('checks prerequisites BEFORE resolving anything or creating a worktree', async () => {
+    // Compare owns this check rather than inheriting capture's, which fires inside a
+    // worktree -- i.e. after two checkouts already exist. Learning that ffmpeg is missing
+    // must not cost two checkouts and two browser runs. Compare also shells out to FFmpeg
+    // itself for the composition step, which capture's check knows nothing about.
+    const root = await freshRoot();
+    const { deps, events } = harness({
+      inspectPrerequisites: async () => { throw new Error('ffmpeg is required for capture but was not found on PATH'); },
+    });
+    let resolved = false;
+    (deps.resolveRef as unknown) = async () => { resolved = true; return {}; };
+    await expect(compareRefs(options(root), deps)).rejects.toThrow(/ffmpeg is required/);
+    expect(resolved).toBe(false);
+    expect(events).toEqual([]);
+  });
+
+  it('records the tool versions it verified', async () => {
+    const root = await freshRoot();
+    const { deps } = harness();
+    const { report } = await compareRefs(options(root), deps);
+    expect(report.prerequisites).toEqual({ playwright: '1.62.0', ffmpeg: 'n7.1', ffprobe: 'n7.1' });
   });
 
   it('refuses to overwrite an existing output directory', async () => {
