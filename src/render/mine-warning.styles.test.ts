@@ -59,6 +59,12 @@ describe('the shared heat ramp', () => {
       prev = lum;
     }
     expect(heatIntensity(1)).toBeGreaterThan(heatIntensity(0)); // intensity ramps too
+    // The endpoint, ASSERTED rather than implied by the title: a ramp frozen at its red
+    // start passes non-strict monotonicity, and a negative control proved exactly that
+    // mutation survived until this line existed. Near-white means green and blue are high.
+    const end = heatColor(1, new THREE.Color());
+    expect(end.g).toBeGreaterThan(0.9);
+    expect(end.b).toBeGreaterThan(0.8);
   });
 });
 
