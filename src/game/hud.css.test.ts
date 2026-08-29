@@ -1236,3 +1236,75 @@ describe('hud.css is syntactically whole', () => {
     }
   });
 });
+
+/*
+ * Issue #364's first acceptance criterion: ONE place defines the transition duration and
+ * easing, and no screen carries its own copy. The duration half is proved behaviourally
+ * in `hud.test.ts` (move the token, the timer moves with it). Easing has no TypeScript
+ * consumer at all -- CSS performs it -- so this is where its half lives.
+ *
+ * Asserted against the SHORTHAND and the source text rather than through `resolved()`,
+ * which was the first attempt and measures nothing here. Probed in this file before
+ * writing: jsdom does not expand `animation`, so `animationDuration` reads `"auto"` and
+ * `animationTimingFunction` reads `"ease"` -- both jsdom's own defaults, identical
+ * whether the stylesheet says 150ms/cubic-bezier or was never loaded. An assertion on
+ * those longhands would have passed against a deleted rule.
+ */
+describe('hud.css: the one application-transition definition (issue #364)', () => {
+  const CONTRACT_RULES = ['.ui-surface--entering', '.ui-surface--leaving'];
+
+  it('gives both contract rules their duration and easing from the tokens, live', () => {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = createHud(root);
+    try {
+      const el = root.querySelector('.hud-panel') as HTMLElement;
+      for (const cls of ['ui-surface--entering', 'ui-surface--leaving']) {
+        el.className = `hud-panel ${cls}`;
+        const shorthand = getComputedStyle(el).animation;
+        // Vacuity guard: a deleted or renamed rule leaves this empty, and every
+        // `toContain` below would then be asserting about "".
+        expect(shorthand, `${cls} matched no rule`).not.toBe('');
+        expect(shorthand, `${cls} does not read the duration token`).toContain(
+          'var(--ui-transition-duration)',
+        );
+        expect(shorthand, `${cls} does not read the easing token`).toContain(
+          'var(--ui-transition-ease)',
+        );
+      }
+      // The tokens themselves resolve, so the references above are not pointing at names
+      // that were never declared.
+      const rootStyle = getComputedStyle(document.documentElement);
+      expect(rootStyle.getPropertyValue('--ui-transition-duration').trim()).toMatch(
+        /^[\d.]+m?s$/,
+      );
+      expect(rootStyle.getPropertyValue('--ui-transition-ease').trim()).not.toBe('');
+    } finally {
+      hud.dispose();
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('declares the duration and the easing exactly once each, and nowhere as a literal', () => {
+    // "No screen has its own copy" is a claim about the whole stylesheet, which the live
+    // check above cannot make -- it only looks at the two rules it already knows about.
+    const text = stripComments(css);
+    for (const token of ['--ui-transition-duration', '--ui-transition-ease']) {
+      const declarations = [...text.matchAll(new RegExp(`${token}\\s*:`, 'g'))];
+      expect(declarations.length, `${token} is declared more than once`).toBe(1);
+    }
+    // Every rule that animates an application surface must go through the tokens. A
+    // second copy would most naturally arrive as a literal duration inside one of these.
+    for (const selector of CONTRACT_RULES) {
+      const rule = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(text);
+      expect(rule, `${selector} is missing from the stylesheet`).not.toBeNull();
+      const body = (rule as RegExpExecArray)[1];
+      expect(body, `${selector} hardcodes a duration`).not.toMatch(/animation:[^;]*\d+m?s/);
+      expect(body, `${selector} hardcodes an easing curve`).not.toMatch(
+        /animation:[^;]*cubic-bezier/,
+      );
+      expect(body).toContain('var(--ui-transition-duration)');
+      expect(body).toContain('var(--ui-transition-ease)');
+    }
+  });
+});

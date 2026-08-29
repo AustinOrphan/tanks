@@ -2402,6 +2402,54 @@ describe('startGameWith: reduced motion reaches the preview through the effectiv
       h.handle.dispose();
     }
   });
+
+  it('pushes the same resolved policy to the HUD, and again when it changes', () => {
+    // The transition contract (issue #364) reads this, and only loop.ts can prove the
+    // push happens at all -- hud.test.ts can prove what the HUD does with the flag but
+    // never that anything hands it over.
+    //
+    // The SAME four rows as the preview sweep above, for the same reason: the OS is set
+    // opposite to the expected answer wherever an override applies, so a wire that
+    // forwarded the media query instead of the resolved value fails two of them.
+    const rows: Array<[('system' | 'full' | 'reduced'), boolean, boolean]> = [
+      ['system', true, true],
+      ['system', false, false],
+      ['full', true, false],
+      ['reduced', false, true],
+    ];
+    for (const [motion, os, expected] of rows) {
+      const h = boot(makeDeps({ systemReducedMotion: os }));
+      h.settingsStore.setMotion(motion);
+      expect(h.rec.reducedMotions.at(-1), `${motion} with OS ${os}`).toBe(expected);
+      h.handle.dispose();
+    }
+  });
+
+  it('pushes it at boot, before the player has touched anything', () => {
+    // A HUD that only learned the policy on the first CHANGE would animate its first
+    // navigation against a player who had already chosen reduced motion.
+    const h = boot(makeDeps({ systemReducedMotion: true }));
+    expect(h.rec.reducedMotions.length, 'nothing was pushed at construction').toBeGreaterThan(0);
+    expect(h.rec.reducedMotions[0]).toBe(true);
+    h.handle.dispose();
+  });
+
+  it('re-pushes on a LIVE change, which is what a createHud argument could not do', () => {
+    // The whole reason this is a setter. A player toggling motion with the menu open
+    // must not need a reload to see it; the subscription republishes and the HUD is told
+    // again. Asserted as a NEW push after boot, not merely as a correct final value --
+    // the latter is already true of a value read once at construction.
+    const h = boot(makeDeps({ systemReducedMotion: false }));
+    const atBoot = h.rec.reducedMotions.length;
+    expect(h.rec.reducedMotions.at(-1)).toBe(false);
+    h.settingsStore.setMotion('reduced');
+    expect(
+      h.rec.reducedMotions.length,
+      'the live change pushed nothing to the HUD',
+    ).toBeGreaterThan(atBoot);
+    expect(h.rec.reducedMotions.at(-1)).toBe(true);
+    h.handle.dispose();
+  });
 });
 
 describe('startGameWith: the persistence notice (issue #320)', () => {
