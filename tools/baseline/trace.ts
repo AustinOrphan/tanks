@@ -334,15 +334,18 @@ import { step } from '../../src/sim/world';
  *     shifted. `newText.startsWith(oldText)` is FALSE and cannot be the evidence, so the
  *     move is confined by direct comparison of the two dumps instead:
  *       * 48 markers before and 48 after, and exactly SIX differ -- `|6:1:lose:1291|` …
- *         `|6:6:lose:1291|` become `|6:…:lose:1249|`. All six are arena index 6, one per
+ *         `|6:6:lose:1291|` become `|6:…:lose:811|`. All six are arena index 6, one per
  *         traced seed. The other 42 are byte-identical.
  *       * The text is byte-identical for its first 122374 characters, which runs through
  *         vs-duel-01's final sample; the first difference is inside vs-tri-01's own seed-1
  *         run.
  *       * The tail from arena index 7's first marker (`vs-quad-01`) to the end is
  *         byte-identical, 4605 characters on both trees.
- *       * Total length 134401 -> 134479, and the 78 is entirely vs-tri-01's section, which
- *         goes 6388 -> 6453 characters.
+ *       * Total length 134401 -> 132457. The trace got SHORTER, and that direction is
+ *         itself the evidence: vs-tri-01's section goes 6388 -> 4767 characters because its
+ *         runs now END SOONER (`lose` at tick 811 rather than 1291), which is what a board
+ *         with more structure and shorter sightlines does to a bot match. Every character
+ *         of the 1944 removed is inside that one section.
  *     So exactly one board's simulation moved, which is what the rebuild was, and no other
  *     board's did -- the property this fingerprint exists to pin.
  *
@@ -371,7 +374,7 @@ import { step } from '../../src/sim/world';
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = '3283b31719970105f3aafe20581f2994cd36c09462d4cbc3c9474903094093bc';
+export const BASELINE_HASH = '9500fc588142deb6276be0f8a406e7f0861757f13f1a6114070a155cdb1b28db';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

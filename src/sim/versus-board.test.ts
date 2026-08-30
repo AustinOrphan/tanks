@@ -106,27 +106,30 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         }
       }
     }
-    // vs-quad-01 (issue #273) takes this over from vs-tri-01, which took it from
-    // vs-duel-01, which took it from arena-02 (185.5). The progression is the point: each
-    // board authored FOR versus is smaller and more furnished than the campaign boards it
-    // joins, so the tightest ratio keeps falling. 27x17 with 141 solid cells, 20
-    // destructible and the two authored spawn letters leaves 296 open floor; at N=4 --
-    // which for this board IS its offered count, unlike vs-tri-01's N=4 above -- that is
-    // 74.0.
+    // vs-tri-01 takes this BACK from vs-quad-01 (74.0), which took it from vs-tri-01's
+    // first version, which took it from vs-duel-01, which took it from arena-02 (185.5).
+    // The progression is the point: each board authored FOR versus is smaller and more
+    // furnished than the campaign boards it joins, so the tightest ratio keeps falling.
+    // 27x17 with 149 solid cells, 19 destructible and the two authored spawn letters
+    // leaves 289 open floor; at N=4 that is 72.25.
     //
-    // The note below asked the next dedicated board to check this figure BEFORE it was
-    // authored. It was: 74.0 clears the 4x bound (72) by 2 cells of open floor, which is
-    // a pass and is also the last one that multiplier will absorb. Re-deriving the
-    // constant is a decision rather than a mechanical fix, so it is filed rather than
-    // taken here, and the margin is stated instead of left to be rediscovered.
-    expect(tightestLabel).toBe('vs-quad-01 @ N=4');
-    expect(tightest).toBeCloseTo(74.0, 5);
+    // AND THAT IS THE HEADLINE, not the label change. The previous revision of this
+    // comment said 74.0 "clears the 4x bound (72) by 2 cells of open floor ... and is
+    // also the last one that multiplier will absorb", and asked the next dedicated board
+    // to check the figure BEFORE it was authored. Issue #424's rework of vs-tri-01 checked
+    // it, and the answer is that the warning was right: at 72.25 the bound below has
+    // 0.25 cells of open floor left. The board is not cramped -- it is four times the
+    // stated minimum -- but this constant can no longer absorb another furnished 27x17
+    // board, and #418's re-derivation is now a prerequisite for the next one rather than
+    // an improvement someone might get to.
+    expect(tightestLabel).toBe('vs-tri-01 @ N=4');
+    expect(tightest).toBeCloseTo(72.25, 5);
     // 4x, down from 6x, itself down from the 10x that held when every board was
     // campaign-sized. LOWERED ON MEASUREMENT each time, and stated here rather than left
     // implicit: at 85.5 the previous 6x bound (108) would fail. The gate still discriminates
     // -- versus-board.test.ts's small-pillar-room fixture fails roomOk outright -- but the
-    // headroom this constant was given is being spent, and the next dedicated board should
-    // check this figure before it is authored rather than after.
+    // headroom is now 0.25 cells of open floor (72.25 against a bound of 72), so this
+    // assertion is one furnished board away from failing and #418 is where that is settled.
     expect(tightest).toBeGreaterThan(MIN_OPEN_FLOOR_PER_PLAYER * 4);
   });
 

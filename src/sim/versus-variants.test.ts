@@ -25,15 +25,17 @@ const DESTRUCTIBLE_COUNTS: Record<string, number> = {
   'arena-05': 18,
   // Four breachable clusters, 2x3 or 2x2, each mirrored through the centre (issue #271).
   'vs-duel-01': 34,
-  // Five clusters, each placed with its mirror partner about column 13 (issue #272,
-  // regeometried by #424): the pylons' lower faces, the core's centre block and its two
-  // flanking blocks, the outer corner blocks, and the row-13 corner blocks. It was 20
-  // before the rebuild. The clusters were chosen against the SPAWN PICKER, not for looks:
-  // a destructible counts as traversable in pickVersusSpawnCell's geodesic graph
-  // (`isWalkable` excludes only 'solid'), so a cluster in the wrong place opens a shortcut
-  // and moves the maximin set off the board's authored triangle -- which is what ruled out
-  // every candidate on the rows 3-4 blocks.
-  'vs-tri-01': 27,
+  // Four clusters, each placed with its mirror partner about column 13 (issue #272,
+  // regeometried by #424): the cheeks of the notch on row 8, the outer block faces on
+  // row 9, the central cap on row 10, and the lower block faces on row 13. It was 20 on
+  // the original board and 27 on the first rework. The clusters are chosen against the
+  // SPAWN PICKER, not for looks: a destructible counts as traversable in
+  // pickVersusSpawnCell's geodesic graph (`isWalkable` excludes only 'solid'), so a
+  // cluster in the wrong place opens a shortcut and moves the maximin set off the board's
+  // authored triangle. They are also kept off the spawn faces deliberately -- every spawn
+  // on this board reaches the shared floor without firing a shot (sealedSpawns is 0 at
+  // N=2, 3 and 4), which a destructible cap on a spawn pocket would end.
+  'vs-tri-01': 19,
   // Ten clusters of 2, mirrored about BOTH axes (issue #273): the pair flanking the core
   // on rows 4 and 12, the four on the open cross-lanes at rows 2 and 14, and the mid-lane
   // pair at rows 7 and 9. Five cells per quadrant, so like vs-tri-01 the count is even by

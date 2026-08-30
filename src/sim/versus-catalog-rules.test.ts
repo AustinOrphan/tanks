@@ -527,12 +527,17 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     // the fairness model a mirror cannot discharge, now on the tank metric as well.
     expect(axisToRight).toBeCloseTo(leftToAxis, 9);
     expect(leftToAxis).toBeCloseTo(17.25, 9);
-    // Base-to-base is fractionally longer, and the reason is stated rather than smoothed:
-    // the jamb at rows 15-16 breaks the base sightline, and driving around it costs 0.417
-    // world units that a cell path does not pay. That is 2.4% of the distance, and it is
-    // shared symmetrically by the two base players, neither of whom is nearer the axis.
-    expect(baseToBase).toBeCloseTo(17.666666666666664, 9);
-    expect(baseToBase - leftToAxis).toBeCloseTo(0.41666666666666607, 9);
+    // Base-to-base is LONGER, and by a lot -- stated rather than smoothed, because it is
+    // the one place the two metrics genuinely disagree about this board. A cell path walks
+    // straight through the middle at 26 steps; a tank has to drive around the central
+    // structure, which costs it 28.333 world units against the axis player's 17.25 to
+    // either base. The asymmetry is shared symmetrically -- each base player is the same
+    // distance from the axis and the same distance from the other base -- so no player is
+    // nearer to everything. What it says about the board is that the keystone sits in the
+    // contested middle and the two bases are genuinely far apart, which is the arch this
+    // board is named for rather than a defect in it.
+    expect(baseToBase).toBeCloseTo(28.333333333333332, 9);
+    expect(baseToBase - leftToAxis).toBeCloseTo(11.083333333333332, 9);
   });
 
   // NO RULE HERE THAT EVERY GAP MUST FIT A TANK, and the absence is deliberate.
