@@ -1261,16 +1261,29 @@ describe('hud: level select panel', () => {
   });
 
   it('the Levels button opens the panel, and Back returns to the menu', () => {
-    const { hud: h, root } = mount();
-    h.setLevelSelect(1, 2);
-    h.setState('main-menu');
-    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
-    openBtn(root).dispatchEvent(new MouseEvent('click'));
-    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(false);
-    (root.querySelector('.hud-levelselect-back') as HTMLButtonElement).dispatchEvent(
-      new MouseEvent('click'),
-    );
-    expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
+    // Fake timers from the START, not after the click: Back now CROSSFADES rather than
+    // cutting, and a timer installed after the click cannot advance one scheduled
+    // before it. The closing pane keeps its `--hidden` off for the transition it is
+    // leaving on, so the assertion below reads the SETTLED state. Where Back lands is
+    // what this test is for; the mid-transition frame is owned by `crossfades a panel
+    // CLOSE, not only its open`.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setLevelSelect(1, 2);
+      h.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(false);
+      (root.querySelector('.hud-levelselect-back') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click'),
+      );
+      vi.advanceTimersByTime(1000);
+      expect(view(root).classList.contains('hud-levelselect--hidden')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('the Levels button lives on the title panel only', () => {
@@ -1444,17 +1457,29 @@ describe('hud: controller assignment panel (docs/superpowers/plans/2026-08-17-co
 
   it('Back routes to shownState, not a hardcoded \'title\' -- opening from PAUSED and clicking ' +
     'Back must return to the live round, not abandon it', () => {
-    const { hud: h, root } = mount();
-    h.setState('main-menu');
-    h.setState('playing');
-    h.setState('paused');
-    openBtn(root).dispatchEvent(new MouseEvent('click'));
-    expect(view(root).classList.contains('hud-controllers--hidden')).toBe(false);
-    backBtn(root).dispatchEvent(new MouseEvent('click'));
-    expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
-    // Landed back on PAUSED, not title -- the pause panel's own Resume button is
-    // visible again, and the title-only Continue/New Game pair is not.
-    expect((root.querySelector('.hud-action') as HTMLButtonElement).textContent).toBe('Resume');
+    // Fake timers from the START, not after the click: Back now CROSSFADES rather than
+    // cutting, and a timer installed after the click cannot advance one scheduled
+    // before it. The closing pane keeps its `--hidden` off for the transition it is
+    // leaving on, so the assertion below reads the SETTLED state. Where Back lands is
+    // what this test is for; the mid-transition frame is owned by `crossfades a panel
+    // CLOSE, not only its open`.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setState('main-menu');
+      h.setState('playing');
+      h.setState('paused');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(view(root).classList.contains('hud-controllers--hidden')).toBe(false);
+      backBtn(root).dispatchEvent(new MouseEvent('click'));
+      vi.advanceTimersByTime(1000);
+      expect(view(root).classList.contains('hud-controllers--hidden')).toBe(true);
+      // Landed back on PAUSED, not title -- the pause panel's own Resume button is
+      // visible again, and the title-only Continue/New Game pair is not.
+      expect((root.querySelector('.hud-action') as HTMLButtonElement).textContent).toBe('Resume');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('onControllersOpen/onControllersClose fire once per ACTUAL transition, matching onCustomizeOpen/Close\'s own contract', () => {
@@ -1921,15 +1946,27 @@ describe('hud: the stats page', () => {
   };
 
   it('opens from the title, shows both columns, and Back returns to the menu', () => {
-    const { hud: h, root } = mount();
-    h.setStats({ lifetime: SOME, attempt: NONE });
-    h.setState('main-menu');
-    openBtn(root).dispatchEvent(new MouseEvent('click'));
-    expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(false);
-    expect(cell(root, 'Shell kills', 0)).toBe('4'); // lifetime column
-    expect(cell(root, 'Shell kills', 1)).toBe('0'); // run column
-    (root.querySelector('.hud-stats-back') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
-    expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(true);
+    // Fake timers from the START, not after the click: Back now CROSSFADES rather than
+    // cutting, and a timer installed after the click cannot advance one scheduled
+    // before it. The closing pane keeps its `--hidden` off for the transition it is
+    // leaving on, so the assertion below reads the SETTLED state. Where Back lands is
+    // what this test is for; the mid-transition frame is owned by `crossfades a panel
+    // CLOSE, not only its open`.
+    vi.useFakeTimers();
+    try {
+      const { hud: h, root } = mount();
+      h.setStats({ lifetime: SOME, attempt: NONE });
+      h.setState('main-menu');
+      openBtn(root).dispatchEvent(new MouseEvent('click'));
+      expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(false);
+      expect(cell(root, 'Shell kills', 0)).toBe('4'); // lifetime column
+      expect(cell(root, 'Shell kills', 1)).toBe('0'); // run column
+      (root.querySelector('.hud-stats-back') as HTMLButtonElement).dispatchEvent(new MouseEvent('click'));
+      vi.advanceTimersByTime(1000);
+      expect(statsView(root).classList.contains('hud-stats--hidden')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('derives both accuracies, and shows -- when the denominator is zero', () => {
@@ -3889,6 +3926,47 @@ describe('createHud application transition contract', () => {
       expect(panelEl.classList.contains('hud-panel--hidden')).toBe(true);
       expect(panelEl.classList.contains('ui-surface--leaving')).toBe(false);
       expect(statsEl.classList.contains('ui-surface--entering')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('crossfades a panel CLOSE, not only its open', () => {
+    // The half the contract shipped without. Every panel Back handler is
+    // `showX(false)` followed SYNCHRONOUSLY by `setState('main-menu')`, and `setState`
+    // runs a transition of its own -- which drains the outstanding one before it begins.
+    // So the close crossfade was started and collapsed in the same tick, and Back was its
+    // own interrupter. Measured in the shipped build before this test was written: the
+    // open applied `ui-surface-out/0.15s`, the close applied no `ui-surface-*` class at
+    // all. Asserted on the frame AFTER the click with no timer advance, because a settled
+    // read cannot tell a 150ms crossfade from a cut.
+    vi.useFakeTimers();
+    try {
+      const { hud, root } = mount();
+      hud.setState('main-menu');
+      vi.advanceTimersByTime(1000);
+      click(root, '.hud-stats-open');
+      vi.advanceTimersByTime(1000); // settle the OPEN, so what follows is only the close
+
+      click(root, '.hud-stats-back');
+      expect(
+        surface(root, '.hud-stats').classList.contains('ui-surface--leaving'),
+        'the closing panel is not marked leaving -- the close was a cut',
+      ).toBe(true);
+      expect(
+        surface(root, '.hud-panel').classList.contains('ui-surface--entering'),
+        'the menu arriving underneath is not marked entering',
+      ).toBe(true);
+      // Still painted: `display: none` cannot be animated out of, so the outgoing surface
+      // keeps its `--hidden` off for the whole fade.
+      expect(hidden(root, '.hud-stats', 'hud-stats--hidden')).toBe(false);
+
+      vi.advanceTimersByTime(1000);
+      expect(hidden(root, '.hud-stats', 'hud-stats--hidden')).toBe(true);
+      expect(surface(root, '.hud-stats').classList.contains('ui-surface--leaving')).toBe(false);
+      expect(surface(root, '.hud-panel').classList.contains('ui-surface--entering')).toBe(false);
+      // The destination is unchanged by any of this: Back still lands on the menu.
+      expect(hidden(root, '.hud-panel', 'hud-panel--hidden')).toBe(false);
     } finally {
       vi.useRealTimers();
     }

@@ -2061,5 +2061,41 @@
       "src/sim/config/versus-catalog.test.ts"
     ],
     "expectFailures": 1
+  },
+  {
+    "id": "panel-close-collapsed-by-its-own-setstate",
+    "file": "src/game/hud.ts",
+    "find": "    if (!desired.some(([surface, want]) => want !== isSurfaceOpen(surface))) {\n      onBegin?.();\n      return;\n    }\n    let leaving: Surface[] = [];",
+    "replace": "    let leaving: Surface[] = [];",
+    "expect": "killed",
+    "why": "The shipped defect this guard was added for, restored. `transitions.run` drains the outstanding chain before it begins -- the interrupt rule criterion 3 needs -- and every panel Back handler is `showX(false)` followed synchronously by `setState(...)` on the next line. That `setState` asks for a state the close is ALREADY arriving at, so it moves no surface and, without this early return, collapses the crossfade it has nothing to add to. Back was its own interrupter, on all five panels. What makes this worth pinning rather than obvious: nothing about the DESTINATION changes -- Back still lands on the menu, the panel still ends up hidden, every settled-state assertion in this suite still passes, and the whole difference is the 150ms nobody advanced a timer through. It was shipped green for exactly that reason, and was measured in the built app (`ui-surface-out/0.15s` on open, no `ui-surface-*` class at all on close) rather than found by a test. `crossfades a panel CLOSE, not only its open` is the case that measures it, on the frame after the click with no timer advance. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1
+  },
+  {
+    "id": "close-all-cleanup-slams-a-fading-surface",
+    "file": "src/game/hud.ts",
+    "find": "  function cleanupHide(el: HTMLElement, hiddenClass: string): void {\n    if (el.classList.contains(LEAVING)) return;\n    el.classList.add(hiddenClass);\n  }",
+    "replace": "  function cleanupHide(el: HTMLElement, hiddenClass: string): void {\n    el.classList.add(hiddenClass);\n  }",
+    "expect": "killed",
+    "why": "The other half of the same defect, and independently sufficient to cause it: `setState`'s close-all putting `--hidden` on a surface that is mid-crossfade. These four calls were bare `classList.add`s that bypassed the transition contract entirely, so the Back handlers' `setState` slammed the pane `showX(false)` was fading. Reverting EITHER this or `panel-close-collapsed-by-its-own-setstate` above reproduces the cut on its own -- measured, both directions -- which is why both exist as separate entries rather than one. The skip is safe because closure is still guaranteed: a surface passed over here is hidden by its own settle, and gameplay entry (where 150ms later would be too late) goes through `setState`'s own `instant` transition, whose drain settles it in the same frame. `crossfades a panel CLOSE, not only its open` is the case that measures it, at the assertion that the closing pane keeps its `--hidden` OFF while it fades. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ],
+    "expectFailures": 1
+  },
+  {
+    "id": "leaving-surface-descendants-still-take-clicks",
+    "file": "src/game/hud.css",
+    "find": ".ui-surface--leaving * {\n  pointer-events: none;\n}",
+    "replace": ".ui-surface--leaving {\n  pointer-events: none;\n}",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The descendant half of the leaving surface's hit-testing rule, collapsed back onto the surface itself -- which is what shipped, and what read as correct because `pointer-events` is inherited. It is not enough: this file gives more than a dozen controls an explicit `pointer-events: auto`, and an explicit value on a child beats an inherited one on its parent. The mutation keeps a syntactically whole rule that still names the right property and the right value, so the brace-balance check, the no-block-inside-a-plain-rule check and the presence sweep all still pass, and `getComputedStyle` on the SURFACE still reports `none` -- only a descendant reports `auto`. Nothing about the animation, the duration or the destination moves. `takes its DESCENDANTS out of hit testing, not only itself` is the case that measures it, and it carries a negative control in the same test: the same descendant must compute `auto` while the surface is NOT leaving, so a stylesheet that disabled it unconditionally fails rather than passes. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
