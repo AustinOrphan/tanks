@@ -16,8 +16,16 @@ import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-cata
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 5 shipped entries validate clean: 0 failures over 30 declared (entry, N, mode) combinations', () => {
-    expect(VERSUS_CATALOG.length).toBe(5);
+  it('all 6 shipped entries validate clean: 0 failures over 32 declared (entry, N, mode) combinations', () => {
+    // 32, not 36: five entries declare 3 player counts x 2 modes, and issue #271's
+    // vs-duel-01 declares 1 x 2. The sweep covers what each entry PROMISES, so a
+    // narrowed declaration shrinks this denominator rather than leaving combinations
+    // silently unchecked.
+    expect(VERSUS_CATALOG.length).toBe(6);
+    expect(
+      VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
+      'the declared (entry, N, mode) population this title states',
+    ).toBe(32);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }

@@ -19,27 +19,44 @@ function entryFixture(overrides: Partial<VersusCatalogEntry>): VersusCatalogEntr
 }
 
 describe('versusMapChoices', () => {
-  const SHIPPED = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
+  const CAMPAIGN_BOARDS = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
+  /** N=2 additionally offers the dedicated duel board (issue #271). */
+  const DUEL = 'vs-duel-01';
 
-  it('parity pin: offers exactly the 5 shipped entry ids, in catalog order, at every (N, mode)', () => {
-    // The pre-#270 implementation offered these same 5 ids at every N (measured
-    // 15/15 suitable, versus-board-rules plan); the declared catalog must not move
-    // the shipped offer -- 6 (N, mode) combinations swept.
+  it('parity pin: offers the 5 migrated boards at every (N, mode), plus the duel board at N=2 only', () => {
+    // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
+    // suitable, versus-board-rules plan), and the declared catalog must not move that
+    // offer. Issue #271 adds to it at exactly one count rather than moving it: 6 (N,
+    // mode) combinations swept, and the duel board appears in 2 of them.
     for (const n of [2, 3, 4] as const) {
       for (const mode of ['ffa', 'teams'] as const) {
-        expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual(SHIPPED);
+        const expected = n === 2 ? [...CAMPAIGN_BOARDS, DUEL] : CAMPAIGN_BOARDS;
+        expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual(expected);
       }
     }
   });
 
-  it('cross-check: the declared offer equals versusBoardCatalog\'s measured suitable ids at every N', () => {
-    // Declarations are promises; this ties the shipped offer back to the live
-    // measurement the old implementation derived it from (the same ground truth
+  it('cross-check: everything offered is measured suitable, and what is withheld is named', () => {
+    // Declarations are promises; this ties the shipped offer back to the live measurement
+    // the old implementation derived it from (the same ground truth
     // versus-catalog-rules.test.ts sweeps in full).
+    //
+    // EQUALITY IN ONE DIRECTION ONLY, by ruling. Offering a board that does not measure
+    // suitable is a bug and stays impossible. Withholding one that does is CURATION --
+    // issue #271's vs-duel-01 measures suitable at all three counts and is offered at
+    // N=2, because a dedicated duel board playing four-way is playable, not designed.
+    // A bare subset assertion would let any number of boards silently drop out of the
+    // offer, so the withheld set is pinned by name too: a board leaving the menu for a
+    // reason nobody wrote down still fails here.
+    const WITHHELD: Record<number, string[]> = { 2: [], 3: ['vs-duel-01'], 4: ['vs-duel-01'] };
     const rows = versusBoardCatalog();
     for (const n of [2, 3, 4] as const) {
       const measured = rows.filter((r) => r.playerCount === n && r.suitable).map((r) => r.arenaId);
-      expect(versusMapChoices(n, 'ffa'), `N=${n}`).toEqual(measured);
+      const offered = versusMapChoices(n, 'ffa');
+      // Nothing is offered that is not measured suitable.
+      for (const id of offered) expect(measured, `N=${n}: ${id} is offered but not suitable`).toContain(id);
+      // ...and exactly the named boards are held back.
+      expect(measured.filter((id) => !offered.includes(id)), `N=${n} withheld`).toEqual(WITHHELD[n]);
     }
   });
 

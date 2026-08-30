@@ -27,8 +27,8 @@ import type { WallKind } from './types';
 // ---------------------------------------------------------------------------
 
 describe('wallsForQuery: convergence with loadArena\'s real solid-wall geometry', () => {
-  it('produces the same solid-wall rectangles as loadArena, on all 5 shipped arenas', () => {
-    expect(ARENAS.length).toBe(5); // the population this test claims
+  it('produces the same solid-wall rectangles as loadArena, on all 6 shipped arenas', () => {
+    expect(ARENAS.length).toBe(6); // the population this test claims
 
     function solidRects(walls: { aabb: { minX: number; minY: number; maxX: number; maxY: number } }[]) {
       return walls
@@ -195,7 +195,7 @@ describe('pickVersusSpawnSet: the relaxation pass runs to convergence, not one r
     ]);
   });
 
-  it('returns exactly `count` distinct cells for every count 1..4, on all 5 shipped arenas', () => {
+  it('returns exactly `count` distinct cells for every count 1..4, on all 6 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       for (const n of [1, 2, 3, 4]) {
         const cells = pickVersusSpawnSet(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, n);
@@ -362,11 +362,11 @@ describe('pickVersusSpawnCell: negative controls (separation genuinely constrain
 });
 
 describe('pickVersusSpawnCell wired through loadArena: before/after on every shipped arena', () => {
-  // Denominator for every claim in this block: 5 shipped arenas x 2 versus modes
+  // Denominator for every claim in this block: 6 shipped arenas x 2 versus modes
   // (ffa/teams) x 3 player counts (2, 3, 4) = 30 loadArena calls, 100 total player
   // pairs (1 + 3 + 6 pairs per arena per mode).
-  it('ARENAS holds exactly 5 shipped arenas -- the population every sweep below claims', () => {
-    expect(ARENAS.length).toBe(5);
+  it('ARENAS holds exactly 6 shipped arenas -- the population every sweep below claims', () => {
+    expect(ARENAS.length).toBe(6);
   });
 
   // BEFORE this change, measured directly against the pre-fix ring search
@@ -378,7 +378,7 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
   // plans/2026-08-17-versus-spawns.md for the full before/after table); the two tests
   // below are the AFTER half of that same contrast, live against current code.
 
-  it('AFTER: 0 of 100 player pairs share mutual line of sight, across the full sweep', () => {
+  it('AFTER: 0 of 120 player pairs share mutual line of sight, across the full sweep', () => {
     let totalPairs = 0;
     let visiblePairs = 0;
     for (const arena of ARENAS) {
@@ -395,7 +395,7 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
         }
       }
     }
-    expect(totalPairs).toBe(100);
+    expect(totalPairs).toBe(120);
     expect(visiblePairs).toBe(0);
   });
 
@@ -411,25 +411,39 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
       return Math.sqrt(dx * dx + dy * dy);
     }
     let globalMin = Infinity;
+    // WHERE the floor is, not just what it is. The prose used to name the worst case and
+    // nothing checked the name, so a floor that moved to a different board would have
+    // kept the old label reading true. Issue #271 is exactly that case.
+    let globalMinLabel = '';
     for (const arena of ARENAS) {
       for (const mode of ['ffa', 'teams'] as const) {
         for (const n of [2, 3, 4]) {
           const { tanks } = loadArena(arena, n, mode);
           const pts = tanks.filter((t) => t.kind === 'player').map((t) => t.pos);
           for (let i = 0; i < pts.length; i++) {
-            for (let j = i + 1; j < pts.length; j++) globalMin = Math.min(globalMin, dist(pts[i], pts[j]));
+            for (let j = i + 1; j < pts.length; j++) {
+              const d = dist(pts[i], pts[j]);
+              if (d < globalMin) {
+                globalMin = d;
+                globalMinLabel = `${arena.id} / ${mode} / N=${n}`;
+              }
+            }
           }
         }
       }
     }
     expect(globalMin).toBeGreaterThan(5);
-    // Exact, and deliberately a two-place edit if placement is ever retuned: now
-    // arena-02 / ffa / N=4, the tightest of the 100 pairs in the sweep. History of the
-    // worst case: 9.0738… with P1 on the authored `P` cell, 11.6619… (at arena-03/N=4)
-    // once P1 joined the maximin set, and 9.6148… after the hull-clearance filter
-    // (issue #225) shrank the eligible pool off walls and boundaries -- still well
-    // clear of the 5-unit floor, with every spawn now hull-clear.
-    expect(globalMin).toBeCloseTo(9.614803401237305, 9);
+    // Exact, and deliberately a two-place edit if placement is ever retuned: the tightest
+    // of the 120 pairs in the sweep. History of the worst case: 9.0738… with P1 on the
+    // authored `P` cell, 11.6619… (at arena-03/N=4) once P1 joined the maximin set,
+    // 9.6148… (at arena-02/ffa/N=4) after the hull-clearance filter (issue #225) shrank
+    // the eligible pool off walls and boundaries, and now 5.6568… -- exactly 4*sqrt(2) --
+    // on issue #271's vs-duel-01, a 27x21 board where four starts simply cannot get as
+    // far apart as they can on a 45x33 one. The 5-unit floor is the guarantee and it
+    // still holds; the headroom above it is now thin enough to be worth watching, and it
+    // is thin at a player count vs-duel-01 is not offered at.
+    expect(globalMin).toBeCloseTo(5.65685424949238, 9);
+    expect(globalMinLabel).toBe('vs-duel-01 / ffa / N=4');
   });
 
   it('every player spawn is a distinct cell (never co-located), across the full sweep', () => {
@@ -442,7 +456,7 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
     }
   });
 
-  it('campaign-coop is untouched: loadArena(arena, n, "campaign-coop") is unchanged from the pre-existing ring search, on all 5 shipped arenas at N=2..4', () => {
+  it('campaign-coop is untouched: loadArena(arena, n, "campaign-coop") is unchanged from the pre-existing ring search, on all 6 shipped arenas at N=2..4', () => {
     // This does not re-implement the ring search to compare against -- that would only
     // prove two copies of the same logic agree. It instead pins that the co-op path
     // still produces DISTINCT, in-bounds cells and never routes through the versus
@@ -582,14 +596,16 @@ describe('clearance-filtered candidate pools (issue #225)', () => {
     expect(versusSpawnClearanceFailures(grid, 5, 5, 0.6, legend, [diag, ...avoid]).length).toBeGreaterThan(0);
   });
 
-  it('shipped sweep: every spawn on all 15 (arena, N) combinations is hull-clear -- 0 violations measured', () => {
-    // Population: 5 shipped arenas x N in {2,3,4} = 15 combinations, real loadArena
+  it('shipped sweep: every spawn on all 18 (arena, N) combinations is hull-clear -- 0 violations measured', () => {
+    // Population: 6 shipped arenas x N in {2,3,4} = 18 combinations, real loadArena
     // placement. Before the filter (issue #225) this measured 2 violations on
     // arena-01 at N=2 alone -- P1 anchored at the corner cell, 0.333 from two
     // boundaries at cellSize 2/3, a 0.5-radius hull overlapping the wall by 0.167.
     // The filter is exactly what makes this sweep clean; it is the acceptance
-    // criterion, not a parity statement.
-    expect(ARENA_DEFS.length).toBe(5);
+    // criterion, not a parity statement. Issue #271's vs-duel-01 is the first board
+    // authored after the filter existed, and it passes with nothing done for it: the
+    // corner it spawns into is the same corner arena-01 failed at.
+    expect(ARENA_DEFS.length).toBe(6);
     for (const arena of ARENA_DEFS) {
       for (const n of [2, 3, 4] as const) {
         const { tanks } = loadArena(arena, n, 'ffa');
