@@ -3,6 +3,10 @@ import { pickVersusSpawnCell, pickVersusSpawnSet, versusSpawnClearanceFailures, 
 import { lineOfSight } from './ai/targeting';
 import { pickVersusVariantGrid } from './versus-variants';
 import { loadArena, ARENAS, ARENA_DEFS } from './arena';
+import { CAMPAIGN_ARENA_DEFS } from './config/campaign';
+
+/** The five boards the campaign plays -- see the min-distance test for why it matters. */
+const CAMPAIGN_ARENA_IDS = new Set(CAMPAIGN_ARENA_DEFS.map((a) => a.id));
 import type { WallKind } from './types';
 
 // ---------------------------------------------------------------------------
@@ -415,6 +419,16 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
     // nothing checked the name, so a floor that moved to a different board would have
     // kept the old label reading true. Issue #271 is exactly that case.
     let globalMinLabel = '';
+    // The tightest among the CAMPAIGN boards, tracked alongside the global floor.
+    // Measured, not decorative: when vs-duel-01 (issue #271) took the global minimum, this
+    // test stopped catching `versus-spawns-drop-euclid-tiebreak` -- 3 failing tests became
+    // 2, because the mutation perturbs arena-02's placement and not the duel board's.
+    // Identified by name rather than inferred: the mutation was applied on both trees and
+    // the failing-test sets diffed. Keeping the old binding constraint as its own pin
+    // restores that sensitivity, so a smaller board joining the catalog cannot silently
+    // retire coverage the larger boards were providing.
+    let campaignMin = Infinity;
+    let campaignMinLabel = '';
     // ARENA_DEFS, not ARENAS: they are the same objects (`arena.ts` exports the one array
     // under both names), but ARENAS is typed `Arena[]`, which drops `id` -- and the label
     // below needs it. Caught by `tsc`, not by vitest, which transpiles without checking.
@@ -429,6 +443,10 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
               if (d < globalMin) {
                 globalMin = d;
                 globalMinLabel = `${arena.id} / ${mode} / N=${n}`;
+              }
+              if (CAMPAIGN_ARENA_IDS.has(arena.id) && d < campaignMin) {
+                campaignMin = d;
+                campaignMinLabel = `${arena.id} / ${mode} / N=${n}`;
               }
             }
           }
@@ -447,6 +465,9 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
     // is thin at a player count vs-duel-01 is not offered at.
     expect(globalMin).toBeCloseTo(5.65685424949238, 9);
     expect(globalMinLabel).toBe('vs-duel-01 / ffa / N=4');
+    // The pre-#271 floor, still pinned where it always was.
+    expect(campaignMin).toBeCloseTo(9.614803401237305, 9);
+    expect(campaignMinLabel).toBe('arena-02 / ffa / N=4');
   });
 
   it('every player spawn is a distinct cell (never co-located), across the full sweep', () => {
