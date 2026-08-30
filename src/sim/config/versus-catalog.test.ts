@@ -49,3 +49,28 @@ describe('VERSUS_CATALOG', () => {
     expect(() => versusCatalogEntryById('random')).toThrow(/Unknown versus catalog id/);
   });
 });
+
+describe('displayName is what the map row renders (issue #271, criterion 5)', () => {
+  it('the five migrated entries name themselves exactly as hud.ts\'s old regex did', () => {
+    // The equivalence that makes reading the catalog a SWAP rather than a retitling.
+    // `arenaLabel` was `/^arena-(\d+)$/` -> `Arena N`; if any migrated entry's
+    // displayName differed from that, changing hud.ts to read the catalog would have
+    // silently renamed a board on screen. Asserted here, in the file that owns the data,
+    // so the equivalence is checked against the DECLARATIONS rather than against a copy.
+    for (const e of VERSUS_CATALOG) {
+      const m = /^arena-(\d+)$/.exec(e.id);
+      if (!m) continue;
+      expect(e.displayName, e.id).toBe(`Arena ${Number(m[1])}`);
+    }
+  });
+
+  it('a board whose id is not arena-NN carries a real name, not a fallback to its id', () => {
+    // The case the regex could not serve, and the reason it had to go. Would fail if
+    // vs-duel-01 shipped with `displayName: 'vs-duel-01'`, which validates fine and
+    // would put a slug on the button.
+    const duel = VERSUS_CATALOG.find((e) => e.id === 'vs-duel-01')!;
+    expect(duel.displayName).toBe('Pinwheel');
+    expect(duel.displayName, 'the name fell back to the id').not.toBe(duel.id);
+    expect(duel.intent.length, 'the intent note is empty').toBeGreaterThan(20);
+  });
+});
