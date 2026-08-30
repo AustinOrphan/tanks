@@ -1058,10 +1058,29 @@ describe('hud.css is syntactically whole', () => {
     const style = getComputedStyle(b);
     expect(style.touchAction, 'a hold on a rotate button can be stolen as a scroll').toBe('none');
     expect(style.cursor).toBe('pointer');
-    // A tap target, not a text button. Stated as a floor, because the exact size is a
-    // layout choice and 34px is already a documented compromise on a 260px pane.
-    expect(parseFloat(style.width)).toBeGreaterThanOrEqual(32);
-    expect(parseFloat(style.height)).toBeGreaterThanOrEqual(32);
+    // A tap target, and now held to the REAL floor. This guard read `>= 32` while the
+    // button was a 34px literal, described in hud.css as a compromise on a 260px pane.
+    // Issue #352 measured that compromise and found it unnecessary: the cluster is
+    // `4W + 30` wide, so 44px comes to 206px inside the same 260px pane and stays on ONE
+    // row down to the 280px Galaxy Fold cover screen, clearing it by 37px.
+    //
+    // ASSERTED ON THE DECLARATION, not on the computed value, and the reason is a jsdom
+    // limit rather than a preference: `.hud-rotate-btn` now takes `--hud-control-min`
+    // (issue #321's primitive) instead of a literal, and jsdom does not substitute
+    // `var()` in getComputedStyle -- `style.width` comes back empty and `parseFloat` NaN.
+    // The same limit is why this file's token block says a rendered height "is not
+    // measurable in this suite at all". So the floor is pinned in two halves that a
+    // regression cannot pass separately: the rule must REFER to the token, and the token
+    // must BE the floor. The rendered 44px itself is measured in a real browser, which is
+    // what issue #352's captures are for.
+    const rotateRule = /\n\.hud-rotate-btn \{([\s\S]*?)\n\}/.exec(stripComments(css));
+    expect(rotateRule, '.hud-rotate-btn must still be a rule this can read').not.toBeNull();
+    const rotateBody = (rotateRule as RegExpExecArray)[1];
+    expect(rotateBody, 'the rotate button must size itself from the control floor')
+      .toMatch(/width:\s*var\(--hud-control-min\)\s*;/);
+    expect(rotateBody).toMatch(/height:\s*var\(--hud-control-min\)\s*;/);
+    expect(stripComments(css), 'and the floor itself must still be 44px')
+      .toMatch(/--hud-control-min:\s*44px\s*;/);
 
     // The icon inside it needs its OWN size, and this is the assertion that says so: an
     // <svg> with a viewBox and no CSS size falls back to the replaced-element default

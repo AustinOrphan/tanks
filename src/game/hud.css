@@ -73,9 +73,9 @@
 
   /* Control sizing. `--hud-control-min` is the 44 CSS px touch floor new primitives are
    * held to; `--hud-control-touch` is the larger on-screen driving control. The rotate
-   * cluster's 34px predates this floor and is raised in issue #352, not here, because a
-   * size change relayouts the 260px preview pane and would break this block's claim to
-   * move no pixel. */
+   * cluster's 34px predated this floor and was deferred out of the token commit so that
+   * commit could claim to move no pixel; issue #352 raised it, and `.hud-rotate-btn` now
+   * takes `--hud-control-min` directly. */
   --hud-control-min: 44px;
   --hud-control-touch: 56px;
 
@@ -147,11 +147,11 @@
  * on #321: the floor governs the new primitives, while raising an existing control
  * relayouts the pane around it -- a visual change that owes its own evidence, which is
  * exactly what this commit is arranged not to owe. `.ui-btn` is therefore sizeless and
- * every control keeps the size it had. Exactly two controls declare a height that meets
- * the floor -- `.hud-level-btn` and `.hud-swatch`, both `var(--hud-control-min)`; every
- * other control here is sized by padding and its inherited font size, and whether that
- * clears 44 px is a rendered measurement rather than something this file states.
- * Establishing it is #290's control-scale work, and the rotate cluster is #352.
+ * every control keeps the size it had. Exactly three controls declare a height that meets
+ * the floor -- `.hud-level-btn`, `.hud-swatch` and, since issue #352, `.hud-rotate-btn`,
+ * all `var(--hud-control-min)`; every other control here is sized by padding and its
+ * inherited font size, and whether that clears 44 px is a rendered measurement rather than
+ * something this file states. Establishing it is #290's control-scale work.
  * A test cannot stand in for that here: jsdom does no layout, so the rendered height of a
  * padded button is not measurable in this suite at all -- it needs the real browser those
  * issues already require. */
@@ -1243,18 +1243,24 @@
 /* touch-action/tap-highlight for the same reason the canvas carries them: these are
  * hold-to-repeat buttons, so a press that the browser decides to treat as the start of
  * a scroll takes the hold away with it (it sends pointercancel, which ends the hold).
- * The 34px box is a compromise on a 260px-wide pane -- below the 44px touch target
- * Apple/WCAG suggest, which is a real cost noted rather than hidden: every one of these
- * buttons duplicates something the canvas itself can already do, so a mis-tap costs a
- * miss, not an action the player did not want. */
+ *
+ * SIZED FROM THE PRIMITIVE, not from a literal (issue #352). This box was 34px with a
+ * comment calling it "a compromise on a 260px-wide pane" -- and that compromise turns out
+ * not to have been necessary. The cluster is four buttons at `--hud-space-1` with a 12px
+ * pair gap, so its width is `4W + 30`: 166px at 34, and 206px at 44 inside the same 260px
+ * pane. MEASURED in Chromium across 4 sizes x 3 widths, including the 280px Galaxy Fold
+ * cover screen this file's narrow rules already target: at 44px the cluster stays on ONE
+ * row at every width and clears the viewport by 37px at the narrowest, and the document
+ * never gains a horizontal scroll. 48px also fits (222px, 29px clear); it is not chosen
+ * because nothing asks for more than the floor and the extra width buys no stated gain. */
 .hud-rotate-btn {
   pointer-events: auto;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--hud-control-min);
+  height: var(--hud-control-min);
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9px;
@@ -1281,9 +1287,12 @@
   outline-offset: var(--hud-focus-offset);
 }
 
+/* Scaled with the box, not left at its old absolute size: 22px in a 34px button filled
+ * 65% of it, and leaving it there in a 44px button drops that to 50% and reads sparse.
+ * 28/44 is 64%, which is the same glyph weight the cluster has always had. */
 .hud-rotate-icon {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   /* The glyph is the whole button; without this it can be dragged out of it as an
    * image on desktop, which cancels the hold. */
   pointer-events: none;
