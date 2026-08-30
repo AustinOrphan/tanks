@@ -501,7 +501,7 @@ describe('canonical verification commands in workflows', () => {
   });
 });
 
-describe('issue metadata automation', () => {
+describe('issue backlog contract automation', () => {
   const maintain = jobBlock(ISSUE_METADATA, 'maintain');
   const audit = jobBlock(ISSUE_METADATA, 'audit');
 
@@ -546,7 +546,7 @@ describe('issue metadata automation', () => {
   it('always audits after the optional maintenance job through the package command', () => {
     expect(audit).toContain('needs: [maintain]');
     expect(audit).toContain('if: ${{ always() }}');
-    expect(namedStep(audit, 'Audit open issue metadata')).toContain(
+    expect(namedStep(audit, 'Audit open issue metadata and relationships')).toContain(
       'run: npm run issues:audit',
     );
     expect(ISSUE_METADATA).not.toContain('npm ci');

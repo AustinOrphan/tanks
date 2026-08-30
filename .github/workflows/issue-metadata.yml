@@ -1,4 +1,4 @@
-name: Issue metadata
+name: Issue backlog contract
 
 on:
   issues:
@@ -39,7 +39,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
   audit:
-    name: audit open issue metadata
+    name: audit issue metadata and relationships
     needs: [maintain]
     # A skipped maintenance job is normal for schedule, dispatch, labeled, and unlabeled.
     # Audit anyway, and also report the backlog if maintenance itself failed.
@@ -55,7 +55,12 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Audit open issue metadata
+      # The same read-only token loads native parents, sub-issues, and blocked-by
+      # edges when the issue summaries say they are relevant. The relationship
+      # checks assume the one-time native relationship migration has already been
+      # applied; against an unpopulated graph they correctly report every mirrored
+      # parent as missing.
+      - name: Audit open issue metadata and relationships
         run: npm run issues:audit
         env:
           GITHUB_TOKEN: ${{ github.token }}
