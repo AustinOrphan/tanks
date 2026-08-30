@@ -600,15 +600,28 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     expect(Math.abs(reach(axis, 8) - reach(base[0], 8)), 'reachable area within 8 steps').toBeLessThanOrEqual(4);
     expect(Math.abs(reach(axis, 4) - reach(base[0], 4)), 'reachable area within 4 steps').toBeLessThanOrEqual(3);
     expect(Math.abs(openRun(axis) - openRun(base[0])), 'total open sightline run').toBeLessThanOrEqual(2);
-    // Measured values behind the bounds, RE-DERIVED on issue #424's geometry rather than
-    // carried over: axis 17/47/9 and each base 16/47/10 for (r4, r8, openRun). They were
-    // 14/40/4 and 15/38/5 on the previous layout, which was a far more enclosed board --
-    // the rebuild trades enclosure for passages a tank can actually use, so every one of
-    // these is larger while the DIFFERENCES stay inside the same bounds (1, 0 and 1
-    // against 3, 4 and 2). No separate "less than the old lane" assertion: with each base
-    // measuring 10 and the bound above at 2, the axis is already confined to 8..12, so
-    // such a line could not fail without one of the three above failing first -- it would
-    // advertise coverage that the bounds already own.
+    // Measured values behind the bounds, re-derived on the SHIPPED grid rather than
+    // carried over: axis 17/38/8 and each base 16/41/10 for (r4, r8, openRun). They were
+    // 14/40/4 and 15/38/5 on the previous layout, which was a far more enclosed board.
+    // The rebuild trades enclosure for passages a tank can actually use, but the movement
+    // is NOT uniform and "every figure is larger" would be the wrong summary: r4 and the
+    // sightline run grow at all three spawns, while the axis spawn's 8-step reachable area
+    // FALLS, 40 -> 38. That inverts which spawn is the more open one on r8 -- it was the
+    // axis by 2, it is now a base by 3 -- which matters because the bound above was
+    // derived against the opposite worry, an axis sitting in a lane reaching 60 against
+    // each base's 38.
+    //
+    // The DIFFERENCES are (1, 3, 2) against the bounds (3, 4, 2), so the sightline
+    // difference sits EXACTLY ON its bound with no margin. Stated rather than left for a
+    // reader to assume slack, and stated with its direction: the axis is the more enclosed
+    // of the two here (8 against 10), so the edit that fails this line is one that
+    // separates them FURTHER -- a cell of sightline taken from the axis, or one given to a
+    // base. Opening the axis lane closes the gap and passes.
+    //
+    // No separate "less than the old lane" assertion: with each base measuring 10 and the
+    // bound above at 2, the axis is already confined to 8..12, so such a line could not
+    // fail without one of the three above failing first -- it would advertise coverage
+    // that the bounds already own.
   });
 });
 
