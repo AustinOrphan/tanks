@@ -5,8 +5,11 @@ import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 import { createWorld, type World } from '../sim/world';
 import type { Tank, Spawn } from '../sim/types';
-import { createTreadTrailSystem, EMIT_SPACING, LIFETIME_SECONDS, MAX_TRAILS } from './tread-trails';
-import { HULL_WIDTH, TRACK_W } from './entities';
+import {
+  createTreadTrailSystem, EMIT_SPACING, LIFETIME_SECONDS, MAX_TRAILS,
+  TREAD_COLOR, TREAD_IDENTITY_BLEND, blendHex, treadColorFor,
+} from './tread-trails';
+import { HULL_WIDTH, TRACK_W, IDENTITY_RING_COLORS, TEAM_COLORS } from './entities';
 
 // Imported from the module rather than re-declared: a re-declared literal here
 // would silently stop matching the module's own constant the moment either one
@@ -384,5 +387,163 @@ describe('tread trails: dispose', () => {
       materialDispose.mockRestore();
       geometryDispose.mockRestore();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IDENTITY TINT (issue #284). The trail layer is the quietest thing on the board and
+// covers the most of it, so every assertion below is about the tint being present AND
+// staying subordinate -- a test that only checked "the colour changed" would pass a trail
+// printed at full ring brightness, which is the failure this feature has to avoid.
+// ---------------------------------------------------------------------------
+function multiWorld(tanks: Tank[], mode?: 'ffa' | 'teams'): World {
+  const spawns: Spawn[] = tanks.map((t) => ({ kind: 'player' as const, pos: { ...t.pos }, angle: t.bodyAngle }));
+  const w = createWorld({ walls: [], tanks, spawns, lives: 3 });
+  return mode ? ({ ...w, mode } as World) : w;
+}
+/** Every distinct decal colour the system printed, in emission order. */
+function printedColors(scene: THREE.Scene): number[] {
+  const out: number[] = [];
+  scene.traverse((o) => {
+    if (o instanceof THREE.Mesh && o.visible && o.material instanceof THREE.MeshBasicMaterial) {
+      out.push(o.material.color.getHex());
+    }
+  });
+  return out;
+}
+/** Drive one tank far enough to print marks, and report the colours. */
+function driveAndRead(world: World, moved: Tank[]): number[] {
+  const scene = new THREE.Scene();
+  const sys = createTreadTrailSystem(scene);
+  sys.sync(world, world); // first sighting: anchors only
+  const after = { ...world, tanks: world.tanks.map((t) => {
+    const m = moved.find((x) => x.id === t.id);
+    return m ? { ...t, pos: { x: t.pos.x + EMIT_SPACING * 3, y: t.pos.y } } : t;
+  }) } as World;
+  sys.sync(world, after);
+  const colors = printedColors(scene);
+  sys.dispose();
+  return colors;
+}
+
+describe('tread trails carry their owner identity in VS (issue #284)', () => {
+  it('derives the tint from the canonical identity constants, not a local palette', () => {
+    // The acceptance criterion that matters most: `resolveOwnerColor`'s own comment records
+    // a call site that rebuilt this logic and fell back to the wrong colour. So the expected
+    // value here is COMPUTED from the shipped constants rather than written as a literal --
+    // retuning the palette moves both sides together, and a private copy in tread-trails
+    // would move only one.
+    for (let slot = 0; slot < IDENTITY_RING_COLORS.length; slot++) {
+      const tank = makeTank(slot + 1, 5, 5, 0, { controlledBy: slot });
+      const other = makeTank(99, 40, 40, 0, { controlledBy: (slot + 1) % 4 });
+      const w = multiWorld([tank, other], 'ffa');
+      expect(treadColorFor(w, tank), `slot ${slot}`)
+        .toBe(blendHex(TREAD_COLOR, IDENTITY_RING_COLORS[slot], TREAD_IDENTITY_BLEND));
+    }
+  });
+
+  it('uses the TEAM colour in teams, not the slot colour', () => {
+    for (const team of [0, 1]) {
+      const tank = makeTank(1, 5, 5, 0, { controlledBy: 3, team });
+      const w = multiWorld([tank, makeTank(2, 40, 40, 0, { controlledBy: 1, team: 1 - team })], 'teams');
+      expect(treadColorFor(w, tank), `team ${team}`)
+        .toBe(blendHex(TREAD_COLOR, TEAM_COLORS[team], TREAD_IDENTITY_BLEND));
+      // ...and it is genuinely the team's, not the slot's: slot 3's identity colour would
+      // give a different answer, so this cannot pass by both palettes agreeing.
+      expect(treadColorFor(w, tank))
+        .not.toBe(blendHex(TREAD_COLOR, IDENTITY_RING_COLORS[3], TREAD_IDENTITY_BLEND));
+    }
+  });
+
+  it('leaves campaign trails neutral -- and for the same reason rings are', () => {
+    // One player-kind tank is below entities.ts's identity threshold, so this is the shared
+    // gate saying no, not a separate mode check in this module that could drift from it.
+    const solo = makeTank(1, 5, 5, 0, { controlledBy: 0 });
+    expect(treadColorFor(worldWith(solo), solo)).toBe(TREAD_COLOR);
+    // An ENEMY is neutral even on a multiplayer board: it has no slot and no team, and
+    // `resolveOwnerColor` would otherwise hand it slot 0's colour.
+    // FOUR-PLAYER CO-OP is neutral too, and this case exists because rendering it caught the
+    // opposite: co-op clears the player-count gate (four player tanks, four identity rings),
+    // so the first implementation tinted campaign trails. #284 says campaign stays neutral.
+    const coop = [0, 1, 2, 3].map((slot) => makeTank(slot + 1, 5 + slot * 8, 5, 0, { controlledBy: slot }));
+    const coopWorld = multiWorld(coop); // no mode override -> 'campaign-coop'
+    expect(coopWorld.mode).toBe('campaign-coop');
+    for (const t of coop) expect(treadColorFor(coopWorld, t), `co-op slot ${t.controlledBy}`).toBe(TREAD_COLOR);
+    // ...and the same four tanks in ffa ARE tinted, so the case above is the mode doing the
+    // work rather than something else making every assertion neutral.
+    const vsWorld = multiWorld(coop, 'ffa');
+    for (const t of coop) expect(treadColorFor(vsWorld, t)).not.toBe(TREAD_COLOR);
+    const enemy = makeTank(2, 9, 9, 0, { kind: 'brown' });
+    const w = multiWorld([makeTank(1, 5, 5, 0, { controlledBy: 0 }), makeTank(3, 40, 40, 0, { controlledBy: 1 }), enemy], 'ffa');
+    expect(treadColorFor(w, enemy)).toBe(TREAD_COLOR);
+  });
+
+  it('stays QUIETER than the identity ring it leans toward, on every channel', () => {
+    // The subordinate-layer criterion, measured rather than asserted by eye: each channel of
+    // a printed mark sits between the neutral earth and the ring colour, and strictly nearer
+    // the neutral. A trail printed at full ring brightness fails this; so does one printed
+    // past it.
+    for (let slot = 0; slot < IDENTITY_RING_COLORS.length; slot++) {
+      const tank = makeTank(1, 5, 5, 0, { controlledBy: slot });
+      const w = multiWorld([tank, makeTank(2, 40, 40, 0, { controlledBy: (slot + 1) % 4 })], 'ffa');
+      const tint = treadColorFor(w, tank);
+      for (const shift of [16, 8, 0]) {
+        const neutral = (TREAD_COLOR >> shift) & 0xff;
+        const ring = (IDENTITY_RING_COLORS[slot] >> shift) & 0xff;
+        const got = (tint >> shift) & 0xff;
+        expect(Math.abs(got - neutral), `slot ${slot} channel ${shift}`)
+          .toBeLessThanOrEqual(Math.abs(got - ring));
+        expect(got, `slot ${slot} channel ${shift} left the neutral..ring interval`)
+          .toBeGreaterThanOrEqual(Math.min(neutral, ring));
+        expect(got).toBeLessThanOrEqual(Math.max(neutral, ring));
+      }
+    }
+  });
+
+  it('prints each owner its own colour through the real emit path', () => {
+    // Not `treadColorFor` in isolation: the colour has to survive `emitPair` and reach the
+    // material a decal actually renders with.
+    const a = makeTank(1, 5, 5, 0, { controlledBy: 0 });
+    const b = makeTank(2, 20, 20, 0, { controlledBy: 1 });
+    const w = multiWorld([a, b], 'ffa');
+    const colors = new Set(driveAndRead(w, [a, b]));
+    expect(colors.has(blendHex(TREAD_COLOR, IDENTITY_RING_COLORS[0], TREAD_IDENTITY_BLEND))).toBe(true);
+    expect(colors.has(blendHex(TREAD_COLOR, IDENTITY_RING_COLORS[1], TREAD_IDENTITY_BLEND))).toBe(true);
+    expect(colors.has(TREAD_COLOR), 'a VS mark printed neutral').toBe(false);
+  });
+
+  it('does not let a POOLED decal keep the previous owner colour', () => {
+    // Decals are recycled (`pool.pop() ?? makeDecal()`), so a colour set once at construction
+    // would give slot 1 slot 0's marks the moment the pool turns over. Setting it per
+    // EMISSION is what prevents that, and this is the case that proves it.
+    const scene = new THREE.Scene();
+    const sys = createTreadTrailSystem(scene);
+    const a = makeTank(1, 5, 5, 0, { controlledBy: 0 });
+    const b = makeTank(2, 20, 20, 0, { controlledBy: 1 });
+    let w = multiWorld([a, b], 'ffa');
+    sys.sync(w, w);
+    // Move A only, then expire everything, then move B only into the recycled decals.
+    const movedA = { ...w, tanks: [{ ...a, pos: { x: 5 + EMIT_SPACING * 4, y: 5 } }, b] } as World;
+    sys.sync(w, movedA);
+    sys.update(LIFETIME_SECONDS + 0.1);
+    w = movedA;
+    const movedB = { ...w, tanks: [w.tanks[0], { ...b, pos: { x: 20 + EMIT_SPACING * 4, y: 20 } }] } as World;
+    sys.sync(w, movedB);
+    const colors = new Set(printedColors(scene));
+    const aTint = blendHex(TREAD_COLOR, IDENTITY_RING_COLORS[0], TREAD_IDENTITY_BLEND);
+    const bTint = blendHex(TREAD_COLOR, IDENTITY_RING_COLORS[1], TREAD_IDENTITY_BLEND);
+    expect(colors.has(bTint), "B's recycled marks are not B's colour").toBe(true);
+    expect(colors.has(aTint), "A's expired marks kept their colour in the pool").toBe(false);
+    sys.dispose();
+  });
+
+  it('blendHex is a plain per-channel lerp, with both ends exact', () => {
+    expect(blendHex(0x000000, 0xffffff, 0)).toBe(0x000000);
+    expect(blendHex(0x000000, 0xffffff, 1)).toBe(0xffffff);
+    expect(blendHex(0x000000, 0xffffff, 0.5)).toBe(0x808080);
+    expect(blendHex(0x102030, 0x506070, 0.5)).toBe(0x304050);
+    // Channels do not bleed into each other, which a naive numeric lerp on the packed
+    // value would do the moment one channel carried.
+    expect(blendHex(0x0000ff, 0xff0000, 0.5)).toBe(0x800080);
   });
 });
