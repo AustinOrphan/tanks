@@ -68,6 +68,7 @@ const CI = read('.github/workflows/ci.yml');
 const MUTATION_FLOOR = read('.github/workflows/mutation-floor.yml');
 const ENGINES = read('.github/workflows/engines.yml');
 const ISSUE_METADATA = read('.github/workflows/issue-metadata.yml');
+const ISSUE_RELATIONSHIPS = read('.github/workflows/issue-relationship-migration.yml');
 const BASELINE_RUN = read('tools/baseline/run.mjs');
 const COMMAND_REFERENCE = read('docs/agent/commands-and-operations.md');
 
@@ -88,6 +89,7 @@ const ATOMIC = {
   'audit:prod': 'npm audit --omit=dev --audit-level=high',
   'issues:audit': 'node tools/issues/run.mjs audit',
   'issues:maintain': 'node tools/issues/run.mjs event',
+  'issues:relationships': 'node tools/issues/migrate-relationships.mjs',
 } as const;
 
 const COMPOSITES = {
@@ -438,6 +440,7 @@ describe('canonical verification commands in workflows', () => {
       ...executableRunCommands(PAGES),
       ...executableRunCommands(ENGINES),
       ...executableRunCommands(ISSUE_METADATA),
+      ...executableRunCommands(ISSUE_RELATIONSHIPS),
     ].map((command) => command.replace(DIRECT_BEACON_COMMAND, ''));
     for (const forbidden of [
       'npx tsc --noEmit',
@@ -450,6 +453,7 @@ describe('canonical verification commands in workflows', () => {
       'node tools/mutate/run.mjs',
       'npm audit --omit=dev --audit-level=high',
       'node tools/issues/run.mjs',
+      'node tools/issues/migrate-relationships.mjs',
     ]) {
       expect(commands.some((command) => command.includes(forbidden)), forbidden).toBe(false);
     }
@@ -546,6 +550,59 @@ describe('issue backlog contract automation', () => {
       'run: npm run issues:audit',
     );
     expect(ISSUE_METADATA).not.toContain('npm ci');
+  });
+});
+
+describe('native issue relationship migration workflow', () => {
+  const planJob = jobBlock(ISSUE_RELATIONSHIPS, 'plan');
+  const rejectionJob = jobBlock(ISSUE_RELATIONSHIPS, 'reject-invalid-confirmation');
+  const applyJob = jobBlock(ISSUE_RELATIONSHIPS, 'apply');
+
+  it('loads a manual-only, serialized workflow through the atomic package command', () => {
+    expect(ISSUE_RELATIONSHIPS.length).toBeGreaterThan(1_000);
+    expect(SCRIPTS['issues:relationships']).toBe(
+      'node tools/issues/migrate-relationships.mjs',
+    );
+    expect(ISSUE_RELATIONSHIPS).toMatch(/^on:\n\s+workflow_dispatch:\s*$/m);
+    expect(ISSUE_RELATIONSHIPS).not.toMatch(/^\s*['"]?(?:push|pull_request|schedule)['"]?\s*:/m);
+    expect(ISSUE_RELATIONSHIPS).toContain(
+      'group: issue-relationship-migration-${{ github.repository }}',
+    );
+    expect(ISSUE_RELATIONSHIPS).toContain('cancel-in-progress: false');
+  });
+
+  it('keeps planning read-only and skips it on every apply dispatch', () => {
+    expect(planJob).toContain('if: ${{ !inputs.apply }}');
+    expect(planJob).toContain('timeout-minutes: 15');
+    expect(planJob).toContain('issues: read');
+    expect(planJob).not.toContain('issues: write');
+    expect(namedStep(planJob, 'Inspect additive relationship plan')).toContain(
+      'run: npm run issues:relationships',
+    );
+  });
+
+  it('rejects bad confirmation without repository write permission or migration reads', () => {
+    expect(rejectionJob).toContain(
+      'if: ${{ inputs.apply && inputs.confirm_repository != github.repository }}',
+    );
+    expect(rejectionJob).toContain('timeout-minutes: 5');
+    expect(rejectionJob).not.toContain('issues: write');
+    expect(rejectionJob).not.toContain('issues:relationships');
+  });
+
+  it('bounds and isolates apply while passing the operator input to the strict tool guard', () => {
+    expect(applyJob).toContain(
+      'if: ${{ inputs.apply && inputs.confirm_repository == github.repository }}',
+    );
+    expect(applyJob).not.toContain('needs: [plan]');
+    expect(applyJob).toContain('timeout-minutes: 30');
+    expect(applyJob).toContain('issues: write');
+    const step = namedStep(applyJob, 'Add missing relationships and verify all reviewed edges');
+    expect(step).toContain(
+      'run: npm run issues:relationships -- apply --confirm "$CONFIRM_REPOSITORY"',
+    );
+    expect(step).toContain('CONFIRM_REPOSITORY: ${{ inputs.confirm_repository }}');
+    expect(step).not.toContain('--confirm "$GITHUB_REPOSITORY"');
   });
 });
 

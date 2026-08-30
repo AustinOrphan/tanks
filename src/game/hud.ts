@@ -1521,6 +1521,35 @@ export function createHud(root: HTMLElement): Hud {
     onBegin?: () => void,
     instant = false,
   ): void {
+    /*
+     * NOTHING TO MOVE IS NOT A NAVIGATION, and it must not disturb one that is in flight.
+     *
+     * `transitions.run` drains the outstanding chain before it begins -- that is the
+     * interrupt rule criterion 3 needs. The cost of applying it unconditionally is that a
+     * REDUNDANT call collapses a crossfade it has nothing to add to, and every panel's
+     * Back button made exactly that call: `showX(false)` starts the close, and the
+     * `setState('main-menu')` on the next line (there to re-render the panel's contents)
+     * asks for a state the close is already arriving at. Back was its own interrupter, so
+     * closing a panel cut while opening one faded -- five handlers, all of them.
+     *
+     * Measured in the shipped build rather than reasoned about: the open applied
+     * `ui-surface-out` at `0.15s`, the close applied no `ui-surface-*` class at all, and
+     * deleting the single `setState` line from one handler restored the crossfade for that
+     * one panel.
+     *
+     * Checked BEFORE `run`, deliberately. Doing it inside `begin` -- where the same diff
+     * already skips individual surfaces -- would be too late: the drain has happened by
+     * then. `isSurfaceOpen` discounts a surface that is fading out, so a surface heading
+     * for the state we want reads as already there and this stays a no-op for it.
+     *
+     * A genuine navigation still moves at least one surface, so it still drains and still
+     * resolves to the second destination. `onBegin` still runs, matching `closeSurface`'s
+     * own already-closed early return: the callback is owed either way.
+     */
+    if (!desired.some(([surface, want]) => want !== isSurfaceOpen(surface))) {
+      onBegin?.();
+      return;
+    }
     let leaving: Surface[] = [];
     let entering: Surface[] = [];
     transitions.run(
@@ -2698,6 +2727,25 @@ export function createHud(root: HTMLElement): Hud {
   newGameBtn.addEventListener('click', handleNewGame);
   newGameBtn.addEventListener('click', blurIfPointer);
 
+  /**
+   * Put a pane away as part of `setState`'s close-all cleanup.
+   *
+   * SKIPS a surface that is already `--leaving`: it is mid-crossfade on its way out, and
+   * the transition that owns it will hide it when it settles. Without this the four bare
+   * `classList.add` calls below slam `--hidden` onto the very surface `showX(false)` is
+   * fading, and the close cuts -- which is what every panel's Back button did, because it
+   * calls `showX(false)` and then `setState` on the next line.
+   *
+   * Closure is still guaranteed, which is the whole point of the close-all. A surface
+   * skipped here is hidden by its own settle 150ms later; and on the one path where that
+   * would be too late -- gameplay entry -- `setState`'s own `transitionTo` runs with
+   * `instant`, whose drain settles the outstanding close in the same frame.
+   */
+  function cleanupHide(el: HTMLElement, hiddenClass: string): void {
+    if (el.classList.contains(LEAVING)) return;
+    el.classList.add(hiddenClass);
+  }
+
   function setState(s: HudSurface): void {
     // Recorded FIRST and unconditionally, unlike `shownState` further down --
     // see this variable's own doc comment for why the two differ.
@@ -2705,7 +2753,7 @@ export function createHud(root: HTMLElement): Hud {
     // Any state change closes the stats and customize pages FIRST -- including the
     // playing early-return below, or an overlay opened on the Main Menu would
     // sit over the live game. They are Main-Menu affairs.
-    statsView.classList.add('hud-stats--hidden');
+    cleanupHide(statsView, 'hud-stats--hidden');
     // Routed through showCustomize (not a bare class add, unlike its stats/achievements
     // siblings above/below) so this path fires onCustomizeClose too -- the common exit
     // from the panel is Start, which arrives here, not through the Back button.
@@ -2716,8 +2764,8 @@ export function createHud(root: HTMLElement): Hud {
     // duration, and its close callbacks (which tear down window listeners) landed a frame
     // late.
     showCustomize(false, true);
-    achView.classList.add('hud-achievements--hidden');
-    levelSelectView.classList.add('hud-levelselect--hidden');
+    cleanupHide(achView, 'hud-achievements--hidden');
+    cleanupHide(levelSelectView, 'hud-levelselect--hidden');
     // Routed through showControllers for the same reason as showCustomize above -- it
     // must fire onControllersClose (loop.ts's window listener teardown) on EVERY exit,
     // not only the panel's own Back button. Omitted, the panel -- and its live
@@ -2728,7 +2776,7 @@ export function createHud(root: HTMLElement): Hud {
     // Controllers just above, this pane has no onVersusClose to fire (see its own doc
     // comment), so there is nothing a transition-guarded call would buy here that a
     // plain toggle does not already give the stats/achievements/level-select siblings.
-    versusSetupView.classList.add('hud-versus-setup--hidden');
+    cleanupHide(versusSetupView, 'hud-versus-setup--hidden');
     disarmReset();
     const atLaunch = s === 'launch';
     const atMainMenu = s === 'main-menu';

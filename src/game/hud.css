@@ -1900,6 +1900,26 @@
   pointer-events: none;
 }
 
+/*
+ * ...and its DESCENDANTS too, which the rule above does not cover on its own.
+ *
+ * `pointer-events` is inherited, so `none` on the surface reads as though it takes the
+ * whole subtree out of hit testing. It does not: this file gives more than a dozen
+ * controls an explicit `pointer-events: auto`, and an explicit value on a child beats an
+ * inherited one on its parent. Measured, not deduced -- driving the production build with
+ * the duration slowed enough to click through a crossfade, the browser refused the
+ * arriving screen's Back button because `.hud-firemode-toggle`, inside the LEAVING panel,
+ * was still taking the hit.
+ *
+ * `.ui-surface--leaving *` is (0,1,0), the same specificity as the single-class rules it
+ * has to beat, and it wins on source order because this block is at the end of the file.
+ * That is a real constraint on where this rule may live, not an accident of formatting:
+ * moved above them it would stop working, silently.
+ */
+.ui-surface--leaving * {
+  pointer-events: none;
+}
+
 @keyframes ui-surface-in {
   from {
     opacity: 0;

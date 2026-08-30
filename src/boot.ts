@@ -1,5 +1,5 @@
-import type { GameHandle } from './game/loop';
-import type { VersusConfig } from './game/versus-config';
+import { createGameSessionHost } from './game/session-host';
+import type { GameSessionHostDeps } from './game/session-host';
 import type { AppShell } from './game/app-shell';
 
 /**
@@ -35,13 +35,13 @@ export interface BootDeps {
   readonly bootCanvas: (root: HTMLElement) => HTMLCanvasElement;
   /**
    * `versus` is `null` for the initial campaign boot, and `{ config }` for every
-   * reboot `requestVersusSession` triggers below. `requestVersusSession` is the SAME
-   * function on every call (this module's own, closed over `handle`/`canvas`) --
-   * threaded here, not stored on `BootDeps`, so main.ts's wrapper can put it on the
-   * new session's `GameDeps.requestVersusSession` (loop.ts's `versusAwareDeps`)
-   * without main.ts holding any state of its own. `requestCampaignSession` (Task 5b)
-   * is the SAME shape, symmetric: a versus session's Campaign button reboots BACK to
-   * a plain campaign session through it, and it too is the SAME function on every call.
+   * reboot `requestVersusSession` triggers. `requestVersusSession` is the SAME function
+   * on every call (the session host's own, closed over its `handle`/`canvas`) -- threaded
+   * as an ARGUMENT, not stored on `BootDeps`, so main.ts's wrapper can put it on the new
+   * session's `GameDeps.requestVersusSession` (loop.ts's `versusAwareDeps`) without
+   * main.ts holding any state of its own. `requestCampaignSession` is the SAME shape,
+   * symmetric: a versus session's Campaign button reboots BACK to a plain campaign
+   * session through it, and it too is the SAME function on every call.
    *
    * `shell` is the SAME instance on every call too, and for a sharper reason than the two
    * callbacks: it is the page's only settings store and resolved `Storage` (issue #320),
@@ -51,15 +51,13 @@ export interface BootDeps {
    * the splash used to replay on every one. Handing the same object to every session is
    * what makes all three survive, and handing a NEW one would silently reintroduce all
    * three defects while every unit test kept passing.
+   *
+   * Aliased from `GameSessionHostDeps` rather than restated: `boot()` hands this field
+   * straight through to the host, so two independent copies of a six-argument signature
+   * could drift into a call TypeScript still accepts -- `requestVersusSession` and
+   * `requestCampaignSession` are both `(config) => void`-compatible at one argument.
    */
-  readonly startGame: (
-    canvas: HTMLCanvasElement,
-    uiRoot: HTMLElement,
-    versus: { config: VersusConfig } | null,
-    requestVersusSession: (config: VersusConfig) => void,
-    requestCampaignSession: () => void,
-    shell: AppShell,
-  ) => GameHandle;
+  readonly startGame: GameSessionHostDeps['startGame'];
   readonly host: BootHost;
   readonly reportError: (err: unknown) => void;
   /**
@@ -89,84 +87,38 @@ export function boot(deps: BootDeps): void {
   // which is why startGame must keep building it eagerly. Without this the
   // visitor stares at the page background with the reason visible only in
   // devtools -- indistinguishable from a broken deploy.
+  //
+  // `sessions.start()` is inside it for that reason and no other: the host's
+  // constructor touches nothing that can fail, so the throw arrives at the call that
+  // builds the first canvas and renderer. A REPLACEMENT that throws does NOT arrive
+  // here -- it is raised inside a HUD click handler, long after boot() returned. That
+  // is a real hole in the recovery story, measured and left alone: "unrecoverable
+  // session creation failure" is issue #325's scope, and what the player should see
+  // when a rematch fails to start is a product decision, not a refactor's to make.
   try {
-    let canvas = deps.bootCanvas(deps.root);
-
-    // Built once, before the first session, and handed to every session after it. See
-    // BootDeps.startGame's own comment for why "once" is the whole point.
+    // Built once, before the first session, and handed to every session after it.
+    // See `BootDeps.startGame`'s own comment for why "once" is the whole point.
+    //
+    // Before the host, the canvas was built one line ABOVE this. The order swapped
+    // because the shell is now an argument to the thing that builds the canvas. The
+    // only difference it can make is which failure wins when a browser would fail
+    // both, and both land on the same error page below -- so it is stated here rather
+    // than pinned as behaviour.
     const shell = deps.createAppShell();
 
-    let lastVersusConfig: VersusConfig | null = null;
-    let handle: GameHandle;
-
-    /**
-     * The versus setup pane's "Start" (a later task) reaches this through
-     * `GameDeps.requestVersusSession` (threaded below, and again on every reboot) to
-     * put the running session into a versus match.
-     *
-     * `handle` and `canvas` are REASSIGNED here, not shadowed: the pagehide teardown
-     * below reads both through this same closure, at the time it fires, rather than
-     * a value captured once at boot -- so it always tears down the CURRENT session.
-     * A `const` capture of the first handle (this module's shape before this task)
-     * is the stale-capture bug boot.test.ts's reboot suite exists to catch: it would
-     * dispose the ORIGINAL handle a second time on the next pagehide instead of the
-     * live one, leaving the actual current session's loop, listeners and GL context
-     * all still running.
-     *
-     * A FRESH canvas, not the outgoing one: `startGameWith`'s teardown disposes the
-     * renderer, which calls `renderer.forceContextLoss()` (render/scene.ts) --
-     * WebGL contexts do not come back from that on command, so a second
-     * `WebGLRenderer` built on the SAME element would silently render nothing,
-     * forever, in a real browser. Nothing in this test suite's fakes can see that
-     * (they never construct a real `WebGLRenderer`), which is exactly why it is
-     * spelled out here rather than left to be rediscovered. The dead canvas is
-     * removed from the DOM so repeated reboots do not leave a stack of disconnected
-     * elements behind the live one.
-     */
-    const requestVersusSession = (config: VersusConfig): void => {
-      lastVersusConfig = config;
-      handle.dispose();
-      canvas.remove();
-      canvas = deps.bootCanvas(deps.root);
-      // `lastVersusConfig`, not the bare `config` parameter: the next session's start
-      // call is handed exactly what was just recorded, one write ago -- not a second,
-      // independent reference to the same object that a later refactor could split.
-      handle = deps.startGame(
-        canvas,
-        deps.root,
-        { config: lastVersusConfig },
-        requestVersusSession,
-        requestCampaignSession,
-        shell,
-      );
-    };
-
-    /**
-     * Task 5b's symmetric counterpart: the versus-kind title screen's Campaign button
-     * reaches this through `GameDeps.requestCampaignSession` to reboot BACK into a
-     * plain campaign session -- same dispose/fresh-canvas/reassign shape as
-     * `requestVersusSession` above (see its own doc comment for why each of those
-     * matters), with `versus: null` for the `startGame` call instead of `{ config }`,
-     * so the new session gets plain campaign deps (`applyVersusToDeps`'s no-versus
-     * branch).
-     *
-     * Deliberately does NOT touch `lastVersusConfig`: nothing here reads a STALE
-     * value between one `requestVersusSession` call and the next -- each sets it
-     * fresh from its own `config` argument the instant it runs (see that function's
-     * own comment on why `lastVersusConfig` exists as a name at all) -- so clearing
-     * it here would be a no-op no test can observe today. It is left alone anyway,
-     * on the chance a future prefill of a fresh campaign session's own setup pane
-     * wants a "last-played match" to read from; boot.test.ts documents this rather
-     * than asserting a behavior nothing yet consumes.
-     */
-    const requestCampaignSession = (): void => {
-      handle.dispose();
-      canvas.remove();
-      canvas = deps.bootCanvas(deps.root);
-      handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession, shell);
-    };
-
-    handle = deps.startGame(canvas, deps.root, null, requestVersusSession, requestCampaignSession, shell);
+    // The replaceable half (issue #317). It owns the canvas, the running session, and
+    // the two reboot seams a session calls to ask for its successor -- all three of
+    // which were anonymous closures in this function until `session-host.ts`. The
+    // reboot suites in boot.test.ts still drive them through `boot()`, deliberately:
+    // tests that predate the extraction and still pass are what proves it preserved
+    // the stale-capture, fresh-canvas and callback-identity properties they pin.
+    const sessions = createGameSessionHost({
+      root: deps.root,
+      bootCanvas: deps.bootCanvas,
+      startGame: deps.startGame,
+      shell,
+    } satisfies GameSessionHostDeps);
+    sessions.start();
 
     // startGame's teardown was once unreachable: nothing called it, so the
     // frame loop, the window listeners and the GL context outlived the page.
@@ -182,7 +134,9 @@ export function boot(deps: BootDeps): void {
     // is nothing to do on the way in and nothing to rebuild on the way out.
     const onPageHide = (e: PageHideEvent): void => {
       if (e.persisted) return;
-      handle.dispose();
+      // The host disposes whichever session is CURRENT, which is why the reboot paths
+      // could reassign it without this line changing.
+      sessions.dispose();
       // The PAGE is going away, so this is the one place the shell may be disposed -- it
       // releases the OS reduced-motion listener and the audio engine the sessions only
       // ever borrowed. Ordered after the session teardown so the session's own

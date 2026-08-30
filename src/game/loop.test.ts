@@ -356,6 +356,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   previewButtons: readonly HTMLButtonElement[];
   fireFrame(now: number): void;
   hasFrame(): boolean;
+  liveFrameCount(): number;
+  fireAllFrames(now: number): void;
   hud: {
     mute(): void;
     volume(v: number): void;
@@ -518,6 +520,20 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 
   let pending: ((now: number) => void) | null = null;
+  /**
+   * Every rAF registration made and not yet cancelled or fired, by handle.
+   *
+   * `pending` alone -- the shape this fake had until issue #317's lifecycle residuals --
+   * is a SINGLE slot that `request` overwrites, and `cancel` was a no-op. Two sessions
+   * running frame loops at once therefore looked exactly like one, so "creating and
+   * disposing repeated sessions does not duplicate frame loops" had no assertion in this
+   * file that could fail. `pending` and `fireFrame` keep their old meaning to the letter
+   * (the LATEST registration, which is the only one those tests ever had); this map is
+   * what the residual checks read.
+   */
+  const liveFrames = new Map<number, (now: number) => void>();
+  let pendingHandle = 0;
+  let nextRafHandle = 1;
   // The harness's synthetic resolved session -- the state machine's canonical
   // ResolvedSession slot needs to be well-formed on `playing`/`paused`/`outcome`
   // (issue #316), and this fake session provides that without loop.ts's real
@@ -1459,9 +1475,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     raf: {
       request(cb): number {
         pending = cb;
-        return 1;
+        pendingHandle = nextRafHandle;
+        nextRafHandle += 1;
+        liveFrames.set(pendingHandle, cb);
+        return pendingHandle;
       },
-      cancel(): void {},
+      // A REAL cancel, keyed by the handle `request` returned. The no-op this replaced is
+      // why `driver.stop()` dropping its `raf.cancel(handle)` was unobservable.
+      // `pending` is deliberately left alone so `hasFrame()` keeps reporting exactly what
+      // it always did.
+      cancel(handle): void {
+        liveFrames.delete(handle);
+      },
     },
     host,
     // A REAL storage (the in-memory one the game itself falls back to), not a
@@ -1514,9 +1539,29 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       const cb = pending;
       if (!cb) throw new Error('no frame queued');
       pending = null;
+      // Consumed, so it is no longer outstanding. Before `cb(now)`, which re-requests
+      // and would otherwise have its fresh handle deleted here instead.
+      liveFrames.delete(pendingHandle);
       cb(now);
     },
     hasFrame: () => pending !== null,
+    /** How many rAF registrations are outstanding -- one per live frame loop. */
+    liveFrameCount: () => liveFrames.size,
+    /**
+     * Fire EVERY outstanding registration, not just the latest.
+     *
+     * The distinction the residual checks need: a session whose `driver.stop()` forgot
+     * `raf.cancel` leaves an outstanding handle that is inert (`running` is false, so
+     * `frame` returns immediately), while a session that was never stopped at all leaves
+     * one that still advances the world. Counting registrations cannot tell those apart;
+     * firing them and counting what MOVED can.
+     */
+    fireAllFrames(now): void {
+      const due = [...liveFrames.entries()];
+      liveFrames.clear();
+      pending = null;
+      for (const [, cb] of due) cb(now);
+    },
     hud: {
       mute: () => onMute(),
       volume: (v) => onVolume(v),
@@ -7660,5 +7705,159 @@ describe('boot + startGameWith: the Launch gate is once per document load (issue
     page.pagehide();
 
     expect(h.rec.disposed, 'the page went away without releasing the audio engine').toContain('audio');
+  });
+});
+
+/**
+ * How many listeners of `type` the host still holds.
+ *
+ * `rec.listeners` and `rec.removed` are both append-only logs, so a raw length is the
+ * number ever REGISTERED, not the number still live. Removals are matched off one by one
+ * (`indexOf`/`splice`) rather than filtered by identity, because every session registers
+ * a `keydown` and each removes its own: an identity filter would cancel all four of a
+ * four-session run against one removal and report zero.
+ */
+function liveHostListeners(h: ReturnType<typeof makeDeps>, type: string): number {
+  const unmatched = h.rec.removed.filter(([t]) => t === type).map(([, fn]) => fn);
+  let live = 0;
+  for (const [t, fn] of h.rec.listeners) {
+    if (t !== type) continue;
+    const i = unmatched.indexOf(fn);
+    if (i >= 0) unmatched.splice(i, 1);
+    else live += 1;
+  }
+  return live;
+}
+
+describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => {
+  const VS: VersusConfig = { mode: 'ffa', players: 2, arenaId: 'arena-02', stock: 3, friendlyFire: false, slots: defaultSlots(2) };
+
+  /**
+   * Campaign -> Main Menu -> Versus -> Main Menu, then two rematches: the exact path the
+   * acceptance criterion names, plus the repetition that turns a one-off leak into a
+   * growing one. Five sessions in total, four of them retired.
+   */
+  function runTheRoute(h: ReturnType<typeof makeDeps>): ReturnType<typeof bootPageOn> {
+    const page = bootPageOn(h);
+    page.pointerdown(); // dismiss the splash, as a first-time player does
+    h.hud.quitToTitle(); // Campaign -> Main Menu
+    page.requestVersus(VS); // Main Menu -> Versus
+    h.hud.quitToTitle(); // Versus -> Main Menu
+    page.requestCampaign(); // Main Menu -> Campaign
+    page.requestVersus(VS); // rematch
+    page.requestVersus(VS); // rematch again
+    return page;
+  }
+
+  it('runs five sessions over the route and retires four of them', () => {
+    // The denominator every assertion below is stated against. If the route stops
+    // rebooting -- a `requestVersusSession` that silently no-ops, say -- every residual
+    // check underneath would pass by never creating a second session at all.
+    const h = makeDeps();
+    const page = runTheRoute(h);
+    expect(page.sessions()).toBe(5);
+    expect(h.rec.hudRoots).toHaveLength(5);
+  });
+
+  it('leaves exactly one live host listener of each kind, not one per session', () => {
+    // Each session registers keydown/resize/blur/pointerdown on the page host and its
+    // teardown removes its own four. A session that skipped one leaves the RETIRED
+    // session's handler driving a disposed state machine on every key the player presses.
+    const h = makeDeps();
+    runTheRoute(h);
+    for (const type of ['keydown', 'resize', 'blur', 'pointerdown']) {
+      expect(liveHostListeners(h, type), `${type} listeners outlived their sessions`).toBe(1);
+    }
+  });
+
+  it('leaves exactly one outstanding frame registration', () => {
+    // What this measures precisely: rAF registrations made and not yet cancelled or
+    // fired. `driver.stop()` both clears its `running` flag AND cancels its handle, so
+    // dropping either one shows up here -- see the pair of assertions below for how they
+    // are told apart.
+    const h = makeDeps();
+    runTheRoute(h);
+    expect(h.liveFrameCount(), 'a retired session left its frame loop registered').toBe(1);
+  });
+
+  it('leaves exactly one frame loop still ADVANCING the world', () => {
+    // The stronger half. A registration that survives with `running` already false is
+    // inert; one whose session was never stopped keeps stepping a disposed world every
+    // frame, forever, alongside the live one. Firing EVERY outstanding callback and
+    // counting renders is what separates them -- `fireFrame` alone only ever reaches the
+    // most recent registration and would report one either way.
+    const h = makeDeps();
+    runTheRoute(h);
+    const before = h.rec.renders.length;
+    h.fireAllFrames(40);
+    expect(h.rec.renders.length - before, 'more than one frame loop advanced').toBe(1);
+  });
+
+  it('leaves exactly one settings-notice subscriber', () => {
+    // `AppSettings` outlives every session (app-settings.ts), so each session's notice
+    // registration is its own to release. Four leaked subscribers would each hold a
+    // retired session's HUD alive and deliver a storage notice to a screen that is gone.
+    const h = makeDeps();
+    runTheRoute(h);
+    expect(h.noticeListenerCount()).toBe(1);
+  });
+
+  it('disposes each retired session exactly once -- input, renderer and HUD alike', () => {
+    // Exactly once each, not at-least-once: a double dispose releases an audio bed and
+    // unregisters listeners the INCOMING session may already own. Four, because the
+    // fifth session is still live.
+    const h = makeDeps();
+    runTheRoute(h);
+    for (const owner of ['input', 'renderer', 'hud']) {
+      expect(
+        h.rec.disposed.filter((d) => d === owner),
+        `${owner} was not disposed exactly once per retired session`,
+      ).toHaveLength(4);
+    }
+  });
+
+  it('never lets a session dispose the page audio engine, and stops each outgoing bed', () => {
+    // Two failures, opposite directions. Disposing latches the engine shut (engine.ts's
+    // `ensureCtx` returns null forever afterwards) so every later session is silent with
+    // nothing thrown; NOT stopping the bed leaves the abandoned level's music playing
+    // under the new screen. One stop per retired session is the contract.
+    const h = makeDeps();
+    const stopsBefore = h.rec.musicStops;
+    runTheRoute(h);
+    expect(h.rec.disposed, 'a session disposed the shell audio engine').not.toContain('audio');
+    expect(h.rec.musicStops - stopsBefore, 'an outgoing session left its bed running').toBe(4);
+  });
+
+  it('never replays the Launch gate, and never paints a retired session over the new one', () => {
+    // The narrow reading of "does not show stale gameplay HUD": no surface a RETIRED
+    // session owned is painted after its replacement takes over. Removing gameplay chrome
+    // (the Lives/Enemies topbar) from application screens is issue #325's scope, not this
+    // one's, and this asserts nothing about it.
+    const h = makeDeps();
+    const page = runTheRoute(h);
+    expect(h.rec.hudStates[0], 'the first session should still open on the splash').toBe('launch');
+    expect(h.rec.hudStates.slice(1), 'the splash replayed on a reboot').not.toContain('launch');
+    expect(h.rec.hudStates.at(-1)).toBe('main-menu');
+    expect(page.sessions()).toBe(5);
+  });
+
+  it('enters Practice inside the running session rather than replacing it', () => {
+    // The third kind the criterion names. Campaign and Versus are boot-level sessions that
+    // the host swaps; Practice is a ROUTE within a campaign-kind session, so it replaces
+    // nothing and the shell question does not arise for it. Pinned rather than assumed,
+    // because routing a level pick through `requestCampaignSession` -- the reboot seam
+    // sitting right next to it -- would rebuild canvas, renderer, HUD and input to move
+    // between two screens of the same session, and every other test here would still pass.
+    const h = makeDeps({ levelCount: 5, progressHighest: 3, tracksProgress: true });
+    const page = bootPageOn(h);
+    page.pointerdown();
+    const rootsBefore = h.rec.hudRoots.length;
+
+    h.hud.pickLevel(1);
+
+    expect(h.rec.hudStates.at(-1), 'the level pick did not reach gameplay').toBe('playing');
+    expect(page.sessions(), 'entering Practice replaced the session').toBe(1);
+    expect(h.rec.hudRoots.length, 'entering Practice rebuilt the HUD').toBe(rootsBefore);
+    expect(h.rec.disposed, 'entering Practice tore down the running session').toEqual([]);
   });
 });
