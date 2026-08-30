@@ -7410,8 +7410,10 @@ describe('startGameWith: canonical session identity at the production boundary',
       h.hud.startRestart();
       expect(h.rec.enemies.at(-1)).toBe(2); // level 2 of the fixture, the run's own board
       // The knob proven live: a SECOND build with a different `lives` argument moves the
-      // readout off the practice board's count. Replacing `hud.setLives(w.lives)` with a
-      // constant fails here and nowhere else in the repo.
+      // readout off the practice board's count. Measured: replacing `hud.setLives(w.lives)`
+      // with the constant 3 fails exactly this test, 1 of 397 in this file. On a88d39e,
+      // before the fake stamped its argument, that same mutation left all 4008 tests in
+      // the repo green -- see the `campaign-lives-readout-ignores-the-world` manifest entry.
       expect(h.rec.lives.at(-1), "the run's carried count, not the practice board's").toBe(2);
       expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: 2 });
       h.handle.dispose();
