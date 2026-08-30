@@ -2160,5 +2160,29 @@
     "tests": [
       "src/game/loop.test.ts"
     ]
+  },
+  {
+    "id": "tread-tint-set-once-not-per-emission",
+    "file": "src/render/tread-trails.ts",
+    "find": "      d.mesh.material.color.setHex(colorHex);",
+    "replace": "",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The identity tint stops being applied per EMISSION, so a decal keeps whatever colour it was built with. Decals are pooled (`pool.pop() ?? makeDecal()`), so the visible defect is not 'no colour' -- it is a player inheriting ANOTHER player's tint the moment the pool turns over, which on a busy board is most marks. It looks like a working feature in a screenshot of a fresh round and wrong in play, and no assertion on `treadColorFor` alone can see it, since that function stays correct. Caught by the real-emit-path case and by the pool-turnover case that expires one player's marks before the other prints into them. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ]
+  },
+  {
+    "id": "tread-tint-ignores-the-identity-gate",
+    "file": "src/render/tread-trails.ts",
+    "find": "  if (tank.kind !== 'player' || !identityApplies(world)) return TREAD_COLOR;",
+    "replace": "  if (tank.kind !== 'player') return TREAD_COLOR;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The trail tint stops consulting `identityApplies`, so a single-player campaign board prints slot 0's colour on every mark. Identity rings and shell tints are OFF below entities.ts's own multiplayer threshold precisely so single-player stays as it shipped, and issue #284's scope says campaign trails stay neutral -- this mutation breaks that agreement while leaving VS looking perfect, which is why the campaign case is asserted rather than assumed from 'VS works'. The gate is imported from entities.ts rather than re-derived here, so this also pins that the two cannot drift apart. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ]
   }
 ]
