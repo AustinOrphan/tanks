@@ -415,7 +415,10 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
     // nothing checked the name, so a floor that moved to a different board would have
     // kept the old label reading true. Issue #271 is exactly that case.
     let globalMinLabel = '';
-    for (const arena of ARENAS) {
+    // ARENA_DEFS, not ARENAS: they are the same objects (`arena.ts` exports the one array
+    // under both names), but ARENAS is typed `Arena[]`, which drops `id` -- and the label
+    // below needs it. Caught by `tsc`, not by vitest, which transpiles without checking.
+    for (const arena of ARENA_DEFS) {
       for (const mode of ['ffa', 'teams'] as const) {
         for (const n of [2, 3, 4]) {
           const { tanks } = loadArena(arena, n, mode);

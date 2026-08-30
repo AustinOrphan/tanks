@@ -2834,17 +2834,20 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // never calls hud.setControllers, so its rows are empty and Back is its only
     // reachable control; row-button reachability is covered by hud.css.test.ts's
     // buttons.length sweep and this file's own controller-row rendering tests instead).
-    // 63 since the versus setup pane landed (docs/superpowers/specs/2026-08-21-versus-
-    // setup-menu-design.md): 44 + 1 (the title panel's own new Versus-open button) +
-    // 18 (the versus pane's OWN reachable controls, measured against this test's own
-    // fixture -- 2 Mode + 3 Players + 6 Map (versusMapChoices(2), all 5 shipped arenas
-    // plus Random) + 5 Stock + 0 friendly fire (absent -- the pane defaults to FFA) +
+    // 64 since issue #271 added a sixth board OFFERED AT N=2, the count this fixture's
+    // versus pane defaults to; it was 63 when the versus setup pane landed
+    // (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md). 44 + 1 (the title
+    // panel's own new Versus-open button) + 19 (the versus pane's OWN reachable controls,
+    // measured against this test's own fixture -- 2 Mode + 3 Players + 7 Map
+    // (versusMapChoices(2): the five migrated boards, vs-duel-01, plus Random -- a board
+    // curated for another count would NOT appear here) + 5 Stock + 0 friendly fire
+    // (absent -- the pane defaults to FFA) +
     // 0 who's-playing preview (this test never calls hud.setControllers, so the
     // session's real assignment is length 0 against the pane's own default player
     // count of 2 -- a MISMATCH, which renders the preview's candidates disabled, same
     // "empty/disabled by construction" shape the Controllers panel's own +1 above
-    // already relies on) + Start + Back = 2+3+6+5+0+0+1+1 = 18).
-    expect(totalControls, 'recount the panels above if this moves').toBe(63);
+    // already relies on) + Start + Back = 2+3+7+5+0+0+1+1 = 19).
+    expect(totalControls, 'recount the panels above if this moves').toBe(64);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -3602,12 +3605,13 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // Exactly, not a lower bound -- this is the sweep's denominator, and it is measured
     // against THIS fixture rather than derived: 11 swatches in the paint shop (PALETTE 6
     // + ACCENTS 5, which share `.hud-swatch`) + 7 skins (SKINS) + 8 in the Controllers
-    // panel (2 slots x [Keyboard/Bot/None + 1 detected pad]) + 24 in the versus pane
-    // (16 option buttons -- Mode 2, Players 3, Map 6, Stock 5 -- and its who's-playing
-    // preview's own 8, the same 2 x 4 arithmetic as the panel). A different slot, pad or
-    // player count pins a different number; the number moving is the prompt to check the
-    // new row is inside the sweep rather than beside it.
-    expect(btns.length).toBe(11 + 7 + 8 + 24);
+    // panel (2 slots x [Keyboard/Bot/None + 1 detected pad]) + 25 in the versus pane
+    // (17 option buttons -- Mode 2, Players 3, Map 7, Stock 5 -- and its who's-playing
+    // preview's own 8, the same 2 x 4 arithmetic as the panel). Map went 6 -> 7 with
+    // issue #271's vs-duel-01, offered at the N=2 this fixture defaults to. A different
+    // slot, pad or player count pins a different number; the number moving is the prompt
+    // to check the new row is inside the sweep rather than beside it.
+    expect(btns.length).toBe(11 + 7 + 8 + 25);
     const missing = btns
       .filter((b) => !b.hasAttribute('aria-pressed'))
       .map((b) => Array.from(b.classList).join('.'));

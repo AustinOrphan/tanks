@@ -614,13 +614,15 @@ describe('hud.css is syntactically whole', () => {
     // mismatched count would produce -- a fixture with a different pane player count
     // or a different setControllers slot count would pin a different number here too.
     // 3 + 2 + 3 + 6 + 5 + 1 + 8 = 28.
-    // 87 since Task 5b's Campaign button landed: 86 + 1 static button
+    // 88 since issue #271's vs-duel-01 joined the N=2 map offer, adding one map button
+    // to the versus pane this fixture renders. It was 87 when Task 5b's Campaign button
+    // landed: 86 + 1 static button
     // (.hud-campaign-open), rendered unconditionally at construction (same convention
     // as every other title-panel button here) and hidden via CSS class rather than
     // removed from the DOM -- this fixture never calls setSessionKind('versus'), so it
     // stays hidden throughout, exactly like .hud-continue/.hud-new-game/
     // .hud-versus-open above ALREADY are counted here whether shown or not.
-    expect(buttons.length).toBe(87);
+    expect(buttons.length).toBe(88);
     expect(unstyled).toEqual([]);
 
     dispose();
