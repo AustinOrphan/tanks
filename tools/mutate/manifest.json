@@ -92,7 +92,7 @@
     "find": "let hi = span * 8;",
     "replace": "let hi = span * 4.5;",
     "expect": "killed",
-    "expectFailures": 15,
+    "expectFailures": 17,
     "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here. COUNT MOVED with issue #271: framing.test.ts sweeps every shipped arena, so a sixth board raises the number of cases this mutation fails from 11 to 13. Measured, not adjusted to fit. DRIFTED UPWARD 13 -> 15 for issue #272, and verified rather than renumbered: the mutation was applied on BOTH trees and the failing-test SETS diffed. The two additions are `contains the whole arena and its walls, arena 7 @ 0.42` and `wastes little screen, arena 7 @ 0.42` -- the per-arena framing cases for vs-tri-01, which is the seventh entry in ARENAS. No test failed on main and stopped failing here, so this is coverage added by a new board rather than coverage moved off an old one.",
     "tests": [
       "src/render/framing.test.ts"
@@ -345,7 +345,7 @@
     "find": "      for (let i = 0; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
     "replace": "      for (let i = 1; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 5,
     "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee.",
     "tests": [
       "src/sim/versus-spawns.test.ts"
@@ -1266,20 +1266,8 @@
       "src/game/ui.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all.",
-    "expectFailures": 3
-  },
-  {
-    "id": "ui-versus-preview-reason-left-on-the-real-rows",
-    "file": "src/game/hud.ts",
-    "find": "        describeDisabledReason(btn, interactive ? null : 'hud-versus-assignment-note');",
-    "replace": "        describeDisabledReason(btn, 'hud-versus-assignment-note');",
-    "expect": "killed",
-    "tests": [
-      "src/game/hud.test.ts"
-    ],
-    "why": "`renderControllerRowsInto` builds BOTH the standalone Controllers panel's real reassignment rows and the versus pane's who's-playing preview, and only the preview is disabled. Pointing every row at \"Assignment applies after Start.\" tells a screen reader that a button which reassigns a slot right now will not take effect until Start -- an explanation that is not merely redundant but false, and attached to a note that is itself hidden in that state. The half of the assertion that catches it is the one that reads the Controllers panel and expects NO reference; a test that only checked the preview gains it would stay green.",
-    "expectFailures": 1
+    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all. Issue #260 raised this from 3 to 5: the versus pane's Start button now carries its refusal through the same helper, so two more assertions -- the pane's own aria-describedby checks -- fail when it is broken.",
+    "expectFailures": 5
   },
   {
     "id": "render-respawn-teleport-removed",
@@ -1508,12 +1496,12 @@
     "find": "  for (let i = 0; i < players; i++) out.push(slots[i] ? { ...slots[i] } : defaults[i]);",
     "replace": "  for (let i = 0; i < players; i++) out.push(defaults[i]);",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/game/versus-setup.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing."
+    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing. Issue #260 raised this from 3 to 4, and the extra failure is the point: until the pane had role CONTROLS, nothing in the UI could show a discarded role. The fourth test drives the player-count buttons and reads the role back off the rendered card, so this is now pinned end to end rather than at the model alone."
   },
   {
     "id": "shell-spawn-ignores-drawn-nose-reach",
@@ -2219,6 +2207,162 @@
     "why": "The trail tint stops excluding `campaign-coop`, so a FOUR-PLAYER CO-OP campaign board prints identity-tinted trails. This is the exact defect the first implementation shipped and a screenshot caught: co-op clears the player-count gate -- four player tanks, four identity rings -- so `identityApplies` alone is not enough, and issue #284's scope says campaign trails stay neutral in the initial implementation. Single-player campaign is NOT the discriminating case here (it fails the player-count gate either way), which is why the test uses four co-op tanks and asserts the same four ARE tinted in ffa -- otherwise the case would pass against a build that tinted nothing. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/render/tread-trails.test.ts"
+    ]
+  },
+  {
+    "id": "quad-board-loses-its-mirror-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"####.####...###...####.####\"",
+    "replace": "\"####.####...###...####.###.\"",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
+  },
+  {
+    "id": "quad-board-offered-at-every-player-count",
+    "file": "src/sim/config/data/versus-catalog.json",
+    "find": "\"players\": [\n        4\n      ],",
+    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The curation undone for the four-player board: vs-quad-01 advertised wherever it mechanically passes. Like the duel and tri entries before it, this is the mutation the shipped validators CANNOT catch -- vs-quad-01 measures suitable at N=2 and N=3 as well (versus-board.test.ts sweeps all 24 (arena, N) combinations and finds 24), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose four corner spawns are a single orbit of its symmetry group has nothing to say about two players or three. Anchored on the `players` block alone rather than on the end of the file, for the same reason the tri entry is -- appending a ninth board must not silently stop this entry applying. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/config/versus-catalog.test.ts"
+    ]
+  },
+  {
+    "id": "parser-span-cannot-cross-a-newline",
+    "file": "tools/issues/metadata.mjs",
+    "find": "        blank += 1;\n        if (blank >= 2) break;",
+    "replace": "        break;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Restores the exact defect issue #416 fixed: a code span that can only be seen when both backticks sit on one line. An opening backtick on one line and its closer on the next would again leave a `Parent: #N` mirror between them looking like prose, so an issue DOCUMENTING the form is audited as USING it -- a red required check whose remediation cannot be followed, because there is no parent to add. Nothing else observes it: the audit's other outputs are unchanged and the whole 181-issue corpus parses identically either way.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
+  },
+  {
+    "id": "parser-stray-backtick-opens-a-span",
+    "file": "tools/issues/metadata.mjs",
+    "find": "      i += open; // unmatched: literal text, left exactly as written",
+    "replace": "      for (let k = i; k < chars.length; k += 1) if (chars[k] !== '\\n') chars[k] = ' ';\n      break;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The over-correction #416 invited and this change deliberately refused: treating an unmatched backtick as an open span and blanking the rest of the body. CommonMark says a backtick run with no equal-length closer is literal text, so this would make the parser disagree with how GitHub renders the body it is reading, and would silently DROP real parent mirrors that merely happen to sit after a stray backtick. Pins the decision, not just the code.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
+  },
+  {
+    "id": "cycle-detector-reports-a-cycle-twice",
+    "file": "tools/issues/metadata.mjs",
+    "find": "      const key = [...cycle].sort((a, b) => a - b).join(':');\n      if (!cycleKeys.has(key)) {\n        cycleKeys.add(key);\n        cycles.push(cycle);\n      }",
+    "replace": "      cycles.push(cycle);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Deletes findDependencyCycles' de-duplication outright. Before issue #417 added its test this SURVIVED -- all 25 tests in metadata.test.ts stayed green -- so the whole block was unverified production logic. It is genuinely reachable, but only narrowly: a duplicated BACK-edge, where the same blocker is listed twice pointing at a node still on the stack, because `visiting.get()` is consulted before `visited.has()`. A duplicated forward edge does not reach it, and neither does any of the 4096 directed graphs on 4 distinct nodes. Without the guard the audit reports one cycle as two errors, telling a maintainer to break an edge that has already been reported.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
+  },
+  {
+    "id": "versus-setup-never-persisted",
+    "file": "src/game/hud.ts",
+    "find": "    opts.versusSetup?.set({ ...next });",
+    "replace": "    void next;",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-start-gate-never-refuses",
+    "file": "src/game/hud.ts",
+    "find": "    versusStartBtn.disabled = problem !== null;",
+    "replace": "    versusStartBtn.disabled = false;",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-slot-device-ignores-live-pads",
+    "file": "src/game/hud.ts",
+    "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));",
+    "replace": "    const sources = resolveSources(slots, []);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Derives every slot's device as if no controller were connected. A second human slot would read 'Unassigned' and refuse Start with a controller plugged in, and -- worse in kind -- the gate would stop reacting to a hotplug at all, which is the criterion about a disconnect disabling Start with an actionable reason.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-refusal-shown-on-every-card",
+    "file": "src/game/hud.ts",
+    "find": "        problem !== null && problem.kind !== 'no-human' && problem.slot === slot;",
+    "replace": "        problem !== null && problem.kind !== 'no-human';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-refusal-reason-not-associated",
+    "file": "src/game/hud.ts",
+    "find": "          : `hud-versus-slot-reason-${problem.slot}`,",
+    "replace": "          : null,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Issue #321's rule is that a disabled control's reason is ASSOCIATED, not merely nearby. The sentence would still be on screen for a sighted player while a screen-reader user hears only that Start is disabled. Nothing about the visible rendering changes, so only an aria-describedby assertion can catch it.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "refused-button-drawn-as-live",
+    "file": "src/game/hud.css",
+    "find": "  opacity: 0.45;\n  filter: saturate(0.4);\n  box-shadow: none;\n  cursor: not-allowed;",
+    "replace": "  cursor: not-allowed;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Leaves a refused control drawn exactly like a live one: `disabled` is still set and the gate still refuses, so every DOM assertion in the suite keeps passing and only the pixels lie. This is the defect that shipped in the first draft of issue #260 and was caught by photographing the built app -- Start was disabled and still bright green with its raised shadow. CSS is typechecked by nothing, so without this entry the whole treatment could be deleted silently.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
+  },
+  {
+    "id": "hover-escapes-the-pointer-query",
+    "file": "src/game/hud.css",
+    "find": "@media (hover: hover) {",
+    "replace": "@media all {",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The hover treatment applied on devices with no hovering pointer (issue #392). This is a correctness defect rather than a cosmetic one, and it is invisible on the machine that writes it: a touch device reports a tap as a hover and HOLDS it until the next tap lands elsewhere, so every control the player has touched stays looking pointed-at. Nothing in a desktop browser, a screenshot, or a jsdom computed-style read can see it -- jsdom does not recompute dynamic pseudo-classes at all, which is why the guard is checked as stylesheet TEXT. `@media all` is chosen over deleting the wrapper so the rules stay syntactically nested and only the CONDITION is wrong, which is the realistic form of this mistake. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
+  },
+  {
+    "id": "hover-engages-on-disabled-controls",
+    "file": "src/game/hud.css",
+    "find": "  .ui-btn:hover:not(:disabled) {",
+    "replace": "  .ui-btn:hover {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). A locked level button -- `hud.ts` sets the real `disabled` attribute, and `.hud-level-btn--locked` dims it to 0.35 opacity -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
     ]
   },
   {

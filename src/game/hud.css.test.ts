@@ -465,16 +465,30 @@ describe('hud.css is syntactically whole', () => {
       '.hud-controller-source-btn',
       // versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup-menu-
       // design.md): hidden rules, the row/option-button layout, and the friendly-fire
-      // toggle -- the who's-playing preview reuses the
-      // controller-assignment selectors just above rather than duplicating them.
+      // toggle.
       '.hud-versus-open--hidden', '.hud-versus-setup', '.hud-versus-setup--hidden',
       '.hud-versus-row', '.hud-versus-mode-row', '.hud-versus-players-row',
       '.hud-versus-map-row', '.hud-versus-stock-row', '.hud-versus-option-btn',
-      '.hud-versus-assignment-note', '.hud-versus-assignment-note--hidden',
-      // issue #280: the who's-playing preview's own side-by-side override of the
-      // controller-assignment selectors just above -- without these two, the preview
-      // falls back to their vertical list, unchanged from before the issue.
-      '.hud-versus-setup .hud-controller-rows', '.hud-versus-setup .hud-controller-row',
+      // `.hud-versus-assignment-note` is deliberately ABSENT from this list as of issue
+      // #260, and both of its rules are gone from the stylesheet. It was listed for its
+      // `--hidden` modifier, which was the only rule it ever had of its own; the note is
+      // unconditional now (devices really are assigned at Start, for every slot), so
+      // that rule would be dead. Its LOOK was always `.ui-hint`, which is swept above.
+      // issue #260: the who's-playing block's OWN classes. It used to reuse the
+      // controller-assignment selectors above and override them under a
+      // `.hud-versus-setup` scope; it renders per-slot ROLE cards now, so the grid,
+      // the derived device line and the two refusal notes are all its own. Without
+      // the first two, the cards fall back to a vertical list -- the exact layout
+      // regression issue #280 exists to prevent.
+      // `.hud-versus-assignment-note--hidden` is deliberately ABSENT: the note is
+      // unconditional now, so a rule for it would be dead.
+      '.hud-versus-slot-rows', '.hud-versus-slot-row', '.hud-versus-slot-label',
+      '.hud-versus-slot-device', '.hud-versus-slot-reason',
+      '.hud-versus-slot-reason--hidden', '.hud-versus-start-reason--hidden',
+      // issue #260: the kit's FIRST disabled-button treatment. Before this, nothing in
+      // hud.css matched `:disabled` at all, so a refused Start rendered identically to a
+      // live one -- caught by photographing the built app, not by any assertion here.
+      '.ui-btn:disabled',
       // Task 5b (a versus session's title screen): the Campaign button's hidden rule
       // -- without it every versus session would show it permanently, even at
       // non-title states.
@@ -607,22 +621,24 @@ describe('hud.css is syntactically whole', () => {
     // this fixture switches the pane to Teams -- see mountEveryButton's own comment;
     // absent under the pane's FFA default, and this would be 85 without that click)
     // + 8 who's-playing PREVIEW row buttons. That preview reuses the exact
-    // renderControllerRowsInto machinery the row above counts: the pane's default
-    // player count (2) matches THIS fixture's own 2-slot setControllers call, so it
-    // lands on the INTERACTIVE branch (2 slots x 4 candidates, same arithmetic as the
-    // real Controllers panel's 8 above) rather than the disabled preview branch a
-    // mismatched count would produce -- a fixture with a different pane player count
-    // or a different setControllers slot count would pin a different number here too.
-    // 3 + 2 + 3 + 6 + 5 + 1 + 8 = 28.
-    // 88 since issue #271's vs-duel-01 joined the N=2 map offer, adding one map button
-    // to the versus pane this fixture renders. It was 87 when Task 5b's Campaign button
-    // landed: 86 + 1 static button
+    // who's-playing ROLE buttons: 2 slots (the pane's default player count) x
+    // [Human/Bot/Off] = 6. This no longer depends on the fixture's setControllers call
+    // at all -- the block used to render the session's DEVICE assignment through
+    // renderControllerRowsInto, so its count moved with the session's slot count and
+    // with how many pads were detected. Roles are a property of the pane's own retained
+    // setup (issue #260), so only the pane's player count can move this number.
+    // 3 + 2 + 3 + 6 + 5 + 1 + 6 = 26.
+    // 86 since issue #260 replaced that 8-button device preview (2 slots x
+    // [Keyboard/Bot/None + 1 detected pad]) with these 6: 88 - 8 + 6.
+    // It was 88 since issue #271's vs-duel-01 joined the N=2 map offer, adding one map
+    // button to the versus pane this fixture renders, and 87 when Task 5b's Campaign
+    // button landed: 86 + 1 static button
     // (.hud-campaign-open), rendered unconditionally at construction (same convention
     // as every other title-panel button here) and hidden via CSS class rather than
     // removed from the DOM -- this fixture never calls setSessionKind('versus'), so it
     // stays hidden throughout, exactly like .hud-continue/.hud-new-game/
     // .hud-versus-open above ALREADY are counted here whether shown or not.
-    expect(buttons.length).toBe(88);
+    expect(buttons.length).toBe(86);
     expect(unstyled).toEqual([]);
 
     dispose();
@@ -785,16 +801,45 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
-  it("lays the versus setup's who's-playing preview out side by side, distinct from the standalone Controllers panel's own vertical list (issue #280)", () => {
-    // The versus pane's who's-playing preview reuses .hud-controller-rows/
-    // .hud-controller-row VERBATIM from the standalone Controllers panel
-    // (renderControllerRowsInto, hud.ts) -- same classes, same DOM shape, scoped only
-    // by the .hud-versus-setup ancestor (renderVersusControllerRows' own doc
-    // comment). The presence-only sweep above cannot tell "the versus pane inherited
-    // the base vertical list" from "the versus pane got its own side-by-side
-    // override" -- both make '.hud-versus-setup .hud-controller-rows' match
-    // `toContain`. This asserts the RESOLVED style actually differs between the two
-    // contexts, and differs in the specific way issue #280 asked for.
+  it('draws a refused button as refused, on more channels than colour alone (issue #260)', () => {
+    // A RESOLVED-STYLE assertion, not a presence check: this file's own sweep above can
+    // only say the selector exists. What made this rule necessary was a screenshot of the
+    // built app -- `disabled` was set on Start and it still rendered bright green with its
+    // raised shadow, indistinguishable from a live primary button.
+    //
+    // Negative control: the enabled twin below must differ on every channel asserted, so
+    // a rule that accidentally applied to all buttons fails here rather than passing.
+    const live = document.createElement('button');
+    live.className = 'ui-btn ui-btn--primary';
+    const refused = document.createElement('button');
+    refused.className = 'ui-btn ui-btn--primary';
+    refused.disabled = true;
+    document.body.append(live, refused);
+
+    const l = getComputedStyle(live);
+    const r = getComputedStyle(refused);
+
+    // Three channels, so neither hue alone nor opacity alone carries the whole signal.
+    expect(r.opacity).not.toBe(l.opacity);
+    expect(r.cursor).toBe('not-allowed');
+    expect(r.cursor).not.toBe(l.cursor);
+    // The raised shadow is what makes the primary button read as pressable at all; a
+    // flattened one is a SHAPE difference, which survives a forced-colors theme (#368)
+    // that would flatten the hue difference away.
+    expect(l.boxShadow, 'the live control lost its raised shadow').not.toBe('none');
+    expect(r.boxShadow, 'the refused control still stands off the surface').toBe('none');
+
+    document.body.innerHTML = '';
+  });
+
+  it("lays the versus setup's who's-playing cards out side by side, distinct from the standalone Controllers panel's own vertical list (issue #280)", () => {
+    // Issue #280's contract, re-pinned on issue #260's classes. The two blocks used to
+    // share .hud-controller-rows and be told apart only by a `.hud-versus-setup`
+    // ancestor scope; the versus pane has its own .hud-versus-slot-rows now. That
+    // makes the presence sweep above even weaker as evidence than before -- a
+    // `.hud-versus-slot-rows` rule that simply forgot `flex-direction: row` would
+    // still match `toContain` -- so this asserts the RESOLVED style, and asserts that
+    // it still differs from the standalone panel in the specific way #280 asked for.
     const controllers = document.createElement('div');
     controllers.className = 'hud-controllers';
     const controllersRows = document.createElement('div');
@@ -804,7 +849,7 @@ describe('hud.css is syntactically whole', () => {
     const versus = document.createElement('div');
     versus.className = 'hud-versus-setup';
     const versusRows = document.createElement('div');
-    versusRows.className = 'hud-controller-rows';
+    versusRows.className = 'hud-versus-slot-rows';
     versus.appendChild(versusRows);
 
     document.body.append(controllers, versus);
@@ -825,7 +870,7 @@ describe('hud.css is syntactically whole', () => {
     expect(controllersStyle.maxHeight).not.toBe('');
     expect(controllersStyle.overflowY).toBe('auto');
 
-    // The versus pane's own preview goes side by side, wrapping, instead.
+    // The versus pane's own cards go side by side, wrapping, instead.
     expect(versusStyle.flexDirection).toBe('row');
     expect(versusStyle.flexWrap).toBe('wrap');
     // Neutralized, not inherited -- a SECOND, nested scroll region a few rows tall
@@ -849,7 +894,7 @@ describe('hud.css is syntactically whole', () => {
     document.body.innerHTML = '';
   });
 
-  it('forces the who\'s-playing preview to two definite-width columns below the phone breakpoint (issue #280)', () => {
+  it('forces the who\'s-playing cards to two definite-width columns below the phone breakpoint (issue #280)', () => {
     // jsdom's window is a fixed 1024px wide, so `@media (max-width: 760px)` never
     // matches here -- this can only be a TEXT assertion, the same reasoning (and the
     // same limitation) as `keeps the narrow-viewport rules the phone layout needs`
@@ -859,7 +904,11 @@ describe('hud.css is syntactically whole', () => {
     // directly in Chromium against the real running app (not jsdom), including the
     // `700px` fit-content trap the scoped rows rule's own comment documents.
     const src = stripComments(css);
-    const idx = src.indexOf('.hud-versus-setup .hud-controller-row {');
+    // lastIndexOf, not indexOf: `.hud-versus-slot-row {` also names the card's own BASE
+    // rule earlier in the file (outside any media query). The narrow-viewport override
+    // is the last of the two, and the media-proximity assertion below is what proves
+    // this really landed on the one inside the query rather than on the base rule.
+    const idx = src.lastIndexOf('.hud-versus-slot-row {');
     expect(idx, 'the narrow-viewport row rule is gone').toBeGreaterThan(-1);
     // Anchored on the SELECTOR's own index, not a positional split on the media query
     // text: the topbar block (line ~170) opens the SAME `@media (max-width: 760px)`
@@ -1341,6 +1390,103 @@ describe('a leaving surface stops eating clicks meant for the one arriving', () 
         getComputedStyle(settings).pointerEvents,
         'a control inside the leaving surface can still eat the click',
       ).toBe('none');
+    } finally {
+      hud.dispose();
+      document.body.innerHTML = '';
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hover (issue #392). TEXT, not computed style, for the reason the focus-visible checks
+// above state at length: jsdom does not recompute a dynamic pseudo-class, so a
+// getComputedStyle assertion here would report every hover rule in the file as absent
+// whether it is wired or not. The BROWSER measurement is the other half and lives in the
+// PR, taken the way #392's own gap table was: each control asked `matches(':hover')`
+// before its computed style was diffed, with `.hud-rotate-btn` as the positive control.
+// ---------------------------------------------------------------------------
+
+describe('hover treatment on the UI kit primitives (issue #392)', () => {
+  const src = stripComments(css);
+  /** The text of the one `@media (hover: hover)` block, brace-matched from its opener. */
+  const hoverBlock = (): string => {
+    const at = src.indexOf('@media (hover: hover)');
+    expect(at, 'no @media (hover: hover) block').toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = src.indexOf('{', at); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error('unterminated @media (hover: hover) block');
+  };
+
+  it('gives every primitive a hover rule -- the five #392 measured as having none', () => {
+    // Named individually rather than counted: a count passes when one selector is
+    // deleted and another duplicated, which is the shape of the gap this closes.
+    const block = hoverBlock();
+    for (const sel of [
+      '.ui-btn:hover',
+      '.ui-btn--primary:hover',
+      '.ui-btn--danger:hover',
+      '.ui-selectable:not(.ui-selectable--on):hover',
+      '.ui-selectable--on:hover',
+    ]) {
+      expect(block, `${sel} has no hover rule`).toContain(sel);
+    }
+    // `--slab` and `--sm` are deliberately absent: they set geometry only and inherit
+    // `.ui-btn`'s fill, so a rule of their own would be a second place to change one
+    // colour. Measured in the browser: both move with the base rule.
+    expect(block).not.toContain('.ui-btn--slab:hover');
+    expect(block).not.toContain('.ui-btn--sm:hover');
+  });
+
+  it('scopes EVERY hover rule behind the pointer query, so a tap cannot stick', () => {
+    // The correctness half. A touch device reports a tap as a hover and holds it until
+    // the next tap lands elsewhere, so an unguarded rule leaves a control looking
+    // permanently pointed-at. Asserted over the whole file rather than the block: a rule
+    // added OUTSIDE the media query is exactly the mistake this must catch.
+    const outside = src.replace(hoverBlock(), '');
+    const stray = [...outside.matchAll(/^[^@}\n][^{\n]*:hover[^{\n]*\{/gm)].map((m) => m[0].trim());
+    // `.hud-rotate-btn:hover` predates #392 and is named in that issue's Boundaries as
+    // out of scope, so it is the one permitted exception -- pinned by name so a SECOND
+    // unguarded rule is a failure rather than joining a growing allowlist.
+    expect(stray.map((s) => s.replace(/\s*\{$/, ''))).toEqual(['.hud-rotate-btn:hover']);
+  });
+
+  it('never engages on a disabled control', () => {
+    // #392's second criterion. Disabled is the real HTML attribute here (hud.ts sets
+    // `btn.disabled = true` for locked levels), so every hover selector must carry
+    // `:not(:disabled)` -- a rule that forgets it repaints a control the player cannot
+    // activate, which reads as "this is available" and is worse than no hover at all.
+    const rules = [...hoverBlock().matchAll(/([^{}]+):hover([^{}]*)\{/g)].map((m) => `${m[1]}:hover${m[2]}`.trim());
+    expect(rules.length, 'no hover rules found to check').toBeGreaterThan(0);
+    for (const r of rules) expect(r, `${r} can engage on a disabled control`).toContain(':not(:disabled)');
+  });
+
+  it('keeps hover, focus and selected on three different properties', () => {
+    // #392's third criterion, and the one a screenshot cannot settle. If hover moved
+    // `border-color` on a selected control it would erase the white ring that is the
+    // ONLY signal of which choice is current; if it moved `outline-color` it would be
+    // indistinguishable from the focus ring. So: fill for buttons, border for the
+    // unselected selectable, and a box-shadow ring for the selected one.
+    const block = hoverBlock();
+    expect(block).not.toContain('outline');
+    const on = block.slice(block.indexOf('.ui-selectable--on:hover'));
+    const onBody = on.slice(on.indexOf('{'), on.indexOf('}'));
+    expect(onBody, 'the selected ring is repainted by hover').not.toContain('border-color');
+    expect(onBody, 'the selected control gets no hover feedback at all').toContain('box-shadow');
+  });
+
+  it('no shipped control is both primary and selectable -- the assumption the ring rests on', () => {
+    // `.ui-btn--primary` owns `box-shadow` for its raised slab, and the selected-hover
+    // ring above would flatten it. That is safe only while no control carries both
+    // classes, so this measures it against the REAL hud rather than trusting the four
+    // call sites to stay as they are.
+    const hud = createHud(document.body);
+    try {
+      const both = [...document.querySelectorAll('.ui-btn--primary.ui-selectable')]
+        .map((e) => e.className);
+      expect(both, 'a primary control is selectable; the hover ring would flatten its slab').toEqual([]);
     } finally {
       hud.dispose();
       document.body.innerHTML = '';

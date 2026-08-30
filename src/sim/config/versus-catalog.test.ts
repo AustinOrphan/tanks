@@ -10,6 +10,7 @@ describe('VERSUS_CATALOG', () => {
     // not a borrowed campaign board.
     expect(VERSUS_CATALOG.map((e) => e.id)).toEqual([
       'arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05', 'vs-duel-01', 'vs-tri-01',
+      'vs-quad-01',
     ]);
     for (const e of VERSUS_CATALOG) expect(e.arenaId, e.id).toBe(e.id);
   });
@@ -35,6 +36,11 @@ describe('VERSUS_CATALOG', () => {
       // maximin spawns were placed an equal 26 walkable cells apart has nothing to offer
       // two players or four.
       'vs-tri-01': [3],
+      // Issue #273: the same narrowing again, at the top of the range. vs-quad-01
+      // measures suitable at N=2 and N=3 as well, and is curated for 4 alone -- the four
+      // corner spawns are a single orbit of the board's symmetry group, and dropping to
+      // two or three players leaves that construction saying nothing.
+      'vs-quad-01': [4],
     };
     // Set equality first, so a new entry cannot ship without a row here to review.
     expect(new Set(VERSUS_CATALOG.map((e) => e.id))).toEqual(new Set(Object.keys(CURATED_COUNTS)));
