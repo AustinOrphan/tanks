@@ -2215,7 +2215,7 @@
     "find": "      i += open; // unmatched: literal text, left exactly as written",
     "replace": "      for (let k = i; k < chars.length; k += 1) if (chars[k] !== '\\n') chars[k] = ' ';\n      break;",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "why": "The over-correction #416 invited and this change deliberately refused: treating an unmatched backtick as an open span and blanking the rest of the body. CommonMark says a backtick run with no equal-length closer is literal text, so this would make the parser disagree with how GitHub renders the body it is reading, and would silently DROP real parent mirrors that merely happen to sit after a stray backtick. Pins the decision, not just the code.",
     "tests": [
       "tools/issues/metadata.test.ts"
