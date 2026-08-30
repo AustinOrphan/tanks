@@ -528,9 +528,6 @@ describe('vs-quad-01: four corners, one orbit', () => {
   const ROW_AXIS = 8; //  r mirrors to 16 - r;  8 is its own partner
   const kindAt = (c: number, r: number): WallKind | undefined => arena.legend[arena.grid[r][c]];
 
-  const blocked = (c: number, r: number): boolean =>
-    c < 0 || r < 0 || c >= arena.cols || r >= arena.rows || kindAt(c, r) !== undefined;
-
   /** Shortest walkable path in cells. `breached` false is the AUTHORED variant, with
    * solid AND destructible blocking -- the same choice, and the same reason, as the
    * vs-tri-01 block above: two spawns can be close in a straight line and far to drive.
