@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   LABEL_DIMENSIONS,
   auditOpenIssues,
+  declaredSingularParent,
   explicitFormLabels,
   planIssueEventLabelChanges,
   renderAuditReport,
@@ -132,6 +133,143 @@ describe('issue metadata contract', () => {
     expect(codes(result.warnings)).toEqual(['readiness-marker']);
     expect(result.warnings[0].issueNumber).toBe(40);
     expect(result.warnings[0].message).toContain('Dependencies');
+  });
+});
+
+describe('native relationship contract', () => {
+  const relationships = (
+    blockedBy: Array<Record<string, unknown>> = [],
+    extra: Record<string, unknown> = {},
+  ) => ({
+    loaded: true,
+    parentLoaded: false,
+    parent: null,
+    blockersLoaded: true,
+    blockedBy,
+    subIssues: [],
+    ...extra,
+  });
+
+  it('parses only unambiguous singular parent mirrors', () => {
+    expect(declaredSingularParent('Parent: #315')).toBe(315);
+    expect(declaredSingularParent('Part of #229.')).toBe(229);
+    expect(declaredSingularParent('## Parent\n\n- #238')).toBe(238);
+    expect(declaredSingularParent('Parents: #228, #315')).toBeNull();
+    expect(declaredSingularParent('## Parents\n\n- #228\n- #315')).toBeNull();
+  });
+
+  it('ignores parent forms that only appear inside code fences or code spans', () => {
+    expect(declaredSingularParent('```\nParent: #999\n```')).toBeNull();
+    expect(declaredSingularParent('```md\nPart of #999\n```')).toBeNull();
+    expect(declaredSingularParent('## Parent\n\nUse the form `Parent: #999` verbatim.')).toBeNull();
+    expect(declaredSingularParent('~~~\n## Parent\n\n- #999\n~~~')).toBeNull();
+    expect(declaredSingularParent('Parent: #315\n\n```\nParent: #999\n```')).toBe(315);
+  });
+
+  it('scopes the native-blocked count to the issues actually inspected for blockers', () => {
+    const inspected = issue(92, [
+      'size:m', 'risk:medium', 'area:ui', 'impact:high', 'priority:next',
+    ], '## Dependencies\n\nNone', {
+      nativeRelationships: relationships([{ number: 70, state: 'open' }]),
+    });
+    const skipped = issue(93, [
+      'size:s', 'risk:low', 'area:repository', 'impact:medium', 'priority:next',
+    ], '## Dependencies\n\nNone', {
+      nativeRelationships: relationships([], { blockersLoaded: false }),
+    });
+
+    const result = auditOpenIssues([inspected, skipped]);
+    expect(result.blockedCount).toBe(1);
+    expect(result.blockerInspectedCount).toBe(1);
+    expect(renderAuditReport(result).split('\n')).toContain(
+      'Native-blocked open issues: 1 of 1 inspected for native blockers (2 audited).',
+    );
+  });
+
+  it('keeps open native blockers out of agent-ready and Now', () => {
+    const blocked = issue(80, [
+      'size:m', 'risk:medium', 'area:ui', 'impact:high', 'priority:now', 'agent-ready',
+    ], '## Dependencies\n\nNone', {
+      nativeRelationships: relationships([
+        { number: 70, state: 'open' },
+        { number: 71, state: 'closed' },
+      ]),
+    });
+    const result = auditOpenIssues([blocked]);
+    expect(codes(result.errors)).toEqual([
+      'agent-ready-native-blocked',
+      'now-native-blocked',
+    ]);
+    expect(result.blockedCount).toBe(1);
+    expect(result.errors.every((error) => error.message.includes('#70'))).toBe(true);
+    expect(result.errors.some((error) => error.message.includes('#71'))).toBe(false);
+  });
+
+  it('treats completed native prerequisites as history, not current blockage', () => {
+    const ready = issue(81, [
+      'size:s', 'risk:low', 'area:repository', 'impact:high', 'priority:now', 'agent-ready',
+    ], '## Dependencies\n\nAll dependencies are complete.', {
+      nativeRelationships: relationships([{ number: 70, state: 'closed' }]),
+    });
+    const result = auditOpenIssues([ready]);
+    expect(result.errors).toEqual([]);
+    expect(result.blockedCount).toBe(0);
+  });
+
+  it('rejects missing or contradictory singular parent mirrors', () => {
+    const missing = issue(82, completeLabels, 'Parent: #10', {
+      nativeRelationships: relationships([], { parentLoaded: true }),
+    });
+    const mismatch = issue(83, completeLabels, '## Parent\n\n- #11', {
+      nativeRelationships: relationships([], {
+        parentLoaded: true,
+        parent: { number: 12, state: 'open' },
+      }),
+    });
+    const result = auditOpenIssues([missing, mismatch]);
+    expect(codes(result.errors)).toEqual([
+      'declared-parent-missing-native',
+      'declared-parent-mismatch',
+    ]);
+  });
+
+  it('flags decomposed XL roll-ups with no native children', () => {
+    const body = '## Implementation breakdown\n\n- [ ] #91 — First leaf';
+    const rollup = issue(90, [
+      'size:xl', 'risk:medium', 'area:repository', 'impact:medium', 'priority:next',
+    ], body, { nativeRelationships: relationships() });
+    const linked = issue(92, [
+      'size:xl', 'risk:medium', 'area:repository', 'impact:medium', 'priority:next',
+    ], body, {
+      nativeRelationships: relationships([], { subIssues: [{ number: 91, state: 'open' }] }),
+    });
+    const result = auditOpenIssues([rollup, linked]);
+    expect(codes(result.errors)).toEqual(['rollup-missing-native-subissues']);
+    expect(result.errors[0].issueNumber).toBe(90);
+  });
+
+  it('warns when an open child remains under a closed native parent', () => {
+    const child = issue(93, completeLabels, 'Part of #90.', {
+      nativeRelationships: relationships([], {
+        parentLoaded: true,
+        parent: { number: 90, state: 'closed' },
+      }),
+    });
+    const result = auditOpenIssues([child]);
+    expect(result.errors).toEqual([]);
+    expect(codes(result.warnings)).toEqual(['open-child-closed-parent']);
+  });
+
+  it('rejects cycles in the open native dependency graph', () => {
+    const first = issue(94, completeLabels, undefined, {
+      nativeRelationships: relationships([{ number: 95, state: 'open' }]),
+    });
+    const second = issue(95, completeLabels, undefined, {
+      nativeRelationships: relationships([{ number: 94, state: 'open' }]),
+    });
+    const result = auditOpenIssues([first, second]);
+    expect(codes(result.errors)).toEqual(['native-dependency-cycle']);
+    expect(result.errors[0].issueNumbers).toEqual([94, 95]);
   });
 });
 

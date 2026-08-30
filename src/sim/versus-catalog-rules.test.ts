@@ -4,6 +4,7 @@ import type { WallKind } from './types';
 import type { VersusCatalogEntry } from './config/versus-catalog-types';
 import { VERSUS_CATALOG } from './config/versus-catalog';
 import { arenaById } from './config/arenas';
+import { loadArena } from './arena';
 import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-catalog-rules';
 
 // ---------------------------------------------------------------------------
@@ -17,24 +18,32 @@ import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-cata
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 6 shipped entries validate clean: 0 failures over 32 declared (entry, N, mode) combinations', () => {
-    // 32, not 36: five entries declare 3 player counts x 2 modes, and issue #271's
-    // vs-duel-01 declares 1 x 2. The sweep covers what each entry PROMISES, so a
-    // narrowed declaration shrinks this denominator rather than leaving combinations
-    // silently unchecked.
-    expect(VERSUS_CATALOG.length).toBe(6);
+  it('all 7 shipped entries validate clean: 0 failures over 33 declared (entry, N, mode) combinations', () => {
+    // 33, not 42: five entries declare 3 player counts x 2 modes (30), issue #271's
+    // vs-duel-01 declares 1 x 2, and issue #272's vs-tri-01 declares 1 x 1 -- three
+    // players have no fair team split, so it promises `ffa` alone. The sweep covers what
+    // each entry PROMISES, so a narrowed declaration shrinks this denominator rather than
+    // leaving combinations silently unchecked.
+    expect(VERSUS_CATALOG.length).toBe(7);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(32);
+    ).toBe(33);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }
-  });
+    // 30s, not the 5s default. This sweep runs real spawn placement and line-of-sight over
+    // every declared combination, and issue #272's seventh board took it to 3.8s on the
+    // development machine -- comfortably green here and within a factor of two of timing
+    // out on a slower CI runner. Raised on that measurement rather than after a red build,
+    // and raised rather than sampled: the denominator in the title IS the assertion.
+  }, 30_000);
 
   it('versusCatalogFailures sweeps the whole shipped catalog to the same answer', () => {
     expect(versusCatalogFailures()).toEqual([]);
-  });
+    // Same reasoning and the same measurement as the sweep above: 3.2s locally at seven
+    // boards, which is not a safe margin against a 5s default on slower hardware.
+  }, 30_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -333,5 +342,163 @@ describe('vs-duel-01: the duel board is its own 180-degree rotation', () => {
       }
     }
     expect(mirrored, 'the board is left-right mirrored, so the rotation test proves less than it claims').toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// vs-tri-01's own design claims (issue #272). Same division as vs-duel-01 above: the
+// geometry sweep proves the board is LEGAL, and these prove it is the board its notes
+// say it is.
+//
+// The shape of the claim differs, and that difference is the point. A rectangular grid
+// has no three-fold rotation -- its symmetry group is {identity, 180 degrees, two
+// mirrors}, order 4, with no element of order 3 -- so #271's "the board is its own
+// rotation" is unavailable at N=3. Criterion 4's "another explicitly justified
+// three-way balance" is therefore discharged in two halves: a MIRROR the two base
+// players hold by construction, and a MEASURED equivalence for the third, which sits on
+// the mirror axis and so has no partner to be equal to.
+//
+// Versus spawns are not the authored letters -- `loadArena`'s versus branch derives them
+// from geometry via `pickVersusSpawnCell` -- so every claim below is about where that
+// policy actually lands, not about where a letter was typed.
+// ---------------------------------------------------------------------------
+
+describe('vs-tri-01: mirrored for two players, measured for the third', () => {
+  const arena = arenaById('vs-tri-01');
+  const AXIS = 13; // column c mirrors to (cols - 1 - c) = 26 - c; 13 is its own partner
+  /** Wall kind alone: `undefined` for open floor AND for a spawn letter -- same reason
+   * the duel board's comparison gives, since `P` and `B` are not mirror partners here. */
+  const kindAt = (c: number, r: number): WallKind | undefined => arena.legend[arena.grid[r][c]];
+
+  const blocked = (c: number, r: number): boolean =>
+    c < 0 || r < 0 || c >= arena.cols || r >= arena.rows || kindAt(c, r) !== undefined;
+
+  /** Shortest walkable path in cells, treating solid AND destructible as blocking --
+   * the AUTHORED variant, before anything is breached. Euclid is deliberately not used:
+   * two spawns can be close in a straight line and far apart to drive between, which is
+   * the same distinction `versus-spawns-drop-euclid-tiebreak` exists to protect. */
+  const pathLen = (from: [number, number], to: [number, number]): number => {
+    const key = (c: number, r: number): number => r * arena.cols + c;
+    const dist = new Map<number, number>([[key(from[0], from[1]), 0]]);
+    const queue: [number, number][] = [from];
+    for (let head = 0; head < queue.length; head++) {
+      const [c, r] = queue[head];
+      const d = dist.get(key(c, r)) as number;
+      if (c === to[0] && r === to[1]) return d;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr;
+        if (blocked(nc, nr) || dist.has(key(nc, nr))) continue;
+        dist.set(key(nc, nr), d + 1);
+        queue.push([nc, nr]);
+      }
+    }
+    return -1;
+  };
+
+  /** The real N=3 versus placement, as grid cells. `cellCentre` is (c + 0.5) * cellSize. */
+  const spawnCells = (): [number, number][] =>
+    loadArena(arena, 3, 'ffa').tanks
+      .filter((t) => t.kind === 'player')
+      .map((t) => [Math.round(t.pos.x / arena.cellSize - 0.5), Math.round(t.pos.y / arena.cellSize - 0.5)] as [number, number]);
+
+  it('every cell has the same wall kind as its mirror partner about the axis', () => {
+    const asymmetric: string[] = [];
+    let compared = 0;
+    for (let r = 0; r < arena.rows; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        compared++;
+        const partner = kindAt(arena.cols - 1 - c, r);
+        if (kindAt(c, r) !== partner) {
+          asymmetric.push(`(${c},${r})=${kindAt(c, r) ?? 'floor'} vs (${arena.cols - 1 - c},${r})=${partner ?? 'floor'}`);
+        }
+      }
+    }
+    expect(compared, 'the whole board, not a sample').toBe(27 * 17);
+    expect(asymmetric, 'vs-tri-01 is not its own mirror about the axis').toEqual([]);
+  });
+
+  it('the maximin policy lands on the authored triangle: two mirrored corners and one on the axis', () => {
+    const cells = spawnCells();
+    expect(cells).toHaveLength(3);
+    // Sorted, because the policy's output ORDER is not part of the claim -- only the set.
+    const sorted = [...cells].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(sorted).toEqual([[1, 15], [13, 1], [25, 15]]);
+    // The two base spawns really are mirror partners, which is what makes their
+    // equivalence structural rather than coincidental; the third really is on the axis,
+    // which is what leaves it needing the measurement below.
+    const base = sorted.filter(([c]) => c !== AXIS);
+    expect(base.map(([c]) => c)).toEqual([1, 25]);
+    expect(base[0][0]).toBe(arena.cols - 1 - base[1][0]);
+    expect(base[0][1]).toBe(base[1][1]);
+    expect(sorted.filter(([c]) => c === AXIS)).toEqual([[13, 1]]);
+  });
+
+  it('the three spawns are pairwise EQUIDISTANT along the real walkable path', () => {
+    const cells = spawnCells();
+    const pairs: number[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      for (let j = i + 1; j < cells.length; j++) pairs.push(pathLen(cells[i], cells[j]));
+    }
+    expect(pairs, 'C(3,2) pairs, every one of them').toHaveLength(3);
+    // 26 is not a tuning target that happened to come out even -- it is why the board is
+    // 27x17. Breaking the base lane so the two lower spawns cannot see each other costs a
+    // two-cell detour, taking base-to-base from 24 to 26, and row 15 is the row at which
+    // top-to-base is also 26. At 27x15 the same construction gives 26/24/24 and no wall
+    // can close it: the two distances have opposite parity there.
+    expect(pairs).toEqual([26, 26, 26]);
+  });
+
+  it('the axis spawn, which has no mirror partner, is no better placed than the two that do', () => {
+    // The half of criterion 4 that a mirror cannot discharge, and it caught a real
+    // asymmetry: before the keystone alcove was added the axis spawn sat in an open lane
+    // with 60 reachable cells within 8 steps and clear runs of 13 either side, against 38
+    // and 1-2 for each base spawn. Both figures are bounded rather than pinned exactly,
+    // so ordinary furniture edits do not churn this test, but the BAND is narrow enough
+    // that reopening that lane fails it.
+    const reach = (cell: [number, number], radius: number): number => {
+      const key = (c: number, r: number): number => r * arena.cols + c;
+      const dist = new Map<number, number>([[key(cell[0], cell[1]), 0]]);
+      const queue: [number, number][] = [cell];
+      let seen = 0;
+      for (let head = 0; head < queue.length; head++) {
+        const [c, r] = queue[head];
+        const d = dist.get(key(c, r)) as number;
+        if (d > 0) seen++;
+        if (d >= radius) continue;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nc = c + dc, nr = r + dr;
+          if (blocked(nc, nr) || dist.has(key(nc, nr))) continue;
+          dist.set(key(nc, nr), d + 1);
+          queue.push([nc, nr]);
+        }
+      }
+      return seen;
+    };
+    /** Total open cells in the four cardinal lines of sight -- how far you can be shot from. */
+    const openRun = (cell: [number, number]): number => {
+      let total = 0;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let c = cell[0] + dc, r = cell[1] + dr;
+        while (!blocked(c, r)) { total++; c += dc; r += dr; }
+      }
+      return total;
+    };
+    const cells = spawnCells();
+    const axis = cells.find(([c]) => c === AXIS) as [number, number];
+    const base = cells.filter(([c]) => c !== AXIS);
+    expect(base).toHaveLength(2);
+    // The two mirrored spawns must measure IDENTICALLY -- if they ever differ, the mirror
+    // above is not doing the work this test credits it with.
+    expect(reach(base[0], 8)).toBe(reach(base[1], 8));
+    expect(openRun(base[0])).toBe(openRun(base[1]));
+    // ...and the axis spawn sits within a small, stated distance of them.
+    expect(Math.abs(reach(axis, 8) - reach(base[0], 8)), 'reachable area within 8 steps').toBeLessThanOrEqual(4);
+    expect(Math.abs(reach(axis, 4) - reach(base[0], 4)), 'reachable area within 4 steps').toBeLessThanOrEqual(3);
+    expect(Math.abs(openRun(axis) - openRun(base[0])), 'total open sightline run').toBeLessThanOrEqual(2);
+    // Measured values behind the bounds, so a reader can see what the slack really is:
+    // axis 14/40/4 and each base 15/38/5 for (r4, r8, openRun). No separate "less than the
+    // old 13-cell lane" assertion: with each base measuring 5 and the bound above at 2, the
+    // axis is already confined to 3..7, so such a line could not fail without one of the
+    // three above failing first -- it would advertise coverage that the bounds already own.
   });
 });

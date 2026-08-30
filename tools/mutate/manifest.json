@@ -92,8 +92,8 @@
     "find": "let hi = span * 8;",
     "replace": "let hi = span * 4.5;",
     "expect": "killed",
-    "expectFailures": 13,
-    "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here. COUNT MOVED with issue #271: framing.test.ts sweeps every shipped arena, so a sixth board raises the number of cases this mutation fails from 11 to 13. Measured, not adjusted to fit.",
+    "expectFailures": 15,
+    "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here. COUNT MOVED with issue #271: framing.test.ts sweeps every shipped arena, so a sixth board raises the number of cases this mutation fails from 11 to 13. Measured, not adjusted to fit. DRIFTED UPWARD 13 -> 15 for issue #272, and verified rather than renumbered: the mutation was applied on BOTH trees and the failing-test SETS diffed. The two additions are `contains the whole arena and its walls, arena 7 @ 0.42` and `wastes little screen, arena 7 @ 0.42` -- the per-arena framing cases for vs-tri-01, which is the seventh entry in ARENAS. No test failed on main and stopped failing here, so this is coverage added by a new board rather than coverage moved off an old one.",
     "tests": [
       "src/render/framing.test.ts"
     ]
@@ -393,8 +393,8 @@
     "find": "    .filter((e) => e.players.includes(players) && e.modes.includes(mode))",
     "replace": "    .filter((e) => e.players.includes(players) && true)",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "versusMapChoices is the setup pane's offer list, and #270's contract is that the offer honors BOTH declared axes of an entry's support: player counts AND modes. Forcing the mode conjunct to true offers a map in a mode it never declared -- exactly the defect the declared catalog exists to prevent, and invisible on shipped data: all 5 shipped entries declare both modes, so the parity pin (6 (N, mode) combinations) and the versusBoardCatalog cross-check read identically under this mutation. Caught by 1 of 13 in versus-config.test.ts: the fails-if-a-predicate-is-dropped fixture, whose ffa-only entry makes versusMapChoices(2, 'teams') return ['vs-both', 'vs-ffa-duo'] instead of ['vs-both']. The players conjunct of the same filter is NOT separately mutated here; the same fixture test pins it (the (3,'ffa') and (4,'ffa') cases), and this entry's kill already proves the fixture reaches the real filter.",
+    "expectFailures": 2,
+    "why": "versusMapChoices is the setup pane's offer list, and #270's contract is that the offer honors BOTH declared axes of an entry's support: player counts AND modes. Forcing the mode conjunct to true offers a map in a mode it never declared -- exactly the defect the declared catalog exists to prevent, and invisible on shipped data: all 5 shipped entries declare both modes, so the parity pin (6 (N, mode) combinations) and the versusBoardCatalog cross-check read identically under this mutation. Caught by 1 of 13 in versus-config.test.ts: the fails-if-a-predicate-is-dropped fixture, whose ffa-only entry makes versusMapChoices(2, 'teams') return ['vs-both', 'vs-ffa-duo'] instead of ['vs-both']. The players conjunct of the same filter is NOT separately mutated here; the same fixture test pins it (the (3,'ffa') and (4,'ffa') cases), and this entry's kill already proves the fixture reaches the real filter. DRIFTED UPWARD 1 -> 2 for issue #272, verified the same way -- mutation applied on both trees, failing sets diffed, nothing lost. The addition is the `parity pin` case, and the reason is a real strengthening rather than an accident of counting: vs-tri-01 is the first catalog entry to declare ONE mode (`ffa`, since three players have no fair team split), so dropping the mode predicate now leaks a board into an (N, mode) combination that does not declare it. Before this board every entry declared both modes, and the predicate could only be caught by the narrower case below.",
     "tests": [
       "src/game/versus-config.test.ts"
     ]
@@ -2041,10 +2041,10 @@
   {
     "id": "duel-board-offered-at-every-player-count",
     "file": "src/sim/config/data/versus-catalog.json",
-    "find": "\"players\": [\n        2\n      ],\n      \"modes\": [\n        \"ffa\",\n        \"teams\"\n      ],\n      \"spawnPolicy\": \"maximin\",\n      \"variants\": [\n        \"seeded-destructible\"\n      ]\n    }\n  ]\n}",
-    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],\n      \"modes\": [\n        \"ffa\",\n        \"teams\"\n      ],\n      \"spawnPolicy\": \"maximin\",\n      \"variants\": [\n        \"seeded-destructible\"\n      ]\n    }\n  ]\n}",
+    "find": "\"players\": [\n        2\n      ],",
+    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
     "expect": "killed",
-    "why": "The curation undone: the duel board advertised wherever it mechanically passes. This is the mutation the shipped validators CANNOT catch, and that is the whole reason it is pinned here -- vs-duel-01 measures suitable at N=3 and N=4 (versus-board.test.ts sweeps all 18 combinations and finds 18), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. Before this branch the catalog's own test asserted every entry declared [2,3,4], so the widened form was the CONFORMING one. The ruling it breaks is that the offer is curated rather than derived: a board designed as a duel is withheld at counts where it is playable but not designed for. `declares the player counts each entry is CURATED for, not merely the ones it passes at` and `cross-check: everything offered is measured suitable, and what is withheld is named` are the cases that measure it, in two different files, from the catalog side and the menu side. Scoped to versus-catalog.test.ts; expectFailures counts that scoped run only.",
+    "why": "The curation undone: the duel board advertised wherever it mechanically passes. This is the mutation the shipped validators CANNOT catch, and that is the whole reason it is pinned here -- vs-duel-01 measures suitable at N=3 and N=4 (versus-board.test.ts sweeps all 18 combinations and finds 18), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. Before this branch the catalog's own test asserted every entry declared [2,3,4], so the widened form was the CONFORMING one. The ruling it breaks is that the offer is curated rather than derived: a board designed as a duel is withheld at counts where it is playable but not designed for. `declares the player counts each entry is CURATED for, not merely the ones it passes at` and `cross-check: everything offered is measured suitable, and what is withheld is named` are the cases that measure it, in two different files, from the catalog side and the menu side. Scoped to versus-catalog.test.ts; expectFailures counts that scoped run only. RE-ANCHORED for issue #272: this entry's find string used to run from `players` to the CLOSING BRACKETS OF THE FILE, which only matched while vs-duel-01 was the last catalog entry. Appending vs-tri-01 after it made the string absent and the harness reported failed-to-apply -- correctly, and it is the only thing that would have. The anchor is now the `players` block alone, which is unique to this entry (the five campaign boards declare [2,3,4] and vs-tri-01 declares [3]) and does not depend on position in the file.",
     "tests": [
       "src/sim/config/versus-catalog.test.ts"
     ],
@@ -2147,6 +2147,30 @@
     "why": "`stop()` clears its running flag but never cancels the frame it has already queued -- the guard is inverted so it can never fire. Strictly milder than `retired-session-keeps-advancing-the-world`: `frame`'s own `if (!running) return;` still makes the leaked callback inert, so the world does NOT advance twice and only the registration leaks. 1 of 397, at 'leaves exactly one outstanding frame registration' -- and NOT at 'leaves exactly one frame loop still ADVANCING the world', which is the whole reason both entries exist. This one is genuinely new coverage: run against origin/main's loop.test.ts the same mutation passes all 388 tests, because that rAF fake held a single `pending` callback slot and a no-op `cancel`, so one live frame loop and two were indistinguishable.",
     "tests": [
       "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "tri-board-loses-its-mirror-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\".xx##...##.......##...##xx.\"",
+    "replace": "\".xx##...##.......##...###x.\"",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "One cell of vs-tri-01's base pocket turned from destructible to solid, breaking the mirror about column 13 that its notes claim (issue #272). The same shape as `duel-board-loses-its-rotational-symmetry` and for the same reason: the board still loads, still validates, still has three distinct and mutually concealed spawns at N=3, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for the two base players is carried entirely BY the mirror: one of them now has a wall where the other has a breachable, so they no longer hold the same board reflected. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
+  },
+  {
+    "id": "tri-board-offered-at-every-player-count",
+    "file": "src/sim/config/data/versus-catalog.json",
+    "find": "\"players\": [\n        3\n      ],",
+    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The curation undone for the three-player board: vs-tri-01 advertised wherever it mechanically passes. Like `duel-board-offered-at-every-player-count`, this is the mutation the shipped validators CANNOT catch -- vs-tri-01 measures suitable at N=2 and N=4 as well (versus-board.test.ts sweeps all 21 (arena, N) combinations and finds 21), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose three maximin spawns were placed an equal 26 walkable cells apart has nothing to say about two players or four. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only. Anchored on the `players` block alone rather than on the end of the file, so that appending an eighth board cannot silently stop this entry applying -- the failure mode the duel board's own entry hit here.",
+    "tests": [
+      "src/sim/config/versus-catalog.test.ts"
     ]
   },
   {

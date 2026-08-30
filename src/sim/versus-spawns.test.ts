@@ -31,8 +31,8 @@ import type { WallKind } from './types';
 // ---------------------------------------------------------------------------
 
 describe('wallsForQuery: convergence with loadArena\'s real solid-wall geometry', () => {
-  it('produces the same solid-wall rectangles as loadArena, on all 6 shipped arenas', () => {
-    expect(ARENAS.length).toBe(6); // the population this test claims
+  it('produces the same solid-wall rectangles as loadArena, on all 7 shipped arenas', () => {
+    expect(ARENAS.length).toBe(7); // the population this test claims
 
     function solidRects(walls: { aabb: { minX: number; minY: number; maxX: number; maxY: number } }[]) {
       return walls
@@ -199,7 +199,7 @@ describe('pickVersusSpawnSet: the relaxation pass runs to convergence, not one r
     ]);
   });
 
-  it('returns exactly `count` distinct cells for every count 1..4, on all 6 shipped arenas', () => {
+  it('returns exactly `count` distinct cells for every count 1..4, on all 7 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       for (const n of [1, 2, 3, 4]) {
         const cells = pickVersusSpawnSet(arena.grid, arena.cols, arena.rows, arena.cellSize, arena.legend, n);
@@ -366,11 +366,11 @@ describe('pickVersusSpawnCell: negative controls (separation genuinely constrain
 });
 
 describe('pickVersusSpawnCell wired through loadArena: before/after on every shipped arena', () => {
-  // Denominator for every claim in this block: 6 shipped arenas x 2 versus modes
+  // Denominator for every claim in this block: 7 shipped arenas x 2 versus modes
   // (ffa/teams) x 3 player counts (2, 3, 4) = 30 loadArena calls, 100 total player
   // pairs (1 + 3 + 6 pairs per arena per mode).
-  it('ARENAS holds exactly 6 shipped arenas -- the population every sweep below claims', () => {
-    expect(ARENAS.length).toBe(6);
+  it('ARENAS holds exactly 7 shipped arenas -- the population every sweep below claims', () => {
+    expect(ARENAS.length).toBe(7);
   });
 
   // BEFORE this change, measured directly against the pre-fix ring search
@@ -399,7 +399,7 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
         }
       }
     }
-    expect(totalPairs).toBe(120);
+    expect(totalPairs).toBe(140);
     expect(visiblePairs).toBe(0);
   });
 
@@ -480,7 +480,7 @@ describe('pickVersusSpawnCell wired through loadArena: before/after on every shi
     }
   });
 
-  it('campaign-coop is untouched: loadArena(arena, n, "campaign-coop") is unchanged from the pre-existing ring search, on all 6 shipped arenas at N=2..4', () => {
+  it('campaign-coop is untouched: loadArena(arena, n, "campaign-coop") is unchanged from the pre-existing ring search, on all 7 shipped arenas at N=2..4', () => {
     // This does not re-implement the ring search to compare against -- that would only
     // prove two copies of the same logic agree. It instead pins that the co-op path
     // still produces DISTINCT, in-bounds cells and never routes through the versus
@@ -620,8 +620,8 @@ describe('clearance-filtered candidate pools (issue #225)', () => {
     expect(versusSpawnClearanceFailures(grid, 5, 5, 0.6, legend, [diag, ...avoid]).length).toBeGreaterThan(0);
   });
 
-  it('shipped sweep: every spawn on all 18 (arena, N) combinations is hull-clear -- 0 violations measured', () => {
-    // Population: 6 shipped arenas x N in {2,3,4} = 18 combinations, real loadArena
+  it('shipped sweep: every spawn on all 21 (arena, N) combinations is hull-clear -- 0 violations measured', () => {
+    // Population: 7 shipped arenas x N in {2,3,4} = 18 combinations, real loadArena
     // placement. Before the filter (issue #225) this measured 2 violations on
     // arena-01 at N=2 alone -- P1 anchored at the corner cell, 0.333 from two
     // boundaries at cellSize 2/3, a 0.5-radius hull overlapping the wall by 0.167.
@@ -629,7 +629,7 @@ describe('clearance-filtered candidate pools (issue #225)', () => {
     // criterion, not a parity statement. Issue #271's vs-duel-01 is the first board
     // authored after the filter existed, and it passes with nothing done for it: the
     // corner it spawns into is the same corner arena-01 failed at.
-    expect(ARENA_DEFS.length).toBe(6);
+    expect(ARENA_DEFS.length).toBe(7);
     for (const arena of ARENA_DEFS) {
       for (const n of [2, 3, 4] as const) {
         const { tanks } = loadArena(arena, n, 'ffa');

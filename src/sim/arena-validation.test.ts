@@ -65,6 +65,12 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   // clearance, and every seeded variant -- are declared in versus-catalog.json and proved
   // by versus-catalog-rules.ts. An empty inventory here is a claim, not an omission.
   'vs-duel-01': {},
+  // Same reasoning, same deliberate emptiness: `vs-tri-01` (issue #272) is the
+  // three-player versus board, and its guarantees are the versus ones -- an equilateral
+  // 26-cell path triangle between the three maximin spawns, all three pairs concealed,
+  // room, connectivity, clearance and every seeded variant -- declared in
+  // versus-catalog.json and proved by versus-catalog-rules.ts.
+  'vs-tri-01': {},
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {
