@@ -13,12 +13,24 @@ import {
 
 const API_VERSION = '2022-11-28';
 
+/**
+ * Shapes for this module (issue #417). Same posture as metadata.mjs's: every field is
+ * optional, because each of these option bags is destructured with defaults and every
+ * caller -- CLI, workflow and test -- supplies a different subset.
+ *
+ * @typedef {import('./metadata.mjs').GhIssue} GhIssue
+ * @typedef {(path: string, options?: RequestOptions) => Promise<any>} GitHubRequest
+ * @typedef {{ method?: string, body?: unknown, allowStatuses?: number[] }} RequestOptions
+ */
+
+/** @param {unknown} remote @returns {string | null} */
 export function parseRepositoryRemote(remote) {
   const normalized = String(remote ?? '').trim().replace(/\.git$/, '');
   const match = /(?:github\.com[/:])([^/]+)\/([^/]+)$/.exec(normalized);
   return match === null ? null : `${match[1]}/${match[2]}`;
 }
 
+/** @param {{ explicit?: string, env?: Record<string, string | undefined>, git?: typeof execFileSync }} [options] @returns {string} */
 export function resolveRepository({ explicit, env = process.env, git = execFileSync } = {}) {
   const candidate = explicit || env.GITHUB_REPOSITORY;
   if (candidate) return candidate;
@@ -34,6 +46,7 @@ export function resolveRepository({ explicit, env = process.env, git = execFileS
   throw new Error('repository is unknown; pass --repo owner/name or run inside a GitHub checkout');
 }
 
+/** @param {string} repository @returns {string} */
 const repositoryPath = (repository) => {
   const parts = String(repository).split('/');
   if (parts.length !== 2 || parts.some((part) => !/^[A-Za-z0-9_.-]+$/.test(part))) {
@@ -42,6 +55,10 @@ const repositoryPath = (repository) => {
   return parts.map(encodeURIComponent).join('/');
 };
 
+/**
+ * @param {{ apiUrl?: string, token?: string, fetchImpl?: typeof globalThis.fetch }} [options]
+ * @returns {GitHubRequest}
+ */
 export function createGitHubRequest({
   apiUrl = 'https://api.github.com',
   token,
@@ -51,6 +68,7 @@ export function createGitHubRequest({
   const root = apiUrl.replace(/\/$/, '');
 
   return async (path, { method = 'GET', body, allowStatuses = [] } = {}) => {
+    /** @type {Record<string, string>} */
     const headers = {
       Accept: 'application/vnd.github+json',
       'User-Agent': 'tanks-issue-metadata-audit',
@@ -83,6 +101,7 @@ export function createGitHubRequest({
   };
 }
 
+/** @param {string} repository @param {GitHubRequest} request */
 export async function listOpenIssues(repository, request) {
   const repo = repositoryPath(repository);
   const issues = [];
@@ -100,6 +119,7 @@ export async function listOpenIssues(repository, request) {
   return issues;
 }
 
+/** @template T, R @param {T[]} values @param {number} limit @param {(value: T) => Promise<R>} action @returns {Promise<R[]>} */
 async function mapWithConcurrency(values, limit, action) {
   const results = new Array(values.length);
   let next = 0;
@@ -115,6 +135,7 @@ async function mapWithConcurrency(values, limit, action) {
   return results;
 }
 
+/** @param {string} repo @param {number} issueNumber @param {string} relationship @param {GitHubRequest} request */
 async function listRelationshipIssues(repo, issueNumber, relationship, request) {
   const related = [];
   for (let page = 1; ; page += 1) {
@@ -129,8 +150,10 @@ async function listRelationshipIssues(repo, issueNumber, relationship, request) 
   }
 }
 
-const nonNegativeCount = (value) => Number.isInteger(value) && value >= 0 ? value : 0;
+/** @param {unknown} value @returns {number} */
+const nonNegativeCount = (value) => Number.isInteger(value) && Number(value) >= 0 ? Number(value) : 0;
 
+/** @param {string} repository @param {GhIssue[]} issues @param {GitHubRequest} request */
 export async function enrichOpenIssueRelationships(repository, issues, request) {
   const repo = repositoryPath(repository);
   return mapWithConcurrency(issues, 6, async (issue) => {
@@ -152,10 +175,10 @@ export async function enrichOpenIssueRelationships(repository, issues, request) 
         ? null
         : request(`/repos/${repo}/issues/${issue.number}/parent`, { allowStatuses: [404] }),
       inspectBlockers
-        ? listRelationshipIssues(repo, issue.number, 'dependencies/blocked_by', request)
+        ? listRelationshipIssues(repo, /** @type {number} */ (issue.number), 'dependencies/blocked_by', request)
         : [],
       inspectSubIssues
-        ? listRelationshipIssues(repo, issue.number, 'sub_issues', request)
+        ? listRelationshipIssues(repo, /** @type {number} */ (issue.number), 'sub_issues', request)
         : [],
     ]);
 
@@ -173,12 +196,13 @@ export async function enrichOpenIssueRelationships(repository, issues, request) 
   });
 }
 
+/** @param {string} repository @param {{ action?: string, issue?: GhIssue }} payload @param {GitHubRequest} request */
 export async function applyIssueEvent(repository, payload, request) {
   const issue = payload?.issue;
   const number = issue?.number;
   if (!Number.isInteger(number)) throw new Error('issue event payload has no numeric issue.number');
 
-  const changes = planIssueEventLabelChanges(payload?.action, issue);
+  const changes = planIssueEventLabelChanges(payload?.action ?? '', issue);
   const repo = repositoryPath(repository);
 
   for (const label of changes.remove) {
@@ -198,6 +222,7 @@ export async function applyIssueEvent(repository, payload, request) {
   return changes;
 }
 
+/** @param {string | undefined} path @param {string} report */
 export function appendStepSummary(path, report) {
   if (!path) return;
   appendFileSync(path, report, 'utf8');
@@ -205,6 +230,7 @@ export function appendStepSummary(path, report) {
   if (!after.endsWith(report)) throw new Error('GitHub step summary read-back did not match');
 }
 
+/** @param {string[]} argv */
 function parseArguments(argv) {
   const args = [...argv];
   const mode = args.shift();
@@ -230,7 +256,7 @@ export async function main({
   log = console.log,
 } = {}) {
   const args = parseArguments(argv);
-  if (!['audit', 'event'].includes(args.mode)) {
+  if (!['audit', 'event'].includes(args.mode ?? '')) {
     throw new Error('usage: node tools/issues/run.mjs <audit|event> [--repo owner/name]');
   }
 

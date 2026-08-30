@@ -32,6 +32,13 @@
  *   labels?: GhLabel[],
  *   pull_request?: unknown,
  *   nativeRelationships?: NativeRelationships,
+ *   issue_dependencies_summary?: {
+ *     blocked_by?: number,
+ *     total_blocked_by?: number,
+ *     blocking?: number,
+ *     total_blocking?: number,
+ *   },
+ *   sub_issues_summary?: { total?: number, completed?: number },
  * }} GhIssue
  *
  * The two problem shapes the audit emits. They are a UNION rather than one shape with
