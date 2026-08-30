@@ -1308,11 +1308,11 @@
   {
     "id": "app-ground-covers-every-application-surface",
     "file": "src/game/hud.ts",
-    "find": "appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu);",
-    "replace": "appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu && !atLaunch);",
+    "find": "        [GROUND_SURFACE, atMainMenu],",
+    "replace": "        [GROUND_SURFACE, atMainMenu || atLaunch],",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Widens the application backdrop by ONE surface, which is the mistake this gate is most likely to be made into: `.hud-splash`'s own rule already keys on `atLaunch`, so folding the ground into it looks like consistency. It is not -- the title screen is deliberately a 0.92 scrim over the live arena ('the game is visibly already there, waiting'), and an opaque ground under it removes the only place the game is shown before it starts. The same one-surface widening applied to `paused` or an outcome screen would hide the board the player is reading the panel over, which is why hud.test.ts sweeps all six surfaces rather than sampling. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "expectFailures": 3,
+    "why": "Widens the application backdrop by ONE surface, which is the mistake this gate is most likely to be made into: `.hud-splash`'s own rule already keys on `atLaunch`, so folding the ground into it looks like consistency. It is not -- the title screen is deliberately a 0.92 scrim over the live arena ('the game is visibly already there, waiting'), and an opaque ground under it removes the only place the game is shown before it starts. The same one-surface widening applied to `paused` or an outcome screen would hide the board the player is reading the panel over, which is why hud.test.ts sweeps all six surfaces rather than sampling. RE-CUT for issue #364: the gate moved from a bare `appGroundEl.classList.toggle('ui-app-ground--hidden', !atMainMenu)` into the one transition contract's desired-state list, so the old anchor stopped applying -- which only `failed-to-apply` reported, while a grep for the status word read the run as fine. Same mutation, inverted sense: the list says which surfaces should be OPEN, so widening is `|| atLaunch` rather than `&& !atLaunch`. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/hud.test.ts"
     ]
