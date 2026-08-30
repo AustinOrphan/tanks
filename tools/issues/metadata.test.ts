@@ -321,6 +321,35 @@ describe('native relationship contract', () => {
     expect(result.errors[0].issueNumbers).toEqual([94, 95]);
   });
 
+  it('treats an ABSENT native parent the same as a null one, instead of throwing (issue #417)', () => {
+    // A real latent crash, found by typing this module under checkJs -- `tsc` flagged
+    // `nativeParent` as possibly undefined, and the payload shape allows it: GitHub
+    // omits the key rather than sending null when there is no parent.
+    //
+    // Measured against `metadata.mjs` as it stood: this input threw
+    // `TypeError: Cannot read properties of undefined (reading 'number')` out of
+    // `auditOpenIssues`, taking the whole audit down rather than reporting one issue.
+    // The audit runs on every `issues` event, so one such payload broke the required check
+    // for every issue in the run, with a stack trace instead of a remediation.
+    const issue = {
+      number: 5,
+      state: 'open',
+      title: 't',
+      body: 'Parent: #9',
+      labels: completeLabels.map((name) => ({ name })),
+      // parentLoaded is TRUE -- the lookup ran -- but no `parent` key came back.
+      nativeRelationships: {
+        loaded: true,
+        parentLoaded: true,
+        blockersLoaded: true,
+        blockedBy: [],
+        subIssues: [],
+      },
+    };
+    const result = auditOpenIssues([issue]);
+    expect(codes(result.errors)).toContain('declared-parent-missing-native');
+  });
+
   it('reports a cycle ONCE when the same back-edge is listed twice (issue #417)', () => {
     // The de-duplication in `findDependencyCycles` had no test at all. Proven by
     // deleting `cycleKeys`, its sorted key and the `if` outright: all 25 tests in this

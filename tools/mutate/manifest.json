@@ -2342,6 +2342,18 @@
     ]
   },
   {
+    "id": "absent-native-parent-crashes-the-audit",
+    "file": "tools/issues/metadata.mjs",
+    "find": "        if (nativeParent === null || nativeParent === undefined) {",
+    "replace": "        if (nativeParent === null) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Restores a real latent crash that typing this module under checkJs surfaced (issue #417). GitHub OMITS the parent key rather than sending null when an issue has none, so `parentLoaded: true` with no `parent` sent `auditOpenIssues` into `nativeParent.number` and threw TypeError. The audit runs on every issues event, so one such payload took down the required check for every issue in the run -- a stack trace instead of a remediation. Measured on the pre-fix tree: it threw; after, it reports declared-parent-missing-native.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
+  },
+  {
     "id": "hover-escapes-the-pointer-query",
     "file": "src/game/hud.css",
     "find": "@media (hover: hover) {",

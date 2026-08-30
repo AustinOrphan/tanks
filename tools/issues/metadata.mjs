@@ -1,3 +1,61 @@
+/**
+ * @typedef {keyof typeof LABEL_DIMENSIONS} LabelDimension
+ *
+ * Shared shapes for this module (issue #417). `tools/issues` is `.mjs` under `checkJs`,
+ * so these typedefs are the only way to give `tsc` anything to check -- there is no
+ * `.d.ts` and no build step that would infer them.
+ *
+ * They describe the GitHub REST payloads as this tool actually reads them, which is
+ * deliberately LOOSER than GitHub's own schema: every field this code touches is
+ * optional, because the audit runs against `issues list` output, against
+ * `issues view --json`, and against hand-built fixtures in the tests, and those three
+ * disagree about which fields are present. Typing them as required would force casts at
+ * every call site and check nothing.
+ *
+ * @typedef {{ name?: string } | string} GhLabel
+ * @typedef {{ number?: number, state?: string }} GhRef
+ * @typedef {{
+ *   loaded?: boolean,
+ *   parentLoaded?: boolean,
+ *   blockersLoaded?: boolean,
+ *   parent?: GhRef | null,
+ *   blockedBy?: GhRef[],
+ *   blocking?: GhRef[],
+ *   subIssues?: GhRef[],
+ * }} NativeRelationships
+ * @typedef {{
+ *   number?: number,
+ *   issue_number?: number,
+ *   state?: string,
+ *   title?: string,
+ *   body?: string,
+ *   labels?: GhLabel[],
+ *   pull_request?: unknown,
+ *   nativeRelationships?: NativeRelationships,
+ *   issue_dependencies_summary?: {
+ *     blocked_by?: number,
+ *     total_blocked_by?: number,
+ *     blocking?: number,
+ *     total_blocking?: number,
+ *   },
+ *   sub_issues_summary?: { total?: number, completed?: number },
+ * }} GhIssue
+ *
+ * The two problem shapes the audit emits. They are a UNION rather than one shape with
+ * both fields optional, because a reader has to be able to tell "this problem names one
+ * issue" from "this problem names a set" -- and the tests assert on exactly that.
+ *
+ * Each member declares the OTHER member's field as optional-undefined. Without that,
+ * reading `problem.issueNumber` off the union is a type error even though the check
+ * `'issueNumber' in problem` is exactly how the code narrows it -- and every caller and
+ * test would need a cast. This keeps the two shapes distinguishable while letting either
+ * field be read and then narrowed.
+ *
+ * @typedef {{ issueNumber: number | null, issueNumbers?: undefined, code: string, message: string, remediation: string }} IssueProblem
+ * @typedef {{ issueNumbers: number[], issueNumber?: undefined, code: string, message: string, remediation: string }} QueueProblem
+ * @typedef {IssueProblem | QueueProblem} AuditProblem
+ */
+
 export const MAX_NOW_ISSUES = 8;
 
 export const LABEL_DIMENSIONS = Object.freeze({
@@ -25,19 +83,24 @@ const DIMENSION_PREFIXES = Object.freeze({
 });
 
 const READY_SIZES = new Set(['size:xs', 'size:s', 'size:m']);
+/** @type {ReadonlyArray<{ dimension: LabelDimension, heading: string }>} */
 const FORM_SELECTIONS = Object.freeze([
   { dimension: 'area', heading: 'Primary area' },
   { dimension: 'impact', heading: 'Expected impact' },
 ]);
 
+/** @param {GhLabel} label */
 const labelName = (label) =>
   (typeof label === 'string' ? label : label?.name ?? '').trim().toLowerCase();
 
+/** @param {GhIssue} issue @returns {string[]} */
 export const issueLabelNames = (issue) =>
   (Array.isArray(issue?.labels) ? issue.labels : []).map(labelName).filter(Boolean);
 
+/** @param {GhIssue} issue @returns {number | null} */
 const issueNumber = (issue) => issue?.number ?? issue?.issue_number ?? null;
 
+/** @param {GhIssue} issue @param {string} code @param {string} message @param {string} remediation @returns {IssueProblem} */
 const issueProblem = (issue, code, message, remediation) => ({
   issueNumber: issueNumber(issue),
   code,
@@ -45,6 +108,7 @@ const issueProblem = (issue, code, message, remediation) => ({
   remediation,
 });
 
+/** @param {number[]} issueNumbers @param {string} code @param {string} message @param {string} remediation @returns {QueueProblem} */
 const queueProblem = (issueNumbers, code, message, remediation) => ({
   issueNumbers,
   code,
@@ -52,8 +116,10 @@ const queueProblem = (issueNumbers, code, message, remediation) => ({
   remediation,
 });
 
+/** @param {string | undefined | null} body @returns {string[]} */
 const normalizedLines = (body) => String(body ?? '').replaceAll('\r\n', '\n').split('\n');
 
+/** @param {string | undefined | null} body @param {string} heading @returns {string[]} */
 export function markdownSections(body, heading) {
   const lines = normalizedLines(body);
   const wanted = heading.trim().toLowerCase();
@@ -77,6 +143,7 @@ export function markdownSections(body, heading) {
   return sections;
 }
 
+/** @param {unknown} value @returns {number[]} */
 const issueReferences = (value) =>
   [...String(value ?? '').matchAll(/#(\d+)/g)].map((match) => Number(match[1]));
 
@@ -102,8 +169,10 @@ const CODE_FENCE = /^\s{0,3}(?:```|~~~)/;
 //
 // Span contents become spaces and newlines are preserved, so every line keeps its offset
 // for the heading scan, exactly as blanked fence lines do.
+/** @param {string} text @returns {string} */
 function blankCodeSpans(text) {
   const chars = [...text];
+  /** @param {number} i */
   const runAt = (i) => {
     let n = 0;
     while (i + n < chars.length && chars[i + n] === '`') n += 1;
@@ -160,6 +229,7 @@ function blankCodeSpans(text) {
 // to the end of the document, so a mirror below one really is inside code. It also fails
 // safe -- the cost is a missed relationship, not a false error against an issue that
 // never claimed one.
+/** @param {string | undefined | null} body @returns {string} */
 function withoutCodeMarkup(body) {
   const lines = [];
   let fenced = false;
@@ -179,6 +249,7 @@ function withoutCodeMarkup(body) {
   return blankCodeSpans(lines.join('\n'));
 }
 
+/** @param {string | undefined | null} body @returns {number | null} */
 export function declaredSingularParent(body) {
   const prose = withoutCodeMarkup(body);
   const lines = normalizedLines(prose);
@@ -199,6 +270,7 @@ export function declaredSingularParent(body) {
   return distinct.length === 1 ? distinct[0] : null;
 }
 
+/** @param {string | undefined | null} body @param {string} heading @param {readonly string[]} allowed @returns {string | null} */
 function explicitSelection(body, heading, allowed) {
   const sections = markdownSections(body, heading);
   if (sections.length !== 1) return null;
@@ -210,7 +282,9 @@ function explicitSelection(body, heading, allowed) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+/** @param {string | undefined | null} body @returns {Partial<Record<LabelDimension, string>>} */
 export function explicitFormLabels(body) {
+  /** @type {Partial<Record<LabelDimension, string>>} */
   const selected = {};
   for (const { dimension, heading } of FORM_SELECTIONS) {
     const value = explicitSelection(body, heading, LABEL_DIMENSIONS[dimension]);
@@ -219,6 +293,7 @@ export function explicitFormLabels(body) {
   return selected;
 }
 
+/** @param {string} action @param {GhIssue} issue */
 export function planIssueEventLabelChanges(action, issue) {
   const labels = issueLabelNames(issue);
 
@@ -240,7 +315,7 @@ export function planIssueEventLabelChanges(action, issue) {
   const remove = [];
 
   for (const [dimension, wanted] of Object.entries(selected)) {
-    const prefix = DIMENSION_PREFIXES[dimension];
+    const prefix = DIMENSION_PREFIXES[/** @type {LabelDimension} */ (dimension)];
     remove.push(...labels.filter((label) => label.startsWith(prefix) && label !== wanted));
     if (!labels.includes(wanted)) add.push(wanted);
   }
@@ -251,6 +326,7 @@ export function planIssueEventLabelChanges(action, issue) {
   };
 }
 
+/** @param {GhIssue} issue @returns {{ heading: string, marker: string }[]} */
 function unresolvedReadinessMarkers(issue) {
   const headings = [
     'Dependencies',
@@ -285,6 +361,7 @@ function unresolvedReadinessMarkers(issue) {
   return warnings;
 }
 
+/** @param {GhIssue} issue @returns {GhRef[]} */
 const openNativeBlockers = (issue) => {
   const relationships = issue?.nativeRelationships;
   if (relationships?.loaded !== true) return [];
@@ -292,24 +369,36 @@ const openNativeBlockers = (issue) => {
     .filter((blocker) => blocker?.state !== 'closed');
 };
 
+/** @param {GhIssue} issue @returns {boolean} */
 const hasImplementationBreakdown = (issue) =>
   markdownSections(issue?.body, 'Implementation breakdown')
     .some((section) => /^\s*-\s*\[[ xX]\]\s+#\d+/m.test(section));
 
+/** @param {GhIssue[]} issues @returns {number[][]} */
 function findDependencyCycles(issues) {
   const issueNumbers = new Set(issues.map(issueNumber).filter((number) => number !== null));
-  const graph = new Map(issues.map((issue) => [
-    issueNumber(issue),
-    openNativeBlockers(issue)
+  /** @type {Map<number, number[]>} */
+  const graph = new Map();
+  for (const issue of issues) {
+    const number = issueNumber(issue);
+    if (number === null) continue;
+    graph.set(number, openNativeBlockers(issue)
       .map(issueNumber)
-      .filter((number) => number !== null && issueNumbers.has(number)),
-  ]));
+      // Filter THEN cast, rather than one predicate: `.filter(x => x !== null)` does not
+      // narrow `number | null` to `number` under checkJs, so the cast states what the
+      // filter beside it already guarantees (issue #417).
+      .filter((candidate) => candidate !== null && issueNumbers.has(candidate))
+      .map((candidate) => /** @type {number} */ (candidate)));
+  }
   const visiting = new Map();
   const visited = new Set();
+  /** @type {number[]} */
   const stack = [];
+  /** @type {number[][]} */
   const cycles = [];
   const cycleKeys = new Set();
 
+  /** @param {number} number */
   const visit = (number) => {
     const stackIndex = visiting.get(number);
     if (stackIndex !== undefined) {
@@ -334,6 +423,7 @@ function findDependencyCycles(issues) {
   return cycles;
 }
 
+/** @param {GhIssue[]} inputIssues @param {{ maxNow?: number }} [options] */
 export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
   const issues = (Array.isArray(inputIssues) ? inputIssues : [])
     .filter((issue) => issue?.state !== 'closed' && issue?.pull_request === undefined)
@@ -350,7 +440,8 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     for (const [dimension, allowed] of Object.entries(LABEL_DIMENSIONS)) {
       const matches = allowed.filter((label) => labels.includes(label));
       const unknown = labels.filter(
-        (label) => label.startsWith(DIMENSION_PREFIXES[dimension]) && !allowed.includes(label),
+        (label) => label.startsWith(DIMENSION_PREFIXES[/** @type {LabelDimension} */ (dimension)])
+          && !allowed.includes(label),
       );
 
       if (matches.length === 0) {
@@ -390,7 +481,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
       const declaredParent = declaredSingularParent(issue?.body);
       if (declaredParent !== null && issue.nativeRelationships.parentLoaded === true) {
         const nativeParent = issue.nativeRelationships.parent;
-        if (nativeParent === null) {
+        if (nativeParent === null || nativeParent === undefined) {
           errors.push(issueProblem(
             issue,
             'declared-parent-missing-native',
@@ -437,7 +528,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
       ));
     }
 
-    if (agentReady && !READY_SIZES.has(size)) {
+    if (agentReady && !READY_SIZES.has(size ?? '')) {
       errors.push(issueProblem(
         issue,
         'agent-ready-size',
@@ -457,7 +548,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
 
     if (priority === 'priority:now') {
       nowIssues.push(issue);
-      if (!agentReady || !READY_SIZES.has(size)) {
+      if (!agentReady || !READY_SIZES.has(size ?? '')) {
         errors.push(issueProblem(
           issue,
           'invalid-now-item',
@@ -517,17 +608,19 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
   };
 }
 
+/** @param {AuditProblem} problem @returns {string} */
 const problemReference = (problem) => {
-  if (problem.issueNumber !== undefined && problem.issueNumber !== null) {
+  if ('issueNumber' in problem && problem.issueNumber !== undefined && problem.issueNumber !== null) {
     return `#${problem.issueNumber}`;
   }
-  if (Array.isArray(problem.issueNumbers) && problem.issueNumbers.length > 0) {
+  if ('issueNumbers' in problem && Array.isArray(problem.issueNumbers) && problem.issueNumbers.length > 0) {
     const label = problem.code === 'now-limit' ? 'Now queue' : 'Issues';
     return `${label} (${problem.issueNumbers.map((number) => `#${number}`).join(', ')})`;
   }
   return 'Repository';
 };
 
+/** @param {ReturnType<typeof auditOpenIssues>} result @returns {string} */
 export function renderAuditReport(result) {
   const lines = [
     '# Issue metadata and relationship audit',

@@ -20,5 +20,5 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["src", "vite.config.ts", "tools/mutate/orchestrate.test.ts"]
+  "include": ["src", "vite.config.ts", "tools/mutate/orchestrate.test.ts", "tools/issues"]
 }
