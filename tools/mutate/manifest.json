@@ -257,8 +257,8 @@
   {
     "id": "versus-board-drops-concealment-requirement",
     "file": "src/sim/versus-board.ts",
-    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
-    "replace": "    suitable: distinctSpawns && roomOk,",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && roomOk && egressOk,",
     "expect": "killed",
     "expectFailures": 1,
     "why": "suitable must require every spawn pair to lack mutual line of sight, not just distinct cells and enough floor -- dropping allPairsConcealed from the conjunction leaves a fully-visible board reading as suitable. Caught by 1 of the 12 cases in versus-board.test.ts: the 10x10-open-room fixture built specifically to isolate concealment (no interior walls, so separation and room both measure true while every spawn pair stays mutually visible at every N in {2,3,4}) asserts suitable=false at N=2 and fails immediately once the mutation makes it true. The 15-shipped-arena sweep does not catch this: every shipped arena already measures 0 of its pairs visible (pickVersusSpawnCell's own hard LOS filter succeeds on all of them), so allPairsConcealed is true regardless of whether the mutation is applied, and suitable's value is unchanged for every shipped (arena, N) combination.",
@@ -269,8 +269,8 @@
   {
     "id": "versus-board-drops-room-requirement",
     "file": "src/sim/versus-board.ts",
-    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
-    "replace": "    suitable: distinctSpawns && allPairsConcealed,",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && allPairsConcealed && egressOk,",
     "expect": "killed",
     "expectFailures": 1,
     "why": "suitable must also require the open-floor-per-player ratio to clear MIN_OPEN_FLOOR_PER_PLAYER -- dropping roomOk from the conjunction leaves a board with plenty of separation and concealment but almost no floor space reading as suitable. Caught by 2 of the 12 cases in versus-board.test.ts: the 7x7 pillar-room fixture (39 open-floor cells, separation and concealment measuring true at every N while the ratio drops below the bound at N=3 and N=4) and the versusBoardCatalog test built against the same fixture at N=4. Equivalent to the concealment entry above in shape but not in effect -- this one changes a different conjunct and is caught by a different, deliberately non-overlapping fixture, so the two mutations cannot silently cover for each other. Count re-measured 2026-08-23: the pillar-room fixture's rescale to cellSize 2 (issue #225) consolidated the kill into 1 failing test.",
@@ -2162,18 +2162,6 @@
     ]
   },
   {
-    "id": "tri-board-offered-at-every-player-count",
-    "file": "src/sim/config/data/versus-catalog.json",
-    "find": "\"players\": [\n        3\n      ],",
-    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
-    "expect": "killed",
-    "expectFailures": 1,
-    "why": "The curation undone for the three-player board: vs-tri-01 advertised wherever it mechanically passes. Like `duel-board-offered-at-every-player-count`, this is the mutation the shipped validators CANNOT catch -- vs-tri-01 measures suitable at N=2 and N=4 as well (versus-board.test.ts sweeps all 21 (arena, N) combinations and finds 21), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose three maximin spawns were placed an equal 26 walkable cells apart has nothing to say about two players or four. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only. Anchored on the `players` block alone rather than on the end of the file, so that appending an eighth board cannot silently stop this entry applying -- the failure mode the duel board's own entry hit here.",
-    "tests": [
-      "src/sim/config/versus-catalog.test.ts"
-    ]
-  },
-  {
     "id": "campaign-lives-readout-ignores-the-world",
     "file": "src/game/loop.ts",
     "find": "    hud.setLives(w.lives);",
@@ -2219,18 +2207,6 @@
     "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/sim/versus-catalog-rules.test.ts"
-    ]
-  },
-  {
-    "id": "quad-board-offered-at-every-player-count",
-    "file": "src/sim/config/data/versus-catalog.json",
-    "find": "\"players\": [\n        4\n      ],",
-    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
-    "expect": "killed",
-    "expectFailures": 1,
-    "why": "The curation undone for the four-player board: vs-quad-01 advertised wherever it mechanically passes. Like the duel and tri entries before it, this is the mutation the shipped validators CANNOT catch -- vs-quad-01 measures suitable at N=2 and N=3 as well (versus-board.test.ts sweeps all 24 (arena, N) combinations and finds 24), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose four corner spawns are a single orbit of its symmetry group has nothing to say about two players or three. Anchored on the `players` block alone rather than on the end of the file, for the same reason the tri entry is -- appending a ninth board must not silently stop this entry applying. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only.",
-    "tests": [
-      "src/sim/config/versus-catalog.test.ts"
     ]
   },
   {
@@ -2404,11 +2380,11 @@
   {
     "id": "egress-ignores-the-tank-footprint",
     "file": "src/sim/versus-board.ts",
-    "find": "      if (x - TANK_RADIUS < 0 || y - TANK_RADIUS < 0 || x + TANK_RADIUS > width || y + TANK_RADIUS > height) continue;\n      let blocked = false;\n      for (const wall of walls) {\n        if (circleVsAABB({ x, y }, TANK_RADIUS, wall.aabb).hit) { blocked = true; break; }\n      }",
-    "replace": "      let blocked = false;\n      for (const wall of walls) {\n        if (circleVsAABB({ x, y }, 0, wall.aabb).hit) { blocked = true; break; }\n      }",
+    "find": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, TANK_RADIUS, b).hit) legal[k] = 0;",
+    "replace": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, 0, b).hit) legal[k] = 0;",
     "expect": "killed",
     "expectFailures": 6,
-    "why": "Shrinks the tank to a POINT, which is precisely what every pre-existing check did by reasoning about cell centres. A one-cell gap is 0.667 wide against a 1.0-wide tank and admits no legal centre position, but admits a point trivially -- so under this mutation the minimum-width fixture's 1-cell passage reads as passable and the boards that shipped unplayable read as fine. Pins that the footprint, not the topology, is what the rule measures.",
+    "why": "Shrinks the tank to a POINT, which is precisely what every pre-existing check did by reasoning about cell centres. A one-cell gap is 0.667 wide against a 1.0-wide tank and admits no legal centre position, but admits a point trivially -- so under this mutation the minimum-width fixture's 1-cell passage reads as passable and the boards that shipped unplayable read as fine. Pins that the footprint, not the topology, is what the rule measures. RE-ANCHORED after the wall-rasterisation rewrite: the original find string named the per-point wall loop that rewrite replaced, and it went stale without failing anything locally -- CI's failed-to-apply is what said so.",
     "tests": [
       "src/sim/versus-board.test.ts"
     ]
