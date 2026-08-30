@@ -2160,5 +2160,29 @@
     "tests": [
       "src/game/loop.test.ts"
     ]
+  },
+  {
+    "id": "dev-url-canonicalises-to-the-wrong-duplicate",
+    "file": "src/game/dev-config.ts",
+    "find": "    out.append(name, params.get(name) as string); // first-wins, as the parser reads it",
+    "replace": "    out.append(name, params.getAll(name)[params.getAll(name).length - 1] as string);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The canonical URL resolves a duplicated developer parameter to the LAST value while every reader in devflags.ts resolves it to the first (`isOn`, `asSeed` and the rest all go through `URLSearchParams.get`, which returns the first). The result is the one thing this function must never produce: a canonical URL that PARSES DIFFERENTLY from the one the player supplied -- `?dev=1&quality=low&quality=high` would canonicalise to `quality=high` and silently change the render preset. Nothing about the output LOOKS wrong; both values came from the URL. It is caught by the first-wins case and by the round-trip sweep, which compares `parseDevFlags(canonical)` against `parseDevFlags(original)` rather than comparing the model to itself. Scoped to dev-config.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ]
+  },
+  {
+    "id": "dev-config-bundle-claims-direct-requests",
+    "file": "src/game/dev-config.ts",
+    "find": "        if (params.has(p)) continue;",
+    "replace": "        if (false) continue;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The playtest bundle reports itself as having FORCED a flag the URL asked for directly. A UI reading these notes would tell the player 'turned on by playtest, not requested directly' about a control they set themselves, and offer to remove a parameter that is doing real work. The mutation is invisible to any assertion that only checks the bundle's members are on -- they are, either way -- which is why the test compares the forced SET against `expandsTo` minus the directly-requested flag rather than counting. Scoped to dev-config.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/dev-config.test.ts"
+    ]
   }
 ]
