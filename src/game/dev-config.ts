@@ -354,3 +354,95 @@ export function explainDevConfig(search: string): DevConfigState {
 
   return { developerMode, effective, notes, unknownParams };
 }
+
+// ---------------------------------------------------------------------------
+// CANONICAL URLs.
+// ---------------------------------------------------------------------------
+
+/**
+ * Developer parameters that were once accepted and no longer are.
+ *
+ * EMPTY, and deliberately so rather than omitted: no developer parameter has been removed
+ * yet, so a populated list would be invented history. The mechanism is real and injectable
+ * (`canonicalDevSearch`'s `deprecated` option) and `dev-config.test.ts` proves it with an
+ * injected list, so the first real removal is a one-line edit here rather than a new feature.
+ *
+ * Without such a list this model CANNOT tell a deprecated developer parameter from an
+ * unrelated application one -- both are simply "not known" -- and `unknownParams` reports
+ * them together. That is a stated limit, not an oversight.
+ */
+export const DEPRECATED_DEV_PARAMS: readonly string[] = [];
+
+export interface CanonicalDevUrlOptions {
+  /** Keep the `dev=1` gate in the output. Default true; false strips developer mode. */
+  readonly keepGate?: boolean;
+  /** Parameters to treat as retired. Defaults to `DEPRECATED_DEV_PARAMS`. */
+  readonly deprecated?: readonly string[];
+}
+
+export interface CanonicalDevUrl {
+  /** The normalized query string, with a leading `?`, or `''` when nothing remains. */
+  readonly search: string;
+  /** Known developer parameters that appeared more than once, and were collapsed. */
+  readonly duplicates: readonly string[];
+  /** Parameters matching the deprecated list; dropped from `search`. */
+  readonly deprecated: readonly string[];
+  /** Parameters this model does not know and did not drop; carried through untouched. */
+  readonly unknown: readonly string[];
+}
+
+/**
+ * Rewrite a query string into the canonical form for the flags it expresses.
+ *
+ * FIRST-WINS on a duplicate known parameter, and that is not a preference: `isOn`, `asSeed`
+ * and every other reader in `devflags.ts` go through `URLSearchParams.get`, which returns the
+ * FIRST value. Canonicalising to the last would produce a URL that parses differently from
+ * the one the player pasted, which is the one thing this function must never do.
+ *
+ * Ordering is `dev`, then the bundle, then registry order -- derived, so two calls cannot
+ * disagree and a round trip is stable. Unrelated parameters keep their original relative
+ * order and their duplicates, because this model has no authority over them.
+ */
+export function canonicalDevSearch(search: string, options: CanonicalDevUrlOptions = {}): CanonicalDevUrl {
+  const { keepGate = true, deprecated = DEPRECATED_DEV_PARAMS } = options;
+  const params = toParams(search);
+  const retired = new Set(deprecated);
+  const known = new Set(knownDevParams());
+  const fields = Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[];
+
+  const duplicates: string[] = [];
+  const seenDeprecated: string[] = [];
+  const out = new URLSearchParams();
+
+  const countOf = (name: string): number => params.getAll(name).length;
+  const take = (name: string): void => {
+    if (!params.has(name)) return;
+    if (countOf(name) > 1) duplicates.push(name);
+    out.append(name, params.get(name) as string); // first-wins, as the parser reads it
+  };
+
+  if (keepGate) take('dev');
+  take(PLAYTEST_BUNDLE.param);
+  for (const f of fields) take(FLAG_REGISTRY[f].param ?? f);
+
+  // Everything else, in the order it arrived and with its duplicates intact -- except the
+  // retired ones, which are dropped and reported.
+  const unknown: string[] = [];
+  for (const [k, v] of params.entries()) {
+    if (known.has(k)) continue;
+    if (retired.has(k)) {
+      if (!seenDeprecated.includes(k)) seenDeprecated.push(k);
+      continue;
+    }
+    if (!unknown.includes(k)) unknown.push(k);
+    out.append(k, v);
+  }
+
+  const s = out.toString();
+  return {
+    search: s === '' ? '' : `?${s}`,
+    duplicates: [...new Set(duplicates)],
+    deprecated: seenDeprecated,
+    unknown,
+  };
+}

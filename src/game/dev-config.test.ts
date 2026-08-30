@@ -3,6 +3,8 @@ import {
   DEV_FLAGS_OFF,
   FLAG_REGISTRY,
   PLAYTEST_BUNDLE,
+  parseDevFlags,
+  parseDeveloperMode,
   registryKeyMismatch,
   type FlagSpec,
 } from './devflags';
@@ -13,6 +15,8 @@ import {
   devControls,
   explainDevConfig,
   knownDevParams,
+  canonicalDevSearch,
+  DEPRECATED_DEV_PARAMS,
 } from './dev-config';
 
 // ---------------------------------------------------------------------------
@@ -240,5 +244,95 @@ describe('explainDevConfig', () => {
     for (const k of ['dev', 'aimRay', 'disarmed', 'playtest']) {
       expect(knownDevParams(), k).toContain(k);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CANONICAL URLs. One focused test per behaviour issue #244 lists, plus the round trip.
+// ---------------------------------------------------------------------------
+describe('canonicalDevSearch', () => {
+  it('preserves unrelated parameters, in order and with their own duplicates', () => {
+    // This model has no authority over parameters that are not its own, so it must not
+    // reorder, collapse or drop them.
+    const r = canonicalDevSearch('?utm_source=a&dev=1&ref=x&aimRay=1&utm_source=b');
+    expect(r.search).toBe('?dev=1&aimRay=1&utm_source=a&ref=x&utm_source=b');
+    expect(r.unknown).toEqual(['utm_source', 'ref']);
+    expect(r.duplicates, 'an unrelated duplicate is not a KNOWN duplicate').toEqual([]);
+  });
+
+  it('collapses a duplicated known parameter to the FIRST value -- what the parser reads', () => {
+    // The rule is forced, not chosen. `URLSearchParams.get` returns the first value and every
+    // reader in devflags.ts goes through it, so canonicalising to the last would hand back a
+    // URL that parses differently from the one supplied.
+    const r = canonicalDevSearch('?dev=1&quality=low&quality=high');
+    expect(r.search).toBe('?dev=1&quality=low');
+    expect(r.duplicates).toEqual(['quality']);
+    // The claim about the parser, measured rather than asserted about ourselves:
+    expect(parseDevFlags('?dev=1&quality=low&quality=high').quality).toBe('low');
+    // ...and the canonical form parses to exactly the same flags as the original.
+    expect(parseDevFlags(r.search)).toEqual(parseDevFlags('?dev=1&quality=low&quality=high'));
+  });
+
+  it('drops deprecated parameters and names them', () => {
+    // DEPRECATED_DEV_PARAMS ships empty -- no developer parameter has been retired yet, and a
+    // populated list would be invented history -- so the MECHANISM is proven with an injected
+    // list instead. That is the whole reason the option exists.
+    expect(DEPRECATED_DEV_PARAMS, 'the shipped list is empty by design').toEqual([]);
+    const r = canonicalDevSearch('?dev=1&oldFlag=1&aimRay=1', { deprecated: ['oldFlag'] });
+    expect(r.search).toBe('?dev=1&aimRay=1');
+    expect(r.deprecated).toEqual(['oldFlag']);
+    expect(r.unknown).toEqual([]);
+    // Without the list the same parameter is merely unknown, and is CARRIED, not dropped.
+    const plain = canonicalDevSearch('?dev=1&oldFlag=1&aimRay=1');
+    expect(plain.deprecated).toEqual([]);
+    expect(plain.unknown).toEqual(['oldFlag']);
+    expect(plain.search).toContain('oldFlag=1');
+  });
+
+  it('retains or removes the master gate as asked', () => {
+    expect(canonicalDevSearch('?dev=1&aimRay=1').search).toBe('?dev=1&aimRay=1');
+    const stripped = canonicalDevSearch('?dev=1&aimRay=1', { keepGate: false });
+    expect(stripped.search).toBe('?aimRay=1');
+    // ...and dropping the gate really does turn everything off, which is the point of being
+    // able to drop it: the URL still SAYS aimRay, and the game will ignore it.
+    expect(parseDevFlags(stripped.search)).toEqual(DEV_FLAGS_OFF);
+    expect(explainDevConfig(stripped.search).notes.map((n) => n.reason)).toContain('gate-closed');
+  });
+
+  it('round trips: the canonical form reproduces the previewed effective flags', () => {
+    // Issue #244's fourth criterion, swept over a set that exercises every behaviour above
+    // rather than one happy case.
+    const cases = [
+      '?dev=1',
+      '?dev=1&aimRay=1&seed=42',
+      '?dev=1&quality=low&quality=high',
+      '?dev=1&players=99',
+      '?dev=1&playtest=1',
+      '?dev=1&disarmed=0&tanks=grey,grey&walls=12',
+      '?utm=1&dev=1&mode=teams&friendlyFire=1&ref=x',
+      '?aimRay=1&seed=7',
+    ];
+    for (const c of cases) {
+      const r = canonicalDevSearch(c);
+      expect(parseDevFlags(r.search), c).toEqual(parseDevFlags(c));
+      expect(parseDeveloperMode(r.search), c).toBe(parseDeveloperMode(c));
+      // Stable: canonicalising a canonical form changes nothing.
+      expect(canonicalDevSearch(r.search).search, `${c} is not a fixed point`).toBe(r.search);
+    }
+    expect(cases).toHaveLength(8);
+  });
+
+  it('emits developer parameters in a derived order, so two callers cannot disagree', () => {
+    // Same flags, opposite input order -> identical output.
+    const a = canonicalDevSearch('?dev=1&seed=42&aimRay=1&mineTimer=1').search;
+    const b = canonicalDevSearch('?dev=1&mineTimer=1&aimRay=1&seed=42').search;
+    expect(a).toBe(b);
+    expect(a).toBe('?dev=1&aimRay=1&seed=42&mineTimer=1');
+  });
+
+  it('returns an empty string rather than a bare question mark', () => {
+    expect(canonicalDevSearch('').search).toBe('');
+    expect(canonicalDevSearch('?').search).toBe('');
+    expect(canonicalDevSearch('?dev=1', { keepGate: false }).search).toBe('');
   });
 });
