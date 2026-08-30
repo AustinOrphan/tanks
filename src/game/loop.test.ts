@@ -356,6 +356,8 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   previewButtons: readonly HTMLButtonElement[];
   fireFrame(now: number): void;
   hasFrame(): boolean;
+  liveFrameCount(): number;
+  fireAllFrames(now: number): void;
   hud: {
     mute(): void;
     volume(v: number): void;
@@ -518,6 +520,20 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
   };
 
   let pending: ((now: number) => void) | null = null;
+  /**
+   * Every rAF registration made and not yet cancelled or fired, by handle.
+   *
+   * `pending` alone -- the shape this fake had until issue #317's lifecycle residuals --
+   * is a SINGLE slot that `request` overwrites, and `cancel` was a no-op. Two sessions
+   * running frame loops at once therefore looked exactly like one, so "creating and
+   * disposing repeated sessions does not duplicate frame loops" had no assertion in this
+   * file that could fail. `pending` and `fireFrame` keep their old meaning to the letter
+   * (the LATEST registration, which is the only one those tests ever had); this map is
+   * what the residual checks read.
+   */
+  const liveFrames = new Map<number, (now: number) => void>();
+  let pendingHandle = 0;
+  let nextRafHandle = 1;
   // The harness's synthetic resolved session -- the state machine's canonical
   // ResolvedSession slot needs to be well-formed on `playing`/`paused`/`outcome`
   // (issue #316), and this fake session provides that without loop.ts's real
@@ -1459,9 +1475,18 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     raf: {
       request(cb): number {
         pending = cb;
-        return 1;
+        pendingHandle = nextRafHandle;
+        nextRafHandle += 1;
+        liveFrames.set(pendingHandle, cb);
+        return pendingHandle;
       },
-      cancel(): void {},
+      // A REAL cancel, keyed by the handle `request` returned. The no-op this replaced is
+      // why `driver.stop()` dropping its `raf.cancel(handle)` was unobservable.
+      // `pending` is deliberately left alone so `hasFrame()` keeps reporting exactly what
+      // it always did.
+      cancel(handle): void {
+        liveFrames.delete(handle);
+      },
     },
     host,
     // A REAL storage (the in-memory one the game itself falls back to), not a
@@ -1514,9 +1539,29 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
       const cb = pending;
       if (!cb) throw new Error('no frame queued');
       pending = null;
+      // Consumed, so it is no longer outstanding. Before `cb(now)`, which re-requests
+      // and would otherwise have its fresh handle deleted here instead.
+      liveFrames.delete(pendingHandle);
       cb(now);
     },
     hasFrame: () => pending !== null,
+    /** How many rAF registrations are outstanding -- one per live frame loop. */
+    liveFrameCount: () => liveFrames.size,
+    /**
+     * Fire EVERY outstanding registration, not just the latest.
+     *
+     * The distinction the residual checks need: a session whose `driver.stop()` forgot
+     * `raf.cancel` leaves an outstanding handle that is inert (`running` is false, so
+     * `frame` returns immediately), while a session that was never stopped at all leaves
+     * one that still advances the world. Counting registrations cannot tell those apart;
+     * firing them and counting what MOVED can.
+     */
+    fireAllFrames(now): void {
+      const due = [...liveFrames.entries()];
+      liveFrames.clear();
+      pending = null;
+      for (const [, cb] of due) cb(now);
+    },
     hud: {
       mute: () => onMute(),
       volume: (v) => onVolume(v),
