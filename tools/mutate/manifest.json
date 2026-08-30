@@ -2340,5 +2340,29 @@
     "tests": [
       "src/game/hud.css.test.ts"
     ]
+  },
+  {
+    "id": "hover-escapes-the-pointer-query",
+    "file": "src/game/hud.css",
+    "find": "@media (hover: hover) {",
+    "replace": "@media all {",
+    "expect": "killed",
+    "expectFailures": 4,
+    "why": "The hover treatment applied on devices with no hovering pointer (issue #392). This is a correctness defect rather than a cosmetic one, and it is invisible on the machine that writes it: a touch device reports a tap as a hover and HOLDS it until the next tap lands elsewhere, so every control the player has touched stays looking pointed-at. Nothing in a desktop browser, a screenshot, or a jsdom computed-style read can see it -- jsdom does not recompute dynamic pseudo-classes at all, which is why the guard is checked as stylesheet TEXT. `@media all` is chosen over deleting the wrapper so the rules stay syntactically nested and only the CONDITION is wrong, which is the realistic form of this mistake. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
+  },
+  {
+    "id": "hover-engages-on-disabled-controls",
+    "file": "src/game/hud.css",
+    "find": "  .ui-btn:hover:not(:disabled) {",
+    "replace": "  .ui-btn:hover {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "One hover selector loses `:not(:disabled)` (issue #392's second acceptance criterion). A locked level button -- `hud.ts` sets the real `disabled` attribute, and `.hud-level-btn--locked` dims it to 0.35 opacity -- would brighten under the pointer, telling the player a control they cannot activate is available. Worse than no hover at all, and the sort of thing that survives review because the rule LOOKS right; the selector is checked per-rule rather than by eye. Only the base `.ui-btn` selector is mutated: one is enough to prove the assertion sweeps every rule in the block rather than a named list. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
