@@ -535,46 +535,19 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     expect(baseToBase - leftToAxis).toBeCloseTo(0.41666666666666607, 9);
   });
 
-  // The rule the rebuilt board is authored to (issue #424), asserted rather than left in
-  // the notes. A tank needs 1.5 cells, so two is the mechanical minimum and one is
-  // impassable; three is what this board claims, which leaves margin instead of sitting on
-  // the minimum. Bounded runs only -- a run that reaches the board edge is bounded by the
-  // wall ring loadArena adds, which is a different question and one the egress gate owns.
-  it('no passage anywhere on the board is narrower than three cells', () => {
-    const isWall = (c: number, r: number): boolean => kindAt(c, r) !== undefined;
-    const narrow: string[] = [];
-    let runs = 0;
-    const scan = (
-      label: string, outer: number, inner: number,
-      at: (o: number, i: number) => boolean,
-    ): void => {
-      for (let o = 0; o < outer; o++) {
-        let run = 0;
-        let boundedStart = false;
-        for (let i = 0; i <= inner; i++) {
-          const wall = i === inner ? true : at(o, i);
-          if (!wall) {
-            if (run === 0) boundedStart = i > 0 && at(o, i - 1);
-            run++;
-            continue;
-          }
-          // Bounded on BOTH sides by a wall, so the board edge is not counted.
-          if (run > 0 && boundedStart && i < inner) {
-            runs++;
-            if (run < 3) narrow.push(`${label} ${o}: run of ${run} ending at ${i}`);
-          }
-          run = 0;
-        }
-      }
-    };
-    scan('row', arena.rows, arena.cols, (r, c) => isWall(c, r));
-    scan('col', arena.cols, arena.rows, (c, r) => isWall(c, r));
-    expect(narrow, 'every wall-bounded passage must fit a 1.5-cell tank with margin').toEqual([]);
-    // ...and the population second, so a scan that silently stopped finding runs cannot
-    // read as a pass. Asserted AFTER the list, so a real narrow passage reports itself by
-    // name rather than being masked by the count moving at the same time.
-    expect(runs, 'wall-bounded open runs found across all 17 rows and 27 columns').toBe(35);
-  });
+  // NO RULE HERE THAT EVERY GAP MUST FIT A TANK, and the absence is deliberate.
+  //
+  // An earlier revision of this file asserted that no wall-bounded run of open cells was
+  // shorter than three anywhere on the board. That is a stronger claim than the defect
+  // warranted and it made the board worse: it outlawed every pillar, notch and firing slit
+  // that was not already a corridor, which is most of what gives an arena texture.
+  //
+  // The rule that actually matters is narrower, and `versus-board.ts` already enforces it:
+  // a gap does not COUNT AS A ROUTE unless a tank fits through it. Sub-tank gaps are fine
+  // as cover and decoration precisely because the egress gate refuses to route through
+  // them -- `tankLegalComponents` samples the real hull against the real walls, so a
+  // one-cell slot is simply not in the graph. What sank the previous layout was never that
+  // narrow gaps existed; it was that the only ways OUT of a spawn were narrow.
 
   it('the axis spawn, which has no mirror partner, is no better placed than the two that do', () => {
     // The half of criterion 4 that a mirror cannot discharge. Both figures are bounded
