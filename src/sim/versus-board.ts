@@ -211,17 +211,35 @@ function tankLegalComponents(
   const ny = Math.max(1, Math.floor(height / step));
   const idx = (i: number, j: number) => i * ny + j;
 
+  // Start from "legal everywhere inside the wall-free border", then RASTERISE each wall
+  // into the lattice cells it can possibly block. The obvious loop -- test every wall at
+  // every lattice point -- is O(lattice x walls) and measured 44s on one variant sweep,
+  // which is not a check anyone will keep. A wall can only block points within
+  // TANK_RADIUS of its box, so each wall touches a small neighbourhood; the exact
+  // `circleVsAABB` test still decides every cell, so this is a speed change and not an
+  // approximation. (Expanding the AABB and marking the whole rectangle WOULD be an
+  // approximation -- it would block the rounded corners a tank can actually occupy.)
   const legal = new Uint8Array(nx * ny);
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
       const x = (i + 0.5) * step;
       const y = (j + 0.5) * step;
       if (x - TANK_RADIUS < 0 || y - TANK_RADIUS < 0 || x + TANK_RADIUS > width || y + TANK_RADIUS > height) continue;
-      let blocked = false;
-      for (const wall of walls) {
-        if (circleVsAABB({ x, y }, TANK_RADIUS, wall.aabb).hit) { blocked = true; break; }
+      legal[idx(i, j)] = 1;
+    }
+  }
+  for (const wall of walls) {
+    const b = wall.aabb;
+    const i0 = Math.max(0, Math.floor((b.minX - TANK_RADIUS) / step) - 1);
+    const i1 = Math.min(nx - 1, Math.ceil((b.maxX + TANK_RADIUS) / step) + 1);
+    const j0 = Math.max(0, Math.floor((b.minY - TANK_RADIUS) / step) - 1);
+    const j1 = Math.min(ny - 1, Math.ceil((b.maxY + TANK_RADIUS) / step) + 1);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const k = idx(i, j);
+        if (legal[k] !== 1) continue;
+        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, TANK_RADIUS, b).hit) legal[k] = 0;
       }
-      if (!blocked) legal[idx(i, j)] = 1;
     }
   }
 

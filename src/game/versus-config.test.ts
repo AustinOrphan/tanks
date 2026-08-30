@@ -60,19 +60,22 @@ describe('versusMapChoices', () => {
     // A bare subset assertion would let any number of boards silently drop out of the
     // offer, so the withheld set is pinned by name too: a board leaving the menu for a
     // reason nobody wrote down still fails here.
-    // Withheld is listed in catalog order, which is the order versusBoardCatalog() reports.
+    // Withheld is EMPTY at every count now, and the reason is worth stating because it
+    // costs this test something.
     //
-    // vs-tri-01 and vs-quad-01 are now withheld at EVERY count, not just the ones they
-    // were not curated for: both are withdrawn pending #424/#425. They still MEASURE
-    // suitable here, which is precisely the point -- `versusBoardCatalog()`'s verdict is
-    // cell-based, and #423 measured that a tank cannot actually leave any spawn on either
-    // board. That gap between "measures suitable" and "is playable" is what this
-    // withdrawal covers until the egress gate below can be turned on for them.
-    const WITHHELD: Record<number, string[]> = {
-      2: ['vs-tri-01', 'vs-quad-01'],
-      3: ['vs-duel-01', 'vs-tri-01', 'vs-quad-01'],
-      4: ['vs-duel-01', 'vs-tri-01', 'vs-quad-01'],
-    };
+    // The set used to be non-empty by CURATION: vs-duel-01 measured suitable at all three
+    // counts and was offered at N=2 alone, and vs-tri-01/vs-quad-01 likewise. The
+    // tank-egress gate (#423) removed all three from `measured`: the two withdrawn boards
+    // fail at every count, and vs-duel-01 fails at N=3 and N=4, where its third and fourth
+    // maximin spawns land in pockets too small to mine out of.
+    //
+    // So "offered exactly equals suitable" now holds trivially rather than by judgement,
+    // and this assertion no longer demonstrates that curation is deliberate -- there is
+    // nothing left being curated. It is kept as a REGRESSION guard (a board that starts
+    // measuring suitable without being offered, or vice versa, still fails here), and
+    // stated as empty rather than deleted, so restoring a withheld-but-playable board
+    // makes this list move visibly. Measured, not assumed: all three sets are [].
+    const WITHHELD: Record<number, string[]> = { 2: [], 3: [], 4: [] };
     const rows = versusBoardCatalog();
     for (const n of [2, 3, 4] as const) {
       const measured = rows.filter((r) => r.playerCount === n && r.suitable).map((r) => r.arenaId);
