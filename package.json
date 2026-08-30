@@ -32,6 +32,7 @@
     "audio": "node tools/audio/render.mjs",
     "issues:audit": "node tools/issues/run.mjs audit",
     "issues:maintain": "node tools/issues/run.mjs event",
+    "issues:relationships": "node tools/issues/migrate-relationships.mjs",
     "docs:check": "node tools/docs/check.mjs",
     "docs:index": "node tools/docs/index.mjs",
     "mutate": "node tools/mutate/run.mjs",

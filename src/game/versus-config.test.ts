@@ -22,16 +22,19 @@ describe('versusMapChoices', () => {
   const CAMPAIGN_BOARDS = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
   /** N=2 additionally offers the dedicated duel board (issue #271). */
   const DUEL = 'vs-duel-01';
+  const TRI = 'vs-tri-01';
 
-  it('parity pin: offers the 5 migrated boards at every (N, mode), plus the duel board at N=2 only', () => {
+  it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
     // suitable, versus-board-rules plan), and the declared catalog must not move that
-    // offer. Issue #271 adds to it at exactly one count rather than moving it: 6 (N,
-    // mode) combinations swept, and the duel board appears in 2 of them.
+    // offer. Each dedicated board adds to it at exactly one count rather than moving it:
+    // 6 (N, mode) combinations swept, the duel board appears in 2 of them (N=2, both
+    // modes) and the tri board in 1 (N=3, ffa only -- issue #272 declares no `teams`,
+    // because three players have no fair team split, so the mode predicate drops it).
     for (const n of [2, 3, 4] as const) {
       for (const mode of ['ffa', 'teams'] as const) {
-        const expected = n === 2 ? [...CAMPAIGN_BOARDS, DUEL] : CAMPAIGN_BOARDS;
-        expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual(expected);
+        const extra = n === 2 ? [DUEL] : n === 3 && mode === 'ffa' ? [TRI] : [];
+        expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
   });
@@ -48,7 +51,15 @@ describe('versusMapChoices', () => {
     // A bare subset assertion would let any number of boards silently drop out of the
     // offer, so the withheld set is pinned by name too: a board leaving the menu for a
     // reason nobody wrote down still fails here.
-    const WITHHELD: Record<number, string[]> = { 2: [], 3: ['vs-duel-01'], 4: ['vs-duel-01'] };
+    // Issue #272's vs-tri-01 measures suitable at all three counts too, and is offered at
+    // N=3 alone for the same reason: a board authored so that its three maximin spawns sit
+    // an equal 26 walkable cells apart has nothing to say about two players or four.
+    // Withheld is listed in catalog order, which is the order versusBoardCatalog() reports.
+    const WITHHELD: Record<number, string[]> = {
+      2: ['vs-tri-01'],
+      3: ['vs-duel-01'],
+      4: ['vs-duel-01', 'vs-tri-01'],
+    };
     const rows = versusBoardCatalog();
     for (const n of [2, 3, 4] as const) {
       const measured = rows.filter((r) => r.playerCount === n && r.suitable).map((r) => r.arenaId);
@@ -88,12 +99,17 @@ describe('pickVersusArena', () => {
   });
 
   it('distributes: two measured seeds pick different arenas -- the negative control for a constant/broken resolver', () => {
-    // Measured (vite-node, this module, players:3, choices = all 5 shipped arenas):
-    // seed 1 -> 'arena-04', seed 6 -> 'arena-03'. Pinned literals, not swept at
-    // runtime -- fails if pickVersusArena collapses to a constant pick (e.g. always
-    // choices[0]) or stops reading `seed`.
+    // RE-MEASURED for issue #272, which puts vs-tri-01 into the N=3 offer and so moves
+    // every pick that reads `seed % choices.length`: at players:3 the choices are now the
+    // 5 campaign boards plus vs-tri-01, and seed 1 -> 'arena-04', seed 4 -> 'vs-tri-01'.
+    // The old pair (1 and 6) BOTH resolve to 'arena-04' against six choices, which would
+    // have left this negative control vacuous while still passing -- so the second seed is
+    // rechosen rather than its expectation renumbered. Seed 4 also proves the new board is
+    // genuinely reachable through the resolver, not merely listed by the catalog.
+    // Pinned literals, not swept at runtime -- fails if pickVersusArena collapses to a
+    // constant pick (e.g. always choices[0]) or stops reading `seed`.
     expect(pickVersusArena(base, 1)).toBe('arena-04');
-    expect(pickVersusArena(base, 6)).toBe('arena-03');
+    expect(pickVersusArena(base, 4)).toBe('vs-tri-01');
   });
 });
 
@@ -110,14 +126,14 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
   });
 
   it("'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument", () => {
-    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 6 ->
-    // 'arena-03' at players:3. Two seeds, not one: a single-seed assertion here would
+    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 4 ->
+    // 'vs-tri-01' at players:3. Two seeds, not one: a single-seed assertion here would
     // not catch a mutation that hardcodes the seed it forwards to `pickVersusArena`
     // (e.g. always `pickVersusArena(config, 1)`) -- this negative control was found
     // empirically while mutating this function for issue #278's PR (a seed-1-only
     // version of this test stayed green under exactly that mutation).
     expect(resolveVersusConfig(random3, 1).arenaId).toBe('arena-04');
-    expect(resolveVersusConfig(random3, 6).arenaId).toBe('arena-03');
+    expect(resolveVersusConfig(random3, 4).arenaId).toBe('vs-tri-01');
   });
 
   it("'random' resolution preserves every other field unchanged", () => {
