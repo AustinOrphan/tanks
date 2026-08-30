@@ -2152,23 +2152,23 @@
   {
     "id": "tri-board-loses-its-mirror-symmetry",
     "file": "src/sim/config/data/arenas.json",
-    "find": "\"......xxx...###...xxx......\"",
-    "replace": "\"......xxx...###...xx#......\"",
+    "find": "\"###...x.x...###...x.x...###\"",
+    "replace": "\"###...x.x...###...x.#...###\"",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "One cell of vs-tri-01's core flank turned from destructible to solid, breaking the mirror about column 13 that its notes claim (issue #272). RE-ANCHORED for issue #424's rebuild: the old find string named a row of the previous grid and no longer exists, which the harness would report as failed-to-apply rather than as lost coverage -- but only if someone ran it. The same shape as `duel-board-loses-its-rotational-symmetry` and for the same reason: the board still loads, still validates, and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for the two base players is carried entirely BY the mirror: one of them now has a wall where the other has a breachable, so they no longer hold the same board reflected. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "why": "One cell of vs-tri-01's notch cheek turned from destructible to solid, breaking the mirror about column 13 that its notes claim (issue #272). RE-ANCHORED for issue #424's rework -- the previous find string named a row of a grid that no longer exists, which the harness reports as failed-to-apply, but only if someone runs it. Same shape as `duel-board-loses-its-rotational-symmetry` and for the same reason: the board still loads, still validates, and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for the two base players is carried entirely BY the mirror: one of them now has a wall where the other has a breachable. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/sim/versus-catalog-rules.test.ts"
     ]
   },
   {
-    "id": "tri-board-passage-narrowed-to-one-cell",
+    "id": "tri-board-lane-closed-behind-the-cell-metric",
     "file": "src/sim/config/data/arenas.json",
-    "find": "\"xxx.....................xxx\",\n        \"...........................\",\n        \".........#########.........\"",
-    "replace": "\"xxx......#########......xxx\",\n        \"...........................\",\n        \".........#########.........\"",
+    "find": "\"...........................\",\n        \"###...#.#...###...#.#...###\"",
+    "replace": "\".........#########.........\",\n        \"###...#.#...###...#.#...###\"",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Closes vs-tri-01's row 13 across columns 9-17, directly above the base-lane jamb, leaving row 14 as a ONE-CELL slot between them. The point is NOT that a narrow gap exists -- narrow gaps are ordinary arena furniture and this board has them on purpose. The point is that a narrow gap is not a ROUTE, and that only the tank-footprint metric can tell: the added bar closes the direct way across, so the distance a tank must actually drive between the two base spawns goes 17.667 -> 20.333 world units while the CELL metric sits unmoved at 26, because a cell path walks straight through a slot no hull fits in. That gap between the two numbers is exactly the defect issue #423 was opened for. The board stays mirror-symmetric, stays connected (rows 10-12 are open across, so the egress gate still passes) and the three spawns do not move, so symmetry, connectivity, cell path distance, spawn clearance and every seeded variant stay clean -- only the tank-lattice distance assertion catches it. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "why": "Bars vs-tri-01's row 11 across columns 9-17, closing the middle of the lower lateral lane. The point is NOT that a narrow gap appears -- narrow gaps are ordinary arena furniture and this board has them deliberately. The point is that closing a ROUTE is invisible to the cell metric and visible only to the tank one. MEASURED on this board: with the bar in place the authored cell distances stay at 26/26/26 and every cell-based claim -- mirror symmetry, the maximin spawn triangle, connectivity, spawn clearance, room, concealment and all ten seeded variants -- stays clean, while the distance a tank must actually drive changes. Exactly one assertion in the scoped file fails, and it is the tank-footprint lattice one. That gap between the two metrics is the defect issue #423 was opened for, and this entry is the proof the newer assertion is what closes it. RENAMED from `tri-board-passage-narrowed-to-one-cell`: the old name described the gap width, which is not the property being pinned. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/sim/versus-catalog-rules.test.ts"
     ]
