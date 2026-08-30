@@ -23,6 +23,12 @@
   --hud-text-bright: #f2f5fa;
   --hud-text-danger: #ffb4b4;
   --hud-quiet-fill: rgba(216, 221, 230, 0.16);
+  /* Hover fills (issue #392). Each is its own base fill brightened, so the hover state
+   * reads as 'more of this control' rather than as a different control. Kept as tokens
+   * for the same reason the base fills are: a second surface that wants the quiet
+   * treatment should not re-derive the lift by eye. */
+  --hud-quiet-fill-hover: rgba(216, 221, 230, 0.28);
+  --hud-danger-fill-hover: rgba(255, 90, 90, 0.30);
   --hud-gold: #e0c04a;
   /* The application backdrop's ground (issue #317, option A3). Referenced ONCE, which
    * the block header above otherwise reserves for literals -- named anyway, on the
@@ -93,6 +99,7 @@
    * candidate. That one rule is also the single site a light or forced-colors theme
    * (#351) has to touch. */
   --hud-primary-shadow: #2f8f45;
+  --hud-primary-fill-hover: #63dd7d;
 
   /* Motion. The two durations this file already animates at. */
   --hud-duration-fast: 220ms;
@@ -246,6 +253,75 @@
 .ui-btn--danger {
   background: rgba(255, 90, 90, 0.18);
   color: var(--hud-text-danger);
+}
+
+/* Hover (issue #392): the one interaction channel a pointer user got no feedback from.
+ * Before this, `grep -nE ":hover" hud.css` returned exactly one line -- `.hud-rotate-btn`
+ * -- while `:focus-visible` engaged on every primitive and drew the same tokenised ring.
+ *
+ * BEHIND `@media (hover: hover)`, and that is a correctness guard rather than tidiness: a
+ * touch device reports a tap as a hover and then keeps it until the next tap lands
+ * elsewhere, so an unguarded rule leaves a control looking permanently pointed-at. The
+ * query is the browser's own answer to "is there a hovering primary pointer".
+ *
+ * `:not(:disabled)` on every selector. Disabled here is the real HTML attribute, not a
+ * class -- `hud.ts` sets `btn.disabled = true` for locked levels and for the unavailable
+ * controller sources -- so this excludes exactly the controls that cannot be activated,
+ * and `.hud-level-btn--locked` keeps its 0.35 opacity with nothing layered over it.
+ *
+ * THREE STATES, THREE CHANNELS, so none of them is confusable with another:
+ *   - hover           -> the control's own FILL brightens (or, for a swatch, its border
+ *                        takes a grey tint);
+ *   - :focus-visible  -> an OUTLINE outside the box, in the focus blue (#7fd0ff);
+ *   - --on            -> the BORDER, at full white.
+ * Each is a different property, so a control that is hovered AND focused AND selected
+ * shows all three at once rather than one hiding another.
+ *
+ * The unselected-only selector matters: `.ui-selectable:hover` alone is specificity
+ * (0,2,0) and would beat `.ui-selectable--on` at (0,1,0), so pointing at the CHOSEN
+ * swatch would erase the white ring that is the only signal of which one is chosen.
+ * `:not(.ui-selectable--on)` keeps the selected control's ring untouched.
+ *
+ * The border colour is a literal, not a token, for the reason the rule above it states at
+ * length: jsdom drops a `border-color: var(--c)` declaration entirely, so tokenising it
+ * would quietly void any jsdom guard over this property. */
+@media (hover: hover) {
+  .ui-btn:hover:not(:disabled) {
+    background: var(--hud-quiet-fill-hover);
+  }
+
+  /* Later than the base rule and equal in specificity (0,3,0), so the tinted variants win
+   * on a hovered primary/danger instead of being flattened back to the quiet fill. */
+  .ui-btn--primary:hover:not(:disabled) {
+    background: var(--hud-primary-fill-hover);
+  }
+
+  .ui-btn--danger:hover:not(:disabled) {
+    background: var(--hud-danger-fill-hover);
+  }
+
+  /* Swatches carry `.ui-selectable` WITHOUT `.ui-btn` (`hud.ts`: `'ui-selectable
+   * hud-swatch'`), so a background lift would fight the colour they exist to show. The
+   * ring is the channel they have. Grey rather than white, so hovering an unselected
+   * swatch cannot be mistaken for selecting it. */
+  .ui-selectable:not(.ui-selectable--on):hover:not(:disabled) {
+    border-color: rgba(216, 221, 230, 0.45);
+  }
+
+  /* The SELECTED control still needs feedback -- it is a control, and #392's gap table
+   * lists the selected swatch and the unselected one separately. Its border is spoken for
+   * (white, the selection signal) and its outline is spoken for (the focus ring), so this
+   * takes a FOURTH channel: a soft ring OUTSIDE the box, which cannot be mistaken for
+   * either. Not `border-color`, which would erase the very thing being hovered.
+   *
+   * `.ui-btn--primary` owns `box-shadow` for its raised slab, so this rule would flatten
+   * one if a control were ever both primary AND selectable. No shipped control is (the
+   * four `.ui-selectable` call sites in hud.ts build swatches, skins, controller sources
+   * and versus options), and `hud.css.test.ts` asserts that rather than leaving it as an
+   * assumption this rule quietly depends on. */
+  .ui-selectable--on:hover:not(:disabled) {
+    box-shadow: 0 0 0 3px rgba(216, 221, 230, 0.25);
+  }
 }
 
 /* The application backdrop (issue #317): the ground application screens stand on, so a

@@ -1347,3 +1347,100 @@ describe('a leaving surface stops eating clicks meant for the one arriving', () 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hover (issue #392). TEXT, not computed style, for the reason the focus-visible checks
+// above state at length: jsdom does not recompute a dynamic pseudo-class, so a
+// getComputedStyle assertion here would report every hover rule in the file as absent
+// whether it is wired or not. The BROWSER measurement is the other half and lives in the
+// PR, taken the way #392's own gap table was: each control asked `matches(':hover')`
+// before its computed style was diffed, with `.hud-rotate-btn` as the positive control.
+// ---------------------------------------------------------------------------
+
+describe('hover treatment on the UI kit primitives (issue #392)', () => {
+  const src = stripComments(css);
+  /** The text of the one `@media (hover: hover)` block, brace-matched from its opener. */
+  const hoverBlock = (): string => {
+    const at = src.indexOf('@media (hover: hover)');
+    expect(at, 'no @media (hover: hover) block').toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = src.indexOf('{', at); i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error('unterminated @media (hover: hover) block');
+  };
+
+  it('gives every primitive a hover rule -- the five #392 measured as having none', () => {
+    // Named individually rather than counted: a count passes when one selector is
+    // deleted and another duplicated, which is the shape of the gap this closes.
+    const block = hoverBlock();
+    for (const sel of [
+      '.ui-btn:hover',
+      '.ui-btn--primary:hover',
+      '.ui-btn--danger:hover',
+      '.ui-selectable:not(.ui-selectable--on):hover',
+      '.ui-selectable--on:hover',
+    ]) {
+      expect(block, `${sel} has no hover rule`).toContain(sel);
+    }
+    // `--slab` and `--sm` are deliberately absent: they set geometry only and inherit
+    // `.ui-btn`'s fill, so a rule of their own would be a second place to change one
+    // colour. Measured in the browser: both move with the base rule.
+    expect(block).not.toContain('.ui-btn--slab:hover');
+    expect(block).not.toContain('.ui-btn--sm:hover');
+  });
+
+  it('scopes EVERY hover rule behind the pointer query, so a tap cannot stick', () => {
+    // The correctness half. A touch device reports a tap as a hover and holds it until
+    // the next tap lands elsewhere, so an unguarded rule leaves a control looking
+    // permanently pointed-at. Asserted over the whole file rather than the block: a rule
+    // added OUTSIDE the media query is exactly the mistake this must catch.
+    const outside = src.replace(hoverBlock(), '');
+    const stray = [...outside.matchAll(/^[^@}\n][^{\n]*:hover[^{\n]*\{/gm)].map((m) => m[0].trim());
+    // `.hud-rotate-btn:hover` predates #392 and is named in that issue's Boundaries as
+    // out of scope, so it is the one permitted exception -- pinned by name so a SECOND
+    // unguarded rule is a failure rather than joining a growing allowlist.
+    expect(stray.map((s) => s.replace(/\s*\{$/, ''))).toEqual(['.hud-rotate-btn:hover']);
+  });
+
+  it('never engages on a disabled control', () => {
+    // #392's second criterion. Disabled is the real HTML attribute here (hud.ts sets
+    // `btn.disabled = true` for locked levels), so every hover selector must carry
+    // `:not(:disabled)` -- a rule that forgets it repaints a control the player cannot
+    // activate, which reads as "this is available" and is worse than no hover at all.
+    const rules = [...hoverBlock().matchAll(/([^{}]+):hover([^{}]*)\{/g)].map((m) => `${m[1]}:hover${m[2]}`.trim());
+    expect(rules.length, 'no hover rules found to check').toBeGreaterThan(0);
+    for (const r of rules) expect(r, `${r} can engage on a disabled control`).toContain(':not(:disabled)');
+  });
+
+  it('keeps hover, focus and selected on three different properties', () => {
+    // #392's third criterion, and the one a screenshot cannot settle. If hover moved
+    // `border-color` on a selected control it would erase the white ring that is the
+    // ONLY signal of which choice is current; if it moved `outline-color` it would be
+    // indistinguishable from the focus ring. So: fill for buttons, border for the
+    // unselected selectable, and a box-shadow ring for the selected one.
+    const block = hoverBlock();
+    expect(block).not.toContain('outline');
+    const on = block.slice(block.indexOf('.ui-selectable--on:hover'));
+    const onBody = on.slice(on.indexOf('{'), on.indexOf('}'));
+    expect(onBody, 'the selected ring is repainted by hover').not.toContain('border-color');
+    expect(onBody, 'the selected control gets no hover feedback at all').toContain('box-shadow');
+  });
+
+  it('no shipped control is both primary and selectable -- the assumption the ring rests on', () => {
+    // `.ui-btn--primary` owns `box-shadow` for its raised slab, and the selected-hover
+    // ring above would flatten it. That is safe only while no control carries both
+    // classes, so this measures it against the REAL hud rather than trusting the four
+    // call sites to stay as they are.
+    const hud = createHud(document.body);
+    try {
+      const both = [...document.querySelectorAll('.ui-btn--primary.ui-selectable')]
+        .map((e) => e.className);
+      expect(both, 'a primary control is selectable; the hover ring would flatten its slab').toEqual([]);
+    } finally {
+      hud.dispose();
+      document.body.innerHTML = '';
+    }
+  });
+});
