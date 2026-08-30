@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import type { Vec2 } from '../sim/types';
+import type { Tank, Vec2 } from '../sim/types';
 import type { World } from '../sim/world';
-import { HULL_WIDTH, TRACK_W } from './entities';
+import { HULL_WIDTH, TRACK_W, identityApplies, resolveOwnerColor } from './entities';
 
 /**
  * Fading tread-print decals left behind a moving tank (issue #231).
@@ -83,7 +83,52 @@ export const LIFETIME_SECONDS = 2.0;
 // mark reads as a print of the tread, not the tread itself.
 const TREAD_LEN = 0.32;
 const TREAD_W = 0.16;
-const TREAD_COLOR = 0x2a2018; // dark disturbed-earth brown, independent of tank paint
+export const TREAD_COLOR = 0x2a2018; // dark disturbed-earth brown, independent of tank paint
+
+/**
+ * How far a VS trail mark is pulled from the neutral earth toward its owner's identity
+ * colour (issue #284). A BLEND, not a replacement, and the number is the whole design:
+ *
+ * The trail layer has to stay subordinate to tanks, rings, shells and hazards -- it is the
+ * quietest thing on the board and covers the most of it. At 1.0 a trail would print the
+ * same colour as the identity ring that is supposed to be the loud signal; at 0 there is no
+ * identity at all. 0.35 keeps the mark unmistakably earth-toned while the hue still reads
+ * as the owner's, which `tread-trails.test.ts` pins as a MEASURED relationship rather than
+ * a taste claim: every tinted mark stays nearer the neutral than the ring colour it leans
+ * toward, on every channel.
+ */
+export const TREAD_IDENTITY_BLEND = 0.35;
+
+/**
+ * Per-channel lerp between two packed 0xRRGGBB values.
+ *
+ * sRGB space, deliberately, matching how `TREAD_COLOR` and the identity palettes are
+ * authored and how THREE reads a hex into a MeshBasicMaterial here. A linear-light mix
+ * would be more correct photometrically and would land somewhere else entirely for the
+ * same 0.35, which is exactly why the constant and the space are stated together.
+ */
+export function blendHex(from: number, to: number, t: number): number {
+  const mix = (shift: number): number => {
+    const a = (from >> shift) & 0xff;
+    const b = (to >> shift) & 0xff;
+    return Math.round(a + (b - a) * t) & 0xff;
+  };
+  return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+}
+
+/**
+ * The colour one tank's next trail mark should print.
+ *
+ * Neutral unless identity applies at all -- `identityApplies` is entities.ts's own gate,
+ * imported rather than re-derived, so campaign stays neutral for the SAME reason identity
+ * rings do (one player-kind tank is below the threshold) rather than by a separate mode
+ * check that could drift from it. Enemy tanks are neutral in every mode: they have no slot
+ * and no team, and `resolveOwnerColor` would hand them slot 0's colour.
+ */
+export function treadColorFor(world: World, tank: Tank): number {
+  if (tank.kind !== 'player' || !identityApplies(world)) return TREAD_COLOR;
+  return blendHex(TREAD_COLOR, resolveOwnerColor(world, tank), TREAD_IDENTITY_BLEND);
+}
 const TREAD_OPACITY = 0.5; // peak opacity of a fresh decal
 // Just off the felt, matching the RING_Y/IDENTITY_RING_Y precedent (spawn-anim.ts,
 // entities.ts) for a flat ground-hugging mesh, low enough to sit under the identity
@@ -171,7 +216,7 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
     return d;
   }
 
-  function emitPair(x: number, y: number, bodyAngle: number): void {
+  function emitPair(x: number, y: number, bodyAngle: number, colorHex: number): void {
     // Perpendicular to the tank's heading (cos, sin), NOT to its direction of travel
     // -- a tread's footprint is fixed to the HULL, so it stays correct even while
     // reversing or mid-turn, when travel direction and heading briefly disagree.
@@ -182,6 +227,9 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
       d.mesh.position.set(x + side * TREAD_OFFSET * perpX, TREAD_Y, y + side * TREAD_OFFSET * perpY);
       d.mesh.rotation.y = -bodyAngle;
       d.mesh.material.opacity = TREAD_OPACITY;
+      // Set per EMISSION, not per decal: decals are pooled and reused, so a mark
+      // recycled from another player's trail would otherwise keep that player's tint.
+      d.mesh.material.color.setHex(colorHex);
       d.mesh.visible = true;
       d.life = LIFETIME_SECONDS;
       d.maxLife = LIFETIME_SECONDS;
@@ -219,6 +267,9 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
         anchors.set(t.id, { x: t.pos.x, y: t.pos.y });
         continue;
       }
+      // Resolved once per tank per sync rather than inside the emit loop: every mark in
+      // one walk belongs to the same tank, and the identity gate reads the whole world.
+      const tint = treadColorFor(curr, t);
       let dx = t.pos.x - anchor.x;
       let dy = t.pos.y - anchor.y;
       let dist = Math.hypot(dx, dy);
@@ -233,7 +284,7 @@ export function createTreadTrailSystem(scene: THREE.Scene): TreadTrailSystem {
         const k = EMIT_SPACING / dist;
         anchor.x += dx * k;
         anchor.y += dy * k;
-        emitPair(anchor.x, anchor.y, t.bodyAngle);
+        emitPair(anchor.x, anchor.y, t.bodyAngle, tint);
         dx = t.pos.x - anchor.x;
         dy = t.pos.y - anchor.y;
         dist = Math.hypot(dx, dy);
