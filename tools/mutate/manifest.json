@@ -2412,5 +2412,17 @@
     "tests": [
       "src/sim/versus-board.test.ts"
     ]
+  },
+  {
+    "id": "rotate-buttons-drop-below-the-touch-floor",
+    "file": "src/game/hud.css",
+    "find": "  width: var(--hud-control-min);\n  height: var(--hud-control-min);\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.14);\n  border-radius: 9px;",
+    "replace": "  width: 34px;\n  height: 34px;\n  padding: 0;\n  border: 1px solid rgba(255, 255, 255, 0.14);\n  border-radius: 9px;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Puts the customize rotate buttons back to the 34px literal they carried before issue #352, which is below the 44 CSS px touch floor Apple/WCAG state and the repo declares as `--hud-control-min`. Nothing else notices: the board still renders, the cluster still fits on one row (it is 40px narrower, not wider), no layout moves that a screenshot diff would catch, and jsdom does no layout so no computed-size assertion anywhere in the suite can see it -- which is exactly why the guard this kills asserts the DECLARATION rather than the rendered box. Measured: KILLED, 1 of 50 in hud.css.test.ts, the 'sized to be hit' case. The token half of that guard is deliberately NOT the target here: lowering `--hud-control-min` itself would also resize `.hud-level-btn` and `.hud-swatch`, so it would be a different and broader defect; this entry isolates the one control the issue was about. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
