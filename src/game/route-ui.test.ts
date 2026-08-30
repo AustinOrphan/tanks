@@ -102,7 +102,13 @@ function fixture(opts: { withStyleSink?: boolean } = {}): Fixture {
   const { hud, handlers, calls } = recordingHud();
 
   const sm = createGameStateMachine({
-    classifyOutcome: createOutcomeClassifier({ isFinalCampaignLevel: () => false }),
+    // A complete `OutcomeContext`. Neither arm is reachable from anything this file
+    // drives -- no route handler ends a session -- but the classifier is REQUIRED with no
+    // default (see its own doc comment), so the state machine cannot be built without one.
+    classifyOutcome: createOutcomeClassifier({
+      isFinalCampaignLevel: () => false,
+      versusResult: () => ({ kind: 'draw' }),
+    }),
   });
 
   const box = {
