@@ -85,7 +85,15 @@ id or slot assignment is ever persisted.
 `src/game/effective-settings.ts` is the only place those rules are applied, and
 `src/game/capabilities.ts` is the only place JavaScript reads
 `matchMedia('(prefers-reduced-motion: reduce)')` — consumers take the resolved value as an
-argument (`createTankPreview`) rather than querying the platform.
+argument (`createTankPreview`) rather than querying the platform. The HUD takes it through a
+setter instead, `hud.setReducedMotion`, pushed from `loop.ts`'s one `effectiveSettings`
+subscription beside mute, volume and haptics: a construction argument would freeze whichever
+answer was true at boot and leave the Settings toggle apparently inert until a reload. It
+drives `src/game/transitions.ts` — the single contract every application screen change,
+panel open/close and backdrop change schedules through (issue #364) — to zero duration.
+That module owns scheduling and interruption only and never touches the DOM; the duration
+and easing live once in `hud.css`, and `hud.ts` reads the token rather than mirroring it, so
+a missing stylesheet degrades to instant rather than to a second constant that can drift.
 
 **A developer session persists into its own key namespace (issue #245).**
 `selectStorageNamespace(location.search)` reads the `dev` GATE — `parseDeveloperMode`, not
