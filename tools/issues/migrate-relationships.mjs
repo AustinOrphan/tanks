@@ -216,7 +216,11 @@ export function withRequestTimeout(fetchImpl, timeoutMs = 30_000) {
  *   repository?: string,
  *   request?: GitHubRequest,
  *   apply?: boolean,
- *   plan?: typeof RELATIONSHIP_MIGRATION,
+ *   plan?: {
+ *     repository?: string,
+ *     parents?: readonly { readonly parent?: number, readonly children?: readonly number[] }[],
+ *     blockedBy?: readonly { readonly issue?: number, readonly blockers?: readonly number[] }[],
+ *   },
  *   pause?: () => Promise<void>,
  * }} [options]
  * @returns {Promise<MigrationResult>}
@@ -233,7 +237,7 @@ export async function migrateRelationships({
     throw new Error(`migration is pinned to ${plan.repository}, not ${repository}`);
   }
   const { parentEdges, dependencyEdges } = expandRelationshipPlan(plan);
-  const repo = repositoryPath(repository);
+  const repo = repositoryPath(/** @type {string} */ (repository));
   const issueNumbers = unique([
     ...parentEdges.flatMap(({ parent, child }) => [parent, child]),
     ...dependencyEdges.flatMap(({ issue, blocker }) => [issue, blocker]),
@@ -503,7 +507,11 @@ function parseArguments(argv) {
  *   env?: Record<string, string | undefined>,
  *   fetchImpl?: typeof globalThis.fetch,
  *   log?: (...args: any[]) => void,
- *   plan?: typeof RELATIONSHIP_MIGRATION,
+ *   plan?: {
+ *     repository?: string,
+ *     parents?: readonly { readonly parent?: number, readonly children?: readonly number[] }[],
+ *     blockedBy?: readonly { readonly issue?: number, readonly blockers?: readonly number[] }[],
+ *   },
  *   pause?: () => Promise<void>,
  *   requestTimeoutMs?: number,
  * }} [options]

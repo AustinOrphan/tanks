@@ -36,7 +36,11 @@ describe('repository resolution', () => {
 
 describe('GitHub issue retrieval', () => {
   it('paginates through all open results and excludes pull requests', async () => {
-    const first = Array.from({ length: 99 }, (_, index) => ({ number: index + 1 }));
+    // Annotated because the 100th entry below carries `pull_request`, which the inferred
+    // element type from these 99 does not have -- the fixture is deliberately mixed, since
+    // excluding PRs is the thing under test.
+    const first: Array<{ number: number; pull_request?: { url: string } }> =
+      Array.from({ length: 99 }, (_, index) => ({ number: index + 1 }));
     first.push({ number: 100, pull_request: { url: 'https://example.test/pr/100' } });
     const paths: string[] = [];
     const request = async (path: string) => {

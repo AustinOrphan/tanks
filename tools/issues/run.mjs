@@ -30,7 +30,13 @@ export function parseRepositoryRemote(remote) {
   return match === null ? null : `${match[1]}/${match[2]}`;
 }
 
-/** @param {{ explicit?: string, env?: Record<string, string | undefined>, git?: typeof execFileSync }} [options] @returns {string} */
+/** @param {{
+ *   explicit?: string,
+ *   env?: Record<string, string | undefined>,
+ *   git?: (...args: any[]) => any,
+ * }} [options]
+ * @returns {string}
+ */
 export function resolveRepository({ explicit, env = process.env, git = execFileSync } = {}) {
   const candidate = explicit || env.GITHUB_REPOSITORY;
   if (candidate) return candidate;

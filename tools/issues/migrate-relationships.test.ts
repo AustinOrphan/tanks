@@ -21,7 +21,7 @@ const plan = {
 
 const issue = (number: number) => ({ id: number * 100, number, state: 'open' });
 
-function createApi({ parent = null, blockers = [] as number[] } = {}) {
+function createApi({ parent = null as number | null, blockers = [] as number[] } = {}) {
   const calls: Array<{ path: string; options: Record<string, unknown> }> = [];
   const parents = new Map<number, number | null>([[11, parent], [12, parent]]);
   const blockedBy = new Map<number, number[]>([[12, [...blockers]]]);
@@ -406,7 +406,11 @@ describe('command safety and reporting', () => {
   });
 
   it('adds a request timeout without replacing a caller-provided signal', async () => {
-    const fetchImpl = vi.fn(async () => new Response('{}'));
+    // The implementation ignores its arguments, but the assertions below read
+    // `mock.calls[n][1]`, so the mock has to DECLARE the two parameters `withRequestTimeout`
+    // actually calls it with -- otherwise `calls` is typed as an array of empty tuples.
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response('{}'));
     const timed = withRequestTimeout(fetchImpl, 1_000);
     await timed('https://example.test/one');
     expect(fetchImpl.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);

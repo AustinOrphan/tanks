@@ -45,8 +45,14 @@
  * both fields optional, because a reader has to be able to tell "this problem names one
  * issue" from "this problem names a set" -- and the tests assert on exactly that.
  *
- * @typedef {{ issueNumber: number | null, code: string, message: string, remediation: string }} IssueProblem
- * @typedef {{ issueNumbers: number[], code: string, message: string, remediation: string }} QueueProblem
+ * Each member declares the OTHER member's field as optional-undefined. Without that,
+ * reading `problem.issueNumber` off the union is a type error even though the check
+ * `'issueNumber' in problem` is exactly how the code narrows it -- and every caller and
+ * test would need a cast. This keeps the two shapes distinguishable while letting either
+ * field be read and then narrowed.
+ *
+ * @typedef {{ issueNumber: number | null, issueNumbers?: undefined, code: string, message: string, remediation: string }} IssueProblem
+ * @typedef {{ issueNumbers: number[], issueNumber?: undefined, code: string, message: string, remediation: string }} QueueProblem
  * @typedef {IssueProblem | QueueProblem} AuditProblem
  */
 
