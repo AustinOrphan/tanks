@@ -2184,5 +2184,17 @@
     "tests": [
       "src/sim/config/versus-catalog.test.ts"
     ]
+  },
+  {
+    "id": "campaign-lives-readout-ignores-the-world",
+    "file": "src/game/loop.ts",
+    "find": "    hud.setLives(w.lives);",
+    "replace": "    hud.setLives(3);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The topbar LIVES readout is the only projection of `world.lives`, and the constant it is replaced with is LIVES itself (balance.json `lives: 3`) -- so this mutation is invisible to any fixture whose board carries full lives. That was EVERY synthetic build until issue #386: `loop.test.ts`'s fake `levels.world` recorded its `lives` argument into `rec.levelBuilds` and then dropped it, spreading `opts.world ?? createArenaWorld(seed)` without stamping it, while the real `createWorldFor` does stamp it. Measured on a88d39e, before the fake was fixed: this exact mutation left 4008 of 4008 tests green across 170 of 170 test files -- the readout was unpinned repository-wide. The fake now applies `lives: lives ?? base.lives`, and THE STATED RESIDUAL test reads the readout across two builds whose arguments differ (a practice board taking arena.ts's own default, then Continue's run board carrying 2), so a constant can no longer satisfy both. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
   }
 ]
