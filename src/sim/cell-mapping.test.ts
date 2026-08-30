@@ -19,13 +19,15 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 7 shipped arenas -- three at 33x27, arena-04
-    // and arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x) -- plus
-    // the 17x13 fixture, untouched by the upscale =
-    // 891 + 891 + 891 + 1485 + 1485 + 567 + 221 = 6431 cells, the 567 being issue
-    // #271's 27x21 vs-duel-01. The non-square boards
-    // matter here: a formula that confused cols with rows would round-trip fine on
-    // a square-ish board.
+    // Population: all cells of all 8 shipped arenas -- three at 33x27, arena-04
+    // and arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x), and the
+    // three dedicated versus boards -- plus the 17x13 fixture, untouched by the
+    // upscale = 891 + 891 + 891 + 1485 + 1485 + 567 + 459 + 459 + 221 = 7349 cells:
+    // the 567 is issue #271's 27x21 vs-duel-01 and the two 459s are #272's vs-tri-01
+    // and #273's vs-quad-01, both 27x17. Recomputed in full rather than incremented,
+    // because the enumeration above had already drifted from its own total. The
+    // non-square boards matter here: a formula that confused cols with rows would
+    // round-trip fine on a square-ish board.
     let checked = 0;
     for (const arena of ARENAS_UNDER_TEST) {
       for (let r = 0; r < arena.rows; r++) {
@@ -36,7 +38,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(6890);
+    expect(checked).toBe(7349);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {
@@ -75,11 +77,14 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
         spawnsChecked++;
       }
     }
-    // 4 + 5 + 6 + 7 + 8 shipped (each count INCLUDES that arena's player spawn) + 3
+    // 4 + 5 + 6 + 7 + 8 campaign (each count INCLUDES that arena's player spawn) + 3
     // fixture = 33. Written as 17 first when the total was 18; the test caught the
     // arithmetic, which is the denominator discipline working on its own author.
-    // 35, not 33: vs-duel-01 authors one player and one enemy letter, the minimum
-    // arenas.json accepts, and both sit on the 1-(mod 3) lattice this test pins.
-    expect(spawnsChecked).toBe(37);
+    // 39, not 33: each of the three dedicated versus boards authors one player and one
+    // enemy letter, the minimum arenas.json accepts, and all six sit on the
+    // 1-(mod 3) lattice this test pins -- vs-quad-01's pair (issue #273) at column 13
+    // on the mirror axis, deliberately away from the four corners its versus spawns
+    // are picked at.
+    expect(spawnsChecked).toBe(39);
   });
 });

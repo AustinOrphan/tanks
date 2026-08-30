@@ -237,7 +237,7 @@ describe('the board actually fills the screen', () => {
   ];
 
   it('covers at least 48% of the frame, on every shipped arena at every common aspect', () => {
-    // Population: all 7 shipped arenas x 4 aspects = 28, every one checked -- not a
+    // Population: all 8 shipped arenas x 4 aspects = 32, every one checked -- not a
     // sample. The floor sits just under the measured worst case (49.1%, arena-01 on a
     // phone) and comfortably above what the old camera managed anywhere (39.9% there).
     // Issue #271's 27x21 vs-duel-01 is the first board of a different shape to join
@@ -259,7 +259,7 @@ describe('the board actually fills the screen', () => {
     // re-measuring. Scoped to the raw catalog on purpose (issue #154: ARENAS is
     // catalog order, not campaign/level order) -- this floor is a property of the
     // BOARDS that ship, independent of which level plays which.
-    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(7);
+    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(8);
     expect(checked).toBe(ARENAS.length * ASPECTS.length);
     expect(thin).toEqual([]);
   });
@@ -289,10 +289,10 @@ describe('the board actually fills the screen', () => {
     // `framing-frame-margin-doubled`. The bands are wide enough to survive a retune and
     // narrow enough to catch a different camera.
     const at = (aspect: number): number[] => ARENAS.map((arena) => coverage(arena, aspect));
-    // Population: all 7 shipped arenas, at each of the two aspects issue #108 names.
+    // Population: all 8 shipped arenas, at each of the two aspects issue #108 names.
     const portrait = at(0.42); // 20:9 upright
     const ultrawide = at(2.39); // 21:9 sideways
-    expect(portrait).toHaveLength(7);
+    expect(portrait).toHaveLength(8);
     for (const f of portrait) {
       expect(f, 'portrait now fills a quarter of the frame -- re-read the orientation decision').toBeLessThan(0.25);
       expect(f).toBeGreaterThan(0.15);
@@ -310,7 +310,12 @@ describe('the board actually fills the screen', () => {
     // above asks for, recorded rather than absorbed: the orientation decision is
     // unchanged, but the "21:9 costs single digits" summary now holds only for boards
     // near the campaign shape.
-    const WIDE = new Set(['vs-tri-01']);
+    // Issue #273's vs-quad-01 is 27x17 as well -- the same bounds as vs-tri-01, so the
+    // same 1.588 world-unit ratio and the same place in this partition. It is named
+    // rather than derived from a width threshold on purpose: the width check below is
+    // what proves the membership, so a board added here without actually being wider
+    // fails instead of quietly widening the band.
+    const WIDE = new Set(['vs-tri-01', 'vs-quad-01']);
     for (const [i, arena] of ARENAS.entries()) {
       const f = ultrawide[i];
       const id = (arena as unknown as { id: string }).id;
