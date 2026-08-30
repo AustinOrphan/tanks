@@ -1,0 +1,299 @@
+name: On-demand capture
+
+# Manual only. Screenshot/video/GIF evidence generation offloaded to a runner (issue #343),
+# so a maintainer can produce a reproducible artifact bundle without a local FFmpeg, a local
+# Chromium, or a machine that happens to render the way CI does.
+#
+# It runs NOTHING new: `npm run capture` is issue #342's recipe runner and
+# `npm run capture:compare` is #335's base/head mode. This file chooses between them,
+# validates the dispatch inputs, and uploads what they produced. Capture logic deliberately
+# does not live in YAML -- a shell reimplementation here would be a second definition of the
+# artifact contract, free to drift from the one the tools and their tests already pin.
+#
+# SECURITY, and why each line is the way it is:
+#   - `workflow_dispatch` only. Nothing here runs on push or PR, so `verify (floor)`,
+#     `verify (current)` and `visual` are untouched (#343's last acceptance criterion).
+#   - `permissions: contents: read`, declared at the top level so no job can widen it. The
+#     workflow pushes nothing, opens nothing, comments nowhere, and never writes to pr-media.
+#   - NOT `pull_request_target`. That trigger runs with a writable token against untrusted
+#     code, which is the exact combination this must never have.
+#   - Every input reaches a script through `env:`, never interpolated into the script text.
+#     `mode` and `recipe` are `choice` inputs and cannot carry shell metacharacters today,
+#     but the habit is what keeps that true when a `string` input is added later. Same
+#     reasoning measure.yml states for its own inputs.
+#   - The refs are `string` inputs, and they are checked twice: once here against the same
+#     character allowlist `tools/compare/args.mjs` enforces, and again inside the tools.
+#   - Checkout is this repository, at the default ref. Requested refs are resolved to exact
+#     SHAs and recorded; the tools do their own ref handling from a full clone.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: capture one ref, or compare a base against a head
+        required: true
+        type: choice
+        options:
+          - capture
+          - compare
+      recipe:
+        description: >-
+          Which committed recipe to run. This list is the allowlist, and
+          tools/workflows.test.ts asserts it equals the ids in tools/capture/recipes.json --
+          a recipe added there without being added here is a red suite, not a silent
+          omission.
+        required: true
+        type: choice
+        options:
+          - gallery.ai-tracking.normal
+          - gallery.drive.normal
+          - gallery.fire.still
+          - gallery.ricochet.still
+      ref:
+        description: capture mode only. A branch, tag or SHA. Blank uses the default branch.
+        required: false
+        default: ''
+        type: string
+      base:
+        description: compare mode only. The ref to treat as "before".
+        required: false
+        default: ''
+        type: string
+      head:
+        description: compare mode only. The ref to treat as "after".
+        required: false
+        default: ''
+        type: string
+      retainFrames:
+        description: Keep intermediate frames in the bundle. Larger artifact.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# One capture at a time per (mode, recipe). NOT cancel-in-progress: a half-finished capture
+# is exactly the "partial capture reported as success" this must never produce, and a
+# maintainer waiting on evidence would rather queue than lose a run.
+concurrency:
+  group: capture-${{ inputs.mode }}-${{ inputs.recipe }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    # Bounded, per #343. Well above a single recipe (the longest shipped one is a normal-speed
+    # temporal capture) and well below a runner's six-hour ceiling, so a hung browser fails
+    # in a readable time rather than burning the day.
+    timeout-minutes: 45
+    steps:
+      # fetch-depth: 0 because compare mode resolves TWO arbitrary refs, and a shallow clone
+      # cannot see a ref that is not the tip it was cloned at.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # Pinned exactly as ci.yml's visual job pins it, so a capture renders the way the
+      # required visual check renders. A bump is a visible diff in both files rather than a
+      # silent drift between them.
+      - name: Install Playwright
+        run: npm i --no-save playwright@1.62.0
+
+      - name: Cache Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1.62.0-${{ runner.os }}
+
+      - run: npx playwright install chromium
+
+      # Reject an input combination before spending a browser on it, and reject it with the
+      # reason rather than letting a tool fail further in with a less specific message. The
+      # ref pattern is the same allowlist tools/compare/args.mjs enforces.
+      - name: Validate inputs
+        env:
+          MODE: ${{ inputs.mode }}
+          REF: ${{ inputs.ref }}
+          BASE: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: |
+          valid_ref () {
+            case "$1" in
+              -*|/*|*/|*..*|*//*) return 1 ;;
+            esac
+            [ "${#1}" -le 240 ] && printf '%s' "$1" | grep -Eq '^[A-Za-z0-9._/-]+$'
+          }
+          case "$MODE" in
+            capture)
+              if [ -n "$BASE" ] || [ -n "$HEAD_REF" ]; then
+                echo "::error::capture mode takes 'ref'; leave 'base' and 'head' blank." >&2; exit 1
+              fi
+              if [ -n "$REF" ] && ! valid_ref "$REF"; then
+                echo "::error::invalid ref '$REF'" >&2; exit 1
+              fi
+              ;;
+            compare)
+              if [ -n "$REF" ]; then
+                echo "::error::compare mode takes 'base' and 'head'; leave 'ref' blank." >&2; exit 1
+              fi
+              if [ -z "$BASE" ] || [ -z "$HEAD_REF" ]; then
+                echo "::error::compare mode needs both 'base' and 'head'." >&2; exit 1
+              fi
+              for r in "$BASE" "$HEAD_REF"; do
+                if ! valid_ref "$r"; then echo "::error::invalid ref '$r'" >&2; exit 1; fi
+              done
+              ;;
+            *) echo "::error::Unknown mode: $MODE" >&2; exit 1 ;;
+          esac
+
+      # Every requested ref recorded as an exact SHA (#343: "resolve every requested ref to
+      # an exact SHA recorded in the result"). `^{commit}` so an annotated tag resolves to
+      # the commit it points at rather than the tag object.
+      - name: Resolve refs
+        id: refs
+        env:
+          MODE: ${{ inputs.mode }}
+          REF: ${{ inputs.ref }}
+          BASE: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+        run: |
+          resolve () {
+            git rev-parse --verify "$1^{commit}" 2>/dev/null || {
+              echo "::error::could not resolve ref '$1'" >&2; exit 1; }
+          }
+          if [ "$MODE" = capture ]; then
+            target="${REF:-HEAD}"
+            echo "refSha=$(resolve "$target")" >> "$GITHUB_OUTPUT"
+          else
+            echo "baseSha=$(resolve "$BASE")" >> "$GITHUB_OUTPUT"
+            echo "headSha=$(resolve "$HEAD_REF")" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Reported, not assumed: #343 asks for tool versions in the summary, and a capture that
+      # cannot be reproduced without knowing the encoder is not evidence.
+      - name: Record tool versions
+        id: versions
+        run: |
+          {
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo "ffmpeg=$(ffmpeg -version 2>/dev/null | head -1 || echo 'not found')"
+            echo "ffprobe=$(ffprobe -version 2>/dev/null | head -1 || echo 'not found')"
+          } >> "$GITHUB_OUTPUT"
+
+      # Straight to a file and back out through `|| status=$?`, for the reason measure.yml
+      # states: a `run:` block is `bash -e {0}`, so a bare failing call would exit the step
+      # before the log is printed -- on precisely the failure worth reading. A pipe would
+      # launder the exit code, and "never report a partial capture as successful" is one of
+      # this issue's acceptance criteria.
+      - name: Run capture
+        id: run
+        env:
+          MODE: ${{ inputs.mode }}
+          RECIPE: ${{ inputs.recipe }}
+          REF: ${{ inputs.ref }}
+          BASE: ${{ inputs.base }}
+          HEAD_REF: ${{ inputs.head }}
+          RETAIN: ${{ inputs.retainFrames }}
+        run: |
+          # `if`, not `[ ... ] && cmd`: a `run:` block is `bash -e {0}`, and an `&&` list
+          # whose left side is FALSE returns non-zero, which trips errexit and kills the
+          # step before the capture runs. The failure mode is silent-looking -- the step
+          # just ends -- and it fires only when the flag is off, which is the common case.
+          extra=()
+          if [ "$RETAIN" = "true" ]; then extra+=(--retain-frames); fi
+          if [ "$MODE" = capture ]; then
+            set -- --recipe "$RECIPE" --out capture-out "${extra[@]}"
+            if [ -n "$REF" ]; then set -- "$@" --source-ref "$REF"; fi
+            npm run capture -- "$@" > capture.log 2>&1 || status=$?
+          else
+            npm run capture:compare -- --recipe "$RECIPE" --base "$BASE" --head "$HEAD_REF" \
+              --out capture-out "${extra[@]}" > capture.log 2>&1 || status=$?
+          fi
+          cat capture.log
+          exit "${status:-0}"
+
+      # `always()`, so a failed run still uploads its log and whatever manifests exist --
+      # diagnostics are most useful exactly when the step above did not succeed. The step's
+      # own exit code is what marks the job failed; nothing here can make a failure look
+      # like evidence.
+      - name: Job summary
+        if: always()
+        env:
+          MODE: ${{ inputs.mode }}
+          RECIPE: ${{ inputs.recipe }}
+          REF_SHA: ${{ steps.refs.outputs.refSha }}
+          BASE_SHA: ${{ steps.refs.outputs.baseSha }}
+          HEAD_SHA: ${{ steps.refs.outputs.headSha }}
+          RETAIN: ${{ inputs.retainFrames }}
+          V_NODE: ${{ steps.versions.outputs.node }}
+          V_NPM: ${{ steps.versions.outputs.npm }}
+          V_FFMPEG: ${{ steps.versions.outputs.ffmpeg }}
+          V_FFPROBE: ${{ steps.versions.outputs.ffprobe }}
+          OUTCOME: ${{ steps.run.outcome }}
+        run: |
+          {
+            echo "## Capture: \`$RECIPE\` ($MODE) — $OUTCOME"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| mode | \`$MODE\` |"
+            echo "| recipe | \`$RECIPE\` |"
+            if [ "$MODE" = capture ]; then
+              echo "| resolved SHA | \`$REF_SHA\` |"
+            else
+              echo "| base SHA | \`$BASE_SHA\` |"
+              echo "| head SHA | \`$HEAD_SHA\` |"
+            fi
+            echo "| retain frames | \`$RETAIN\` |"
+            echo "| node | \`$V_NODE\` |"
+            echo "| npm | \`$V_NPM\` |"
+            echo "| playwright | \`1.62.0\` |"
+            echo "| ffmpeg | \`$V_FFMPEG\` |"
+            echo "| ffprobe | \`$V_FFPROBE\` |"
+            echo
+            echo "### Reproduce locally"
+            echo
+            echo '```sh'
+            if [ "$MODE" = capture ]; then
+              echo "npm run capture -- --recipe $RECIPE --out capture-out${REF_SHA:+ --source-ref $REF_SHA}"
+            else
+              echo "npm run capture:compare -- --recipe $RECIPE --base $BASE_SHA --head $HEAD_SHA --out capture-out"
+            fi
+            echo '```'
+            echo
+            if [ -d capture-out ]; then
+              echo "### Outputs"
+              echo
+              echo '```'
+              find capture-out -type f -printf '%-60p %10s bytes\n' | sort
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checksums
+        if: always()
+        run: |
+          if [ -d capture-out ]; then
+            find capture-out -type f -exec sha256sum {} + | sort -k2 > capture-out/SHA256SUMS
+          fi
+
+      # Temporary review evidence, not documentation. #258 owns the review-and-commit
+      # publication flow; nothing here writes to the repository or to pr-media.
+      - name: Upload bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: capture-${{ inputs.mode }}-${{ inputs.recipe }}-${{ github.run_id }}
+          path: |
+            capture-out
+            capture.log
+          retention-days: 14
+          if-no-files-found: warn
