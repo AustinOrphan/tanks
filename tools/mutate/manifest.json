@@ -257,8 +257,8 @@
   {
     "id": "versus-board-drops-concealment-requirement",
     "file": "src/sim/versus-board.ts",
-    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
-    "replace": "    suitable: distinctSpawns && roomOk,",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && roomOk && egressOk,",
     "expect": "killed",
     "expectFailures": 1,
     "why": "suitable must require every spawn pair to lack mutual line of sight, not just distinct cells and enough floor -- dropping allPairsConcealed from the conjunction leaves a fully-visible board reading as suitable. Caught by 1 of the 12 cases in versus-board.test.ts: the 10x10-open-room fixture built specifically to isolate concealment (no interior walls, so separation and room both measure true while every spawn pair stays mutually visible at every N in {2,3,4}) asserts suitable=false at N=2 and fails immediately once the mutation makes it true. The 15-shipped-arena sweep does not catch this: every shipped arena already measures 0 of its pairs visible (pickVersusSpawnCell's own hard LOS filter succeeds on all of them), so allPairsConcealed is true regardless of whether the mutation is applied, and suitable's value is unchanged for every shipped (arena, N) combination.",
@@ -269,11 +269,11 @@
   {
     "id": "versus-board-drops-room-requirement",
     "file": "src/sim/versus-board.ts",
-    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
-    "replace": "    suitable: distinctSpawns && allPairsConcealed,",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && allPairsConcealed && egressOk,",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "suitable must also require the open-floor-per-player ratio to clear MIN_OPEN_FLOOR_PER_PLAYER -- dropping roomOk from the conjunction leaves a board with plenty of separation and concealment but almost no floor space reading as suitable. Caught by 2 of the 12 cases in versus-board.test.ts: the 7x7 pillar-room fixture (39 open-floor cells, separation and concealment measuring true at every N while the ratio drops below the bound at N=3 and N=4) and the versusBoardCatalog test built against the same fixture at N=4. Equivalent to the concealment entry above in shape but not in effect -- this one changes a different conjunct and is caught by a different, deliberately non-overlapping fixture, so the two mutations cannot silently cover for each other. Count re-measured 2026-08-23: the pillar-room fixture's rescale to cellSize 2 (issue #225) consolidated the kill into 1 failing test.",
+    "expectFailures": 2,
+    "why": "suitable must also require the open-floor-per-player ratio to clear MIN_OPEN_FLOOR_PER_PLAYER -- dropping roomOk from the conjunction leaves a board with plenty of separation and concealment but almost no floor space reading as suitable. Caught by 2 of the 12 cases in versus-board.test.ts: the 7x7 pillar-room fixture (39 open-floor cells, separation and concealment measuring true at every N while the ratio drops below the bound at N=3 and N=4) and the versusBoardCatalog test built against the same fixture at N=4. Equivalent to the concealment entry above in shape but not in effect -- this one changes a different conjunct and is caught by a different, deliberately non-overlapping fixture, so the two mutations cannot silently cover for each other. Count re-measured 2026-08-23: the pillar-room fixture's rescale to cellSize 2 (issue #225) consolidated the kill into 1 failing test. Count moved 1 -> 2 when the egress gate landed: the shipped sweep now asserts suitability per OFFERED combination as well, so dropping roomOk fails that assertion too.",
     "tests": [
       "src/sim/versus-board.test.ts"
     ]
@@ -393,8 +393,8 @@
     "find": "    .filter((e) => e.players.includes(players) && e.modes.includes(mode))",
     "replace": "    .filter((e) => e.players.includes(players) && true)",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "versusMapChoices is the setup pane's offer list, and #270's contract is that the offer honors BOTH declared axes of an entry's support: player counts AND modes. Forcing the mode conjunct to true offers a map in a mode it never declared -- exactly the defect the declared catalog exists to prevent, and invisible on shipped data: all 5 shipped entries declare both modes, so the parity pin (6 (N, mode) combinations) and the versusBoardCatalog cross-check read identically under this mutation. Caught by 1 of 13 in versus-config.test.ts: the fails-if-a-predicate-is-dropped fixture, whose ffa-only entry makes versusMapChoices(2, 'teams') return ['vs-both', 'vs-ffa-duo'] instead of ['vs-both']. The players conjunct of the same filter is NOT separately mutated here; the same fixture test pins it (the (3,'ffa') and (4,'ffa') cases), and this entry's kill already proves the fixture reaches the real filter. DRIFTED UPWARD 1 -> 2 for issue #272, verified the same way -- mutation applied on both trees, failing sets diffed, nothing lost. The addition is the `parity pin` case, and the reason is a real strengthening rather than an accident of counting: vs-tri-01 is the first catalog entry to declare ONE mode (`ffa`, since three players have no fair team split), so dropping the mode predicate now leaks a board into an (N, mode) combination that does not declare it. Before this board every entry declared both modes, and the predicate could only be caught by the narrower case below.",
+    "expectFailures": 1,
+    "why": "versusMapChoices is the setup pane's offer list, and #270's contract is that the offer honors BOTH declared axes of an entry's support: player counts AND modes. Forcing the mode conjunct to true offers a map in a mode it never declared -- exactly the defect the declared catalog exists to prevent, and invisible on shipped data: all 5 shipped entries declare both modes, so the parity pin (6 (N, mode) combinations) and the versusBoardCatalog cross-check read identically under this mutation. Caught by 1 of 13 in versus-config.test.ts: the fails-if-a-predicate-is-dropped fixture, whose ffa-only entry makes versusMapChoices(2, 'teams') return ['vs-both', 'vs-ffa-duo'] instead of ['vs-both']. The players conjunct of the same filter is NOT separately mutated here; the same fixture test pins it (the (3,'ffa') and (4,'ffa') cases), and this entry's kill already proves the fixture reaches the real filter. DRIFTED UPWARD 1 -> 2 for issue #272, verified the same way -- mutation applied on both trees, failing sets diffed, nothing lost. The addition is the `parity pin` case, and the reason is a real strengthening rather than an accident of counting: vs-tri-01 is the first catalog entry to declare ONE mode (`ffa`, since three players have no fair team split), so dropping the mode predicate now leaks a board into an (N, mode) combination that does not declare it. Before this board every entry declared both modes, and the predicate could only be caught by the narrower case below. Count moved 2 -> 1 when vs-tri-01 was withdrawn (#424): it was the only catalog entry declaring `ffa` alone, so with it gone, dropping the mode predicate changes one fewer assertion. If a mode-narrowed board returns, this should move back.",
     "tests": [
       "src/game/versus-config.test.ts"
     ]
@@ -2162,18 +2162,6 @@
     ]
   },
   {
-    "id": "tri-board-offered-at-every-player-count",
-    "file": "src/sim/config/data/versus-catalog.json",
-    "find": "\"players\": [\n        3\n      ],",
-    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
-    "expect": "killed",
-    "expectFailures": 1,
-    "why": "The curation undone for the three-player board: vs-tri-01 advertised wherever it mechanically passes. Like `duel-board-offered-at-every-player-count`, this is the mutation the shipped validators CANNOT catch -- vs-tri-01 measures suitable at N=2 and N=4 as well (versus-board.test.ts sweeps all 21 (arena, N) combinations and finds 21), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose three maximin spawns were placed an equal 26 walkable cells apart has nothing to say about two players or four. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only. Anchored on the `players` block alone rather than on the end of the file, so that appending an eighth board cannot silently stop this entry applying -- the failure mode the duel board's own entry hit here.",
-    "tests": [
-      "src/sim/config/versus-catalog.test.ts"
-    ]
-  },
-  {
     "id": "campaign-lives-readout-ignores-the-world",
     "file": "src/game/loop.ts",
     "find": "    hud.setLives(w.lives);",
@@ -2219,18 +2207,6 @@
     "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/sim/versus-catalog-rules.test.ts"
-    ]
-  },
-  {
-    "id": "quad-board-offered-at-every-player-count",
-    "file": "src/sim/config/data/versus-catalog.json",
-    "find": "\"players\": [\n        4\n      ],",
-    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
-    "expect": "killed",
-    "expectFailures": 1,
-    "why": "The curation undone for the four-player board: vs-quad-01 advertised wherever it mechanically passes. Like the duel and tri entries before it, this is the mutation the shipped validators CANNOT catch -- vs-quad-01 measures suitable at N=2 and N=3 as well (versus-board.test.ts sweeps all 24 (arena, N) combinations and finds 24), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose four corner spawns are a single orbit of its symmetry group has nothing to say about two players or three. Anchored on the `players` block alone rather than on the end of the file, for the same reason the tri entry is -- appending a ninth board must not silently stop this entry applying. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only.",
-    "tests": [
-      "src/sim/config/versus-catalog.test.ts"
     ]
   },
   {
@@ -2399,6 +2375,42 @@
     "why": "The playtest bundle reports itself as having FORCED a flag the URL asked for directly. A UI reading these notes would tell the player 'turned on by playtest, not requested directly' about a control they set themselves, and offer to remove a parameter that is doing real work. The mutation is invisible to any assertion that only checks the bundle's members are on -- they are, either way -- which is why the test compares the forced SET against `expandsTo` minus the directly-requested flag rather than counting. Scoped to dev-config.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/dev-config.test.ts"
+    ]
+  },
+  {
+    "id": "egress-not-gated-only-reported",
+    "file": "src/sim/versus-board.ts",
+    "find": "    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,",
+    "replace": "    suitable: distinctSpawns && allPairsConcealed && roomOk,",
+    "expect": "killed",
+    "expectFailures": 3,
+    "why": "Drops the tank-egress rule out of the verdict while still computing and reporting it -- exactly the shape the defect took before issue #423. Keystone and Quarters passed clearance, connectivity, symmetry, path distance and scripted playtests and shipped unplayable: players could not leave their spawns. Every cell-based criterion stays green under this mutation, which is the point; only an assertion that a board with no tank-sized exit is UNSUITABLE catches it.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ]
+  },
+  {
+    "id": "egress-ignores-the-tank-footprint",
+    "file": "src/sim/versus-board.ts",
+    "find": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, TANK_RADIUS, b).hit) legal[k] = 0;",
+    "replace": "        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, 0, b).hit) legal[k] = 0;",
+    "expect": "killed",
+    "expectFailures": 6,
+    "why": "Shrinks the tank to a POINT, which is precisely what every pre-existing check did by reasoning about cell centres. A one-cell gap is 0.667 wide against a 1.0-wide tank and admits no legal centre position, but admits a point trivially -- so under this mutation the minimum-width fixture's 1-cell passage reads as passable and the boards that shipped unplayable read as fine. Pins that the footprint, not the topology, is what the rule measures. RE-ANCHORED after the wall-rasterisation rewrite: the original find string named the per-point wall loop that rewrite replaced, and it went stale without failing anything locally -- CI's failed-to-apply is what said so.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
+    ]
+  },
+  {
+    "id": "fatal-escape-not-gated",
+    "file": "src/sim/versus-board.ts",
+    "find": "    if ((intact.diameters[l] ?? 0) < MINE_KILL_RADIUS) fatal.push(s);",
+    "replace": "    void l;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Stops refusing a spawn sealed by destructibles in a pocket too small to survive blowing it. Only a mine clears a destructible (destructibleByBlast, mines.ts) and a mine kills within MINE_BLAST_RADIUS + TANK_RADIUS = 2.5, so the player pays a LIFE to leave the start line -- which is exactly how Keystone shipped, whose spawn pockets measure 1.18 to 1.72 across. The solid-connectivity half of the gate does NOT catch it: Keystone's spawns are reachable once the destructibles are gone, so without this line the board reads as suitable again.",
+    "tests": [
+      "src/sim/versus-board.test.ts"
     ]
   }
 ]

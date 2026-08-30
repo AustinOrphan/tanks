@@ -1,6 +1,8 @@
 import type { Arena } from './arena';
 import { loadArena, ARENA_DEFS } from './arena';
 import { lineOfSight } from './ai/targeting';
+import { circleVsAABB } from './collision';
+import { TANK_RADIUS, MINE_BLAST_RADIUS } from './constants';
 
 /**
  * A checkable definition of whether a board is fit for versus play at N players --
@@ -123,6 +125,237 @@ export interface VersusBoardVerdict {
   readonly openFloorPerPlayer: number;
   /** `openFloorPerPlayer >= MIN_OPEN_FLOOR_PER_PLAYER`. */
   readonly roomOk: boolean;
+
+  /**
+   * How many spawns share the LARGEST connected region of tank-legal space (issue #423).
+   * `playerCount` means every player can reach every other without changing the map.
+   */
+  readonly spawnsInLargestRegion: number;
+  /** `spawnsInLargestRegion === playerCount`. */
+  readonly egressOk: boolean;
+  /**
+   * How many spawns share no destructible-free region with any other spawn -- i.e. must
+   * shoot to meet anyone. REPORTED, not gated: arena-02 and vs-duel-01 are legitimately
+   * like this. See `evaluateSpawnEgress` for the full reasoning.
+   */
+  readonly sealedSpawns: number;
+  /**
+   * How many spawns are sealed by destructibles in a pocket too small to retreat out of a
+   * mine blast -- i.e. the player must spend a LIFE to leave the start line. Gated: only a
+   * mine clears a destructible, and a mine kills within `MINE_KILL_RADIUS`.
+   */
+  readonly fatalEscapes: number;
+  /**
+   * Human-readable cause when `egressOk` is false: which spawns are cut off from which,
+   * so a failure names the blocked slot instead of only the board. Empty when it holds.
+   */
+  readonly egressDiagnosis: string;
+}
+
+/**
+ * Whether every spawn can actually DRIVE to every other one (issue #423).
+ *
+ * This exists because every other check in this module reasons about CELLS, and a cell is
+ * not a tank. `cellSize` on the dedicated boards is 0.6667 while a tank is
+ * `2 * TANK_RADIUS` = 1.0 across -- 1.5 cells -- so a one-cell gap is "walkable" to a
+ * cell-based check and has no legal tank-centre position at all. Keystone and Quarters both
+ * passed clearance, connectivity, symmetry, path-distance and scripted playtests and were
+ * still unplayable: players could not leave their spawns. That is the gap.
+ *
+ * WHAT IS GATED: with destructible walls REMOVED -- a player may shoot through those --
+ * every spawn must sit in one shared connected region of tank-legal space. That is the
+ * issue's "usable tank-sized egress into a shared combat space", and it is the requirement
+ * no board can argue with: if the SOLID layout partitions the spawns, no amount of play
+ * brings the players together.
+ *
+ * SECOND GATE: A SEALED SPAWN MUST SURVIVE ITS OWN ESCAPE. Only a MINE clears a
+ * destructible wall -- `destructibleByBlast` in mines.ts; shells treat every intact wall
+ * alike -- and a mine kills within `MINE_BLAST_RADIUS + TANK_RADIUS` = 2.5. So a spawn
+ * walled in by destructibles is playable only if its pocket is big enough to lay the mine
+ * and then retreat out of the blast. If it is not, the player pays a LIFE simply to leave
+ * the start line, which is not a board being hard -- it is a board being broken.
+ *
+ * This is what separates the two shipped failures from the boards that are fine, and the
+ * measurement is not close:
+ *
+ *   Keystone   pocket 36-45 cells, diameter 1.18-1.72  -- cannot retreat 2.5, escape is fatal
+ *   arena-02   pocket 4438-4862 cells, diameter ~21.6  -- retreats freely
+ *   vs-duel-01 pocket 3280 cells, diameter ~20.8       -- retreats freely
+ *
+ * So arena-02 and vs-duel-01, which ARE split into two regions by destructibles alone,
+ * stay suitable: on a board carrying 72 destructible blocks, blowing through to reach an
+ * opponent is the design. Keystone, whose spawn pockets are barely wider than a tank, is
+ * refused.
+ *
+ * RESIDUAL, stated rather than hidden: the pocket-diameter test is NECESSARY, not
+ * sufficient. It proves the player has somewhere to retreat TO; it does not prove the
+ * retreat is reachable from the specific spot the mine must be laid. A pocket shaped like
+ * a long dead-end corridor could pass this and still be fatal. Closing that needs a
+ * per-mine-position reachability search, which is worth doing if a board ever fails
+ * playtesting while passing here.
+ *
+ * The lattice step is `cellSize / 8`, not a magic constant. The narrowest passage a tank
+ * can use is 2 cells (1.333), leaving a legal centre band of `1.333 - 1.0 = 0.333`; four
+ * samples across that band means the minimum legal passage cannot alias closed.
+ * `versus-board.test.ts` pins both ends: a 1-cell passage fails and a 2-cell passage passes.
+ */
+function tankLegalComponents(
+  arena: Arena,
+  positions: readonly { x: number; y: number }[],
+  walls: ReturnType<typeof loadArena>['walls'],
+): { labels: number[]; sizes: number[]; diameters: number[] } {
+  const width = arena.cols * arena.cellSize;
+  const height = arena.rows * arena.cellSize;
+  const step = arena.cellSize / 8;
+  const nx = Math.max(1, Math.floor(width / step));
+  const ny = Math.max(1, Math.floor(height / step));
+  const idx = (i: number, j: number) => i * ny + j;
+
+  // Start from "legal everywhere inside the wall-free border", then RASTERISE each wall
+  // into the lattice cells it can possibly block. The obvious loop -- test every wall at
+  // every lattice point -- is O(lattice x walls) and measured 44s on one variant sweep,
+  // which is not a check anyone will keep. A wall can only block points within
+  // TANK_RADIUS of its box, so each wall touches a small neighbourhood; the exact
+  // `circleVsAABB` test still decides every cell, so this is a speed change and not an
+  // approximation. (Expanding the AABB and marking the whole rectangle WOULD be an
+  // approximation -- it would block the rounded corners a tank can actually occupy.)
+  const legal = new Uint8Array(nx * ny);
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      const x = (i + 0.5) * step;
+      const y = (j + 0.5) * step;
+      if (x - TANK_RADIUS < 0 || y - TANK_RADIUS < 0 || x + TANK_RADIUS > width || y + TANK_RADIUS > height) continue;
+      legal[idx(i, j)] = 1;
+    }
+  }
+  for (const wall of walls) {
+    const b = wall.aabb;
+    const i0 = Math.max(0, Math.floor((b.minX - TANK_RADIUS) / step) - 1);
+    const i1 = Math.min(nx - 1, Math.ceil((b.maxX + TANK_RADIUS) / step) + 1);
+    const j0 = Math.max(0, Math.floor((b.minY - TANK_RADIUS) / step) - 1);
+    const j1 = Math.min(ny - 1, Math.ceil((b.maxY + TANK_RADIUS) / step) + 1);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const k = idx(i, j);
+        if (legal[k] !== 1) continue;
+        if (circleVsAABB({ x: (i + 0.5) * step, y: (j + 0.5) * step }, TANK_RADIUS, b).hit) legal[k] = 0;
+      }
+    }
+  }
+
+  const label = new Int32Array(nx * ny).fill(-1);
+  const sizes: number[] = [];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      if (legal[idx(i, j)] !== 1 || label[idx(i, j)] !== -1) continue;
+      const id = sizes.length;
+      let count = 0;
+      const stack = [i, j];
+      label[idx(i, j)] = id;
+      while (stack.length > 0) {
+        const cy = stack.pop() as number;
+        const cx = stack.pop() as number;
+        count += 1;
+        const around = [cx + 1, cy, cx - 1, cy, cx, cy + 1, cx, cy - 1];
+        for (let n = 0; n < around.length; n += 2) {
+          const ax = around[n];
+          const ay = around[n + 1];
+          if (ax < 0 || ay < 0 || ax >= nx || ay >= ny) continue;
+          const k = idx(ax, ay);
+          if (legal[k] !== 1 || label[k] !== -1) continue;
+          label[k] = id;
+          stack.push(ax, ay);
+        }
+      }
+      sizes.push(count);
+    }
+  }
+
+  // Per-component extent, as the bounding-box diagonal of its lattice cells. Used only to
+  // ask whether a sealed pocket is wide enough to retreat out of a mine blast, so an
+  // over-estimate is the safe direction: it can only let a marginal board through, never
+  // refuse a roomy one, and the boards this separates differ by more than a factor of ten.
+  const box = sizes.map(() => ({ minI: Infinity, maxI: -Infinity, minJ: Infinity, maxJ: -Infinity }));
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      const id = label[idx(i, j)];
+      if (id < 0) continue;
+      const b = box[id];
+      if (i < b.minI) b.minI = i;
+      if (i > b.maxI) b.maxI = i;
+      if (j < b.minJ) b.minJ = j;
+      if (j > b.maxJ) b.maxJ = j;
+    }
+  }
+  const diameters = box.map((b) => Math.hypot((b.maxI - b.minI) * step, (b.maxJ - b.minJ) * step));
+
+  const labels = positions.map((p) => {
+    const i = Math.min(nx - 1, Math.max(0, Math.floor(p.x / step)));
+    const j = Math.min(ny - 1, Math.max(0, Math.floor(p.y / step)));
+    return label[idx(i, j)];
+  });
+  return { labels, sizes, diameters };
+}
+
+/** The radius `detonateMine` actually kills at -- the distance a player must retreat. */
+export const MINE_KILL_RADIUS = MINE_BLAST_RADIUS + TANK_RADIUS;
+
+function evaluateSpawnEgress(
+  arena: Arena,
+  positions: readonly { x: number; y: number }[],
+  walls: ReturnType<typeof loadArena>['walls'],
+): {
+  spawnsInLargestRegion: number;
+  egressOk: boolean;
+  sealedSpawns: number;
+  fatalEscapes: number;
+  egressDiagnosis: string;
+} {
+  const solid = walls.filter((w) => w.kind !== 'destructible');
+  const { labels, sizes } = tankLegalComponents(arena, positions, solid);
+
+  const tally = new Map<number, number>();
+  for (const l of labels) tally.set(l, (tally.get(l) ?? 0) + 1);
+  let spawnsInLargestRegion = 0;
+  for (const n of tally.values()) if (n > spawnsInLargestRegion) spawnsInLargestRegion = n;
+  const solidlyConnected = positions.length > 0
+    && spawnsInLargestRegion === positions.length
+    && labels.every((l) => l >= 0);
+
+  // The state the player actually starts in: nothing destroyed yet.
+  const intact = tankLegalComponents(arena, positions, walls);
+  const softTally = new Map<number, number>();
+  for (const l of intact.labels) softTally.set(l, (softTally.get(l) ?? 0) + 1);
+  const sealedSpawns = intact.labels.filter((l) => (softTally.get(l) ?? 0) === 1).length;
+
+  // A sealed spawn must have room to lay the mine and get clear of it.
+  const fatal: number[] = [];
+  for (let s = 0; s < positions.length; s++) {
+    const l = intact.labels[s];
+    if (l < 0) { fatal.push(s); continue; }
+    if ((softTally.get(l) ?? 0) > 1) continue; // shares its pocket with another player
+    if ((intact.diameters[l] ?? 0) < MINE_KILL_RADIUS) fatal.push(s);
+  }
+  const fatalEscapes = fatal.length;
+
+  const egressOk = solidlyConnected && fatalEscapes === 0;
+
+  const parts: string[] = [];
+  if (!solidlyConnected) {
+    const groups = [...tally.entries()].map(([l]) => {
+      const slots = labels.map((x, s) => (x === l ? `P${s + 1}` : '')).filter(Boolean).join('+');
+      return l < 0 ? `${slots} on no tank-legal cell` : `${slots} in a solid-walled region of ${sizes[l]} lattice cells`;
+    });
+    parts.push(`${groups.length} disjoint spawn region(s) with destructibles removed: ${groups.join('; ')}`);
+  }
+  if (fatalEscapes > 0) {
+    parts.push(fatal.map((s) => {
+      const l = intact.labels[s];
+      const d = l < 0 ? 0 : (intact.diameters[l] ?? 0);
+      return `P${s + 1} is sealed by destructibles in a pocket only ${d.toFixed(2)} across, under the ${MINE_KILL_RADIUS} mine kill radius -- escaping costs a life`;
+    }).join('; '));
+  }
+  return { spawnsInLargestRegion, egressOk, sealedSpawns, fatalEscapes, egressDiagnosis: parts.join(' | ') };
 }
 
 /**
@@ -179,9 +412,13 @@ export function evaluateVersusBoard(arena: Arena, playerCount: number): VersusBo
   const openFloorPerPlayer = openFloorCells / playerCount;
   const roomOk = openFloorPerPlayer >= MIN_OPEN_FLOOR_PER_PLAYER;
 
+  // Issue #423. Folded into `suitable` rather than merely reported, because the two
+  // boards this caught were suitable by every other measure and unplayable in fact.
+  const { spawnsInLargestRegion, egressOk, sealedSpawns, fatalEscapes, egressDiagnosis } = evaluateSpawnEgress(arena, positions, walls);
+
   return {
     playerCount,
-    suitable: distinctSpawns && allPairsConcealed && roomOk,
+    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,
     spawnCount,
     distinctSpawns,
     totalPairs,
@@ -189,6 +426,11 @@ export function evaluateVersusBoard(arena: Arena, playerCount: number): VersusBo
     allPairsConcealed,
     openFloorCells,
     openFloorPerPlayer,
+    spawnsInLargestRegion,
+    egressOk,
+    sealedSpawns,
+    fatalEscapes,
+    egressDiagnosis,
     roomOk,
   };
 }

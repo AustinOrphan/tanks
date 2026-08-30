@@ -18,19 +18,21 @@ import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-cata
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 8 shipped entries validate clean: 0 failures over 35 declared (entry, N, mode) combinations', () => {
-    // 35, not 48: five entries declare 3 player counts x 2 modes (30), issue #271's
-    // vs-duel-01 declares 1 x 2, issue #272's vs-tri-01 declares 1 x 1 -- three players
-    // have no fair team split, so it promises `ffa` alone -- and issue #273's vs-quad-01
-    // declares 1 x 2, four players splitting into a top pair and a bottom pair that hold
-    // mirrored territory. The sweep covers what each entry PROMISES, so a narrowed
+  it('all 6 shipped entries validate clean: 0 failures over 32 declared (entry, N, mode) combinations', () => {
+    // 32, not 36: five entries declare 3 player counts x 2 modes (30), and issue #271's
+    // vs-duel-01 declares 1 x 2. The sweep covers what each entry PROMISES, so a narrowed
     // declaration shrinks this denominator rather than leaving combinations silently
     // unchecked.
-    expect(VERSUS_CATALOG.length).toBe(8);
+    //
+    // It was 8 entries / 35 combinations until vs-tri-01 (#272, 1 x 1 -- three players
+    // have no fair team split) and vs-quad-01 (#273, 1 x 2) were WITHDRAWN pending
+    // #424/#425: human playtesting found players cannot leave their spawns on either
+    // board. 35 - 1 - 2 = 32. Their arena definitions remain; only the offer is withdrawn.
+    expect(VERSUS_CATALOG.length).toBe(6);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(35);
+    ).toBe(32);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }

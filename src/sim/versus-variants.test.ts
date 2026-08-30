@@ -264,22 +264,51 @@ describe('room: openFloorCells rises by EXACTLY the removed count, on all 8 ship
 // ---------------------------------------------------------------------------
 
 describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measured', () => {
-  it('0 of 240 (arena, N, seed) draws are unsuitable -- 8 arenas x 3 player counts x 10 seeds, fraction 0.4', () => {
+  it('0 of 160 OFFERED (arena, N, seed) draws are unsuitable, and the 80 unoffered ones are accounted for', () => {
+    // Population re-derived for the tank-egress gate (issue #423). It used to sweep all
+    // 240 draws and claim 0 unsuitable, which held only because nothing checked whether a
+    // tank could leave its spawn.
+    //
+    // The sweep that MATTERS is the offered one: 5 campaign boards x 3 counts x 10 seeds
+    // (150) plus vs-duel-01 at its single count x 10 (10) = 160 draws, 0 unsuitable. Every
+    // combination the menu can actually serve survives destructible removal at fraction
+    // 0.4 on all ten seeds.
+    //
+    // The other 80 are not swept for suitability, they are ACCOUNTED for, so the number
+    // cannot drift silently: vs-tri-01 and vs-quad-01 are withdrawn (#424/#425) and fail
+    // every one of their 60 draws, and vs-duel-01 fails 14 of the 20 draws at the counts
+    // it is not offered at (5 of 10 at N=3, 9 of 10 at N=4) -- removing destructibles
+    // changes which pockets its third and fourth spawns land in, which is why that half
+    // is seed-dependent while the withdrawn boards are not.
     const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const OFFERED: Record<string, number[]> = {
+      'arena-01': [2, 3, 4], 'arena-02': [2, 3, 4], 'arena-03': [2, 3, 4],
+      'arena-04': [2, 3, 4], 'arena-05': [2, 3, 4], 'vs-duel-01': [2],
+    };
     let checked = 0;
     let unsuitable = 0;
+    let unofferedChecked = 0;
+    let unofferedUnsuitable = 0;
     for (const arena of ARENA_DEFS) {
       for (const n of [2, 3, 4] as const) {
         for (const seed of seeds) {
-          checked++;
           const grid = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, seed, DESTRUCTIBLE_REMOVAL_FRACTION);
           const variant: Arena = { ...arena, grid };
-          if (!evaluateVersusBoard(variant, n).suitable) unsuitable++;
+          const ok = evaluateVersusBoard(variant, n).suitable;
+          if ((OFFERED[arena.id] ?? []).includes(n)) {
+            checked++;
+            if (!ok) unsuitable++;
+          } else {
+            unofferedChecked++;
+            if (!ok) unofferedUnsuitable++;
+          }
         }
       }
     }
-    expect(checked).toBe(240);
+    expect(checked, 'the offered (arena, N, seed) population').toBe(160);
     expect(unsuitable).toBe(0);
+    expect(unofferedChecked).toBe(80);
+    expect(unofferedUnsuitable, 'the unoffered draws that fail, pinned so it cannot drift').toBe(74);
     // 30s, not the 5s default. The sweep is O(arenas x N x seeds) real board evaluations
     // and issue #272's seventh arena took it from 180 draws to 210, measured at just over
     // 5s -- so it began timing out on content rather than on any slowdown. Raised rather
