@@ -69,6 +69,7 @@ const MUTATION_FLOOR = read('.github/workflows/mutation-floor.yml');
 const ENGINES = read('.github/workflows/engines.yml');
 const ISSUE_METADATA = read('.github/workflows/issue-metadata.yml');
 const ISSUE_RELATIONSHIPS = read('.github/workflows/issue-relationship-migration.yml');
+const CAPTURE = read('.github/workflows/capture.yml');
 const BASELINE_RUN = read('tools/baseline/run.mjs');
 const COMMAND_REFERENCE = read('docs/agent/commands-and-operations.md');
 
@@ -697,5 +698,121 @@ describe('the Engines Matrix iOS Simulator beacon', () => {
     expect(step).toContain(
       'set +e\n          wait "$RUNNER_PID"\n          BEACON_EXIT=$?\n          set -e\n          RUNNER_PID=""\n          exit "$BEACON_EXIT"',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// capture.yml (issue #343): manually dispatched capture/compare runs.
+//
+// Same TEXT-not-YAML caveat as everything above. What makes this file worth guarding is
+// that its two worst failure modes are silent in the same way pages.yml's are: a widened
+// permission still captures perfectly, and a recipe list that has drifted from the registry
+// still runs the recipes it does list. Neither shows up as a red run.
+//
+// EACH ASSERTION WAS RUN AGAINST THE MUTATION IT CLAIMS TO CATCH:
+//   add a 5th id to recipes.json only          -> offers exactly the committed recipes
+//   `contents: read` -> `contents: write`      -> grants no write permission
+//   add `pull_request_target:`                 -> is dispatch-only, so required CI is untouched
+//   add `push:`                                -> is dispatch-only, so required CI is untouched
+//   interpolate ${{ inputs.ref }} into a script -> passes every input through env
+//   retention-days 14 -> 90                    -> bounds artifact retention and job runtime
+//   delete timeout-minutes                     -> bounds artifact retention and job runtime
+//   playwright 1.62.0 -> 1.63.0 in capture.yml -> pins the same browser the visual job pins
+// ---------------------------------------------------------------------------
+describe('capture.yml: the on-demand capture workflow', () => {
+  it('offers exactly the recipes committed to the registry, and no others', () => {
+    // THE drift guard. A `choice` input is an allowlist expressed in YAML, so it is a second
+    // copy of a list that already exists in tools/capture/recipes.json -- and a copy that
+    // silently omits a recipe is invisible: every run still works, the missing one simply
+    // cannot be dispatched. Compared as SETS, so ordering in either file is free to change.
+    const registry = JSON.parse(read('tools/capture/recipes.json')) as { id: string }[];
+    const ids = registry.map((r) => r.id);
+    expect(ids.length, 'the registry is empty; this test would pass vacuously').toBeGreaterThan(0);
+    const block = CAPTURE.slice(CAPTURE.indexOf('      recipe:'), CAPTURE.indexOf('      ref:'));
+    const offered = [...block.matchAll(/^ {10}- (\S+)$/gm)].map((m) => m[1]);
+    expect(new Set(offered)).toEqual(new Set(ids));
+    expect(offered).toHaveLength(ids.length);
+  });
+
+  it('grants no write permission', () => {
+    // `permissions:` at the top level, so no job can widen it. The workflow pushes nothing,
+    // opens nothing and comments nowhere -- issue #343's security section.
+    expect(CAPTURE).toContain('permissions:\n  contents: read\n');
+    expect(CAPTURE, 'a write permission appeared').not.toMatch(/:\s*write\b/);
+    expect(CAPTURE, 'a token was exposed to the run').not.toContain('secrets.');
+  });
+
+  it('is dispatch-only, so the required checks are untouched', () => {
+    // `pull_request_target` runs untrusted code with a writable token, which is the one
+    // combination this must never have. `push`/`pull_request` would put a capture on the
+    // critical path of every change, which #343's last criterion forbids.
+    const triggers = CAPTURE.slice(CAPTURE.indexOf('\non:'), CAPTURE.indexOf('\npermissions:'));
+    expect(triggers).toContain('workflow_dispatch:');
+    for (const forbidden of ['pull_request_target:', 'pull_request:', 'push:', 'schedule:']) {
+      expect(triggers, `capture.yml triggers on ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('passes every input through env rather than into script text', () => {
+    // A `choice` input cannot carry shell metacharacters, but `ref`, `base` and `head` are
+    // `string` inputs. Interpolating any of them into a `run:` body puts attacker-controlled
+    // text into the script itself, where quoting is the only thing between it and execution.
+    // Asserted over the whole file rather than per step, because the mistake is adding a NEW
+    // step that interpolates -- the existing ones are already correct.
+    // Block-scalar bodies are the lines indented FURTHER than their own `run:` key, up to
+    // the first line that is not. A single greedy regex swallows every later block into the
+    // first one -- measured: it found 1 body where the file has 6 -- so the bodies are cut
+    // by indentation instead, and the count is asserted against a grep of the same file.
+    const lines = CAPTURE.split('\n');
+    const runBodies: string[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const open = /^(\s*)run: \|\s*$/.exec(lines[i]);
+      if (!open) continue;
+      const indent = open[1].length;
+      const body: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        const l = lines[j];
+        if (l.trim() !== '' && (l.length - l.trimStart().length) <= indent) break;
+        body.push(l);
+      }
+      runBodies.push(body.join('\n'));
+    }
+    expect(runBodies.length, 'no run blocks found; this test would pass vacuously')
+      .toBe((CAPTURE.match(/^\s*run: \|\s*$/gm) ?? []).length);
+    expect(runBodies.length).toBeGreaterThan(3);
+    for (const body of runBodies) {
+      expect(body, 'an input is interpolated into a run: script').not.toMatch(/\$\{\{\s*inputs\./);
+      expect(body, 'a github context value is interpolated into a run: script').not.toMatch(/\$\{\{\s*github\./);
+    }
+  });
+
+  it('bounds artifact retention and job runtime', () => {
+    // Both are explicit acceptance criteria. Retention is the one that costs storage
+    // silently; the timeout is what turns a hung browser into a readable failure.
+    expect(CAPTURE).toContain('retention-days: 14');
+    expect(CAPTURE).toMatch(/timeout-minutes: \d+/);
+    expect(CAPTURE).toContain('concurrency:');
+    // NOT cancel-in-progress: a half-finished capture is the "partial capture reported as
+    // successful" this issue forbids.
+    expect(CAPTURE).toContain('cancel-in-progress: false');
+  });
+
+  it('pins the same browser the visual job pins', () => {
+    // A capture that renders differently from the required `visual` check is evidence about
+    // a browser nobody gates on. Read from CI rather than hardcoded here, so a deliberate
+    // bump in one file is a red suite until the other follows.
+    const pin = /playwright@(\d+\.\d+\.\d+)/;
+    const ciPin = CI.match(pin)?.[1];
+    expect(ciPin, 'ci.yml no longer pins playwright').toBeDefined();
+    expect(CAPTURE.match(pin)?.[1], 'capture.yml and ci.yml pin different Playwright versions').toBe(ciPin);
+    expect(CAPTURE).toContain(`playwright-chromium-${ciPin}-`);
+  });
+
+  it('reuses the committed runners instead of reimplementing capture in YAML', () => {
+    // #343: "Reuse #342/#335 commands rather than reimplementing capture logic in workflow
+    // YAML." A shell reimplementation would be a second definition of the artifact contract.
+    expect(CAPTURE).toContain('npm run capture --');
+    expect(CAPTURE).toContain('npm run capture:compare --');
+    expect(CAPTURE, 'the workflow drives a browser directly').not.toContain('npx playwright test');
   });
 });
