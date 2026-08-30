@@ -188,3 +188,169 @@ export function devControls(): readonly DevControl[] {
 }
 
 export { parseDevFlags, parseDeveloperMode };
+
+// ---------------------------------------------------------------------------
+// REQUESTED vs EFFECTIVE, with a machine-readable reason for every difference.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a requested value is not the effective one, or why an effective one needs explaining.
+ *
+ * `rejected`, NOT `clamped`. Issue #244's scope says "clamping", but `devflags.ts` says the
+ * opposite in three places and on purpose -- `asQuality` and `asPlayers` both state "not
+ * clamped: an out-of-range value must not silently become a different meaning", and
+ * `sandboxWalls` says it matches "`players`' own reject-to-null idiom rather than clamping".
+ * So the parser REJECTS to the default and this model explains that. Modelling a `clamped`
+ * reason would describe behaviour the code does not have. Raised on the issue.
+ */
+export type DevConfigReason =
+  /** A developer parameter was supplied without `dev=1`, so nothing it asked for applies. */
+  | 'gate-closed'
+  /** `playtest` turned this boolean on; the URL did not ask for it directly. */
+  | 'bundle-forced'
+  /** The value did not parse, so the flag's default stands. */
+  | 'rejected'
+  /** Parsed and carried, but nothing reads it in this configuration. */
+  | 'context-inert'
+  /** A boolean whose default is ON, so absence is not "off" (`sandboxDisarmed`). */
+  | 'inverted-default';
+
+export interface DevConfigNote {
+  readonly field: string;
+  readonly param: string;
+  readonly reason: DevConfigReason;
+  /** The raw parameter value, when the URL carried one. */
+  readonly requested?: string;
+  /** What the parser actually produced. */
+  readonly effective: unknown;
+  /** One line, suitable for display beside the control. */
+  readonly detail: string;
+}
+
+export interface DevConfigState {
+  readonly developerMode: boolean;
+  readonly effective: DevFlags;
+  readonly notes: readonly DevConfigNote[];
+  /** Parameters that are not `dev`, not `playtest`, and name no registry flag. */
+  readonly unknownParams: readonly string[];
+}
+
+/** Every query parameter this model knows how to read. */
+export function knownDevParams(): readonly string[] {
+  const fields = Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[];
+  return ['dev', PLAYTEST_BUNDLE.param, ...fields.map((f) => FLAG_REGISTRY[f].param ?? f)];
+}
+
+function toParams(search: string): URLSearchParams {
+  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+}
+
+/**
+ * Explain one query string.
+ *
+ * Routes `parseDeveloperMode` and `parseDevFlags` -- the SAME functions `createBrowserDeps`
+ * calls at boot -- so a preview cannot disagree with what the game will do. Everything below
+ * is commentary ON that result, never a second computation OF it.
+ */
+export function explainDevConfig(search: string): DevConfigState {
+  const params = toParams(search);
+  const developerMode = parseDeveloperMode(search);
+  const effective = parseDevFlags(search);
+  const fields = Object.keys(FLAG_REGISTRY) as (keyof DevFlags)[];
+  const paramOf = (f: keyof DevFlags): string => FLAG_REGISTRY[f].param ?? f;
+  const notes: DevConfigNote[] = [];
+
+  const known = new Set(knownDevParams());
+  const unknownParams = [...new Set([...params.keys()])].filter((k) => !known.has(k)).sort();
+
+  // 1. The gate. `parseDevFlags` returns DEV_FLAGS_OFF wholesale without `dev=1`, so a URL
+  //    full of developer parameters does nothing at all -- the single most confusing state
+  //    this model exists to explain, and one no per-flag comparison would surface, since
+  //    every flag simply equals its default.
+  if (!developerMode) {
+    for (const f of fields) {
+      const p = paramOf(f);
+      if (!params.has(p)) continue;
+      notes.push({
+        field: f, param: p, reason: 'gate-closed', requested: params.get(p) ?? '',
+        effective: effective[f],
+        detail: `\`${p}\` was supplied without \`dev=1\`, so it has no effect.`,
+      });
+    }
+    if (params.has(PLAYTEST_BUNDLE.param)) {
+      notes.push({
+        field: 'playtest', param: PLAYTEST_BUNDLE.param, reason: 'gate-closed',
+        requested: params.get(PLAYTEST_BUNDLE.param) ?? '', effective: false,
+        detail: `\`${PLAYTEST_BUNDLE.param}\` was supplied without \`dev=1\`, so it has no effect.`,
+      });
+    }
+    return { developerMode, effective, notes, unknownParams };
+  }
+
+  // 2. The bundle. Only ever sets booleans true (`expandsTo` is typed `BooleanFlagKey[]`),
+  //    so it can never force a valued flag -- worth stating, because a reader may assume a
+  //    bundle can set anything. A member the URL asked for directly is not "forced".
+  if (params.has(PLAYTEST_BUNDLE.param)) {
+    const bundleOn = toParams(search).get(PLAYTEST_BUNDLE.param);
+    const on = bundleOn === null ? false : !['0', 'false', 'off', 'no'].includes(bundleOn.toLowerCase());
+    if (on) {
+      for (const f of PLAYTEST_BUNDLE.expandsTo) {
+        const p = paramOf(f);
+        if (params.has(p)) continue;
+        notes.push({
+          field: f, param: p, reason: 'bundle-forced', effective: effective[f],
+          detail: `Turned on by \`${PLAYTEST_BUNDLE.param}\`, not requested directly.`,
+        });
+      }
+    }
+  }
+
+  // 3. Rejection. A valued flag whose parameter is present but whose effective value is
+  //    still the default was rejected -- sound here because EVERY valued flag defaults to
+  //    null and no accepted value parses to null, which `dev-config.test.ts` pins as a
+  //    premise rather than leaving as an assumption.
+  for (const f of fields) {
+    const spec = FLAG_REGISTRY[f];
+    if (spec.kind !== 'valued') continue;
+    const p = paramOf(f);
+    if (!params.has(p)) continue;
+    if (effective[f] !== DEV_FLAGS_OFF[f]) continue;
+    const shape = spec.values ? spec.values.map((v) => `\`${v}\``).join(', ') : spec.type ?? '';
+    notes.push({
+      field: f, param: p, reason: 'rejected', requested: params.get(p) ?? '',
+      effective: effective[f],
+      detail: `Not an accepted value${shape ? ` (${shape})` : ''}; the default stands. Values are rejected, never clamped.`,
+    });
+  }
+
+  // 4. Context-inert flags: carried faithfully, read by nothing in this configuration. Both
+  //    instances are stated in DevFlags' own field comments ("so this flag is inert").
+  if (effective.coopPool && (effective.players ?? 1) < 2) {
+    notes.push({
+      field: 'coopPool', param: 'coopPool', reason: 'context-inert', effective: true,
+      detail: 'Only meaningful with `players` >= 2; a single-player session never enters the shared-pool path.',
+    });
+  }
+  if (effective.friendlyFire && effective.mode !== 'teams') {
+    notes.push({
+      field: 'friendlyFire', param: 'friendlyFire', reason: 'context-inert', effective: true,
+      detail: 'Only meaningful with `mode=teams`; outside teams it self-disables by construction.',
+    });
+  }
+
+  // 5. Inverted defaults, derived rather than named: any boolean whose DEV_FLAGS_OFF entry is
+  //    already `true`, so absence of its parameter does not mean "off". `sandboxDisarmed` is
+  //    the only one today, and the test pins that population so a second one cannot appear
+  //    unexplained.
+  for (const f of fields) {
+    if (FLAG_REGISTRY[f].kind !== 'boolean' || DEV_FLAGS_OFF[f] !== true) continue;
+    const p = paramOf(f);
+    notes.push({
+      field: f, param: p, reason: 'inverted-default', ...(params.has(p) ? { requested: params.get(p) ?? '' } : {}),
+      effective: effective[f],
+      detail: `Defaults to ON: absence of \`${p}\` leaves it enabled, and \`${p}=0\` is what turns it off.`,
+    });
+  }
+
+  return { developerMode, effective, notes, unknownParams };
+}

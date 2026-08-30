@@ -11,6 +11,8 @@ import {
   FLAG_GROUPS,
   controlKindFor,
   devControls,
+  explainDevConfig,
+  knownDevParams,
 } from './dev-config';
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,105 @@ describe('control type is derived from the registry, not declared twice', () => 
   it('carries each default straight from DEV_FLAGS_OFF', () => {
     for (const c of devControls().filter((x) => !x.isBundle)) {
       expect(c.defaultValue, c.field).toBe(DEV_FLAGS_OFF[c.field as keyof typeof DEV_FLAGS_OFF]);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REQUESTED vs EFFECTIVE. Every case here is a real query string routed through the SAME
+// `parseDevFlags` the boot path calls, so a green test cannot mean "the model's own copy of
+// the parser agrees with itself".
+// ---------------------------------------------------------------------------
+describe('explainDevConfig', () => {
+  const reasons = (s: string): string[] => explainDevConfig(s).notes.map((n) => `${n.field}:${n.reason}`);
+  const noteFor = (s: string, field: string) => explainDevConfig(s).notes.find((n) => n.field === field);
+
+  it('THE PREMISE the rejection rule rests on: every valued flag defaults to null', () => {
+    // The rule is "parameter present, effective still the default => rejected". That is only
+    // sound while no ACCEPTED value can itself parse to the default. It holds because every
+    // valued flag's default is null and nothing valid parses to null -- asserted here rather
+    // than assumed, because a future valued flag defaulting to, say, 1 would silently make
+    // `?players=1` look rejected.
+    const valued = (Object.keys(FLAG_REGISTRY) as (keyof typeof FLAG_REGISTRY)[])
+      .filter((f) => FLAG_REGISTRY[f].kind === 'valued');
+    expect(valued.length, 'the population this premise covers').toBe(11);
+    for (const f of valued) {
+      expect(DEV_FLAGS_OFF[f], `${f} defaults to something a valid value could parse to`).toBeNull();
+    }
+  });
+
+  it('THE PREMISE the inverted-default rule rests on: exactly one boolean defaults to ON', () => {
+    const inverted = (Object.keys(FLAG_REGISTRY) as (keyof typeof FLAG_REGISTRY)[])
+      .filter((f) => FLAG_REGISTRY[f].kind === 'boolean' && DEV_FLAGS_OFF[f] === true);
+    expect(inverted).toEqual(['sandboxDisarmed']);
+  });
+
+  it('explains a whole URL that does nothing, because the gate is shut', () => {
+    // The most confusing real state: every flag equals its default, so a per-flag value
+    // comparison reports nothing wrong at all. Only the gate explains it.
+    const s = explainDevConfig('?aimRay=1&seed=42&playtest=1');
+    expect(s.developerMode).toBe(false);
+    expect(s.effective).toEqual(DEV_FLAGS_OFF);
+    expect(s.notes.map((n) => `${n.field}:${n.reason}`).sort())
+      .toEqual(['aimRay:gate-closed', 'playtest:gate-closed', 'seed:gate-closed']);
+    expect(s.notes.find((n) => n.field === 'seed')?.requested).toBe('42');
+  });
+
+  it('names each bundle member it forced, and does not claim one the URL asked for', () => {
+    const forced = explainDevConfig('?dev=1&playtest=1').notes
+      .filter((n) => n.reason === 'bundle-forced').map((n) => n.field);
+    expect(forced.length, 'the bundle expands to something').toBeGreaterThan(0);
+    expect(forced.sort()).toEqual([...PLAYTEST_BUNDLE.expandsTo].sort());
+    // Ask for one member directly: it is still on, but it was not FORCED.
+    const direct = PLAYTEST_BUNDLE.expandsTo[0];
+    const withDirect = explainDevConfig(`?dev=1&playtest=1&${direct}=1`).notes
+      .filter((n) => n.reason === 'bundle-forced').map((n) => n.field);
+    expect(withDirect).not.toContain(direct);
+    expect(withDirect.length).toBe(forced.length - 1);
+  });
+
+  it('reports a rejected value as rejected, and says the default stands', () => {
+    const n = noteFor('?dev=1&quality=ludicrous', 'quality');
+    expect(n?.reason).toBe('rejected');
+    expect(n?.requested).toBe('ludicrous');
+    expect(n?.effective).toBe(DEV_FLAGS_OFF.quality);
+    expect(n?.detail).toContain('never clamped');
+    // An ACCEPTED value produces no note at all -- the negative half, without which the
+    // rule above would pass while flagging everything.
+    expect(reasons('?dev=1&quality=low').filter((r) => r.startsWith('quality:'))).toEqual([]);
+  });
+
+  it('rejects an out-of-range number rather than clamping it into a different meaning', () => {
+    // The behaviour the issue's "clamping" wording would have described wrongly:
+    // `players=99` does not become the maximum, it becomes null.
+    const n = noteFor('?dev=1&players=99', 'players');
+    expect(n?.reason).toBe('rejected');
+    expect(explainDevConfig('?dev=1&players=99').effective.players).toBeNull();
+  });
+
+  it('calls out a flag nothing reads in this configuration', () => {
+    expect(noteFor('?dev=1&friendlyFire=1', 'friendlyFire')?.reason).toBe('context-inert');
+    // ...and stops calling it out once the context it needs is present.
+    expect(noteFor('?dev=1&friendlyFire=1&mode=teams', 'friendlyFire')).toBeUndefined();
+    expect(noteFor('?dev=1&coopPool=1', 'coopPool')?.reason).toBe('context-inert');
+    expect(noteFor('?dev=1&coopPool=1&players=2', 'coopPool')).toBeUndefined();
+  });
+
+  it('explains the one flag whose absence does not mean off', () => {
+    const n = noteFor('?dev=1', 'sandboxDisarmed');
+    expect(n?.reason).toBe('inverted-default');
+    expect(n?.effective).toBe(true);
+    expect(n?.detail).toContain('=0');
+    // It is explained whether or not the URL mentions it, because the confusing case is
+    // precisely the one where the parameter is absent.
+    expect(noteFor('?dev=1&disarmed=0', 'sandboxDisarmed')?.effective).toBe(false);
+  });
+
+  it('surfaces parameters it does not know, and keeps the ones it does out of that list', () => {
+    const s = explainDevConfig('?dev=1&aimRay=1&oldFlag=1&utm_source=x&disarmed=0');
+    expect(s.unknownParams).toEqual(['oldFlag', 'utm_source']);
+    for (const k of ['dev', 'aimRay', 'disarmed', 'playtest']) {
+      expect(knownDevParams(), k).toContain(k);
     }
   });
 });
