@@ -123,15 +123,19 @@ describe('pickVersusArena', () => {
   });
 
   it('distributes: two measured seeds pick different arenas -- the negative control for a constant/broken resolver', () => {
-    // RE-MEASURED again: withdrawing vs-tri-01 returns the N=3 offer to the 5 campaign
-    // boards, which moves every pick that reads `seed % choices.length`.
+    // RE-MEASURED again: issue #424's rebuild returns vs-tri-01 to the N=3 offer, taking it
+    // to SIX boards, which moves every pick that reads `seed % choices.length`.
     //
-    // The second seed is RECHOSEN from a measured distribution, not renumbered. Over seeds
-    // 1..20 at N=3 the picks land arena-04 x7 (1,2,3,5,16,17,20), arena-03 x5, arena-01 x4
-    // (7,8,9,19), arena-02 x3, arena-05 x1 (seed 4 alone). Seed 4 is now a SINGLETON, so
-    // pinning it would put this control on a knife edge; seed 7 -> 'arena-01' sits in a
-    // four-seed bucket and still differs from seed 1's 'arena-04', which is the property
-    // this control actually needs.
+    // Both seeds are checked against the measured distribution rather than assumed to have
+    // survived. Over seeds 1..20 at N=3 on this tree the picks land arena-04 x6
+    // (1,6,10,11,13,16), arena-05 x5 (2,3,5,17,20), arena-01 x3 (7,8,19), arena-02 x3
+    // (9,12,15), arena-03 x2 (14,18), vs-tri-01 x1 (seed 4 alone).
+    //
+    // The pinned pair is unchanged -- seed 1 -> 'arena-04' and seed 7 -> 'arena-01' both
+    // still hold, which is luck rather than design and is worth saying so nobody reads an
+    // unmoved literal as evidence the offer did not move. Both sit in multi-seed buckets
+    // (six and three), so neither is on a knife edge; vs-tri-01's seed 4 is a SINGLETON and
+    // is deliberately not pinned here.
     // Pinned literals, not swept at runtime -- fails if pickVersusArena collapses to a
     // constant pick (e.g. always choices[0]) or stops reading `seed`.
     expect(pickVersusArena(base, 1)).toBe('arena-04');
@@ -153,7 +157,8 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
 
   it("'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument", () => {
     // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 7 ->
-    // 'arena-01' at players:3, re-derived after vs-tri-01's withdrawal. Two seeds, not
+    // 'arena-01' at players:3, re-derived against the SIX-board N=3 offer that issue
+    // #424's rebuild restored -- both literals happen to be unchanged. Two seeds, not
     // one: a single-seed assertion here would not catch a mutation that hardcodes the
     // seed it forwards to `pickVersusArena` (e.g. always `pickVersusArena(config, 1)`) --
     // this negative control was found empirically while mutating this function for issue
