@@ -1,0 +1,332 @@
+{
+  "slowed": [
+    {
+      "name": "a-early",
+      "atMs": 450,
+      "before": {
+        "panel": {
+          "classes": "hud-panel ui-surface--leaving",
+          "style": {
+            "display": "flex",
+            "opacity": "0.998"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats ui-surface--entering",
+          "style": {
+            "display": "flex",
+            "opacity": "0.002"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      },
+      "after": {
+        "panel": {
+          "classes": "hud-panel ui-surface--leaving",
+          "style": {
+            "display": "flex",
+            "opacity": "0.727"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats ui-surface--entering",
+          "style": {
+            "display": "flex",
+            "opacity": "0.273"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      }
+    },
+    {
+      "name": "b-middle",
+      "atMs": 4413,
+      "before": {
+        "panel": {
+          "classes": "hud-panel ui-surface--leaving",
+          "style": {
+            "display": "flex",
+            "opacity": "0.669"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats ui-surface--entering",
+          "style": {
+            "display": "flex",
+            "opacity": "0.331"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      },
+      "after": {
+        "panel": {
+          "classes": "hud-panel ui-surface--leaving",
+          "style": {
+            "display": "flex",
+            "opacity": "0.381"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats ui-surface--entering",
+          "style": {
+            "display": "flex",
+            "opacity": "0.619"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      }
+    },
+    {
+      "name": "c-late",
+      "atMs": 8429,
+      "before": {
+        "panel": {
+          "classes": "hud-panel ui-surface--leaving",
+          "style": {
+            "display": "flex",
+            "opacity": "0.352"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats ui-surface--entering",
+          "style": {
+            "display": "flex",
+            "opacity": "0.648"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      },
+      "after": {
+        "panel": {
+          "classes": "hud-panel ui-surface--leaving",
+          "style": {
+            "display": "flex",
+            "opacity": "0.203"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats ui-surface--entering",
+          "style": {
+            "display": "flex",
+            "opacity": "0.797"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      }
+    },
+    {
+      "name": "d-settled",
+      "atMs": 44279,
+      "before": {
+        "panel": {
+          "classes": "hud-panel hud-panel--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats",
+          "style": {
+            "display": "flex",
+            "opacity": "1.000"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      },
+      "after": {
+        "panel": {
+          "classes": "hud-panel hud-panel--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "stats": {
+          "classes": "hud-stats",
+          "style": {
+            "display": "flex",
+            "opacity": "1.000"
+          }
+        },
+        "splash": {
+          "classes": "hud-splash hud-splash--hidden",
+          "style": {
+            "display": "none",
+            "opacity": "1.000"
+          }
+        },
+        "ground": {
+          "classes": "ui-app-ground",
+          "style": {
+            "display": "block",
+            "opacity": "1.000"
+          }
+        },
+        "token": "30000ms"
+      }
+    }
+  ],
+  "reduced": {
+    "before": {
+      "panel": {
+        "classes": "hud-panel hud-panel--hidden",
+        "style": {
+          "display": "none",
+          "opacity": "1.000"
+        }
+      },
+      "stats": {
+        "classes": "hud-stats",
+        "style": {
+          "display": "flex",
+          "opacity": "1.000"
+        }
+      },
+      "splash": {
+        "classes": "hud-splash hud-splash--hidden",
+        "style": {
+          "display": "none",
+          "opacity": "1.000"
+        }
+      },
+      "ground": {
+        "classes": "ui-app-ground",
+        "style": {
+          "display": "block",
+          "opacity": "1.000"
+        }
+      },
+      "token": "30000ms"
+    },
+    "after": {
+      "panel": {
+        "classes": "hud-panel hud-panel--hidden",
+        "style": {
+          "display": "none",
+          "opacity": "1.000"
+        }
+      },
+      "stats": {
+        "classes": "hud-stats",
+        "style": {
+          "display": "flex",
+          "opacity": "1.000"
+        }
+      },
+      "splash": {
+        "classes": "hud-splash hud-splash--hidden",
+        "style": {
+          "display": "none",
+          "opacity": "1.000"
+        }
+      },
+      "ground": {
+        "classes": "ui-app-ground",
+        "style": {
+          "display": "block",
+          "opacity": "1.000"
+        }
+      },
+      "token": "30000ms"
+    }
+  }
+}
