@@ -2232,5 +2232,17 @@
     "tests": [
       "src/game/hud.test.ts"
     ]
+  },
+  {
+    "id": "refused-button-drawn-as-live",
+    "file": "src/game/hud.css",
+    "find": "  opacity: 0.45;\n  filter: saturate(0.4);\n  box-shadow: none;\n  cursor: not-allowed;",
+    "replace": "  cursor: not-allowed;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Leaves a refused control drawn exactly like a live one: `disabled` is still set and the gate still refuses, so every DOM assertion in the suite keeps passing and only the pixels lie. This is the defect that shipped in the first draft of issue #260 and was caught by photographing the built app -- Start was disabled and still bright green with its raised shadow. CSS is typechecked by nothing, so without this entry the whole treatment could be deleted silently.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]

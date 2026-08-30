@@ -485,6 +485,10 @@ describe('hud.css is syntactically whole', () => {
       '.hud-versus-slot-rows', '.hud-versus-slot-row', '.hud-versus-slot-label',
       '.hud-versus-slot-device', '.hud-versus-slot-reason',
       '.hud-versus-slot-reason--hidden', '.hud-versus-start-reason--hidden',
+      // issue #260: the kit's FIRST disabled-button treatment. Before this, nothing in
+      // hud.css matched `:disabled` at all, so a refused Start rendered identically to a
+      // live one -- caught by photographing the built app, not by any assertion here.
+      '.ui-btn:disabled',
       // Task 5b (a versus session's title screen): the Campaign button's hidden rule
       // -- without it every versus session would show it permanently, even at
       // non-title states.
@@ -793,6 +797,37 @@ describe('hud.css is syntactically whole', () => {
 
     row.classList.add('hud-versus-stocks--hidden');
     expect(getComputedStyle(row).display).toBe('none');
+
+    document.body.innerHTML = '';
+  });
+
+  it('draws a refused button as refused, on more channels than colour alone (issue #260)', () => {
+    // A RESOLVED-STYLE assertion, not a presence check: this file's own sweep above can
+    // only say the selector exists. What made this rule necessary was a screenshot of the
+    // built app -- `disabled` was set on Start and it still rendered bright green with its
+    // raised shadow, indistinguishable from a live primary button.
+    //
+    // Negative control: the enabled twin below must differ on every channel asserted, so
+    // a rule that accidentally applied to all buttons fails here rather than passing.
+    const live = document.createElement('button');
+    live.className = 'ui-btn ui-btn--primary';
+    const refused = document.createElement('button');
+    refused.className = 'ui-btn ui-btn--primary';
+    refused.disabled = true;
+    document.body.append(live, refused);
+
+    const l = getComputedStyle(live);
+    const r = getComputedStyle(refused);
+
+    // Three channels, so neither hue alone nor opacity alone carries the whole signal.
+    expect(r.opacity).not.toBe(l.opacity);
+    expect(r.cursor).toBe('not-allowed');
+    expect(r.cursor).not.toBe(l.cursor);
+    // The raised shadow is what makes the primary button read as pressable at all; a
+    // flattened one is a SHAPE difference, which survives a forced-colors theme (#368)
+    // that would flatten the hue difference away.
+    expect(l.boxShadow, 'the live control lost its raised shadow').not.toBe('none');
+    expect(r.boxShadow, 'the refused control still stands off the surface').toBe('none');
 
     document.body.innerHTML = '';
   });

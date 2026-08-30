@@ -241,6 +241,41 @@
   box-shadow: 0 3px 0 var(--hud-primary-shadow);
 }
 
+/* A REFUSED control, and the first one this kit has ever had to draw (issue #260).
+ *
+ * Nothing in hud.css matched `:disabled` before this. That was survivable while the only
+ * disabled buttons were the versus pane's old preview candidates -- rows a player was
+ * told, in a note beside them, not to expect anything from. It stops being survivable
+ * when the PRIMARY action is the refused one: `.ui-btn--primary` paints Start bright
+ * green with a raised shadow, so a refused Start looked exactly as clickable as a live
+ * one and simply did nothing. Verified in Chromium before this rule existed.
+ *
+ * THREE channels, not one, because #368's forced-colors work must not have to retrofit
+ * this and a colour-blind player must not be the only one who cannot tell:
+ *   - `opacity` dims it,
+ *   - the raised `box-shadow` is FLATTENED, which is a shape change rather than a hue
+ *     change: the button stops standing off the surface, the same cue `:active` uses,
+ *   - `cursor` says it before the click does.
+ * The refusal ALSO has two non-visual channels already -- the button's own `disabled`
+ * state and the aria-describedby reason (renderVersusSlotRows, hud.ts).
+ *
+ * `filter: saturate()` rather than a flat overriding background: it composes with
+ * whatever variant is underneath (primary, slab, destructive) instead of needing one
+ * disabled rule per variant, which is what would actually rot as variants are added. */
+.ui-btn:disabled {
+  opacity: 0.45;
+  filter: saturate(0.4);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ...and it must not still depress on click. Without this the refused Start animates as
+ * if it had accepted the press, which is the one cue that most reads as "it worked". */
+.ui-btn--primary:disabled:active {
+  transform: none;
+  box-shadow: none;
+}
+
 /* Destructive: the quiet slab, re-tinted. Reserved for replacing or resetting stored
  * data, and always paired with the arm/confirm step `.hud-danger--armed` draws. */
 .ui-btn--danger {
