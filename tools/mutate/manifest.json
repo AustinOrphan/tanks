@@ -1266,20 +1266,8 @@
       "src/game/ui.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all.",
-    "expectFailures": 3
-  },
-  {
-    "id": "ui-versus-preview-reason-left-on-the-real-rows",
-    "file": "src/game/hud.ts",
-    "find": "        describeDisabledReason(btn, interactive ? null : 'hud-versus-assignment-note');",
-    "replace": "        describeDisabledReason(btn, 'hud-versus-assignment-note');",
-    "expect": "killed",
-    "tests": [
-      "src/game/hud.test.ts"
-    ],
-    "why": "`renderControllerRowsInto` builds BOTH the standalone Controllers panel's real reassignment rows and the versus pane's who's-playing preview, and only the preview is disabled. Pointing every row at \"Assignment applies after Start.\" tells a screen reader that a button which reassigns a slot right now will not take effect until Start -- an explanation that is not merely redundant but false, and attached to a note that is itself hidden in that state. The half of the assertion that catches it is the one that reads the Controllers panel and expects NO reference; a test that only checked the preview gains it would stay green.",
-    "expectFailures": 1
+    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all. Issue #260 raised this from 3 to 5: the versus pane's Start button now carries its refusal through the same helper, so two more assertions -- the pane's own aria-describedby checks -- fail when it is broken.",
+    "expectFailures": 5
   },
   {
     "id": "render-respawn-teleport-removed",
@@ -1508,12 +1496,12 @@
     "find": "  for (let i = 0; i < players; i++) out.push(slots[i] ? { ...slots[i] } : defaults[i]);",
     "replace": "  for (let i = 0; i < players; i++) out.push(defaults[i]);",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/game/versus-setup.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing."
+    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing. Issue #260 raised this from 3 to 4, and the extra failure is the point: until the pane had role CONTROLS, nothing in the UI could show a discarded role. The fourth test drives the player-count buttons and reads the role back off the rendered card, so this is now pinned end to end rather than at the model alone."
   },
   {
     "id": "shell-spawn-ignores-drawn-nose-reach",
@@ -2279,6 +2267,78 @@
     "why": "Deletes findDependencyCycles' de-duplication outright. Before issue #417 added its test this SURVIVED -- all 25 tests in metadata.test.ts stayed green -- so the whole block was unverified production logic. It is genuinely reachable, but only narrowly: a duplicated BACK-edge, where the same blocker is listed twice pointing at a node still on the stack, because `visiting.get()` is consulted before `visited.has()`. A duplicated forward edge does not reach it, and neither does any of the 4096 directed graphs on 4 distinct nodes. Without the guard the audit reports one cycle as two errors, telling a maintainer to break an edge that has already been reported.",
     "tests": [
       "tools/issues/metadata.test.ts"
+    ]
+  },
+  {
+    "id": "versus-setup-never-persisted",
+    "file": "src/game/hud.ts",
+    "find": "    opts.versusSetup?.set({ ...next });",
+    "replace": "    void next;",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-start-gate-never-refuses",
+    "file": "src/game/hud.ts",
+    "find": "    versusStartBtn.disabled = problem !== null;",
+    "replace": "    versusStartBtn.disabled = false;",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-slot-device-ignores-live-pads",
+    "file": "src/game/hud.ts",
+    "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));",
+    "replace": "    const sources = resolveSources(slots, []);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Derives every slot's device as if no controller were connected. A second human slot would read 'Unassigned' and refuse Start with a controller plugged in, and -- worse in kind -- the gate would stop reacting to a hotplug at all, which is the criterion about a disconnect disabling Start with an actionable reason.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-refusal-shown-on-every-card",
+    "file": "src/game/hud.ts",
+    "find": "        problem !== null && problem.kind !== 'no-human' && problem.slot === slot;",
+    "replace": "        problem !== null && problem.kind !== 'no-human';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-refusal-reason-not-associated",
+    "file": "src/game/hud.ts",
+    "find": "          : `hud-versus-slot-reason-${problem.slot}`,",
+    "replace": "          : null,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Issue #321's rule is that a disabled control's reason is ASSOCIATED, not merely nearby. The sentence would still be on screen for a sighted player while a screen-reader user hears only that Start is disabled. Nothing about the visible rendering changes, so only an aria-describedby assertion can catch it.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "refused-button-drawn-as-live",
+    "file": "src/game/hud.css",
+    "find": "  opacity: 0.45;\n  filter: saturate(0.4);\n  box-shadow: none;\n  cursor: not-allowed;",
+    "replace": "  cursor: not-allowed;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Leaves a refused control drawn exactly like a live one: `disabled` is still set and the gate still refuses, so every DOM assertion in the suite keeps passing and only the pixels lie. This is the defect that shipped in the first draft of issue #260 and was caught by photographing the built app -- Start was disabled and still bright green with its raised shadow. CSS is typechecked by nothing, so without this entry the whole treatment could be deleted silently.",
+    "tests": [
+      "src/game/hud.css.test.ts"
     ]
   },
   {
