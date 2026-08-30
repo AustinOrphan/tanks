@@ -92,7 +92,7 @@
     "find": "let hi = span * 8;",
     "replace": "let hi = span * 4.5;",
     "expect": "killed",
-    "expectFailures": 15,
+    "expectFailures": 17,
     "why": "fitCameraToArea bisects between lo and hi, and its own comment records that when NOTHING in the bracket fits it returns the untested hi -- a camera that CROPS the board, silently. The bracket's real utilisation is aspect-dependent: the tightest shipped combination needs 4.84 spans of distance, at 20:9 portrait (0.42), against 4.44 at 19.5:9 (0.46). So 4.5 is the value that separates the aspect this PR added from the one that was already there. Gap proved before the test was written: against origin/main's framing.test.ts (d5cb2b3) this mutation passes 25 of 25; against the file as it stands it fails 11 -- 5 arenas x 2 sweeps at 0.42, plus the portrait/ultrawide coverage tripwire (was 9 = 4 arenas x 2 + 1 before arena-05 shipped; arena-05 shares arena-04's exact bounds, so it fails the same two checks). NOT re-verified against the whole suite, only the scoped file, which is what SURVIVES/KILLED means here. COUNT MOVED with issue #271: framing.test.ts sweeps every shipped arena, so a sixth board raises the number of cases this mutation fails from 11 to 13. Measured, not adjusted to fit. DRIFTED UPWARD 13 -> 15 for issue #272, and verified rather than renumbered: the mutation was applied on BOTH trees and the failing-test SETS diffed. The two additions are `contains the whole arena and its walls, arena 7 @ 0.42` and `wastes little screen, arena 7 @ 0.42` -- the per-arena framing cases for vs-tri-01, which is the seventh entry in ARENAS. No test failed on main and stopped failing here, so this is coverage added by a new board rather than coverage moved off an old one.",
     "tests": [
       "src/render/framing.test.ts"
@@ -345,7 +345,7 @@
     "find": "      for (let i = 0; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
     "replace": "      for (let i = 1; i < playerCount; i++) {\n        const pos = { x: (cells[i].col + 0.5) * cellSize, y: (cells[i].row + 0.5) * cellSize };",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 5,
     "why": "The design ruling is that versus is symmetric: no player may inherit the campaign author's `P` cell as a privileged start. Starting the placement loop at 1 leaves P1's tank and spawn exactly where PASS 1a stamped them -- on `P` -- while every other player is still maximin-placed, which is precisely the asymmetry pickVersusSpawnSet exists to remove. It also silently discards cells[0], so the co-players are placed against a set whose first member is not where anyone actually is. Caught by 3 of 17 in versus-spawns.test.ts: the coop-vs-ffa contrast (P1's position becomes identical in both modes again, which is the most direct statement of the ruling that exists), the exact separation-floor pin (11.6619... is the arena-03/ffa/N=4 figure WITH P1 relocated; pinning P1 to `P` takes the floor back to 9.0738...), and the greater-than-5-world-units guarantee.",
     "tests": [
       "src/sim/versus-spawns.test.ts"
@@ -2219,6 +2219,30 @@
     "why": "The trail tint stops excluding `campaign-coop`, so a FOUR-PLAYER CO-OP campaign board prints identity-tinted trails. This is the exact defect the first implementation shipped and a screenshot caught: co-op clears the player-count gate -- four player tanks, four identity rings -- so `identityApplies` alone is not enough, and issue #284's scope says campaign trails stay neutral in the initial implementation. Single-player campaign is NOT the discriminating case here (it fails the player-count gate either way), which is why the test uses four co-op tanks and asserts the same four ARE tinted in ffa -- otherwise the case would pass against a build that tinted nothing. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/render/tread-trails.test.ts"
+    ]
+  },
+  {
+    "id": "quad-board-loses-its-mirror-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"####.####...###...####.####\"",
+    "replace": "\"####.####...###...####.###.\"",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
+  },
+  {
+    "id": "quad-board-offered-at-every-player-count",
+    "file": "src/sim/config/data/versus-catalog.json",
+    "find": "\"players\": [\n        4\n      ],",
+    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The curation undone for the four-player board: vs-quad-01 advertised wherever it mechanically passes. Like the duel and tri entries before it, this is the mutation the shipped validators CANNOT catch -- vs-quad-01 measures suitable at N=2 and N=3 as well (versus-board.test.ts sweeps all 24 (arena, N) combinations and finds 24), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose four corner spawns are a single orbit of its symmetry group has nothing to say about two players or three. Anchored on the `players` block alone rather than on the end of the file, for the same reason the tri entry is -- appending a ninth board must not silently stop this entry applying. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/config/versus-catalog.test.ts"
     ]
   }
 ]

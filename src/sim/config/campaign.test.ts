@@ -27,7 +27,7 @@ describe('CAMPAIGN: the shipped campaign', () => {
     // matching campaign.json entry or an entry below; or a campaign level named an arena
     // that does not exist (the loader rejects that first); or a board listed here were
     // quietly given a campaign level after all.
-    const VERSUS_ONLY = new Set(['vs-duel-01', 'vs-tri-01']);
+    const VERSUS_ONLY = new Set(['vs-duel-01', 'vs-tri-01', 'vs-quad-01']);
 
     const levelArenaIds = new Set(CAMPAIGN_LEVELS.map((l) => l.arenaId));
     const arenaIds = new Set(ARENA_DEFS.map((a) => a.id));
