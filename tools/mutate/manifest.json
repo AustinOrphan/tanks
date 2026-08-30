@@ -2198,6 +2198,30 @@
     ]
   },
   {
+    "id": "tread-tint-set-once-not-per-emission",
+    "file": "src/render/tread-trails.ts",
+    "find": "      d.mesh.material.color.setHex(colorHex);",
+    "replace": "      void colorHex;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The identity tint stops being applied per EMISSION, so a decal keeps whatever colour it was built with. Decals are pooled (`pool.pop() ?? makeDecal()`), so the visible defect is not 'no colour' -- it is a player inheriting ANOTHER player's tint the moment the pool turns over, which on a busy board is most marks. It looks like a working feature in a screenshot of a fresh round and wrong in play, and no assertion on `treadColorFor` alone can see it, since that function stays correct. Caught by the real-emit-path case and by the pool-turnover case that expires one player's marks before the other prints into them. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only. The replacement is `void colorHex;` rather than an empty string: the manifest validator requires a non-empty `replace` (lib.mjs, \"'replace' must be a non-empty string\"), and a no-op that still consumes the parameter expresses the deletion without leaving an unused-argument diagnostic behind it.",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ]
+  },
+  {
+    "id": "tread-tint-ignores-the-campaign-gate",
+    "file": "src/render/tread-trails.ts",
+    "find": "  if (world.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
+    "replace": "  if (!identityApplies(world)) return TREAD_COLOR;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The trail tint stops excluding `campaign-coop`, so a FOUR-PLAYER CO-OP campaign board prints identity-tinted trails. This is the exact defect the first implementation shipped and a screenshot caught: co-op clears the player-count gate -- four player tanks, four identity rings -- so `identityApplies` alone is not enough, and issue #284's scope says campaign trails stay neutral in the initial implementation. Single-player campaign is NOT the discriminating case here (it fails the player-count gate either way), which is why the test uses four co-op tanks and asserts the same four ARE tinted in ffa -- otherwise the case would pass against a build that tinted nothing. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/tread-trails.test.ts"
+    ]
+  },
+  {
     "id": "dev-url-canonicalises-to-the-wrong-duplicate",
     "file": "src/game/dev-config.ts",
     "find": "    out.append(name, params.get(name) as string); // first-wins, as the parser reads it",
