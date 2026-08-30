@@ -155,6 +155,25 @@ dependency or decision wording is reported as a warning. `npm run issues:maintai
 workflow-only event handler that applies allowlisted area/impact choices from issue forms and
 cleans transient labels from closed issues.
 
+`npm run issues:relationships` is the reviewed, additive migration from issue-body hierarchy
+and hard-prerequisite statements to GitHub's native parent/sub-issue and blocked-by fields. It is
+operator-only: both plan and apply modes require `GH_TOKEN` or `GITHUB_TOKEN`, the ledger is
+pinned to `AustinOrphan/tanks`, and apply additionally requires the exact
+`--confirm AustinOrphan/tanks` argument. Plan mode performs no writes and reports every missing
+edge or parent conflict. Apply mode never reparents a conflicting child, continues with the
+independent dependency edges, rate-limits every successful write, verifies the resulting graph,
+and records completed and remaining edges in the Actions step summary even after a partial
+failure.
+
+Use the manual `Migrate native issue relationships` workflow for the repository migration. A
+plan dispatch performs 136 inspection reads for the reviewed 81 parent and 147 blocked-by edges.
+An initial apply dispatch skips the separate plan job and is bounded at 591 requests: 136
+inspection reads, 91 issue-record validations, 228 writes, and 136 verification reads. Reviewing
+a plan and then dispatching apply therefore uses at most 727 requests while every blocked-by list
+fits on one 100-item page, below the published 1,000-request/hour Actions-token budget. The
+workflow serializes dispatches, gives write access only to the guarded apply job, and passes the
+operator-entered confirmation through to the command's exact-string check.
+
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
 through the REAL render modules against a REAL world. `--skin`/`--hull`/`--accent` dress
 the player tank through the game's own `setPlayerStyle`, and `--frames N` gives an
