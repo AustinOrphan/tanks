@@ -3,6 +3,7 @@ import type { Arena } from './arena';
 import type { WallKind } from './types';
 import type { VersusCatalogEntry } from './config/versus-catalog-types';
 import { VERSUS_CATALOG } from './config/versus-catalog';
+import { arenaById } from './config/arenas';
 import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-catalog-rules';
 
 // ---------------------------------------------------------------------------
@@ -257,5 +258,80 @@ describe('determinism: two runs on the same entry are deep-equal', () => {
   it('the shipped arena-02 entry (most destructibles) yields identical failure lists twice', () => {
     const entry = VERSUS_CATALOG[1];
     expect(versusCatalogEntryFailures(entry)).toEqual(versusCatalogEntryFailures(entry));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// vs-duel-01's own design claims (issue #271). The geometry sweep above proves the
+// board is LEGAL; these prove it is the board its notes say it is. Acceptance
+// criterion 4 -- "rotational, mirrored, or deliberately documented asymmetric balance
+// is evident" -- is otherwise carried by prose in `arenas.json` and by nothing that can
+// fail.
+// ---------------------------------------------------------------------------
+
+describe('vs-duel-01: the duel board is its own 180-degree rotation', () => {
+  const arena = arenaById('vs-duel-01');
+  /**
+   * Wall kind alone: `undefined` for open floor AND for a spawn letter.
+   *
+   * Spawn letters are deliberately outside the comparison. The board carries `P` at
+   * (1,1) and `B` at (25,19) -- each other's rotational partner by POSITION, but
+   * different characters, because arenas.json requires exactly one player spawn and at
+   * least one enemy. Comparing raw characters would fail on that pair and prove nothing
+   * about the geometry; comparing wall kind is the claim the notes actually make.
+   */
+  const kindAt = (c: number, r: number): string | undefined => arena.legend[arena.grid[r][c]];
+
+  it('every cell has the same wall kind as its partner through the centre', () => {
+    const asymmetric: string[] = [];
+    let compared = 0;
+    for (let r = 0; r < arena.rows; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        compared++;
+        const partner = kindAt(arena.cols - 1 - c, arena.rows - 1 - r);
+        if (kindAt(c, r) !== partner) {
+          asymmetric.push(`(${c},${r})=${kindAt(c, r) ?? 'floor'} vs (${arena.cols - 1 - c},${arena.rows - 1 - r})=${partner ?? 'floor'}`);
+        }
+      }
+    }
+    expect(compared, 'the whole board, not a sample').toBe(27 * 21);
+    expect(asymmetric, 'vs-duel-01 is not its own 180-degree rotation').toEqual([]);
+  });
+
+  it('the two spawn letters are each other\'s partner through the centre', () => {
+    const find = (ch: string): [number, number] => {
+      for (let r = 0; r < arena.rows; r++) {
+        const c = arena.grid[r].indexOf(ch);
+        if (c !== -1) return [c, r];
+      }
+      throw new Error(`no ${ch} in vs-duel-01`);
+    };
+    const [pc, pr] = find('P');
+    const [bc, br] = find('B');
+    expect([bc, br], 'the enemy letter is not the player letter rotated').toEqual([
+      arena.cols - 1 - pc,
+      arena.rows - 1 - pr,
+    ]);
+    // ...and both sit on the old cellSize-2 lattice resolution.test.ts pins, which is
+    // what forced 27x21 rather than a 25-column board: at 25 columns the partner of
+    // column 1 is column 23, and 23 is not 1 (mod 3).
+    for (const v of [pc, pr, bc, br]) expect(v % 3, `${v} is off the spawn lattice`).toBe(1);
+  });
+
+  it('is NOT symmetric under a plain mirror, which is a different board', () => {
+    // A negative control for the test above: 180-degree rotation is the claim, and a
+    // left-right mirror is the nearby shape that would also read as "symmetric" in a
+    // screenshot while playing differently -- under a mirror both players approach the
+    // centre pinwheel from the same side, and the pinwheel stops being a pinwheel.
+    let mirrored = true;
+    for (let r = 0; r < arena.rows && mirrored; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        if (kindAt(c, r) !== kindAt(arena.cols - 1 - c, r)) {
+          mirrored = false;
+          break;
+        }
+      }
+    }
+    expect(mirrored, 'the board is left-right mirrored, so the rotation test proves less than it claims').toBe(false);
   });
 });
