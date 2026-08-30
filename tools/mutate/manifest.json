@@ -2184,5 +2184,29 @@
     "tests": [
       "src/sim/config/versus-catalog.test.ts"
     ]
+  },
+  {
+    "id": "quad-board-loses-its-mirror-symmetry",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"####.####...###...####.####\"",
+    "replace": "\"####.####...###...####.###.\"",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "One cell of vs-quad-01's right-hand rim block turned from solid to open floor, on the board's own row axis, breaking the column mirror its notes claim (issue #273). Same shape as `tri-board-loses-its-mirror-symmetry` and `duel-board-loses-its-rotational-symmetry`, and the same reason: the board still loads, still validates, still has four distinct and mutually concealed spawns at N=4, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for four players is carried ENTIRELY by the two mirrors: without them the four corners stop being one orbit of the symmetry group, and 'every spawn holds the same multiset of distances' becomes a coincidence rather than a construction. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
+  },
+  {
+    "id": "quad-board-offered-at-every-player-count",
+    "file": "src/sim/config/data/versus-catalog.json",
+    "find": "\"players\": [\n        4\n      ],",
+    "replace": "\"players\": [\n        2,\n        3,\n        4\n      ],",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The curation undone for the four-player board: vs-quad-01 advertised wherever it mechanically passes. Like the duel and tri entries before it, this is the mutation the shipped validators CANNOT catch -- vs-quad-01 measures suitable at N=2 and N=3 as well (versus-board.test.ts sweeps all 24 (arena, N) combinations and finds 24), so `versusCatalogEntryFailures` returns clean on the widened declaration and the schema accepts it. What rejects it is the CURATED_COUNTS table, which states the offer as a decision rather than deriving it from the geometry verdict: a board whose four corner spawns are a single orbit of its symmetry group has nothing to say about two players or three. Anchored on the `players` block alone rather than on the end of the file, for the same reason the tri entry is -- appending a ninth board must not silently stop this entry applying. Scoped to config/versus-catalog.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/config/versus-catalog.test.ts"
+    ]
   }
 ]

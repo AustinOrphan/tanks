@@ -504,3 +504,177 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     // three above failing first -- it would advertise coverage that the bounds already own.
   });
 });
+
+// ---------------------------------------------------------------------------
+// vs-quad-01's own design claims (issue #273). Same division again: the geometry sweep
+// proves the board is LEGAL, and these prove it is the board its notes say it is.
+//
+// The shape of the claim is the strongest of the three boards, and that is a fact about
+// four rather than about this author. A rectangle's symmetry group has order 4 --
+// {identity, 180 degrees, mirror about the column axis, mirror about the row axis} -- so
+// where N=3 had to split its fairness into "mirrored for two, measured for the third",
+// N=4 fits the group exactly: the four corners are a SINGLE orbit, and every spawn is
+// carried onto every other by some element of it. Nothing here is left to measurement in
+// the way vs-tri-01's axis player was.
+//
+// Versus spawns are not the authored letters -- `loadArena`'s versus branch derives them
+// from geometry via `pickVersusSpawnCell` -- so every claim below is about where that
+// policy actually lands, not about where a letter was typed.
+// ---------------------------------------------------------------------------
+
+describe('vs-quad-01: four corners, one orbit', () => {
+  const arena = arenaById('vs-quad-01');
+  const COL_AXIS = 13; // c mirrors to 26 - c; 13 is its own partner
+  const ROW_AXIS = 8; //  r mirrors to 16 - r;  8 is its own partner
+  const kindAt = (c: number, r: number): WallKind | undefined => arena.legend[arena.grid[r][c]];
+
+  const blocked = (c: number, r: number): boolean =>
+    c < 0 || r < 0 || c >= arena.cols || r >= arena.rows || kindAt(c, r) !== undefined;
+
+  /** Shortest walkable path in cells. `breached` false is the AUTHORED variant, with
+   * solid AND destructible blocking -- the same choice, and the same reason, as the
+   * vs-tri-01 block above: two spawns can be close in a straight line and far to drive.
+   * `breached` true removes the destructibles, which is the board after a match has been
+   * played into. Both are measured below, because a board that is fair only until someone
+   * breaches a wall is not a fair board. */
+  const pathLenWith = (breached: boolean) => (from: [number, number], to: [number, number]): number => {
+    const isBlocked = (c: number, r: number): boolean =>
+      c < 0 || r < 0 || c >= arena.cols || r >= arena.rows ||
+      (breached ? kindAt(c, r) === 'solid' : kindAt(c, r) !== undefined);
+    return pathLenImpl(isBlocked, from, to);
+  };
+  const pathLen = pathLenWith(false);
+  const pathLenImpl = (
+    blockedBy: (c: number, r: number) => boolean,
+    from: [number, number],
+    to: [number, number],
+  ): number => {
+    const key = (c: number, r: number): number => r * arena.cols + c;
+    const dist = new Map<number, number>([[key(from[0], from[1]), 0]]);
+    const queue: [number, number][] = [from];
+    for (let head = 0; head < queue.length; head++) {
+      const [c, r] = queue[head];
+      const d = dist.get(key(c, r)) as number;
+      if (c === to[0] && r === to[1]) return d;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc, nr = r + dr;
+        if (blockedBy(nc, nr) || dist.has(key(nc, nr))) continue;
+        dist.set(key(nc, nr), d + 1);
+        queue.push([nc, nr]);
+      }
+    }
+    return -1;
+  };
+
+  const spawnCells = (mode: 'ffa' | 'teams' = 'ffa'): [number, number][] =>
+    loadArena(arena, 4, mode).tanks
+      .filter((t) => t.kind === 'player')
+      .map((t) => [Math.round(t.pos.x / arena.cellSize - 0.5), Math.round(t.pos.y / arena.cellSize - 0.5)] as [number, number]);
+
+  it('every cell has the same wall kind as its partner under BOTH mirrors', () => {
+    const asymmetric: string[] = [];
+    let compared = 0;
+    for (let r = 0; r < arena.rows; r++) {
+      for (let c = 0; c < arena.cols; c++) {
+        compared += 2;
+        const acrossCols = kindAt(arena.cols - 1 - c, r);
+        const acrossRows = kindAt(c, arena.rows - 1 - r);
+        if (kindAt(c, r) !== acrossCols) {
+          asymmetric.push(`col-mirror (${c},${r})=${kindAt(c, r) ?? 'floor'} vs (${arena.cols - 1 - c},${r})=${acrossCols ?? 'floor'}`);
+        }
+        if (kindAt(c, r) !== acrossRows) {
+          asymmetric.push(`row-mirror (${c},${r})=${kindAt(c, r) ?? 'floor'} vs (${c},${arena.rows - 1 - r})=${acrossRows ?? 'floor'}`);
+        }
+      }
+    }
+    // Both mirrors, not one: the 180-degree rotation is their composition, so checking a
+    // single mirror would leave the board free to be rotationally symmetric and not
+    // mirrored -- a different board, and one whose four corners are two orbits rather
+    // than one, which is exactly what the distance claim below would then lose.
+    expect(compared, 'the whole board twice over, not a sample').toBe(2 * 27 * 17);
+    expect(asymmetric, 'vs-quad-01 is not invariant under both of its mirrors').toEqual([]);
+  });
+
+  it('the maximin policy lands on the four corners, and they are one orbit of the group', () => {
+    const cells = spawnCells();
+    expect(cells).toHaveLength(4);
+    // Sorted, because the policy's output ORDER is not part of this claim -- only the set.
+    const sorted = [...cells].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    expect(sorted).toEqual([[1, 1], [1, 15], [25, 1], [25, 15]]);
+    // Orbit, stated as the closure it is: applying either mirror to any spawn lands on
+    // another spawn. A set that merely LOOKED corner-shaped -- say three corners and a
+    // near-corner -- would satisfy the count above and fail here.
+    const key = (c: number, r: number): string => `${c},${r}`;
+    const set = new Set(sorted.map(([c, r]) => key(c, r)));
+    for (const [c, r] of sorted) {
+      expect(set.has(key(arena.cols - 1 - c, r)), `col-mirror of ${key(c, r)}`).toBe(true);
+      expect(set.has(key(c, arena.rows - 1 - r)), `row-mirror of ${key(c, r)}`).toBe(true);
+    }
+    expect(sorted.some(([c]) => c === COL_AXIS), 'no spawn sits on the column axis').toBe(false);
+    expect(sorted.some(([, r]) => r === ROW_AXIS), 'no spawn sits on the row axis').toBe(false);
+  });
+
+  it('every spawn holds the SAME multiset of path distances, authored AND breached', () => {
+    const cells = spawnCells();
+    const multisetsWith = (breached: boolean) =>
+      cells.map((from) =>
+        cells.filter((to) => to !== from)
+          .map((to) => pathLenWith(breached)(from, to))
+          .sort((a, b) => a - b));
+    // This is the whole fairness claim: not that the six pairs are equal -- they cannot
+    // be, a rectangle's diagonal is longer than its sides -- but that no player holds a
+    // different SET of separations from any other.
+    //
+    // Both boards, because they are genuinely different numbers and the earlier of the
+    // two was nearly written into the notes as if it were the only one. AUTHORED, with
+    // the destructibles standing, the cross-lane clusters on rows 2 and 14 lengthen the
+    // horizontal hop from 26 to 32, so the set is {30, 32, 38}: vertical neighbour,
+    // horizontal neighbour, diagonal. BREACHED, with every destructible removed, it
+    // relaxes to {26, 30, 38}. The board is equal-for-all in both, which is the claim
+    // worth making -- a board that is fair only while its cover stands is not fair.
+    for (const m of multisetsWith(false)) expect(m, 'authored per-spawn multiset').toEqual([30, 32, 38]);
+    for (const m of multisetsWith(true)) expect(m, 'breached per-spawn multiset').toEqual([26, 30, 38]);
+    // Pinned literals rather than "all four are equal to each other", because an equality
+    // check alone stays green if every distance collapses to the same wrong number (a
+    // pathLen that returned -1 everywhere, for instance, is perfectly equal). The two sets
+    // differing from each other is itself the control that `breached` is wired.
+    expect(multisetsWith(false)).toHaveLength(4);
+    expect(multisetsWith(false)).not.toEqual(multisetsWith(true));
+  });
+
+  it('teams splits the orbit into two mirror-image halves, not an unfair pairing', () => {
+    const tanks = loadArena(arena, 4, 'teams').tanks.filter((t) => t.kind === 'player');
+    const cellOfTank = (t: (typeof tanks)[number]): [number, number] =>
+      [Math.round(t.pos.x / arena.cellSize - 0.5), Math.round(t.pos.y / arena.cellSize - 0.5)];
+    const byTeam = new Map<number, [number, number][]>();
+    for (const t of tanks) {
+      const team = t.team as number;
+      byTeam.set(team, [...(byTeam.get(team) ?? []), cellOfTank(t)]);
+    }
+    expect([...byTeam.keys()].sort()).toEqual([0, 1]);
+    const zero = (byTeam.get(0) as [number, number][]).sort((a, b) => a[0] - b[0]);
+    const one = (byTeam.get(1) as [number, number][]).sort((a, b) => a[0] - b[0]);
+    expect(zero).toEqual([[1, 1], [25, 1]]);
+    expect(one).toEqual([[1, 15], [25, 15]]);
+    // The two teams are each other's reflection about the row axis, so neither holds a
+    // shape the other does not. `teamOf(slot) = slot % 2` reads the picker's ORDER, so
+    // this could easily have come out as a diagonal pairing -- which would still be 2v2,
+    // still pass every geometry validator, and give one team the board's two 38-step
+    // corners while the other took the two 26-step ones.
+    for (const [c, r] of zero) {
+      expect(one.some(([oc, or]) => oc === c && or === arena.rows - 1 - r), `row-mirror of ${c},${r}`).toBe(true);
+    }
+    // Teammates the same distance apart on both sides, which is that fairness in numbers.
+    // 32 is the AUTHORED figure (the row-2 and row-14 destructible clusters stand between
+    // the two corners of each team); it relaxes to 26 once they are breached.
+    expect(pathLen(zero[0], zero[1])).toBe(pathLen(one[0], one[1]));
+    expect(pathLen(zero[0], zero[1])).toBe(32);
+    expect(pathLenWith(true)(zero[0], zero[1])).toBe(26);
+  });
+
+  it('ffa and teams place the four players identically -- the geometry claims cover both modes', () => {
+    // The catalog declares BOTH modes for this board, and every claim above was measured
+    // on the ffa placement. This is what entitles them to cover the teams declaration too.
+    expect(spawnCells('teams')).toEqual(spawnCells('ffa'));
+  });
+});
