@@ -15,10 +15,16 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: issue-relationship-migration-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   plan:
     name: plan relationship migration
+    if: ${{ !inputs.apply }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       issues: read
@@ -36,6 +42,7 @@ jobs:
     name: reject invalid apply confirmation
     if: ${{ inputs.apply && inputs.confirm_repository != github.repository }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -46,9 +53,9 @@ jobs:
 
   apply:
     name: apply and verify relationship migration
-    needs: [plan]
     if: ${{ inputs.apply && inputs.confirm_repository == github.repository }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: write
@@ -58,6 +65,7 @@ jobs:
         with:
           node-version: '24'
       - name: Add missing relationships and verify all reviewed edges
-        run: npm run issues:relationships -- apply --confirm "$GITHUB_REPOSITORY"
+        run: npm run issues:relationships -- apply --confirm "$CONFIRM_REPOSITORY"
         env:
+          CONFIRM_REPOSITORY: ${{ inputs.confirm_repository }}
           GITHUB_TOKEN: ${{ github.token }}

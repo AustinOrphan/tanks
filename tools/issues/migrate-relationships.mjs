@@ -80,18 +80,29 @@ function assertAcyclic(edges, kind) {
 
 const repositoryPath = (repository) => repository.split('/').map(encodeURIComponent).join('/');
 
-async function mapWithConcurrency(values, limit, action) {
+export async function mapWithConcurrency(values, limit, action) {
   const results = new Array(values.length);
   let next = 0;
+  let failed = false;
+  let failure;
   const worker = async () => {
-    for (;;) {
+    while (!failed) {
       const index = next;
       next += 1;
       if (index >= values.length) return;
-      results[index] = await action(values[index], index);
+      try {
+        results[index] = await action(values[index], index);
+      } catch (error) {
+        if (!failed) {
+          failed = true;
+          failure = error;
+        }
+        return;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
+  if (failed) throw failure;
   return results;
 }
 
@@ -105,6 +116,38 @@ async function listBlockedBy(repo, issue, request) {
     blockers.push(...batch);
     if (batch.length < 100) return blockers;
   }
+}
+
+const edgeKey = (edge) => JSON.stringify(edge);
+
+const remainingEdges = (missing, added) => {
+  const completed = new Set(added.map(edgeKey));
+  return missing.filter((edge) => !completed.has(edgeKey(edge)));
+};
+
+const errorMessage = (error) => error instanceof Error ? error.message : String(error);
+
+const parentConflictMessage = (conflicts) => conflicts.map(
+  ({ child, currentParent }) => `parent conflict: #${child} already belongs to #${currentParent}`,
+).join('\n');
+
+export class RelationshipMigrationError extends Error {
+  constructor(message, result, options) {
+    super(message, options);
+    this.name = 'RelationshipMigrationError';
+    this.result = result;
+    result.status = 'failed';
+    result.error = message;
+  }
+}
+
+export function withRequestTimeout(fetchImpl, timeoutMs = 30_000) {
+  if (typeof fetchImpl !== 'function') throw new Error('global fetch is unavailable');
+  if (!positiveInteger(timeoutMs)) throw new Error('request timeout must be a positive integer');
+  return (input, init = {}) => fetchImpl(input, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(timeoutMs),
+  });
 }
 
 export async function migrateRelationships({
@@ -124,71 +167,128 @@ export async function migrateRelationships({
     ...parentEdges.flatMap(({ parent, child }) => [parent, child]),
     ...dependencyEdges.flatMap(({ issue, blocker }) => [issue, blocker]),
   ]).sort((a, b) => a - b);
+  const result = {
+    apply,
+    status: 'inspecting',
+    stage: 'inspect parent edges',
+    parentEdges: parentEdges.length,
+    dependencyEdges: dependencyEdges.length,
+    existingParents: 0,
+    existingDependencies: 0,
+    missingParents: [],
+    missingDependencies: [],
+    parentConflicts: [],
+    addedParents: [],
+    addedDependencies: [],
+    inspectedParents: false,
+    inspectedDependencies: false,
+    requests: 0,
+    verified: false,
+  };
 
-  const loaded = await mapWithConcurrency(issueNumbers, 8, async (number) => {
-    const issue = await request(`/repos/${repo}/issues/${number}`);
-    if (!positiveInteger(issue?.id) || issue.number !== number) {
-      throw new Error(`GitHub returned an invalid issue record for #${number}`);
+  const call = async (...args) => {
+    result.requests += 1;
+    return request(...args);
+  };
+
+  try {
+    const currentParents = new Map(await mapWithConcurrency(
+      parentEdges,
+      8,
+      async ({ child }) => [
+        child,
+        await call(`/repos/${repo}/issues/${child}/parent`, { allowStatuses: [404] }),
+      ],
+    ));
+
+    for (const edge of parentEdges) {
+      const current = currentParents.get(edge.child);
+      if (current === null) result.missingParents.push(edge);
+      else if (current?.number === edge.parent) result.existingParents += 1;
+      else if (positiveInteger(current?.number)) {
+        result.parentConflicts.push({ ...edge, currentParent: current.number });
+      } else {
+        throw new Error(`GitHub returned an invalid parent record for #${edge.child}`);
+      }
     }
-    return issue;
-  });
-  const issues = new Map(loaded.map((issue) => [issue.number, issue]));
+    result.inspectedParents = true;
 
-  const currentParents = new Map(await mapWithConcurrency(
-    parentEdges,
-    8,
-    async ({ child }) => [
-      child,
-      await request(`/repos/${repo}/issues/${child}/parent`, { allowStatuses: [404] }),
-    ],
-  ));
+    result.stage = 'inspect blocked-by edges';
+    const blockedIssueNumbers = unique(dependencyEdges.map(({ issue }) => issue));
+    const currentBlockedBy = new Map(await mapWithConcurrency(
+      blockedIssueNumbers,
+      8,
+      async (issue) => [issue, await listBlockedBy(repo, issue, call)],
+    ));
+    result.missingDependencies = dependencyEdges.filter(({ issue, blocker }) =>
+      !(currentBlockedBy.get(issue) ?? []).some((entry) => entry.number === blocker));
+    result.existingDependencies = dependencyEdges.length - result.missingDependencies.length;
+    result.inspectedDependencies = true;
 
-  const conflicts = [];
-  const missingParents = [];
-  for (const edge of parentEdges) {
-    const current = currentParents.get(edge.child);
-    if (current === null) missingParents.push(edge);
-    else if (current.number !== edge.parent) {
-      conflicts.push(`parent conflict: #${edge.child} already belongs to #${current.number}`);
-    }
-  }
-  if (conflicts.length > 0) throw new Error(conflicts.join('\n'));
-
-  const blockedIssueNumbers = unique(dependencyEdges.map(({ issue }) => issue));
-  const currentBlockedBy = new Map(await mapWithConcurrency(
-    blockedIssueNumbers,
-    8,
-    async (issue) => [issue, await listBlockedBy(repo, issue, request)],
-  ));
-  const missingDependencies = dependencyEdges.filter(({ issue, blocker }) =>
-    !(currentBlockedBy.get(issue) ?? []).some((entry) => entry.number === blocker));
-
-  if (apply) {
-    for (const { parent, child } of missingParents) {
-      await request(`/repos/${repo}/issues/${parent}/sub_issues`, {
-        method: 'POST',
-        body: { sub_issue_id: issues.get(child).id },
-      });
-      await pause();
-    }
-    for (const { issue, blocker } of missingDependencies) {
-      await request(`/repos/${repo}/issues/${issue}/dependencies/blocked_by`, {
-        method: 'POST',
-        body: { issue_id: issues.get(blocker).id },
-      });
-      await pause();
+    if (!apply) {
+      result.status = 'planned';
+      if (result.parentConflicts.length > 0) {
+        result.stage = 'resolve parent conflicts';
+        throw new RelationshipMigrationError(
+          parentConflictMessage(result.parentConflicts),
+          result,
+        );
+      }
+      result.stage = 'complete';
+      return result;
     }
 
-    const verifiedParents = await mapWithConcurrency(parentEdges, 8, async ({ parent, child }) => {
-      const current = await request(`/repos/${repo}/issues/${child}/parent`, {
-        allowStatuses: [404],
-      });
-      return current?.number === parent ? null : `#${child} does not verify under #${parent}`;
+    result.stage = 'load issue records';
+    const loaded = await mapWithConcurrency(issueNumbers, 8, async (number) => {
+      const issue = await call(`/repos/${repo}/issues/${number}`);
+      if (
+        !positiveInteger(issue?.id)
+        || issue.number !== number
+        || issue.pull_request !== undefined
+      ) {
+        throw new Error(`GitHub returned an invalid issue record for #${number}`);
+      }
+      return issue;
     });
+    const issues = new Map(loaded.map((issue) => [issue.number, issue]));
+
+    result.stage = 'add parent edges';
+    for (const edge of result.missingParents) {
+      await call(`/repos/${repo}/issues/${edge.parent}/sub_issues`, {
+        method: 'POST',
+        body: { sub_issue_id: issues.get(edge.child).id },
+      });
+      result.addedParents.push(edge);
+      await pause();
+    }
+
+    result.stage = 'add blocked-by edges';
+    for (const edge of result.missingDependencies) {
+      await call(`/repos/${repo}/issues/${edge.issue}/dependencies/blocked_by`, {
+        method: 'POST',
+        body: { issue_id: issues.get(edge.blocker).id },
+      });
+      result.addedDependencies.push(edge);
+      await pause();
+    }
+
+    result.stage = 'verify relationships';
+    const conflictedChildren = new Set(result.parentConflicts.map(({ child }) => child));
+    const verifiableParents = parentEdges.filter(({ child }) => !conflictedChildren.has(child));
+    const verifiedParents = await mapWithConcurrency(
+      verifiableParents,
+      8,
+      async ({ parent, child }) => {
+        const current = await call(`/repos/${repo}/issues/${child}/parent`, {
+          allowStatuses: [404],
+        });
+        return current?.number === parent ? null : `#${child} does not verify under #${parent}`;
+      },
+    );
     const verifiedDependencies = new Map(await mapWithConcurrency(
       blockedIssueNumbers,
       8,
-      async (issue) => [issue, await listBlockedBy(repo, issue, request)],
+      async (issue) => [issue, await listBlockedBy(repo, issue, call)],
     ));
     const verificationFailures = [
       ...verifiedParents.filter(Boolean),
@@ -197,49 +297,101 @@ export async function migrateRelationships({
           ? []
           : [`#${issue} does not verify as blocked by #${blocker}`]),
     ];
-    if (verificationFailures.length > 0) {
-      throw new Error(`relationship verification failed:\n${verificationFailures.join('\n')}`);
-    }
-  }
+    result.verified = (
+      result.parentConflicts.length === 0
+      && verificationFailures.length === 0
+    );
 
-  return {
-    apply,
-    parentEdges: parentEdges.length,
-    dependencyEdges: dependencyEdges.length,
-    existingParents: parentEdges.length - missingParents.length,
-    existingDependencies: dependencyEdges.length - missingDependencies.length,
-    missingParents,
-    missingDependencies,
-  };
+    if (result.parentConflicts.length > 0 || verificationFailures.length > 0) {
+      const failures = [];
+      if (result.parentConflicts.length > 0) {
+        failures.push(parentConflictMessage(result.parentConflicts));
+      }
+      if (verificationFailures.length > 0) {
+        failures.push(`relationship verification failed:\n${verificationFailures.join('\n')}`);
+      }
+      throw new RelationshipMigrationError(failures.join('\n'), result);
+    }
+
+    result.stage = 'complete';
+    result.status = 'succeeded';
+    return result;
+  } catch (error) {
+    if (error instanceof RelationshipMigrationError) throw error;
+    throw new RelationshipMigrationError(errorMessage(error), result, { cause: error });
+  }
 }
 
 export function renderMigrationReport(result) {
   const mode = result.apply ? 'apply' : 'plan';
+  const remainingParents = remainingEdges(result.missingParents, result.addedParents);
+  const remainingDependencies = remainingEdges(
+    result.missingDependencies,
+    result.addedDependencies,
+  );
   const lines = [
     `## Native issue relationship migration (${mode})`,
     '',
-    `- Parent edges: ${result.parentEdges} (${result.existingParents} already present, ${result.missingParents.length} ${result.apply ? 'added' : 'to add'})`,
-    `- Blocked-by edges: ${result.dependencyEdges} (${result.existingDependencies} already present, ${result.missingDependencies.length} ${result.apply ? 'added' : 'to add'})`,
+    `- Status: ${result.status}${result.status === 'failed' ? ` during ${result.stage}` : ''}`,
+    `- API requests attempted: ${result.requests}`,
+    result.inspectedParents
+      ? `- Parent edges: ${result.parentEdges} (${result.existingParents} already present, ${result.addedParents.length} added, ${remainingParents.length} remaining, ${result.parentConflicts.length} conflicts)`
+      : `- Parent edges: ${result.parentEdges} (inspection incomplete)`,
+    result.inspectedDependencies
+      ? `- Blocked-by edges: ${result.dependencyEdges} (${result.existingDependencies} already present, ${result.addedDependencies.length} added, ${remainingDependencies.length} remaining)`
+      : `- Blocked-by edges: ${result.dependencyEdges} (inspection incomplete)`,
   ];
-  if (result.missingParents.length > 0) {
+  if (result.error) {
+    lines.push('', '### Failure', '', `- ${result.error.replaceAll('\n', '; ')}`);
+  }
+  if (result.addedParents.length > 0) {
     lines.push(
       '',
-      `### Parent edges ${result.apply ? 'added' : 'to add'}`,
+      '### Parent edges added',
       '',
-      ...result.missingParents.map(({ parent, child }) => `- #${parent} → #${child}`),
+      ...result.addedParents.map(({ parent, child }) => `- #${parent} → #${child}`),
     );
   }
-  if (result.missingDependencies.length > 0) {
+  if (result.addedDependencies.length > 0) {
     lines.push(
       '',
-      `### Blocked-by edges ${result.apply ? 'added' : 'to add'}`,
+      '### Blocked-by edges added',
       '',
-      ...result.missingDependencies.map(
+      ...result.addedDependencies.map(
         ({ issue, blocker }) => `- #${issue} blocked by #${blocker}`,
       ),
     );
   }
-  if (!result.apply && (result.missingParents.length > 0 || result.missingDependencies.length > 0)) {
+  if (remainingParents.length > 0) {
+    lines.push(
+      '',
+      `### Parent edges ${result.apply ? 'remaining' : 'to add'}`,
+      '',
+      ...remainingParents.map(({ parent, child }) => `- #${parent} → #${child}`),
+    );
+  }
+  if (remainingDependencies.length > 0) {
+    lines.push(
+      '',
+      `### Blocked-by edges ${result.apply ? 'remaining' : 'to add'}`,
+      '',
+      ...remainingDependencies.map(
+        ({ issue, blocker }) => `- #${issue} blocked by #${blocker}`,
+      ),
+    );
+  }
+  if (result.parentConflicts.length > 0) {
+    lines.push(
+      '',
+      '### Parent conflicts',
+      '',
+      ...result.parentConflicts.map(
+        ({ parent, child, currentParent }) =>
+          `- #${child} belongs to #${currentParent}; reviewed parent is #${parent}`,
+      ),
+    );
+  }
+  if (!result.apply && (remainingParents.length > 0 || remainingDependencies.length > 0)) {
     lines.push(
       '',
       'No relationships were changed. Re-run in apply mode after reviewing this plan.',
@@ -274,25 +426,37 @@ export async function main({
   env = process.env,
   fetchImpl = globalThis.fetch,
   log = console.log,
+  plan = RELATIONSHIP_MIGRATION,
+  pause,
+  requestTimeoutMs = 30_000,
 } = {}) {
   const args = parseArguments(argv);
   const repository = resolveRepository({ explicit: args.repository, env });
   const apply = args.mode === 'apply';
   const token = env.GH_TOKEN || env.GITHUB_TOKEN;
-  if (apply && !token) throw new Error('apply mode requires GH_TOKEN or GITHUB_TOKEN');
-  if (apply && args.confirmation !== RELATIONSHIP_MIGRATION.repository) {
-    throw new Error(`apply mode requires --confirm ${RELATIONSHIP_MIGRATION.repository}`);
+  if (!token) throw new Error('plan and apply modes require GH_TOKEN or GITHUB_TOKEN');
+  if (apply && args.confirmation !== plan.repository) {
+    throw new Error(`apply mode requires --confirm ${plan.repository}`);
   }
   const request = createGitHubRequest({
     apiUrl: env.GITHUB_API_URL || 'https://api.github.com',
     token,
-    fetchImpl,
+    fetchImpl: withRequestTimeout(fetchImpl, requestTimeoutMs),
   });
-  const result = await migrateRelationships({ repository, request, apply });
-  const report = renderMigrationReport(result);
-  log(report.trimEnd());
-  appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
-  return 0;
+  try {
+    const result = await migrateRelationships({ repository, request, apply, plan, pause });
+    const report = renderMigrationReport(result);
+    log(report.trimEnd());
+    appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
+    return 0;
+  } catch (error) {
+    if (error instanceof RelationshipMigrationError) {
+      const report = renderMigrationReport(error.result);
+      log(report.trimEnd());
+      appendStepSummary(env.GITHUB_STEP_SUMMARY, report);
+    }
+    throw error;
+  }
 }
 
 const directInvocation =
