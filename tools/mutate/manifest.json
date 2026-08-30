@@ -2395,7 +2395,7 @@
     "find": "    if ((intact.diameters[l] ?? 0) < MINE_KILL_RADIUS) fatal.push(s);",
     "replace": "    void l;",
     "expect": "killed",
-    "expectFailures": 1,
+    "expectFailures": 2,
     "why": "Stops refusing a spawn sealed by destructibles in a pocket too small to survive blowing it. Only a mine clears a destructible (destructibleByBlast, mines.ts) and a mine kills within MINE_BLAST_RADIUS + TANK_RADIUS = 2.5, so the player pays a LIFE to leave the start line -- which is exactly how Keystone shipped, whose spawn pockets measure 1.18 to 1.72 across. The solid-connectivity half of the gate does NOT catch it: Keystone's spawns are reachable once the destructibles are gone, so without this line the board reads as suitable again.",
     "tests": [
       "src/sim/versus-board.test.ts"
