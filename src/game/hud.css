@@ -248,6 +248,41 @@
   box-shadow: 0 3px 0 var(--hud-primary-shadow);
 }
 
+/* A REFUSED control, and the first one this kit has ever had to draw (issue #260).
+ *
+ * Nothing in hud.css matched `:disabled` before this. That was survivable while the only
+ * disabled buttons were the versus pane's old preview candidates -- rows a player was
+ * told, in a note beside them, not to expect anything from. It stops being survivable
+ * when the PRIMARY action is the refused one: `.ui-btn--primary` paints Start bright
+ * green with a raised shadow, so a refused Start looked exactly as clickable as a live
+ * one and simply did nothing. Verified in Chromium before this rule existed.
+ *
+ * THREE channels, not one, because #368's forced-colors work must not have to retrofit
+ * this and a colour-blind player must not be the only one who cannot tell:
+ *   - `opacity` dims it,
+ *   - the raised `box-shadow` is FLATTENED, which is a shape change rather than a hue
+ *     change: the button stops standing off the surface, the same cue `:active` uses,
+ *   - `cursor` says it before the click does.
+ * The refusal ALSO has two non-visual channels already -- the button's own `disabled`
+ * state and the aria-describedby reason (renderVersusSlotRows, hud.ts).
+ *
+ * `filter: saturate()` rather than a flat overriding background: it composes with
+ * whatever variant is underneath (primary, slab, destructive) instead of needing one
+ * disabled rule per variant, which is what would actually rot as variants are added. */
+.ui-btn:disabled {
+  opacity: 0.45;
+  filter: saturate(0.4);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ...and it must not still depress on click. Without this the refused Start animates as
+ * if it had accepted the press, which is the one cue that most reads as "it worked". */
+.ui-btn--primary:disabled:active {
+  transform: none;
+  box-shadow: none;
+}
+
 /* Destructive: the quiet slab, re-tinted. Reserved for replacing or resetting stored
  * data, and always paired with the arm/confirm step `.hud-danger--armed` draws. */
 .ui-btn--danger {
@@ -1856,26 +1891,62 @@
   padding: 6px 14px;
 }
 
-/* Shown only while the pane's chosen player count does not match the running session's
- * real Assignment -- see renderVersusControllerRows (hud.ts). Its look is `.ui-hint`;
- * only the visibility rule below is its own. */
+/* The who's-playing note. Since issue #260 it is unconditional -- devices really are
+ * assigned at Start now, for every slot -- so it has no --hidden modifier any more and
+ * needs no rule of its own beyond `.ui-hint`. The refusal notes below DO toggle. */
 
-.hud-versus-assignment-note--hidden {
+/* The pane-level refusal (no-human) and the per-slot one. `.ui-hint` gives them their
+ * look; only visibility is theirs. Kept as separate selectors rather than one shared
+ * class because they sit in different boxes -- one in the pane, one inside a slot row --
+ * and a future spacing rule will almost certainly want to tell them apart. */
+.hud-versus-start-reason--hidden,
+.hud-versus-slot-reason--hidden {
   display: none;
 }
 
-/* Issue #280: the who's-playing preview reuses .hud-controller-rows/.hud-controller-row
- * verbatim from the standalone Controllers panel above (renderControllerRowsInto,
- * hud.ts) -- see that panel's own base rule for the vertical list this inherits by
- * default. A vertical list reads fine as the STANDALONE panel's own scrollable list,
- * but wastes this pane's width: even 4 slots would sit one under another below five
- * other rows. Row + wrap here is what puts them side by side; centered, not
+/* The refusal text is the one thing on this pane that must not be missed, so it is not
+ * dimmed the way `.ui-hint` dims a passive hint. Colour is NOT the only channel: the
+ * refusal is also carried by Start's own `disabled` state and by `aria-describedby`
+ * (renderVersusSlotRows, hud.ts), so a player who cannot distinguish the hue still has
+ * two other signals -- which is what issue #368's forced-colors work will inherit
+ * rather than have to retrofit. */
+.hud-versus-slot-reason,
+.hud-versus-start-reason {
+  opacity: 1;
+  color: var(--hud-text-danger);
+}
+
+/* The DERIVED device line under each slot's role buttons. Same size/dimming as the
+ * Controllers panel's own current-source line, which it is the analogue of. */
+.hud-versus-slot-device {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.hud-versus-slot-label {
+  font-weight: var(--hud-weight-normal);
+}
+
+/* Issue #280's 2x2 grid, CARRIED OVER to the pane's own classes (issue #260).
+ *
+ * These rules used to be scoped selectors over .hud-controller-rows/.hud-controller-row,
+ * because the who's-playing block reused the standalone Controllers panel's rows
+ * verbatim. It renders its own .hud-versus-slot-row now, so those selectors would match
+ * nothing here and the grid would silently revert to a vertical list -- the layout
+ * regression #280 exists to prevent. Renamed rather than deleted, and the reasoning
+ * below is #280's own, unchanged: a vertical list reads fine as the STANDALONE panel's
+ * scrollable list but wastes this pane's width, since even 4 slots would sit one under
+ * another below five other rows. Row + wrap puts them side by side; centered, not
  * space-between, so 2 or 3 slots do not stretch across the pane's full width.
  *
- * Scoped under .hud-versus-setup so the standalone Controllers panel keeps its own
- * vertical list untouched -- this rule never matches there (issue #280's own bar:
- * "completely unaffected"). */
-.hud-versus-setup .hud-controller-rows {
+ * No .hud-versus-setup scope is needed any more: the class exists only in this pane, so
+ * the standalone Controllers panel is untouched by construction rather than by a
+ * selector (issue #280's own bar: "completely unaffected"). */
+.hud-versus-slot-rows {
+  pointer-events: auto;
+  display: flex;
+  gap: var(--hud-space-3);
+  padding: 4px 8px;
   flex-direction: row;
   flex-wrap: wrap;
   justify-content: center;
@@ -1908,8 +1979,21 @@
   width: 92vw;
 }
 
-/* .hud-controller-row is already narrow at its default size (a label, a
- * current-source line, and a column of single buttons -- .hud-controller-row's own
+/* One slot's card: label, the three role buttons, its derived device line, and the
+ * refusal that may or may not be showing. A column, the same shape .hud-controller-row
+ * uses, and the border-left is what makes each card legible as one unit in the wrapped
+ * row above. */
+.hud-versus-slot-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--hud-space-1);
+  border-left: 3px solid rgba(216, 221, 230, 0.25);
+  padding: 6px 12px;
+}
+
+/* .hud-versus-slot-row is already narrow at its default size (a label, a
+ * device line, and a column of single buttons -- its own
  * flex-direction: column above, unchanged here), so unconstrained content width
  * already lets 2, 3 or 4 sit side by side at any desktop window this pane opens in --
  * no rule needed above this breakpoint. Between that and 760px, sizing stays
@@ -1940,7 +2024,7 @@
  * several lines inside the button; the row stays in its column and does not clip or
  * push into its neighbour. */
 @media (max-width: 760px) {
-  .hud-versus-setup .hud-controller-row {
+  .hud-versus-slot-row {
     flex: 0 1 40vw;
     min-width: 0;
     box-sizing: border-box;

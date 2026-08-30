@@ -7,6 +7,8 @@ import { SKINS, ACCENTS } from './customization';
 import { ACHIEVEMENTS } from './achievements';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { versusMapChoices, type VersusConfig } from './versus-config';
+import { createVersusSetupStore, VERSUS_SETUP_KEY } from './versus-setup-store';
+import { createMemoryStorage } from './storage';
 import { VERSUS_STOCK } from '../sim/constants';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 
@@ -1534,16 +1536,20 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     root.querySelector(`.hud-versus-map-row [data-map="${map}"]`) as HTMLButtonElement;
   const friendlyFireBtn = (root: HTMLElement): HTMLButtonElement | null =>
     root.querySelector('.hud-versus-friendlyfire-btn');
-  // Scoped to view(root) -- .hud-controller-row/.hud-controller-source-btn are
-  // reused, unscoped, by the real Controllers panel elsewhere in the document (every
-  // test here builds the whole HUD via mount()); see the identical comment on that
-  // panel's own `rows` helper.
-  const rows = (root: HTMLElement): HTMLElement[] =>
-    Array.from(view(root).querySelectorAll('.hud-controller-row'));
-  const candidateButtons = (row: HTMLElement): HTMLButtonElement[] =>
-    Array.from(row.querySelectorAll('.hud-controller-source-btn'));
-  const note = (root: HTMLElement): HTMLElement =>
-    root.querySelector('.hud-versus-assignment-note') as HTMLElement;
+  // The who's-playing SETUP rows (issue #260). These used to be
+  // .hud-controller-row/.hud-controller-source-btn, shared with the real Controllers
+  // panel and therefore needing a `view(root)` scope; they are now the pane's own
+  // classes, which cannot collide, so no scoping comment is needed here any more.
+  const slotRows = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll('.hud-versus-slot-row'));
+  const roleBtn = (root: HTMLElement, slot: number, role: string): HTMLButtonElement =>
+    root.querySelector(
+      `.hud-versus-slot-row[data-slot="${slot}"] .hud-versus-role-btn[data-role="${role}"]`,
+    ) as HTMLButtonElement;
+  const slotDevice = (root: HTMLElement, slot: number): HTMLElement =>
+    root.querySelector(`.hud-versus-slot-row[data-slot="${slot}"] .hud-versus-slot-device`) as HTMLElement;
+  const slotReason = (root: HTMLElement, slot: number): HTMLElement =>
+    root.querySelector(`.hud-versus-slot-row[data-slot="${slot}"] .hud-versus-slot-reason`) as HTMLElement;
 
   it('the Versus button is a bare click passthrough: it does NOT open the pane itself, and fires onVersusOpen once per click', () => {
     // Kills the mutation "the button calls showVersusSetup directly" -- see
@@ -1706,90 +1712,193 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     expect(playersBtn(root, 4).classList.contains('ui-selectable--on')).toBe(true);
   });
 
-  it("who's-playing renders the REAL session assignment, interactively, when the pane's player count matches it", () => {
-    // Controller ruling adopted for this task: MATCH -> the real thing, wired to the
-    // same onReassignSlot path the Controllers panel itself uses -- reassigning a
-    // slot here IS reassigning the running session.
-    const { hud: h, root } = mount();
-    h.setControllers([{ kind: 'keyboard' }, { kind: 'none' }]); // 2 slots == pane's default 2 players
-    h.setState('main-menu');
-    h.showVersusSetup(true);
-    const rs = rows(root);
-    expect(rs).toHaveLength(2);
-    expect(
-      note(root).classList.contains('hud-versus-assignment-note--hidden'),
-      'a MATCH must hide the note',
-    ).toBe(true);
-    const calls: Array<[number, unknown]> = [];
-    h.onReassignSlot((slot, source) => calls.push([slot, source]));
-    const btn = candidateButtons(rs[0]).find((b) => b.textContent === 'None') as HTMLButtonElement;
-    btn.dispatchEvent(new MouseEvent('click'));
-    expect(calls).toEqual([[0, { kind: 'none' }]]);
-  });
+  // ---------------------------------------------------------------------------
+  // Who's playing -- per-slot ROLE controls (issue #260).
+  //
+  // These four tests REPLACE four that pinned the previous ruling: that these rows
+  // rendered the RUNNING session's `Assignment` and that clicking a candidate
+  // reassigned that session through `onReassignSlot`, interactively when the pane's
+  // player count matched the session's and as a disabled preview when it did not.
+  // That is the divergence issue #260 exists to remove -- Start disposes the session
+  // those clicks were editing, so what the pane showed was not what launched. The old
+  // tests are deleted rather than skipped: they asserted the superseded behaviour
+  // directly, so there is nothing in them left to be true.
+  // ---------------------------------------------------------------------------
 
-  it("who's-playing renders a DISABLED preview, sized to the PANE's player count, when it does not match the session", () => {
-    // Controller ruling: MISMATCH -> a non-interactive preview -- there is no slot 3
-    // to reassign in a 1-player session, so a click (even a programmatic one) must
-    // not fire onReassignSlot.
+  it('offers a role control per slot, and a click writes that slot -- Start carries the roles it displayed', () => {
+    // The issue's "Start initializes the session from the exact displayed assignments".
+    // Kills the mutation "the role button re-renders without calling setVersusConfig":
+    // the pane would LOOK right and Start would still emit the old slots.
     const { hud: h, root } = mount();
-    h.setControllers([{ kind: 'keyboard' }]); // 1 slot != pane's default 2 players
     h.setState('main-menu');
     h.showVersusSetup(true);
-    const rs = rows(root);
-    expect(rs, "preview row COUNT follows the PANE's player count, not the session's").toHaveLength(2);
-    expect(
-      note(root).classList.contains('hud-versus-assignment-note--hidden'),
-      'a MISMATCH must show the note',
-    ).toBe(false);
-    let calls = 0;
-    h.onReassignSlot(() => {
-      calls += 1;
+    expect(slotRows(root), 'one row per slot at the default player count').toHaveLength(2);
+
+    let started: VersusConfig | null = null;
+    h.onVersusStart((c) => {
+      started = c;
     });
-    for (const b of candidateButtons(rs[0])) {
-      expect(b.disabled, `${b.textContent} must be disabled in preview mode`).toBe(true);
-      b.dispatchEvent(new MouseEvent('click'));
-    }
-    expect(calls, 'a disabled preview candidate fired onReassignSlot').toBe(0);
+    // Slot 1 defaults to Bot (defaultSlots); make it a second Human and start.
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+    expect(roleBtn(root, 1, 'human').classList.contains('ui-selectable--on')).toBe(true);
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    expect(started, 'Start fired').not.toBeNull();
+    expect((started as unknown as VersusConfig).slots).toEqual([
+      { role: 'human' },
+      { role: 'human' },
+    ]);
   });
 
-  it("a session reassignment WHILE the pane is already open refreshes the who's-playing preview -- setControllers is not read only at construction/open", () => {
-    // Kills the mutation "drop the renderVersusControllerRows() refresh from
-    // setControllers/setDetectedPads/setBotAssignmentAllowed" -- found by review
-    // while implementing this task: those three setters are the panel's own
-    // "unconditional, regardless of visibility" convention (see setControllers' own
-    // doc comment), and the versus preview reads the exact same currentAssignment/
-    // currentDetectedPads/botAssignmentAllowedNow state, so it needs the identical
-    // refresh or it goes stale the instant a hotplug or reassignment happens while
-    // this pane -- not the Controllers panel -- is the one on screen.
+  it('derives the device column from the live pads rather than storing one, and never honours a stale index', () => {
+    // The issue's one purely NEGATIVE criterion. Slot 1 is Human and one pad is
+    // connected, so it resolves to that pad; unplug it and the SAME stored role
+    // resolves to Unassigned rather than to some other physical controller.
+    //
+    // Negative control: if `resolveSources` were replaced by a stored per-slot device,
+    // the second assertion would still read "Pad Seven (index 3)" after the unplug.
     const { hud: h, root } = mount();
+    h.setDetectedPads([{ padIndex: 3, id: 'Pad Seven' }]);
     h.setState('main-menu');
-    h.showVersusSetup(true); // opened BEFORE setControllers -- mismatch, disabled preview
-    const initialCandidates = candidateButtons(rows(root)[0]);
-    expect(initialCandidates.length, 'the assertion below must not vacuously pass on an empty list').toBeGreaterThan(0);
-    for (const b of initialCandidates) expect(b.disabled).toBe(true);
-    expect(note(root).classList.contains('hud-versus-assignment-note--hidden')).toBe(false);
+    h.showVersusSetup(true);
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+    expect(slotDevice(root, 0).textContent).toBe('Keyboard / Mouse / Touch');
+    expect(slotDevice(root, 1).textContent).toBe('Pad Seven (index 3)');
 
-    h.setControllers([{ kind: 'keyboard' }, { kind: 'none' }]); // now MATCHES the pane's 2 players
-    const rs = rows(root);
-    expect(note(root).classList.contains('hud-versus-assignment-note--hidden'), 'match must hide the note').toBe(true);
-    for (const b of candidateButtons(rs[0])) expect(b.disabled, 'still disabled after the reassignment').toBe(false);
-    const calls: Array<[number, unknown]> = [];
-    h.onReassignSlot((slot, source) => calls.push([slot, source]));
-    (candidateButtons(rs[1]).find((b) => b.textContent === 'Keyboard') as HTMLButtonElement).dispatchEvent(
-      new MouseEvent('click'),
-    );
-    expect(calls).toEqual([[1, { kind: 'keyboard' }]]);
+    h.setDetectedPads([]); // unplugged WHILE the pane is open
+    expect(
+      slotDevice(root, 1).textContent,
+      'a human slot with no free device must read Unassigned, not a remembered pad',
+    ).toBe('Unassigned');
   });
 
-  it("Players change REPLACES the who's-playing preview rows across two successive re-renders -- row COUNT follows the new player count, never appended", () => {
+  it('refuses Start with an actionable, ASSOCIATED reason -- and only the first offending card carries one', () => {
+    // "Never accept Start with an inert required slot", plus the deliberate
+    // first-problem-only choice `versusSetupProblem` makes: two simultaneous refusals
+    // would give a player two sentences and no order to fix them in.
     const { hud: h, root } = mount();
     h.setState('main-menu');
     h.showVersusSetup(true);
-    expect(rows(root)).toHaveLength(2);
     playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
-    expect(rows(root)).toHaveLength(3);
+    expect(startBtn(root).disabled, 'the default 3-player setup is startable').toBe(false);
+
+    // Turn slots 1 AND 2 off: two `unassigned` problems at once.
+    roleBtn(root, 1, 'none').dispatchEvent(new MouseEvent('click'));
+    roleBtn(root, 2, 'none').dispatchEvent(new MouseEvent('click'));
+    expect(startBtn(root).disabled, 'an Off slot must refuse Start').toBe(true);
+    expect(slotReason(root, 1).textContent).toBe('Player 2 is off. Choose Human or Bot to start.');
+    expect(slotReason(root, 1).classList.contains('hud-versus-slot-reason--hidden')).toBe(false);
+    expect(
+      slotReason(root, 2).textContent,
+      'the SECOND offending card stays silent -- one actionable fix at a time',
+    ).toBe('');
+    // Associated, not merely on screen (#321's rule).
+    expect(startBtn(root).getAttribute('aria-describedby')).toBe('hud-versus-slot-reason-1');
+
+    // Fixing the first reveals the second, which is what makes one-at-a-time workable.
+    roleBtn(root, 1, 'bot').dispatchEvent(new MouseEvent('click'));
+    expect(slotReason(root, 2).textContent).toBe('Player 3 is off. Choose Human or Bot to start.');
+    expect(startBtn(root).getAttribute('aria-describedby')).toBe('hud-versus-slot-reason-2');
+    roleBtn(root, 2, 'bot').dispatchEvent(new MouseEvent('click'));
+    expect(startBtn(root).disabled, 'both fixed -> startable again').toBe(false);
+    expect(startBtn(root).getAttribute('aria-describedby'), 'the reason is withdrawn').toBeNull();
+  });
+
+  it('refuses an all-bot match at the PANE level, since no-human names no slot to hang a reason on', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    const paneReason = root.querySelector('.hud-versus-start-reason') as HTMLElement;
+    expect(paneReason.classList.contains('hud-versus-start-reason--hidden')).toBe(true);
+
+    roleBtn(root, 0, 'bot').dispatchEvent(new MouseEvent('click'));
+    expect(startBtn(root).disabled).toBe(true);
+    expect(paneReason.textContent).toBe('At least one slot must be Human.');
+    expect(paneReason.classList.contains('hud-versus-start-reason--hidden')).toBe(false);
+    expect(startBtn(root).getAttribute('aria-describedby')).toBe('hud-versus-start-reason');
+    // No per-slot card claims it -- the problem belongs to the match, not a player.
+    expect(slotReason(root, 0).textContent).toBe('');
+    expect(slotReason(root, 1).textContent).toBe('');
+  });
+
+  it('a Human slot left without a device refuses Start with the device-missing reason, not the off one', () => {
+    // The three refusal kinds are distinguished on purpose: a card that says only
+    // "not ready" is not actionable, and the fix here (connect a pad, or choose Bot)
+    // is different from the fix for an Off slot.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click')); // no pads connected
+    expect(startBtn(root).disabled).toBe(true);
+    expect(slotReason(root, 1).textContent).toBe(
+      'Player 2 is Human but no device is free. Connect a controller, or choose Bot.',
+    );
+    // ...and connecting one clears it, which is what proves the gate reads live pads.
+    h.setDetectedPads([{ padIndex: 0, id: 'Pad One' }]);
+    expect(startBtn(root).disabled).toBe(false);
+    expect(slotReason(root, 1).textContent).toBe('');
+  });
+
+  it('keyboard-only first launch is playable by default: no refusal, and exactly one human', () => {
+    // The issue's "first-time keyboard-only ... produce playable defaults". A default
+    // of Human for slot 1 would hand a keyboard-only player a tank nothing can drive.
+    const { hud: h, root } = mount(); // no setDetectedPads at all
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    expect(startBtn(root).disabled, 'first launch must be startable with no controllers').toBe(false);
+    expect(startBtn(root).getAttribute('aria-describedby')).toBeNull();
+    expect(slotDevice(root, 0).textContent).toBe('Keyboard / Mouse / Touch');
+    expect(slotDevice(root, 1).textContent).toBe('Bot');
+  });
+
+  it('returning from a match reopens the pane on the roles that match started with', () => {
+    // The issue's "returning from gameplay preserves displayed role choices". The
+    // return-to-setup path is `showVersusSetup(true, initial)` with loop.ts's retained
+    // `initialVersusConfig` -- the UNRESOLVED config the session was started from.
+    //
+    // Driven end to end rather than asserted on `initial` alone: the seeding call is
+    // `setVersusConfig`, so this also pins that a re-open RE-RENDERS the cards from the
+    // seeded slots. Kills the mutation "seed the state but skip renderVersusSlotRows",
+    // which would leave the previous match's cards on screen while Start emitted the
+    // seeded ones -- the same display/launch divergence the issue is about, one level up.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+
+    let started: VersusConfig | null = null;
+    h.onVersusStart((c) => {
+      started = c;
+    });
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    const launched = started as unknown as VersusConfig;
+    expect(launched.slots).toEqual([{ role: 'human' }, { role: 'human' }, { role: 'bot' }]);
+
+    // ...the match runs, then the results screen returns to setup with what it launched.
+    h.setState('playing');
+    h.setState('main-menu');
+    h.showVersusSetup(true, launched);
+    expect(slotRows(root), 'the pane reopened at the match player count').toHaveLength(3);
+    expect(roleBtn(root, 1, 'human').classList.contains('ui-selectable--on')).toBe(true);
+    expect(roleBtn(root, 2, 'bot').classList.contains('ui-selectable--on')).toBe(true);
+    // ...and a negative half: slot 1 is NOT still showing the default it started life at.
+    expect(roleBtn(root, 1, 'bot').classList.contains('ui-selectable--on')).toBe(false);
+  });
+
+  it('Players change REPLACES the slot rows across two successive re-renders, and keeps the roles already chosen', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    expect(slotRows(root)).toHaveLength(2);
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    expect(slotRows(root)).toHaveLength(3);
+    expect(
+      roleBtn(root, 1, 'human').classList.contains('ui-selectable--on'),
+      "resizeSlots keeps slot 1's chosen role when the count grows",
+    ).toBe(true);
     playersBtn(root, 4).dispatchEvent(new MouseEvent('click'));
-    expect(rows(root)).toHaveLength(4);
+    expect(slotRows(root)).toHaveLength(4);
   });
 
   it('Back hides the pane and returns to the TITLE menu -- hardcoded, unlike handleControllersBack\'s shownState routing', () => {
@@ -2072,6 +2181,108 @@ describe('hud: the stats page', () => {
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 0');
     h.setCoopKills([1, 1]);
     expect((root.querySelector('.hud-coop-kills') as HTMLElement).textContent).toBe('P1: 1 · P2: 1');
+  });
+});
+
+describe('hud: the versus pane reads and writes the RETAINED setup (issue #260)', () => {
+  // A REAL `createVersusSetupStore` over a real `createMemoryStorage`, not a fake.
+  // A hand-rolled stub would give this file's assertions nothing to say about the
+  // module that actually has to survive a reload -- and the store's own sanitize-on-
+  // write is part of the behaviour under test, since the pane hands it a whole config.
+  function mountWithStore(storage: Storage): { hud: Hud; root: HTMLElement } {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const h = createHud(root, { versusSetup: createVersusSetupStore(storage) });
+    return { hud: h, root };
+  }
+
+  const roleBtn = (root: HTMLElement, slot: number, role: string): HTMLButtonElement =>
+    root.querySelector(
+      `.hud-versus-slot-row[data-slot="${slot}"] .hud-versus-role-btn[data-role="${role}"]`,
+    ) as HTMLButtonElement;
+  const open = (h: Hud): void => {
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+  };
+
+  it('persists a role choice to the RAW key, so a second HUD on the same storage opens with it', () => {
+    // The reload criterion, and the reason it is asserted through a SECOND HUD rather
+    // than by reading the first one back: a pane that only updated its own closure
+    // state would pass any single-instance assertion and still forget on reload.
+    //
+    // Negative control: drop the `opts.versusSetup?.set(...)` line from
+    // `setVersusConfig` and the second HUD opens on the default Bot for slot 1.
+    const storage = createMemoryStorage();
+    const first = mountWithStore(storage);
+    open(first.hud);
+    roleBtn(first.root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+    first.hud.dispose();
+
+    expect(storage.getItem(VERSUS_SETUP_KEY), 'nothing reached the raw key').not.toBeNull();
+    const second = mountWithStore(storage);
+    open(second.hud);
+    expect(
+      roleBtn(second.root, 1, 'human').classList.contains('ui-selectable--on'),
+      'the retained role did not survive into a fresh HUD',
+    ).toBe(true);
+    second.hud.dispose();
+    document.body.innerHTML = '';
+  });
+
+  it('persists the match rules too, not only the slots -- every write goes through one funnel', () => {
+    // Kills the mutation "persist only in the role-button handler": mode, players,
+    // stock, map and friendly fire each have their own call site, and a per-site
+    // `store.set` is exactly the thing that gets forgotten at the next one added.
+    const storage = createMemoryStorage();
+    const first = mountWithStore(storage);
+    open(first.hud);
+    (first.root.querySelector('.hud-versus-mode-row [data-mode="teams"]') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    (first.root.querySelector('.hud-versus-players-row [data-players="4"]') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    (first.root.querySelector('.hud-versus-stock-row [data-stock="5"]') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    first.hud.dispose();
+
+    const stored = JSON.parse(storage.getItem(VERSUS_SETUP_KEY) as string);
+    expect(stored.mode).toBe('teams');
+    expect(stored.players).toBe(4);
+    expect(stored.stock).toBe(5);
+    expect(stored.slots, 'slots follow the player count into storage').toHaveLength(4);
+    document.body.innerHTML = '';
+  });
+
+  it('never writes a device to storage -- only the role pattern survives', () => {
+    // The stored shape is what makes "survives reload" and "never silently binds a
+    // different physical controller" both true at once. A pad index in here would
+    // break the second the moment anyone read it back.
+    const storage = createMemoryStorage();
+    const { hud: h, root } = mountWithStore(storage);
+    h.setDetectedPads([{ padIndex: 2, id: 'Pad Three' }]);
+    open(h);
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+    const raw = storage.getItem(VERSUS_SETUP_KEY) as string;
+    expect(raw).toContain('"role":"human"');
+    expect(raw, 'a device index reached storage').not.toContain('padIndex');
+    expect(raw).not.toContain('keyboard');
+    h.dispose();
+    document.body.innerHTML = '';
+  });
+
+  it('works with no store at all -- the pane still gates, it simply forgets', () => {
+    // `createHud(root)` is the shape ~200 existing tests use. The optional dependency
+    // must not turn into a required one by accident.
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const h = createHud(root);
+    open(h);
+    const start = root.querySelector('.hud-versus-start') as HTMLButtonElement;
+    expect(start.disabled).toBe(false);
+    (root.querySelector('.hud-versus-slot-row[data-slot="0"] .hud-versus-role-btn[data-role="bot"]') as HTMLButtonElement)
+      .dispatchEvent(new MouseEvent('click'));
+    expect(start.disabled, 'the gate still runs without a store').toBe(true);
+    h.dispose();
+    document.body.innerHTML = '';
   });
 });
 
@@ -2873,18 +3084,25 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // buttons.length sweep and this file's own controller-row rendering tests instead).
     // 64 since issue #271 added a sixth board OFFERED AT N=2, the count this fixture's
     // versus pane defaults to; it was 63 when the versus setup pane landed
-    // (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md). 44 + 1 (the title
-    // panel's own new Versus-open button) + 19 (the versus pane's OWN reachable controls,
-    // measured against this test's own fixture -- 2 Mode + 3 Players + 7 Map
-    // (versusMapChoices(2): the five migrated boards, vs-duel-01, plus Random -- a board
-    // curated for another count would NOT appear here) + 5 Stock + 0 friendly fire
-    // (absent -- the pane defaults to FFA) +
-    // 0 who's-playing preview (this test never calls hud.setControllers, so the
-    // session's real assignment is length 0 against the pane's own default player
-    // count of 2 -- a MISMATCH, which renders the preview's candidates disabled, same
-    // "empty/disabled by construction" shape the Controllers panel's own +1 above
-    // already relies on) + Start + Back = 2+3+7+5+0+0+1+1 = 19).
-    expect(totalControls, 'recount the panels above if this moves').toBe(64);
+    // (docs/superpowers/specs/2026-08-21-versus-setup-menu-design.md).
+    //
+    // 70 since issue #260 made who's-playing a set of per-slot ROLE controls. That block
+    // used to contribute 0 reachable controls here: it rendered a DEVICE preview, and
+    // this test never calls hud.setControllers, so the session's assignment was length 0
+    // against the pane's default 2 players -- a mismatch, which rendered every candidate
+    // DISABLED and therefore unreachable by the roving walk. The role buttons are
+    // enabled unconditionally, so the same block now contributes 2 slots x
+    // [Human/Bot/Off] = 6. Start is still reachable because the default slots
+    // (Human, Bot) raise no problem and so leave it enabled -- a fixture whose defaults
+    // refused Start would pin 69, not 70.
+    //
+    // 44 + 1 (the title panel's own new Versus-open button) + 25 (the versus pane's OWN
+    // reachable controls, measured against this test's own fixture -- 2 Mode + 3 Players
+    // + 7 Map (versusMapChoices(2): the five migrated boards, vs-duel-01, plus Random --
+    // a board curated for another count would NOT appear here) + 5 Stock + 0 friendly
+    // fire (absent -- the pane defaults to FFA) + 6 who's-playing role buttons
+    // + Start + Back = 2+3+7+5+0+6+1+1 = 25).
+    expect(totalControls, 'recount the panels above if this moves').toBe(70);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -3642,13 +3860,18 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // Exactly, not a lower bound -- this is the sweep's denominator, and it is measured
     // against THIS fixture rather than derived: 11 swatches in the paint shop (PALETTE 6
     // + ACCENTS 5, which share `.hud-swatch`) + 7 skins (SKINS) + 8 in the Controllers
-    // panel (2 slots x [Keyboard/Bot/None + 1 detected pad]) + 25 in the versus pane
-    // (17 option buttons -- Mode 2, Players 3, Map 7, Stock 5 -- and its who's-playing
-    // preview's own 8, the same 2 x 4 arithmetic as the panel). Map went 6 -> 7 with
-    // issue #271's vs-duel-01, offered at the N=2 this fixture defaults to. A different
-    // slot, pad or player count pins a different number; the number moving is the prompt
-    // to check the new row is inside the sweep rather than beside it.
-    expect(btns.length).toBe(11 + 7 + 8 + 25);
+    // panel (2 slots x [Keyboard/Bot/None + 1 detected pad]) + 23 in the versus pane
+    // (17 option buttons -- Mode 2, Players 3, Map 7, Stock 5 -- plus its who's-playing
+    // ROLE buttons, 2 slots x [Human/Bot/Off] = 6). Map went 6 -> 7 with issue #271's
+    // vs-duel-01, offered at the N=2 this fixture defaults to.
+    //
+    // 23 and not 25 since issue #260: the who's-playing block used to contribute 8
+    // (2 slots x [Keyboard/Bot/None + 1 pad]) as a DEVICE preview reusing the
+    // Controllers panel's own candidate rows. It renders per-slot ROLES now, and three
+    // roles per slot is 6. A different slot, pad or player count pins a different
+    // number; the number moving is the prompt to check the new row is inside the sweep
+    // rather than beside it.
+    expect(btns.length).toBe(11 + 7 + 8 + 23);
     const missing = btns
       .filter((b) => !b.hasAttribute('aria-pressed'))
       .map((b) => Array.from(b.classList).join('.'));
@@ -3700,7 +3923,11 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     expect(after.map((b) => b.getAttribute('aria-describedby'))).toEqual([null, null, null, null]);
   });
 
-  it("associates the versus pane's preview buttons with the note, and the real rows with nothing", () => {
+  it("associates a refused Start with the reason, and describes the Controllers panel's real rows with nothing", () => {
+    // SUPERSEDES the versus half of this test. It used to assert that the pane's
+    // who's-playing PREVIEW buttons pointed at #hud-versus-assignment-note while
+    // disabled -- those buttons are gone (issue #260), and the pane's disabled control
+    // is now Start itself, whose reason moves with the problem.
     const { root } = mountEveryChoice();
     const described = (sel: string): (string | null)[] =>
       Array.from(root.querySelectorAll(`${sel} .hud-controller-source-btn`))
@@ -3708,27 +3935,23 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // The standalone Controllers panel reassigns for real: its buttons need no excuse.
     expect(new Set(described('.hud-controllers'))).toEqual(new Set([null]));
     expect(described('.hud-controllers').length).toBeGreaterThan(0);
+    // ...and the versus pane no longer renders any of those buttons at all.
+    expect(described('.hud-versus-setup'), 'the device preview should be gone').toEqual([]);
 
-    // The versus pane's who's-playing PREVIEW is interactive while the pane's player
-    // count matches the session's (2 here, from setControllers above), so it is NOT
-    // described either -- the note beside it is hidden in that state too.
-    const noteEl = root.querySelector('#hud-versus-assignment-note') as HTMLElement;
-    expect(noteEl, 'the versus pane has no assignment note').not.toBeNull();
-    expect(noteEl.classList.contains('hud-versus-assignment-note--hidden')).toBe(true);
-    expect(new Set(described('.hud-versus-setup'))).toEqual(new Set([null]));
+    const start = root.querySelector('.hud-versus-start') as HTMLButtonElement;
+    expect(start.disabled, 'the fixture default is startable').toBe(false);
+    expect(start.getAttribute('aria-describedby'), 'an allowed Start needs no excuse').toBeNull();
 
-    // Move the pane off the session's player count and the same rows become a preview:
-    // disabled, and now pointing at the note that has just appeared with them.
-    (root.querySelector('.hud-versus-players-row [data-players="4"]') as HTMLButtonElement)
+    // Refuse it, and the association appears with the reason -- not merely near it.
+    (root.querySelector('.hud-versus-slot-row[data-slot="0"] .hud-versus-role-btn[data-role="none"]') as HTMLButtonElement)
       .click();
-    expect(noteEl.classList.contains('hud-versus-assignment-note--hidden')).toBe(false);
-    const preview = Array.from(
-      root.querySelectorAll('.hud-versus-setup .hud-controller-source-btn'),
-    ) as HTMLButtonElement[];
-    expect(preview.length).toBeGreaterThan(0);
-    expect(preview.every((b) => b.disabled), 'a preview button is still clickable').toBe(true);
-    expect(new Set(preview.map((b) => b.getAttribute('aria-describedby'))))
-      .toEqual(new Set(['hud-versus-assignment-note']));
+    expect(start.disabled).toBe(true);
+    const id = start.getAttribute('aria-describedby');
+    expect(id).toBe('hud-versus-slot-reason-0');
+    const reason = root.querySelector(`#${id}`) as HTMLElement;
+    expect(reason, 'aria-describedby points at no element').not.toBeNull();
+    expect(reason.textContent, 'the referenced element is empty, so the excuse says nothing')
+      .not.toBe('');
   });
 });
 
