@@ -2165,10 +2165,10 @@
     "id": "tread-tint-set-once-not-per-emission",
     "file": "src/render/tread-trails.ts",
     "find": "      d.mesh.material.color.setHex(colorHex);",
-    "replace": "",
+    "replace": "      void colorHex;",
     "expect": "killed",
     "expectFailures": 2,
-    "why": "The identity tint stops being applied per EMISSION, so a decal keeps whatever colour it was built with. Decals are pooled (`pool.pop() ?? makeDecal()`), so the visible defect is not 'no colour' -- it is a player inheriting ANOTHER player's tint the moment the pool turns over, which on a busy board is most marks. It looks like a working feature in a screenshot of a fresh round and wrong in play, and no assertion on `treadColorFor` alone can see it, since that function stays correct. Caught by the real-emit-path case and by the pool-turnover case that expires one player's marks before the other prints into them. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+    "why": "The identity tint stops being applied per EMISSION, so a decal keeps whatever colour it was built with. Decals are pooled (`pool.pop() ?? makeDecal()`), so the visible defect is not 'no colour' -- it is a player inheriting ANOTHER player's tint the moment the pool turns over, which on a busy board is most marks. It looks like a working feature in a screenshot of a fresh round and wrong in play, and no assertion on `treadColorFor` alone can see it, since that function stays correct. Caught by the real-emit-path case and by the pool-turnover case that expires one player's marks before the other prints into them. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only. The replacement is `void colorHex;` rather than an empty string: the manifest validator requires a non-empty `replace` (lib.mjs, \"'replace' must be a non-empty string\"), and a no-op that still consumes the parameter expresses the deletion without leaving an unused-argument diagnostic behind it.",
     "tests": [
       "src/render/tread-trails.test.ts"
     ]
