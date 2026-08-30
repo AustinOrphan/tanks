@@ -64,11 +64,12 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
         }
       }
     }
-    // 6 arenas x (33x27 + 33x27 + 33x27 + 45x33 + 45x33 + 27x21) cells -- pinned so a
-    // narrowed scan (e.g. only checking row 0) cannot read as a pass. The 27x21 term is
-    // issue #271's vs-duel-01, written as its own factor rather than folded into a total
-    // so the shape of each board stays legible here.
-    expect(compared).toBe(3 * 33 * 27 + 2 * 45 * 33 + 27 * 21);
+    // 7 arenas x (33x27 + 33x27 + 33x27 + 45x33 + 45x33 + 27x21 + 27x17) cells -- pinned
+    // so a narrowed scan (e.g. only checking row 0) cannot read as a pass. The 27x21 term
+    // is issue #271's vs-duel-01 and the 27x17 is issue #272's vs-tri-01, each written as
+    // its own factor rather than folded into a total so the shape of every board stays
+    // legible here.
+    expect(compared).toBe(3 * 33 * 27 + 2 * 45 * 33 + 27 * 21 + 27 * 17);
   });
 
   it('the P cell sits at the identical position in every variant, on all 7 shipped arenas', () => {
