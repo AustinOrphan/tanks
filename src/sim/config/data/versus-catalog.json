@@ -6,10 +6,19 @@
       "displayName": "Arena 1",
       "intent": "Sparse destructibles on a mid-size board; cover is mostly permanent, so lanes stay stable all match.",
       "preview": "arena-01",
-      "players": [2, 3, 4],
-      "modes": ["ffa", "teams"],
+      "players": [
+        2,
+        3,
+        4
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
       "spawnPolicy": "maximin",
-      "variants": ["seeded-destructible"]
+      "variants": [
+        "seeded-destructible"
+      ]
     },
     {
       "id": "arena-02",
@@ -17,10 +26,19 @@
       "displayName": "Arena 2",
       "intent": "Destructible-heavy centre; the board opens up as a match runs and variants reshape it most here.",
       "preview": "arena-02",
-      "players": [2, 3, 4],
-      "modes": ["ffa", "teams"],
+      "players": [
+        2,
+        3,
+        4
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
       "spawnPolicy": "maximin",
-      "variants": ["seeded-destructible"]
+      "variants": [
+        "seeded-destructible"
+      ]
     },
     {
       "id": "arena-03",
@@ -28,10 +46,19 @@
       "displayName": "Arena 3",
       "intent": "Even mix of solid and breakable cover on a mid-size board.",
       "preview": "arena-03",
-      "players": [2, 3, 4],
-      "modes": ["ffa", "teams"],
+      "players": [
+        2,
+        3,
+        4
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
       "spawnPolicy": "maximin",
-      "variants": ["seeded-destructible"]
+      "variants": [
+        "seeded-destructible"
+      ]
     },
     {
       "id": "arena-04",
@@ -39,10 +66,19 @@
       "displayName": "Arena 4",
       "intent": "Largest open floor of the set; longer rotations and the most room at four players.",
       "preview": "arena-04",
-      "players": [2, 3, 4],
-      "modes": ["ffa", "teams"],
+      "players": [
+        2,
+        3,
+        4
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
       "spawnPolicy": "maximin",
-      "variants": ["seeded-destructible"]
+      "variants": [
+        "seeded-destructible"
+      ]
     },
     {
       "id": "arena-05",
@@ -50,10 +86,37 @@
       "displayName": "Arena 5",
       "intent": "Large board walled mostly in solid cover; few breakables, so sightlines barely drift.",
       "preview": "arena-05",
-      "players": [2, 3, 4],
-      "modes": ["ffa", "teams"],
+      "players": [
+        2,
+        3,
+        4
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
       "spawnPolicy": "maximin",
-      "variants": ["seeded-destructible"]
+      "variants": [
+        "seeded-destructible"
+      ]
+    },
+    {
+      "id": "vs-duel-01",
+      "arenaId": "vs-duel-01",
+      "displayName": "Pinwheel",
+      "intent": "A compact duel board: two covered corners, one contested centre, and four walls worth breaking.",
+      "preview": "vs-duel-01",
+      "players": [
+        2
+      ],
+      "modes": [
+        "ffa",
+        "teams"
+      ],
+      "spawnPolicy": "maximin",
+      "variants": [
+        "seeded-destructible"
+      ]
     }
   ]
 }

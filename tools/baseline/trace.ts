@@ -323,8 +323,19 @@ import { step } from '../../src/sim/world';
  * status only, never events or bullets. The flash's position is pinned by tests instead
  * (bullets.test.ts, step-contract.test.ts, and the `muzzle-flash-collapses-onto-the-shell`
  * manifest entry), not here.
+ *
+ * MOVED ONCE, on 2026-08-29, and only after proving the move was a WIDENING rather than a
+ * re-record -- the failure mode this file's own test warns about ("someone narrows the
+ * trace, sees red, and RE-RECORDS the hash"). Issue #271 appended `vs-duel-01` to
+ * ARENA_DEFS, and `traceText` iterates that array in order, so the new board's runs land
+ * at the END. Measured on both trees with the same probe: the new trace text is
+ * byte-identical to the old for its first 115687 characters and adds 6642, containing
+ * exactly 6 new `|a:seed:status:tick|` markers -- one per seed for the one new board.
+ * `newText.startsWith(oldText)` is true. No existing arena's simulation moved, which is
+ * the only thing this fingerprint is a pin on. Previous value:
+ * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = '5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c';
+export const BASELINE_HASH = '6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

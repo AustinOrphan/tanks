@@ -56,6 +56,7 @@ import type { StatCounts } from './stats';
 import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { teamOf } from '../sim/arena';
+import { versusCatalogEntryById } from '../sim/config/versus-catalog';
 import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
 import { createTransitionRunner } from './transitions';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
@@ -2392,9 +2393,28 @@ export function createHud(root: HTMLElement): Hud {
    *  not reachable against the shipped catalog (`arena-01`..`arena-05`; measured via
    *  `versusBoardCatalog()`, see versus-config.ts's own doc comment: all 15 of 15
    *  (arena, playerCount) rows pass `suitable` today). */
+  /**
+   * The map button's copy, READ FROM THE CATALOG (issue #271, criterion 5).
+   *
+   * This was `/^arena-(\d+)$/` -> `Arena N`, a second implementation of data the catalog
+   * already carried: every migrated entry's `displayName` is exactly the string that
+   * regex produced, which is what makes this swap behaviour-preserving rather than a
+   * retitling (asserted in hud.test.ts, both directions). The regex was fine while every
+   * board was `arena-NN`; the first board that is not fell through to its raw id, so
+   * `vs-duel-01` would have been the name on screen instead of `Pinwheel`.
+   *
+   * `intent` and `preview` are declared beside `displayName` and are NOT read here --
+   * the selector that shows them is #274's, and inventing a place for them in this row
+   * would be building that selector early. The name is what this row renders today.
+   */
   function arenaLabel(id: string): string {
-    const m = /^arena-(\d+)$/.exec(id);
-    return m ? `Arena ${Number(m[1])}` : id;
+    try {
+      return versusCatalogEntryById(id).displayName;
+    } catch {
+      // Not a catalog id at all -- a campaign-only arena reached through some other
+      // path. The id is a worse label than a name, and a better one than a crash.
+      return id;
+    }
   }
 
   // Pane-local selection state, session-scoped (spec ruling 4: "no seventh store,

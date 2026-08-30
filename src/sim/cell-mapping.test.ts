@@ -19,10 +19,11 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 5 shipped arenas -- three at 33x27 and arena-04
+    // Population: all cells of all 6 shipped arenas -- three at 33x27, arena-04
     // and arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x) -- plus
     // the 17x13 fixture, untouched by the upscale =
-    // 891 + 891 + 891 + 1485 + 1485 + 221 = 5864 cells. The non-square boards
+    // 891 + 891 + 891 + 1485 + 1485 + 567 + 221 = 6431 cells, the 567 being issue
+    // #271's 27x21 vs-duel-01. The non-square boards
     // matter here: a formula that confused cols with rows would round-trip fine on
     // a square-ish board.
     let checked = 0;
@@ -35,7 +36,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(5864);
+    expect(checked).toBe(6431);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {
@@ -77,6 +78,8 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
     // 4 + 5 + 6 + 7 + 8 shipped (each count INCLUDES that arena's player spawn) + 3
     // fixture = 33. Written as 17 first when the total was 18; the test caught the
     // arithmetic, which is the denominator discipline working on its own author.
-    expect(spawnsChecked).toBe(33);
+    // 35, not 33: vs-duel-01 authors one player and one enemy letter, the minimum
+    // arenas.json accepts, and both sit on the 1-(mod 3) lattice this test pins.
+    expect(spawnsChecked).toBe(35);
   });
 });

@@ -530,6 +530,49 @@
           "why": "All seven spawn blocks are solid cells -- the bar's segments for the north three, the continuous east wall for its three, the reused mid-field block for the west grey -- so none opens under a breach. Measured 0 of 28 nudge probes (7 enemies x 4 cardinal offsets) open in either wall phase, including green's ricochet, which is the property three rejected west-wall shapes failed to hold (see notes)."
         }
       ]
+    },
+    {
+      "id": "vs-duel-01",
+      "cols": 27,
+      "rows": 21,
+      "cellSize": 0.6666666666666666,
+      "legend": {
+        "#": "solid",
+        "x": "destructible"
+      },
+      "grid": [
+        "...........................",
+        ".P.........................",
+        "...........................",
+        "...................##......",
+        "...#######......xx###......",
+        "...#......xx....xx###......",
+        "...#......xx.##....##......",
+        "...#......xx.##....##......",
+        "...#.........##....##xx....",
+        ".........######......xxx...",
+        "...xx....#########....xx...",
+        "...xxx......######.........",
+        "....xx##....##.........#...",
+        "......##....##.xx......#...",
+        "......##....##.xx......#...",
+        "......###xx....xx......#...",
+        "......###xx......#######...",
+        "......##...................",
+        "...........................",
+        ".........................B.",
+        "..........................."
+      ],
+      "notes": [
+        "Issue #271: the first board authored FOR versus rather than borrowed from the campaign.",
+        "Every wall is placed with its 180-degree partner, so the two halves are the same board turned around: neither player can hold a shape the other cannot.",
+        "The maximin spawn policy takes the extreme corners, so the cover that matters is one step INBOARD of them. Each pocket is an L that breaks the corner-to-corner diagonal at its own end while opening onto both edge lanes -- covered on arrival, never one way out.",
+        "The centre is a pinwheel of two offset arms plus their partners: you round it clockwise or anticlockwise and neither is shorter, so holding the middle costs a commitment rather than winning by default.",
+        "The flank shoulder splits the long way round into an outer edge lane and an inner mid lane, so the two routes between the pockets are different in character rather than mirrored.",
+        "The four destructible clusters each plug what would otherwise be the obvious fast line. Breaching one is the tempo decision this map is about, and seeded-destructible variants pre-open a subset.",
+        "claims is empty deliberately: lane, sightlineAfterBreach and spawnBlockRobust are campaign-intent vocabulary, and versus boards are validated by versus-catalog-rules.ts instead."
+      ],
+      "claims": []
     }
   ]
 }

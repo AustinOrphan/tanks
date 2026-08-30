@@ -13,7 +13,7 @@ import type { WallKind } from './types';
 
 // ---------------------------------------------------------------------------
 // MEASURED DESTRUCTIBLE-CELL COUNTS, the population every fraction/removal-count claim
-// below is derived from. Denominator: 5 shipped arenas.
+// below is derived from. Denominator: 6 shipped arenas (issue #271 added vs-duel-01).
 // ---------------------------------------------------------------------------
 
 const DESTRUCTIBLE_COUNTS: Record<string, number> = {
@@ -22,14 +22,16 @@ const DESTRUCTIBLE_COUNTS: Record<string, number> = {
   'arena-03': 27,
   'arena-04': 27,
   'arena-05': 18,
+  // Four breachable clusters, 2x3 or 2x2, each mirrored through the centre (issue #271).
+  'vs-duel-01': 34,
 };
 
 describe('measured destructible-cell counts per shipped arena', () => {
-  it('ARENA_DEFS holds exactly 5 shipped arenas -- the population this file claims throughout', () => {
-    expect(ARENA_DEFS.length).toBe(5);
+  it('ARENA_DEFS holds exactly 6 shipped arenas -- the population this file claims throughout', () => {
+    expect(ARENA_DEFS.length).toBe(6);
   });
 
-  it('matches DESTRUCTIBLE_COUNTS on all 5 shipped arenas (counted directly from each grid/legend)', () => {
+  it('matches DESTRUCTIBLE_COUNTS on all 6 shipped arenas (counted directly from each grid/legend)', () => {
     for (const arena of ARENA_DEFS) {
       let count = 0;
       for (const row of arena.grid) for (const ch of row) if (arena.legend[ch] === 'destructible') count++;
@@ -58,12 +60,14 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
         }
       }
     }
-    // 5 arenas x (33x27 + 33x27 + 33x27 + 45x33 + 45x33) cells -- pinned so a narrowed
-    // scan (e.g. only checking row 0) cannot read as a pass.
-    expect(compared).toBe(3 * 33 * 27 + 2 * 45 * 33);
+    // 6 arenas x (33x27 + 33x27 + 33x27 + 45x33 + 45x33 + 27x21) cells -- pinned so a
+    // narrowed scan (e.g. only checking row 0) cannot read as a pass. The 27x21 term is
+    // issue #271's vs-duel-01, written as its own factor rather than folded into a total
+    // so the shape of each board stays legible here.
+    expect(compared).toBe(3 * 33 * 27 + 2 * 45 * 33 + 27 * 21);
   });
 
-  it('the P cell sits at the identical position in every variant, on all 5 shipped arenas', () => {
+  it('the P cell sits at the identical position in every variant, on all 6 shipped arenas', () => {
     function findP(grid: string[]): { row: number; col: number } {
       for (let r = 0; r < grid.length; r++) {
         const c = grid[r].indexOf('P');
@@ -78,7 +82,7 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
     }
   });
 
-  it('removes exactly round(destructibleCount * fraction) cells, on all 5 shipped arenas', () => {
+  it('removes exactly round(destructibleCount * fraction) cells, on all 6 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       const variant = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 3, DESTRUCTIBLE_REMOVAL_FRACTION);
       const removed = countRemoved(arena.grid, variant);
@@ -104,7 +108,7 @@ describe('buildVariantGrid: solid geometry and the authored P cell are NEVER tou
 });
 
 describe('buildVariantGrid: determinism and seed variety', () => {
-  it('the same seed produces byte-identical output on repeated calls, on all 5 shipped arenas', () => {
+  it('the same seed produces byte-identical output on repeated calls, on all 6 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       const a = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 42, DESTRUCTIBLE_REMOVAL_FRACTION);
       const b = buildVariantGrid(arena.grid, arena.cols, arena.rows, arena.legend, 42, DESTRUCTIBLE_REMOVAL_FRACTION);
@@ -188,7 +192,7 @@ function reachableFromP1(grid: string[], cols: number, rows: number, legend: Rec
 }
 
 describe('connectivity: every cell reachable in the authored board stays reachable in the variant', () => {
-  it('measured on all 5 shipped arenas x 5 seeds = 25 (arena, seed) pairs: reachable(authored) is always a SUBSET of reachable(variant)', () => {
+  it('measured on all 6 shipped arenas x 5 seeds = 30 (arena, seed) pairs: reachable(authored) is always a SUBSET of reachable(variant)', () => {
     const seeds = [1, 2, 3, 4, 5];
     let checked = 0;
     for (const arena of ARENA_DEFS) {
@@ -203,7 +207,7 @@ describe('connectivity: every cell reachable in the authored board stays reachab
         }
       }
     }
-    expect(checked).toBe(25);
+    expect(checked).toBe(30);
   });
 
   it('reachability strictly GROWS on at least one shipped arena -- the claim is not vacuously true because nothing ever gets removed near reachable floor', () => {
@@ -224,7 +228,7 @@ describe('connectivity: every cell reachable in the authored board stays reachab
 // isVariantSuitable (versus-variants.ts) does not re-check it.
 // ---------------------------------------------------------------------------
 
-describe('room: openFloorCells rises by EXACTLY the removed count, on all 5 shipped arenas', () => {
+describe('room: openFloorCells rises by EXACTLY the removed count, on all 6 shipped arenas', () => {
   it('countOpenFloor(variant) - countOpenFloor(authored) === removedCount', () => {
     function countOpenFloor(grid: string[]): number {
       let n = 0;
@@ -248,7 +252,7 @@ describe('room: openFloorCells rises by EXACTLY the removed count, on all 5 ship
 // ---------------------------------------------------------------------------
 
 describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measured', () => {
-  it('0 of 150 (arena, N, seed) draws are unsuitable -- 5 arenas x 3 player counts x 10 seeds, fraction 0.4', () => {
+  it('0 of 180 (arena, N, seed) draws are unsuitable -- 6 arenas x 3 player counts x 10 seeds, fraction 0.4', () => {
     const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let checked = 0;
     let unsuitable = 0;
@@ -262,7 +266,7 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
         }
       }
     }
-    expect(checked).toBe(150);
+    expect(checked).toBe(180);
     expect(unsuitable).toBe(0);
   });
 });
@@ -387,7 +391,7 @@ describe('loadArena: versus variants are guard-first on mode AND an explicit see
     }
   });
 
-  it('ffa/teams WITHOUT a seed is BYTE-IDENTICAL to before this feature existed, on all 5 shipped arenas', () => {
+  it('ffa/teams WITHOUT a seed is BYTE-IDENTICAL to before this feature existed, on all 6 shipped arenas', () => {
     for (const arena of ARENA_DEFS) {
       for (const mode of ['ffa', 'teams'] as const) {
         const before = loadArena(arena, 4, mode);
@@ -426,7 +430,7 @@ describe('loadArena: versus variants are guard-first on mode AND an explicit see
     expect(aKeys).not.toEqual(bKeys); // but a DIFFERENT subset was removed
   });
 
-  it('the wired output is itself suitable (gate-guaranteed): spot check on 5 shipped arenas x N=4, seed 1', () => {
+  it('the wired output is itself suitable (gate-guaranteed): spot check on 6 shipped arenas x N=4, seed 1', () => {
     for (const arena of ARENA_DEFS) {
       const { tanks, walls } = loadArena(arena, 4, 'ffa', 1);
       const players = tanks.filter((t) => t.kind === 'player');

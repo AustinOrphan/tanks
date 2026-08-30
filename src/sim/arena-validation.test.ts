@@ -7,6 +7,7 @@ import { bankShot, lineOfSight } from './ai/targeting';
 import { ARENAS, ARENA_01, loadArena, arenaBounds } from './arena';
 import { structuralFailures, claimFailures, cellCentre, cellOf, breach } from './arena-claims';
 import { ARENA_DEFS, arenaById } from './config/arenas';
+import { CAMPAIGN_ARENA_DEFS } from './config/campaign';
 import { configFor } from './config';
 import { WIDE_ARENA, SEALED_POCKET_ARENA, OPEN_SIGHTLINE_ARENA, BANK_SIGHTLINE_ARENA } from './config/arena-fixtures';
 import type { ArenaClaim } from './config/arena-types';
@@ -56,6 +57,14 @@ const EXPECTED_CLAIMS: Record<string, Partial<Record<ArenaClaim['type'], number>
   'arena-03': { lane: 2, sightlineAfterBreach: 5, spawnBlockRobust: 1 },
   'arena-04': { lane: 7, sightlineAfterBreach: 6, spawnBlockRobust: 1 },
   'arena-05': { spawnBlockRobust: 1 },
+  // Deliberately empty, and the gate above is why it is stated rather than omitted:
+  // `lane`, `sightlineAfterBreach` and `spawnBlockRobust` are CAMPAIGN-intent vocabulary
+  // read against authored enemy spawn letters, and `vs-duel-01` (issue #271) is a versus
+  // board whose real spawns are chosen by the maximin policy at load. Its equivalent
+  // guarantees -- distinct spawns, concealed spawn pairs, room, connectivity, #225
+  // clearance, and every seeded variant -- are declared in versus-catalog.json and proved
+  // by versus-catalog-rules.ts. An empty inventory here is a claim, not an omission.
+  'vs-duel-01': {},
 };
 
 it('each shipped arena declares its claim inventory exactly, per this table', () => {
@@ -214,6 +223,11 @@ describe('the cover ratio each arena quotes in its notes', () => {
   // region that changed shape. Subsampling the new grid at exactly the points that map
   // back to the old cell centres (k -> 3k+1 on both axes) reproduces the old counts
   // (35/86, 41/83, 30/88, 35/151) exactly, confirming the geometry itself did not move.
+  // Scoped to the CAMPAIGN arenas: the note this recomputes is arena-04's, comparing the
+  // four campaign boards on one probe, and the probe itself reads sightlines from AUTHORED
+  // enemy spawn letters. A versus board's real spawns are chosen by the maximin policy at
+  // load, so the same number would not mean the same thing there -- `vs-duel-01` is
+  // measured by versus-catalog-rules.ts instead. (Issue #271.)
   const EXPECTED: Record<string, { unseen: number; open: number }> = {
     'arena-01': { unseen: 288, open: 774 },
     'arena-02': { unseen: 369, open: 747 },
@@ -225,10 +239,10 @@ describe('the cover ratio each arena quotes in its notes', () => {
   it('recomputes every quoted count, and the ranking the note claims', () => {
     // Symmetric with EXPECTED_CLAIMS above: set equality both ways, so adding a
     // fifth arena cannot leave this table quietly covering four of five.
-    expect(new Set(ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED)));
+    expect(new Set(CAMPAIGN_ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED)));
 
     const ratio: Record<string, number> = {};
-    for (const arena of ARENA_DEFS) {
+    for (const arena of CAMPAIGN_ARENA_DEFS) {
       const { walls, spawns } = loadArena(arena);
       const enemies = spawns.filter((s) => s.kind !== 'player');
       let open = 0;

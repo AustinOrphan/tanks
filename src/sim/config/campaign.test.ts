@@ -14,15 +14,29 @@ describe('CAMPAIGN: the shipped campaign', () => {
     expect(CAMPAIGN_LEVELS[0].id).toBe('level-01');
   });
 
-  it('the set of levels\' arenaIds equals the set of ARENA_DEFS ids', () => {
-    // A deliberate pin, not a tautology of "5 == 5": this forces a conscious edit
-    // the day an arena joins ARENA_DEFS but not the campaign, or vice versa --
-    // production code that only checked lengths would stay green under either.
-    // Would fail if: an arena were added to config/data/arenas.json without a
-    // matching campaign.json entry (or the reverse).
+  it('plays every shipped arena except the ones named here as versus-only', () => {
+    // A deliberate pin, not a tautology of "5 == 5": it forces a conscious edit the day
+    // an arena joins ARENA_DEFS but not the campaign, or vice versa. That day arrived
+    // with issue #271, and this is the conscious edit -- equality became a partition,
+    // NOT a one-way subset. A bare `levelArenaIds ⊆ arenaIds` would let any number of
+    // unplayed arenas ship unnoticed, which is exactly the hole the original comment was
+    // guarding. Naming the exception keeps the pin sharp: a second versus board still
+    // fails here until someone adds it to the list on purpose.
+    //
+    // Would fail if: an arena were added to config/data/arenas.json without either a
+    // matching campaign.json entry or an entry below; or a campaign level named an arena
+    // that does not exist (the loader rejects that first); or a board listed here were
+    // quietly given a campaign level after all.
+    const VERSUS_ONLY = new Set(['vs-duel-01']);
+
     const levelArenaIds = new Set(CAMPAIGN_LEVELS.map((l) => l.arenaId));
     const arenaIds = new Set(ARENA_DEFS.map((a) => a.id));
-    expect(levelArenaIds).toEqual(arenaIds);
+    const campaignArenaIds = new Set([...arenaIds].filter((id) => !VERSUS_ONLY.has(id)));
+    expect(levelArenaIds).toEqual(campaignArenaIds);
+    // The exceptions are real arenas, so a typo here cannot silently excuse nothing.
+    for (const id of VERSUS_ONLY) expect(arenaIds, `${id} is not a shipped arena`).toContain(id);
+    // ...and each is genuinely absent from the campaign, not merely listed.
+    for (const id of VERSUS_ONLY) expect(levelArenaIds).not.toContain(id);
   });
 });
 

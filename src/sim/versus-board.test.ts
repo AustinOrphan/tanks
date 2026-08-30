@@ -11,19 +11,22 @@ import type { Arena } from './arena';
 import type { WallKind } from './types';
 
 // ---------------------------------------------------------------------------
-// SHIPPED-ARENA SWEEP. Denominator for every claim in this block: 5 shipped arenas x
-// 3 versus player counts (2, 3, 4) = 15 (arena, N) verdicts, 10 spawn pairs per arena
+// SHIPPED-ARENA SWEEP. Denominator for every claim in this block: 6 shipped arenas x
+// 3 versus player counts (2, 3, 4) = 18 (arena, N) verdicts, 10 spawn pairs per arena
 // (C(2,2) + C(3,2) + C(4,2) = 1 + 3 + 6), 50 pairs total. Pinned as its own assertion
 // so a 6th arena moves this test rather than silently shrinking the sweep --
 // versus-spawns.test.ts's own `ARENAS.length` pin is the precedent.
 // ---------------------------------------------------------------------------
 
 describe('evaluateVersusBoard: the shipped-arena sweep', () => {
-  it('ARENA_DEFS holds exactly 5 shipped arenas -- the population every sweep below claims', () => {
-    expect(ARENA_DEFS.length).toBe(5);
+  it('ARENA_DEFS holds exactly 6 shipped arenas -- the population every sweep below claims', () => {
+    expect(ARENA_DEFS.length).toBe(6);
   });
 
-  it('every shipped arena is suitable at every N in {2, 3, 4}: 15 of 15 (arena, N) combinations', () => {
+  // Every board is MEASURED at every N here; what a board is OFFERED at is a separate,
+  // curated question the catalog answers (vs-duel-01 declares [2] only). Suitability is
+  // the floor, not the offer.
+  it('every shipped arena is suitable at every N in {2, 3, 4}: 18 of 18 (arena, N) combinations', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
     let checked = 0;
@@ -39,20 +42,24 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         expect(verdict.roomOk, `${arena.id} @ N=${n} roomOk`).toBe(true);
       }
     }
-    expect(checked).toBe(15);
+    expect(checked).toBe(18);
   });
 
   // NONE OF THE THREE CRITERIA CURRENTLY DISCRIMINATES ON SHIPPED DATA -- stated
-  // plainly rather than left to be inferred from the all-true sweep above. Every
-  // shipped arena is 33x27 or 45x33, authored for a single campaign player plus
+  // plainly rather than left to be inferred from the all-true sweep above. Five of the
+  // six shipped arenas are 33x27 or 45x33, authored for a single campaign player plus
   // arranged enemies, not for tightness at 2-4 versus starts; none of them was ever
-  // close to failing any of these bounds. The three synthetic-fixture describe blocks
+  // close to failing any of these bounds. Issue #271's vs-duel-01 is the first board
+  // authored FOR versus and the first to move this margin -- at 27x21 it is the
+  // smallest shipped, and it more than halves the headroom (10x MIN down to 6x) while
+  // still not coming close to failing. The criterion remains non-discriminating on
+  // shipped data; it is just no longer non-discriminating by an order of magnitude. The three synthetic-fixture describe blocks
   // below prove each criterion CAN fail (and, for concealment and room, that it is
   // wired into `suitable` -- see the mutation table in
   // docs/superpowers/plans/2026-08-17-versus-board-rules.md), which is what makes this
   // sweep evidence that shipped boards are roomy rather than evidence the rule is
   // decorative.
-  it('the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin on every shipped combination -- the tightest is arena-02 at N=4', () => {
+  it('the room ratio clears MIN_OPEN_FLOOR_PER_PLAYER by a wide, stated margin on every shipped combination -- the tightest is vs-duel-01 at N=4', () => {
     let tightest = Infinity;
     let tightestLabel = '';
     for (const arena of ARENA_DEFS) {
@@ -64,12 +71,17 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         }
       }
     }
-    expect(tightestLabel).toBe('arena-02 @ N=4');
-    expect(tightest).toBeCloseTo(185.5, 5);
-    expect(tightest).toBeGreaterThan(MIN_OPEN_FLOOR_PER_PLAYER * 10);
+    // vs-duel-01 takes this over from arena-02 (which was 185.5): a 27x21 duel board,
+    // deliberately the smallest shipped, so it holds the tightest room ratio -- and it
+    // holds it at N=4, a count the catalog does not even offer it at. 448 open cells / 4.
+    expect(tightestLabel).toBe('vs-duel-01 @ N=4');
+    expect(tightest).toBeCloseTo(112, 5);
+    // 6x, not the 10x that was true when every board was campaign-sized. Lowered on
+    // measurement, and the margin is stated in the title rather than left implicit.
+    expect(tightest).toBeGreaterThan(MIN_OPEN_FLOOR_PER_PLAYER * 6);
   });
 
-  it('0 of 50 spawn pairs share mutual line of sight, across the full sweep', () => {
+  it('0 of 60 spawn pairs share mutual line of sight, across the full sweep', () => {
     let totalPairs = 0;
     let concealedPairs = 0;
     for (const arena of ARENA_DEFS) {
@@ -79,8 +91,8 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         concealedPairs += verdict.concealedPairs;
       }
     }
-    expect(totalPairs).toBe(50);
-    expect(concealedPairs).toBe(50);
+    expect(totalPairs).toBe(60);
+    expect(concealedPairs).toBe(60);
   });
 });
 
@@ -221,11 +233,11 @@ describe('evaluateVersusBoard: room can fail, isolated from the other two', () =
 });
 
 describe('versusBoardCatalog', () => {
-  it('produces one row per (arena, N), labelled with the arena id, over the default 5 arenas x {2,3,4}', () => {
+  it('produces one row per (arena, N), labelled with the arena id, over the default 6 arenas x {2,3,4}', () => {
     const rows = versusBoardCatalog();
-    expect(rows.length).toBe(15);
+    expect(rows.length).toBe(18);
     const labels = rows.map((r) => `${r.arenaId}@${r.playerCount}`);
-    expect(new Set(labels).size).toBe(15); // every row is a distinct (arena, N) pair
+    expect(new Set(labels).size).toBe(18); // every row is a distinct (arena, N) pair
     expect(rows.every((r) => r.suitable)).toBe(true);
   });
 
@@ -263,7 +275,7 @@ describe("versus-board: the 'ffa' hardcode rests on teams placing identically", 
   // tanks equal would fail for the one reason that is not a defect.
   const COUNTS = [2, 3, 4] as const;
 
-  it('places every player at identical positions in ffa and teams, on all 5 shipped arenas', () => {
+  it('places every player at identical positions in ffa and teams, on all 6 shipped arenas', () => {
     let compared = 0;
     for (const arena of ARENA_DEFS) {
       for (const n of COUNTS) {
@@ -281,7 +293,7 @@ describe("versus-board: the 'ffa' hardcode rests on teams placing identically", 
     }
     // Denominator, so a change that stops loading players cannot read as a pass:
     // 5 arenas x (2 + 3 + 4) players = 45 position comparisons.
-    expect(compared).toBe(45);
+    expect(compared).toBe(54);
   });
 
   it('still stamps team ONLY in teams mode -- the one difference that is expected', () => {
