@@ -34,13 +34,13 @@ describe('arenaBounds', () => {
 describe('loadArena', () => {
   // Regression pin, written and passing BEFORE loadArena grew a playerCount param's
   // real logic: at playerCount 1 (the default, and passed explicitly), output must
-  // stay byte-identical to today's single-arg call -- across all 7 shipped arenas,
+  // stay byte-identical to today's single-arg call -- across all 8 shipped arenas,
   // not just ARENA_01, since the co-op spawn-offset rule reads every arena's own
   // grid. This is the claim CLAUDE.md's arena.ts section calls "stronger than the
   // prototype made": conditional controlledBy stamping means PASS 1a is the ENTIRE
   // function body relevant to spawns at playerCount 1, so nothing here should ever
   // need editing when PASS 1b (playerCount > 1) lands.
-  it('at playerCount 1 (default and explicit) is byte-identical to the single-arg call, on all 7 shipped arenas', () => {
+  it('at playerCount 1 (default and explicit) is byte-identical to the single-arg call, on all 8 shipped arenas', () => {
     ARENAS.forEach((arena, i) => {
       const noArg = loadArena(arena);
       const explicit1 = loadArena(arena, 1);
@@ -144,7 +144,7 @@ describe('loadArena', () => {
 
   // Measured directly (ring 1, cellsNeeded=2 at the shipped cellSize 2/3, all 8
   // RING_DIRECTIONS in priority order): the FIRST candidate, E (+2 cols, +0 rows),
-  // is open ('.', in-bounds) in all 6 of 7 shipped arenas. arena-01/02/03 share a P
+  // is open ('.', in-bounds) in all 6 of 8 shipped arenas. arena-01/02/03 share a P
   // spawn at (row 22, col 16) and resolve P2 to (row 22, col 18); arena-04/05 share
   // (row 28, col 22) and resolve to (row 28, col 24). Zero grid edits needed.
   it('resolves P2 to the measured E-ring cell on every shipped arena, with controlledBy 0/1', () => {
@@ -174,7 +174,7 @@ describe('loadArena', () => {
 
   // Measured directly (ring 1, cellsNeeded=2, all 8 RING_DIRECTIONS in priority order),
   // per the N-player plan's red-first step: `loadArena(arena, 3)` and `loadArena(arena,
-  // 4)` on all 7 shipped arenas, asserting the CONCRETE resolved cell rather than merely
+  // 4)` on all 8 shipped arenas, asserting the CONCRETE resolved cell rather than merely
   // "found one". On every one of the 5, P3's ring-1-S candidate (dist 2, direction
   // [0,1]) and P4's ring-1-W candidate (dist 2, direction [-1,0]) are BOTH open -- no
   // arena falls through to ring 2 or the co-locate fallback, so those paths stay
@@ -548,11 +548,11 @@ describe('loadArena', () => {
 describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
   // Denominator for every "all N arenas" claim below: ARENAS.length is 5 at this tree
   // (arena-01..05) -- asserted once so a sixth arena silently narrows nothing.
-  it('ARENAS holds exactly 7 shipped arenas -- the population every sweep below claims', () => {
-    expect(ARENAS.length).toBe(7);
+  it('ARENAS holds exactly 8 shipped arenas -- the population every sweep below claims', () => {
+    expect(ARENAS.length).toBe(8);
   });
 
-  it('strips every non-player spawn letter in ffa/teams, on all 7 shipped arenas: only player tanks are ever instantiated', () => {
+  it('strips every non-player spawn letter in ffa/teams, on all 8 shipped arenas: only player tanks are ever instantiated', () => {
     for (const arena of ARENAS) {
       for (const mode of ['ffa', 'teams'] as const) {
         const { tanks, spawns } = loadArena(arena, 4, mode);
@@ -572,7 +572,7 @@ describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
     }
   });
 
-  it('teams stamps team = slot % 2 on every player tank, N=4, on all 7 shipped arenas', () => {
+  it('teams stamps team = slot % 2 on every player tank, N=4, on all 8 shipped arenas', () => {
     for (const arena of ARENAS) {
       const { tanks } = loadArena(arena, 4, 'teams');
       const players = tanks.filter((t) => t.kind === 'player');

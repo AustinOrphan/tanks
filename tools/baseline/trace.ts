@@ -324,7 +324,7 @@ import { step } from '../../src/sim/world';
  * (bullets.test.ts, step-contract.test.ts, and the `muzzle-flash-collapses-onto-the-shell`
  * manifest entry), not here.
  *
- * MOVED TWICE, and each time only after proving the move was a WIDENING rather than a
+ * MOVED THREE TIMES, and each time only after proving the move was a WIDENING rather than a
  * re-record -- the failure mode this file's own test warns about ("someone narrows the
  * trace, sees red, and RE-RECORDS the hash"). Both moves have the same cause: a board
  * appended to ARENA_DEFS, and `traceText` iterates that array in order, so a new board's
@@ -338,12 +338,20 @@ import { step } from '../../src/sim/world';
  *   - 2026-08-29, issue #271 appended `vs-duel-01`: byte-identical for its first 115687
  *     characters, adding 6642 and exactly 6 new markers, `startsWith` likewise true.
  *
- * No existing arena's simulation moved on either occasion, which is the only thing this
- * fingerprint is a pin on. Previous values, newest first:
+ * The newest move, listed out of order above because it is the one this hash records:
+ *
+ *   - 2026-08-30, issue #273 appended `vs-quad-01`. Same probe, both trees dumped through
+ *     the real `traceText()`: byte-identical for its first 128893 characters and adding
+ *     5508, markers 42 -> 48 with all 6 of the new ones inside the appended tail, and
+ *     `newText.startsWith(oldText)` true.
+ *
+ * No existing arena's simulation moved on any of the three occasions, which is the only
+ * thing this fingerprint is a pin on. Previous values, newest first:
+ * f9663703abe7308b55b2f54a1beb9edeacd6258f5b4b6941a4c6cb7f891f36e5
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = 'f9663703abe7308b55b2f54a1beb9edeacd6258f5b4b6941a4c6cb7f891f36e5';
+export const BASELINE_HASH = 'c89d93a7b8b27e5490f3db63da8a8694878f9004f18a58e3c45cbf4c259f0c6e';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
