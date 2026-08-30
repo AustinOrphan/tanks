@@ -604,7 +604,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
 
 /** @param {AuditProblem} problem @returns {string} */
 const problemReference = (problem) => {
-  if ('issueNumber' in problem && problem.issueNumber !== null) {
+  if ('issueNumber' in problem && problem.issueNumber !== undefined && problem.issueNumber !== null) {
     return `#${problem.issueNumber}`;
   }
   if ('issueNumbers' in problem && Array.isArray(problem.issueNumbers) && problem.issueNumbers.length > 0) {

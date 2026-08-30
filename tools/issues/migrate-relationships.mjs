@@ -4,10 +4,57 @@ import { pathToFileURL } from 'node:url';
 import { appendStepSummary, createGitHubRequest, resolveRepository } from './run.mjs';
 import { RELATIONSHIP_MIGRATION } from './relationship-migration-plan.mjs';
 
-const positiveInteger = (value) => Number.isInteger(value) && value > 0;
+/**
+ * Shapes for this module (issue #417). An "edge" is a `[from, to]` issue-number pair --
+ * a tuple, not a 2-array, so `assertAcyclic`'s destructuring keeps its types.
+ *
+ * An "edge" is an OBJECT here -- `{parent, child}` or `{issue, blocker}` -- and is only
+ * flattened to a `[from, to]` tuple for the cycle check, which is what `CycleEdge` is for.
+ * A first pass typed all of them as tuples and `tsc` rejected it at four call sites.
+ *
+ * @typedef {[number, number]} CycleEdge
+ * @typedef {{ parent: number, child: number }} ParentEdge
+ * @typedef {{ issue: number, blocker: number }} DependencyEdge
+ * @typedef {import('./run.mjs').GitHubRequest} GitHubRequest
+ * @typedef {{ child: number, currentParent: number }} ParentConflict
+ * @typedef {{
+ *   apply: boolean,
+ *   status: string,
+ *   stage: string,
+ *   parentEdges: number,
+ *   dependencyEdges: number,
+ *   existingParents: number,
+ *   existingDependencies: number,
+ *   missingParents: ParentEdge[],
+ *   missingDependencies: DependencyEdge[],
+ *   parentConflicts: ParentConflict[],
+ *   addedParents: ParentEdge[],
+ *   addedDependencies: DependencyEdge[],
+ *   inspectedParents: boolean,
+ *   inspectedDependencies: boolean,
+ *   requests: number,
+ *   verified: boolean,
+ *   error?: string,
+ * }} MigrationResult
+ */
 
+/** @param {unknown} value @returns {boolean} */
+const positiveInteger = (value) => Number.isInteger(value) && Number(value) > 0;
+
+/** @template T @param {T[]} values @returns {T[]} */
 const unique = (values) => [...new Set(values)];
 
+/**
+ * `readonly` throughout, because the shipped plan is a deeply-frozen literal and TypeScript
+ * will not hand a `readonly T[]` to a `T[]` parameter. Every field stays optional so the
+ * tests' partial fixtures still type-check -- the validation inside is what makes them safe.
+ *
+ * @param {{
+ *   repository?: string,
+ *   parents?: readonly { readonly parent?: number, readonly children?: readonly number[] }[],
+ *   blockedBy?: readonly { readonly issue?: number, readonly blockers?: readonly number[] }[],
+ * }} plan
+ */
 export function expandRelationshipPlan(plan) {
   if (typeof plan?.repository !== 'string' || !plan.repository.includes('/')) {
     throw new Error('relationship migration plan has no valid repository');
@@ -49,12 +96,13 @@ export function expandRelationshipPlan(plan) {
     }
   }
 
-  assertAcyclic(parentEdges.map(({ parent, child }) => [parent, child]), 'parent');
-  assertAcyclic(dependencyEdges.map(({ issue, blocker }) => [blocker, issue]), 'dependency');
+  assertAcyclic(parentEdges.map(({ parent, child }) => /** @type {CycleEdge} */ ([parent, child])), 'parent');
+  assertAcyclic(dependencyEdges.map(({ issue, blocker }) => /** @type {CycleEdge} */ ([blocker, issue])), 'dependency');
 
   return { parentEdges, dependencyEdges };
 }
 
+/** @param {CycleEdge[]} edges @param {string} kind */
 function assertAcyclic(edges, kind) {
   const outgoing = new Map();
   for (const [from, to] of edges) {
@@ -64,6 +112,7 @@ function assertAcyclic(edges, kind) {
   const visiting = new Set();
   const visited = new Set();
 
+  /** @param {number} number */
   const visit = (number) => {
     if (visiting.has(number)) {
       throw new Error(`${kind} relationship plan contains a cycle at #${number}`);
@@ -78,8 +127,10 @@ function assertAcyclic(edges, kind) {
   for (const number of outgoing.keys()) visit(number);
 }
 
+/** @param {string} repository @returns {string} */
 const repositoryPath = (repository) => repository.split('/').map(encodeURIComponent).join('/');
 
+/** @template T, R @param {T[]} values @param {number} limit @param {(value: T, index: number) => Promise<R>} action @returns {Promise<R[]>} */
 export async function mapWithConcurrency(values, limit, action) {
   const results = new Array(values.length);
   let next = 0;
@@ -106,6 +157,7 @@ export async function mapWithConcurrency(values, limit, action) {
   return results;
 }
 
+/** @param {string} repo @param {number} issue @param {GitHubRequest} request @returns {Promise<number[]>} */
 async function listBlockedBy(repo, issue, request) {
   const blockers = [];
   for (let page = 1; ; page += 1) {
@@ -118,20 +170,25 @@ async function listBlockedBy(repo, issue, request) {
   }
 }
 
+/** @param {ParentEdge | DependencyEdge} edge @returns {string} */
 const edgeKey = (edge) => JSON.stringify(edge);
 
+/** @template {ParentEdge | DependencyEdge} T @param {T[]} missing @param {T[]} added @returns {T[]} */
 const remainingEdges = (missing, added) => {
   const completed = new Set(added.map(edgeKey));
   return missing.filter((edge) => !completed.has(edgeKey(edge)));
 };
 
+/** @param {unknown} error @returns {string} */
 const errorMessage = (error) => error instanceof Error ? error.message : String(error);
 
+/** @param {ParentConflict[]} conflicts @returns {string} */
 const parentConflictMessage = (conflicts) => conflicts.map(
   ({ child, currentParent }) => `parent conflict: #${child} already belongs to #${currentParent}`,
 ).join('\n');
 
 export class RelationshipMigrationError extends Error {
+  /** @param {string} message @param {MigrationResult} result @param {ErrorOptions} [options] */
   constructor(message, result, options) {
     super(message, options);
     this.name = 'RelationshipMigrationError';
@@ -141,6 +198,7 @@ export class RelationshipMigrationError extends Error {
   }
 }
 
+/** @param {typeof globalThis.fetch} fetchImpl @param {number} [timeoutMs] @returns {typeof globalThis.fetch} */
 export function withRequestTimeout(fetchImpl, timeoutMs = 30_000) {
   if (typeof fetchImpl !== 'function') throw new Error('global fetch is unavailable');
   if (!positiveInteger(timeoutMs)) throw new Error('request timeout must be a positive integer');
@@ -150,6 +208,16 @@ export function withRequestTimeout(fetchImpl, timeoutMs = 30_000) {
   });
 }
 
+/**
+ * @param {{
+ *   repository?: string,
+ *   request?: GitHubRequest,
+ *   apply?: boolean,
+ *   plan?: typeof RELATIONSHIP_MIGRATION,
+ *   pause?: () => Promise<void>,
+ * }} [options]
+ * @returns {Promise<MigrationResult>}
+ */
 export async function migrateRelationships({
   repository,
   request,
@@ -167,6 +235,7 @@ export async function migrateRelationships({
     ...parentEdges.flatMap(({ parent, child }) => [parent, child]),
     ...dependencyEdges.flatMap(({ issue, blocker }) => [issue, blocker]),
   ]).sort((a, b) => a - b);
+  /** @type {MigrationResult} */
   const result = {
     apply,
     status: 'inspecting',
@@ -186,6 +255,7 @@ export async function migrateRelationships({
     verified: false,
   };
 
+  /** @type {GitHubRequest} */
   const call = async (...args) => {
     result.requests += 1;
     return request(...args);
@@ -322,6 +392,7 @@ export async function migrateRelationships({
   }
 }
 
+/** @param {MigrationResult} result @returns {string} */
 export function renderMigrationReport(result) {
   const mode = result.apply ? 'apply' : 'plan';
   const remainingParents = remainingEdges(result.missingParents, result.addedParents);
@@ -400,6 +471,7 @@ export function renderMigrationReport(result) {
   return `${lines.join('\n')}\n`;
 }
 
+/** @param {string[]} argv */
 function parseArguments(argv) {
   const args = [...argv];
   const mode = args.shift() ?? 'plan';
