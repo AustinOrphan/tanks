@@ -82,10 +82,84 @@ const issueReferences = (value) =>
 
 const CODE_FENCE = /^\s{0,3}(?:```|~~~)/;
 
+// Blank every code span in `text`, matching backtick runs by LENGTH and across lines.
+//
+// This replaces a per-line `replaceAll(/`[^`]*`/g, ' ')` (issue #416). That regex could
+// only ever see a span whose two backticks sat on the SAME line, so an opening backtick
+// on one line and its closer on the next left everything between them -- a `Parent: #N`
+// mirror included -- looking like prose.
+//
+// Two CommonMark rules this follows on purpose, both pinned by tests:
+//
+//  - A backtick string opens a span only if a LATER backtick string of EXACTLY the same
+//    length closes it. An unmatched backtick, or a `` opener met by a ` , is literal
+//    text. #416 listed that as a false-positive direction to close; it is not one.
+//    Treating a stray backtick as an open span would make this parser disagree with how
+//    GitHub renders the very body it is reading, and would swallow real declarations.
+//  - A span cannot cross a BLANK LINE. Inline parsing happens inside a block, so a
+//    backtick opened in one paragraph cannot close in the next. Without this the scan
+//    would be greedier than the line-local one it replaces.
+//
+// Span contents become spaces and newlines are preserved, so every line keeps its offset
+// for the heading scan, exactly as blanked fence lines do.
+function blankCodeSpans(text) {
+  const chars = [...text];
+  const runAt = (i) => {
+    let n = 0;
+    while (i + n < chars.length && chars[i + n] === '`') n += 1;
+    return n;
+  };
+
+  let i = 0;
+  while (i < chars.length) {
+    const open = runAt(i);
+    if (open === 0) {
+      i += 1;
+      continue;
+    }
+
+    let j = i + open;
+    let close = -1;
+    let blank = 0; // consecutive newlines seen; two of them end the block
+    while (j < chars.length) {
+      if (chars[j] === '\n') {
+        blank += 1;
+        if (blank >= 2) break;
+        j += 1;
+        continue;
+      }
+      if (chars[j] !== ' ' && chars[j] !== '\t') blank = 0;
+      const run = runAt(j);
+      if (run === open) {
+        close = j;
+        break;
+      }
+      j += run > 0 ? run : 1;
+    }
+
+    if (close === -1) {
+      i += open; // unmatched: literal text, left exactly as written
+      continue;
+    }
+    for (let k = i; k < close + open; k += 1) {
+      if (chars[k] !== '\n') chars[k] = ' ';
+    }
+    i = close + open;
+  }
+
+  return chars.join('');
+}
+
 // A parent mirror is a statement, not an illustration. Blank out fenced blocks and code
 // spans first so an issue documenting the `Parent: #N` form is not read as using it.
 // Fenced lines become empty rather than disappearing, which keeps heading offsets aligned
 // for the section scan below.
+//
+// An UNCLOSED fence blanks everything after it, and that is the decided behaviour rather
+// than a side effect of the toggle (issue #416): CommonMark runs an unclosed fenced block
+// to the end of the document, so a mirror below one really is inside code. It also fails
+// safe -- the cost is a missed relationship, not a false error against an issue that
+// never claimed one.
 function withoutCodeMarkup(body) {
   const lines = [];
   let fenced = false;
@@ -96,10 +170,13 @@ function withoutCodeMarkup(body) {
       lines.push('');
       continue;
     }
-    lines.push(fenced ? '' : line.replaceAll(/`[^`]*`/g, ' '));
+    lines.push(fenced ? '' : line);
   }
 
-  return lines.join('\n');
+  // Spans are blanked over the WHOLE body at once, not line by line -- that is the fix.
+  // Fenced lines are already empty, so this cannot pair a backtick inside a fence with
+  // one outside it.
+  return blankCodeSpans(lines.join('\n'));
 }
 
 export function declaredSingularParent(body) {
