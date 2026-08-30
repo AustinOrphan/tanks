@@ -573,6 +573,46 @@
         "claims is empty deliberately: lane, sightlineAfterBreach and spawnBlockRobust are campaign-intent vocabulary, and versus boards are validated by versus-catalog-rules.ts instead."
       ],
       "claims": []
+    },
+    {
+      "id": "vs-tri-01",
+      "cols": 27,
+      "rows": 17,
+      "cellSize": 0.6666666666666666,
+      "legend": {
+        "#": "solid",
+        "x": "destructible"
+      },
+      "grid": [
+        ".........##.....##.........",
+        ".P...##.##.#...#.##.##.....",
+        "...........................",
+        "....###...#######...###....",
+        "..#.....................#..",
+        "..#........xx.xx........#..",
+        "...........................",
+        ".##....##..#####..##....##.",
+        ".......##..#####..##.......",
+        ".....###...#####...###.....",
+        "......xx...........xx......",
+        ".........xx.....xx.........",
+        ".xx##...##.......##...##xx.",
+        "..###.................###B.",
+        "...........................",
+        "...##..##..#####..##..##...",
+        "......##.xx.....xx.##......"
+      ],
+      "notes": [
+        "Issue #272: the first board authored for THREE players. Named for the arch it forms -- two base corners and one keystone at the top centre.",
+        "A rectangular grid has no three-fold rotation (its symmetry group has order 4: identity, 180 degrees and two mirrors), so exact rotational equivalence is unavailable at N=3. This board takes the honest substitute the issue's own wording allows -- 'another explicitly justified three-way balance' -- as MIRROR symmetry about column 13. Every wall is placed with its partner at column 26-c, so the two base players hold literally the same shape reflected, and their equivalence is by construction rather than measurement.",
+        "The third player is on the mirror axis, so its equivalence to the other two is MEASURED, not constructed. Versus spawns are derived from geometry by pickVersusSpawnCell rather than read from the authored letters, so the claim is about where that policy actually lands: (13,1), (1,15) and (25,15), pairwise 26 cells apart along the real walkable path in the authored variant -- an equilateral triangle in path terms, not in Euclidean terms.",
+        "27x17 and not 27x15 is what buys that equality. On a bare board the policy takes the top centre and the two lowest corners, which are 12 + (R-1) apart top-to-base and 24 apart base-to-base. Breaking the base lane so the two lower spawns cannot see each other costs a two-cell detour, taking base-to-base to 26; R=15 is the row that makes top-to-base 26 as well. At 27x15 the same construction gives 26/24/24, and no wall can close that gap, because the two distances have opposite parity there.",
+        "The keystone alcove exists to answer a measured asymmetry rather than for its own sake. Without it the top spawn sat in an open lane -- 60 reachable cells within eight steps and clear runs of 13 cells left and right, against 38 and 1-2 for each base spawn. Walling columns 11 and 15 on its own row, plus the row-0 and row-1 furniture, brings it to 40 cells and runs of 1: the three spawns now sit within 2 of each other on reachable-area and within 1 on total open run.",
+        "Six destructible clusters, mirrored in pairs. Each plugs a line that would otherwise be fast: the pair flanking the core, the pair on the mid lane, the pair at the base pockets and the pair on the bottom rim. Breaching one is the tempo decision, and seeded-destructible variants pre-open a subset.",
+        "The authored P and B letters serve the campaign-facing loadArena path and resolution.test.ts's grid rule (every authored spawn coordinate must be odd in world space, i.e. an index congruent to 1 mod 3); they are NOT the versus spawns and deliberately sit away from the three the policy picks.",
+        "claims is empty deliberately, same as vs-duel-01: lane, sightlineAfterBreach and spawnBlockRobust are campaign-intent vocabulary, and versus boards are validated by versus-catalog-rules.ts instead."
+      ],
+      "claims": []
     }
   ]
 }
