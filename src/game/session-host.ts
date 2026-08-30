@@ -144,7 +144,6 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
     if (spent) return;
     stop();
     canvas?.remove();
-    canvas = null;
     create(versus);
   };
 
@@ -167,7 +166,14 @@ export function createGameSessionHost(deps: GameSessionHostDeps): GameSessionHos
 
   return {
     start(): void {
-      create(null);
+      // `replace`, not `create`: routing the first session through the same path as every
+      // later one is what makes `start()` obey the `spent` latch and dispose a predecessor.
+      // Calling `create` directly -- the shape this had first -- meant a `start()` after
+      // `dispose()` built a session onto a dying page, and a second `start()` orphaned the
+      // first session's loop, renderer and GL context with nothing left holding its handle.
+      // On the ONLY call boot.ts makes, with no handle and no canvas yet, the two are
+      // identical: `stop()` no-ops and there is nothing to remove.
+      replace(null);
     },
     requestVersusSession,
     requestCampaignSession,

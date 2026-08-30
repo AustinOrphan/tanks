@@ -97,6 +97,24 @@ describe('createGameSessionHost: start', () => {
     expect(versus).toBeNull();
   });
 
+  it('a SECOND start() replaces the first session rather than orphaning it', () => {
+    // Not a call boot.ts makes, and that is the point: `start()` bypassing the replace
+    // path is the shape this had first, and it left the first session's frame loop,
+    // renderer and GL context running with nothing holding its handle.
+    const h = harness();
+    h.host.start();
+    h.host.start();
+    expect(h.disposedIds, 'the first session was orphaned').toEqual([0]);
+    expect(h.root.querySelectorAll('canvas')).toHaveLength(1);
+  });
+
+  it('start() after dispose() starts nothing -- the latch covers the first session too', () => {
+    const h = harness();
+    h.host.dispose();
+    h.host.start();
+    expect(h.startArgs, 'a session started on a page that had already gone').toEqual([]);
+  });
+
   it('does not touch the canvas or the game before start() is called', () => {
     // The constructor has to be side-effect-free for boot.ts's try/catch to be where the
     // no-WebGL throw lands: a renderer built at construction would throw from a line
