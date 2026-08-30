@@ -1850,6 +1850,41 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     expect(slotDevice(root, 1).textContent).toBe('Bot');
   });
 
+  it('returning from a match reopens the pane on the roles that match started with', () => {
+    // The issue's "returning from gameplay preserves displayed role choices". The
+    // return-to-setup path is `showVersusSetup(true, initial)` with loop.ts's retained
+    // `initialVersusConfig` -- the UNRESOLVED config the session was started from.
+    //
+    // Driven end to end rather than asserted on `initial` alone: the seeding call is
+    // `setVersusConfig`, so this also pins that a re-open RE-RENDERS the cards from the
+    // seeded slots. Kills the mutation "seed the state but skip renderVersusSlotRows",
+    // which would leave the previous match's cards on screen while Start emitted the
+    // seeded ones -- the same display/launch divergence the issue is about, one level up.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    playersBtn(root, 3).dispatchEvent(new MouseEvent('click'));
+    roleBtn(root, 1, 'human').dispatchEvent(new MouseEvent('click'));
+
+    let started: VersusConfig | null = null;
+    h.onVersusStart((c) => {
+      started = c;
+    });
+    startBtn(root).dispatchEvent(new MouseEvent('click'));
+    const launched = started as unknown as VersusConfig;
+    expect(launched.slots).toEqual([{ role: 'human' }, { role: 'human' }, { role: 'bot' }]);
+
+    // ...the match runs, then the results screen returns to setup with what it launched.
+    h.setState('playing');
+    h.setState('main-menu');
+    h.showVersusSetup(true, launched);
+    expect(slotRows(root), 'the pane reopened at the match player count').toHaveLength(3);
+    expect(roleBtn(root, 1, 'human').classList.contains('ui-selectable--on')).toBe(true);
+    expect(roleBtn(root, 2, 'bot').classList.contains('ui-selectable--on')).toBe(true);
+    // ...and a negative half: slot 1 is NOT still showing the default it started life at.
+    expect(roleBtn(root, 1, 'bot').classList.contains('ui-selectable--on')).toBe(false);
+  });
+
   it('Players change REPLACES the slot rows across two successive re-renders, and keeps the roles already chosen', () => {
     const { hud: h, root } = mount();
     h.setState('main-menu');

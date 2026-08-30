@@ -1266,20 +1266,8 @@
       "src/game/ui.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all.",
-    "expectFailures": 3
-  },
-  {
-    "id": "ui-versus-preview-reason-left-on-the-real-rows",
-    "file": "src/game/hud.ts",
-    "find": "        describeDisabledReason(btn, interactive ? null : 'hud-versus-assignment-note');",
-    "replace": "        describeDisabledReason(btn, 'hud-versus-assignment-note');",
-    "expect": "killed",
-    "tests": [
-      "src/game/hud.test.ts"
-    ],
-    "why": "`renderControllerRowsInto` builds BOTH the standalone Controllers panel's real reassignment rows and the versus pane's who's-playing preview, and only the preview is disabled. Pointing every row at \"Assignment applies after Start.\" tells a screen reader that a button which reassigns a slot right now will not take effect until Start -- an explanation that is not merely redundant but false, and attached to a note that is itself hidden in that state. The half of the assertion that catches it is the one that reads the Controllers panel and expects NO reference; a test that only checked the preview gains it would stay green.",
-    "expectFailures": 1
+    "why": "`aria-describedby=\"\"` looks like absence and is not: it is still a described-by relationship, one that resolves to no element, which assistive technology reports as a broken reference rather than as a control needing no explanation. The distinction is invisible to any assertion that asks whether the reason is GONE by reading the attribute's value, which is why the cases here ask `hasAttribute` instead. Killed in ui.test.ts and in the versus-preview sweep, where the standalone Controllers panel's interactive buttons must carry no reference at all. Issue #260 raised this from 3 to 5: the versus pane's Start button now carries its refusal through the same helper, so two more assertions -- the pane's own aria-describedby checks -- fail when it is broken.",
+    "expectFailures": 5
   },
   {
     "id": "render-respawn-teleport-removed",
@@ -1508,12 +1496,12 @@
     "find": "  for (let i = 0; i < players; i++) out.push(slots[i] ? { ...slots[i] } : defaults[i]);",
     "replace": "  for (let i = 0; i < players; i++) out.push(defaults[i]);",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/game/versus-setup.test.ts",
       "src/game/hud.test.ts"
     ],
-    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing."
+    "why": "Rebuilding rather than resizing throws away every role the player set as soon as they touch the player-count buttons, which is a silent loss of exactly the choices this issue exists to preserve. Worth pinning because the array still ends up the right LENGTH, so every shape-based assertion keeps passing. Issue #260 raised this from 3 to 4, and the extra failure is the point: until the pane had role CONTROLS, nothing in the UI could show a discarded role. The fourth test drives the player-count buttons and reads the role back off the rendered card, so this is now pinned end to end rather than at the model alone."
   },
   {
     "id": "shell-spawn-ignores-drawn-nose-reach",

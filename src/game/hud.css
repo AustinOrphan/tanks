@@ -1802,7 +1802,7 @@
 .hud-versus-slot-reason,
 .hud-versus-start-reason {
   opacity: 1;
-  color: var(--hud-warn, #f2b8b5);
+  color: var(--hud-text-danger);
 }
 
 /* The DERIVED device line under each slot's role buttons. Same size/dimming as the

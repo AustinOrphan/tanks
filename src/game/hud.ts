@@ -1841,21 +1841,20 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
    * `setDetectedPads`, each gated on the panel being open). One row per slot; one button
    * per candidate source (Keyboard / Bot / None / one per currently detected pad index).
    *
-   * Parameterized over the TARGET CONTAINER, the ASSIGNMENT to render, and whether the
-   * candidate buttons are INTERACTIVE. The second caller this was extracted for -- the
-   * versus pane's who's-playing preview -- is GONE as of issue #260: that pane now
-   * renders retained ROLES, not a device assignment (renderVersusSlotRows). The
-   * parameters are kept rather than inlined back because `interactive: false` is still
-   * reachable, and re-inlining would be a second rewrite of this renderer for no
-   * behavioural gain. The real Controllers panel below is the `interactive: true`
-   * caller against the session's own `currentAssignment`; nothing about its own
+   * Parameterized over the TARGET CONTAINER and the ASSIGNMENT to render.
+   *
+   * It USED to take an `interactive` flag too, for the second caller it was extracted
+   * for: the versus pane's who's-playing preview, which rendered these same rows
+   * disabled and pointed them at an explanatory note. That caller is gone as of issue
+   * #260 -- the pane renders retained ROLES now, not a device assignment
+   * (renderVersusSlotRows) -- which left `interactive: false` with no reachable caller.
+   * Dropped rather than kept as contract, because an unreachable branch is dead code;
+   * the manifest entry that pinned it (`ui-versus-preview-reason-left-on-the-real-rows`)
+   * is retired in the same change rather than left killing through its other half. The
+   * real Controllers panel below is now the only caller; nothing about its own
    * behaviour changes from this extraction.
    */
-  function renderControllerRowsInto(
-    container: HTMLElement,
-    assignment: Assignment,
-    interactive: boolean,
-  ): void {
+  function renderControllerRowsInto(container: HTMLElement, assignment: Assignment): void {
     container.replaceChildren();
     for (let slot = 0; slot < assignment.length; slot++) {
       const source = assignment[slot];
@@ -1893,22 +1892,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         btn.textContent = candidateLabel(candidate);
         setSelected(btn, sameSource(candidate, source));
         const forSlot = slot; // captured per-iteration, not the loop's shared binding
-        if (interactive) {
-          btn.addEventListener('click', () => {
-            for (const cb of reassignSlotCbs) cb(forSlot, candidate);
-          });
-        } else {
-          // A non-interactive render: the buttons are disabled so a click (even a
-          // programmatic one) can never reassign a slot. The versus pane was the
-          // original caller that needed this; since issue #260 it renders its own role
-          // rows instead, and this branch is held by `renderControllerRowsInto`'s
-          // contract rather than by a live second caller.
-          btn.disabled = true;
-        }
-        // The reason is already on screen for a sighted player -- the note this row
-        // renders beside, toggled by the same `matchesSession` that decides
-        // `interactive` -- so the only thing missing was the association (#321).
-        describeDisabledReason(btn, interactive ? null : 'hud-versus-assignment-note');
+        btn.addEventListener('click', () => {
+          for (const cb of reassignSlotCbs) cb(forSlot, candidate);
+        });
         row.appendChild(btn);
       }
       container.appendChild(row);
@@ -1916,7 +1902,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   function renderControllerRows(): void {
-    renderControllerRowsInto(controllerRowsEl, currentAssignment, true);
+    renderControllerRowsInto(controllerRowsEl, currentAssignment);
   }
 
   /**
