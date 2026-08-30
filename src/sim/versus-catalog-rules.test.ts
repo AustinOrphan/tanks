@@ -17,7 +17,7 @@ import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-cata
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 6 shipped entries validate clean: 0 failures over 32 declared (entry, N, mode) combinations', () => {
+  it('all 7 shipped entries validate clean: 0 failures over 32 declared (entry, N, mode) combinations', () => {
     // 32, not 36: five entries declare 3 player counts x 2 modes, and issue #271's
     // vs-duel-01 declares 1 x 2. The sweep covers what each entry PROMISES, so a
     // narrowed declaration shrinks this denominator rather than leaving combinations

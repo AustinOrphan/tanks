@@ -19,7 +19,7 @@ const ARENAS_UNDER_TEST = [...ARENA_DEFS, WIDE_ARENA];
 
 describe('cellCentre and cellOf are exact inverses', () => {
   it('round-trips every cell of every arena, including the non-square fixture', () => {
-    // Population: all cells of all 6 shipped arenas -- three at 33x27, arena-04
+    // Population: all cells of all 7 shipped arenas -- three at 33x27, arena-04
     // and arena-05 at 45x33 (the 33x27s are the old 11x9 board upscaled 3x) -- plus
     // the 17x13 fixture, untouched by the upscale =
     // 891 + 891 + 891 + 1485 + 1485 + 567 + 221 = 6431 cells, the 567 being issue
