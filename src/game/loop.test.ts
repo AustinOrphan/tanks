@@ -6442,11 +6442,12 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
   });
 
   describe('issue #278: the VS floor/camera are sized to the rolled arena, not the largest candidate', () => {
-    // players:3, all 5 shipped arenas offerable (versus-config.test.ts) -- pinned wallMs
-    // values, not swept at runtime, matched to the SAME measured deriveSeed/pickVersusArena
-    // table versus-config.test.ts's own "distributes" case pins: deriveSeed is a no-op
-    // for inputs under 512 (`wallMs ^ (wallMs >>> 9)` clears no bits), so wallMs 1/6 here
-    // resolve through pickVersusArena exactly like seeds 1/6 do there.
+    // players:3, all 5 campaign arenas plus vs-tri-01 offerable (versus-config.test.ts) --
+    // pinned wallMs values, not swept at runtime, matched to the SAME measured
+    // deriveSeed/pickVersusArena table versus-config.test.ts's own "distributes" case
+    // pins: deriveSeed is a no-op for inputs under 512 (`wallMs ^ (wallMs >>> 9)` clears
+    // no bits), so wallMs 1/4 here resolve through pickVersusArena exactly like seeds 1/4
+    // do there.
     const random3: VersusConfig = { mode: 'ffa', players: 3, arenaId: 'random', stock: 3, friendlyFire: false, slots: defaultSlots(3) };
 
     it("random resolves to a member of versusMapChoices(players), and levels.bounds matches THAT arena exactly -- the defect's direct oracle", () => {
@@ -6456,19 +6457,23 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // happens to land on the largest class would pass this assertion under the UNFIXED
       // code too, and prove nothing.
       //
-      // RE-MEASURED AGAIN, and the seed is rechosen rather than its expectation
-      // renumbered -- for the third time, because this test's whole point is that the
-      // pick must not be in the largest class. Withdrawing vs-tri-01 (#424) returns the
-      // N=3 offer to the five campaign boards, and wallMs 4 now lands on arena-05, which
-      // at 45 columns IS the largest class alongside arena-04 -- exactly the vacuous case
-      // this test exists to avoid. Measured over seeds 1..20 at N=3: arena-04 x7
-      // (1,2,3,5,16,17,20), arena-03 x5 (6,10,11,13,14), arena-01 x4 (7,8,9,19),
-      // arena-02 x3 (12,15,18), arena-05 x1 (4). wallMs 6 -> arena-03 at 33 columns
-      // restores the discrimination against the 45-column largest candidate.
-      const deps = { ...baseDeps(), wallMs: () => 6 };
+      // RE-MEASURED, and the seed is rechosen rather than its expectation renumbered.
+      // This pin has moved with the N=3 offer three times: wallMs 4 originally landed on
+      // vs-tri-01, moved to arena-03 via wallMs 6 when #424 withdrew that board, and is
+      // now BACK on wallMs 4 -> vs-tri-01 because the rebuilt board rejoined the offer.
+      // Measured over seeds 1..20 at N=3 on the shipped tree: arena-04 x6
+      // (1,6,10,11,13,16), arena-05 x5 (2,3,5,17,20), arena-01 x3 (7,8,19), arena-02 x3
+      // (9,12,15), arena-03 x2 (14,18), vs-tri-01 x1 (4).
+      //
+      // vs-tri-01 is a SINGLETON bucket, which would be a knife edge for a distribution
+      // control and is the right choice here for the opposite reason: this test wants the
+      // widest possible gap from the largest candidate, and 27 columns against 45 is the
+      // widest the catalog offers. A 33-column board would also pass; it would discriminate
+      // less.
+      const deps = { ...baseDeps(), wallMs: () => 4 };
       const result = applyVersusToDeps(deps, { config: random3 }, noop);
       const resolvedId = result.levels.start.arenaId;
-      expect(resolvedId).toBe('arena-03');
+      expect(resolvedId).toBe('vs-tri-01');
       expect(versusMapChoices(3, 'ffa')).toContain(resolvedId);
       const arena = arenaById(resolvedId);
       // Fails if bounds() ever falls back to a largest-candidate guess (the pre-#278
@@ -6485,16 +6490,15 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
     });
 
     it('a rematch through Start (a fresh applyVersusToDeps call) CAN land on a different arena', () => {
-      // Two independent Start-boundary resolutions, wallMs 1 and 6 -- measured to differ
+      // Two independent Start-boundary resolutions, wallMs 1 and 4 -- measured to differ
       // (versus-config.test.ts's own "distributes" case). Proves the fix does NOT collapse
-      // 'random' into a single fixed pick across sessions. The second seed has moved twice
-      // now: 6 collided with 1 on arena-04 while vs-tri-01 was in the N=3 offer, and 4
-      // (its replacement) landed on arena-05 once vs-tri-01 was withdrawn. With five
-      // choices again, 1 -> arena-04 and 6 -> arena-03, which differ in BOTH id and bounds.
+      // 'random' into a single fixed pick across sessions. With vs-tri-01 back in the N=3
+      // offer (#424) the pair is 1 -> arena-04 (45 columns) and 4 -> vs-tri-01 (27), which
+      // differ in BOTH id and bounds by the widest margin the catalog allows.
       const first = applyVersusToDeps({ ...baseDeps(), wallMs: () => 1 }, { config: random3 }, noop);
-      const second = applyVersusToDeps({ ...baseDeps(), wallMs: () => 6 }, { config: random3 }, noop);
+      const second = applyVersusToDeps({ ...baseDeps(), wallMs: () => 4 }, { config: random3 }, noop);
       expect(first.levels.start.arenaId).toBe('arena-04');
-      expect(second.levels.start.arenaId).toBe('arena-03');
+      expect(second.levels.start.arenaId).toBe('vs-tri-01');
       expect(first.levels.bounds(first.levels.start)).not.toEqual(second.levels.bounds(second.levels.start));
     });
 
@@ -6510,18 +6514,18 @@ describe('applyVersusToDeps / versusAwareDeps: the reboot seam', () => {
       // directly: ONE resolved session's `levels.world()` must return the SAME arena
       // no matter what seed a later rebuild call passes it, which is exactly what
       // makes a Quit-triggered `nextSeed()` harmless.
-      const result = applyVersusToDeps({ ...baseDeps(), wallMs: () => 6 }, { config: random3 }, noop);
-      const initial = result.levels.world(result.levels.start, 6, undefined, 3);
+      const result = applyVersusToDeps({ ...baseDeps(), wallMs: () => 4 }, { config: random3 }, noop);
+      const initial = result.levels.world(result.levels.start, 4, undefined, 3);
       // Seed 1 is `pickVersusArena`'s own 'arena-04' pick (versus-config.test.ts) --
       // under the pre-#278 code, world() re-resolved 'random' from THIS seed on every
       // call, so a quit rebuild landing on seed 1 would have silently swapped the
-      // arena from arena-03 to arena-04. Fails (build throws or returns arena-04) if
-      // world() ever goes back to reading `config.arenaId === 'random'` per call. 33 vs 45
-      // columns is the gap, restored after vs-tri-01's withdrawal moved this seed off a
-      // 27-column board.
+      // arena from vs-tri-01 to arena-04. Fails (build throws or returns arena-04) if
+      // world() ever goes back to reading `config.arenaId === 'random'` per call. 27 vs 45
+      // columns is the gap, back to its widest now that #424's rebuild returned vs-tri-01
+      // to the N=3 offer.
       const quitRebuilt = result.levels.world(result.levels.start, 1, undefined, 3);
-      expect(initial.arenaGeometry?.cols).toBe(33); // arena-03
-      expect(quitRebuilt.arenaGeometry?.cols).toBe(33); // still arena-03, not arena-04
+      expect(initial.arenaGeometry?.cols).toBe(27); // vs-tri-01
+      expect(quitRebuilt.arenaGeometry?.cols).toBe(27); // still vs-tri-01, not arena-04
     });
   });
 });

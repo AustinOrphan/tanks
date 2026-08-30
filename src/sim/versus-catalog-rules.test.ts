@@ -6,6 +6,11 @@ import { VERSUS_CATALOG } from './config/versus-catalog';
 import { arenaById } from './config/arenas';
 import { loadArena } from './arena';
 import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-catalog-rules';
+// The tank-footprint lattice below is measured with the SAME primitives versus-board.ts's
+// egress gate uses, not a re-derivation of them: if the collision test or the hull radius
+// ever move, this test moves with them rather than pinning a stale geometry.
+import { circleVsAABB } from './collision';
+import { TANK_RADIUS } from './constants';
 
 // ---------------------------------------------------------------------------
 // Shipped sweep: every declaration in versus-catalog.json proven against the real
@@ -18,21 +23,24 @@ import { versusCatalogEntryFailures, versusCatalogFailures } from './versus-cata
 // ---------------------------------------------------------------------------
 
 describe('versus catalog sweep: shipped declarations hold', () => {
-  it('all 6 shipped entries validate clean: 0 failures over 32 declared (entry, N, mode) combinations', () => {
-    // 32, not 36: five entries declare 3 player counts x 2 modes (30), and issue #271's
-    // vs-duel-01 declares 1 x 2. The sweep covers what each entry PROMISES, so a narrowed
-    // declaration shrinks this denominator rather than leaving combinations silently
-    // unchecked.
+  it('all 7 shipped entries validate clean: 0 failures over 33 declared (entry, N, mode) combinations', () => {
+    // 33, not 42: five entries declare 3 player counts x 2 modes (30), issue #271's
+    // vs-duel-01 declares 1 x 2, and issue #272's vs-tri-01 declares 1 x 1 -- three
+    // players have no fair team split, so it offers `ffa` alone. The sweep covers what
+    // each entry PROMISES, so a narrowed declaration shrinks this denominator rather than
+    // leaving combinations silently unchecked.
     //
-    // It was 8 entries / 35 combinations until vs-tri-01 (#272, 1 x 1 -- three players
-    // have no fair team split) and vs-quad-01 (#273, 1 x 2) were WITHDRAWN pending
-    // #424/#425: human playtesting found players cannot leave their spawns on either
-    // board. 35 - 1 - 2 = 32. Their arena definitions remain; only the offer is withdrawn.
-    expect(VERSUS_CATALOG.length).toBe(6);
+    // History of this number, each step re-derived rather than renumbered: 35 with all
+    // eight entries, then 32 when vs-tri-01 (1 x 1) and vs-quad-01 (1 x 2) were WITHDRAWN
+    // pending #424/#425 because human playtesting found players could not leave their
+    // spawns on either board, and now 33 -- issue #424 rebuilt vs-tri-01's geometry and it
+    // clears the tank-egress gate, so its single combination returns. 32 + 1 = 33.
+    // vs-quad-01's two are still out, pending #425.
+    expect(VERSUS_CATALOG.length).toBe(7);
     expect(
       VERSUS_CATALOG.reduce((n, e) => n + e.players.length * e.modes.length, 0),
       'the declared (entry, N, mode) population this title states',
-    ).toBe(32);
+    ).toBe(33);
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }
@@ -444,21 +452,114 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
       for (let j = i + 1; j < cells.length; j++) pairs.push(pathLen(cells[i], cells[j]));
     }
     expect(pairs, 'C(3,2) pairs, every one of them').toHaveLength(3);
-    // 26 is not a tuning target that happened to come out even -- it is why the board is
-    // 27x17. Breaking the base lane so the two lower spawns cannot see each other costs a
-    // two-cell detour, taking base-to-base from 24 to 26, and row 15 is the row at which
-    // top-to-base is also 26. At 27x15 the same construction gives 26/24/24 and no wall
-    // can close it: the two distances have opposite parity there.
     expect(pairs).toEqual([26, 26, 26]);
   });
 
+  // THE SAME QUESTION ON THE METRIC THAT GOVERNS PLAY, and this pair of tests exists as a
+  // pair because separating them is what shipped an unplayable board (#423/#424).
+  //
+  // `pathLen` above walks CELLS. A cell is not a tank: cellSize is 0.6667 and a tank is
+  // 2 x TANK_RADIUS = 1.0 across, so a one-cell gap is walkable to the metric above and
+  // has no legal tank-centre position at all. The previous layout recorded 26/26/26 here
+  // and was unplayable, because its three spawns sat in three DISCONNECTED regions of
+  // tank-legal space -- the cell number was true and described a route no tank could take.
+  //
+  // So this measures the same three distances over the same tank-footprint lattice
+  // versus-board.ts's egress gate uses (step = cellSize/8, exact circleVsAABB per sample,
+  // destructibles present), in world units. Both numbers are asserted, and the cell metric
+  // is never again allowed to stand in for this one.
+  it('...and equidistant on the TANK-FOOTPRINT lattice too, not just on the cell grid', () => {
+    const { tanks, walls } = loadArena(arena, 3, 'ffa');
+    const pos = tanks.filter((t) => t.kind === 'player').map((t) => t.pos).sort((a, b) => a.x - b.x || a.y - b.y);
+    const width = arena.cols * arena.cellSize;
+    const height = arena.rows * arena.cellSize;
+    const step = arena.cellSize / 8;
+    const nx = Math.floor(width / step);
+    const ny = Math.floor(height / step);
+    const idx = (i: number, j: number): number => i * ny + j;
+    const legal = new Uint8Array(nx * ny);
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < ny; j++) {
+        const x = (i + 0.5) * step;
+        const y = (j + 0.5) * step;
+        if (x - TANK_RADIUS < 0 || y - TANK_RADIUS < 0 || x + TANK_RADIUS > width || y + TANK_RADIUS > height) continue;
+        if (walls.some((w) => circleVsAABB({ x, y }, TANK_RADIUS, w.aabb).hit)) continue;
+        legal[idx(i, j)] = 1;
+      }
+    }
+    const cellOf = (p: { x: number; y: number }): [number, number] => [
+      Math.min(nx - 1, Math.floor(p.x / step)), Math.min(ny - 1, Math.floor(p.y / step)),
+    ];
+    const steps = (from: { x: number; y: number }): Int32Array => {
+      const d = new Int32Array(nx * ny).fill(-1);
+      const [si, sj] = cellOf(from);
+      d[idx(si, sj)] = 0;
+      const queue: number[] = [si, sj];
+      for (let head = 0; head < queue.length; head += 2) {
+        const ci = queue[head];
+        const cj = queue[head + 1];
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ai = ci + di;
+          const aj = cj + dj;
+          if (ai < 0 || aj < 0 || ai >= nx || aj >= ny) continue;
+          if (legal[idx(ai, aj)] !== 1 || d[idx(ai, aj)] !== -1) continue;
+          d[idx(ai, aj)] = d[idx(ci, cj)] + 1;
+          queue.push(ai, aj);
+        }
+      }
+      return d;
+    };
+    // Every spawn is on tank-legal ground to begin with -- the premise the old board failed.
+    for (const p of pos) expect(legal[idx(...cellOf(p))], `${p.x},${p.y} is tank-legal`).toBe(1);
+    const world: number[] = [];
+    for (let i = 0; i < pos.length; i++) {
+      const d = steps(pos[i]);
+      for (let j = i + 1; j < pos.length; j++) {
+        const n = d[idx(...cellOf(pos[j]))];
+        expect(n, `P${i + 1}-P${j + 1} must be reachable at all`).toBeGreaterThan(0);
+        world.push(n * step);
+      }
+    }
+    // Sorted by x, so pos is [base-left, axis, base-right] and the pairs are
+    // base-left/axis, base-left/base-right, axis/base-right.
+    const [leftToAxis, baseToBase, axisToRight] = world;
+    // The axis player is EXACTLY equidistant from the two mirrored bases -- the half of
+    // the fairness model a mirror cannot discharge, now on the tank metric as well.
+    expect(axisToRight).toBeCloseTo(leftToAxis, 9);
+    expect(leftToAxis).toBeCloseTo(17.25, 9);
+    // Base-to-base is LONGER, and by a lot -- stated rather than smoothed, because it is
+    // the one place the two metrics genuinely disagree about this board. A cell path walks
+    // straight through the middle at 26 steps; a tank has to drive around the central
+    // structure, which costs it 28.333 world units against the axis player's 17.25 to
+    // either base. The asymmetry is shared symmetrically -- each base player is the same
+    // distance from the axis and the same distance from the other base -- so no player is
+    // nearer to everything. What it says about the board is that the keystone sits in the
+    // contested middle and the two bases are genuinely far apart, which is the arch this
+    // board is named for rather than a defect in it.
+    expect(baseToBase).toBeCloseTo(28.333333333333332, 9);
+    expect(baseToBase - leftToAxis).toBeCloseTo(11.083333333333332, 9);
+  });
+
+  // NO RULE HERE THAT EVERY GAP MUST FIT A TANK, and the absence is deliberate.
+  //
+  // An earlier revision of this file asserted that no wall-bounded run of open cells was
+  // shorter than three anywhere on the board. That is a stronger claim than the defect
+  // warranted and it made the board worse: it outlawed every pillar, notch and firing slit
+  // that was not already a corridor, which is most of what gives an arena texture.
+  //
+  // The rule that actually matters is narrower, and `versus-board.ts` already enforces it:
+  // a gap does not COUNT AS A ROUTE unless a tank fits through it. Sub-tank gaps are fine
+  // as cover and decoration precisely because the egress gate refuses to route through
+  // them -- `tankLegalComponents` samples the real hull against the real walls, so a
+  // one-cell slot is simply not in the graph. What sank the previous layout was never that
+  // narrow gaps existed; it was that the only ways OUT of a spawn were narrow.
+
   it('the axis spawn, which has no mirror partner, is no better placed than the two that do', () => {
-    // The half of criterion 4 that a mirror cannot discharge, and it caught a real
-    // asymmetry: before the keystone alcove was added the axis spawn sat in an open lane
-    // with 60 reachable cells within 8 steps and clear runs of 13 either side, against 38
-    // and 1-2 for each base spawn. Both figures are bounded rather than pinned exactly,
-    // so ordinary furniture edits do not churn this test, but the BAND is narrow enough
-    // that reopening that lane fails it.
+    // The half of criterion 4 that a mirror cannot discharge. Both figures are bounded
+    // rather than pinned exactly, so ordinary furniture edits do not churn this test, but
+    // the BAND is narrow enough that reopening the axis spawn's lane fails it -- which is
+    // what the bounds were originally derived to catch, on a layout where the axis spawn
+    // sat in an open lane reaching 60 cells within 8 steps against each base's 38.
     const reach = (cell: [number, number], radius: number): number => {
       const key = (c: number, r: number): number => r * arena.cols + c;
       const dist = new Map<number, number>([[key(cell[0], cell[1]), 0]]);
@@ -499,11 +600,15 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     expect(Math.abs(reach(axis, 8) - reach(base[0], 8)), 'reachable area within 8 steps').toBeLessThanOrEqual(4);
     expect(Math.abs(reach(axis, 4) - reach(base[0], 4)), 'reachable area within 4 steps').toBeLessThanOrEqual(3);
     expect(Math.abs(openRun(axis) - openRun(base[0])), 'total open sightline run').toBeLessThanOrEqual(2);
-    // Measured values behind the bounds, so a reader can see what the slack really is:
-    // axis 14/40/4 and each base 15/38/5 for (r4, r8, openRun). No separate "less than the
-    // old 13-cell lane" assertion: with each base measuring 5 and the bound above at 2, the
-    // axis is already confined to 3..7, so such a line could not fail without one of the
-    // three above failing first -- it would advertise coverage that the bounds already own.
+    // Measured values behind the bounds, RE-DERIVED on issue #424's geometry rather than
+    // carried over: axis 17/47/9 and each base 16/47/10 for (r4, r8, openRun). They were
+    // 14/40/4 and 15/38/5 on the previous layout, which was a far more enclosed board --
+    // the rebuild trades enclosure for passages a tank can actually use, so every one of
+    // these is larger while the DIFFERENCES stay inside the same bounds (1, 0 and 1
+    // against 3, 4 and 2). No separate "less than the old lane" assertion: with each base
+    // measuring 10 and the bound above at 2, the axis is already confined to 8..12, so
+    // such a line could not fail without one of the three above failing first -- it would
+    // advertise coverage that the bounds already own.
   });
 });
 
