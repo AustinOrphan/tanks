@@ -462,6 +462,17 @@ describe('tread trails carry their owner identity in VS (issue #284)', () => {
     expect(treadColorFor(worldWith(solo), solo)).toBe(TREAD_COLOR);
     // An ENEMY is neutral even on a multiplayer board: it has no slot and no team, and
     // `resolveOwnerColor` would otherwise hand it slot 0's colour.
+    // FOUR-PLAYER CO-OP is neutral too, and this case exists because rendering it caught the
+    // opposite: co-op clears the player-count gate (four player tanks, four identity rings),
+    // so the first implementation tinted campaign trails. #284 says campaign stays neutral.
+    const coop = [0, 1, 2, 3].map((slot) => makeTank(slot + 1, 5 + slot * 8, 5, 0, { controlledBy: slot }));
+    const coopWorld = multiWorld(coop); // no mode override -> 'campaign-coop'
+    expect(coopWorld.mode).toBe('campaign-coop');
+    for (const t of coop) expect(treadColorFor(coopWorld, t), `co-op slot ${t.controlledBy}`).toBe(TREAD_COLOR);
+    // ...and the same four tanks in ffa ARE tinted, so the case above is the mode doing the
+    // work rather than something else making every assertion neutral.
+    const vsWorld = multiWorld(coop, 'ffa');
+    for (const t of coop) expect(treadColorFor(vsWorld, t)).not.toBe(TREAD_COLOR);
     const enemy = makeTank(2, 9, 9, 0, { kind: 'brown' });
     const w = multiWorld([makeTank(1, 5, 5, 0, { controlledBy: 0 }), makeTank(3, 40, 40, 0, { controlledBy: 1 }), enemy], 'ffa');
     expect(treadColorFor(w, enemy)).toBe(TREAD_COLOR);

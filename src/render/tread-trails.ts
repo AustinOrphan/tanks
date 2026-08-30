@@ -126,7 +126,18 @@ export function blendHex(from: number, to: number, t: number): number {
  * and no team, and `resolveOwnerColor` would hand them slot 0's colour.
  */
 export function treadColorFor(world: World, tank: Tank): number {
-  if (tank.kind !== 'player' || !identityApplies(world)) return TREAD_COLOR;
+  if (tank.kind !== 'player') return TREAD_COLOR;
+  // VS ONLY, and `campaign-coop` is checked EXPLICITLY rather than left to the player-count
+  // gate below. Four-player co-op clears that gate -- it has four player tanks and draws
+  // four identity rings -- so `identityApplies` alone tinted co-op trails too. Caught by
+  // rendering it: the 4-player screenshot for this PR came back a campaign board (`Level:
+  // 1/5`) with tinted marks, which #284's "keep campaign trails neutral in the initial
+  // implementation" does not allow. The rings staying identity-coloured there while the
+  // trails do not is a deliberate asymmetry this issue asks for, not an oversight.
+  if (world.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;
+  // `identityApplies` is kept alongside the mode check rather than dropped as redundant:
+  // it is the SAME gate the rings hang on, so a trail can never be tinted on a board where
+  // the ring it leans toward is not drawn.
   return blendHex(TREAD_COLOR, resolveOwnerColor(world, tank), TREAD_IDENTITY_BLEND);
 }
 const TREAD_OPACITY = 0.5; // peak opacity of a fresh decal

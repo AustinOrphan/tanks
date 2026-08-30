@@ -2174,13 +2174,13 @@
     ]
   },
   {
-    "id": "tread-tint-ignores-the-identity-gate",
+    "id": "tread-tint-ignores-the-campaign-gate",
     "file": "src/render/tread-trails.ts",
-    "find": "  if (tank.kind !== 'player' || !identityApplies(world)) return TREAD_COLOR;",
-    "replace": "  if (tank.kind !== 'player') return TREAD_COLOR;",
+    "find": "  if (world.mode === 'campaign-coop' || !identityApplies(world)) return TREAD_COLOR;",
+    "replace": "  if (!identityApplies(world)) return TREAD_COLOR;",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "The trail tint stops consulting `identityApplies`, so a single-player campaign board prints slot 0's colour on every mark. Identity rings and shell tints are OFF below entities.ts's own multiplayer threshold precisely so single-player stays as it shipped, and issue #284's scope says campaign trails stay neutral -- this mutation breaks that agreement while leaving VS looking perfect, which is why the campaign case is asserted rather than assumed from 'VS works'. The gate is imported from entities.ts rather than re-derived here, so this also pins that the two cannot drift apart. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
+    "why": "The trail tint stops excluding `campaign-coop`, so a FOUR-PLAYER CO-OP campaign board prints identity-tinted trails. This is the exact defect the first implementation shipped and a screenshot caught: co-op clears the player-count gate -- four player tanks, four identity rings -- so `identityApplies` alone is not enough, and issue #284's scope says campaign trails stay neutral in the initial implementation. Single-player campaign is NOT the discriminating case here (it fails the player-count gate either way), which is why the test uses four co-op tanks and asserts the same four ARE tinted in ffa -- otherwise the case would pass against a build that tinted nothing. Scoped to tread-trails.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/render/tread-trails.test.ts"
     ]
