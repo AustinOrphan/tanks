@@ -1310,3 +1310,40 @@ describe('hud.css: the one application-transition definition (issue #364)', () =
     }
   });
 });
+
+describe('a leaving surface stops eating clicks meant for the one arriving', () => {
+  it('takes its DESCENDANTS out of hit testing, not only itself', () => {
+    // `pointer-events` is inherited, so `.ui-surface--leaving { pointer-events: none }`
+    // reads as though it covers the whole subtree. It does not: a descendant with its own
+    // explicit `pointer-events: auto` -- and this stylesheet has more than a dozen --
+    // overrides an INHERITED none. The rule's comment claimed the outgoing screen "must
+    // not eat a click meant for what is arriving underneath", and nothing checked it.
+    //
+    // Found by a real click, not by reading: driving the production build with the
+    // duration slowed so the crossfade was long enough to click through, Playwright
+    // refused the Back button with "<button class=... hud-firemode-toggle> from
+    // <div class='hud-panel ui-surface--leaving'> subtree intercepts pointer events".
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const hud = createHud(root);
+    try {
+      const panel = root.querySelector('.hud-panel') as HTMLElement;
+      const settings = root.querySelector('.hud-panel-settings') as HTMLElement;
+      expect(settings, 'fixture drifted: no descendant with its own pointer-events').not.toBeNull();
+
+      // NEGATIVE CONTROL: with the surface not leaving, the descendant is clickable --
+      // otherwise this test would pass against a stylesheet that disabled it always.
+      expect(getComputedStyle(settings).pointerEvents, 'control: settings should be clickable').toBe('auto');
+
+      panel.classList.add('ui-surface--leaving');
+      expect(getComputedStyle(panel).pointerEvents, 'the leaving surface itself').toBe('none');
+      expect(
+        getComputedStyle(settings).pointerEvents,
+        'a control inside the leaving surface can still eat the click',
+      ).toBe('none');
+    } finally {
+      hud.dispose();
+      document.body.innerHTML = '';
+    }
+  });
+});
