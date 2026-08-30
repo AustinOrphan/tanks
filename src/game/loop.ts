@@ -932,7 +932,10 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
     createDirector: createAudioDirector,
     createHaptics: (playerId) => createHapticsDirector(resolveVibrate(), playerId),
     createStateMachine: createGameStateMachine,
-    createHud,
+    // The pane needs the retained VS setup (issue #260) and `GameDeps.createHud` is
+    // deliberately still `(root) => Hud`: the store is a BROWSER-WIRING concern, so it
+    // is bound here rather than widened into the injected seam that ~200 tests build.
+    createHud: (root) => createHud(root, { versusSetup: stores.versusSetup }),
     levels: createLevelSystem(devFlags, run),
     progress,
     run,
