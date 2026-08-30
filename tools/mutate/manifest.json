@@ -2196,5 +2196,29 @@
     "tests": [
       "src/game/loop.test.ts"
     ]
+  },
+  {
+    "id": "parser-span-cannot-cross-a-newline",
+    "file": "tools/issues/metadata.mjs",
+    "find": "        blank += 1;\n        if (blank >= 2) break;",
+    "replace": "        break;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Restores the exact defect issue #416 fixed: a code span that can only be seen when both backticks sit on one line. An opening backtick on one line and its closer on the next would again leave a `Parent: #N` mirror between them looking like prose, so an issue DOCUMENTING the form is audited as USING it -- a red required check whose remediation cannot be followed, because there is no parent to add. Nothing else observes it: the audit's other outputs are unchanged and the whole 181-issue corpus parses identically either way.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
+  },
+  {
+    "id": "parser-stray-backtick-opens-a-span",
+    "file": "tools/issues/metadata.mjs",
+    "find": "      i += open; // unmatched: literal text, left exactly as written",
+    "replace": "      for (let k = i; k < chars.length; k += 1) if (chars[k] !== '\\n') chars[k] = ' ';\n      break;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The over-correction #416 invited and this change deliberately refused: treating an unmatched backtick as an open span and blanking the rest of the body. CommonMark says a backtick run with no equal-length closer is literal text, so this would make the parser disagree with how GitHub renders the body it is reading, and would silently DROP real parent mirrors that merely happen to sit after a stray backtick. Pins the decision, not just the code.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
   }
 ]

@@ -166,6 +166,55 @@ describe('native relationship contract', () => {
     expect(declaredSingularParent('Parent: #315\n\n```\nParent: #999\n```')).toBe(315);
   });
 
+  it('blanks a code span that OPENS and CLOSES on different lines (issue #416)', () => {
+    // The one real gap of the three #416 names. `withoutCodeMarkup`'s span blanking was
+    // `line.replaceAll(/`[^`]*`/g, ' ')` -- line-local, so an opening backtick on one
+    // line and its closer on another left everything between them intact and the
+    // anchored `Parent:` regex read it as a declaration.
+    //
+    // Measured against the parser as it stood: each of these three returned 999.
+    expect(declaredSingularParent('Use the form `\nParent: #999\n` verbatim.')).toBeNull();
+    expect(declaredSingularParent('## Parent\n\nWrite `Parent:\n#999` exactly.')).toBeNull();
+    // Run length is matched, not just "a backtick": a ``-opened span needs a `` closer.
+    expect(declaredSingularParent('Use ``\nParent: #999\n`` verbatim.')).toBeNull();
+  });
+
+  it('treats an UNMATCHED backtick as literal text, not as an open span (issue #416)', () => {
+    // A DELIBERATE decision, and it contradicts what #416 guessed. The issue listed this
+    // as a false-positive direction to be closed; CommonMark says a backtick string that
+    // never finds a closer of equal length is ordinary text, so the declaration beside it
+    // is a real declaration and 999 is the correct answer. Closing it "as a gap" would
+    // make the parser disagree with how GitHub renders the very body it is reading.
+    //
+    // These are the assertions that would fail if someone "fixed" that non-bug.
+    expect(declaredSingularParent('The form is ` here.\nParent: #999')).toBe(999);
+    expect(declaredSingularParent('## Parent\n\nSee ` the #999 form.')).toBe(999);
+    // Mismatched run lengths are the same case: `` opens nothing that ` can close.
+    expect(declaredSingularParent('Use ``\nParent: #999\n` verbatim.')).toBe(999);
+    // ...and a lone backtick ahead of the form still refuses, because the line is then
+    // not the anchored form at all.
+    expect(declaredSingularParent('`Parent: #999')).toBeNull();
+  });
+
+  it('does not let a code span cross a blank line, the way a paragraph break does not (issue #416)', () => {
+    // The boundary the whole-body scan has to respect. Inline parsing happens INSIDE a
+    // block, so a backtick opened in one paragraph cannot close in the next; without
+    // this the new scan would be MORE eager than the line-local one it replaces and
+    // would swallow a real mirror sitting between two unrelated backticks.
+    expect(declaredSingularParent('Use the form `\n\nParent: #999\n\n` verbatim.')).toBe(999);
+  });
+
+  it('lets an unclosed fence run to the end of the body, and states that this is the choice (issue #416)', () => {
+    // #416 asked for this to be decided deliberately rather than left as a side effect of
+    // the toggle. DECIDED: an unclosed fence runs to the end of the document, which is
+    // what CommonMark specifies and what GitHub renders -- so a mirror below one is
+    // genuinely inside code and genuinely not a declaration. It also fails safe: the cost
+    // is a missed relationship, not a false error against an issue that never claimed one.
+    expect(declaredSingularParent('```\nsample\n\nParent: #315')).toBeNull();
+    // The negative half: the same mirror ABOVE the unclosed fence is still read.
+    expect(declaredSingularParent('Parent: #315\n\n```\nsample')).toBe(315);
+  });
+
   it('scopes the native-blocked count to the issues actually inspected for blockers', () => {
     const inspected = issue(92, [
       'size:m', 'risk:medium', 'area:ui', 'impact:high', 'priority:next',
