@@ -324,11 +324,29 @@ import { step } from '../../src/sim/world';
  * (bullets.test.ts, step-contract.test.ts, and the `muzzle-flash-collapses-onto-the-shell`
  * manifest entry), not here.
  *
- * MOVED THREE TIMES, and each time only after proving the move was a WIDENING rather than a
- * re-record -- the failure mode this file's own test warns about ("someone narrows the
- * trace, sees red, and RE-RECORDS the hash"). Both moves have the same cause: a board
- * appended to ARENA_DEFS, and `traceText` iterates that array in order, so a new board's
- * runs land at the END and cannot disturb a byte before them.
+ * MOVED FOUR TIMES. The first three were WIDENINGS -- a board appended to ARENA_DEFS, whose
+ * runs land at the END and cannot disturb a byte before them. The fourth is NOT, and it is
+ * called out first because it is the case this file's own test warns about ("someone
+ * narrows the trace, sees red, and RE-RECORDS the hash"):
+ *
+ *   - 2026-08-30, issue #424 REBUILT `vs-tri-01`'s grid. Its arena is index 6 of 8, so this
+ *     is the first move where an existing board's simulation changed and the bytes after it
+ *     shifted. `newText.startsWith(oldText)` is FALSE and cannot be the evidence, so the
+ *     move is confined by direct comparison of the two dumps instead:
+ *       * 48 markers before and 48 after, and exactly SIX differ -- `|6:1:lose:1291|` …
+ *         `|6:6:lose:1291|` become `|6:…:lose:1249|`. All six are arena index 6, one per
+ *         traced seed. The other 42 are byte-identical.
+ *       * The text is byte-identical for its first 122374 characters, which runs through
+ *         vs-duel-01's final sample; the first difference is inside vs-tri-01's own seed-1
+ *         run.
+ *       * The tail from arena index 7's first marker (`vs-quad-01`) to the end is
+ *         byte-identical, 4605 characters on both trees.
+ *       * Total length 134401 -> 134479, and the 78 is entirely vs-tri-01's section, which
+ *         goes 6388 -> 6453 characters.
+ *     So exactly one board's simulation moved, which is what the rebuild was, and no other
+ *     board's did -- the property this fingerprint exists to pin.
+ *
+ * The three earlier moves, each an append:
  *
  *   - 2026-08-30, issue #272 appended `vs-tri-01`. Measured on both trees with the same
  *     probe: the new trace text is byte-identical to the old for its first 122329
@@ -345,13 +363,15 @@ import { step } from '../../src/sim/world';
  *     5508, markers 42 -> 48 with all 6 of the new ones inside the appended tail, and
  *     `newText.startsWith(oldText)` true.
  *
- * No existing arena's simulation moved on any of the three occasions, which is the only
- * thing this fingerprint is a pin on. Previous values, newest first:
+ * No existing arena's simulation moved on any of those three occasions, and on the fourth
+ * exactly one did and it is named above -- which is the only thing this fingerprint is a
+ * pin on. Previous values, newest first:
+ * c89d93a7b8b27e5490f3db63da8a8694878f9004f18a58e3c45cbf4c259f0c6e
  * f9663703abe7308b55b2f54a1beb9edeacd6258f5b4b6941a4c6cb7f891f36e5
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = 'c89d93a7b8b27e5490f3db63da8a8694878f9004f18a58e3c45cbf4c259f0c6e';
+export const BASELINE_HASH = '3283b31719970105f3aafe20581f2994cd36c09462d4cbc3c9474903094093bc';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
