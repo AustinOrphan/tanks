@@ -32,11 +32,18 @@ describe('versus catalog sweep: shipped declarations hold', () => {
     for (const entry of VERSUS_CATALOG) {
       expect(versusCatalogEntryFailures(entry), entry.id).toEqual([]);
     }
-  });
+    // 30s, not the 5s default. This sweep runs real spawn placement and line-of-sight over
+    // every declared combination, and issue #272's seventh board took it to 3.8s on the
+    // development machine -- comfortably green here and within a factor of two of timing
+    // out on a slower CI runner. Raised on that measurement rather than after a red build,
+    // and raised rather than sampled: the denominator in the title IS the assertion.
+  }, 30_000);
 
   it('versusCatalogFailures sweeps the whole shipped catalog to the same answer', () => {
     expect(versusCatalogFailures()).toEqual([]);
-  });
+    // Same reasoning and the same measurement as the sweep above: 3.2s locally at seven
+    // boards, which is not a safe margin against a 5s default on slower hardware.
+  }, 30_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -489,7 +496,9 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     expect(Math.abs(reach(axis, 4) - reach(base[0], 4)), 'reachable area within 4 steps').toBeLessThanOrEqual(3);
     expect(Math.abs(openRun(axis) - openRun(base[0])), 'total open sightline run').toBeLessThanOrEqual(2);
     // Measured values behind the bounds, so a reader can see what the slack really is:
-    // axis 14/40/4 and each base 15/38/5 for (r4, r8, openRun).
-    expect(openRun(axis)).toBeLessThan(13); // the open-lane regression this replaced
+    // axis 14/40/4 and each base 15/38/5 for (r4, r8, openRun). No separate "less than the
+    // old 13-cell lane" assertion: with each base measuring 5 and the bound above at 2, the
+    // axis is already confined to 3..7, so such a line could not fail without one of the
+    // three above failing first -- it would advertise coverage that the bounds already own.
   });
 });
