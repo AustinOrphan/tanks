@@ -202,7 +202,7 @@ export async function applyIssueEvent(repository, payload, request) {
   const number = issue?.number;
   if (!Number.isInteger(number)) throw new Error('issue event payload has no numeric issue.number');
 
-  const changes = planIssueEventLabelChanges(payload?.action ?? '', issue);
+  const changes = planIssueEventLabelChanges(payload?.action ?? '', issue ?? {});
   const repo = repositoryPath(repository);
 
   for (const label of changes.remove) {

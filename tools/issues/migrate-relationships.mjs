@@ -16,7 +16,7 @@ import { RELATIONSHIP_MIGRATION } from './relationship-migration-plan.mjs';
  * @typedef {{ parent: number, child: number }} ParentEdge
  * @typedef {{ issue: number, blocker: number }} DependencyEdge
  * @typedef {import('./run.mjs').GitHubRequest} GitHubRequest
- * @typedef {{ child: number, currentParent: number }} ParentConflict
+ * @typedef {{ parent: number, child: number, currentParent: number }} ParentConflict
  * @typedef {{
  *   apply: boolean,
  *   status: string,
@@ -54,12 +54,14 @@ const unique = (values) => [...new Set(values)];
  *   parents?: readonly { readonly parent?: number, readonly children?: readonly number[] }[],
  *   blockedBy?: readonly { readonly issue?: number, readonly blockers?: readonly number[] }[],
  * }} plan
+ * @returns {{ parentEdges: ParentEdge[], dependencyEdges: DependencyEdge[] }}
  */
 export function expandRelationshipPlan(plan) {
   if (typeof plan?.repository !== 'string' || !plan.repository.includes('/')) {
     throw new Error('relationship migration plan has no valid repository');
   }
 
+  /** @type {ParentEdge[]} */
   const parentEdges = [];
   const childOwners = new Map();
   for (const group of plan.parents ?? []) {
@@ -75,10 +77,11 @@ export function expandRelationshipPlan(plan) {
         throw new Error(`child #${child} is assigned to both #${prior} and #${group.parent}`);
       }
       childOwners.set(child, group.parent);
-      parentEdges.push({ parent: group.parent, child });
+      parentEdges.push({ parent: /** @type {number} */ (group.parent), child });
     }
   }
 
+  /** @type {DependencyEdge[]} */
   const dependencyEdges = [];
   const dependencyKeys = new Set();
   for (const group of plan.blockedBy ?? []) {
@@ -92,7 +95,7 @@ export function expandRelationshipPlan(plan) {
       const key = `${group.issue}:${blocker}`;
       if (dependencyKeys.has(key)) throw new Error(`duplicate blocked-by edge ${key}`);
       dependencyKeys.add(key);
-      dependencyEdges.push({ issue: group.issue, blocker });
+      dependencyEdges.push({ issue: /** @type {number} */ (group.issue), blocker });
     }
   }
 
@@ -157,7 +160,7 @@ export async function mapWithConcurrency(values, limit, action) {
   return results;
 }
 
-/** @param {string} repo @param {number} issue @param {GitHubRequest} request @returns {Promise<number[]>} */
+/** @param {string} repo @param {number} issue @param {GitHubRequest} request @returns {Promise<{ number?: number }[]>} */
 async function listBlockedBy(repo, issue, request) {
   const blockers = [];
   for (let page = 1; ; page += 1) {
@@ -258,6 +261,7 @@ export async function migrateRelationships({
   /** @type {GitHubRequest} */
   const call = async (...args) => {
     result.requests += 1;
+    if (request === undefined) throw new Error('migrateRelationships needs a request function');
     return request(...args);
   };
 
@@ -288,7 +292,7 @@ export async function migrateRelationships({
     const currentBlockedBy = new Map(await mapWithConcurrency(
       blockedIssueNumbers,
       8,
-      async (issue) => [issue, await listBlockedBy(repo, issue, call)],
+      async (issue) => /** @type {[number, { number?: number }[]]} */ ([issue, await listBlockedBy(repo, issue, call)]),
     ));
     result.missingDependencies = dependencyEdges.filter(({ issue, blocker }) =>
       !(currentBlockedBy.get(issue) ?? []).some((entry) => entry.number === blocker));
@@ -479,7 +483,7 @@ function parseArguments(argv) {
   let confirmation;
   while (args.length > 0) {
     const flag = args.shift();
-    if (!['--repo', '--confirm'].includes(flag)) throw new Error(`unknown argument: ${flag}`);
+    if (!['--repo', '--confirm'].includes(flag ?? '')) throw new Error(`unknown argument: ${flag}`);
     const value = args.shift();
     if (!value) throw new Error(`${flag} requires a value`);
     if (flag === '--repo') repository = value;
@@ -493,6 +497,17 @@ function parseArguments(argv) {
   return { mode, repository, confirmation };
 }
 
+/**
+ * @param {{
+ *   argv?: string[],
+ *   env?: Record<string, string | undefined>,
+ *   fetchImpl?: typeof globalThis.fetch,
+ *   log?: (...args: any[]) => void,
+ *   plan?: typeof RELATIONSHIP_MIGRATION,
+ *   pause?: () => Promise<void>,
+ *   requestTimeoutMs?: number,
+ * }} [options]
+ */
 export async function main({
   argv = process.argv.slice(2),
   env = process.env,
