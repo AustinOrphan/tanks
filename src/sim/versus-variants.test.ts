@@ -257,7 +257,7 @@ describe('room: openFloorCells rises by EXACTLY the removed count, on all 7 ship
 // ---------------------------------------------------------------------------
 
 describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measured', () => {
-  it('0 of 180 (arena, N, seed) draws are unsuitable -- 6 arenas x 3 player counts x 10 seeds, fraction 0.4', () => {
+  it('0 of 210 (arena, N, seed) draws are unsuitable -- 7 arenas x 3 player counts x 10 seeds, fraction 0.4', () => {
     const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let checked = 0;
     let unsuitable = 0;
@@ -273,7 +273,12 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
     }
     expect(checked).toBe(210);
     expect(unsuitable).toBe(0);
-  });
+    // 30s, not the 5s default. The sweep is O(arenas x N x seeds) real board evaluations
+    // and issue #272's seventh arena took it from 180 draws to 210, measured at just over
+    // 5s -- so it began timing out on content rather than on any slowdown. Raised rather
+    // than sampled: dropping seeds to fit a default would trade the stated population for
+    // wall-clock, and the population is the assertion.
+  }, 30_000);
 });
 
 // ---------------------------------------------------------------------------
