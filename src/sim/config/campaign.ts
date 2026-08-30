@@ -1,4 +1,5 @@
 import { createCatalog } from './catalog';
+import type { ArenaDefinition } from './arena-types';
 import type { CampaignDefinition, CampaignLevel } from './campaign-types';
 import { validateCampaign } from './validate';
 import { ARENA_DEFS } from './arenas';
@@ -27,3 +28,24 @@ export function campaignLevelById(id: string): CampaignLevel {
 }
 
 export const FIRST_CAMPAIGN_LEVEL: CampaignLevel = CAMPAIGN_LEVELS[0];
+
+/**
+ * The arenas the campaign actually plays, in `ARENA_DEFS` catalog order.
+ *
+ * Not every shipped arena is a campaign level. Issue #271 added `vs-duel-01`, a board
+ * authored FOR versus and never entered from the campaign, and the versus arc will add
+ * more. Campaign-facing sweeps -- difficulty pacing, the claim inventory, the cover
+ * ratios each arena quotes in its notes -- take THIS population rather than
+ * `ARENA_DEFS`, so that shipping a versus board cannot silently widen a claim that was
+ * only ever measured about campaign pacing, and cannot force campaign vocabulary
+ * (`lane`, `sightlineAfterBreach`, `spawnBlockRobust`) onto a board validated by
+ * `versus-catalog-rules.ts` instead.
+ *
+ * Geometry sweeps are deliberately NOT scoped this way: `cellCentre` round-trips,
+ * spawn-lattice placement and the versus spawn/sightline machinery are properties of
+ * every board the game can load, so those keep iterating `ARENA_DEFS`.
+ */
+const CAMPAIGN_ARENA_IDS: ReadonlySet<string> = new Set(CAMPAIGN_LEVELS.map((l) => l.arenaId));
+export const CAMPAIGN_ARENA_DEFS: readonly ArenaDefinition[] = ARENA_DEFS.filter((a) =>
+  CAMPAIGN_ARENA_IDS.has(a.id),
+);

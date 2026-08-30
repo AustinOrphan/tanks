@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { AIBehavior } from './enums';
 import { configFor } from './roster';
 import { TANK_KINDS } from './validate';
-import { ARENA_DEFS } from './arenas';
+import { CAMPAIGN_ARENA_DEFS } from './campaign';
 import type { ArenaShape } from './arena-types';
 import type { AIProfileBalance, ResolvedTankConfig } from './types';
 import {
@@ -360,7 +360,11 @@ describe('tankDifficulty over the shipped roster (population: all 7 shipped Tank
   });
 });
 
-describe('levelDifficulty over the 5 shipped arenas (population: all 5, from ARENA_DEFS)', () => {
+// Population: the five CAMPAIGN arenas, not every shipped board. `levelDifficulty` scores
+// a campaign level's pacing, and issue #271's `vs-duel-01` is never entered from the
+// campaign -- scoring it here would widen a claim about campaign pacing to a board the
+// campaign does not play. See CAMPAIGN_ARENA_DEFS's own comment.
+describe('levelDifficulty over the 5 campaign arenas (population: all 5, from CAMPAIGN_ARENA_DEFS)', () => {
   const EXPECTED: Record<string, { total: number; rosterSum: number; enemyCount: number; openCells: number }> = {
     'arena-01': { total: 131.1750830564784, rosterSum: 121.79523809523809, enemyCount: 3, openCells: 774 },
     'arena-02': { total: 164.99757123733025, rosterSum: 148.2238095238095, enemyCount: 4, openCells: 747 },
@@ -370,8 +374,8 @@ describe('levelDifficulty over the 5 shipped arenas (population: all 5, from ARE
   };
 
   it('matches every shipped arena, not a sample', () => {
-    expect(new Set(ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED)));
-    for (const arena of ARENA_DEFS) {
+    expect(new Set(CAMPAIGN_ARENA_DEFS.map((a) => a.id))).toEqual(new Set(Object.keys(EXPECTED)));
+    for (const arena of CAMPAIGN_ARENA_DEFS) {
       const b = levelDifficultyBreakdown(arena);
       const exp = EXPECTED[arena.id];
       expect({ total: b.total, rosterSum: b.rosterSum, enemyCount: b.enemyCount, openCells: b.openCells }, arena.id)
@@ -388,7 +392,7 @@ describe('levelDifficulty over the 5 shipped arenas (population: all 5, from ARE
     const known: Record<string, number> = {
       'arena-01': 774, 'arena-02': 747, 'arena-03': 792, 'arena-04': 1359, 'arena-05': 1359,
     };
-    for (const arena of ARENA_DEFS) {
+    for (const arena of CAMPAIGN_ARENA_DEFS) {
       expect(levelDifficultyBreakdown(arena).openCells, arena.id).toBe(known[arena.id]);
     }
   });
@@ -399,14 +403,14 @@ describe('levelDifficulty over the 5 shipped arenas (population: all 5, from ARE
     // enemies are spread thinner. The model's TOTAL still comes out monotonic
     // in ship order (rosterSum dominates), but the geometry term alone does not.
     const density = Object.fromEntries(
-      ARENA_DEFS.map((a) => [a.id, levelDifficultyBreakdown(a).density]),
+      CAMPAIGN_ARENA_DEFS.map((a) => [a.id, levelDifficultyBreakdown(a).density]),
     );
     expect(density['arena-04']).toBeLessThan(density['arena-02']);
     expect(density['arena-04']).toBeLessThan(density['arena-03']);
     // The total ordering this model computes today -- stated as what the model
     // OUTPUTS, not verified against actual play (no scripted-player harness
     // exists yet; see the issue).
-    const total = ARENA_DEFS.map((a) => levelDifficultyBreakdown(a).total);
+    const total = CAMPAIGN_ARENA_DEFS.map((a) => levelDifficultyBreakdown(a).total);
     expect(total).toEqual([...total].sort((a, b) => a - b));
   });
 });
@@ -467,7 +471,7 @@ describe('enemy count is not double-counted against the geometry term', () => {
 
 describe('ENEMY_DENSITY_BOUNDS covers the shipped arenas with headroom (documentation check)', () => {
   it('every shipped arena density falls inside the bound, not clamped flush against an edge', () => {
-    for (const arena of ARENA_DEFS) {
+    for (const arena of CAMPAIGN_ARENA_DEFS) {
       const density = levelDifficultyBreakdown(arena).density;
       expect(density, arena.id).toBeGreaterThan(ENEMY_DENSITY_BOUNDS.min);
       expect(density, arena.id).toBeLessThan(ENEMY_DENSITY_BOUNDS.max);
@@ -475,11 +479,11 @@ describe('ENEMY_DENSITY_BOUNDS covers the shipped arenas with headroom (document
   });
 
   it('ENEMY_DENSITY_WEIGHT actually moves the level total (the weight is wired)', () => {
-    const before = levelDifficulty(ARENA_DEFS[0]);
+    const before = levelDifficulty(CAMPAIGN_ARENA_DEFS[0]);
     // Simulate the weight being 0 by re-deriving from the breakdown rather than
     // mutating the constant (constants are readonly exports); this proves the
     // densityTerm is a real, non-zero component of `total` for a real arena.
-    const b = levelDifficultyBreakdown(ARENA_DEFS[0]);
+    const b = levelDifficultyBreakdown(CAMPAIGN_ARENA_DEFS[0]);
     expect(b.densityTerm).toBeGreaterThan(0);
     expect(before).toBeCloseTo(b.rosterSum + b.densityTerm, 9);
   });
@@ -504,13 +508,13 @@ describe('reports the full table', () => {
       console.log(`tank ${kind}:`, JSON.stringify(b));
       return kind;
     });
-    const arenas = ARENA_DEFS.map((arena) => {
+    const arenas = CAMPAIGN_ARENA_DEFS.map((arena) => {
       const b = levelDifficultyBreakdown(arena);
       // eslint-disable-next-line no-console
       console.log(`level ${arena.id}:`, JSON.stringify(b));
       return arena.id;
     });
-    // Non-vacuity: if TANK_KINDS or ARENA_DEFS ever came back empty (a broken
+    // Non-vacuity: if TANK_KINDS or CAMPAIGN_ARENA_DEFS ever came back empty (a broken
     // import, a narrowed glob), the loops above would silently print nothing
     // and the test would still pass with zero assertions failing. Pin the
     // population so that failure mode is loud instead.
