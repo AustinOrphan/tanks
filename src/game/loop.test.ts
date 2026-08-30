@@ -1464,6 +1464,16 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         const built = {
           ...base,
           tanks,
+          // The real createWorldFor stamps its `lives` argument onto the world it returns,
+          // and loop.ts's `refreshStats` projects `world.lives` straight to the topbar.
+          // While this branch DROPPED the argument, every synthetic build echoed the
+          // fixture's own count, so the LIVES readout could only ever be observed pushing
+          // ONE number however its callers varied it. Measured on a88d39e: replacing
+          // `hud.setLives(w.lives)` with the constant 3 left all 4008 tests in the repo
+          // green. `undefined` falls through to the base world's own count -- what
+          // arena.ts's `lives: number = LIVES` default gives a practice or dev-jump build,
+          // which is exactly what those call sites pass.
+          lives: lives ?? base.lives,
           roundStartTick: base.roundStartTick + (opts.staticRoundStart ? 0 : rec.seeds.length - 1),
         };
         rec.builtWorlds.push(built);
@@ -3324,8 +3334,11 @@ describe('startGameWith: the active campaign run (issues #153/#152)', () => {
 
   describe('level clear -- advances the run reactively, not deferred to a click', () => {
     it('persists the next level and the carried lives the instant the win lands', () => {
-      const won = { ...createArenaWorld(1), lives: 2 };
-      const h = boot(makeDeps({ levelCount: 3, world: won, savedRun: { level: 0, lives: LIVES } }));
+      // The RUN's lives are what the boot hands `levels.world`, what the built board then
+      // carries, and what the advance records. While the fake ignored that argument this
+      // fixture had to state the carried count TWICE -- once on the run and once as a
+      // `world` override that silently won -- and the two were free to disagree.
+      const h = boot(makeDeps({ levelCount: 3, world: createArenaWorld(1), savedRun: { level: 0, lives: 2 } }));
       expect(h.rec.runAdvances).toEqual([]); // nothing yet
       h.setState('outcome-win'); // level 1 cleared, not final (levelCount 3)
       expect(h.rec.runAdvances).toEqual([{ level: 1, lives: 2 }]);
@@ -7374,32 +7387,45 @@ describe('startGameWith: canonical session identity at the production boundary',
       // reads the session the player just left. Removing gameplay chrome from
       // application screens is #324, and that is what dissolves this.
       //
-      // ENEMIES is what this measures. `setLives` rides the SAME `refreshStats` call and
-      // is stale in the same way, but it is not asserted here and this test does not
-      // claim it: the fake's world builder ignores its `lives` argument and echoes one
-      // constant, so a lives assertion would be measuring the fixture rather than
-      // production. That dead knob is worth fixing on its own; pretending the assertion
-      // exists would be worse than saying which half is measured.
+      // BOTH halves are measured now. `setLives` rides the SAME `refreshStats` call and
+      // goes stale in the same way. It went unasserted while the fake's world builder
+      // ignored its `lives` argument and echoed one constant, which would have made a
+      // lives assertion measure the fixture rather than production (#386); the fake now
+      // stamps the argument, so the readout varies with the board it was built for.
       //
       // The fixture makes the two values genuinely differ: practice on another board
       // with fresh lives, quit, and the landing the quit ANNOUNCES is the run's level 1
-      // with 2 lives. The level chip follows the announcement; lives does not.
+      // with 2 lives. The level chip follows the announcement; neither readout does.
       const h = boot(
         makeDeps({ levelCount: 3, levelStart: 1, savedRun: { level: 1, lives: 2 }, enemiesByLevel: [3, 2, 1] }),
       );
       h.hud.pickLevel(2); // practice on level 3, which this fixture gives ONE enemy
       const practiceEnemies = h.rec.enemies.at(-1);
       expect(practiceEnemies, 'the fixture must make the two boards differ').toBe(1);
+      // Practice passes no `lives`, so its board carries arena.ts's own default -- and
+      // the run's 2 is a DIFFERENT number, which is what makes the assertions below
+      // discriminate rather than restate the fixture.
+      const practiceLives = h.rec.lives.at(-1);
+      expect(practiceLives, 'practice builds with fresh lives, not the run\'s carried 2').toBe(LIVES);
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 2, lives: undefined });
       h.setState('paused');
       h.hud.quitToTitle();
 
       expect(h.rec.hudLevels.at(-1), 'the level chip did NOT follow the landing').toEqual([2, 3]);
       expect(h.rec.enemies.at(-1), 'enemies was re-projected without a world').toBe(practiceEnemies);
+      expect(h.rec.lives.at(-1), 'lives was re-projected without a world').toBe(practiceLives);
 
       // ...and it is genuinely stale rather than coincidentally equal: Continue builds
       // the run's board, and the same `refreshStats` call that pushes Lives pushes this.
       h.hud.startRestart();
       expect(h.rec.enemies.at(-1)).toBe(2); // level 2 of the fixture, the run's own board
+      // The knob proven live: a SECOND build with a different `lives` argument moves the
+      // readout off the practice board's count. Measured: replacing `hud.setLives(w.lives)`
+      // with the constant 3 fails exactly this test, 1 of 397 in this file. On a88d39e,
+      // before the fake stamped its argument, that same mutation left all 4008 tests in
+      // the repo green -- see the `campaign-lives-readout-ignores-the-world` manifest entry.
+      expect(h.rec.lives.at(-1), "the run's carried count, not the practice board's").toBe(2);
+      expect(h.rec.levelBuilds.at(-1)).toEqual({ level: 1, lives: 2 });
       h.handle.dispose();
     });
 
