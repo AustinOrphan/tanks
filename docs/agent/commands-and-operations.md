@@ -147,13 +147,43 @@ validation, cooperative signal cleanup, prerequisites, registry/manifest fields,
 and the cross-environment determinism boundary.
 
 `npm run issues:audit` checks every open issue for the repository's required size, risk,
-area, impact, horizon, readiness, and active-queue invariants. It infers the repository from
-`GITHUB_REPOSITORY` or the current Git remote, uses `GH_TOKEN`/`GITHUB_TOKEN` when available,
-and can audit this public repository anonymously within GitHub's lower unauthenticated rate
-limit. Contract violations exit non-zero with issue-specific remediation; explicitly uncertain
+area, impact, horizon, readiness, and active-queue invariants, and holds GitHub's native
+parent, sub-issue, and blocked-by fields to the same contract: a singular body parent must
+mirror a native parent, `agent-ready` and `priority:now` work must carry no open native
+blocker, native dependencies must stay acyclic, and a decomposed `size:xl` roll-up must keep
+native children. An open child under a closed parent is a warning rather than an error. The
+audit assumes the one-time native relationship migration has already been applied; run
+against an unpopulated graph it correctly reports every mirrored parent as missing. It infers
+the repository from `GITHUB_REPOSITORY` or the current Git remote and uses
+`GH_TOKEN`/`GITHUB_TOKEN` when available; the anonymous path still covers the label-only
+checks, but relationship reads make GitHub's lower unauthenticated hourly budget the binding
+limit, so pass a token for a complete audit. Relationship reads are skipped for issues whose
+GitHub summaries report none, except `agent-ready` and `priority:now` issues, which are
+always inspected — so the report states the inspected population beside its native-blocked
+count instead of presenting it as a backlog-wide census. Contract violations exit non-zero
+with issue-specific remediation; explicitly uncertain
 dependency or decision wording is reported as a warning. `npm run issues:maintain` is the
 workflow-only event handler that applies allowlisted area/impact choices from issue forms and
 cleans transient labels from closed issues.
+
+`npm run issues:relationships` is the reviewed, additive migration from issue-body hierarchy
+and hard-prerequisite statements to GitHub's native parent/sub-issue and blocked-by fields. It is
+operator-only: both plan and apply modes require `GH_TOKEN` or `GITHUB_TOKEN`, the ledger is
+pinned to `AustinOrphan/tanks`, and apply additionally requires the exact
+`--confirm AustinOrphan/tanks` argument. Plan mode performs no writes and reports every missing
+edge or parent conflict. Apply mode never reparents a conflicting child, continues with the
+independent dependency edges, rate-limits every successful write, verifies the resulting graph,
+and records completed and remaining edges in the Actions step summary even after a partial
+failure.
+
+Use the manual `Migrate native issue relationships` workflow for the repository migration. A
+plan dispatch performs 136 inspection reads for the reviewed 81 parent and 147 blocked-by edges.
+An initial apply dispatch skips the separate plan job and is bounded at 591 requests: 136
+inspection reads, 91 issue-record validations, 228 writes, and 136 verification reads. Reviewing
+a plan and then dispatching apply therefore uses at most 727 requests while every blocked-by list
+fits on one 100-item page, below the published 1,000-request/hour Actions-token budget. The
+workflow serializes dispatches, gives write access only to the guarded apply job, and passes the
+operator-entered confirmation through to the command's exact-string check.
 
 `npm run gallery` renders game elements as stills, animations or labelled sweep grids,
 through the REAL render modules against a REAL world. `--skin`/`--hull`/`--accent` dress

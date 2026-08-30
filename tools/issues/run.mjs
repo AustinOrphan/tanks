@@ -5,6 +5,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   auditOpenIssues,
+  declaredSingularParent,
+  issueLabelNames,
   planIssueEventLabelChanges,
   renderAuditReport,
 } from './metadata.mjs';
@@ -98,6 +100,79 @@ export async function listOpenIssues(repository, request) {
   return issues;
 }
 
+async function mapWithConcurrency(values, limit, action) {
+  const results = new Array(values.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= values.length) return;
+      results[index] = await action(values[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
+  return results;
+}
+
+async function listRelationshipIssues(repo, issueNumber, relationship, request) {
+  const related = [];
+  for (let page = 1; ; page += 1) {
+    const batch = await request(
+      `/repos/${repo}/issues/${issueNumber}/${relationship}?per_page=100&page=${page}`,
+    );
+    if (!Array.isArray(batch)) {
+      throw new Error(`${relationship} page for #${issueNumber} was not an array`);
+    }
+    related.push(...batch);
+    if (batch.length < 100) return related;
+  }
+}
+
+const nonNegativeCount = (value) => Number.isInteger(value) && value >= 0 ? value : 0;
+
+export async function enrichOpenIssueRelationships(repository, issues, request) {
+  const repo = repositoryPath(repository);
+  return mapWithConcurrency(issues, 6, async (issue) => {
+    const labels = issueLabelNames(issue);
+    const declaredParent = declaredSingularParent(issue?.body);
+    const dependencySummary = issue?.issue_dependencies_summary ?? {};
+    const subIssueSummary = issue?.sub_issues_summary ?? {};
+    const blockerCount = Math.max(
+      nonNegativeCount(dependencySummary.blocked_by),
+      nonNegativeCount(dependencySummary.total_blocked_by),
+    );
+    const inspectBlockers = blockerCount > 0
+      || labels.includes('agent-ready')
+      || labels.includes('priority:now');
+    const inspectSubIssues = nonNegativeCount(subIssueSummary.total) > 0;
+
+    const [parent, blockedBy, subIssues] = await Promise.all([
+      declaredParent === null
+        ? null
+        : request(`/repos/${repo}/issues/${issue.number}/parent`, { allowStatuses: [404] }),
+      inspectBlockers
+        ? listRelationshipIssues(repo, issue.number, 'dependencies/blocked_by', request)
+        : [],
+      inspectSubIssues
+        ? listRelationshipIssues(repo, issue.number, 'sub_issues', request)
+        : [],
+    ]);
+
+    return {
+      ...issue,
+      nativeRelationships: {
+        loaded: true,
+        parentLoaded: declaredParent !== null,
+        parent,
+        blockersLoaded: inspectBlockers,
+        blockedBy,
+        subIssues,
+      },
+    };
+  });
+}
+
 export async function applyIssueEvent(repository, payload, request) {
   const issue = payload?.issue;
   const number = issue?.number;
@@ -178,7 +253,8 @@ export async function main({
     return 0;
   }
 
-  const issues = await listOpenIssues(repository, request);
+  const listedIssues = await listOpenIssues(repository, request);
+  const issues = await enrichOpenIssueRelationships(repository, listedIssues, request);
   const result = auditOpenIssues(issues);
   const report = renderAuditReport(result);
   log(report.trimEnd());

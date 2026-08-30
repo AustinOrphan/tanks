@@ -117,6 +117,23 @@
       "variants": [
         "seeded-destructible"
       ]
+    },
+    {
+      "id": "vs-tri-01",
+      "arenaId": "vs-tri-01",
+      "displayName": "Keystone",
+      "intent": "A three-player arch: two base corners, one keystone on the mirror axis, and every spawn the same 26 steps from the other two.",
+      "preview": "vs-tri-01",
+      "players": [
+        3
+      ],
+      "modes": [
+        "ffa"
+      ],
+      "spawnPolicy": "maximin",
+      "variants": [
+        "seeded-destructible"
+      ]
     }
   ]
 }

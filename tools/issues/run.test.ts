@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyIssueEvent,
   createGitHubRequest,
+  enrichOpenIssueRelationships,
   listOpenIssues,
   main,
   parseRepositoryRemote,
@@ -56,6 +57,117 @@ describe('GitHub issue retrieval', () => {
   it('rejects malformed API pages instead of treating them as an empty clean backlog', async () => {
     await expect(listOpenIssues('AustinOrphan/tanks', async () => ({ message: 'bad' })))
       .rejects.toThrow('was not an array');
+  });
+});
+
+describe('native relationship retrieval', () => {
+  it('loads only relationship details needed to enforce the live contract', async () => {
+    const issues = [
+      {
+        number: 1,
+        body: 'Parent: #10',
+        labels: ['priority:next'],
+        issue_dependencies_summary: { blocked_by: 0, total_blocked_by: 0 },
+        sub_issues_summary: { total: 0 },
+      },
+      {
+        number: 2,
+        body: '',
+        labels: ['priority:now', 'agent-ready'],
+        issue_dependencies_summary: { blocked_by: 0, total_blocked_by: 0 },
+        sub_issues_summary: { total: 0 },
+      },
+      {
+        number: 3,
+        body: '',
+        labels: ['priority:next'],
+        issue_dependencies_summary: { blocked_by: 1, total_blocked_by: 1 },
+        sub_issues_summary: { total: 1 },
+      },
+      {
+        number: 4,
+        body: '',
+        labels: ['priority:next'],
+        issue_dependencies_summary: { blocked_by: 0, total_blocked_by: 0 },
+        sub_issues_summary: { total: 0 },
+      },
+    ];
+    const paths: string[] = [];
+    const request = async (path: string) => {
+      paths.push(path);
+      if (path.endsWith('/issues/1/parent')) return { number: 10, state: 'open' };
+      if (path.includes('/issues/2/dependencies/blocked_by?')) {
+        return [{ number: 20, state: 'closed' }];
+      }
+      if (path.includes('/issues/3/dependencies/blocked_by?')) {
+        return [{ number: 30, state: 'open' }];
+      }
+      if (path.includes('/issues/3/sub_issues?')) return [{ number: 31, state: 'open' }];
+      throw new Error(`unexpected path ${path}`);
+    };
+
+    const enriched = await enrichOpenIssueRelationships('AustinOrphan/tanks', issues, request);
+    expect(paths.sort()).toEqual([
+      '/repos/AustinOrphan/tanks/issues/1/parent',
+      '/repos/AustinOrphan/tanks/issues/2/dependencies/blocked_by?per_page=100&page=1',
+      '/repos/AustinOrphan/tanks/issues/3/dependencies/blocked_by?per_page=100&page=1',
+      '/repos/AustinOrphan/tanks/issues/3/sub_issues?per_page=100&page=1',
+    ]);
+    expect(enriched[0].nativeRelationships).toMatchObject({
+      loaded: true,
+      parentLoaded: true,
+      parent: { number: 10 },
+      blockedBy: [],
+      subIssues: [],
+    });
+    expect(enriched[1].nativeRelationships.blockedBy).toEqual([
+      { number: 20, state: 'closed' },
+    ]);
+    expect(enriched[2].nativeRelationships).toMatchObject({
+      parentLoaded: false,
+      blockedBy: [{ number: 30, state: 'open' }],
+      subIssues: [{ number: 31, state: 'open' }],
+    });
+    expect(enriched[3].nativeRelationships).toMatchObject({
+      parentLoaded: false,
+      blockedBy: [],
+      subIssues: [],
+    });
+  });
+
+  it('paginates native dependency collections instead of silently truncating them', async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      number: index + 100,
+      state: 'closed',
+    }));
+    const paths: string[] = [];
+    const request = async (path: string) => {
+      paths.push(path);
+      return paths.length === 1 ? firstPage : [{ number: 200, state: 'open' }];
+    };
+    const [enriched] = await enrichOpenIssueRelationships('AustinOrphan/tanks', [{
+      number: 5,
+      body: '',
+      labels: ['agent-ready'],
+      issue_dependencies_summary: { blocked_by: 1, total_blocked_by: 101 },
+      sub_issues_summary: { total: 0 },
+    }], request);
+
+    expect(paths).toEqual([
+      '/repos/AustinOrphan/tanks/issues/5/dependencies/blocked_by?per_page=100&page=1',
+      '/repos/AustinOrphan/tanks/issues/5/dependencies/blocked_by?per_page=100&page=2',
+    ]);
+    expect(enriched.nativeRelationships.blockedBy).toHaveLength(101);
+  });
+
+  it('rejects malformed relationship pages instead of treating them as empty', async () => {
+    await expect(enrichOpenIssueRelationships('AustinOrphan/tanks', [{
+      number: 6,
+      body: '',
+      labels: ['agent-ready'],
+      issue_dependencies_summary: { blocked_by: 1, total_blocked_by: 1 },
+      sub_issues_summary: { total: 0 },
+    }], async () => ({ message: 'bad' }))).rejects.toThrow('was not an array');
   });
 });
 
@@ -190,5 +302,39 @@ describe('audit command exit contract', () => {
       }]),
       log,
     })).resolves.toBe(0);
+  });
+
+  it('returns non-zero when a live native blocker contradicts readiness', async () => {
+    const reports: string[] = [];
+    const fetchImpl = async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('/dependencies/blocked_by?')) {
+        return new Response(JSON.stringify([{ number: 9, state: 'open' }]), { status: 200 });
+      }
+      return new Response(JSON.stringify([{
+        number: 10,
+        state: 'open',
+        body: '## Dependencies\n\nNone',
+        labels: [
+          'size:s',
+          'risk:low',
+          'area:repository',
+          'impact:high',
+          'priority:now',
+          'agent-ready',
+        ],
+        issue_dependencies_summary: { blocked_by: 1, total_blocked_by: 1 },
+        sub_issues_summary: { total: 0 },
+      }]), { status: 200 });
+    };
+
+    await expect(main({
+      argv: ['audit', '--repo', 'AustinOrphan/tanks'],
+      env: {},
+      fetchImpl,
+      log: (report) => reports.push(report),
+    })).resolves.toBe(1);
+    expect(reports.join('\n')).toContain('agent-ready-native-blocked');
+    expect(reports.join('\n')).toContain('now-native-blocked');
   });
 });
