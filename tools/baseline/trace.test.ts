@@ -39,7 +39,7 @@ describe('baseline', () => {
 
   it('covers every shipped arena at every seed', () => {
     // One `|a:seed:status:tick|` marker is appended per run, after the tick loop, so the
-    // count states the fingerprint's POPULATION out loud: 6 shipped arenas x 6 seeds.
+    // count states the fingerprint's POPULATION out loud: 7 shipped arenas x 6 seeds.
     //
     // Deliberately against LITERALS, not against TRACE_SEEDS: written as
     // `ARENAS.length * TRACE_SEEDS` this test moved with the constant and could not fail
@@ -49,8 +49,8 @@ describe('baseline', () => {
     // the hash. That goes green above and red here.
     const markers = text.match(/\|\d+:\d+:(playing|win|lose):\d+\|/g) ?? [];
     expect(TRACE_SEEDS).toBe(6);
-    expect(ARENAS.length).toBe(6);
-    expect(markers.length).toBe(6 * 6);
+    expect(ARENAS.length).toBe(7);
+    expect(markers.length).toBe(7 * 6);
   });
 });
 

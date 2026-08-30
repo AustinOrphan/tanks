@@ -237,7 +237,7 @@ describe('the board actually fills the screen', () => {
   ];
 
   it('covers at least 48% of the frame, on every shipped arena at every common aspect', () => {
-    // Population: all 6 shipped arenas x 4 aspects = 24, every one checked -- not a
+    // Population: all 7 shipped arenas x 4 aspects = 28, every one checked -- not a
     // sample. The floor sits just under the measured worst case (49.1%, arena-01 on a
     // phone) and comfortably above what the old camera managed anywhere (39.9% there).
     // Issue #271's 27x21 vs-duel-01 is the first board of a different shape to join
@@ -259,7 +259,7 @@ describe('the board actually fills the screen', () => {
     // re-measuring. Scoped to the raw catalog on purpose (issue #154: ARENAS is
     // catalog order, not campaign/level order) -- this floor is a property of the
     // BOARDS that ship, independent of which level plays which.
-    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(6);
+    expect(ARENAS.length, 'an arena was added; re-measure the coverage floor').toBe(7);
     expect(checked).toBe(ARENAS.length * ASPECTS.length);
     expect(thin).toEqual([]);
   });
@@ -289,20 +289,45 @@ describe('the board actually fills the screen', () => {
     // `framing-frame-margin-doubled`. The bands are wide enough to survive a retune and
     // narrow enough to catch a different camera.
     const at = (aspect: number): number[] => ARENAS.map((arena) => coverage(arena, aspect));
-    // Population: all 6 shipped arenas, at each of the two aspects issue #108 names.
+    // Population: all 7 shipped arenas, at each of the two aspects issue #108 names.
     const portrait = at(0.42); // 20:9 upright
     const ultrawide = at(2.39); // 21:9 sideways
-    expect(portrait).toHaveLength(6);
+    expect(portrait).toHaveLength(7);
     for (const f of portrait) {
       expect(f, 'portrait now fills a quarter of the frame -- re-read the orientation decision').toBeLessThan(0.25);
       expect(f).toBeGreaterThan(0.15);
     }
     // 21:9 is the other end and costs far less: it is below the 48% floor the four
     // common aspects hold, but by single digits rather than by half.
-    for (const f of ultrawide) {
-      expect(f).toBeLessThan(0.5);
-      expect(f, '21:9 is no longer the mild case -- the floor above may need re-measuring').toBeGreaterThan(0.4);
+    //
+    // PARTITIONED BY BOARD SHAPE, on measurement, for issue #272. The <0.5 ceiling was
+    // measured when every shipped board was between 1.222 and 1.364 wide in world units;
+    // vs-tri-01 is 27x17 = 1.588, the widest shipped, and reaches 0.561 at 21:9 -- a
+    // board closer to the screen's own shape simply fills more of it. Widening the band
+    // to cover both would blunt it for the six boards it was derived from (the comment
+    // above names the camera changes it catches at single-digit margins), so the wide
+    // board is named and given its own bound instead. This is the re-read the tripwire
+    // above asks for, recorded rather than absorbed: the orientation decision is
+    // unchanged, but the "21:9 costs single digits" summary now holds only for boards
+    // near the campaign shape.
+    const WIDE = new Set(['vs-tri-01']);
+    for (const [i, arena] of ARENAS.entries()) {
+      const f = ultrawide[i];
+      const id = (arena as unknown as { id: string }).id;
+      if (WIDE.has(id)) {
+        expect(f, `${id} at 21:9`).toBeLessThan(0.6);
+        expect(f, `${id} at 21:9`).toBeGreaterThan(0.5);
+      } else {
+        expect(f, `${id} at 21:9`).toBeLessThan(0.5);
+        expect(f, `${id}: 21:9 is no longer the mild case -- the floor above may need re-measuring`).toBeGreaterThan(0.4);
+      }
     }
+    // The partition is a claim about shape, not a licence: every named wide board must
+    // really be wider than every board in the tight band, or the split is arbitrary.
+    const widthOf = (a: typeof ARENAS[number]) => arenaBounds(a).width / arenaBounds(a).height;
+    const wide = ARENAS.filter((a) => WIDE.has((a as unknown as { id: string }).id)).map(widthOf);
+    const rest = ARENAS.filter((a) => !WIDE.has((a as unknown as { id: string }).id)).map(widthOf);
+    expect(Math.min(...wide), 'a board is in the wide partition without being wider').toBeGreaterThan(Math.max(...rest));
     // The contrast is the finding, not either number on its own.
     expect(Math.max(...portrait)).toBeLessThan(Math.min(...ultrawide) / 1.8);
   });

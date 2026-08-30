@@ -1,0 +1,71 @@
+name: Migrate native issue relationships
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Add missing reviewed relationships after inspecting the plan
+        required: true
+        default: false
+        type: boolean
+      confirm_repository:
+        description: To apply, enter AustinOrphan/tanks exactly
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: issue-relationship-migration-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: plan relationship migration
+    if: ${{ !inputs.apply }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Inspect additive relationship plan
+        run: npm run issues:relationships
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  reject-invalid-confirmation:
+    name: reject invalid apply confirmation
+    if: ${{ inputs.apply && inputs.confirm_repository != github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Explain the confirmation requirement
+        run: |
+          echo "Apply requires confirm_repository to equal $GITHUB_REPOSITORY exactly."
+          exit 1
+
+  apply:
+    name: apply and verify relationship migration
+    if: ${{ inputs.apply && inputs.confirm_repository == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Add missing relationships and verify all reviewed edges
+        run: npm run issues:relationships -- apply --confirm "$CONFIRM_REPOSITORY"
+        env:
+          CONFIRM_REPOSITORY: ${{ inputs.confirm_repository }}
+          GITHUB_TOKEN: ${{ github.token }}

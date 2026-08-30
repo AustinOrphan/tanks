@@ -77,6 +77,51 @@ export function markdownSections(body, heading) {
   return sections;
 }
 
+const issueReferences = (value) =>
+  [...String(value ?? '').matchAll(/#(\d+)/g)].map((match) => Number(match[1]));
+
+const CODE_FENCE = /^\s{0,3}(?:```|~~~)/;
+
+// A parent mirror is a statement, not an illustration. Blank out fenced blocks and code
+// spans first so an issue documenting the `Parent: #N` form is not read as using it.
+// Fenced lines become empty rather than disappearing, which keeps heading offsets aligned
+// for the section scan below.
+function withoutCodeMarkup(body) {
+  const lines = [];
+  let fenced = false;
+
+  for (const line of normalizedLines(body)) {
+    if (CODE_FENCE.test(line)) {
+      fenced = !fenced;
+      lines.push('');
+      continue;
+    }
+    lines.push(fenced ? '' : line.replaceAll(/`[^`]*`/g, ' '));
+  }
+
+  return lines.join('\n');
+}
+
+export function declaredSingularParent(body) {
+  const prose = withoutCodeMarkup(body);
+  const lines = normalizedLines(prose);
+  const candidates = [];
+
+  for (const line of lines) {
+    const direct = /^\s*Parent:\s*#(\d+)\s*\.?\s*$/i.exec(line);
+    const partOf = /^\s*Part of #([0-9]+)\s*\.?\s*$/i.exec(line);
+    if (direct !== null) candidates.push(Number(direct[1]));
+    if (partOf !== null) candidates.push(Number(partOf[1]));
+  }
+
+  for (const section of markdownSections(prose, 'Parent')) {
+    candidates.push(...issueReferences(section));
+  }
+
+  const distinct = [...new Set(candidates)];
+  return distinct.length === 1 ? distinct[0] : null;
+}
+
 function explicitSelection(body, heading, allowed) {
   const sections = markdownSections(body, heading);
   if (sections.length !== 1) return null;
@@ -163,6 +208,55 @@ function unresolvedReadinessMarkers(issue) {
   return warnings;
 }
 
+const openNativeBlockers = (issue) => {
+  const relationships = issue?.nativeRelationships;
+  if (relationships?.loaded !== true) return [];
+  return (Array.isArray(relationships.blockedBy) ? relationships.blockedBy : [])
+    .filter((blocker) => blocker?.state !== 'closed');
+};
+
+const hasImplementationBreakdown = (issue) =>
+  markdownSections(issue?.body, 'Implementation breakdown')
+    .some((section) => /^\s*-\s*\[[ xX]\]\s+#\d+/m.test(section));
+
+function findDependencyCycles(issues) {
+  const issueNumbers = new Set(issues.map(issueNumber).filter((number) => number !== null));
+  const graph = new Map(issues.map((issue) => [
+    issueNumber(issue),
+    openNativeBlockers(issue)
+      .map(issueNumber)
+      .filter((number) => number !== null && issueNumbers.has(number)),
+  ]));
+  const visiting = new Map();
+  const visited = new Set();
+  const stack = [];
+  const cycles = [];
+  const cycleKeys = new Set();
+
+  const visit = (number) => {
+    const stackIndex = visiting.get(number);
+    if (stackIndex !== undefined) {
+      const cycle = stack.slice(stackIndex);
+      const key = [...cycle].sort((a, b) => a - b).join(':');
+      if (!cycleKeys.has(key)) {
+        cycleKeys.add(key);
+        cycles.push(cycle);
+      }
+      return;
+    }
+    if (visited.has(number)) return;
+    visiting.set(number, stack.length);
+    stack.push(number);
+    for (const blocker of graph.get(number) ?? []) visit(blocker);
+    stack.pop();
+    visiting.delete(number);
+    visited.add(number);
+  };
+
+  for (const number of graph.keys()) visit(number);
+  return cycles;
+}
+
 export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
   const issues = (Array.isArray(inputIssues) ? inputIssues : [])
     .filter((issue) => issue?.state !== 'closed' && issue?.pull_request === undefined)
@@ -170,6 +264,8 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
   const errors = [];
   const warnings = [];
   const nowIssues = [];
+  let blockedCount = 0;
+  let blockerInspectedCount = 0;
 
   for (const issue of issues) {
     const labels = issueLabelNames(issue);
@@ -209,6 +305,51 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     const size = LABEL_DIMENSIONS.size.find((label) => labels.includes(label));
     const priority = LABEL_DIMENSIONS.priority.find((label) => labels.includes(label));
     const agentReady = labels.includes('agent-ready');
+    const nativeBlockers = openNativeBlockers(issue);
+    if (issue?.nativeRelationships?.blockersLoaded === true) blockerInspectedCount += 1;
+    if (nativeBlockers.length > 0) blockedCount += 1;
+
+    if (issue?.nativeRelationships?.loaded === true) {
+      const declaredParent = declaredSingularParent(issue?.body);
+      if (declaredParent !== null && issue.nativeRelationships.parentLoaded === true) {
+        const nativeParent = issue.nativeRelationships.parent;
+        if (nativeParent === null) {
+          errors.push(issueProblem(
+            issue,
+            'declared-parent-missing-native',
+            `declares parent #${declaredParent}, but has no native parent`,
+            `Add #${issueNumber(issue)} as a native sub-issue of #${declaredParent}, or correct the stale body mirror.`,
+          ));
+        } else if (nativeParent.number !== declaredParent) {
+          errors.push(issueProblem(
+            issue,
+            'declared-parent-mismatch',
+            `declares parent #${declaredParent}, but its native parent is #${nativeParent.number}`,
+            'Keep the native decomposition authoritative and correct the stale body mirror or reviewed parent edge.',
+          ));
+        }
+        if (nativeParent?.state === 'closed') {
+          warnings.push(issueProblem(
+            issue,
+            'open-child-closed-parent',
+            `is open under closed native parent #${nativeParent.number}`,
+            'Confirm the child belongs under that completed roll-up or reopen/correct the parent as appropriate.',
+          ));
+        }
+      }
+
+      if (size === 'size:xl' && hasImplementationBreakdown(issue)) {
+        const subIssues = issue.nativeRelationships.subIssues;
+        if (!Array.isArray(subIssues) || subIssues.length === 0) {
+          errors.push(issueProblem(
+            issue,
+            'rollup-missing-native-subissues',
+            'has an explicit implementation breakdown but no native sub-issues',
+            'Represent the reviewed decomposition with native sub-issues; keep cross-cutting references in the body.',
+          ));
+        }
+      }
+    }
 
     if (size === 'size:l' && !labels.includes('needs-split')) {
       errors.push(issueProblem(
@@ -228,6 +369,15 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
       ));
     }
 
+    if (agentReady && nativeBlockers.length > 0) {
+      errors.push(issueProblem(
+        issue,
+        'agent-ready-native-blocked',
+        `is agent-ready while blocked by open ${nativeBlockers.map((blocker) => `#${blocker.number}`).join(', ')}`,
+        'Resolve/remove the native blockers or remove agent-ready until the issue is independently implementable.',
+      ));
+    }
+
     if (priority === 'priority:now') {
       nowIssues.push(issue);
       if (!agentReady || !READY_SIZES.has(size)) {
@@ -236,6 +386,14 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
           'invalid-now-item',
           'is priority:now without being an agent-ready XS-M leaf',
           'Move it to priority:next/later, or finish triage and decomposition before returning it to Now.',
+        ));
+      }
+      if (nativeBlockers.length > 0) {
+        errors.push(issueProblem(
+          issue,
+          'now-native-blocked',
+          `is in Now while blocked by open ${nativeBlockers.map((blocker) => `#${blocker.number}`).join(', ')}`,
+          'Move the issue out of Now until its native blockers are complete, or correct stale blocker edges.',
         ));
       }
     }
@@ -262,9 +420,20 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     ));
   }
 
+  for (const cycle of findDependencyCycles(issues)) {
+    errors.push({
+      issueNumbers: cycle,
+      code: 'native-dependency-cycle',
+      message: `form a native blocked-by cycle: ${cycle.map((number) => `#${number}`).join(' → ')} → #${cycle[0]}`,
+      remediation: 'Correct the prerequisite direction or remove the edge that makes the dependency graph cyclic.',
+    });
+  }
+
   return {
     issueCount: issues.length,
     nowCount: nowIssues.length,
+    blockedCount,
+    blockerInspectedCount,
     maxNow,
     errors,
     warnings,
@@ -276,16 +445,20 @@ const problemReference = (problem) => {
     return `#${problem.issueNumber}`;
   }
   if (Array.isArray(problem.issueNumbers) && problem.issueNumbers.length > 0) {
-    return `Now queue (${problem.issueNumbers.map((number) => `#${number}`).join(', ')})`;
+    const label = problem.code === 'now-limit' ? 'Now queue' : 'Issues';
+    return `${label} (${problem.issueNumbers.map((number) => `#${number}`).join(', ')})`;
   }
   return 'Repository';
 };
 
 export function renderAuditReport(result) {
   const lines = [
-    '# Issue metadata audit',
+    '# Issue metadata and relationship audit',
     '',
     `Audited ${result.issueCount} open issues. Now queue: ${result.nowCount}/${result.maxNow}.`,
+    `Native-blocked open issues: ${result.blockedCount ?? 0} of `
+      + `${result.blockerInspectedCount ?? 0} inspected for native blockers `
+      + `(${result.issueCount} audited).`,
     '',
   ];
 
