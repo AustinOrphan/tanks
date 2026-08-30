@@ -2160,5 +2160,65 @@
     "tests": [
       "src/game/loop.test.ts"
     ]
+  },
+  {
+    "id": "versus-setup-never-persisted",
+    "file": "src/game/hud.ts",
+    "find": "    opts.versusSetup?.set({ ...next });",
+    "replace": "    void next;",
+    "expect": "killed",
+    "expectFailures": 5,
+    "why": "The whole point of issue #260's store is that the pane's choices survive a reload. Without this write the pane still LOOKS correct for the rest of the page-session -- every selection renders, Start carries it, the gate runs -- and forgets everything on the next load. That is invisible to any assertion made against a single HUD instance, which is why the persistence tests read back through a SECOND createHud over the same Storage.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-start-gate-never-refuses",
+    "file": "src/game/hud.ts",
+    "find": "    versusStartBtn.disabled = problem !== null;",
+    "replace": "    versusStartBtn.disabled = false;",
+    "expect": "killed",
+    "expectFailures": 7,
+    "why": "The issue's 'never accept Start with an inert required slot'. The reasons would still render on the offending card, so the pane would still LOOK like it was refusing -- while Start stayed clickable and launched a match with an unassigned or driverless tank. Computing a refusal and not enforcing it is the failure this pins.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-slot-device-ignores-live-pads",
+    "file": "src/game/hud.ts",
+    "find": "    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));",
+    "replace": "    const sources = resolveSources(slots, []);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Derives every slot's device as if no controller were connected. A second human slot would read 'Unassigned' and refuse Start with a controller plugged in, and -- worse in kind -- the gate would stop reacting to a hotplug at all, which is the criterion about a disconnect disabling Start with an actionable reason.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-refusal-shown-on-every-card",
+    "file": "src/game/hud.ts",
+    "find": "        problem !== null && problem.kind !== 'no-human' && problem.slot === slot;",
+    "replace": "        problem !== null && problem.kind !== 'no-human';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "versus-refusal-reason-not-associated",
+    "file": "src/game/hud.ts",
+    "find": "          : `hud-versus-slot-reason-${problem.slot}`,",
+    "replace": "          : null,",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Issue #321's rule is that a disabled control's reason is ASSOCIATED, not merely nearby. The sentence would still be on screen for a sighted player while a screen-reader user hears only that Start is disabled. Nothing about the visible rendering changes, so only an aria-describedby assertion can catch it.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
   }
 ]
