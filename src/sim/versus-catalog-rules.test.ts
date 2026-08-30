@@ -569,9 +569,11 @@ describe('vs-tri-01: mirrored for two players, measured for the third', () => {
     };
     scan('row', arena.rows, arena.cols, (r, c) => isWall(c, r));
     scan('col', arena.cols, arena.rows, (c, r) => isWall(c, r));
-    // The population, so a scan that silently stopped finding runs cannot read as a pass.
-    expect(runs, 'wall-bounded open runs found across all 17 rows and 27 columns').toBe(35);
     expect(narrow, 'every wall-bounded passage must fit a 1.5-cell tank with margin').toEqual([]);
+    // ...and the population second, so a scan that silently stopped finding runs cannot
+    // read as a pass. Asserted AFTER the list, so a real narrow passage reports itself by
+    // name rather than being masked by the count moving at the same time.
+    expect(runs, 'wall-bounded open runs found across all 17 rows and 27 columns').toBe(35);
   });
 
   it('the axis spawn, which has no mirror partner, is no better placed than the two that do', () => {
