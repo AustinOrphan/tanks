@@ -929,12 +929,12 @@
   },
   {
     "id": "settings-preview-ignores-motion-policy",
-    "file": "src/game/loop.ts",
+    "file": "src/game/route-ui.ts",
     "find": "      deps.effectiveSettings.current().reducedMotion,",
     "replace": "      false,",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Hardcodes the Customize preview's reduced-motion flag, which is what the module did before issue #320 in a different form -- it read `window.matchMedia` itself, so the OS was the only input and a player who wanted full effects anyway had no say. Killed by loop.test.ts's four-row motion sweep, which drives all three player-facing states against an OS preference set opposite to the expected answer wherever the override applies. 1 of 366.",
+    "why": "Hardcodes the Customize preview's reduced-motion flag, which is what the module did before issue #320 in a different form -- it read `window.matchMedia` itself, so the OS was the only input and a player who wanted full effects anyway had no say. Killed by loop.test.ts's four-row motion sweep, which drives all three player-facing states against an OS preference set opposite to the expected answer wherever the override applies. 1 of 366. RE-ANCHORED for issue #427: the Customize preview's construction moved from `startGameWith` to `route-ui.ts` with the rest of the application-route handlers, so the find string named a file that no longer contains it -- which the harness reports as `failed-to-apply`, but only to whoever runs it. The line, the mutation and the killing test are unchanged; only `file` moved. The count below was re-measured on the new location rather than carried over.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -2435,6 +2435,18 @@
     "why": "Puts the customize rotate buttons back to the 34px literal they carried before issue #352, which is below the 44 CSS px touch floor Apple/WCAG state and the repo declares as `--hud-control-min`. Nothing else notices: the board still renders, the cluster still fits on one row (it is 40px narrower, not wider), no layout moves that a screenshot diff would catch, and jsdom does no layout so no computed-size assertion anywhere in the suite can see it -- which is exactly why the guard this kills asserts the DECLARATION rather than the rendered box. Measured: KILLED, 1 of 50 in hud.css.test.ts, the 'sized to be hit' case. The token half of that guard is deliberately NOT the target here: lowering `--hud-control-min` itself would also resize `.hud-level-btn` and `.hud-swatch`, so it would be a different and broader defect; this entry isolates the one control the issue was about. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/hud.css.test.ts"
+    ]
+  },
+  {
+    "id": "route-ui-requires-a-gameplay-renderer",
+    "file": "src/game/route-ui.ts",
+    "find": "    styleSink?.(hex, skin, accentHex);",
+    "replace": "    (styleSink as StyleSink)(hex, skin, accentHex);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The optional call made mandatory -- the paint shop demanding a gameplay renderer again, which is the exact coupling issue #427 removed. This is the one line that decides whether Customize is an APPLICATION route or a gameplay one: `restyle` runs on every hull, skin and accent pick, and with no session there is no sink, so a non-optional call throws on a page whose only crime is having no match running. WHY IT NEEDS ITS OWN ENTRY, measured rather than assumed: with this mutation applied, `loop.test.ts` still passes 397 of 397. It cannot see the defect, because every route it reaches goes through `startGameWith`, which always attaches a sink -- so the whole existing suite agrees a session is present and the missing case is the one nobody was testing. `route-ui.test.ts` fails 2 of its 14: `the paint shop records a pick and drives the preview with NO renderer attached`, and `a detached sink stops the pushes without stopping the pick`, which is that case's own negative control (it re-runs the same pick after clearing the sink, so a build that pushed a triple regardless of the sink would fail there too). Two failures, MEASURED by applying this edit and running the file, not predicted. Scoped to route-ui.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/route-ui.test.ts"
     ]
   }
 ]
