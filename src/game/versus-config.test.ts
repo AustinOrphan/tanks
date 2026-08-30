@@ -22,6 +22,8 @@ describe('versusMapChoices', () => {
   const CAMPAIGN_BOARDS = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
   /** N=2 additionally offers the dedicated duel board (issue #271). */
   const DUEL = 'vs-duel-01';
+  /** N=3 ffa additionally offers the dedicated tri board (issue #272, rebuilt by #424). */
+  const TRI = 'vs-tri-01';
 
   it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
@@ -35,14 +37,18 @@ describe('versusMapChoices', () => {
     // declared alongside `ffa` and the mode predicate keeps it at both).
     for (const n of [2, 3, 4] as const) {
       for (const mode of ['ffa', 'teams'] as const) {
-        // vs-tri-01 and vs-quad-01 are WITHDRAWN pending #424/#425 -- players cannot
-        // leave their spawns on either board (#423). Their `TRI`/`QUAD` constants are
-        // removed with them rather than left unused; only the OFFER is withdrawn, so the
-        // arena definitions remain in arenas.json for the redesign to edit. Restoring
-        // either means a catalog entry plus a row here -- and passing the tank-egress gate
-        // in versus-board.test.ts, which is what will hold them out until the geometry is
-        // actually fixed.
-        const extra = n === 2 ? [DUEL] : [];
+        // vs-tri-01 is BACK (issue #424 rebuilt its geometry; it clears the tank-egress
+        // gate in versus-board.test.ts at N=2, 3 and 4). It returns at N=3 AND `ffa`
+        // alone: three players have no fair team split, so the catalog declares one mode
+        // and the mode predicate drops it from N=3 `teams`. That asymmetry between the
+        // two `extra` arms is the whole reason this pin is written per (N, mode) rather
+        // than per N.
+        //
+        // vs-quad-01 stays WITHDRAWN pending #425 -- players cannot leave their spawns on
+        // it (#423) -- so it has no constant here. Only the OFFER is withdrawn; its arena
+        // definition remains in arenas.json for the redesign to edit, and restoring it
+        // means a catalog entry plus a row here AND passing the egress gate.
+        const extra = n === 2 ? [DUEL] : n === 3 && mode === 'ffa' ? [TRI] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
@@ -60,22 +66,24 @@ describe('versusMapChoices', () => {
     // A bare subset assertion would let any number of boards silently drop out of the
     // offer, so the withheld set is pinned by name too: a board leaving the menu for a
     // reason nobody wrote down still fails here.
-    // Withheld is EMPTY at every count now, and the reason is worth stating because it
-    // costs this test something.
+    // Withheld is non-empty again, and by CURATION rather than by accident -- which is
+    // the state this assertion was written to demonstrate.
     //
-    // The set used to be non-empty by CURATION: vs-duel-01 measured suitable at all three
-    // counts and was offered at N=2 alone, and vs-tri-01/vs-quad-01 likewise. The
-    // tank-egress gate (#423) removed all three from `measured`: the two withdrawn boards
-    // fail at every count, and vs-duel-01 fails at N=3 and N=4, where its third and fourth
-    // maximin spawns land in pockets too small to mine out of.
+    // It had collapsed to empty at every count: the tank-egress gate (#423) removed
+    // vs-tri-01, vs-quad-01 and vs-duel-01 (at N=3/N=4) from `measured` entirely, so
+    // "offered exactly equals suitable" held trivially and there was nothing left being
+    // curated. Issue #424's rebuild of vs-tri-01 restores the judgement: it now measures
+    // suitable at all three counts and is offered at N=3 alone, so N=2 and N=4 hold it
+    // back the same way vs-duel-01's [2] holds that board back -- playable, but not the
+    // count it was designed for.
     //
-    // So "offered exactly equals suitable" now holds trivially rather than by judgement,
-    // and this assertion no longer demonstrates that curation is deliberate -- there is
-    // nothing left being curated. It is kept as a REGRESSION guard (a board that starts
-    // measuring suitable without being offered, or vice versa, still fails here), and
-    // stated as empty rather than deleted, so restoring a withheld-but-playable board
-    // makes this list move visibly. Measured, not assumed: all three sets are [].
-    const WITHHELD: Record<number, string[]> = { 2: [], 3: [], 4: [] };
+    // vs-duel-01 contributes nothing here despite the same curation, because it no longer
+    // measures suitable at N=3 or N=4: its third and fourth maximin spawns land in pockets
+    // too small to mine out of. vs-quad-01 likewise fails at every count.
+    //
+    // Measured, not assumed, and pinned by name so a board leaving the menu for a reason
+    // nobody wrote down still fails here.
+    const WITHHELD: Record<number, string[]> = { 2: ['vs-tri-01'], 3: [], 4: ['vs-tri-01'] };
     const rows = versusBoardCatalog();
     for (const n of [2, 3, 4] as const) {
       const measured = rows.filter((r) => r.playerCount === n && r.suitable).map((r) => r.arenaId);

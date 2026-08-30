@@ -27,23 +27,27 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
   // Every board is MEASURED at every N here; what a board is OFFERED at is a separate,
   // curated question the catalog answers (vs-duel-01 declares [2] only). Suitability is
   // the floor, not the offer.
-  it('every arena still offered is suitable at every N in {2, 3, 4}: 15 of 24 (arena, N) combinations', () => {
+  it('every arena still offered is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
     //
-    // 15 of 24, not 24 of 24, and the shrinkage is in two deliberate steps.
+    // 18 of 24, not 24 of 24, and the shrinkage is in two deliberate steps.
     //
-    // vs-tri-01 and vs-quad-01 remain in ARENA_DEFS -- their grids are what #424/#425
-    // will edit -- but are WITHDRAWN from the catalog and fail the tank-egress gate at
-    // all three counts. That is asserted directly below rather than skipped: the sweep
-    // would be dishonest if it quietly dropped the two boards this suite failed to catch.
+    // vs-quad-01 remains in ARENA_DEFS -- its grid is what #425 will edit -- but is
+    // WITHDRAWN from the catalog and fails the tank-egress gate at all three counts. That
+    // is asserted directly below rather than skipped: the sweep would be dishonest if it
+    // quietly dropped the board this suite failed to catch.
+    //
+    // vs-tri-01 was in that same exclusion and has REJOINED the sweep, which is the whole
+    // evidence that issue #424 fixed it: it is held to `suitable === true` at all three
+    // counts here, not merely at the one it is offered at. 15 -> 18.
     //
     // vs-duel-01 is also excluded here, at N=3 and N=4 ONLY. The egress gate finds it
     // unsuitable at those counts -- a third and fourth maximin spawn land in pockets too
     // small to mine out of -- and it is offered at neither, so this is the gate reporting
     // something true about counts the board never promised. The offered-combination sweep
     // further down is the one that covers what actually ships.
-    const WITHDRAWN = new Set(['vs-tri-01', 'vs-quad-01', 'vs-duel-01']);
+    const WITHDRAWN = new Set(['vs-quad-01', 'vs-duel-01']);
     let checked = 0;
     for (const arena of ARENA_DEFS) {
       if (WITHDRAWN.has(arena.id)) continue;
@@ -58,12 +62,12 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         expect(verdict.roomOk, `${arena.id} @ N=${n} roomOk`).toBe(true);
       }
     }
-    expect(checked).toBe(15);
+    expect(checked).toBe(18);
 
-    // ...and the two withdrawn boards fail, on egress specifically. This is the
-    // assertion that would have blocked them (#423), stated as a fact about the shipped
-    // grids rather than left implicit in their absence above.
-    for (const id of ['vs-tri-01', 'vs-quad-01']) {
+    // ...and the withdrawn board fails, on egress specifically. This is the assertion
+    // that would have blocked it (#423), stated as a fact about the shipped grid rather
+    // than left implicit in its absence above.
+    for (const id of ['vs-quad-01']) {
       const arena = ARENA_DEFS.find((a) => a.id === id) as Arena;
       for (const n of [2, 3, 4] as const) {
         const verdict = evaluateVersusBoard(arena, n);
@@ -283,14 +287,15 @@ describe('versusBoardCatalog', () => {
     expect(rows.length).toBe(24);
     const labels = rows.map((r) => `${r.arenaId}@${r.playerCount}`);
     expect(new Set(labels).size).toBe(24); // every row is a distinct (arena, N) pair
-    // 16 of 24 suitable, not all: this function sweeps ARENA_DEFS at every N, not the
-    // offer, so it still REPORTS the two withdrawn boards (6 failing combinations) and
+    // 19 of 24 suitable, not all: this function sweeps ARENA_DEFS at every N, not the
+    // offer, so it still REPORTS the withdrawn board (3 failing combinations) and
     // vs-duel-01 at the two counts it is not offered at (2 more). Naming them here is
-    // what keeps "report, don't gatekeep" honest.
-    expect(rows.filter((r) => r.suitable).length).toBe(16);
+    // what keeps "report, don't gatekeep" honest. It was 16 while vs-tri-01 failed all
+    // three counts too; issue #424's rebuild moved exactly those three rows and nothing
+    // else, which is why the set below is the old one minus its three entries.
+    expect(rows.filter((r) => r.suitable).length).toBe(19);
     const unsuitable = rows.filter((r) => !r.suitable).map((r) => `${r.arenaId}@${r.playerCount}`);
     expect(new Set(unsuitable)).toEqual(new Set([
-      'vs-tri-01@2', 'vs-tri-01@3', 'vs-tri-01@4',
       'vs-quad-01@2', 'vs-quad-01@3', 'vs-quad-01@4',
       'vs-duel-01@3', 'vs-duel-01@4',
     ]));
@@ -447,9 +452,11 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
         checked += 1;
       }
     }
-    // 16 = five campaign boards x 3 counts, plus vs-duel-01 at its single count.
-    // Withdrawing vs-tri-01 and vs-quad-01 (#424/#425) took this from 18.
-    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(16);
+    // 17 = five campaign boards x 3 counts, plus vs-duel-01 and vs-tri-01 at their single
+    // counts. Withdrawing vs-tri-01 and vs-quad-01 (#424/#425) took this from 18 to 16;
+    // #424's rebuild returns vs-tri-01's one combination, so 17. vs-quad-01's is still
+    // out, pending #425.
+    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(17);
   });
 
   it('a destructible seal is fine when the pocket is big enough to survive blowing it', () => {
@@ -464,17 +471,45 @@ describe('spawn egress: a tank, not a cell (issue #423)', () => {
   });
 
   it('a destructible seal is FATAL when the pocket is smaller than the mine blast', () => {
-    // The failure mode the geometry checks could not see, and the one that made Keystone
-    // unplayable rather than merely awkward. Only a MINE clears a destructible
-    // (`destructibleByBlast`, mines.ts -- shells treat every intact wall alike), and a
-    // mine kills within MINE_BLAST_RADIUS + TANK_RADIUS = 2.5. Keystone's spawn pockets
-    // measure 1.18 to 1.72 across, so the player cannot get clear of their own mine:
-    // leaving the start line costs a life.
+    // The failure mode the geometry checks could not see. Only a MINE clears a
+    // destructible (`destructibleByBlast`, mines.ts -- shells treat every intact wall
+    // alike), and a mine kills within MINE_BLAST_RADIUS + TANK_RADIUS = 2.5, so a spawn
+    // sealed in a pocket narrower than that pays a LIFE to leave the start line.
+    //
+    // THE SUBJECT MOVED, and deliberately, because the old one was fixed. This test used
+    // to run on vs-tri-01 at N=3, whose pockets measured 1.18 to 1.72 across -- but issue
+    // #424 rebuilt that board and it now reports fatalEscapes 0. Deleting the test would
+    // have retired the only coverage of the `fatalEscapes` branch; re-pointing it at
+    // vs-duel-01 keeps that branch pinned against SHIPPED data rather than a fixture.
+    //
+    // vs-duel-01 is the STRICTER demonstration of the two, and that is why it was chosen
+    // over a synthetic grid. Keystone used to fail BOTH halves of the gate at once
+    // (spawnsInLargestRegion 2 of 3), so it could not distinguish them. Here
+    // spawnsInLargestRegion EQUALS the player count -- the solid-connectivity half passes
+    // completely -- and the board is still refused, by the fatal-escape half alone. That
+    // is the only configuration in which this branch is the sole cause of a verdict.
+    const duel3 = evaluateVersusBoard(ARENA_DEFS.find((a) => a.id === 'vs-duel-01') as Arena, 3);
+    expect(duel3.spawnsInLargestRegion, 'solid connectivity is satisfied: every spawn is in one region').toBe(3);
+    expect(duel3.sealedSpawns).toBe(1);
+    expect(duel3.fatalEscapes, 'the third maximin spawn is sealed in a 2.24-wide pocket').toBe(1);
+    expect(duel3.egressOk, 'so the board is refused on the fatal half ALONE').toBe(false);
+    expect(duel3.egressDiagnosis).toContain('escaping costs a life');
+    expect(duel3.egressDiagnosis).not.toContain('disjoint spawn region');
+
+    // ...and a fourth player seals a second pocket, so the count tracks the spawns rather
+    // than being a board-level boolean wearing a number.
+    const duel4 = evaluateVersusBoard(ARENA_DEFS.find((a) => a.id === 'vs-duel-01') as Arena, 4);
+    expect(duel4.spawnsInLargestRegion).toBe(4);
+    expect(duel4.fatalEscapes).toBe(2);
+    expect(duel4.egressOk).toBe(false);
+
+    // The board this test used to run on now passes the same gate, at the count it is
+    // offered at -- stated here, next to the branch it stopped exercising, so the move
+    // above cannot read as coverage quietly going missing.
     const tri = evaluateVersusBoard(ARENA_DEFS.find((a) => a.id === 'vs-tri-01') as Arena, 3);
-    expect(tri.sealedSpawns).toBe(3);
-    expect(tri.fatalEscapes, 'all three Keystone spawns must be refused as fatal').toBe(3);
-    expect(tri.egressOk).toBe(false);
-    expect(tri.egressDiagnosis).toContain('escaping costs a life');
+    expect(tri.fatalEscapes, 'issue #424: Keystone no longer seals any spawn').toBe(0);
+    expect(tri.sealedSpawns).toBe(0);
+    expect(tri.egressOk).toBe(true);
 
     // Quarters fails for the OTHER reason, and the two must not be conflated: its pockets
     // are 3.81 across -- big enough to mine safely -- but the seal is SOLID, so no mine
