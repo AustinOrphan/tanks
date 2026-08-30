@@ -139,6 +139,20 @@ export function resolveOwnerColor(world: World, tank: Tank): number {
  * unmodified checkout (a method, not a checked-in tool -- rerun it if this area moves).
  */
 const MULTIPLAYER_THRESHOLD = 2;
+
+/**
+ * The ONE gate identity colour hangs on, exported so a fourth consumer cannot assemble its
+ * own copy of `countPlayerTanks(...) >= MULTIPLAYER_THRESHOLD`.
+ *
+ * Issue #284 is why it is exported rather than left local: tread trails need exactly this
+ * predicate, and `resolveOwnerColor`'s own comment records what happened the last time a
+ * call site rebuilt the identity logic instead of calling into it -- a fourth copy that
+ * indexed the palettes directly and fell back to the wrong colour. `sync` below now calls
+ * this too, so there is one definition rather than one plus a re-derivation.
+ */
+export function identityApplies(world: World): boolean {
+  return countPlayerTanks(world.tanks) >= MULTIPLAYER_THRESHOLD;
+}
 function countPlayerTanks(tanks: readonly { kind: TankKind }[]): number {
   let n = 0;
   for (const t of tanks) if (t.kind === 'player') n++;
@@ -1833,7 +1847,7 @@ export function createEntityViews(
     // picked up on the very next sync, the same way `snap` is. At playerCount 1 this
     // is false on every call, which is what keeps single-player pixel-identical to the
     // game before this feature -- see IDENTITY_RING_COLORS' own comment.
-    const multiPlayer = countPlayerTanks(curr.tanks) >= MULTIPLAYER_THRESHOLD;
+    const multiPlayer = identityApplies(curr);
     syncWalls(curr);
     syncTanks(prev, curr, a, snap, multiPlayer, dt);
     syncBullets(prev, curr, a, multiPlayer);
