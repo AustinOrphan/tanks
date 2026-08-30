@@ -2104,8 +2104,8 @@
     "find": "    stop();\n    canvas?.remove();\n    create(versus);",
     "replace": "    stop();\n    create(versus);",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was drawn -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. Killed by session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM' and 'leaves exactly one canvas in the root after repeated switches', which is why the second exists: a single switch leaves one stale element and reads as cosmetic, and the repeated case is what shows it grows.",
+    "expectFailures": 5,
+    "why": "Leaves the outgoing session's canvas in the DOM when a replacement takes over. The replacement still gets a FRESH canvas, so nothing renders to the wrong element and no unit fake can see a difference in what was DRAWN -- what accumulates is a stack of disconnected canvases behind the live one, one per Campaign<->Versus switch, each still holding the GL context `renderer.forceContextLoss()` killed. 5 of 54, across both files: boot.test.ts's 'builds a fresh canvas for the rebooted session and removes the dead one' and its campaign twin (both predate session-host.ts and still drive `boot()`, which is what makes them evidence the extraction kept this property), plus session-host.test.ts's 'builds a FRESH canvas per replacement and removes the dead one from the DOM', 'leaves exactly one canvas in the root after repeated switches' -- the repeated case is what shows the stack GROWS rather than reading as one cosmetic leftover -- and 'a SECOND start() replaces the first session rather than orphaning it', which reaches the same line because `start()` routes through `replace`.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2130,8 +2130,8 @@
     "find": "      stop();\n      spent = true;",
     "replace": "      stop();",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. Killed by session-host.test.ts's 'dispose() latches: a late reboot request starts no session on a dying page'.",
+    "expectFailures": 2,
+    "why": "Disposes the running session on page teardown but never latches, so the host will still build another one. Both reboot seams are already in a HUD click handler's hands when `pagehide` fires, and a click that lands in the same task then constructs a canvas, renderer, input controller and frame loop onto a document that is going away -- holding a GL context nothing will ever dispose. The teardown itself still looks correct, which is why nothing else notices. 2 of 54, both in session-host.test.ts: 'dispose() latches: a late reboot request starts no session on a dying page' and 'start() after dispose() starts nothing', the second because `start()` routes through the same guard.",
     "tests": [
       "src/game/session-host.test.ts",
       "src/boot.test.ts"
@@ -2140,11 +2140,11 @@
   {
     "id": "retired-session-keeps-advancing-the-world",
     "file": "src/game/loop.ts",
-    "find": "      driver.stop();",
-    "replace": "",
+    "find": "    dispose(): void {\n      driver.stop();",
+    "replace": "    dispose(): void {",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "A session teardown that never stops its driver. The retired session's frame loop stays registered AND keeps stepping its own disposed world every frame, forever, alongside the live session's -- two simulations advancing on one page after a single Campaign<->Versus switch. This was unobservable in loop.test.ts until issue #317 gave the rAF fake a real `cancel` and a live-registration count: the fake held ONE `pending` callback slot that `request` overwrote, so two loops and one loop were indistinguishable. Killed by BOTH of the frame residuals -- 'leaves exactly one outstanding frame registration' and 'leaves exactly one frame loop still ADVANCING the world' -- and killing both is what separates it from `retired-session-frame-loop-never-cancelled`, which kills only the first.",
+    "expectFailures": 3,
+    "why": "A session teardown that never stops its driver. The retired session's frame loop stays registered AND keeps stepping its own disposed world every frame, alongside the live session's -- two simulations advancing on one page after a single Campaign<->Versus switch. NOT new coverage: measured on origin/main, this mutation already failed 1 of 388, at 'stops the frame loop, so a queued callback cannot advance the world'. What issue #317 adds is the repeated-route view of the same defect -- 3 of 397 now, the pre-existing case plus 'leaves exactly one outstanding frame registration' and 'leaves exactly one frame loop still ADVANCING the world'. Failing BOTH of those is what separates this from `retired-session-frame-loop-never-cancelled`, which fails only the first; that contrast is measured, not assumed.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -2156,7 +2156,7 @@
     "replace": "    stop(): void {\n      running = false;\n      if (running) deps.raf.cancel(handle);\n    },",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "`stop()` clears its running flag but never cancels the frame it has already queued -- the guard is inverted so it can never fire. Strictly milder than `retired-session-keeps-advancing-the-world`: `frame`'s own `if (!running) return;` still makes the leaked callback inert, so the world does NOT advance twice and only the registration leaks. That difference is the point of having both entries, and it is measured: this one fails ONLY 'leaves exactly one outstanding frame registration', while dropping `driver.stop()` fails that AND 'leaves exactly one frame loop still ADVANCING the world'. Before issue #317 gave the rAF fake a real `cancel`, this mutation was invisible to all 388 tests in loop.test.ts.",
+    "why": "`stop()` clears its running flag but never cancels the frame it has already queued -- the guard is inverted so it can never fire. Strictly milder than `retired-session-keeps-advancing-the-world`: `frame`'s own `if (!running) return;` still makes the leaked callback inert, so the world does NOT advance twice and only the registration leaks. 1 of 397, at 'leaves exactly one outstanding frame registration' -- and NOT at 'leaves exactly one frame loop still ADVANCING the world', which is the whole reason both entries exist. This one is genuinely new coverage: run against origin/main's loop.test.ts the same mutation passes all 388 tests, because that rAF fake held a single `pending` callback slot and a no-op `cancel`, so one live frame loop and two were indistinguishable.",
     "tests": [
       "src/game/loop.test.ts"
     ]
