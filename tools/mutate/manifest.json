@@ -921,8 +921,8 @@
     "find": "      stopSettingsNotice();",
     "replace": "      void stopSettingsNotice;",
     "expect": "killed",
-    "expectFailures": 1,
-    "why": "Leaves this session's persistence-notice registration attached at teardown. The callback closes over the session's HUD, which is destroyed on every campaign/versus reboot, so a notice arriving later would call `showToast` on a torn-down HUD. Killed by loop.test.ts's 'unregisters on teardown, so a notice cannot reach a dead HUD', which counts the live registrations and then fires a notice after disposal. 1 of 366.",
+    "expectFailures": 2,
+    "why": "Leaves this session's persistence-notice registration attached at teardown. The callback closes over the session's HUD, which is destroyed on every campaign/versus reboot, so a notice arriving later would call `showToast` on a torn-down HUD. Killed by loop.test.ts's 'unregisters on teardown, so a notice cannot reach a dead HUD', which counts the live registrations and then fires a notice after disposal. 1 of 366. Widened by issue #317's session-host work: the repeated-session route now fails here too, at 'leaves exactly one settings-notice subscriber'. 2 of 397; the pre-existing case ('unregisters on teardown, so a notice cannot reach a dead HUD') still fails, so this is coverage added, not moved -- checked by naming the failing set on both sides, not by renumbering.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -1792,8 +1792,8 @@
     "find": "    initialRoute: deps.launchGate.dismissed() ? 'main-menu' : 'launch',",
     "replace": "    initialRoute: 'launch',",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Opens every session on the Launch route, which is what production did before issue #317. boot.ts rebuilds the whole session on a Campaign<->Versus switch, so this re-shows 'press any key or tap to begin' to a player who already dismissed it -- the acceptance criterion 'the Launch gate appears at most once per document load'. Invisible to every session-level test in loop.test.ts, because one session in isolation SHOULD open at Launch, and invisible to boot.test.ts, which fakes startGame. Killed only by the boot+startGameWith seam, which composes the real boot() with the real startGameWith over the REAL state machine. Kills BOTH dismissal tests (pointer and keyboard), because neither session can reach a dismissed gate: 2 of 4 in that suite.",
+    "expectFailures": 3,
+    "why": "Opens every session on the Launch route, which is what production did before issue #317. boot.ts rebuilds the whole session on a Campaign<->Versus switch, so this re-shows 'press any key or tap to begin' to a player who already dismissed it -- the acceptance criterion 'the Launch gate appears at most once per document load'. Invisible to every session-level test in loop.test.ts, because one session in isolation SHOULD open at Launch, and invisible to boot.test.ts, which fakes startGame. Killed only by the boot+startGameWith seam, which composes the real boot() with the real startGameWith over the REAL state machine. Kills BOTH dismissal tests (pointer and keyboard), because neither session can reach a dismissed gate: 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered.",
     "tests": [
       "src/game/loop.test.ts"
     ]
@@ -1804,8 +1804,8 @@
     "find": "    deps.launchGate.dismiss();\n  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
     "replace": "  };\n  deps.host.addEventListener('pointerdown', onSplashGesture);",
     "expect": "killed",
-    "expectFailures": 2,
-    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite.",
+    "expectFailures": 3,
+    "why": "Dismisses the splash in THIS session's state machine but never tells the page, so the gate stays closed and the next session opens on the splash again. The read half (launch-gate-ignored-on-reboot) and this write half fail independently and neither implies the other. Both the pointer and keyboard handlers route through onSplashGesture, so this kills both of the seam's dismissal tests. 2 of 4 in that suite. Widened by issue #317's session-host work: 3 of 397 now. The two pre-existing Launch-gate cases ('a Campaign -> Versus reboot does not replay the splash' and 'a KEYBOARD dismissal reports to the page too') both still fail, joined by the repeated-session route's 'never replays the Launch gate, and never paints a retired session over the new one'. The failing SET was compared on both sides rather than the count renumbered.",
     "tests": [
       "src/game/loop.test.ts"
     ]
