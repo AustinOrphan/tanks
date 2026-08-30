@@ -1,6 +1,8 @@
 import type { Arena } from './arena';
 import { loadArena, ARENA_DEFS } from './arena';
 import { lineOfSight } from './ai/targeting';
+import { circleVsAABB } from './collision';
+import { TANK_RADIUS } from './constants';
 
 /**
  * A checkable definition of whether a board is fit for versus play at N players --
@@ -123,6 +125,152 @@ export interface VersusBoardVerdict {
   readonly openFloorPerPlayer: number;
   /** `openFloorPerPlayer >= MIN_OPEN_FLOOR_PER_PLAYER`. */
   readonly roomOk: boolean;
+
+  /**
+   * How many spawns share the LARGEST connected region of tank-legal space (issue #423).
+   * `playerCount` means every player can reach every other without changing the map.
+   */
+  readonly spawnsInLargestRegion: number;
+  /** `spawnsInLargestRegion === playerCount`. */
+  readonly egressOk: boolean;
+  /**
+   * How many spawns share no destructible-free region with any other spawn -- i.e. must
+   * shoot to meet anyone. REPORTED, not gated: arena-02 and vs-duel-01 are legitimately
+   * like this. See `evaluateSpawnEgress` for the full reasoning.
+   */
+  readonly sealedSpawns: number;
+  /**
+   * Human-readable cause when `egressOk` is false: which spawns are cut off from which,
+   * so a failure names the blocked slot instead of only the board. Empty when it holds.
+   */
+  readonly egressDiagnosis: string;
+}
+
+/**
+ * Whether every spawn can actually DRIVE to every other one (issue #423).
+ *
+ * This exists because every other check in this module reasons about CELLS, and a cell is
+ * not a tank. `cellSize` on the dedicated boards is 0.6667 while a tank is
+ * `2 * TANK_RADIUS` = 1.0 across -- 1.5 cells -- so a one-cell gap is "walkable" to a
+ * cell-based check and has no legal tank-centre position at all. Keystone and Quarters both
+ * passed clearance, connectivity, symmetry, path-distance and scripted playtests and were
+ * still unplayable: players could not leave their spawns. That is the gap.
+ *
+ * WHAT IS GATED: with destructible walls REMOVED -- a player may shoot through those --
+ * every spawn must sit in one shared connected region of tank-legal space. That is the
+ * issue's "usable tank-sized egress into a shared combat space", and it is the requirement
+ * no board can argue with: if the SOLID layout partitions the spawns, no amount of play
+ * brings the players together.
+ *
+ * WHAT IS DELIBERATELY NOT GATED, and why: "leaving spawn must not require destroying a
+ * wall" is also in the issue's scope, and it is reported below as `sealedSpawns` rather
+ * than folded into the verdict. Measured against the shipped catalog, gating it would
+ * reject arena-02 and vs-duel-01, which are split into two regions by DESTRUCTIBLES alone
+ * (both are single-region once those are removed) -- on a board carrying 72 destructible
+ * blocks, shooting through to reach an opponent is the design, not a defect. Separating
+ * the two would need a "how much shared space is enough" threshold, and no non-arbitrary
+ * one presented itself. So the hard rule gates and the soft one reports.
+ *
+ * The lattice step is `cellSize / 8`, not a magic constant. The narrowest passage a tank
+ * can use is 2 cells (1.333), leaving a legal centre band of `1.333 - 1.0 = 0.333`; four
+ * samples across that band means the minimum legal passage cannot alias closed.
+ * `versus-board.test.ts` pins both ends: a 1-cell passage fails and a 2-cell passage passes.
+ */
+function tankLegalComponents(
+  arena: Arena,
+  positions: readonly { x: number; y: number }[],
+  walls: ReturnType<typeof loadArena>['walls'],
+): { labels: number[]; sizes: number[] } {
+  const width = arena.cols * arena.cellSize;
+  const height = arena.rows * arena.cellSize;
+  const step = arena.cellSize / 8;
+  const nx = Math.max(1, Math.floor(width / step));
+  const ny = Math.max(1, Math.floor(height / step));
+  const idx = (i: number, j: number) => i * ny + j;
+
+  const legal = new Uint8Array(nx * ny);
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      const x = (i + 0.5) * step;
+      const y = (j + 0.5) * step;
+      if (x - TANK_RADIUS < 0 || y - TANK_RADIUS < 0 || x + TANK_RADIUS > width || y + TANK_RADIUS > height) continue;
+      let blocked = false;
+      for (const wall of walls) {
+        if (circleVsAABB({ x, y }, TANK_RADIUS, wall.aabb).hit) { blocked = true; break; }
+      }
+      if (!blocked) legal[idx(i, j)] = 1;
+    }
+  }
+
+  const label = new Int32Array(nx * ny).fill(-1);
+  const sizes: number[] = [];
+  for (let i = 0; i < nx; i++) {
+    for (let j = 0; j < ny; j++) {
+      if (legal[idx(i, j)] !== 1 || label[idx(i, j)] !== -1) continue;
+      const id = sizes.length;
+      let count = 0;
+      const stack = [i, j];
+      label[idx(i, j)] = id;
+      while (stack.length > 0) {
+        const cy = stack.pop() as number;
+        const cx = stack.pop() as number;
+        count += 1;
+        const around = [cx + 1, cy, cx - 1, cy, cx, cy + 1, cx, cy - 1];
+        for (let n = 0; n < around.length; n += 2) {
+          const ax = around[n];
+          const ay = around[n + 1];
+          if (ax < 0 || ay < 0 || ax >= nx || ay >= ny) continue;
+          const k = idx(ax, ay);
+          if (legal[k] !== 1 || label[k] !== -1) continue;
+          label[k] = id;
+          stack.push(ax, ay);
+        }
+      }
+      sizes.push(count);
+    }
+  }
+
+  const labels = positions.map((p) => {
+    const i = Math.min(nx - 1, Math.max(0, Math.floor(p.x / step)));
+    const j = Math.min(ny - 1, Math.max(0, Math.floor(p.y / step)));
+    return label[idx(i, j)];
+  });
+  return { labels, sizes };
+}
+
+function evaluateSpawnEgress(
+  arena: Arena,
+  positions: readonly { x: number; y: number }[],
+  walls: ReturnType<typeof loadArena>['walls'],
+): { spawnsInLargestRegion: number; egressOk: boolean; sealedSpawns: number; egressDiagnosis: string } {
+  const solid = walls.filter((w) => w.kind !== 'destructible');
+  const { labels, sizes } = tankLegalComponents(arena, positions, solid);
+
+  const tally = new Map<number, number>();
+  for (const l of labels) tally.set(l, (tally.get(l) ?? 0) + 1);
+  let spawnsInLargestRegion = 0;
+  for (const n of tally.values()) if (n > spawnsInLargestRegion) spawnsInLargestRegion = n;
+  const egressOk = positions.length > 0
+    && spawnsInLargestRegion === positions.length
+    && labels.every((l) => l >= 0);
+
+  // REPORTED, not gated -- see this module's doc comment above for why. A spawn is
+  // "sealed" when it shares no destructible-free region with any other spawn, i.e. the
+  // player must shoot to meet anyone.
+  const withDestructibles = tankLegalComponents(arena, positions, walls);
+  const softTally = new Map<number, number>();
+  for (const l of withDestructibles.labels) softTally.set(l, (softTally.get(l) ?? 0) + 1);
+  const sealedSpawns = withDestructibles.labels.filter((l) => (softTally.get(l) ?? 0) === 1).length;
+
+  let egressDiagnosis = '';
+  if (!egressOk) {
+    const groups = [...tally.entries()].map(([l]) => {
+      const slots = labels.map((x, s) => (x === l ? `P${s + 1}` : '')).filter(Boolean).join('+');
+      return l < 0 ? `${slots} on no tank-legal cell` : `${slots} in a solid-walled region of ${sizes[l]} lattice cells`;
+    });
+    egressDiagnosis = `${groups.length} disjoint spawn region(s) with destructibles removed: ${groups.join('; ')}`;
+  }
+  return { spawnsInLargestRegion, egressOk, sealedSpawns, egressDiagnosis };
 }
 
 /**
@@ -179,9 +327,13 @@ export function evaluateVersusBoard(arena: Arena, playerCount: number): VersusBo
   const openFloorPerPlayer = openFloorCells / playerCount;
   const roomOk = openFloorPerPlayer >= MIN_OPEN_FLOOR_PER_PLAYER;
 
+  // Issue #423. Folded into `suitable` rather than merely reported, because the two
+  // boards this caught were suitable by every other measure and unplayable in fact.
+  const { spawnsInLargestRegion, egressOk, sealedSpawns, egressDiagnosis } = evaluateSpawnEgress(arena, positions, walls);
+
   return {
     playerCount,
-    suitable: distinctSpawns && allPairsConcealed && roomOk,
+    suitable: distinctSpawns && allPairsConcealed && roomOk && egressOk,
     spawnCount,
     distinctSpawns,
     totalPairs,
@@ -189,6 +341,10 @@ export function evaluateVersusBoard(arena: Arena, playerCount: number): VersusBo
     allPairsConcealed,
     openFloorCells,
     openFloorPerPlayer,
+    spawnsInLargestRegion,
+    egressOk,
+    sealedSpawns,
+    egressDiagnosis,
     roomOk,
   };
 }

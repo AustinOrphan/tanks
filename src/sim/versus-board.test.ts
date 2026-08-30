@@ -9,6 +9,7 @@ import { ARENA_DEFS, loadArena } from './arena';
 import { lineOfSight } from './ai/targeting';
 import type { Arena } from './arena';
 import type { WallKind } from './types';
+import { VERSUS_CATALOG } from './config/versus-catalog';
 
 // ---------------------------------------------------------------------------
 // SHIPPED-ARENA SWEEP. Denominator for every claim in this block: 7 shipped arenas x
@@ -26,11 +27,19 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
   // Every board is MEASURED at every N here; what a board is OFFERED at is a separate,
   // curated question the catalog answers (vs-duel-01 declares [2] only). Suitability is
   // the floor, not the offer.
-  it('every shipped arena is suitable at every N in {2, 3, 4}: 24 of 24 (arena, N) combinations', () => {
+  it('every arena still OFFERED is suitable at every N in {2, 3, 4}: 18 of 24 (arena, N) combinations', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
+    //
+    // 18 of 24, not 24 of 24. vs-tri-01 and vs-quad-01 remain in ARENA_DEFS -- their
+    // grids are what #424/#425 will edit -- but are WITHDRAWN from the catalog, and they
+    // fail the tank-egress gate at all three counts. That is deliberate and is asserted
+    // directly below rather than skipped: the sweep would be dishonest if it quietly
+    // dropped the two boards this suite failed to catch.
+    const WITHDRAWN = new Set(['vs-tri-01', 'vs-quad-01']);
     let checked = 0;
     for (const arena of ARENA_DEFS) {
+      if (WITHDRAWN.has(arena.id)) continue;
       for (const n of [2, 3, 4] as const) {
         checked++;
         const verdict = evaluateVersusBoard(arena, n);
@@ -42,7 +51,19 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
         expect(verdict.roomOk, `${arena.id} @ N=${n} roomOk`).toBe(true);
       }
     }
-    expect(checked).toBe(24);
+    expect(checked).toBe(18);
+
+    // ...and the two withdrawn boards fail, on egress specifically. This is the
+    // assertion that would have blocked them (#423), stated as a fact about the shipped
+    // grids rather than left implicit in their absence above.
+    for (const id of WITHDRAWN) {
+      const arena = ARENA_DEFS.find((a) => a.id === id) as Arena;
+      for (const n of [2, 3, 4] as const) {
+        const verdict = evaluateVersusBoard(arena, n);
+        expect(verdict.egressOk, `${id} @ N=${n} must still fail egress`).toBe(false);
+        expect(verdict.suitable, `${id} @ N=${n}`).toBe(false);
+      }
+    }
   });
 
   // NONE OF THE THREE CRITERIA CURRENTLY DISCRIMINATES ON SHIPPED DATA -- stated
@@ -252,12 +273,22 @@ describe('versusBoardCatalog', () => {
     expect(rows.length).toBe(24);
     const labels = rows.map((r) => `${r.arenaId}@${r.playerCount}`);
     expect(new Set(labels).size).toBe(24); // every row is a distinct (arena, N) pair
-    expect(rows.every((r) => r.suitable)).toBe(true);
+    // 18 of 24 suitable, not all: the catalog still REPORTS the two withdrawn boards
+    // (this function sweeps ARENA_DEFS, not the offer), and they fail the egress gate.
+    // Naming the failing six here is what keeps "report, don't gatekeep" honest.
+    expect(rows.filter((r) => r.suitable).length).toBe(18);
+    const unsuitable = rows.filter((r) => !r.suitable).map((r) => r.arenaId);
+    expect(new Set(unsuitable)).toEqual(new Set(['vs-tri-01', 'vs-quad-01']));
   });
 
   it('accepts an explicit arena/count list, for synthetic fixtures', () => {
+    // cellSize 2, not 1, for the same reason the room fixture above already uses it: at
+    // cellSize 1 a one-cell gap between the pillars is EXACTLY the tank's 1.0 diameter,
+    // so the legal centre set is a zero-width line and the egress gate (issue #423)
+    // rightly refuses it. The room ratios count CELLS and are cellSize-independent, so
+    // the 19.5 / 9.75 arithmetic this test is actually about is unchanged.
     const arena: Arena & { id: string } = {
-      id: 'fixture', cols: 7, rows: 7, cellSize: 1,
+      id: 'fixture', cols: 7, rows: 7, cellSize: 2,
       legend: { x: 'solid' as WallKind },
       grid: [
         'P......',
@@ -321,3 +352,99 @@ describe("versus-board: the 'ffa' hardcode rests on teams placing identically", 
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// TANK-SIZED SPAWN EGRESS (issue #423).
+//
+// Every other criterion in this module counts CELLS. A cell is not a tank: with
+// cellSize 0.6667 and TANK_RADIUS 0.5 a tank is 1.5 cells across, so a one-cell gap is
+// "walkable" to a cell-based check and has no legal tank-centre position at all.
+// Keystone and Quarters passed clearance, connectivity, symmetry, path distance and
+// scripted playtests and were unplayable in human hands: players could not leave spawn.
+// ---------------------------------------------------------------------------
+describe('spawn egress: a tank, not a cell (issue #423)', () => {
+  const cellSize = 2 / 3; // the dedicated boards' own cellSize
+
+  /**
+   * Two rooms separated by a solid divider with a doorway `gapCells` COLUMNS wide.
+   * Only one authored letter: versus spawns are derived by `pickVersusSpawnCell`, not
+   * read from the grid, and maximin puts the two picks in opposite rooms.
+   */
+  const twoRooms = (gapCells: number): Arena => {
+    const width = 13;
+    const doorStart = Math.floor((width - gapCells) / 2);
+    const divider = Array.from({ length: width }, (_, c) =>
+      (c >= doorStart && c < doorStart + gapCells ? '.' : 'x')).join('');
+    const grid: string[] = [
+      'P'.padEnd(width, '.'),
+      '.'.repeat(width),
+      '.'.repeat(width),
+      divider,
+      '.'.repeat(width),
+      '.'.repeat(width),
+      '.'.repeat(width),
+    ];
+    return { cols: width, rows: grid.length, cellSize, legend: { x: 'solid' as WallKind }, grid };
+  };
+
+  it('a ONE-cell passage is impassable and a TWO-cell passage is not -- the minimum width, measured', () => {
+    // The load-bearing discrimination. A 1-cell gap is 0.667 wide against a 1.0-wide
+    // tank, so no legal centre position exists; 2 cells is 1.333 and leaves a 0.333 band.
+    // Cell connectivity cannot tell these apart -- both are "open" -- which is exactly
+    // the class of failure that shipped.
+    const narrow = evaluateVersusBoard(twoRooms(1), 2);
+    const wide = evaluateVersusBoard(twoRooms(2), 2);
+    expect(narrow.egressOk, 'a 1-cell passage must NOT count as egress').toBe(false);
+    expect(narrow.spawnsInLargestRegion).toBe(1);
+    expect(wide.egressOk, 'a 2-cell passage must count as egress').toBe(true);
+    expect(wide.spawnsInLargestRegion).toBe(2);
+  });
+
+  it('names the blocked slots and the region sizes, so a failure is actionable', () => {
+    // Acceptance criterion: failure output identifies the arena, count and spawn slot.
+    const narrow = evaluateVersusBoard(twoRooms(1), 2);
+    expect(narrow.egressDiagnosis).toContain('disjoint spawn region');
+    expect(narrow.egressDiagnosis).toMatch(/P1/);
+    expect(narrow.egressDiagnosis).toMatch(/P2/);
+    // ...and says nothing when it holds, so the field is not noise.
+    expect(evaluateVersusBoard(twoRooms(2), 2).egressDiagnosis).toBe('');
+  });
+
+  it('folds into `suitable`, which is what makes it a gate rather than a report', () => {
+    // The negative control for the gate itself: the narrow board is otherwise fine --
+    // distinct spawns, concealed, roomy -- and must still be refused.
+    const narrow = evaluateVersusBoard(twoRooms(1), 2);
+    expect(narrow.distinctSpawns, 'the fixture must fail ONLY on egress').toBe(true);
+    expect(narrow.allPairsConcealed).toBe(true);
+    expect(narrow.roomOk).toBe(true);
+    expect(narrow.suitable).toBe(false);
+  });
+
+  it('every board the catalog OFFERS clears it, at every count it is offered at', () => {
+    // The sweep that would have caught Keystone and Quarters before they shipped.
+    let checked = 0;
+    for (const entry of VERSUS_CATALOG) {
+      const arena = ARENA_DEFS.find((a) => a.id === entry.arenaId);
+      expect(arena, entry.arenaId).toBeDefined();
+      for (const n of entry.players) {
+        const verdict = evaluateVersusBoard(arena as Arena, n);
+        expect(verdict.egressOk, `${entry.id} @ N=${n}: ${verdict.egressDiagnosis}`).toBe(true);
+        checked += 1;
+      }
+    }
+    // 16 = five campaign boards x 3 counts, plus vs-duel-01 at its single count.
+    // Withdrawing vs-tri-01 and vs-quad-01 (#424/#425) took this from 18.
+    expect(checked, 'the offered (entry, N) population this sweep covers').toBe(16);
+  });
+
+  it('DESTRUCTIBLE walls do not count against egress -- shooting through is legitimate', () => {
+    // Measured, and it is why the gate keys on solid geometry alone: arena-02 and
+    // vs-duel-01 are split into two regions by destructibles and are single-region once
+    // those are removed. Gating on all-walls connectivity would reject both, on boards
+    // where shooting through to reach an opponent is the design. `sealedSpawns` reports
+    // that softer signal instead of gating it.
+    const a02 = evaluateVersusBoard(ARENA_DEFS.find((a) => a.id === 'arena-02') as Arena, 2);
+    expect(a02.egressOk).toBe(true);
+    expect(a02.sealedSpawns, 'arena-02 at N=2 really does need a shot to meet').toBe(2);
+  });
+});
