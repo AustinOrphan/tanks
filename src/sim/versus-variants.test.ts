@@ -25,10 +25,15 @@ const DESTRUCTIBLE_COUNTS: Record<string, number> = {
   'arena-05': 18,
   // Four breachable clusters, 2x3 or 2x2, each mirrored through the centre (issue #271).
   'vs-duel-01': 34,
-  // Six clusters of 2, each placed with its mirror partner about column 13 (issue #272):
-  // the pair flanking the core, the mid-lane pair, the base-pocket pair and the bottom-rim
-  // pair. Ten cells per half, so the count is even by construction.
-  'vs-tri-01': 20,
+  // Five clusters, each placed with its mirror partner about column 13 (issue #272,
+  // regeometried by #424): the pylons' lower faces, the core's centre block and its two
+  // flanking blocks, the outer corner blocks, and the row-13 corner blocks. It was 20
+  // before the rebuild. The clusters were chosen against the SPAWN PICKER, not for looks:
+  // a destructible counts as traversable in pickVersusSpawnCell's geodesic graph
+  // (`isWalkable` excludes only 'solid'), so a cluster in the wrong place opens a shortcut
+  // and moves the maximin set off the board's authored triangle -- which is what ruled out
+  // every candidate on the rows 3-4 blocks.
+  'vs-tri-01': 27,
   // Ten clusters of 2, mirrored about BOTH axes (issue #273): the pair flanking the core
   // on rows 4 and 12, the four on the open cross-lanes at rows 2 and 14, and the mid-lane
   // pair at rows 7 and 9. Five cells per quadrant, so like vs-tri-01 the count is even by
@@ -270,20 +275,24 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
     // tank could leave its spawn.
     //
     // The sweep that MATTERS is the offered one: 5 campaign boards x 3 counts x 10 seeds
-    // (150) plus vs-duel-01 at its single count x 10 (10) = 160 draws, 0 unsuitable. Every
-    // combination the menu can actually serve survives destructible removal at fraction
-    // 0.4 on all ten seeds.
+    // (150) plus vs-duel-01 and vs-tri-01 at their single counts x 10 (20) = 170 draws,
+    // 0 unsuitable. Every combination the menu can actually serve survives destructible
+    // removal at fraction 0.4 on all ten seeds.
     //
-    // The other 80 are not swept for suitability, they are ACCOUNTED for, so the number
-    // cannot drift silently: vs-tri-01 and vs-quad-01 are withdrawn (#424/#425) and fail
-    // every one of their 60 draws, and vs-duel-01 fails 14 of the 20 draws at the counts
-    // it is not offered at (5 of 10 at N=3, 9 of 10 at N=4) -- removing destructibles
-    // changes which pockets its third and fourth spawns land in, which is why that half
-    // is seed-dependent while the withdrawn boards are not.
+    // 170, not 160: issue #424 rebuilt vs-tri-01 and it is offered again at N=3, so its
+    // ten draws move from the unoffered half to this one -- and pass. That move is the
+    // whole reason both denominators below shift by ten.
+    //
+    // The other 70 are not swept for suitability, they are ACCOUNTED for, so the number
+    // cannot drift silently: vs-quad-01 is still withdrawn (#425) and fails every one of
+    // its 30 draws, vs-duel-01 fails 14 of the 20 draws at the counts it is not offered at
+    // (5 of 10 at N=3, 9 of 10 at N=4), and vs-tri-01's remaining 20 -- N=2 and N=4, the
+    // counts it is not offered at -- all PASS, which is why 30 + 14 + 0 = 44 rather than
+    // the 74 this pinned while the board was broken.
     const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const OFFERED: Record<string, number[]> = {
       'arena-01': [2, 3, 4], 'arena-02': [2, 3, 4], 'arena-03': [2, 3, 4],
-      'arena-04': [2, 3, 4], 'arena-05': [2, 3, 4], 'vs-duel-01': [2],
+      'arena-04': [2, 3, 4], 'arena-05': [2, 3, 4], 'vs-duel-01': [2], 'vs-tri-01': [3],
     };
     let checked = 0;
     let unsuitable = 0;
@@ -305,10 +314,10 @@ describe('DESTRUCTIBLE_REMOVAL_FRACTION: suitability of the ungated draw, measur
         }
       }
     }
-    expect(checked, 'the offered (arena, N, seed) population').toBe(160);
+    expect(checked, 'the offered (arena, N, seed) population').toBe(170);
     expect(unsuitable).toBe(0);
-    expect(unofferedChecked).toBe(80);
-    expect(unofferedUnsuitable, 'the unoffered draws that fail, pinned so it cannot drift').toBe(74);
+    expect(unofferedChecked).toBe(70);
+    expect(unofferedUnsuitable, 'the unoffered draws that fail, pinned so it cannot drift').toBe(44);
     // 30s, not the 5s default. The sweep is O(arenas x N x seeds) real board evaluations
     // and issue #272's seventh arena took it from 180 draws to 210, measured at just over
     // 5s -- so it began timing out on content rather than on any slowdown. Raised rather
