@@ -165,6 +165,7 @@ export async function enrichOpenIssueRelationships(repository, issues, request) 
         loaded: true,
         parentLoaded: declaredParent !== null,
         parent,
+        blockersLoaded: inspectBlockers,
         blockedBy,
         subIssues,
       },

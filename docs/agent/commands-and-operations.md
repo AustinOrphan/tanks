@@ -147,10 +147,21 @@ validation, cooperative signal cleanup, prerequisites, registry/manifest fields,
 and the cross-environment determinism boundary.
 
 `npm run issues:audit` checks every open issue for the repository's required size, risk,
-area, impact, horizon, readiness, and active-queue invariants. It infers the repository from
-`GITHUB_REPOSITORY` or the current Git remote, uses `GH_TOKEN`/`GITHUB_TOKEN` when available,
-and can audit this public repository anonymously within GitHub's lower unauthenticated rate
-limit. Contract violations exit non-zero with issue-specific remediation; explicitly uncertain
+area, impact, horizon, readiness, and active-queue invariants, and holds GitHub's native
+parent, sub-issue, and blocked-by fields to the same contract: a singular body parent must
+mirror a native parent, `agent-ready` and `priority:now` work must carry no open native
+blocker, native dependencies must stay acyclic, and a decomposed `size:xl` roll-up must keep
+native children. An open child under a closed parent is a warning rather than an error. The
+audit assumes the one-time native relationship migration has already been applied; run
+against an unpopulated graph it correctly reports every mirrored parent as missing. It infers
+the repository from `GITHUB_REPOSITORY` or the current Git remote and uses
+`GH_TOKEN`/`GITHUB_TOKEN` when available; the anonymous path still covers the label-only
+checks, but relationship reads make GitHub's lower unauthenticated hourly budget the binding
+limit, so pass a token for a complete audit. Relationship reads are skipped for issues whose
+GitHub summaries report none, except `agent-ready` and `priority:now` issues, which are
+always inspected — so the report states the inspected population beside its native-blocked
+count instead of presenting it as a backlog-wide census. Contract violations exit non-zero
+with issue-specific remediation; explicitly uncertain
 dependency or decision wording is reported as a warning. `npm run issues:maintain` is the
 workflow-only event handler that applies allowlisted area/impact choices from issue forms and
 cleans transient labels from closed issues.

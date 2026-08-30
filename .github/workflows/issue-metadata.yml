@@ -56,7 +56,10 @@ jobs:
           node-version: '24'
 
       # The same read-only token loads native parents, sub-issues, and blocked-by
-      # edges when the issue summaries say they are relevant.
+      # edges when the issue summaries say they are relevant. The relationship
+      # checks assume the one-time native relationship migration has already been
+      # applied; against an unpopulated graph they correctly report every mirrored
+      # parent as missing.
       - name: Audit open issue metadata and relationships
         run: npm run issues:audit
         env:

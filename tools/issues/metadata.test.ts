@@ -140,7 +140,15 @@ describe('native relationship contract', () => {
   const relationships = (
     blockedBy: Array<Record<string, unknown>> = [],
     extra: Record<string, unknown> = {},
-  ) => ({ loaded: true, parentLoaded: false, parent: null, blockedBy, subIssues: [], ...extra });
+  ) => ({
+    loaded: true,
+    parentLoaded: false,
+    parent: null,
+    blockersLoaded: true,
+    blockedBy,
+    subIssues: [],
+    ...extra,
+  });
 
   it('parses only unambiguous singular parent mirrors', () => {
     expect(declaredSingularParent('Parent: #315')).toBe(315);
@@ -148,6 +156,34 @@ describe('native relationship contract', () => {
     expect(declaredSingularParent('## Parent\n\n- #238')).toBe(238);
     expect(declaredSingularParent('Parents: #228, #315')).toBeNull();
     expect(declaredSingularParent('## Parents\n\n- #228\n- #315')).toBeNull();
+  });
+
+  it('ignores parent forms that only appear inside code fences or code spans', () => {
+    expect(declaredSingularParent('```\nParent: #999\n```')).toBeNull();
+    expect(declaredSingularParent('```md\nPart of #999\n```')).toBeNull();
+    expect(declaredSingularParent('## Parent\n\nUse the form `Parent: #999` verbatim.')).toBeNull();
+    expect(declaredSingularParent('~~~\n## Parent\n\n- #999\n~~~')).toBeNull();
+    expect(declaredSingularParent('Parent: #315\n\n```\nParent: #999\n```')).toBe(315);
+  });
+
+  it('scopes the native-blocked count to the issues actually inspected for blockers', () => {
+    const inspected = issue(92, [
+      'size:m', 'risk:medium', 'area:ui', 'impact:high', 'priority:next',
+    ], '## Dependencies\n\nNone', {
+      nativeRelationships: relationships([{ number: 70, state: 'open' }]),
+    });
+    const skipped = issue(93, [
+      'size:s', 'risk:low', 'area:repository', 'impact:medium', 'priority:next',
+    ], '## Dependencies\n\nNone', {
+      nativeRelationships: relationships([], { blockersLoaded: false }),
+    });
+
+    const result = auditOpenIssues([inspected, skipped]);
+    expect(result.blockedCount).toBe(1);
+    expect(result.blockerInspectedCount).toBe(1);
+    expect(renderAuditReport(result).split('\n')).toContain(
+      'Native-blocked open issues: 1 of 1 inspected for native blockers (2 audited).',
+    );
   });
 
   it('keeps open native blockers out of agent-ready and Now', () => {

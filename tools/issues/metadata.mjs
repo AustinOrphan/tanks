@@ -80,8 +80,31 @@ export function markdownSections(body, heading) {
 const issueReferences = (value) =>
   [...String(value ?? '').matchAll(/#(\d+)/g)].map((match) => Number(match[1]));
 
+const CODE_FENCE = /^\s{0,3}(?:```|~~~)/;
+
+// A parent mirror is a statement, not an illustration. Blank out fenced blocks and code
+// spans first so an issue documenting the `Parent: #N` form is not read as using it.
+// Fenced lines become empty rather than disappearing, which keeps heading offsets aligned
+// for the section scan below.
+function withoutCodeMarkup(body) {
+  const lines = [];
+  let fenced = false;
+
+  for (const line of normalizedLines(body)) {
+    if (CODE_FENCE.test(line)) {
+      fenced = !fenced;
+      lines.push('');
+      continue;
+    }
+    lines.push(fenced ? '' : line.replaceAll(/`[^`]*`/g, ' '));
+  }
+
+  return lines.join('\n');
+}
+
 export function declaredSingularParent(body) {
-  const lines = normalizedLines(body);
+  const prose = withoutCodeMarkup(body);
+  const lines = normalizedLines(prose);
   const candidates = [];
 
   for (const line of lines) {
@@ -91,7 +114,7 @@ export function declaredSingularParent(body) {
     if (partOf !== null) candidates.push(Number(partOf[1]));
   }
 
-  for (const section of markdownSections(body, 'Parent')) {
+  for (const section of markdownSections(prose, 'Parent')) {
     candidates.push(...issueReferences(section));
   }
 
@@ -242,6 +265,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
   const warnings = [];
   const nowIssues = [];
   let blockedCount = 0;
+  let blockerInspectedCount = 0;
 
   for (const issue of issues) {
     const labels = issueLabelNames(issue);
@@ -282,6 +306,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     const priority = LABEL_DIMENSIONS.priority.find((label) => labels.includes(label));
     const agentReady = labels.includes('agent-ready');
     const nativeBlockers = openNativeBlockers(issue);
+    if (issue?.nativeRelationships?.blockersLoaded === true) blockerInspectedCount += 1;
     if (nativeBlockers.length > 0) blockedCount += 1;
 
     if (issue?.nativeRelationships?.loaded === true) {
@@ -408,6 +433,7 @@ export function auditOpenIssues(inputIssues, { maxNow = MAX_NOW_ISSUES } = {}) {
     issueCount: issues.length,
     nowCount: nowIssues.length,
     blockedCount,
+    blockerInspectedCount,
     maxNow,
     errors,
     warnings,
@@ -430,7 +456,9 @@ export function renderAuditReport(result) {
     '# Issue metadata and relationship audit',
     '',
     `Audited ${result.issueCount} open issues. Now queue: ${result.nowCount}/${result.maxNow}.`,
-    `Native-blocked open issues: ${result.blockedCount ?? 0}.`,
+    `Native-blocked open issues: ${result.blockedCount ?? 0} of `
+      + `${result.blockerInspectedCount ?? 0} inspected for native blockers `
+      + `(${result.issueCount} audited).`,
     '',
   ];
 
