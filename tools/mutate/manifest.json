@@ -2152,11 +2152,23 @@
   {
     "id": "tri-board-loses-its-mirror-symmetry",
     "file": "src/sim/config/data/arenas.json",
-    "find": "\".xx##...##.......##...##xx.\"",
-    "replace": "\".xx##...##.......##...###x.\"",
+    "find": "\"......xxx...###...xxx......\"",
+    "replace": "\"......xxx...###...xx#......\"",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "One cell of vs-tri-01's base pocket turned from destructible to solid, breaking the mirror about column 13 that its notes claim (issue #272). The same shape as `duel-board-loses-its-rotational-symmetry` and for the same reason: the board still loads, still validates, still has three distinct and mutually concealed spawns at N=3, still passes clearance, connectivity and every seeded variant -- `versusCatalogEntryFailures` returns clean on it -- and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for the two base players is carried entirely BY the mirror: one of them now has a wall where the other has a breachable, so they no longer hold the same board reflected. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "why": "One cell of vs-tri-01's core flank turned from destructible to solid, breaking the mirror about column 13 that its notes claim (issue #272). RE-ANCHORED for issue #424's rebuild: the old find string named a row of the previous grid and no longer exists, which the harness would report as failed-to-apply rather than as lost coverage -- but only if someone ran it. The same shape as `duel-board-loses-its-rotational-symmetry` and for the same reason: the board still loads, still validates, and one flipped cell on a 27x17 board is invisible in a screenshot. What breaks is the FAIRNESS claim, which for the two base players is carried entirely BY the mirror: one of them now has a wall where the other has a breachable, so they no longer hold the same board reflected. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/versus-catalog-rules.test.ts"
+    ]
+  },
+  {
+    "id": "tri-board-passage-narrowed-to-one-cell",
+    "file": "src/sim/config/data/arenas.json",
+    "find": "\"xxx.....................xxx\",\n        \"...........................\",\n        \".........#########.........\"",
+    "replace": "\"xxx......#########......xxx\",\n        \"...........................\",\n        \".........#########.........\"",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Closes vs-tri-01's row 13 across columns 9-17, directly above the base-lane jamb, leaving row 14 as a ONE-CELL slot between them. This is the exact shape that made the board unplayable before issue #424: cellSize is 0.6667 and a tank is 1.0 across, so a one-cell gap has no legal tank-centre position, and every cell-based check -- symmetry, connectivity, path distance, spawn clearance -- reads it as open floor. The board stays MIRROR-symmetric, stays connected (rows 10-12 are still open across, so the egress gate still passes), and the three spawns do not move, which is why nothing else catches it. Only the minimum-passage-width rule #424 added does. Scoped to versus-catalog-rules.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/sim/versus-catalog-rules.test.ts"
     ]
