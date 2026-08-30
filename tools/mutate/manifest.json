@@ -2220,5 +2220,17 @@
     "tests": [
       "tools/issues/metadata.test.ts"
     ]
+  },
+  {
+    "id": "cycle-detector-reports-a-cycle-twice",
+    "file": "tools/issues/metadata.mjs",
+    "find": "      const key = [...cycle].sort((a, b) => a - b).join(':');\n      if (!cycleKeys.has(key)) {\n        cycleKeys.add(key);\n        cycles.push(cycle);\n      }",
+    "replace": "      cycles.push(cycle);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Deletes findDependencyCycles' de-duplication outright. Before issue #417 added its test this SURVIVED -- all 25 tests in metadata.test.ts stayed green -- so the whole block was unverified production logic. It is genuinely reachable, but only narrowly: a duplicated BACK-edge, where the same blocker is listed twice pointing at a node still on the stack, because `visiting.get()` is consulted before `visited.has()`. A duplicated forward edge does not reach it, and neither does any of the 4096 directed graphs on 4 distinct nodes. Without the guard the audit reports one cycle as two errors, telling a maintainer to break an edge that has already been reported.",
+    "tests": [
+      "tools/issues/metadata.test.ts"
+    ]
   }
 ]

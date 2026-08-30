@@ -320,6 +320,35 @@ describe('native relationship contract', () => {
     expect(codes(result.errors)).toEqual(['native-dependency-cycle']);
     expect(result.errors[0].issueNumbers).toEqual([94, 95]);
   });
+
+  it('reports a cycle ONCE when the same back-edge is listed twice (issue #417)', () => {
+    // The de-duplication in `findDependencyCycles` had no test at all. Proven by
+    // deleting `cycleKeys`, its sorted key and the `if` outright: all 25 tests in this
+    // file stayed green, so the whole block was unverified production logic.
+    //
+    // Finding the input that discriminates took a search, and the obvious guesses were
+    // wrong. A duplicated FORWARD edge does not reach the dedup -- `visited` short-
+    // circuits the second traversal. Nor does any ordinary graph: over all 4096 directed
+    // graphs on 4 distinct nodes, removing the dedup changed nothing, because a node is
+    // marked `visited` once its own visit completes.
+    //
+    // What DOES reach it is a duplicated BACK-edge -- the same blocker listed twice,
+    // pointing at a node still on the stack. `visiting.get()` is consulted BEFORE
+    // `visited.has()`, so both copies record the cycle and only the key set collapses
+    // them. Without it this graph reports [[94, 95], [94, 95]].
+    const first = issue(94, completeLabels, undefined, {
+      nativeRelationships: relationships([{ number: 95, state: 'open' }]),
+    });
+    const second = issue(95, completeLabels, undefined, {
+      nativeRelationships: relationships([
+        { number: 94, state: 'open' },
+        { number: 94, state: 'open' },
+      ]),
+    });
+    const result = auditOpenIssues([first, second]);
+    expect(codes(result.errors)).toEqual(['native-dependency-cycle']);
+    expect(result.errors[0].issueNumbers).toEqual([94, 95]);
+  });
 });
 
 describe('deterministic issue-form labels', () => {
