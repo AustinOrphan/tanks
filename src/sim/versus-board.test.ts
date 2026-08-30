@@ -12,7 +12,7 @@ import type { WallKind } from './types';
 
 // ---------------------------------------------------------------------------
 // SHIPPED-ARENA SWEEP. Denominator for every claim in this block: 7 shipped arenas x
-// 3 versus player counts (2, 3, 4) = 18 (arena, N) verdicts, 10 spawn pairs per arena
+// 3 versus player counts (2, 3, 4) = 21 (arena, N) verdicts, 10 spawn pairs per arena
 // (C(2,2) + C(3,2) + C(4,2) = 1 + 3 + 6), 50 pairs total. Pinned as its own assertion
 // so a 6th arena moves this test rather than silently shrinking the sweep --
 // versus-spawns.test.ts's own `ARENAS.length` pin is the precedent.
@@ -26,7 +26,7 @@ describe('evaluateVersusBoard: the shipped-arena sweep', () => {
   // Every board is MEASURED at every N here; what a board is OFFERED at is a separate,
   // curated question the catalog answers (vs-duel-01 declares [2] only). Suitability is
   // the floor, not the offer.
-  it('every shipped arena is suitable at every N in {2, 3, 4}: 18 of 18 (arena, N) combinations', () => {
+  it('every shipped arena is suitable at every N in {2, 3, 4}: 21 of 21 (arena, N) combinations', () => {
     // Re-derived live, not snapshotted: this recomputes open-floor counts and
     // reruns the real loadArena placement/LOS checks on every shipped grid.
     let checked = 0;

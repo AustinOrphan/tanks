@@ -49,7 +49,7 @@ describe('baseline', () => {
     // the hash. That goes green above and red here.
     const markers = text.match(/\|\d+:\d+:(playing|win|lose):\d+\|/g) ?? [];
     expect(TRACE_SEEDS).toBe(6);
-    expect(ARENAS.length).toBe(6);
+    expect(ARENAS.length).toBe(7);
     expect(markers.length).toBe(6 * 6);
   });
 });

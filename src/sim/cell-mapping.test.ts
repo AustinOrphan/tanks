@@ -36,7 +36,7 @@ describe('cellCentre and cellOf are exact inverses', () => {
         }
       }
     }
-    expect(checked).toBe(6431);
+    expect(checked).toBe(6890);
   });
 
   it('resolves a point anywhere inside a cell, not only its exact centre', () => {
@@ -80,6 +80,6 @@ describe("loadArena's spawn placement is the formula cellCentre encodes", () => 
     // arithmetic, which is the denominator discipline working on its own author.
     // 35, not 33: vs-duel-01 authors one player and one enemy letter, the minimum
     // arenas.json accepts, and both sit on the 1-(mod 3) lattice this test pins.
-    expect(spawnsChecked).toBe(35);
+    expect(spawnsChecked).toBe(37);
   });
 });
