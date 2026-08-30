@@ -117,41 +117,6 @@
       "variants": [
         "seeded-destructible"
       ]
-    },
-    {
-      "id": "vs-tri-01",
-      "arenaId": "vs-tri-01",
-      "displayName": "Keystone",
-      "intent": "A three-player arch: two base corners, one keystone on the mirror axis, and every spawn the same 26 steps from the other two.",
-      "preview": "vs-tri-01",
-      "players": [
-        3
-      ],
-      "modes": [
-        "ffa"
-      ],
-      "spawnPolicy": "maximin",
-      "variants": [
-        "seeded-destructible"
-      ]
-    },
-    {
-      "id": "vs-quad-01",
-      "arenaId": "vs-quad-01",
-      "displayName": "Quarters",
-      "intent": "Four mirror-equal quarters: every corner spawn holds the same set of distances to the other three, and the teams split reflects across the middle.",
-      "preview": "vs-quad-01",
-      "players": [
-        4
-      ],
-      "modes": [
-        "ffa",
-        "teams"
-      ],
-      "spawnPolicy": "maximin",
-      "variants": [
-        "seeded-destructible"
-      ]
     }
   ]
 }

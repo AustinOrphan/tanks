@@ -22,8 +22,6 @@ describe('versusMapChoices', () => {
   const CAMPAIGN_BOARDS = ['arena-01', 'arena-02', 'arena-03', 'arena-04', 'arena-05'];
   /** N=2 additionally offers the dedicated duel board (issue #271). */
   const DUEL = 'vs-duel-01';
-  const TRI = 'vs-tri-01';
-  const QUAD = 'vs-quad-01';
 
   it('parity pin: offers the 5 migrated boards at every (N, mode), plus each dedicated board at exactly its own count', () => {
     // The pre-#270 implementation offered the same 5 ids at every N (measured 15/15
@@ -37,7 +35,14 @@ describe('versusMapChoices', () => {
     // declared alongside `ffa` and the mode predicate keeps it at both).
     for (const n of [2, 3, 4] as const) {
       for (const mode of ['ffa', 'teams'] as const) {
-        const extra = n === 2 ? [DUEL] : n === 3 && mode === 'ffa' ? [TRI] : n === 4 ? [QUAD] : [];
+        // vs-tri-01 and vs-quad-01 are WITHDRAWN pending #424/#425 -- players cannot
+        // leave their spawns on either board (#423). Their `TRI`/`QUAD` constants are
+        // removed with them rather than left unused; only the OFFER is withdrawn, so the
+        // arena definitions remain in arenas.json for the redesign to edit. Restoring
+        // either means a catalog entry plus a row here -- and passing the tank-egress gate
+        // in versus-board.test.ts, which is what will hold them out until the geometry is
+        // actually fixed.
+        const extra = n === 2 ? [DUEL] : [];
         expect(versusMapChoices(n, mode), `N=${n} mode=${mode}`).toEqual([...CAMPAIGN_BOARDS, ...extra]);
       }
     }
@@ -55,14 +60,18 @@ describe('versusMapChoices', () => {
     // A bare subset assertion would let any number of boards silently drop out of the
     // offer, so the withheld set is pinned by name too: a board leaving the menu for a
     // reason nobody wrote down still fails here.
-    // Issue #272's vs-tri-01 measures suitable at all three counts too, and is offered at
-    // N=3 alone for the same reason: a board authored so that its three maximin spawns sit
-    // an equal 26 walkable cells apart has nothing to say about two players or four.
     // Withheld is listed in catalog order, which is the order versusBoardCatalog() reports.
+    //
+    // vs-tri-01 and vs-quad-01 are now withheld at EVERY count, not just the ones they
+    // were not curated for: both are withdrawn pending #424/#425. They still MEASURE
+    // suitable here, which is precisely the point -- `versusBoardCatalog()`'s verdict is
+    // cell-based, and #423 measured that a tank cannot actually leave any spawn on either
+    // board. That gap between "measures suitable" and "is playable" is what this
+    // withdrawal covers until the egress gate below can be turned on for them.
     const WITHHELD: Record<number, string[]> = {
       2: ['vs-tri-01', 'vs-quad-01'],
-      3: ['vs-duel-01', 'vs-quad-01'],
-      4: ['vs-duel-01', 'vs-tri-01'],
+      3: ['vs-duel-01', 'vs-tri-01', 'vs-quad-01'],
+      4: ['vs-duel-01', 'vs-tri-01', 'vs-quad-01'],
     };
     const rows = versusBoardCatalog();
     for (const n of [2, 3, 4] as const) {
@@ -103,17 +112,19 @@ describe('pickVersusArena', () => {
   });
 
   it('distributes: two measured seeds pick different arenas -- the negative control for a constant/broken resolver', () => {
-    // RE-MEASURED for issue #272, which puts vs-tri-01 into the N=3 offer and so moves
-    // every pick that reads `seed % choices.length`: at players:3 the choices are now the
-    // 5 campaign boards plus vs-tri-01, and seed 1 -> 'arena-04', seed 4 -> 'vs-tri-01'.
-    // The old pair (1 and 6) BOTH resolve to 'arena-04' against six choices, which would
-    // have left this negative control vacuous while still passing -- so the second seed is
-    // rechosen rather than its expectation renumbered. Seed 4 also proves the new board is
-    // genuinely reachable through the resolver, not merely listed by the catalog.
+    // RE-MEASURED again: withdrawing vs-tri-01 returns the N=3 offer to the 5 campaign
+    // boards, which moves every pick that reads `seed % choices.length`.
+    //
+    // The second seed is RECHOSEN from a measured distribution, not renumbered. Over seeds
+    // 1..20 at N=3 the picks land arena-04 x7 (1,2,3,5,16,17,20), arena-03 x5, arena-01 x4
+    // (7,8,9,19), arena-02 x3, arena-05 x1 (seed 4 alone). Seed 4 is now a SINGLETON, so
+    // pinning it would put this control on a knife edge; seed 7 -> 'arena-01' sits in a
+    // four-seed bucket and still differs from seed 1's 'arena-04', which is the property
+    // this control actually needs.
     // Pinned literals, not swept at runtime -- fails if pickVersusArena collapses to a
     // constant pick (e.g. always choices[0]) or stops reading `seed`.
     expect(pickVersusArena(base, 1)).toBe('arena-04');
-    expect(pickVersusArena(base, 4)).toBe('vs-tri-01');
+    expect(pickVersusArena(base, 7)).toBe('arena-01');
   });
 });
 
@@ -130,14 +141,17 @@ describe('resolveVersusConfig (issue #278: the Start-boundary resolver)', () => 
   });
 
   it("'random' resolves to pickVersusArena's own pick for that seed, and honors its OWN seed argument", () => {
-    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 4 ->
-    // 'vs-tri-01' at players:3. Two seeds, not one: a single-seed assertion here would
-    // not catch a mutation that hardcodes the seed it forwards to `pickVersusArena`
-    // (e.g. always `pickVersusArena(config, 1)`) -- this negative control was found
-    // empirically while mutating this function for issue #278's PR (a seed-1-only
-    // version of this test stayed green under exactly that mutation).
+    // Measured (pickVersusArena's own suite, above): seed 1 -> 'arena-04', seed 7 ->
+    // 'arena-01' at players:3, re-derived after vs-tri-01's withdrawal. Two seeds, not
+    // one: a single-seed assertion here would not catch a mutation that hardcodes the
+    // seed it forwards to `pickVersusArena` (e.g. always `pickVersusArena(config, 1)`) --
+    // this negative control was found empirically while mutating this function for issue
+    // #278's PR (a seed-1-only version of this test stayed green under exactly that
+    // mutation). The two seeds must keep resolving to DIFFERENT boards for that to hold,
+    // which is why the pair is rechosen from the measured distribution rather than
+    // renumbered.
     expect(resolveVersusConfig(random3, 1).arenaId).toBe('arena-04');
-    expect(resolveVersusConfig(random3, 4).arenaId).toBe('vs-tri-01');
+    expect(resolveVersusConfig(random3, 7).arenaId).toBe('arena-01');
   });
 
   it("'random' resolution preserves every other field unchanged", () => {
