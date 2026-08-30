@@ -65,7 +65,15 @@ import type { RoundPhase } from '../sim/round';
 import { DEFAULT_VOLUME } from '../audio/manifest';
 import { VERSUS_STOCK } from '../sim/constants';
 import { versusMapChoices, type VersusConfig } from './versus-config';
-import { defaultSlots, resizeSlots } from './versus-setup';
+import {
+  defaultSlots,
+  resizeSlots,
+  resolveSources,
+  versusSetupProblem,
+  type VersusSlotRole,
+  type VersusSetupProblem,
+} from './versus-setup';
+import type { VersusSetupStore } from './versus-setup-store';
 import {
   STICK_RADIUS_PX,
   stickVector,
@@ -609,7 +617,23 @@ const ROTATE_ICON = {
   turretRight: rotateIcon('turret', 'right'),
 };
 
-export function createHud(root: HTMLElement): Hud {
+/**
+ * What `createHud` may be handed besides its root. Optional as a whole and optional
+ * field by field, because `createHud(root)` is the shape ~200 existing tests call and
+ * a required dependency would have made this change a rewrite of all of them rather
+ * than a behavioural one.
+ */
+export interface HudOptions {
+  /**
+   * The retained VS setup (issue #260). WITHOUT it the pane still works and still
+   * enforces its own gate -- it simply forgets between page loads, which is exactly
+   * what a test that does not care about persistence wants. `createBrowserDeps`
+   * (loop.ts) is the one production caller and always supplies it.
+   */
+  readonly versusSetup?: VersusSetupStore;
+}
+
+export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const el = document.createElement('div');
   el.className = 'hud';
   el.innerHTML = `
@@ -731,11 +755,12 @@ export function createHud(root: HTMLElement): Hud {
          REPLACE-never-append rendering, setState's unconditional close below). Rows:
          Mode, Players, Map, Stock, Friendly fire (Teams only -- genuinely absent from
          the DOM under FFA, not merely hidden; see renderVersusFriendlyFireRow), and a
-         who's-playing preview that REUSES the Controllers panel's own row machinery
-         (renderControllerRowsInto) rather than forking it -- see
-         renderVersusControllerRows' doc comment for the interactive/preview split.
-         .hud-controller-rows/.hud-controller-row/.hud-controller-source-btn are the
-         SAME classes .hud-controllers above uses (scoped by the .hud-versus-setup
+         who's-playing block that is now per-slot ROLE controls writing the retained
+         setup (issue #260) -- see renderVersusSlotRows' doc comment for what it
+         supersedes. It no longer reuses .hud-controller-row/.hud-controller-source-btn:
+         those render a DEVICE assignment for the running session, and conflating the
+         two is the divergence #260 removes. (.hud-controllers above still uses them.)
+         The unused scoping note that stood here referred to the shared classes
          ancestor in every selector that reads them), the same trick
          .hud-aimstick .hud-stick-base already uses to share .hud-stick-base between
          the driving and aiming sticks. -->
@@ -763,10 +788,21 @@ export function createHud(root: HTMLElement): Hud {
       <div class="hud-versus-row hud-versus-friendlyfire-row"></div>
       <div class="hud-versus-row">
         <h2>Who's playing</h2>
-        <!-- Shown only when the pane's chosen player count does not match the
-             running session's real Assignment -- see renderVersusControllerRows. -->
-        <p class="ui-hint hud-versus-assignment-note hud-versus-assignment-note--hidden" id="hud-versus-assignment-note">Assignment applies after Start.</p>
-        <div class="hud-controller-rows"></div>
+        <!-- SUPERSEDED BY ISSUE #260, and the old comment is replaced rather than left
+             to mislead. This block used to render the RUNNING session's live
+             Assignment -- clicking a candidate reassigned the session behind the pane
+             -- and showed this note only when the pane's player count disagreed with
+             that session's. Both behaviours were the bug the issue opens with: the pane
+             mutated a session that Start then disposes, so what was displayed and what
+             launched could differ. The rows below are now SETUP controls that write the
+             retained per-slot roles, so the note is unconditionally true and therefore
+             unconditionally shown. -->
+        <p class="ui-hint hud-versus-assignment-note" id="hud-versus-assignment-note">Devices are assigned to human slots when the match starts.</p>
+        <div class="hud-versus-slot-rows"></div>
+        <!-- The pane-level refusal, used for the ONE problem kind that names no slot
+             (no-human). Per-slot reasons live on their own row; see
+             renderVersusSlotRows. -->
+        <p class="ui-hint hud-versus-start-reason hud-versus-start-reason--hidden" id="hud-versus-start-reason"></p>
       </div>
       <button class="ui-btn ui-btn--primary hud-versus-start" type="button">Start</button>
       <button class="ui-btn ui-btn--slab hud-versus-back" type="button">Back</button>
@@ -1008,8 +1044,8 @@ export function createHud(root: HTMLElement): Hud {
   const versusMapRow = el.querySelector('.hud-versus-map-row') as HTMLElement;
   const versusStockRow = el.querySelector('.hud-versus-stock-row') as HTMLElement;
   const versusFriendlyFireRow = el.querySelector('.hud-versus-friendlyfire-row') as HTMLElement;
-  const versusControllerRowsEl = el.querySelector('.hud-versus-setup .hud-controller-rows') as HTMLElement;
-  const versusAssignmentNoteEl = el.querySelector('.hud-versus-assignment-note') as HTMLElement;
+  const versusSlotRowsEl = el.querySelector('.hud-versus-slot-rows') as HTMLElement;
+  const versusStartReasonEl = el.querySelector('.hud-versus-start-reason') as HTMLElement;
   const levelsNoteEl = el.querySelector('.hud-levels-note') as HTMLElement;
   const versusStartBtn = el.querySelector('.hud-versus-start') as HTMLButtonElement;
   const versusBackBtn = el.querySelector('.hud-versus-back') as HTMLButtonElement;
@@ -1356,7 +1392,7 @@ export function createHud(root: HTMLElement): Hud {
    * interface for the full contract. Rebuilt from scratch on every call (at most 4
    * entries, the identity palette's own cap -- entities.ts's own IDENTITY_RING_COLORS
    * comment) rather than diffed, the same "cheap enough to just rebuild" precedent
-   * renderAchievements/renderVersusControllerRows already use elsewhere in this file.
+   * renderAchievements/renderVersusSlotRows already use elsewhere in this file.
    * ONE ELEMENT PER ENTRY, not one joined string like renderVersusResultsLine above:
    * each slot needs its OWN inline tint, which a single text node cannot carry part of.
    */
@@ -1806,10 +1842,12 @@ export function createHud(root: HTMLElement): Hud {
    * per candidate source (Keyboard / Bot / None / one per currently detected pad index).
    *
    * Parameterized over the TARGET CONTAINER, the ASSIGNMENT to render, and whether the
-   * candidate buttons are INTERACTIVE -- extracted so the versus setup pane's who's-
-   * playing preview (`renderVersusControllerRows`) can reuse this exact renderer
-   * against its OWN pane-local player count rather than forking it (task 4 brief: "do
-   * not fork it"). The real Controllers panel below is simply the `interactive: true`
+   * candidate buttons are INTERACTIVE. The second caller this was extracted for -- the
+   * versus pane's who's-playing preview -- is GONE as of issue #260: that pane now
+   * renders retained ROLES, not a device assignment (renderVersusSlotRows). The
+   * parameters are kept rather than inlined back because `interactive: false` is still
+   * reachable, and re-inlining would be a second rewrite of this renderer for no
+   * behavioural gain. The real Controllers panel below is the `interactive: true`
    * caller against the session's own `currentAssignment`; nothing about its own
    * behaviour changes from this extraction.
    */
@@ -1860,10 +1898,11 @@ export function createHud(root: HTMLElement): Hud {
             for (const cb of reassignSlotCbs) cb(forSlot, candidate);
           });
         } else {
-          // The versus pane's PREVIEW rows (renderVersusControllerRows): the pane's
-          // chosen player count does not match the running session's, so this cannot
-          // possibly be the real assignment -- disabled so a click (even a
-          // programmatic one) can never reassign a slot that does not exist yet.
+          // A non-interactive render: the buttons are disabled so a click (even a
+          // programmatic one) can never reassign a slot. The versus pane was the
+          // original caller that needed this; since issue #260 it renders its own role
+          // rows instead, and this branch is held by `renderControllerRowsInto`'s
+          // contract rather than by a live second caller.
           btn.disabled = true;
         }
         // The reason is already on screen for a sighted player -- the note this row
@@ -2457,12 +2496,35 @@ export function createHud(root: HTMLElement): Hud {
   // there is no "the default arena is not offered at this player count" case for a
   // fallback to handle -- not coded, since a fallback branch nothing can reach is
   // exactly what this repo's review flags as dead.
-  let versusConfigState: VersusConfig = {
-    mode: 'ffa',
-    players: 2,
-    arenaId: 'random',
-    stock: VERSUS_STOCK,
-    friendlyFire: false, slots: defaultSlots(2) };
+  let versusConfigState: VersusConfig = opts.versusSetup
+    ? { ...opts.versusSetup.get() }
+    : {
+        mode: 'ffa',
+        players: 2,
+        arenaId: 'random',
+        stock: VERSUS_STOCK,
+        friendlyFire: false,
+        slots: defaultSlots(2),
+      };
+
+  /**
+   * The ONE place `versusConfigState` is replaced, and therefore the one place the
+   * retained setup is written (issue #260).
+   *
+   * A helper rather than six inlined `versusConfigState = {...}; store.set(...)` pairs,
+   * because that shape only has to be forgotten ONCE -- at the sixth call site added
+   * later -- for a selection to stop persisting with every other one still working, and
+   * for the resulting test to look like an unrelated flake. Funnelling the write makes
+   * "changing anything persists it" structural instead of a convention.
+   *
+   * `VersusSetup` and `VersusConfig` carry the same six fields today, so this hands the
+   * config over directly; the store sanitizes on the way IN (see its `set`), which is
+   * what keeps a mid-edit slots/players mismatch from ever reaching storage.
+   */
+  function setVersusConfig(next: VersusConfig): void {
+    versusConfigState = next;
+    opts.versusSetup?.set({ ...next });
+  }
 
   function renderVersusModeSelection(): void {
     for (const b of Array.from(versusModeRow.children) as HTMLButtonElement[]) {
@@ -2505,7 +2567,7 @@ export function createHud(root: HTMLElement): Hud {
       b.textContent = choice === 'random' ? 'Random' : arenaLabel(choice);
       setSelected(b, choice === versusConfigState.arenaId);
       b.addEventListener('click', () => {
-        versusConfigState = { ...versusConfigState, arenaId: choice };
+        setVersusConfig({ ...versusConfigState, arenaId: choice });
         renderVersusMapRow(); // REPLACE -- rebuilds the whole row for the new selection ring
       });
       b.addEventListener('click', blurIfPointer);
@@ -2536,42 +2598,135 @@ export function createHud(root: HTMLElement): Hud {
     b.className = 'ui-btn ui-btn--sm hud-versus-friendlyfire-btn';
     renderVersusFriendlyFireLabel(b);
     b.addEventListener('click', () => {
-      versusConfigState = { ...versusConfigState, friendlyFire: !versusConfigState.friendlyFire };
+      setVersusConfig({ ...versusConfigState, friendlyFire: !versusConfigState.friendlyFire });
       renderVersusFriendlyFireLabel(b);
     });
     b.addEventListener('click', blurIfPointer);
     versusFriendlyFireRow.append(heading, b);
   }
 
+  /** The label a role button carries, and the order the three are offered in. */
+  const VERSUS_ROLE_OPTIONS: ReadonlyArray<{ role: VersusSlotRole; label: string }> = [
+    { role: 'human', label: 'Human' },
+    { role: 'bot', label: 'Bot' },
+    { role: 'none', label: 'Off' },
+  ];
+
   /**
-   * The who's-playing PREVIEW: reuses `renderControllerRowsInto` exactly (task 4
-   * brief: "do not fork it"), rendered against the PANE's own chosen player count,
-   * which may differ from the RUNNING session's real `Assignment`
-   * (`currentAssignment.length`) -- e.g. the pane defaults to 2 players while a
-   * 3-player session is still live behind it.
-   *
-   * Controller ruling adopted for this task: when the counts MATCH, these rows show
-   * (and can reassign) the session's own real assignment -- clicking a candidate here
-   * IS reassigning the running session, exactly as the Controllers panel itself does,
-   * via the same `onReassignSlot` path. When they DIFFER, this cannot possibly be the
-   * running session's assignment (there is no slot 3 to reassign in a 2-player
-   * session), so it renders as a non-interactive PREVIEW instead: synthetic
-   * `{ kind: 'none' }` placeholders, one per pane slot, with every candidate button
-   * disabled and a note that the real assignment is seeded fresh at reboot
-   * (`deriveInitialAssignment`, boot.ts) once Start is pressed.
-   *
-   * `VersusConfig` deliberately carries no assignment field of its own -- wiring the
-   * pane's preview THROUGH to the new session's actual assignment is out of scope for
-   * this task (see the PR body / backlog for that residual).
+   * The sentence a refused Start puts on the offending card. One per problem KIND,
+   * because "not ready" is not actionable: each of the three has a different fix, and
+   * `versusSetupProblem` distinguishes them precisely so this function can.
    */
-  function renderVersusControllerRows(): void {
-    const paneCount = versusConfigState.players;
-    const matchesSession = currentAssignment.length === paneCount;
-    const assignment: Assignment = matchesSession
-      ? currentAssignment
-      : Array.from({ length: paneCount }, (): SlotSource => ({ kind: 'none' }));
-    versusAssignmentNoteEl.classList.toggle('hud-versus-assignment-note--hidden', matchesSession);
-    renderControllerRowsInto(versusControllerRowsEl, assignment, matchesSession);
+  function versusProblemText(problem: VersusSetupProblem): string {
+    switch (problem.kind) {
+      case 'unassigned':
+        return `Player ${problem.slot + 1} is off. Choose Human or Bot to start.`;
+      case 'device-missing':
+        return `Player ${problem.slot + 1} is Human but no device is free. Connect a controller, or choose Bot.`;
+      case 'no-human':
+        return 'At least one slot must be Human.';
+    }
+  }
+
+  /**
+   * The who's-playing SETUP rows -- per-slot role controls, issue #260's remaining gap.
+   *
+   * SUPERSEDES A PREVIOUS RULING, and its comment is rewritten rather than left in
+   * place: these rows used to render the RUNNING session's live `Assignment` through
+   * `renderControllerRowsInto`, and clicking a candidate reassigned that session via
+   * `onReassignSlot`. That is the exact divergence the issue is about -- Start disposes
+   * the session those clicks were editing, then rebuilt its assignment from defaults,
+   * so what the pane displayed was not what launched.
+   *
+   * What a row edits now is the RETAINED ROLE (`VersusSlotSetup.role`), which Start
+   * carries through in `versusConfigState.slots`. The DEVICE is not editable here at
+   * all: it is derived, every render, by `resolveSources` from the roles plus whatever
+   * pads are connected right now. That derivation is the whole reason a stale pad index
+   * can never be honoured -- there is no stored index to honour (see versus-setup.ts).
+   *
+   * Re-rendered on: a role click, a player-count change, pane open, and
+   * `setDetectedPads` -- the last is what makes a controller unplugged WHILE the pane is
+   * open move a slot to "Unassigned" and refuse Start, rather than leaving a readout
+   * that was true a moment ago.
+   */
+  function renderVersusSlotRows(): void {
+    const slots = versusConfigState.slots;
+    const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));
+    const problem = versusSetupProblem(slots, sources);
+
+    versusSlotRowsEl.replaceChildren();
+    for (let slot = 0; slot < slots.length; slot++) {
+      const row = document.createElement('div');
+      row.className = 'hud-versus-slot-row';
+      row.dataset.slot = String(slot);
+
+      const label = document.createElement('span');
+      label.className = 'hud-versus-slot-label';
+      label.textContent = `Player ${slot + 1}`;
+      row.appendChild(label);
+
+      for (const opt of VERSUS_ROLE_OPTIONS) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ui-btn ui-selectable hud-versus-role-btn';
+        btn.dataset.role = opt.role;
+        btn.textContent = opt.label;
+        setSelected(btn, slots[slot].role === opt.role);
+        const forSlot = slot; // captured per-iteration, not the loop's shared binding
+        btn.addEventListener('click', () => {
+          const next = slots.map((s, i) => (i === forSlot ? { ...s, role: opt.role } : { ...s }));
+          setVersusConfig({ ...versusConfigState, slots: next });
+          renderVersusSlotRows(); // REPLACE -- selection, derived devices and the gate all move
+        });
+        btn.addEventListener('click', blurIfPointer);
+        row.appendChild(btn);
+      }
+
+      // The DERIVED device, not a choice. `slotSourceLabel` is reused rather than
+      // reimplemented so a gamepad reads with the same name the Controllers panel
+      // gives it.
+      const device = document.createElement('span');
+      device.className = 'hud-versus-slot-device';
+      device.textContent = slotSourceLabel(sources[slot]);
+      row.appendChild(device);
+
+      // ONE reason is shown, on the FIRST offending card, because `versusSetupProblem`
+      // returns the first problem and not a list. That is a deliberate choice, not a
+      // limitation worked around: two simultaneous refusals would give a player two
+      // sentences and no order to fix them in, and the second becomes visible the
+      // moment the first is resolved. `versus-setup.test.ts` pins the first-problem
+      // contract; the pane test pins that the second card stays silent.
+      const reason = document.createElement('p');
+      reason.className = 'ui-hint hud-versus-slot-reason';
+      reason.id = `hud-versus-slot-reason-${slot}`;
+      const ownsProblem =
+        problem !== null && problem.kind !== 'no-human' && problem.slot === slot;
+      reason.textContent = ownsProblem ? versusProblemText(problem) : '';
+      reason.classList.toggle('hud-versus-slot-reason--hidden', !ownsProblem);
+      row.appendChild(reason);
+
+      versusSlotRowsEl.appendChild(row);
+    }
+
+    // `no-human` names no slot, so it is the one refusal that belongs to the pane
+    // rather than to a card.
+    const paneLevel = problem !== null && problem.kind === 'no-human';
+    versusStartReasonEl.textContent = paneLevel ? versusProblemText(problem) : '';
+    versusStartReasonEl.classList.toggle('hud-versus-start-reason--hidden', !paneLevel);
+
+    // "Never accept Start with an inert required slot" -- and the reason is ASSOCIATED
+    // (#321's rule), not merely on screen somewhere: aria-describedby points at the one
+    // element that is actually showing text, so a screen-reader user hears why Start is
+    // refused instead of only that it is.
+    versusStartBtn.disabled = problem !== null;
+    describeDisabledReason(
+      versusStartBtn,
+      problem === null
+        ? null
+        : problem.kind === 'no-human'
+          ? 'hud-versus-start-reason'
+          : `hud-versus-slot-reason-${problem.slot}`,
+    );
   }
 
   // Mode/Players/Stock are FIXED-size option sets (unlike Map/who's-playing, they
@@ -2584,7 +2739,7 @@ export function createHud(root: HTMLElement): Hud {
     b.dataset.mode = opt.id;
     b.textContent = opt.label;
     b.addEventListener('click', () => {
-      versusConfigState = { ...versusConfigState, mode: opt.id };
+      setVersusConfig({ ...versusConfigState, mode: opt.id });
       renderVersusModeSelection();
       renderVersusFriendlyFireRow(); // absent <-> present follows mode directly
       renderVersusMapRow(); // REPLACE -- Mode filters the map list too (issue #270)
@@ -2604,14 +2759,14 @@ export function createHud(root: HTMLElement): Hud {
       // `slots` MUST follow the count, or Start emits a config whose slot array does not
       // describe the match being started (issue #260). Resized rather than rebuilt so
       // going 2 -> 3 -> 2 gives back the roles that were chosen, not fresh defaults.
-      versusConfigState = {
+      setVersusConfig({
         ...versusConfigState,
         players,
         slots: resizeSlots(versusConfigState.slots, players),
-      };
+      });
       renderVersusPlayersSelection();
       renderVersusMapRow(); // REPLACE -- Players filters the map list
-      renderVersusControllerRows(); // REPLACE -- the preview row COUNT follows players
+      renderVersusSlotRows(); // REPLACE -- the slot row COUNT follows players
     });
     b.addEventListener('click', blurIfPointer);
     versusPlayersRow.appendChild(b);
@@ -2625,7 +2780,7 @@ export function createHud(root: HTMLElement): Hud {
     b.dataset.stock = String(stock);
     b.textContent = String(stock);
     b.addEventListener('click', () => {
-      versusConfigState = { ...versusConfigState, stock };
+      setVersusConfig({ ...versusConfigState, stock });
       renderVersusStockSelection();
     });
     b.addEventListener('click', blurIfPointer);
@@ -2641,7 +2796,7 @@ export function createHud(root: HTMLElement): Hud {
   // Controllers panel.
   renderVersusMapRow();
   renderVersusFriendlyFireRow();
-  renderVersusControllerRows();
+  renderVersusSlotRows();
 
   const versusOpenCbs: Array<() => void> = [];
   const versusStartCbs: Array<(config: VersusConfig) => void> = [];
@@ -2704,13 +2859,13 @@ export function createHud(root: HTMLElement): Hud {
       return;
     }
     swapSurface(openSurface(), VERSUS_SETUP_SURFACE, () => {
-      if (initial) versusConfigState = { ...initial };
+      if (initial) setVersusConfig({ ...initial });
       renderVersusModeSelection();
       renderVersusPlayersSelection();
       renderVersusStockSelection();
       renderVersusMapRow();
       renderVersusFriendlyFireRow();
-      renderVersusControllerRows();
+      renderVersusSlotRows();
       versusSetupView.focus();
     });
   }
@@ -3243,23 +3398,28 @@ export function createHud(root: HTMLElement): Hud {
     setControllers(assignment: Assignment): void {
       currentAssignment = assignment;
       renderControllerRows();
-      // The versus pane's who's-playing PREVIEW reads `currentAssignment` too (see
-      // renderVersusControllerRows) -- refreshed here for the same "stays current
-      // regardless of visibility" reason as the real panel just above, so a session
-      // reassignment while the setup pane is open is reflected immediately, and a
-      // match/mismatch against the pane's own player count is never left stale from
-      // whatever it was at construction.
-      renderVersusControllerRows();
+      // NO versus-pane refresh here any more (issue #260). These rows used to mirror
+      // `currentAssignment`, so a session reassignment had to repaint them; they now
+      // render the RETAINED ROLES and a device derived from `currentDetectedPads`,
+      // neither of which this setter touches. `setDetectedPads` below is the one that
+      // still has to repaint them, because pads ARE an input to that derivation.
     },
     setDetectedPads(pads: readonly DetectedPad[]): void {
       currentDetectedPads = pads;
       renderControllerRows();
-      renderVersusControllerRows();
+      // The versus pane's derived device column AND its Start gate both read the pad
+      // list (`resolveSources`), so a hotplug or an unplug while the pane is open has
+      // to repaint them -- that is what turns a controller pulled mid-setup into a
+      // refused Start with a reason, rather than a readout that was true a moment ago.
+      renderVersusSlotRows();
     },
     setBotAssignmentAllowed(allowed: boolean): void {
       botAssignmentAllowedNow = allowed;
       renderControllerRows();
-      renderVersusControllerRows();
+      // Not the versus pane: this flag gates whether a bot may drive a player tank in
+      // the RUNNING session (the campaign refuses it), and the setup pane is a versus
+      // pane, where Bot is always a legitimate slot role -- `defaultSlots` makes it the
+      // default for every slot after the first.
     },
     onControllersOpen(cb: () => void): void {
       controllersOpenCbs.push(cb);
