@@ -127,8 +127,8 @@ describe('control type is derived from the registry, not declared twice', () => 
     // Stated so the sweep has a population rather than possibly checking nothing. MEASURED,
     // and the first draft of this line guessed 17 -- the assertion caught it, which is the
     // only reason a stated population is worth writing down.
-    expect(toggles).toBe(15);
-    expect(controls).toHaveLength(27); // +1: aiPerception (issue #359's superseded bound, behind a flag)
+    expect(toggles).toBe(16);
+    expect(controls).toHaveLength(28); // +1 each: aiPerception (#359's superseded bound), aiContact (#372's contact overlay)
   });
 
   it('reads each parameter from the registry, using the field name only where none is given', () => {
