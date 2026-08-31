@@ -177,10 +177,10 @@ and records completed and remaining edges in the Actions step summary even after
 failure.
 
 Use the manual `Migrate native issue relationships` workflow for the repository migration. A
-plan dispatch performs 136 inspection reads for the reviewed 81 parent and 147 blocked-by edges.
-An initial apply dispatch skips the separate plan job and is bounded at 591 requests: 136
-inspection reads, 91 issue-record validations, 228 writes, and 136 verification reads. Reviewing
-a plan and then dispatching apply therefore uses at most 727 requests while every blocked-by list
+plan dispatch performs 143 inspection reads for the reviewed 85 parent and 154 blocked-by edges.
+An initial apply dispatch skips the separate plan job and is bounded at 620 requests: 143
+inspection reads, 95 issue-record validations, 239 writes, and 143 verification reads. Reviewing
+a plan and then dispatching apply therefore uses at most 763 requests while every blocked-by list
 fits on one 100-item page, below the published 1,000-request/hour Actions-token budget. The
 workflow serializes dispatches, gives write access only to the guarded apply job, and passes the
 operator-entered confirmation through to the command's exact-string check.
