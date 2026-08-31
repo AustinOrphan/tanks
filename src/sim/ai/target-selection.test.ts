@@ -148,18 +148,16 @@ describe('committed opponent selection', () => {
 
   it('does not switch at expiry for a trivially better candidate, but does for a material one', () => {
     const preferred = configFor('grey').ai.preferredDistance;
-    // Committed to a target sitting exactly at preferred range, span already lapsed.
-    const held = tank(2, 'player', { x: preferred, y: 0 });
-    const run = (challengerX: number) => {
-      const ai = tank(1, 'grey', { x: 0, y: 0 }, { aiTargetId: 2, aiTargetTicks: 0 });
-      const challenger = tank(3, 'player', { x: challengerX, y: 0.001 });
-      const reason = commitTarget(world([ai, held, challenger]), ai);
-      return { id: ai.aiTargetId, reason };
-    };
-    // A challenger closer to preferred, but by less than the margin: keep the current one.
-    const tiny = run(preferred - AI_TARGET_SWITCH_MARGIN / 2);
-    expect(tiny.id).toBe(2);
-    expect(tiny.reason).toBe(null);
+    // The challenger must be genuinely BETTER than the held target, by less than the margin.
+    // An earlier version of this case put the challenger further from preferred than the
+    // held one, so no margin could ever have been crossed and the assertion held for a build
+    // with the margin set to -1 -- i.e. it tested nothing. Held sits one unit off preferred;
+    // the challenger sits exactly on it, an improvement of 1 against a margin of 2.
+    const ai0 = tank(1, 'grey', { x: 0, y: 0 }, { aiTargetId: 2, aiTargetTicks: 0 });
+    const heldSlightlyOff = tank(2, 'player', { x: preferred + AI_TARGET_SWITCH_MARGIN / 2, y: 0 });
+    const slightlyBetter = tank(3, 'player', { x: preferred, y: 0 });
+    expect(commitTarget(world([ai0, heldSlightlyOff, slightlyBetter]), ai0)).toBe(null);
+    expect(ai0.aiTargetId).toBe(2);
     // The held target is only reachable as "worse" if the challenger beats it by MORE than
     // the margin. Put the held one far off preferred instead.
     const ai = tank(1, 'grey', { x: 0, y: 0 }, { aiTargetId: 2, aiTargetTicks: 0 });
