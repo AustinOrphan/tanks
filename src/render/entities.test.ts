@@ -8,6 +8,7 @@ import {
   createEntityViews, BARREL_OUT, MUZZLE_LEN, HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_SHADE, BULLET_Y,
   STRIPE_TURRET_MODE, IDENTITY_RING_COLORS, IDENTITY_RING_INNER_R, IDENTITY_RING_OUTER_R,
   TEAM_COLORS,
+  TEAM_LABELS,
 } from './entities';
 import { createWorld, type World } from '../sim/world';
 import { ARENAS, createWorldFor } from '../sim/arena';
@@ -1891,9 +1892,24 @@ describe('player identity: ring and shell tint', () => {
     return createWorld({ walls: [], tanks: [p0, p1, p2, p3], spawns, lives: 3, mode: 'teams' });
   }
 
-  it('TEAM_COLORS: exactly 2 hues, pairwise distinct from each other, every roster colour and the placeholder', () => {
-    expect(TEAM_COLORS).toHaveLength(2);
-    expect(TEAM_COLORS[0]).not.toBe(TEAM_COLORS[1]);
+  it('TEAM_COLORS: exactly 3 hues, pairwise distinct from each other, every roster colour and the placeholder', () => {
+    // THREE since issue #281: four-player Teams may use two or three teams (2v2 or
+    // 2v1v1). Two entries left `teamColor(2)` falling through to the white fallback,
+    // which is also the unstyled-slot placeholder -- so a 2v1v1 rendered one whole side
+    // as "no identity", in the ring, the shell tint, the tread trail and the stock chip
+    // at once.
+    expect(TEAM_COLORS).toHaveLength(3);
+    // Pairwise over all three, generated rather than written out, so a fourth entry is
+    // covered without anyone remembering to add another line.
+    for (let i = 0; i < TEAM_COLORS.length; i++) {
+      for (let j = i + 1; j < TEAM_COLORS.length; j++) {
+        expect(TEAM_COLORS[i], `team ${i} vs team ${j}`).not.toBe(TEAM_COLORS[j]);
+      }
+    }
+    // ...and a label per hue, since the letter is the non-colour channel and a missing one
+    // would silently render as the '?' fallback.
+    expect(TEAM_LABELS).toHaveLength(TEAM_COLORS.length);
+    expect(new Set(TEAM_LABELS).size, 'two teams share a letter').toBe(TEAM_LABELS.length);
     // Real rendered placeholder, same method as the identity-ring sweep above.
     const scene = new THREE.Scene();
     const views = createEntityViews(scene);

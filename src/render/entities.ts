@@ -130,14 +130,35 @@ function identityColor(slot: number): number {
  * Team colours (n-player arc PR 4) -- 'teams' mode's alternative to IDENTITY_RING_COLORS
  * at the SAME lookup site (syncTanks' ring creation, shellTintFor), dispatched on
  * `world.mode === 'teams'`. Where per-slot identity answers "which of 4 players",
- * teams answers "which of 2 SIDES" -- knowing your teammate's shell apart from an
- * opponent's matters more than telling two teammates apart. A vivid red/blue pair
- * (Tank.team = teamOf(slot) = slot % 2, arena.ts), picked by eye and verified distinct
+ * teams answers "which SIDE" -- knowing your teammate's shell apart from an
+ * opponent's matters more than telling two teammates apart.
+ *
+ * THREE, not two, since issue #281: four-player Teams may use two or three teams
+ * (2v2 or 2v1v1), and `Tank.team` is now the CONFIGURED team rather than the derived
+ * `slot % 2`. Before the third entry existed `teamColor(2)` fell through to
+ * `IDENTITY_COLOR_FALLBACK` -- white, which is also the unstyled-slot placeholder -- so a
+ * 2v1v1 match rendered one whole side as "no identity".
+ *
+ * The third hue was picked by MEASUREMENT, not by eye like the first two: `#ff4fd8` is the
+ * candidate whose worst-case RGB distance to anything it must not be confused with is
+ * largest (107, against the purple identity ring `0x9d3bff`). Amber and gold sat 28-36 from
+ * the yellow tank; violet sat 29 from that same ring. A vivid red/blue/magenta trio, verified distinct
  * from every roster colour, both identity-ring hues and the unstyled-slot placeholder
  * by entities.test.ts's sweep -- same reuse-the-mechanism, new-colour-source shape PR1
  * itself used for IDENTITY_RING_COLORS' own placeholder swatch.
  */
-export const TEAM_COLORS: readonly [number, number] = [0xff3b3b, 0x3b82ff];
+export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0xff4fd8];
+
+/**
+ * Single letters for the same three sides, and the reason they exist (issue #281).
+ *
+ * The issue asks for team choice to be "reinforce[d] ... with label/marker in addition to
+ * color". A hue alone fails three readers at once: a colour-blind player, a player on a
+ * forced-colours palette (issue #368 replaces authored hues outright), and anyone reading a
+ * screenshot in greyscale. A letter survives all three, and it is the same A/B/C the setup
+ * pane's team selector shows -- so the readout and the control that set it agree.
+ */
+export const TEAM_LABELS: readonly [string, string, string] = ['A', 'B', 'C'];
 function teamColor(team: number): number {
   return TEAM_COLORS[team] ?? IDENTITY_COLOR_FALLBACK;
 }

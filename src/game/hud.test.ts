@@ -2444,6 +2444,39 @@ describe('hud: in-match stock readout (spec §3a, owner addition 2026-08-21)', (
     return `rgb(${r}, ${g}, ${b})`;
   }
 
+  it('carries the TEAM as a letter beside the colour, all three teams (issue #281)', () => {
+    // The non-colour channel. Colour alone fails a colour-blind reader, a forced-colours
+    // palette (#368 replaces authored hues outright) and a greyscale screenshot; the
+    // letter survives all three. Asserted as TEXT, which is the part that survives.
+    const { hud: h, root } = mount();
+    // Production order (see the note below this block): the strip's visibility is
+    // state-derived, so the session kind has to be set before `playing`.
+    h.setSessionKind('versus');
+    h.setState('playing');
+    h.setVersusStocks([
+      { slot: 0, stock: 3, team: 0 },
+      { slot: 1, stock: 2, team: 1 },
+      { slot: 2, stock: 1, team: 2 },
+    ]);
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 A 3', 'P2 B 2', 'P3 C 1']);
+    // ...and the third team is a real hue, not the white fallback. This is the assertion
+    // that would have failed while TEAM_COLORS had only two entries -- a 2v1v1 rendered
+    // team 2 as the unstyled-slot placeholder.
+    expect(entries(root)[2].style.color).toBe(expectedCssColor(TEAM_COLORS[2]));
+    expect(entries(root)[2].style.color).not.toBe(expectedCssColor(0xffffff));
+  });
+
+  it('omits the team letter in FFA, where a slot has no side', () => {
+    // The control for the case above: without it, "P1 A 3" could be an unconditional
+    // format rather than a teams-only reinforcement, and FFA would grow a letter that
+    // means nothing.
+    const { hud: h, root } = mount();
+    h.setSessionKind('versus');
+    h.setState('playing');
+    h.setVersusStocks([{ slot: 0, stock: 3 }, { slot: 1, stock: 2 }]);
+    expect(entries(root).map((e) => e.textContent)).toEqual(['P1 3', 'P2 2']);
+  });
+
   it('setVersusStocks(null) keeps the strip hidden even while playing', () => {
     const { hud: h, root } = mount();
     h.setSessionKind('versus');
