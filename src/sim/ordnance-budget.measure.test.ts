@@ -132,8 +132,10 @@ measure('per-kind active-ordnance baseline (set VITE_RUN_MEASURE=1 to run)', () 
               }
             }
             if (e.type === 'tank-destroyed') {
-              const victim = agg.get(e.kind);
-              if (victim) victim.deaths++;
+              const victim =
+                agg.get(e.kind) ?? blank(configFor(e.kind).weapon.maxActiveProjectiles);
+              victim.deaths++;
+              agg.set(e.kind, victim);
               const killer = w.tanks.find((x) => x.id === e.by.ownerId);
               if (killer) {
                 const st = agg.get(killer.kind) ?? blank(configFor(killer.kind).weapon.maxActiveProjectiles);
