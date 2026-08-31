@@ -135,7 +135,7 @@ export const MOMENT_IDS = [
  * The camera names exported by subjects.ts. This plain-node module cannot import the
  * TypeScript value directly, so args.test.ts pins the two lists in both directions.
  */
-export const GALLERY_VIEW_IDS = ['game', 'close', 'low', 'top', 'headon', 'behind', 'below'];
+export const GALLERY_VIEW_IDS = ['game', 'close', 'low', 'top', 'headon', 'behind', 'below', 'side', 'quarter', 'quarter-rear'];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
