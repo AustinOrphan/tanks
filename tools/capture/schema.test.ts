@@ -25,6 +25,7 @@ describe('capture recipe schema', () => {
       'gallery.ai-tracking.normal',
       'gallery.ricochet.still',
       'gallery.drive.normal',
+      'gallery.ai-last-seen.normal',
     ]);
     for (const entry of CAPTURE_RECIPES) expect(validateRecipe(entry.recipe)).toBe(entry.recipe);
   });
@@ -44,7 +45,13 @@ describe('capture recipe schema', () => {
     }
     expect([...kinds.keys()].sort()).toEqual(['still', 'temporal']);
     for (const [kind, scenarios] of kinds) {
-      expect(`${kind}: ${scenarios.size} scenario(s)`).toBe(`${kind}: 2 scenario(s)`);
+      // AT LEAST two, which is the invariant this test's own title states. An exact `2`
+      // was a snapshot of the catalogue on the day it was written, and it turns every
+      // later recipe into an unrelated red -- issue #372's ai-last-seen clip hit it as
+      // the third temporal scenario. Still compared as a string so a failure names the
+      // kind and what was wrong with it rather than printing a bare `1`.
+      const enough = scenarios.size >= 2 ? 'multiple' : `only ${scenarios.size}`;
+      expect(`${kind}: ${enough} scenario(s)`).toBe(`${kind}: multiple scenario(s)`);
     }
   });
 

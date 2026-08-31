@@ -249,5 +249,67 @@
     "altText": "A blue tank driving across the felt arena floor, laying a tread trail.",
     "timeoutMs": 180000,
     "outputBudgetBytes": 20000000
+  },
+  {
+    "schemaVersion": 1,
+    "recipeVersion": 1,
+    "id": "gallery.ai-last-seen.normal",
+    "producer": {
+      "kind": "moment",
+      "scenarioId": "ai-last-seen"
+    },
+    "fixture": {
+      "id": "gallery.ai-last-seen",
+      "seed": 7
+    },
+    "variant": {
+      "view": "top",
+      "skin": "solid",
+      "hull": null,
+      "accent": null,
+      "spawnAnimation": "warp"
+    },
+    "viewport": {
+      "width": 640,
+      "height": 480,
+      "devicePixelRatio": 1
+    },
+    "profile": {
+      "visual": "software-gl",
+      "motion": "full",
+      "capability": "headless-desktop",
+      "reducedMotion": false
+    },
+    "schedule": {
+      "kind": "ticks",
+      "startTick": 0,
+      "endTick": "scenario",
+      "step": 1,
+      "subdivisions": 1,
+      "tickRate": 60
+    },
+    "playback": {
+      "rate": 1,
+      "intendedFps": 60
+    },
+    "artifacts": [
+      {
+        "format": "mp4",
+        "filename": "capture.mp4"
+      },
+      {
+        "format": "gif",
+        "filename": "preview.gif"
+      }
+    ],
+    "expectations": {
+      "events": [],
+      "allowUnexpectedEvents": false
+    },
+    "title": "Gallery AI last-seen memory at normal speed",
+    "description": "A stationary brown tank loses sight of the player behind a wall, holds its turret on the last position it actually observed for AI_LAST_SEEN_TICKS, then hands off to the idle search sweep. Issue #372's artefact. Shot from the TOP view, not the game camera: the whole content of the clip is where a turret points relative to a target it cannot see, and the game camera's oblique angle foreshortens exactly that bearing. The clip is evidence for a judgement -- whether this reads as attentive rather than omniscient -- not a measurement; the measurable parts are pinned in tools/gallery/moments.test.ts.",
+    "altText": "Top-down view: a brown tank's turret follows a blue tank until the blue tank passes behind a grey wall, then stays pointed at the spot where it disappeared while the blue tank drives back and forth elsewhere, and finally begins sweeping.",
+    "timeoutMs": 420000,
+    "outputBudgetBytes": 20000000
   }
 ]
