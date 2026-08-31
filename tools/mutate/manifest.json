@@ -2802,18 +2802,6 @@
     "why": "ownerId is what lets a consumer show the cue to the CONTROLLING player only, which is one of #356's acceptance criteria. The event is emitted for enemy owners too, so a treatment reading a wrong or constant owner would flash on every enemy's blocked shot -- visible only in a multi-tank fixture, never in a one-tank unit test."
   },
   {
-    "id": "ai-opponent-selection-reverses-slot-order",
-    "file": "src/sim/ai/targeting.ts",
-    "find": "  return world.tanks.find((t) => t.kind === 'player' && t.alive);",
-    "replace": "  return [...world.tanks].reverse().find((t) => t.kind === 'player' && t.alive);",
-    "expect": "killed",
-    "expectFailures": 2,
-    "why": "Every AI switches from the first alive player-kind tank to the LAST, which at more than one player is a different opponent for every behaviour at once -- movement, direct fire and bank-shot planning all follow it, since issue #359 routed them through this one function. WHY THIS ENTRY EXISTS: the extraction that created the seam shipped with this behaviour UNPINNED, and it was measured rather than assumed -- applying this exact mutation left all 374 tests under `tools/baseline` and `src/sim/ai` green, because the golden trace is single-player and first-vs-last is indistinguishable there. `BASELINE_HASH` cannot see it either, for the same reason. That gap is the whole point: #359's real fix replaces this slot-order policy deliberately, and without a pin the next change could replace it by accident. Killed by the two multi-player cases -- one where a far NEARER player is still not chosen, and one where two AIs converge on the same target -- which state the current bias as an expectation so changing it is a visible diff. Scoped to targeting.test.ts; expectFailures counts that scoped run only.",
-    "tests": [
-      "src/sim/ai/targeting.test.ts"
-    ]
-  },
-  {
     "id": "difficulty-never-reaches-hazard-judgment",
     "file": "src/sim/ai/targeting.ts",
     "find": "  return AI_HAZARD_SPREAD / cfg.ai.estimationAccuracy;",
