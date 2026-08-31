@@ -794,12 +794,16 @@ await checkAsync('the SAME voice is loud at volume 1 and silent at volume 0', as
 });
 
 check('every SFX key is actually covered by an audio check', () => {
-  // Without this, degrading isSfxKey silently drops the nine render checks and
-  // the runner still reports success -- proven in review: 9 checks vanished and
-  // it printed "all 20 GL checks passed".
+  // Without this, degrading isSfxKey silently drops the render checks and the
+  // runner still reports success -- proven in review: 9 checks vanished and it
+  // printed "all 20 GL checks passed".
+  //
+  // 10, up from 9: issue #356's `fire-blocked` click. The count is stated twice on
+  // purpose -- once for the key list and once for the checks that ran -- because the
+  // failure this guards against is exactly the two drifting apart.
   const rendered = results.filter((r) => r.name.startsWith('synth renders audible samples')).length;
-  if (SFX_KEYS.length !== 9) return `SFX_KEYS has ${SFX_KEYS.length} entries, expected 9`;
-  return rendered === 9 ? null : `only ${rendered} of 9 sfx render checks ran`;
+  if (SFX_KEYS.length !== 10) return `SFX_KEYS has ${SFX_KEYS.length} entries, expected 10`;
+  return rendered === 10 ? null : `only ${rendered} of 10 sfx render checks ran`;
 });
 
 await checkAsync('a COMPOSED track renders audible samples', async () => {
