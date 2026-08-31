@@ -1256,6 +1256,12 @@ export function startGameWith(
       const p = w.tanks.find((t) => t.kind === 'player');
       if (p) p.invincible = true;
     }
+    // Applied here rather than threaded through `levels.world`, for the same reason
+    // `invincible` is: this is the one chokepoint every world in this loop passes through,
+    // so a sixth parameter would buy nothing but two more signatures to keep in step. Absent
+    // leaves World.aiTargetPerception at its own 'full' default (issue #359's owner ruling);
+    // `?dev=1&aiPerception=los` restores the superseded line-of-sight bound.
+    if (deps.devFlags.aiPerception) w.aiTargetPerception = deps.devFlags.aiPerception;
     return w;
   }
 

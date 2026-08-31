@@ -7,6 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { commitTarget, isTargetable } from './target-selection';
 import { resolveOpponent } from './targeting';
+import { brownDecision } from './brown';
+import { stepAi } from './index';
 import { configFor } from '../config';
 import { TICK_HZ, AI_TARGET_SWITCH_MARGIN } from '../constants';
 import { TANK_KINDS } from '../config/validate';
@@ -49,33 +51,66 @@ describe('committed opponent selection', () => {
     expect(checked).toBe(TANK_KINDS.length);
   });
 
-  it('acquires only what it can SEE, for a profile that does not bank', () => {
-    // BROWN, not grey, and the choice is the test. `perceives` treats a banking profile as
-    // perceiving what it could bank at -- indirect fire is that role's whole identity -- so
-    // grey (bankShotWeight 0.1) sees through walls by design and cannot show this bound at
-    // all. brown's STATIC_BASIC banks at weight 0, so it is the profile the rule bites on.
+  it('by DEFAULT sees the whole board, exactly as the player does', () => {
+    // The owner ruling that supersedes rule 1's perception bound. The camera frames the
+    // whole playable area and nothing fogs or culls, so an AI limited to line of sight had
+    // an information limit the human does not -- and the counterplay was standing behind a
+    // wall until it forgot you. brown is the case that showed it: it does not bank, so the
+    // old bound left it with no target for 44.78% of its live ticks.
     expect(configFor('brown').ai.bankShotWeight).toBe(0);
     const ai = tank(1, 'brown', { x: 0, y: 0 });
-    const seen = tank(2, 'player', { x: 9, y: 0 });
-    const w = world([ai, seen]);
+    const w = world([ai, tank(2, 'player', { x: 9, y: 0 })], { walls: [wall(3, -3, 4, 3)] });
     expect(commitTarget(w, ai)).toBe('acquired');
     expect(resolveOpponent(w, ai, configFor('brown'))?.id).toBe(2);
+  });
 
-    // The same opponent, behind a wall, is not acquirable at all.
+  it("selection is all it widens: aiming still needs a real line of sight", () => {
+    // The load-bearing half of the ruling. Full awareness decides WHO a tank is fighting,
+    // never what it can shoot -- otherwise a turret would track a target through a wall,
+    // which is the omniscience the bound was reaching for in the first place. `hasSolution`
+    // is the gate, and it is unchanged: no line, no solution.
+    const ai = tank(1, 'brown', { x: 0, y: 0 });
+    const foe = tank(2, 'player', { x: 9, y: 0 });
+    const blocked = world([ai, foe], { walls: [wall(3, -3, 4, 3)] });
+    commitTarget(blocked, ai);
+    expect(resolveOpponent(blocked, ai, configFor('brown'))?.id).toBe(2); // committed...
+    expect(brownDecision(blocked, ai).hasSolution).toBe(false); // ...and still cannot shoot
+    // Same fixture with the wall gone: now it has both.
+    const clear = world([ai, foe]);
+    expect(brownDecision(clear, ai).hasSolution).toBe(true);
+  });
+
+  it("under the dev flag, acquires only what it can SEE, for a profile that does not bank", () => {
+    // `?dev=1&aiPerception=los` restores the bound so the experiment stays runnable.
+    // BROWN, not grey, and the choice is the test: `perceives` treats a banking profile as
+    // perceiving what it could bank at -- indirect fire is that role's identity -- so grey
+    // (bankShotWeight 0.1) saw through walls even under the bound, measured at 0.00% of its
+    // live ticks blocked. brown's STATIC_BASIC banks at weight 0, so it is the profile the
+    // rule ever bit on.
+    expect(configFor('brown').ai.bankShotWeight).toBe(0);
+    const seen = tank(1, 'brown', { x: 0, y: 0 });
+    const w = world([seen, tank(2, 'player', { x: 9, y: 0 })], { aiTargetPerception: 'line-of-sight' });
+    expect(commitTarget(w, seen)).toBe('acquired');
+
     const blind = tank(1, 'brown', { x: 0, y: 0 });
-    const w2 = world([blind, tank(2, 'player', { x: 9, y: 0 })], { walls: [wall(3, -3, 4, 3)] });
+    const w2 = world([blind, tank(2, 'player', { x: 9, y: 0 })], {
+      walls: [wall(3, -3, 4, 3)],
+      aiTargetPerception: 'line-of-sight',
+    });
     expect(commitTarget(w2, blind)).toBe(null);
     expect(resolveOpponent(w2, blind, configFor('brown'))).toBeUndefined();
   });
 
-  it('a BANKING profile is allowed to select what it cannot see, and that is deliberate', () => {
-    // The counterpart, asserted rather than left implicit: the same geometry that hides an
-    // opponent from brown does not hide it from grey. Recorded because it makes rule 1's
-    // perception bound nearly inert for banking profiles -- a real limitation that wants a
-    // perception model with memory (#372), not a tighter predicate.
+  it('under the dev flag, a BANKING profile still selects what it cannot see', () => {
+    // Why the bound was never a graded perception model: it is switched by
+    // `bankShotWeight`, a weapon-style knob. Kept as a case because it is the measurement
+    // that drove the ruling, and it must stay true of the flagged path.
     expect(configFor('grey').ai.bankShotWeight).toBeGreaterThan(0);
     const grey = tank(1, 'grey', { x: 0, y: 0 });
-    const w = world([grey, tank(2, 'player', { x: 9, y: 0 })], { walls: [wall(3, -3, 4, 3)] });
+    const w = world([grey, tank(2, 'player', { x: 9, y: 0 })], {
+      walls: [wall(3, -3, 4, 3)],
+      aiTargetPerception: 'line-of-sight',
+    });
     expect(commitTarget(w, grey)).toBe('acquired');
   });
 
@@ -201,5 +236,34 @@ describe('committed opponent selection', () => {
     expect(isTargetable(w, ai, foe)).toBe(true);
     // Another enemy is never a target, in any mode.
     expect(isTargetable(world([ai]), ai, tank(4, 'brown', { x: 2, y: 0 }))).toBe(false);
+  });
+});
+
+describe('the commitment reaches the game, not just this file', () => {
+  it('stepAi writes and HOLDS a committed target across ticks, with two players on the board', () => {
+    // This used to be pinned by the golden trace: five of its runs' timing depended on the
+    // commitment holding. The owner's full-awareness ruling removed that -- with one player
+    // there is only ever one tank to commit to, so the trace went back to its pre-#359 value
+    // and the wiring became invisible to it (`target-commitment-not-wired-into-stepai`
+    // started SURVIVING). Its value was always multi-player, so this pins it there instead.
+    //
+    // Every case above drives `commitTarget` directly and passes in full against a build
+    // where `stepAi` never calls it.
+    const preferred = configFor('grey').ai.preferredDistance;
+    const ai = tank(1, 'grey', { x: 0, y: 0 });
+    const p1 = tank(2, 'player', { x: -preferred, y: 0 });
+    const p2 = tank(3, 'player', { x: preferred, y: 0 });
+    const w = world([ai, p1, p2]);
+
+    stepAi(w, []);
+    const first = ai.aiTargetId;
+    expect(first, 'stepAi must commit a target').toBeDefined();
+    expect([p1.id, p2.id]).toContain(first);
+
+    // ...and it STAYS committed. A tank that re-selected every tick would still have an id
+    // here, so holding it is the half worth asserting.
+    for (let i = 0; i < 30; i++) stepAi(w, []);
+    expect(ai.aiTargetId).toBe(first);
+    expect(ai.aiTargetTicks ?? 0).toBeGreaterThan(0);
   });
 });

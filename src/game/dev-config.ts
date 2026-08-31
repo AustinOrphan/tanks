@@ -59,6 +59,7 @@ export type DevFlagGroup = (typeof DEV_FLAG_GROUPS)[number];
 export const FLAG_GROUPS: Record<keyof DevFlags, DevFlagGroup> = {
   level: 'Gameplay',
   invincible: 'Gameplay',
+  aiPerception: 'Gameplay',
   corpseBlock: 'Gameplay',
   muzzleInside: 'Gameplay',
 

@@ -600,9 +600,23 @@ export function selectPerceived(world: World, tank: Tank, cfg: ResolvedTankConfi
   // find string ambiguous and the entry stops applying -- silently, since a stale anchor
   // reports failed-to-apply rather than a survivor. Renaming here is cheaper than weakening
   // a pin that already exists.
+  // THE SHIPPED DEFAULT IS FULL AWARENESS (issue #359, owner ruling superseding rule 1).
+  // The player sees every tank on the board -- the camera frames the whole playable area and
+  // nothing fogs or culls -- so bounding SELECTION by line of sight handed the AI a limit the
+  // human does not have, whose counterplay was standing behind a wall until it forgot you.
+  // Measured before the ruling: the bound was never once reached by a banking profile (grey
+  // and teal, 0.00% of live ticks) and left a non-banking one with no target for most of its
+  // life (brown 44.78%, olive 77.79%) -- because an LOS-only reading deletes bank shots and
+  // had to be widened for every profile with `bankShotWeight > 0`, which is a weapon-style
+  // knob deciding perception.
+  //
+  // Aiming is untouched either way: `hasSolution` still needs a real line of sight, so a tank
+  // that knows who it is fighting still cannot shoot -- or track -- through a wall.
+  const bounded = (world.aiTargetPerception ?? 'full') === 'line-of-sight';
   let chosen: Tank | undefined;
   for (const other of world.tanks) {
-    if (!isTargetable(world, tank, other) || !perceives(world, tank, other, cfg)) continue;
+    if (!isTargetable(world, tank, other)) continue;
+    if (bounded && !perceives(world, tank, other, cfg)) continue;
     if (!chosen || better(world, tank, other, chosen, preferred)) chosen = other;
   }
   return chosen;
