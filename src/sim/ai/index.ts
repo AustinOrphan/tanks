@@ -6,7 +6,7 @@ import type { AiDecision } from './decision';
 import { brownDecision } from './brown';
 import { greyDecision } from './grey';
 import { tealDecision } from './teal';
-import { spawnBullet } from '../bullets';
+import { spawnBullet, shellCapReached } from '../bullets';
 import { dropMine } from '../mines';
 import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread } from './targeting';
 import { commitMove } from './commitment';
@@ -262,7 +262,13 @@ export function stepAi(world: World, events: SimEvent[]): void {
       // angle -- a shot taken mid-swing must go where the barrel currently points, not
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
       // fire with a perfect solution while the barrel visibly points elsewhere.
-      if (spawnBullet(world, tank.id, tank.turretAngle, decision.fireType, events)) {
+      // The same cap-refusal cost the player pays (issue #356), and applied here for the
+      // reason the cap itself is: a rule each caller opts into is one the next caller
+      // silently escapes. No branch on tank kind -- an enemy that spams at its cap pays the
+      // same beat a player does, which is also what keeps `fire-blocked`'s rate bounded for
+      // every owner rather than only the local one.
+      const fired = spawnBullet(world, tank.id, tank.turretAngle, decision.fireType, events);
+      if (fired || shellCapReached(world, tank.id)) {
         tank.fireCooldown = configFor(tank.kind).weapon.fireCooldown;
       }
     }
