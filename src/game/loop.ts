@@ -963,7 +963,8 @@ export function createBrowserDeps(shell: AppShell = createBrowserAppShell()): Ga
       dismissed: () => shell.launchDismissed(),
       dismiss: () => shell.dismissLaunch(),
     },
-    createDirector: createAudioDirector,
+    createDirector: (engine, playerId) =>
+      createAudioDirector(engine, playerId, { blockedFire: devFlags.blockedFire }),
     createHaptics: (playerId) =>
       createHapticsDirector(resolveVibrate(), playerId, { blockedFire: devFlags.blockedFire }),
     createStateMachine: createGameStateMachine,

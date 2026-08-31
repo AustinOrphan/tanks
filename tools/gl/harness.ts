@@ -37,7 +37,7 @@ const results: Result[] = [];
 /** The manifest's sfx keys, filtered through the synth's own guard. */
 const SFX_KEYS = [
   'cannon', 'cannon-enemy', 'ping', 'explosion',
-  'mine-drop', 'mine-arm', 'mine-boom', 'victory', 'defeat',
+  'mine-drop', 'mine-arm', 'mine-boom', 'fire-blocked', 'victory', 'defeat',
 ].filter(isSfxKey);
 function check(name: string, fn: () => string | null): void {
   try {
