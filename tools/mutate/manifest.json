@@ -2484,5 +2484,17 @@
     "tests": [
       "src/game/hud.css.test.ts"
     ]
+  },
+  {
+    "id": "tank-track-position-drifts-from-the-model",
+    "file": "src/render/entities.ts",
+    "find": "      track.position.copy(trackPart.position);",
+    "replace": "      track.position.set(0, TRACK_H / 2, (trackIndex === 1 ? -1 : 1) * 0.3);",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "A track position written out longhand at the consumer instead of taken from the shared model -- the exact shape `makeTank` had before issue #385, and the way an exported tank silently stops being the tank the game draws. The tracks move from the model's +/-0.375 (HULL_WIDTH/2 - TRACK_W/2) to +/-0.3, which pulls them visibly inward off the hull's edge. WHY THIS ENTRY EXISTS RATHER THAN A COMPARISON OF THE TWO BUILDERS: `makeTank` calls `tankParts()`, so a test that checked the model against itself would be comparing a function to its own output and could not fail. The risk is at the CONSUMER, and it is measured: with this mutation applied, `src/render/entities.test.ts` passes 90 of 90 -- the whole existing render suite is blind to it, because nothing there asserts where a track sits -- while `tank-model.test.ts` fails 1 of 7, on the case that compares the live scene graph's track offsets against the model's. That gap between 90-of-90 green and one named failure is the coverage this issue added. Scoped to tank-model.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/tank-model.test.ts"
+    ]
   }
 ]

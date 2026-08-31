@@ -209,6 +209,16 @@ export const VIEWS: Record<string, { dir: [number, number, number]; up?: [number
   headon: { dir: [1, 0.06, 0] },
   behind: { dir: [-1, 0.06, 0] },
   below: { dir: [0, -1, 0.0001], up: [0, 0, 1] },
+  // The canonical reference angles (issue #385). Added here rather than in a second
+  // harness because framing, distance-from-span and the deterministic clock are already
+  // solved in this one -- the issue's boundary asks for exactly that reuse.
+  //
+  // `side` looks along +z at the tank's flank; the two quarters are the 45-degree views a
+  // designer traces a silhouette from, raised to the game's own elevation so the shape
+  // reads the way it does in play rather than as an architectural elevation.
+  side: { dir: [0, 0.06, 1] },
+  quarter: { dir: [0.75, 0.55, 0.75] },
+  'quarter-rear': { dir: [-0.75, 0.55, 0.75] },
 };
 
 /**

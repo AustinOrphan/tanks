@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { World } from '../sim/world';
 import type { Wall, TankKind, Tank } from '../sim/types';
 import { lerpAngle, lerpVec2 } from './interpolate';
-import { BULLET_RADIUS, SHELL_MUZZLE_FORWARD, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
+import { BULLET_RADIUS, TANK_RADIUS, RESPAWN_SHIELD_TICKS } from '../sim/constants';
 import { configFor, wallConfigFor } from '../sim/config';
 import { createSkinTexture } from './skins';
 import { skinScroll, DEFAULT_SPAWN_ANIM, type SkinId, type SpawnAnimId } from '../game/customization';
@@ -19,6 +19,35 @@ import {
 import { MINE_TIMER } from '../sim/constants';
 import { MINE_BLAST_EXPAND_TICKS, MINE_BLAST_HOLD_TICKS } from '../sim/constants';
 import { SPAWN_ANIMATORS, makeSpawnRing, ENTRANCE_SECONDS } from './spawn-anim';
+import {
+  TANK_BODY_H, TURRET_H, TURRET_SEAT,
+  HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_H, TRACK_SHADE, HULL_CORNER, HULL_NOSE,
+  HULL_BEVEL, TRACK_BEVEL, HULL_RIDE, TRACK_PROUD, TRACK_OVERHANG, TURRET_R,
+  STRIPE_TURRET_MODE, BULLET_Y, BARREL_OUT, MUZZLE_LEN, MUZZLE_FLARE,
+  BARREL_R, TURRET_GROUP_Y,
+  turretProfile, barrelProfile,
+  tankParts, type TankPart,
+  type StripeTurretMode,
+} from './tank-model';
+
+/**
+ * The tank's dimensions and shape now live in `tank-model.ts` (issue #385), so an
+ * exporter can build the same geometry without importing this module's textures, skins
+ * and spawn effects.
+ *
+ * RE-EXPORTED rather than left for callers to re-import: these names are part of this
+ * module's published surface -- `entities.test.ts` imports sixteen of them by this path,
+ * and `aimray.ts` takes `BULLET_Y` -- and the move is meant to relocate the definition,
+ * not change who can see it.
+ */
+export {
+  TANK_BODY_H, TURRET_H, TURRET_SEAT,
+  HULL_LEN, HULL_WIDTH, TRACK_W, TRACK_H, TRACK_SHADE, HULL_CORNER, HULL_NOSE,
+  HULL_BEVEL, TRACK_BEVEL, HULL_RIDE, TRACK_PROUD, TRACK_OVERHANG, TURRET_R,
+  STRIPE_TURRET_MODE, BULLET_Y, BARREL_OUT, MUZZLE_LEN, MUZZLE_FLARE,
+  type StripeTurretMode,
+};
+
 
 export interface EntityViews {
   /** `dt` drives animated skins; omitting it freezes them, which is what tests want. */
@@ -202,10 +231,6 @@ function makeIdentityRing(color: number): THREE.Mesh {
   return mesh;
 }
 
-const TANK_BODY_H = 0.4;
-const TURRET_H = 0.28;
-/** How much of the turret ring is deliberately seated into the hull. */
-const TURRET_SEAT = 0.03;
 /** Centre of the fireball: sat on the deck, so its lower half is buried like a real one. */
 const BLAST_Y = 0.2;
 /**
@@ -229,215 +254,14 @@ const BLAST_LINGER_TICKS = 2;
  * precisely what it kills.
  */
 const BLAST_FLATTEN = 0.7;
-/**
- * Turret radius. 0.36 is 90% of the hull's 0.80 depth -- close to flush without
- * overhanging the sides. Chosen from two rendered sweeps, 0.26-0.44 then 0.32-0.38.
- */
-/**
- * Hull dimensions, in world units, along the tank's own axes: +x is forward.
- *
- * The sim collides tanks as a CIRCLE of radius TANK_RADIUS, so nothing here can make the
- * collision wrong -- but it can make it MISLEADING, and it did: the hull was drawn 0.8
- * wide against a circle 1.0 across, so a tank looked like it should slip through gaps
- * that stop it.
- *
- * HULL_WIDTH is now EXACTLY TANK_RADIUS * 2, tracks included. Not approximately: any
- * other value is the visual over- or under-stating the collider, and there is no reason
- * to pick one. The test asserts the equality, so drift in either direction fails --
- * including too WIDE, which lies the opposite way and would otherwise pass unnoticed.
- */
-export const HULL_LEN = 1.0;
-export const HULL_WIDTH = 1.0;
-/** Width of ONE track. The two of them make up the hull's full width at the edges. */
-export const TRACK_W = 0.25;
-/** Tracks are shorter than the body is tall and sit on the ground; the body rides above. */
-export const TRACK_H = 0.34;
-/**
- * How much darker the tracks are than the hull paint.
- *
- * Too dark and they read as the tank's own shadow rather than as part of it -- which is
- * exactly what 0.45 did at play distance. Chosen from a sweep of 0.45/0.70/0.90 shot
- * through the real camera; the height mattered far less than the shade.
- */
-export const TRACK_SHADE = 0.7;
-/** Corner radius of the hull body in plan. */
-export const HULL_CORNER = 0.3;
-/** Width of the hull's front shoulder, as a fraction of its mid-body width. */
-export const HULL_NOSE = 1; //0.85;
-/** Edge bevel on the hull body. */
-export const HULL_BEVEL = 0.035;
-/** Edge bevel on the tracks. Smaller: they are narrow, and a big bevel eats the face. */
-export const TRACK_BEVEL = 0.025;
-/**
- * Ground clearance under the hull body.
- *
- * The body used to start at 55% of the track's height, which put most of its mass ABOVE
- * the track and made the tank read as stacked slabs -- a pancake stack rather than a
- * hull. Dropping it to a small clearance sets the body ALONGSIDE the track run, which is
- * how a real tank is arranged and what stops the tracks looking like a plinth.
- */
-export const HULL_RIDE = 0.14;
-/**
- * How far the tracks stand PROUD of the body, from 0 to 1.
- *
- *   0    tracks entirely under the hull -- realistic, and nearly invisible from above
- *   0.5  half proud, half tucked
- *   1    tracks entirely outside the body -- toy-tank, most readable from overhead
- *
- * The total footprint is HULL_WIDTH either way; this only decides how it is divided
- * between body and track. Which matters because the game camera looks down at ~50deg:
- * anything tucked under the hull is hidden at exactly the angle the game is played from.
- */
-export const TRACK_PROUD = 0.25;
-/** How far the tracks overhang the body front and back. */
-export const TRACK_OVERHANG = 0.05;
 
-export const TURRET_R = 0.36;
 
-/**
- * RACING STRIPES RUN THE WHOLE TANK AS ONE STRIPE. The verdict, after seeing both rendered:
- * "I like continuous stripes actually."
- *
- *   'body'  SHIPPED. One continuous field. Every part is projected at world scale
- *           (k = 1), so the SAME pair of stripes runs from the nose, up over the turret
- *           and out along the gun at one constant width of 0.084 world units. It reads
- *           as one striped object, which is what a racing stripe on a real vehicle is:
- *           one unbroken line down the whole body.
- *
- *   'part'  BUILT AND REJECTED, kept because it is the arrangement that shipped before
- *           and someone will otherwise wonder whether it was considered. Each part's
- *           stripe is normalised to that part's own half-width, so the pair covers the
- *           same FRACTION of hull, turret and barrel -- which means the three sets are
- *           the same size relative to their part and do NOT line up with each other.
- *           Measured in world units the stripe is 0.084 wide on the hull, 0.069 on the
- *           turret and 0.025 on the barrel: the gun's are 3.4x NARROWER than the hull's,
- *           and the mismatch steps visibly where the barrel leaves the turret. Clearest
- *           in the `top` view, which is how the choice was made.
- *
- * Normalising to HULL_HALF_W is what makes 'body' work: `projectPlanarUV` divides by
- * `acrossHalf`, so handing it the hull's own half-width leaves the scale factor at 1 and
- * every part lands in the hull's world-space v.
- */
-export type StripeTurretMode = 'part' | 'body';
-export const STRIPE_TURRET_MODE: StripeTurretMode = 'body';
 
-/**
- * Height of the barrel's centreline, and therefore of every shell in flight.
- *
- * DERIVED, because it has to equal the gun it comes out of: this is the same stack the
- * turret group is positioned by in createTankView. It was a hardcoded 0.35 against a
- * barrel at 0.65 -- shells flew a third of a tank's height BELOW the muzzle. A hardcoded
- * 0.65 is right today and silently wrong the day any of these four terms is retuned.
- * (Declared here, below HULL_RIDE, because a module-level const cannot read one
- * declared after it.)
- */
-export const BULLET_Y = HULL_RIDE + TANK_BODY_H + TURRET_H / 2 - TURRET_SEAT;
 
-/**
- * How far the barrel protrudes BEYOND the turret.
- *
- * The barrel is positioned from this rather than absolutely, so growing the turret
- * does not silently shorten the gun -- at a fixed position, going 0.26 -> 0.38 ate a
- * third of the visible barrel.
- *
- * DERIVED from the sim's SHELL_MUZZLE_FORWARD -- the muzzle PLANE, not the shell's spawn
- * centre. The sim decides where the gun ends, and the drawn opening has to be that same
- * plane or the render lies about where the gun fires from. To lengthen the gun, change
- * SHELL_MUZZLE_FORWARD, which moves the opening, the spawn and the flash together.
- *
- * DELIBERATELY NOT SHELL_SPAWN_FORWARD (issue #237). That constant is now the shell's
- * CENTRE, one bullet-radius behind the opening, so deriving the barrel from it would
- * silently shorten the drawn gun by exactly that radius -- the regression this comment
- * used to warn about, arriving through the fix rather than through a retune. The reach
- * was chosen at PLAY distance, not in
- * close-up: the barrel is the shipped aim indicator (aimRay is a dev flag precisely
- * because of that), and a shorter one read as a nub from the real camera even though
- * it looked generous up close.
- */
-export const BARREL_OUT = SHELL_MUZZLE_FORWARD - TURRET_R;
-/** Length of the flared muzzle at the tip. */
-export const MUZZLE_LEN = 0.18;
-/** How much wider the muzzle is than the barrel behind it. */
-export const MUZZLE_FLARE = 1.40;
 
-/** A rectangle with rounded corners, centred on the origin, in the shape's own XY. */
-function roundedRect(w: number, h: number, r: number): THREE.Shape {
-  const rad = Math.min(r, w / 2, h / 2);
-  const x = -w / 2;
-  const y = -h / 2;
-  const s = new THREE.Shape();
-  s.moveTo(x + rad, y);
-  s.lineTo(x + w - rad, y);
-  s.quadraticCurveTo(x + w, y, x + w, y + rad);
-  s.lineTo(x + w, y + h - rad);
-  s.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
-  s.lineTo(x + rad, y + h);
-  s.quadraticCurveTo(x, y + h, x, y + h - rad);
-  s.lineTo(x, y + rad);
-  s.quadraticCurveTo(x, y, x + rad, y);
-  return s;
-}
 
-/**
- * A box with rounded corners in-plane AND bevelled edges along the extrusion, centred
- * on the origin, whose finished size is exactly (w, h, depth).
- *
- * The bevel is subtracted from the shape and the extrusion depth first, because
- * ExtrudeGeometry ADDS bevelSize outward and bevelThickness at each end. Without that
- * correction every rounded part comes out larger than asked, which matters here: the
- * hull's width is asserted to equal the sim's collision diameter exactly.
- */
-function roundedBox(w: number, h: number, depth: number, corner: number, bevel: number): THREE.ExtrudeGeometry {
-  const b = Math.min(bevel, w / 4, h / 4, depth / 4);
-  const shape = roundedRect(w - b * 2, h - b * 2, Math.max(0.001, corner - b));
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: depth - b * 2,
-    bevelEnabled: true,
-    bevelThickness: b,
-    bevelSize: b,
-    bevelSegments: 2,
-    curveSegments: 6,
-  });
-  geo.translate(0, 0, -depth / 2 + b);
-  return geo;
-}
 
-/** Bevelled extrusion of an arbitrary plan shape, centred in z like roundedBox(). */
-function beveledExtrude(shape: THREE.Shape, depth: number, bevel: number): THREE.ExtrudeGeometry {
-  const b = Math.min(bevel, depth / 4);
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: depth - b * 2,
-    bevelEnabled: true,
-    bevelThickness: b,
-    bevelSize: b,
-    bevelSegments: 2,
-    curveSegments: 8,
-  });
-  geo.translate(0, 0, -depth / 2 + b);
-  return geo;
-}
 
-/**
- * Hull plan: a rounded rear with a tapered nose.
- *
- * +x is forward. `nose` sets the shoulder width at the front relative to the mid-body.
- */
-function hullPlan(len: number, width: number, round: number, nose: number): THREE.Shape {
-  const halfL = len / 2;
-  const halfW = width / 2;
-  const shoulderW = halfW * clamp01(nose);
-  const r = Math.min(round, halfW * 0.9, halfL * 0.45);
-  const s = new THREE.Shape();
-  s.moveTo(-halfL + r, -halfW);
-  s.lineTo(halfL - r, -shoulderW);
-  s.quadraticCurveTo(halfL, -shoulderW, halfL, 0);
-  s.quadraticCurveTo(halfL, shoulderW, halfL - r, shoulderW);
-  s.lineTo(-halfL + r, halfW);
-  s.quadraticCurveTo(-halfL, halfW, -halfL, halfW - r);
-  s.lineTo(-halfL, -halfW + r);
-  s.quadraticCurveTo(-halfL, -halfW, -halfL + r, -halfW);
-  return s;
-}
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -675,51 +499,8 @@ export function createEntityViews(
   const mineViews = new Map<number, MineView>();
   const wallViews = new Map<number, { mesh: THREE.Mesh; signature: string }>();
 
-  /**
-   * Barrel radius. Must exceed the shell's, with wall thickness to spare -- see the
-   * assertion in entities.test.ts, which exists because this was wrong.
-   */
-  const BARREL_R = BULLET_RADIUS * 1.3;
-  /** Rounds the top edge, so the turret is a cylinder with a crown rather than a can. */
-  const TURRET_FILLET = 0.09;
 
-  /**
-   * The turret's lathe profile, in (radius, height) -- split out from the geometry so the
-   * BARREL can measure it. Matching the barrel's texel density to the turret's needs the
-   * turret's circumference and profile arc length, and re-deriving either by hand would
-   * go stale the moment TURRET_R or TURRET_FILLET moved.
-   */
-  function turretProfile(): THREE.Vector2[] {
-    const half = TURRET_H / 2;
-    const pts: THREE.Vector2[] = [
-      new THREE.Vector2(0, -half),
-      new THREE.Vector2(TURRET_R, -half),
-      new THREE.Vector2(TURRET_R, half - TURRET_FILLET),
-    ];
-    const STEPS = 5;
-    for (let i = 1; i <= STEPS; i++) {
-      const a = (i / STEPS) * (Math.PI / 2);
-      pts.push(
-        new THREE.Vector2(
-          TURRET_R - TURRET_FILLET + TURRET_FILLET * Math.cos(a),
-          half - TURRET_FILLET + TURRET_FILLET * Math.sin(a),
-        ),
-      );
-    }
-    pts.push(new THREE.Vector2(0, half));
-    return pts;
-  }
 
-  /**
-   * The turret: a cylinder with a rounded top edge.
-   *
-   * It was a box, which read as a crate balanced on the hull -- and at this camera angle
-   * a square turret and a square hull are one silhouette. Round it and the turret
-   * separates from the body, which is what makes the tank legible when it rotates.
-   */
-  function turretGeometry(): THREE.LatheGeometry {
-    return new THREE.LatheGeometry(turretProfile(), 20);
-  }
 
   /** Total arc length of a lathe profile, which is the world span its `v` runs over. */
   function profileLength(pts: THREE.Vector2[]): number {
@@ -889,46 +670,8 @@ export function createEntityViews(
     uv.needsUpdate = true;
   }
 
-  /**
-   * The gun: a tube from inside the turret to the muzzle, with the last MUZZLE_LEN
-   * stepped out into a flare.
-   *
-   * One lathe rather than two cylinders, so the step is a real edge in the silhouette
-   * rather than a seam between meshes that can drift apart.
-   */
-  function barrelProfile(): THREE.Vector2[] {
-    const breech = TURRET_R * 0.3; // seated inside the turret
-    const muzzle = TURRET_R + BARREL_OUT;
-    const flareStart = muzzle - MUZZLE_LEN;
-    const rMuzzle = BARREL_R * MUZZLE_FLARE;
-    return [
-      new THREE.Vector2(0, breech), // closed at the breech
-      new THREE.Vector2(BARREL_R, breech),
-      new THREE.Vector2(BARREL_R, flareStart),
-      new THREE.Vector2(rMuzzle, flareStart), // step out
-      new THREE.Vector2(rMuzzle, muzzle),
-      new THREE.Vector2(0, muzzle), // and closed at the tip
-    ];
-  }
 
-  /**
-   * Where the barrel's UV seam falls, as a lathe angle.
-   *
-   * `matchLatheToTurret` scales u to a FRACTION of a texture repeat, which means u no
-   * longer meets itself at the meridian where the lathe closes -- there is a seam, and it
-   * has to go somewhere. The barrel mesh is rotated -90deg about z, which sends lathe
-   * local +x to world -y, so phi = PI/2 puts the seam on the gun's UNDERSIDE, where the
-   * game's ~50deg overhead camera never looks.
-   *
-   * PI/2 is exactly 4 of the barrel's 16 segments, so this is a relabelling of which
-   * vertex starts the ring: the SURFACE IS UNCHANGED, only the seam moves. Pick an angle
-   * that is not a whole number of segments and the silhouette rotates with it.
-   */
-  const BARREL_SEAM_PHI = Math.PI / 2;
 
-  function barrelGeometry(): THREE.LatheGeometry {
-    return new THREE.LatheGeometry(barrelProfile(), 16, BARREL_SEAM_PHI);
-  }
 
   /**
    * Re-scale a lathe part's UVs so its pattern is the SAME WORLD SIZE as the turret's.
@@ -1030,8 +773,6 @@ export function createEntityViews(
     // and at this camera angle the hull and turret were one silhouette. Tracks are what
     // say "this thing drives", and they carry the width so the body can stay narrower and
     // sit higher, which separates it from the ground.
-    const bodyWidth = HULL_WIDTH - TRACK_W * TRACK_PROUD * 2;
-    const bodyH = TANK_BODY_H;
     // Rounded in plan and bevelled at the edges. A hard-edged box reads as a placeholder
     // at any distance; the corners are what make it look built rather than blocked out.
     // Shape is (length, width) and extrudes along its own +z, so rotating -90deg about x
@@ -1060,14 +801,25 @@ export function createEntityViews(
     // comes, this comment is the reminder that the gate must follow the skin.
     const striped = mapped && resolvedSkin === 'stripes';
 
-    const bodyGeo = beveledExtrude(hullPlan(HULL_LEN, bodyWidth, HULL_CORNER, HULL_NOSE), bodyH, HULL_BEVEL);
-    bodyGeo.rotateX(-Math.PI / 2);
+    // GEOMETRY AND TRANSFORMS BOTH COME FROM `tank-model.ts` (issue #385), so the tank an
+    // exporter writes and the tank the game draws cannot diverge. Sharing only the shapes
+    // would still leave two copies of where each part SITS, and where the parts sit is
+    // half of what a canonical model is. What stays here is everything that model
+    // excludes: materials, skins, the UV work below, and the per-tank decisions above.
+    const parts = tankParts();
+    const partFor = (name: TankPart['name']): TankPart => {
+      const found = parts.find((q) => q.name === name);
+      if (found === undefined) throw new Error(`tankParts() is missing '${name}'`);
+      return found;
+    };
+    const hullPart = partFor('hull');
+    const bodyGeo = hullPart.geometry;
     // EVERY mapped skin gets this now, not just `stripes` -- see projectBodyUV for why
     // the hull was arriving in panels and what the three parameterisations were.
     if (mapped) projectBodyUV(bodyGeo);
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = 'hull';
-    body.position.y = HULL_RIDE + bodyH / 2;
+    body.position.copy(hullPart.position);
     body.castShadow = true;
     body.receiveShadow = true;
     visual.add(body);
@@ -1080,21 +832,21 @@ export function createEntityViews(
       roughness: 0.95,
       metalness: 0.35,
     });
+    // The two tracks, in the order `tankParts` emits them (-z first). Indexed rather than
+    // re-derived from `side`, so their positions come from the shared model as well.
+    const trackParts = parts.filter((q) => q.name === 'track');
+    let trackIndex = 0;
     for (const side of [-1, 1]) {
+      void side;
       // TRACK SHAPED: a stadium in side profile -- fully rounded front and back, like the
       // run of a real track round its drive sprockets. The corner radius is half the
       // height, which is what turns a rounded rectangle into a stadium; anything less
       // reads as a box with softened corners.
-      const trackGeo = roundedBox(
-        HULL_LEN + TRACK_OVERHANG * 2,
-        TRACK_H,
-        TRACK_W,
-        TRACK_H / 2,
-        TRACK_BEVEL,
-      );
+      const trackPart = trackParts[trackIndex++];
+      const trackGeo = trackPart.geometry;
       const track = new THREE.Mesh(trackGeo, trackMat);
       track.name = 'track';
-      track.position.set(0, TRACK_H / 2, side * (HULL_WIDTH / 2 - TRACK_W / 2));
+      track.position.copy(trackPart.position);
       track.castShadow = true;
       track.receiveShadow = true;
       visual.add(track);
@@ -1105,7 +857,7 @@ export function createEntityViews(
     // that origin at the hull top buried half the turret in the hull -- 43% of its height
     // at these proportions. TURRET_SEAT is the deliberate part: a little of the turret
     // ring sunk in, so it looks seated rather than balanced on top.
-    turret.position.y = HULL_RIDE + bodyH + TURRET_H / 2 - TURRET_SEAT;
+    turret.position.y = TURRET_GROUP_Y;
     // The turret reads as the same paint, less worn -- smoother, so the highlight that
     // separates it from the hull below sits on the turret rather than the body.
     const turretMat = new THREE.MeshStandardMaterial({
@@ -1114,7 +866,7 @@ export function createEntityViews(
       roughness: 0.42,
       metalness: 0.35,
     });
-    const domeGeo = turretGeometry();
+    const domeGeo = partFor('turret').geometry as THREE.LatheGeometry;
     // `stripeAcross` is the ONE knob that separates the two racing-stripe options, and
     // it is deliberately the same number for the turret and the barrel -- see
     // STRIPE_TURRET_MODE.
@@ -1126,7 +878,8 @@ export function createEntityViews(
     // The bore has to clear the shell it fires. It did not: the barrel was radius 0.07
     // against a shell of BULLET_RADIUS 0.10, so the round was WIDER than the tube it
     // came out of -- visible the moment shells were drawn at their true size.
-    const barrelGeo = barrelGeometry();
+    const barrelPart = partFor('barrel');
+    const barrelGeo = barrelPart.geometry as THREE.LatheGeometry;
     // The barrel's lathe runs along its own +y (the mesh is rotated -90deg about z to
     // lay it along the turret's +x), so in GEOMETRY space the along-axis is y and the
     // horizontal across-axis is z -- which is what puts the stripe on its top and
@@ -1138,7 +891,7 @@ export function createEntityViews(
     // The profile is built along the lathe's own +y from breech to muzzle, so rotating
     // -90deg about z lays it along local +x already positioned -- no offset to keep in
     // step with the length, which is how the barrel got shorter when the turret grew.
-    barrel.rotation.z = -Math.PI / 2;
+    barrel.rotation.z = barrelPart.rotationZ;
     barrel.name = 'barrel';
     barrel.castShadow = true;
     turret.add(barrel);
