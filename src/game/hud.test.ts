@@ -1587,6 +1587,96 @@ describe('hud: versus setup pane (docs/superpowers/specs/2026-08-21-versus-setup
     }
   });
 
+  const teamBtns = (root: HTMLElement, slot: number): HTMLButtonElement[] =>
+    Array.from(
+      (root.querySelectorAll('.hud-versus-slot-rows > *')[slot]?.querySelectorAll('.hud-versus-team-btn') ?? []) as NodeListOf<HTMLButtonElement>,
+    );
+
+  it('does not offer Teams at two players, and does at three (issue #281)', () => {
+    // The issue's first binding rule. `.click()` rather than `dispatchEvent`, deliberately:
+    // a disabled button ignores a real click and honours a dispatched one, so only the
+    // former measures what a player can actually do.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    expect(modeBtn(root, 'teams').disabled, 'Teams is offered at two players').toBe(true);
+    expect(modeBtn(root, 'ffa').disabled, 'FFA was refused too').toBe(false);
+    modeBtn(root, 'teams').click();
+    expect(teamBtns(root, 0), 'a refused Teams click still built the team controls').toHaveLength(0);
+
+    playersBtn(root, 3).click();
+    expect(modeBtn(root, 'teams').disabled, 'Teams still refused at three players').toBe(false);
+  });
+
+  it('drops out of Teams when the player count falls to two', () => {
+    // The state a disabled button alone cannot prevent: pick Teams at three, then go back
+    // to two. Leaving the mode set would leave the pane in a mode it no longer offers, and
+    // the Start gate refusing a match the player cannot see how to fix.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    playersBtn(root, 3).click();
+    modeBtn(root, 'teams').click();
+    expect(teamBtns(root, 0).length).toBeGreaterThan(0);
+
+    playersBtn(root, 2).click();
+    expect(modeBtn(root, 'teams').disabled).toBe(true);
+    expect(teamBtns(root, 0), 'the team controls survived the drop to two players').toHaveLength(0);
+    // ...and friendly fire, which is Teams-only, went with it.
+    expect(friendlyFireBtn(root)).toBeNull();
+  });
+
+  it('offers a team per slot under Teams, and none under FFA', () => {
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    playersBtn(root, 3).click();
+    expect(teamBtns(root, 0), 'FFA offered team controls').toHaveLength(0);
+    modeBtn(root, 'teams').click();
+    for (const slot of [0, 1, 2]) expect(teamBtns(root, slot)).toHaveLength(3);
+    // The letters are the non-colour reinforcement the issue asks for, so they are pinned
+    // as CONTENT rather than left to the swatch's hue.
+    expect(teamBtns(root, 0).map((b) => b.textContent)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('shows the EFFECTIVE team on an untouched slot, not an empty selection', () => {
+    // An untouched slot has `team === undefined` and falls back to `teamOf(slot)`, which is
+    // exactly what `loadArena` stamps. Showing nothing chosen would read as a decision the
+    // player still had to make, in a pane whose Start button is already enabled.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    playersBtn(root, 3).click();
+    modeBtn(root, 'teams').click();
+    const chosen = (slot: number): string[] =>
+      teamBtns(root, slot).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent ?? '');
+    // teamOf alternates, so slots 0/1/2 start on A/B/A.
+    expect(chosen(0)).toEqual(['A']);
+    expect(chosen(1)).toEqual(['B']);
+    expect(chosen(2)).toEqual(['A']);
+  });
+
+  it('keeps a chosen team across a round trip through FFA', () => {
+    // The issue's "switching modes does not corrupt retained team choices". The controls
+    // are absent in FFA, so the only way this can hold is by the CHOICE surviving in the
+    // descriptor while its control does not exist -- which is why `team` is carried
+    // unconditionally rather than only under Teams.
+    const { hud: h, root } = mount();
+    h.setState('main-menu');
+    h.showVersusSetup(true);
+    playersBtn(root, 3).click();
+    modeBtn(root, 'teams').click();
+    teamBtns(root, 1)[2].click(); // put slot 1 on team C, which teamOf would never pick
+    const chosenC = (): boolean =>
+      teamBtns(root, 1)[2]?.getAttribute('aria-pressed') === 'true';
+    expect(chosenC()).toBe(true);
+
+    modeBtn(root, 'ffa').click();
+    expect(teamBtns(root, 1), 'FFA kept the team controls on screen').toHaveLength(0);
+    modeBtn(root, 'teams').click();
+    expect(chosenC(), 'the round trip through FFA lost the chosen team').toBe(true);
+  });
+
   it("Start fires onVersusStart with exactly the selections made, not the pane's defaults", () => {
     // Kills the mutation "emit versusConfigState's INITIAL value" / "emit a
     // hardcoded default object" -- every field below is changed from its default
@@ -3102,11 +3192,18 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // a board curated for another count would NOT appear here) + 5 Stock + 0 friendly
     // fire (absent -- the pane defaults to FFA) + 6 who's-playing role buttons
     // + Start + Back = 2+3+7+5+0+6+1+1 = 25).
-    // 73 since issue #267: the versus pane's one BOT slot (`defaultSlots(2)` is
-    // `[human, bot]`) gained Easy/Normal/Hard, and all three are reachable by arrow key
-    // like every other choice control -- which is the property this test exists to prove,
-    // so the count moving is the point rather than an inconvenience.
-    expect(totalControls, 'recount the panels above if this moves').toBe(73);
+    // 72 since issue #281, DOWN by one, and the direction is the point: this sweep counts
+    // visible and ENABLED controls, and Teams is no longer offered at two players ("not a
+    // distinct option for two players because it is equivalent to FFA"). This fixture is at
+    // the pane's default count, so the Teams button is disabled here and correctly drops
+    // out of arrow-key navigation -- a disabled control that stayed reachable would be the
+    // defect.
+    //
+    // It was 73 since issue #267, when the one BOT slot (`defaultSlots(2)` is
+    // `[human, bot]`) gained Easy/Normal/Hard. The per-slot TEAM buttons do not appear
+    // here at all, because they render only under Teams -- which this fixture cannot now
+    // reach at two players.
+    expect(totalControls, 'recount the panels above if this moves').toBe(72);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
