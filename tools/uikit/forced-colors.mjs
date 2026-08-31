@@ -146,18 +146,47 @@ async function main() {
     }
 
     // Level select: the locked button is the shipped example of a refused control.
-    await page.click('.hud-levelselect-open', { timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(200);
+    const levelsShown = await (async () => {
+      await page.click('.hud-levelselect-open', { timeout: 15000 }).catch(() => {});
+      return page.waitForSelector('.hud-levelselect:not(.hud-levelselect--hidden)', { state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+    })();
+    out.__levelSelectOpened = levelsShown;
     out['locked-level'] = await readStyle(page, '.hud-level-btn--locked');
-    await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(150);
+    // Closed by its OWN named Back control, not Escape. `tools/uikit/README.md` records
+    // this as a sharp edge and it bit here too: Escape left the level panel open over the
+    // menu, so every later `click` landed on an obscured element and timed out. The
+    // surface flags below are what turned that from four mislabelled screenshots into a
+    // visible `customize:false`.
+    await page.click('.hud-levelselect-back', { timeout: 15000 }).catch(() => {});
+    await page.waitForSelector('.hud-levelselect', { state: 'hidden', timeout: 8000 }).catch(() => {});
+
+    /**
+     * Open a panel and REPORT whether it actually became visible.
+     *
+     * Not a convenience. `hud.ts` builds several panels at mount and merely hides them, so
+     * `querySelector` finds their controls and `getComputedStyle` returns real values for
+     * them whether or not the panel ever opened -- the measurements stay valid while the
+     * SCREENSHOT quietly captures whatever screen is actually up. That happened here: the
+     * two light-scheme passes timed out on their clicks and wrote menu screenshots labelled
+     * `customize` and `stats`, byte-identical to each other, while their computed readings
+     * were correct. A capture that cannot fail loudly is not evidence, so every surface now
+     * records whether it opened and the summary prints it beside the readings.
+     */
+    async function openPanel(openSel, panelSel) {
+      await page.click(openSel, { timeout: 15000 }).catch(() => {});
+      const shown = await page
+        .waitForSelector(panelSel, { state: 'visible', timeout: 8000 })
+        .then(() => true)
+        .catch(() => false);
+      await page.waitForTimeout(150);
+      return shown;
+    }
 
     // Customize: tag one selected and one unselected swatch so the pair can be compared.
     // The SELECTED one is found by class rather than assumed to be first -- the stored
     // choice decides which it is, and a fixture that assumed index 0 would silently
     // compare two unselected swatches and report the ring as working.
-    await page.click('.hud-customize-open', { timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(250);
+    out.__surfaces = { customize: await openPanel('.hud-customize-open', '.hud-customize:not(.hud-customize--hidden)') };
     const tagged = await page.evaluate(() => {
       const all = [...document.querySelectorAll('.hud-swatch')];
       const on = all.find((b) => b.classList.contains('ui-selectable--on'));
@@ -202,10 +231,9 @@ async function main() {
     await page.screenshot({ path: join(outDir, `customize--${colorScheme}--${forcedColors}.png`), fullPage: false });
 
     // ---- Stats: the destructive control ----
-    await page.click('.hud-customize-back', { timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(200);
-    await page.click('.hud-stats-open', { timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(250);
+    await page.click('.hud-customize-back', { timeout: 15000 }).catch(() => {});
+    await page.waitForSelector('.hud-customize', { state: 'hidden', timeout: 8000 }).catch(() => {});
+    out.__surfaces.stats = await openPanel('.hud-stats-open', '.hud-stats:not(.hud-stats--hidden)');
     out.destructive = await readStyle(page, '.hud-reset-progress');
     await page.screenshot({ path: join(outDir, `stats--${colorScheme}--${forcedColors}.png`), fullPage: false });
 
@@ -235,6 +263,7 @@ async function main() {
     const off = report[`${scheme}:none`];
     const on = report[`${scheme}:active`];
     lines.push(`\n=== ${scheme} ===`);
+    lines.push(`surfaces opened: ${JSON.stringify(on.__surfaces)} levelSelect=${on.__levelSelectOpened}`);
     lines.push(`swatches: ${JSON.stringify(on.__swatches)}  focus: ${JSON.stringify(on.__focus?.engaged)}`);
     for (const c of CONTROLS) {
       const moved = diff(off[c.id], on[c.id]);

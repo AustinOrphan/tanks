@@ -1592,6 +1592,24 @@ describe('forced-colors conformance (issue #368)', () => {
     expect(selector, 'the opt-out must be on the swatch alone').toBe('.hud-swatch');
   });
 
+  it('gives the opted-out swatch a boundary the opt-out cannot take away', () => {
+    // The cost of `forced-color-adjust: none`, paid back. With the swatch's own colours no
+    // longer forced, `.ui-selectable`'s base ring keeps its authored `transparent` -- so an
+    // unchosen near-white swatch had NO boundary at all against a light theme's white
+    // Canvas. Every computed reading was correct while that was true, because a transparent
+    // border is exactly what the unforced stylesheet asks for; it was found by looking at
+    // the capture. A system keyword still resolves inside an opted-out subtree, which is
+    // what makes the repair possible without touching the fill.
+    const block = forcedBlock();
+    const at = block.indexOf('.hud-swatch:not(.ui-selectable--on) {');
+    expect(at, 'the unchosen swatch has no explicit boundary').toBeGreaterThan(-1);
+    const body = block.slice(at, block.indexOf('}', at));
+    expect(body).toContain('border-color');
+    // A SYSTEM keyword, not an authored one: an authored colour here would be exactly the
+    // hue dependency the opt-out already forces this element to live without.
+    expect(body).toMatch(/CanvasText|ButtonText|Highlight/);
+  });
+
   it('confines EVERY forced-colors declaration to the block, so normal rendering cannot move', () => {
     // The claim the PR makes about risk, made checkable. A system-colour keyword or a
     // `forced-color-adjust` outside the query would change what ordinary players see --

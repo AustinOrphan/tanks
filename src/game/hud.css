@@ -451,6 +451,21 @@
   .hud-swatch {
     forced-color-adjust: none;
   }
+
+  /* ...and the cost of that opt-out, paid back. Because the swatch's own colours are no
+   * longer forced, `.ui-selectable`'s base ring keeps its authored `transparent` here --
+   * so an unchosen near-white swatch had NO boundary at all against a light theme's white
+   * Canvas. Found by looking at the capture, not at the numbers: every measurement above
+   * was already correct, because a transparent border is exactly what the unforced
+   * stylesheet asks for.
+   *
+   * A system keyword still resolves inside an opted-out subtree -- the opt-out stops the
+   * agent REPLACING colours, it does not stop `CanvasText` meaning what it means -- so this
+   * gives the boundary back without touching the fill the opt-out exists to preserve.
+   * Scoped away from the chosen one, whose ring is already `Highlight`. */
+  .hud-swatch:not(.ui-selectable--on) {
+    border-color: CanvasText;
+  }
 }
 
 
