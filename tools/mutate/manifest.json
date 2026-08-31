@@ -2687,9 +2687,9 @@
     "expect": "killed",
     "expectFailures": 1,
     "tests": [
-      "tools/baseline/trace.test.ts"
+      "src/sim/ai/target-selection.test.ts"
     ],
-    "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding."
+    "why": "Pins the WIRING of issue #359's commitment, not the policy. target-selection.test.ts drives commitTarget directly and passes in full while stepAi never calls it, which would leave every AI on the pure fallback -- re-selecting from scratch every tick, with the stickiness the issue asks for present in the module and absent from the game. The golden trace is what notices, because five of its runs' timing depends on the commitment holding. Re-pointed 2026-08-31: the golden trace used to kill this (five runs's timing depended on the commitment holding), but the owner's full-awareness ruling made the commitment behaviourally invisible in single-player -- the trace reverted to its pre-#359 value and this entry started SURVIVING. Its value was always multi-player, so it is now pinned by a two-player stepAi case instead."
   },
   {
     "id": "target-selection-tie-break-is-symmetric",
