@@ -2763,5 +2763,42 @@
       "src/game/loop.test.ts"
     ],
     "why": "Pins the WIRING, not the effect. death-pulse.test.ts drives setReducedMotion directly and passes in full while the game never calls it, which is exactly the state before this change: the HUD had the policy since #364 and gameplay had none. The four-row matrix in loop.test.ts also fails a build that forwarded the raw media query instead of the value effective-settings.ts resolved."
+  },
+  {
+    "id": "blocked-fire-announced-during-the-countdown",
+    "file": "src/sim/world.ts",
+    "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
+    "replace": "  if (input.fire && player.fireCooldown <= 0) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/fire-refusal-paths.test.ts"
+    ],
+    "why": "Issue #356's cue must explain the active-shell cap and nothing else. Dropping the phase gate lets a tank that is already at its cap reach spawnBullet during the pre-round countdown, so the game announces a full magazine at a moment when firing was never on offer. The capacity check itself is untouched by this mutation -- only the order in which the two are consulted."
+  },
+  {
+    "id": "blocked-fire-announced-on-cooldown",
+    "file": "src/sim/world.ts",
+    "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
+    "replace": "  if (canAct && input.fire) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/fire-refusal-paths.test.ts"
+    ],
+    "why": "The other way the cue can start lying. With the cooldown out of the gate, every tick of a reload reaches spawnBullet, and a tank at its cap reports a capacity refusal 60 times a second for a shot the cooldown was holding anyway -- which is both the wrong reason and the unbounded output #356 forbids."
+  },
+  {
+    "id": "fire-blocked-carries-the-wrong-owner",
+    "file": "src/sim/bullets.ts",
+    "find": "    events.push({ type: 'fire-blocked', ownerId, reason: 'shell-cap' })",
+    "replace": "    events.push({ type: 'fire-blocked', ownerId: 0, reason: 'shell-cap' })",
+    "expect": "killed",
+    "expectFailures": 3,
+    "tests": [
+      "src/sim/fire-refusal-paths.test.ts",
+      "src/sim/bullets.test.ts"
+    ],
+    "why": "ownerId is what lets a consumer show the cue to the CONTROLLING player only, which is one of #356's acceptance criteria. The event is emitted for enemy owners too, so a treatment reading a wrong or constant owner would flash on every enemy's blocked shot -- visible only in a multi-tank fixture, never in a one-tank unit test."
   }
 ]

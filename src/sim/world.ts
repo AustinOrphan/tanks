@@ -2,7 +2,7 @@ import type { Tank, Bullet, Blast, Mine, Wall, Spawn, InputState, UnarmedTrigger
 import { angleOf, slewAngle, vsub, isActionLocked } from './types';
 import type { SimEvent } from './events';
 import { moveTank, separateTanks, resolveWalls } from './collision';
-import { spawnBullet, stepBullets, resolveBulletHits } from './bullets';
+import { spawnBullet, shellCapReached, stepBullets, resolveBulletHits } from './bullets';
 import { dropMine, stepBlasts, stepMines } from './mines';
 import { stepAi } from './ai';
 import { DT, MINE_COOLDOWN_TICKS, PLAYER_TURRET_TURN_RATE, RESPAWN_DELAY_TICKS, RESPAWN_SHIELD_TICKS } from './constants';
@@ -312,7 +312,23 @@ function driveTank(world: World, player: Tank, input: InputState, events: SimEve
   const canAct = phase === 'live' && !isActionLocked(player, world.tick);
 
   if (canAct && input.fire && player.fireCooldown <= 0) {
-    if (spawnBullet(world, player.id, player.turretAngle, pcfg.weapon.bulletType, events)) {
+    // A SHOT REFUSED BY THE SHELL CAP COSTS THE COOLDOWN ANYWAY (issue #356).
+    //
+    // Two things follow from it, and the second is the reason. Mechanically, a refusal used
+    // to leave the cooldown at zero, so holding the trigger at the cap re-attempted every
+    // tick: the `fire-blocked` cue could fire 60 times a second against a real shot's 2.5
+    // (`cooldownSeconds` 0.4), and any cue attached to it needed a rate limiter of its own.
+    // Now a refusal is paced by the same clock a real shot is, so it cannot outrun one.
+    //
+    // And it gives the rule teeth: spraying while every shell is still in the air now costs
+    // the same beat a real shot costs, so paying attention to how many you have out there is
+    // worth something. That is a deliberate, small punishment, not an accident of the fix.
+    //
+    // Only the CAP refusal pays. A shot held because a teammate crossed the lane, because the
+    // round has not started, or because the tank is dead is not the shooter's doing, and
+    // `dispatch.test.ts` still pins that those leave the cooldown alone.
+    const fired = spawnBullet(world, player.id, player.turretAngle, pcfg.weapon.bulletType, events);
+    if (fired || shellCapReached(world, player.id)) {
       player.fireCooldown = pcfg.weapon.fireCooldown;
     }
   }

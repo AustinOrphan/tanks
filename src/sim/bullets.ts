@@ -68,6 +68,22 @@ function muzzlePoint(world: World, owner: Tank, dir: Vec2): MuzzleSolution {
   return { spawn, flash: vadd(owner.pos, vscale(dir, SHELL_MUZZLE_FORWARD)) }
 }
 
+/**
+ * Is this owner already holding every shell its weapon allows (issue #356)?
+ *
+ * Extracted so the CALLER can tell a capacity refusal apart from every other reason
+ * `spawnBullet` returns false -- a dead owner, and nothing else today -- without restating
+ * the rule. The callers use it to decide whether a refused shot costs the fire cooldown:
+ * being at your cap is the shooter's own doing, so it does; being dead is not, so it does
+ * not. One definition, read in two places, rather than a second copy that can drift from the
+ * gate it is supposed to mirror.
+ */
+export function shellCapReached(world: World, ownerId: number): boolean {
+  const owner = world.tanks.find((t) => t.id === ownerId)
+  if (!owner) return false
+  return ownerShellCount(world, ownerId) >= configFor(owner.kind).weapon.maxActiveProjectiles
+}
+
 export function ownerShellCount(world: World, ownerId: number): number {
   let n = 0
   for (const b of world.bullets) {
@@ -90,7 +106,7 @@ export function spawnBullet(
   // 'player' when the player was the only shell-firer; that made it a no-op for AI owners.
   // The cap is now the owner's resolved weapon limit (configFor); it is SHELL_CAP for
   // every shipped kind today, so this is behaviour-identical (see config/roster.test.ts).
-  if (ownerShellCount(world, ownerId) >= configFor(owner.kind).weapon.maxActiveProjectiles) {
+  if (shellCapReached(world, ownerId)) {
     // Refused, and SAID SO (issue #356). Emitted for every owner, not just the player, for
     // the same reason the cap itself applies to every owner -- a signal each consumer opts
     // into is one the next consumer silently misses. Filtering to the local player is the

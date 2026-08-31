@@ -398,10 +398,20 @@ import { step } from '../../src/sim/world';
  * multi-player, which a single-player trace cannot exercise -- which is also why
  * `target-selection.test.ts` carries symmetric two-player fixtures.
  *
+ * 2026-08-31, issue #356 made a shot refused by the SHELL CAP cost the fire cooldown, for
+ * every owner rather than only the player -- so an enemy at its cap now pays the same beat a
+ * player does, and its fire cadence moves with it.
+ *
+ * RECOMPUTED on top of the full-awareness ruling (#456) rather than carried over: this
+ * branch's earlier pin was measured while #449's line-of-sight target bound was still in
+ * place. Both changes move this same hash independently, which is the case #456's own note
+ * warned about -- and this is it happening.
+ *
  * No existing arena's simulation moved on any of the first three occasions, on the fourth
  * exactly one did and it is named above, on the fifth every arena's turret track did, on
  * the sixth five runs' timing did, and on the seventh five runs' timing moved back.
  * Previous values, newest first:
+ * b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583
  * 1ec4ad63d5a05699b5d16f37bd1d5f114f52284ad654103d2a6f4e8f0cf5cf06
  * b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583
  * 9500fc588142deb6276be0f8a406e7f0861757f13f1a6114070a155cdb1b28db
@@ -410,7 +420,7 @@ import { step } from '../../src/sim/world';
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = 'b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583';
+export const BASELINE_HASH = '64013a606e3dce459ff04d01e4364be477e340ae9b287c14cf865c9e16e7d85a';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;
