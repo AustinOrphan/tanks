@@ -57,7 +57,7 @@ import type { Assignment, SlotSource } from '../input/assignment';
 import type { DetectedPad } from '../input/gamepad';
 import { teamOf } from '../sim/arena';
 import { versusCatalogEntryById } from '../sim/config/versus-catalog';
-import { IDENTITY_RING_COLORS, TEAM_COLORS } from '../render/entities';
+import { IDENTITY_RING_COLORS, TEAM_COLORS, TEAM_LABELS } from '../render/entities';
 import { createTransitionRunner } from './transitions';
 import { PALETTE, SKINS, ACCENTS, type HullColorId, type SkinId, type AccentId } from './customization';
 import { ACHIEVEMENTS, type AchievementDef, type AchievementId } from './achievements';
@@ -1412,14 +1412,23 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     for (const entry of versusStocksData) {
       const span = document.createElement('span');
       span.className = 'hud-versus-stock-entry';
-      span.textContent = `P${entry.slot + 1} ${entry.stock}`;
+      // The TEAM LETTER beside the player number, in teams mode (issue #281). Colour is
+      // not the only channel the readout carries the side on: a colour-blind player, a
+      // forced-colours palette (#368 replaces authored hues outright) and a greyscale
+      // screenshot all lose the hue and keep the letter. Same A/B/C the setup pane's team
+      // selector shows, so the readout and the control that set it agree.
+      const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';
+      span.textContent = `P${entry.slot + 1}${teamMark} ${entry.stock}`;
       // teams: TEAM_COLORS[team]; ffa (no `team` on the entry): IDENTITY_RING_COLORS[
       // slot] -- the SAME dispatch entities.ts's own ring/tint colouring uses at its
       // `mode === 'teams' ? teamColor(...) : identityColor(...)` site, imported rather
       // than copied out as literal hex (see setVersusStocks' own doc comment). The
       // `?? 0xffffff` fallback is unreached today -- both palettes cover every slot the
-      // n-player cap (4) allows -- kept only so a future out-of-range slot degrades to
-      // a colour rather than an NaN hex string.
+      // n-player cap (4) allows, and TEAM_COLORS covers all three teams issue #281 permits
+      // -- kept only so a future out-of-range slot degrades to a colour rather than an NaN
+      // hex string. It was REACHABLE between #281's descriptor landing and TEAM_COLORS
+      // gaining its third entry: a 2v1v1 rendered team 2's stock white, which is also the
+      // unstyled-slot placeholder.
       const hex = entry.team !== undefined ? (TEAM_COLORS[entry.team] ?? 0xffffff) : (IDENTITY_RING_COLORS[entry.slot] ?? 0xffffff);
       span.style.color = cssColor(hex);
       versusStocksEl.appendChild(span);

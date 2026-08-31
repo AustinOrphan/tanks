@@ -2593,5 +2593,30 @@
     "tests": [
       "src/game/hud.test.ts"
     ]
+  },
+  {
+    "id": "third-team-falls-back-to-the-placeholder",
+    "file": "src/render/entities.ts",
+    "find": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0x4eff3b];",
+    "replace": "export const TEAM_COLORS: readonly [number, number, number] = [0xff3b3b, 0x3b82ff, 0xffffff];",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Team C loses its own hue and renders as the white fallback -- the state that shipped between issue #281's descriptor landing and TEAM_COLORS gaining a third entry. It is not a crash and not a blank: `teamColor` still returns a colour, the ring still draws, the shell still tints, the tread trail still blends, and the stock chip still paints. What is lost is that a 2v1v1 match renders one whole SIDE in the fallback white, which the player has no way to read as a team. Deliberately mutated to `0xffffff` -- the actual fallback -- rather than to a duplicate of team A or B: a duplicate is caught by the pairwise-distinctness sweep, which makes that the easy half, while the fallback is a DISTINCT colour and passes every distinctness assertion. It is caught instead by the stock-readout case that asserts team 2's chip is TEAM_COLORS[2] and is not the fallback, which is the one place the two are told apart. Scoped to entities.test.ts and hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/render/entities.test.ts",
+      "src/game/hud.test.ts"
+    ]
+  },
+  {
+    "id": "stock-chip-drops-the-team-letter",
+    "file": "src/game/hud.ts",
+    "find": "      const teamMark = entry.team !== undefined ? ` ${TEAM_LABELS[entry.team] ?? '?'}` : '';",
+    "replace": "      const teamMark = '';",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The stock readout goes back to carrying its side in COLOUR ALONE. Issue #281 requires the team choice to be reinforced \"with label/marker in addition to color\", and this is the readout where that matters most: it is the only place a player checks mid-match to see who is left. Three readers lose the information and get no warning -- a colour-blind player (red and green are the shipped team A and C, the worst pair for a deuteranope, which is stated in TEAM_COLORS' own comment as the reason the letter is not optional), anyone on a forced-colours palette (issue #368 replaces authored hues outright, so every chip becomes one system colour), and anyone reading a greyscale screenshot. Nothing else fails: the chips still render, still count down, and still carry their hue, so no layout or visibility assertion can see it. Killed by the case that pins the chip TEXT for all three teams, whose control is the FFA case asserting no letter appears where a slot has no side. Scoped to hud.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.test.ts"
+    ]
   }
 ]
