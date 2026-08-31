@@ -20,8 +20,12 @@ make that sentence say something false about where these came from, so they sit 
 the same shape as the "walls as geometry" follow-ups above.
 
 **1. The replay stamp cannot see CODE.** `simDataFingerprint()` (`src/game/replay.ts`) is a
-canonical FNV-1a over the sim's four JSON data files — balance, tank-defs, ai-profiles,
-arenas — so any DATA change invalidates a trace. A change to `targeting.ts` or
+canonical FNV-1a over four of the sim's six JSON data files — balance, tank-defs,
+ai-profiles, arenas — so any change to those invalidates a trace. The two it omits are
+omitted CORRECTLY, and the reason is worth stating so nobody 'fixes' it: `campaign.json` and
+`versus-catalog.json` decide WHICH arena a session loads, and `ReplayMeta.arenaId` already
+records the resolved arena rather than a level id, precisely so a re-pointed level or a
+re-declared catalog cannot change what a trace reproduces (see that field's own comment). A change to `targeting.ts` or
 `collision.ts` diverges a replay with the fingerprint unchanged. So a mismatch proves a
 trace is stale; a match does not prove it is fresh. Closing it means stamping a build
 identity (a commit sha injected through `vite`'s `define`), which is a build-pipeline
@@ -33,8 +37,11 @@ store snapshots its key into an in-memory shadow at CONSTRUCTION and writes back
 shadow, so `__tanks.save.import(...)` mid-session changes nothing on screen — and the next
 write from a live store overwrites what was just imported. `save.ts`'s doc comment says so
 and the API is dev-flag-gated, which is the whole of the mitigation. A real fix is either a
-`location.reload()` inside `import`, or a re-read path on the five stores; both are product
-decisions about what an import is allowed to do to a session in progress.
+`location.reload()` inside `import`, or a re-read path on the SEVEN stores
+(`createStores`: progress, stats, customization, settings, achievements, run, versusSetup --
+it said five when this was written; `run` and `versusSetup` have since joined, which makes
+the second option larger, not different); both are product decisions about what an import is
+allowed to do to a session in progress.
 
 **3. Nothing REPLAYS a trace back into the running game.** `replayTrace(trace, world)`
 re-simulates headlessly and is what the tests use, but the loop has no path that feeds a
