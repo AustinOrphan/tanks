@@ -83,6 +83,7 @@ import {
   resolveBootSessionContext,
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { createRouteUi, type RouteUi } from './route-ui';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
 import { roundPhase, roundPhaseTicksLeft } from '../sim/round';
@@ -1656,18 +1657,6 @@ export function startGameWith(
     hud.setReducedMotion(effective.reducedMotion);
   }
 
-  /**
-   * Store -> audio -> button, for all three mute paths.
-   *
-   * Both mute buttons and the M hotkey used to call `audio.toggleMute()` directly and
-   * hand its return value to `hud.setMuted`. Routing them all through the store is what
-   * makes an M-key mute survive a reload; leaving any one of them on the old path would
-   * make mute persist or not depending on which control the player used.
-   */
-  function toggleMute(): void {
-    deps.settings.setMuted(!deps.settings.snapshot().audio.muted);
-  }
-
   applySettings();
   // ONE subscription. `EffectiveSettingsHandle.subscribe` republishes on any INPUT change
   // -- a stored preference, a capability, or the OS motion preference -- not only when
@@ -2106,13 +2095,25 @@ export function startGameWith(
     // the panel first.
     hud.setControllers(assignment);
   }
-
-  // Write the store and stop. `applySettings`, from the subscription above, is what
-  // reaches the audio engine and both buttons -- see its own doc comment.
-  hud.onMuteToggle(toggleMute);
-  hud.onVolumeChange((v) => {
-    deps.settings.setVolume(v);
+  /**
+   * The application routes, wired above this session (issue #427).
+   *
+   * Built here rather than registered inline because these handlers do not need a world,
+   * a driver or a renderer to be correct -- `route-ui.ts` lists the measurement that
+   * decided which ones those are. Construction is what registers them, and `hud.ts`
+   * APPENDS callbacks rather than replacing them, so this must happen exactly once per
+   * HUD.
+   *
+   * The style sink is the one thing the routes cannot do alone: the paint shop restyles
+   * the tank behind the panel through the gameplay renderer, which exists only while a
+   * session does. Handing it over here is what keeps the Customize panel's behaviour
+   * identical to when these three handlers lived in this function.
+   */
+  const routeUi: RouteUi = createRouteUi(hud, sm, deps);
+  routeUi.setStyleSink((hex, skin, accentHex) => {
+    renderer.setPlayerStyle(hex, skin, accentHex);
   });
+
   hud.onStartRestart(() => {
     // This click is the only guaranteed user gesture in the game, and Safari
     // will not open an AudioContext resumed from anywhere else. Sounds are
@@ -2182,26 +2183,6 @@ export function startGameWith(
   // the retained config to prefill from (`?? null` for "no prior match this session",
   // the same fallback applyVersusToDeps/versusAwareDeps use for a fresh campaign boot)
   // and, on Start, forwarding the pane's chosen config to the reboot seam.
-  hud.onVersusOpen(() => {
-    hud.showVersusSetup(true, deps.initialVersusConfig ?? null);
-  });
-  // `?.`: `requestVersusSession` is optional (GameDeps' own doc comment) so every
-  // existing test/caller that builds a GameDeps with no reboot seam at all keeps
-  // compiling AND keeps working -- a Start click reaching here with nothing wired to
-  // receive it must not throw.
-  hud.onVersusStart((config) => {
-    deps.requestVersusSession?.(config);
-  });
-  // The Campaign button -- a bare passthrough, same shape as the two above:
-  // `deps.requestCampaignSession` is only ever wired on a setup-pane versus session's
-  // own deps (applyVersusToDeps), so a campaign session's own click here (unreachable,
-  // since hud.ts hides the button for the 'campaign-levels' relaunch target -- see
-  // setRelaunchTarget) would no-op via `?.` exactly like a Start click with no
-  // requestVersusSession wired does above.
-  hud.onCampaignOpen(() => {
-    deps.requestCampaignSession?.();
-  });
-
   /**
    * Land on a level: build its world, rebind everything the old world owned, and
    * refit the renderer if the BOARD changed size. One path for advance, quit and
@@ -2322,10 +2303,6 @@ export function startGameWith(
     if (deps.levels.tracksProgress) hud.setContinueAvailable(deps.run.active() !== null);
   }
 
-  /** How many levels are pickable: everything cleared plus the next one, capped. */
-  const unlockedLevels = (): number =>
-    Math.min(deps.progress.highestCleared() + 1, deps.levels.levels.length);
-
   hud.onLevelSelect((picked) => {
     // Panel-only control, guarded like Quit: CSS hiding is not the only defence --
     // and neither is the HUD's button rendering, for the index. `deps.levels.levels[7]`
@@ -2421,11 +2398,6 @@ export function startGameWith(
   // Deliberately does NOT change the music: musicContextFor maps 'paused' to 'arena'
   // and the bed ducks instead of stopping, on the reasoning that moving the music
   // elsewhere would make a pause feel like leaving the level.
-  hud.onPauseTap(() => {
-    if (sm.isPaused) sm.resume();
-    else sm.pause();
-  });
-
   // The touch-only Mine button, routed to the input controller's own latch so a mine
   // tapped is indistinguishable from a mine keyed: same sample(), same clear-on-pause.
   hud.onMineTap(() => {
@@ -2448,16 +2420,6 @@ export function startGameWith(
   // the echo used to guarantee. The HUD never flips optimistically on its own (hud.ts's
   // toggles render only from `setTouchScheme`/`setFireMode`/`setHaptics`), which is what
   // makes "publish nothing" the correct response to a rejected value.
-  hud.onTouchSchemeChange((next) => {
-    deps.settings.setTouchScheme(next);
-  });
-  hud.onFireModeChange((next) => {
-    deps.settings.setFireMode(next);
-  });
-  hud.onHapticsChange((next) => {
-    deps.settings.setDeviceHaptics(next);
-  });
-
   hud.onQuitToTitle(() => {
     // The HUD hides the Quit button outside pause and the level-cleared panel, but a
     // handler that rebuilds the world deserves its own guard, not a CSS class as its
@@ -2521,110 +2483,8 @@ export function startGameWith(
     sm.toMainMenu();
   });
 
-  // The paint shop's live preview: a SECOND WebGL context. Built on onCustomizeOpen,
-  // torn down on onCustomizeClose -- together the ONE chokepoint hud.ts fires both
-  // transitions through (see its doc comment), so this never SKIPS a dispose down the
-  // "Start while the panel is open" path. But "torn down" is dispose(), not context
-  // loss: measured directly (see render/preview.ts's doc comment), the underlying
-  // WebGL context survives dispose() and is REUSED on the next open, because the HUD
-  // holds one persistent `.hud-preview` canvas for the whole session rather than a
-  // fresh one per open. So the context is held from the first Customize open through
-  // the rest of the session, not freed and reacquired every open/close -- what
-  // dispose() DOES reclaim every time is the THREE-side cost (the scene, the tank
-  // mesh, the skin texture, the environment map, the shadow map). The number that
-  // stays true either way, and is the one that actually matters: peak is two live
-  // contexts (this one plus the main game's), never three.
-  let preview: TankPreview | null = null;
-  hud.onCustomizeOpen(() => {
-    // The EFFECTIVE reduced-motion policy, resolved once here and handed down. preview.ts
-    // used to call `window.matchMedia` itself, which meant the OS was the only input and
-    // a player who wanted full effects anyway could not say so. Sampled at open, like the
-    // media query it replaces -- the preview lives only while this panel is open.
-    preview = deps.createPreview(
-      hud.previewCanvas,
-      hud.previewRotateButtons,
-      deps.effectiveSettings.current().reducedMotion,
-    );
-    preview?.setStyle(
-      deps.customization.hexFor(deps.customization.hull()),
-      deps.customization.skin(),
-      deps.customization.accentHexFor(deps.customization.accent()),
-    );
-  });
-  hud.onCustomizeClose(() => {
-    preview?.dispose();
-    preview = null;
-  });
-
-  // Hull, skin and accent restyle through ONE renderer call: the style is a triple,
-  // and sending part of it would reset the rest to a default. The live preview (when
-  // open) gets the SAME triple, so the tank behind the panel and the one inside it
-  // never disagree.
-  function restyle(): void {
-    const hex = deps.customization.hexFor(deps.customization.hull());
-    const skin = deps.customization.skin();
-    const accentHex = deps.customization.accentHexFor(deps.customization.accent());
-    renderer.setPlayerStyle(hex, skin, accentHex);
-    preview?.setStyle(hex, skin, accentHex);
-  }
-
-  hud.onPickHullColor((id) => {
-    deps.customization.setHull(id);
-    // Echo the ACCEPTED value back: the store refuses off-palette ids, and the
-    // swatch ring must show what was stored, not what was clicked.
-    hud.setHullColor(deps.customization.hull());
-    restyle();
-  });
-
-  hud.onPickSkin((id) => {
-    deps.customization.setSkin(id);
-    hud.setSkin(deps.customization.skin());
-    restyle();
-  });
-
-  hud.onPickAccentColor((id) => {
-    deps.customization.setAccent(id);
-    hud.setAccentColor(deps.customization.accent());
-    restyle();
-  });
-
   // The controller assignment UI's one write path -- see reassignSlot's own doc comment.
   hud.onReassignSlot(reassignSlot);
-
-  // The panel's live pad list -- read once immediately on open (the browser's
-  // gamepadconnected/disconnected events fire only on CHANGE, so opening over
-  // already-connected pads would otherwise show nothing until the next hotplug), then
-  // kept live by the two window listeners for as long as the panel stays open. Added and
-  // removed at exactly this chokepoint -- the driver does not tick during title/paused,
-  // so nothing else would refresh the panel while it is up.
-  const onGamepadHotplug = (): void => {
-    hud.setDetectedPads(deps.readDetectedPads());
-  };
-  hud.onControllersOpen(() => {
-    onGamepadHotplug();
-    deps.host.addEventListener('gamepadconnected', onGamepadHotplug);
-    deps.host.addEventListener('gamepaddisconnected', onGamepadHotplug);
-  });
-  hud.onControllersClose(() => {
-    deps.host.removeEventListener('gamepadconnected', onGamepadHotplug);
-    deps.host.removeEventListener('gamepaddisconnected', onGamepadHotplug);
-  });
-
-  hud.onResetStats(() => {
-    deps.stats.resetLifetime();
-    hud.setStats({ lifetime: deps.stats.lifetime(), attempt: deps.stats.attempt() });
-  });
-
-  hud.onResetProgress(() => {
-    deps.progress.reset();
-    // Achievements are progress, not statistics: this is the one reset that clears
-    // them, and Reset stats deliberately leaves them alone.
-    deps.achievements.reset();
-    hud.setAchievements(deps.achievements.earned());
-    // Levels re-lock immediately: the select the player is looking at must not keep
-    // offering a level the save no longer justifies.
-    hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
-  });
 
   /**
    * The music follows the game rather than merely starting and stopping.
@@ -2693,7 +2553,7 @@ export function startGameWith(
     // unlock real levels.
     if (nowWon && deps.levels.tracksProgress) {
       deps.progress.recordCleared(level);
-      hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
+      hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
     }
     // Latched, not evaluated here -- see pendingClear. Outside the tracksProgress
     // guard on purpose: the sandbox unlocks no levels but a feat performed there is
@@ -2741,7 +2601,7 @@ export function startGameWith(
   hud.setState(locationToHudSurface(sm.location)); // initial launch panel
   followMusic(sm.location); // ...and its music: this path bypasses sm.onChange
   hud.setLevel(ordinalOf(level), deps.levels.levels.length);
-  hud.setLevelSelect(unlockedLevels(), deps.levels.levels.length);
+  hud.setLevelSelect(routeUi.unlockedLevels(), deps.levels.levels.length);
   // Boot is an arrival at the title screen too (splash precedes it, but the button
   // states must already be right underneath) -- see the matching sm.onChange main-menu
   // refresh above, which covers every LATER arrival.
@@ -2793,7 +2653,7 @@ export function startGameWith(
       onSplashGesture();
       return;
     }
-    if (isMuteHotkey(e)) toggleMute();
+    if (isMuteHotkey(e)) routeUi.toggleMute();
     if (isPauseHotkey(e)) {
       // Toggle, guarded by the state machine: pause() acts only from `playing`
       // and resume() only from `paused`, so main-menu/outcome ignore the key
@@ -2817,7 +2677,7 @@ export function startGameWith(
     // Only while open: a disposed preview has nothing to resize, and re-reading
     // hud.previewCanvas's now-hidden layout would just re-fit against stale/zero
     // dimensions for no visible effect.
-    preview?.resize();
+    routeUi.resizePreview();
   };
   deps.host.addEventListener('resize', onResize);
   onResize();
@@ -2880,7 +2740,7 @@ export function startGameWith(
       // The panel can still be open at teardown (main.ts's pagehide path can fire
       // any time) -- dispose whatever live preview context is holding, same as the
       // main renderer just above.
-      preview?.dispose();
+      routeUi.disposePreview();
       deps.releaseAudio(audio);
       hud.dispose();
     },
