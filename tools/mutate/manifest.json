@@ -2448,5 +2448,29 @@
     "tests": [
       "src/game/route-ui.test.ts"
     ]
+  },
+  {
+    "id": "forced-colors-selection-ring-loses-its-shape",
+    "file": "src/game/hud.css",
+    "find": "  .ui-selectable--on {\n    border-style: solid;",
+    "replace": "  .ui-selectable--on {\n    border-style: dotted;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The chosen control drawn with the SAME border style as an unchosen one, under forced colours. This is the defect issue #368 was opened over, restored: measured in Chromium before the contract existed, `.ui-selectable`'s base `2px solid transparent` comes back OPAQUE and identical to `--on`'s authored white on both the dark and light high-contrast themes, so the ring the primitive's own comment calls \"the ONLY visual signal of the current choice\" disappears and every swatch, skin, source and option reads as selected. `border-color: Highlight` is deliberately LEFT in place by this mutation rather than removed with it, because colour alone is not the contract: `.hud-swatch` carries `forced-color-adjust: none` (the colour on a swatch is its content), so on a swatch the ring's colour is unforced and can land on a same-coloured Canvas -- the shape is the channel that holds in both cases. Nothing outside forced-colors mode moves, so no ordinary-rendering guard can see it, and jsdom never matches the media query at all, so no computed-style assertion can either. Killed by the text-level pair in `hud.css.test.ts` that asserts unselected is dotted, selected is solid, and the two differ. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
+  },
+  {
+    "id": "forced-colors-opt-out-widens-past-the-swatch",
+    "file": "src/game/hud.css",
+    "find": "  .hud-swatch {\n    forced-color-adjust: none;\n  }",
+    "replace": "  .hud-panel {\n    forced-color-adjust: none;\n  }",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The one narrow opt-out moved onto a CONTAINER, which is the failure mode `forced-color-adjust` invites: the property inherits, so `none` on `.hud-panel` takes every descendant out of colour forcing with it -- the whole interface silently stops honouring the user's high-contrast palette while still passing a rule sweep that only asks whether the declaration exists. Issue #368's boundaries name this explicitly (\"No wholesale forced-color-adjust: none\") and its criterion 5 requires any use to be narrowly scoped and justified. The swatch is the justified case and the only one: `hud.ts` sets each swatch's fill inline from the palette, so forcing replaces all eleven with a single system colour and the hull and accent pickers stop offering a choice rather than merely looking different. Killed by the guard that asserts `forced-color-adjust` appears exactly once in the whole file AND that its owning selector is `.hud-swatch` -- the count alone would pass this mutation, since it moves the declaration rather than adding one. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
