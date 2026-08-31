@@ -64,7 +64,7 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // function, which is what lets the deferred multi-player policy -- a per-AI commitment
   // window, a seeded tie-break, a perception bound -- land in ONE place. Still returns the
   // first alive player-kind tank today, so this extraction moves no behaviour.
-  const player = resolveOpponent(world, tank);
+  const player = resolveOpponent(world, tank, cfg);
   const sees = player !== undefined && lineOfSight(tank.pos, player.pos, world.walls);
   if (underFire && dodgeTicks < patienceTicks) {
     return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };

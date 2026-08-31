@@ -24,14 +24,24 @@ tick**, and an 8-frame rollback is roughly **0.5–1.2 ms of a 16.7 ms budget**.
 contrast, not the tick number: two probes disagreed by more than 2x, and tick cost varies
 2.3x across arenas — 61 µs to 144 µs — so the absolute moves when the probe moves.)
 
-Against that, the single-player assumption is load-bearing in five places, of which issue
-#120 moved one: the step boundary now takes a LIST (`stepInputs`, with `step` as a
-one-argument adapter) and pairs inputs with player tanks by position, so `applyPlayerInput`
-finding one tank by kind is no longer the only path. The other four are untouched.
-`resolveStatus` still finds one tank by kind; the arena validator **hard-fails at module load**
-on any grid without exactly one `P` (`config/validate.ts:257`); four AI target-acquisition
-sites take the FIRST player found; and a death resets the whole arena by `tanks[i]` ↔
-`spawns[i]` index alignment. The fifth, "no gamepad code, so local versus has no second
+Against that, the single-player assumption was load-bearing in five places. **Three have now
+moved; two remain** (re-verified against the tree on 2026-08-31, not carried forward):
+
+- **MOVED, issue #120** — the step boundary takes a LIST (`stepInputs`, with `step` as a
+  one-argument adapter) and pairs inputs with player tanks by position, so
+  `applyPlayerInput` finding one tank by kind is no longer the only path.
+- **MOVED, the versus arc** — `resolveStatus` no longer finds one tank by kind. It filters
+  the player tanks and resolves through `isVersusEliminated`, so N players already decide a
+  round (`world.ts`).
+- **MOVED, issue #359** — the four AI target-acquisition sites that took the FIRST player
+  found are gone. Every AI now reads one committed opponent through `resolveOpponent`, whose
+  selection is perception-bounded and breaks ties with a seeded per-AI draw; zero
+  `kind === 'player' && t.alive` scans remain in `ai/targeting.ts`.
+- **STANDS** — the arena validator **hard-fails at module load** on any campaign grid without
+  exactly one `P` (`config/validate.ts:282`; versus boards are validated separately through
+  the versus catalog).
+- **STANDS** — a death still resets the arena by `tanks[i]` ↔ `spawns[i]` index alignment
+  (`respawnPos`, `world.ts`). The fifth, "no gamepad code, so local versus has no second
 controller," is now stale: couch co-op's input-routing PR
 (`docs/superpowers/plans/2026-08-15-coop-input-routing.md`, branch `coop-input`) gives
 `?dev=1&coop=1` a real second controller — a standalone gamepad-only `PlayerInputSource`

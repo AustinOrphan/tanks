@@ -132,6 +132,17 @@ export interface Tank {
   aiAimHeld?: number;
   aiAimHeldTicks?: number;
   /** PROTOTYPE (issue #332): the held bank-first/direct-first shot plan and its countdown. */
+  /**
+   * The opponent this AI tank is committed to, and how many ticks that commitment has left
+   * (issue #359). Same optional pair shape as aiAimHeld/aiAimHeldTicks above, and absent
+   * means "nothing committed" -- an id of 0 is a real tank.
+   *
+   * Written ONLY by ai/target-selection.ts's commitTarget, called once per tank per tick by
+   * stepAi before the decision runs. Read through resolveOpponent, never directly, so
+   * movement and firing cannot end up on different opponents.
+   */
+  aiTargetId?: number;
+  aiTargetTicks?: number;
   aiShotPlan?: 'bank' | 'direct';
   aiShotPlanTicks?: number;
   /**

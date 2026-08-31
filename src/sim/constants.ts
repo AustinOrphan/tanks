@@ -506,6 +506,26 @@ export const TANK_TURN_RATE = data.tank.turnRate;
 // Lowering it makes enemies more readable/telegraphed.
 export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 
+// ---- Sticky opponent selection (issue #359) ----
+// The band inside which two candidates count as EQUIVALENT, and so are separated by the
+// seeded per-AI tie-break rather than by their distances.
+//
+// This exists because rule 3 is otherwise unreachable. Two opponents are almost never at
+// exactly equal range in floating point, so an unquantised comparison would leave the
+// tie-break as dead code -- and dead code here is indistinguishable from working code until
+// somebody writes a symmetric multi-player fixture. 0.5 units is half a tank radius: closer
+// than that and no profile can act on the difference.
+export const AI_TARGET_TIE_BAND = 0.5;
+
+// How much better a challenger must be, in preferred-range cost, before an AI abandons a
+// still-valid opponent at the end of its commitment span (rule 6: "do not switch merely
+// because a numerically tiny score difference exists").
+//
+// Strictly larger than AI_TARGET_TIE_BAND on purpose. If it were smaller, a challenger could
+// be too close to rank ahead on acquisition yet far enough ahead to trigger a switch, and the
+// AI would flip between two opponents at every span boundary.
+export const AI_TARGET_SWITCH_MARGIN = 2;
+
 // ---- Idle turret search (issue #371) ----
 // How long an AI holds one search heading, and how far from its HULL facing that heading
 // may fall. Both are plain literals like AI_JITTER_TICKS, not data-driven scalars: they

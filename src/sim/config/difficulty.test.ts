@@ -28,6 +28,7 @@ function aiProfile(over: Partial<AIProfileBalance> = {}): AIProfileBalance {
     estimationAccuracy: 0.5,
     reactionTime: 0.5,
     commitmentTime: 0.3,
+    targetCommitmentTime: 1.5,
     aimHoldTime: 0.2,
     shotCommitmentTime: 2,
     aggression: 0.5,

@@ -159,7 +159,7 @@ export function validateTankDefinitions(raw: unknown, file = 'tank-defs.json'): 
 }
 
 const PROFILE_FIELDS = [
-  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aimHoldTime', 'shotCommitmentTime', 'aggression', 'preferredDistance',
+  'behavior', 'aimAccuracy', 'estimationAccuracy', 'reactionTime', 'commitmentTime', 'aimHoldTime', 'shotCommitmentTime', 'targetCommitmentTime', 'aggression', 'preferredDistance',
   'minimumDistance', 'retreatChance', 'directShotWeight', 'bankShotWeight',
 ] as const;
 const PROFILE_OPTIONAL_FIELDS = ['minePlacementChance'] as const;
@@ -207,6 +207,11 @@ export function validateAiProfiles(raw: unknown, file = 'ai-profiles.json'): Rec
       // Same reason again: tealDecision re-arms to Math.round(shotCommitmentTime * TICK_HZ),
       // and a negative span would re-arm to a negative countdown that is already lapsed.
       shotCommitmentTime: nonNegative(file, `${profile}.shotCommitmentTime`, p.shotCommitmentTime),
+      // Same reason a fourth time: commitTarget re-arms to
+      // Math.round(targetCommitmentTime * TICK_HZ), and a negative span would re-arm to a
+      // countdown that never reaches zero -- an AI locked onto its first target for the rest
+      // of the round, with rule 6's re-evaluation unreachable.
+      targetCommitmentTime: nonNegative(file, `${profile}.targetCommitmentTime`, p.targetCommitmentTime),
       aggression: unitInterval(file, `${profile}.aggression`, p.aggression),
       preferredDistance: num(file, `${profile}.preferredDistance`, p.preferredDistance),
       minimumDistance: num(file, `${profile}.minimumDistance`, p.minimumDistance),

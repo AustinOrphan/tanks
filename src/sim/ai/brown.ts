@@ -16,7 +16,7 @@ export function brownDecision(world: World, tank: Tank, cfg: ResolvedTankConfig 
   // function, which is what lets the deferred multi-player policy -- a per-AI commitment
   // window, a seeded tie-break, a perception bound -- land in ONE place. Still returns the
   // first alive player-kind tank today, so this extraction moves no behaviour.
-  const player = resolveOpponent(world, tank);
+  const player = resolveOpponent(world, tank, cfg);
   if (!player) {
     return { desiredMove: { x: 0, y: 0 }, turretAngle: tank.turretAngle, fire: false, hasSolution: false, fireType: weapon.bulletType, mine: false, nextState: 'idle', nextTimer: 0, avoid: null, avoidKind: null, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
   }
