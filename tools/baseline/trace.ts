@@ -366,15 +366,29 @@ import { step } from '../../src/sim/world';
  *     5508, markers 42 -> 48 with all 6 of the new ones inside the appended tail, and
  *     `newText.startsWith(oldText)` true.
  *
- * No existing arena's simulation moved on any of those three occasions, and on the fourth
- * exactly one did and it is named above -- which is the only thing this fingerprint is a
- * pin on. Previous values, newest first:
+ * The newest move is the FIRST that is not an append. 2026-08-31, issue #371 gave an idle
+ * AI turret a search heading and required the barrel to reach its solution before firing.
+ * Both change `turretAngle`, which this trace samples every tick, so the text diverges at
+ * character 28 of 132457 rather than sharing a prefix -- `startsWith` is false and is
+ * expected to be.
+ *
+ * What did NOT change is the part worth stating. Measured by dumping `traceText()` from
+ * both trees and comparing the per-run end markers: the population is still 48 (8 arenas
+ * x 6 seeds), and **0 of those 48 runs changed outcome** -- every one ends `lose`, before
+ * and after. 30 of 48 end on the same tick as well; the other 18 end on a different tick,
+ * the longest shift being seed 6 of arena 0 (1515 -> 1948). So the pin moved because the
+ * guns point somewhere new, not because the campaign plays out differently.
+ *
+ * No existing arena's simulation moved on any of the first three occasions, on the fourth
+ * exactly one did and it is named above, and on the fifth every arena's turret track did.
+ * Previous values, newest first:
+ * 9500fc588142deb6276be0f8a406e7f0861757f13f1a6114070a155cdb1b28db
  * c89d93a7b8b27e5490f3db63da8a8694878f9004f18a58e3c45cbf4c259f0c6e
  * f9663703abe7308b55b2f54a1beb9edeacd6258f5b4b6941a4c6cb7f891f36e5
  * 6438933b56c8d0d1b968217896313c903ea5bc7fbbc4cabac14f6e2e65e00a70
  * 5a7238535cd9192a39a7ae22aaba2f89afe7d15fd93369be40eeb5ee012a221c
  */
-export const BASELINE_HASH = '9500fc588142deb6276be0f8a406e7f0861757f13f1a6114070a155cdb1b28db';
+export const BASELINE_HASH = 'b7e8b2aa567be37d7bf6a84cc920b4dfe6a438503f8a3acb7df09d7739f0c583';
 
 /** Seeds 1..TRACE_SEEDS are traced for every arena. */
 export const TRACE_SEEDS = 6;

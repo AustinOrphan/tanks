@@ -506,6 +506,32 @@ export const TANK_TURN_RATE = data.tank.turnRate;
 // Lowering it makes enemies more readable/telegraphed.
 export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 
+// ---- Idle turret search (issue #371) ----
+// How long an AI holds one search heading, and how far from its HULL facing that heading
+// may fall. Both are plain literals like AI_JITTER_TICKS, not data-driven scalars: they
+// describe a presentation cadence rather than a balance quantity, and nothing reads them
+// outside ai/search.ts.
+//
+// Why this exists, measured over 3 seeds x 3 arenas before it was added: an AI turret was
+// PERFECTLY STILL on 99.50% of the 58,932 ticks on which it had no firing solution
+// (brown 99.88%, grey 99.89%, olive 99.85%, teal 96.98%), and those ticks are 89.7% of
+// every AI tank-tick in that sample. The gun was dormant, not searching, for the large
+// majority of its life.
+//
+// AI_SEARCH_HOLD_TICKS is the DECISION span the issue asks for, not the slew time: the
+// turret spends part of the span travelling and the rest dwelling, which is what makes the
+// motion read as a deliberate look rather than jitter. Shorter than the ~75 ticks a full
+// half-turn takes at AI_TURRET_TURN_RATE, so a heading that lands far away is still being
+// approached when the next one is chosen -- deliberately, since arriving exactly on every
+// search heading is the "perfect coverage" the issue rules out.
+export const AI_SEARCH_HOLD_TICKS = 45; // 0.75s at 60Hz
+
+// Bounded to a forward-ish arc rather than the full circle, so a searching tank sweeps the
+// ground it faces and NEVER guarantees it will look behind itself. That is a deliberate
+// competence limit: full coverage would let a scan find an enemy the perception model says
+// the tank has not detected, which is the one thing issue #371 forbids outright.
+export const AI_SEARCH_SWEEP = 1.2; // radians, ~69 degrees either side of the hull facing
+
 // ---- AI turret angular acceleration (issue #347) ----
 // Ticks the AI turret takes to reach AI_TURRET_TURN_RATE from a standstill. The per-tick
 // acceleration budget is AI_TURRET_TURN_RATE * DT / this, and accelSlew (ai/turret-accel.ts)

@@ -1069,11 +1069,11 @@
     "find": "    turretAngle: aim.angle,",
     "replace": "    turretAngle: decision.turretAngle,",
     "expect": "killed",
-    "expectFailures": 2,
+    "expectFailures": 3,
     "tests": [
       "src/sim/ai/dispatch.test.ts"
     ],
-    "why": "Pins the WIRING, not the helper: holdAimFor can be correct and fully unit-tested while decideAi quietly discards its result, which would leave every unit test in aim-hold.test.ts green and the shipped game completely unchanged. The write-back pair is deliberately left intact here so the mutation is a pure 'result ignored', not a type error."
+    "why": "Pins the WIRING, not the helper: holdAimFor can be correct and fully unit-tested while decideAi quietly discards its result, which would leave every unit test in aim-hold.test.ts green and the shipped game completely unchanged. The write-back pair is deliberately left intact here so the mutation is a pure 'result ignored', not a type error. Failure count went 2 -> 3 when issue #371 added dispatch.test.ts's barrel-arrival case, which also depends on the held angle reaching the trigger."
   },
   {
     "id": "storage-developer-writes-land-on-production-keys",
@@ -2642,5 +2642,53 @@
     "tests": [
       "src/sim/bullets.test.ts"
     ]
+  },
+  {
+    "id": "idle-turret-never-searches",
+    "file": "src/sim/ai/index.ts",
+    "find": "  const solution = decision.hasSolution ? decision.turretAngle : searchAim(world, tank);",
+    "replace": "  const solution = decision.turretAngle;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "Pins the WIRING of issue #371's idle search, not searchAim itself. search.test.ts can pass in full while the dispatcher never calls it, which is exactly the shipped state before #371 -- every personality passes tank.turretAngle through and the gun sits still. Reverting to that pass-through must not be silent. One failure, not two: with no search the turret is perfectly still, so the anti-jitter case beside it counts zero reversals and still passes. The dormant-gun case is what carries this."
+  },
+  {
+    "id": "fire-gate-ignores-barrel-arrival",
+    "file": "src/sim/ai/index.ts",
+    "find": "    const onTarget = Math.abs(angleDelta(tank.turretAngle, decision.turretAngle)) <= AI_AIM_BREAK;",
+    "replace": "    const onTarget = true;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/dispatch.test.ts"
+    ],
+    "why": "aimTicks measures how long a solution has EXISTED, never whether the gun got there, and the shot deliberately leaves along the barrel -- so without this gate a tank fires mid-slew into whatever is in front of it. Latent until idle search shipped: measured over pacifist.test.ts's 60 seeds, dropping this takes AI-on-AI shell kills from 43 to 51 on an unchanged shot count."
+  },
+  {
+    "id": "search-anchored-on-the-turret-not-the-hull",
+    "file": "src/sim/ai/search.ts",
+    "find": "  return tank.bodyAngle + draw * AI_SEARCH_SWEEP;",
+    "replace": "  return tank.turretAngle + draw * AI_SEARCH_SWEEP;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/sim/ai/search.test.ts"
+    ],
+    "why": "Anchoring on the turret makes the target chase the barrel: the aim-hold layer sees a solution that moves every tick as the turret slews toward it, breaks its hold and re-solves, reintroducing the per-tick chasing issue #344 removed. The bound also stops meaning anything, since it is then measured from a moving reference."
+  },
+  {
+    "id": "search-redrawn-every-tick",
+    "file": "src/sim/ai/search.ts",
+    "find": "  const span = Math.floor(world.tick / AI_SEARCH_HOLD_TICKS);",
+    "replace": "  const span = world.tick;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/sim/ai/search.test.ts"
+    ],
+    "why": "The hold is the difference between a search and jitter. Issue #371 asks for headings held for a decision span; a fresh draw every tick satisfies every bound in search.test.ts except the hold itself, and produces a barrel that shivers rather than looks."
   }
 ]
