@@ -57,6 +57,14 @@ import type { TankKind } from './types';
 // Until that merges, `%ticksAtCap` below is the closest available proxy: it is
 // capacity-stall TIME, which is not the same quantity. A tank can sit at its cap
 // without ever wanting to shoot.
+//
+// That gap is not hypothetical, and one variant measures its size. Dropping
+// BROWN from 5 to 2 raises its capacity stall from 0.00% to 0.44% and changes
+// NOTHING else: brown's shots, kills, deaths and shell lifetime are unchanged,
+// and every other kind's row is bit-identical across all nine encounters. The
+// cap was occupied and never refused a shot. Dropping brown to 1 does bind --
+// stall 3.62%, shots 33 -> 26 -- so the threshold sits between 2 and 1. Read a
+// nonzero stall as "worth investigating", never as "shots were lost".
 // ---------------------------------------------------------------------------
 
 const SECONDS = 60;
