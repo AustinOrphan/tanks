@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Spike -- richer animated skins — what the offset mechanism cannot express
 implementation-issues: []
 implementation-prs: []
@@ -29,19 +29,19 @@ the cheapest route that does not introduce this tree's first shader?
    patterned skin, reverted): **7 failing tests across 3 files** — four literal counts in
    `skins.test.ts` (120, 28, 30 and a second 30), six new GOLDEN hashes, two in
    `customization.test.ts`, and one in `hud.css.test.ts` (every `SKINS` entry builds a
-   button). A second *scrolling* skin costs more still, because `customization.test.ts:108`
-   asserts `flow` is the only animated one.
+   button). A second *scrolling* skin costs more still, because `customization.test.ts`'s
+   "flow is the animated one, and slow: speed is per-skin DATA" case asserts it.
 
 **What would answer it:**
 
-- **Decide what `customization.test.ts:108` should become.** That assertion is the reason
+- **Decide what that `flow is the animated one` case should become.** That assertion is the reason
   "ship the bold-speed Flow variant" (ledger, #61) is not the trivial data edit it looks
   like. It is a design question — what does "the animated one" mean when there are two? —
   and it must be settled before any second scrolling skin, including the one already on the
   ledger.
 - **Decide whether skins should be unlockable at all** (ledger, #61), and specifically what
   happens to a save wearing a locked skin after `Reset progress` calls
-  `achievements.reset()` (`loop.ts:708`). The mechanics are trivial; the rule is not.
+  `achievements.reset()` (now `route-ui.ts`, moved there by the route-UI extraction). The mechanics are trivial; the rule is not.
 - **Whether a scrolling tile SHIMMERS at play distance is still open — the spatial half of
   it was measured and fixed, the temporal half was not.** Skins no longer inherit
   `DataTexture`'s NearestFilter/no-mipmap defaults: `skins.ts` now names
@@ -66,7 +66,7 @@ the cheapest route that does not introduce this tree's first shader?
   should, the preview's rule follows from that decision rather than standing on its own.
 - **If a brightness pulse is wanted, the cheapest route is an emissive channel, not a
   shader** — precedent exists in the same file (the mine's
-  `mat.emissive.copy(lo).lerp(hi, pulse)`, `entities.ts:828`). It needs the player's hull and
+  `mat.emissive.copy(lo).lerp(hi, pulse)` in `entities.ts`). It needs the player's hull and
   turret materials retained (or a `traverse` by mesh name); `tankViews` holds only
   `{ group, turret, kind, gen }` today. The open question is whether an emissive pulse reads
   as "skin" or as "this tank is in some state" — the game already uses emissive pulsing to

@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Spike -- intensity granularity, and a destination set by the level
 implementation-issues: []
 implementation-prs: []
@@ -18,15 +18,15 @@ half-scale jumps as they die; the glide softens the transit, not the destination
 ends, and how finely it moves in between — be a function of that level's difficulty,
 instead of the same 0..1 kill fraction in every level?
 
-`musicIntensity` (`game/loop.ts:189`) is `destroyed / (total - 1)`, where `total` is
+`musicIntensity` (`game/loop.ts`'s exported helper of that name) is `destroyed / (total - 1)`, where `total` is
 `enemiesAtRoundStart`. Two consequences, both structural rather than a tuning miss:
 
 - **The granularity IS the enemy count.** The step is `1 / (total - 1)`, so a level's
   musical resolution is decided by how many tanks its grid happens to spawn.
 - **The destination is 1.0 everywhere.** The last kill of level 1 asks for exactly the
   arrangement the last kill of level 4 asks for. Nothing in the signal knows which level
-  it is — though `level` (`loop.ts:319`) is in scope at the call site (`loop.ts:421`) and
-  simply is not read.
+  it is — though the level is in scope at the call site (the `audio.setMusicIntensity(...)`
+  call inside `startGameWith`'s frame handler) and simply is not read.
 
 **Measured at `60bdcfa`.** Population: the 4 shipped arenas × the 24 distinct members
 named by an `arena`-context suite in `music-suites.json` — 96 (arena, member) pairs. Each
@@ -80,7 +80,7 @@ the payoff the hardest one does not.
   the target over `INTENSITY_GLIDE_SECONDS` (2.0). Changing the destination changes what
   the walk arrives at; it does not change the walk.
 - **Respawn is part of this.** `enemiesAtRoundStart` is recomputed in `switchTo`
-  (`loop.ts:484`) — per LEVEL, not per round — so losing a life still takes the target from
+  (`loop.ts`, named function) — per LEVEL, not per round — so losing a life still takes the target from
   1.0 to 0.0. A per-level floor shortens that fall, which is half the appeal.
 - **`total <= 1` returns 1.** A one-enemy round sits at the full arrangement start to
   finish. Not reachable in a shipped level (the minimum is 3) but reachable today via

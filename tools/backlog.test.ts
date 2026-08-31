@@ -217,6 +217,33 @@ describe('the backlog index is complete (issue #265)', () => {
     expect(new Set(linked).size).toBe(linked.length);
   });
 
+  it('cites code by SYMBOL, never by line number', () => {
+    // Measured before this guard existed, sweeping every topic on 2026-08-31: of 17
+    // `file:line` pointers in the backlog, **15 were wrong**. One had moved to a different
+    // FILE entirely (`achievements.reset()` left `loop.ts` in the route-UI extraction), and
+    // one rotted within HOURS of being corrected -- `config/validate.ts:282` became :287
+    // when #456 added a validation above it, the same day it was written.
+    //
+    // The claims themselves held up almost perfectly. It is only the addresses that rot, and
+    // they rot silently: you follow one, land on an unrelated `*/` or a blank line, and have
+    // to work out whether the claim or the pointer is wrong. A symbol name, a test title or a
+    // quoted line of code moves with the code and cannot mislead that way.
+    //
+    // Scoped to source extensions so ordinary prose with colons and digits is untouched.
+    const offenders: string[] = [];
+    for (const f of readdirSync(BACKLOG_DIR).filter((n) => n.endsWith('.md'))) {
+      const body = readFileSync(`${BACKLOG_DIR}${f}`, 'utf8');
+      for (const m of body.matchAll(/`[^`\s]+\.(?:ts|tsx|mjs|js|css|json|html|yml|yaml):\d+`/g)) {
+        offenders.push(`${f}: ${m[0]}`);
+      }
+    }
+    expect(
+      offenders,
+      `cite the symbol, test title or quoted code instead -- line numbers rot (15 of 17 were ` +
+        `stale when this guard was added):\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+
   it('the index stays compact: no topic bodies, only one line per topic', () => {
     // The whole point of the split (issue #265's first acceptance criterion): loading
     // the index must not load the corpus. 40 lines comfortably holds ~16 entries plus

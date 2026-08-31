@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Spike -- mobile app release (iOS App Store / Google Play)
 implementation-issues: []
 implementation-prs: []
@@ -18,7 +18,7 @@ first?
 
 **Why it is live now.** The tree is unusually ready for a wrapper and nobody has said so in
 one place: `grep` finds exactly 1 non-test occurrence of `fetch(`/`XMLHttpRequest`/`import(`
-across `src/` (a type-position import at `audio/music.ts:86`), `public/audio/` holds only a
+across `src/` (a type-position import in `audio/music.ts`'s `director?:` field), `public/audio/` holds only a
 `.gitkeep`, and `base: './'` already emits `./assets/…`. Touch controls, gesture
 classification, `pointercancel`/`blur`/`visibilitychange` recovery and the iOS audio-unlock
 gesture path all ship today. What is missing is the store-quality shell — and one number.

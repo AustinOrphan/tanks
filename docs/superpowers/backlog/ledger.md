@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Ledger -- deferred work harvested from PR descriptions
 implementation-issues: []
 implementation-prs: []
@@ -49,9 +49,9 @@ items triaged; the difference is itemised at the end. All five figures are recom
 
 ### Gaps with a reachability argument
 
-- `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `targeting.ts:333` documents the divergence as negligible rather than closing it. #1
+- `bankShot` models an exact-corner bounce as a single-face reflection while `reflectSweep` retroreflects both axes; `bankShot`'s own comment in `targeting.ts` documents the divergence as negligible rather than closing it. #1
 - The retroreflecting-seam fix is open: it must distinguish a coplanar neighbour that continues the surface from a perpendicular one that merely touches it. CLAUDE.md §Known holes owns the measurement and the record of the fix that was tried and reverted — do not restate them here. #1
-- `melody.ts:99`'s density knob is inert at and above 0.5: the predicate is `rnd() < spec.density * 2`. **13 of 42** generated layers ship at ≥ 0.5. *(pinned)* #70
+- `melody.ts`'s density knob is inert at and above 0.5: the predicate is `rnd() < spec.density * 2`. **13 of 42** generated layers ship at ≥ 0.5. *(pinned)* #70
 - `melody.ts` carries `previous` as a palette *index* across bars whose palettes may differ in size, weakening the contour guarantee. #70
 - Six tracks — blitz, dread, hunt, siege, standoff, triumph — belong to no suite, so nothing can select them: **25 of 31** reachable. *(pinned)* #71, #74
 - The suite walk can backtrack X→Y→X; `rankCandidates` takes only `from` and has no memory of the previous suite. #72
@@ -70,7 +70,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - Terminal-event cardinality: the win/lose presence assertions use `toContainEqual`, so a duplicated push survives and the audio director plays the stinger twice. (Three assertions in the same block do use `toEqual([])`, but on the empty case.) #3
 - `resolveStatus`'s own guard is pinned on the win side only; narrowing it to `=== 'win'` still lets a lost world push a second `lose`. Reachability through `step()` was proven nil, so it is latent. #3
 - `tank-destroyed` / `explosion` push order on the bullets path is stated in a comment and asserted by nothing. #3
-- The purity guard's specifier regexes use `['"]` only, so a template-literal import specifier is invisible to it. #1
+- The purity guard's specifier regexes use `['"]` only, so a template-literal import specifier is invisible to it. **Narrower than this said**: a STATIC `import x from \`three\`` is a syntax error (verified with `node --check`), so the hole is reachable only through a DYNAMIC `import(\`three\`)`, which is valid. #1
 - The purity guard matches `Math.random` / `Date.now` as tokens, so an alias or destructure walks past it. #1
 - `FRAME_MARGIN` tightness is self-referential: the test imports the constant and uses it on both sides. Routing around the constant *is* caught. #5
 - `VIEW_DIR`'s pitch magnitude is now pinned to 51.0° by `framing.test.ts` (#103 added it after review measured that swinging it to 80° — a near-top-down camera — passed all 1538 tests; 27 of integer tilts 30–89 survived the coverage floor). What is still unpinned is whether 51° is the right CHOICE: it is not optimal for any single aspect (43° is +3.49pp at 16:9, fov 30) and was kept because within a playable 40–60° band the best fixed tilt (60°) gains only +1.63pp on a uniform mix of 4 arenas × 4 common aspects — going further means going near-top-down (89° gains +10.07pp and is a different game). #5 #103
@@ -82,13 +82,13 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - `dispose()` ordering was never swept; the assertion `.sort()`s, making it explicitly order-insensitive. #6
 - `renderer.dispose()` idempotency is still unmeasured — **the blocker PR #6 recorded has lifted**, since `tools/gl/harness.ts` now runs in a real browser and already calls `dispose()`. #6
 - The GL harness's two `refit()` checks pass bare literals (`34, 18`), not the bounds of any shipped arena or of `WIDE_ARENA` (which is 34 × 26). No `refit` check is driven by production arena data. #67
-- `makeTank`/`mkTank` is redefined in **8 test files** — and `src/sim/arena.ts:38` already exports a `makeTank` that two other test files import. The shared helper exists; it is neither named `test-helpers.ts` nor used consistently. #2
+- `makeTank`/`mkTank` is redefined in **8 test files** — and `src/sim/arena.ts` already exports a `makeTank` that two other test files import. The shared helper exists; it is neither named `test-helpers.ts` nor used consistently. #2
 - Musical content — authored pitches, layer lengths, voicings — is deliberately unpinned. #68
 - `barSteps` has a lower bound and an integrality check, but no upper bound. #70
 - Authored layers are not validated against the track's declared chords; the chord check fires for generated layers. #70
 - `TRACKS_PER_SUITE = 3` and the start suite are unmeasured feel constants; the test pins the mechanism against whatever the constant is. #72
 - The music seed is taken from `Date.now()` at bed construction and is not surfaced as a dev flag, so a specific walk cannot be replayed. #72
-- The 3.0s countdown is an unmeasured feel choice, pinned only by the tautological seconds assertion. (The "TAKE AIM" string itself IS pinned, at `hud.test.ts:338`.) #63
+- The 3.0s countdown is an unmeasured feel choice, pinned only by the tautological seconds assertion. (The "TAKE AIM" string is GONE: `hud.test.ts`'s "is a bare number -- no \"AIM\"/\"TAKE AIM\" word, on either non-live phase" now pins its ABSENCE. This line previously claimed the opposite.) #63
 - SFX recipe numbers were tuned by ear against design intent and never measured. #64
 - `arenas.json`'s prose — `notes` and each claim's `why` — ships in the browser bundle. #65
 - `engine.ts`'s non-`setMusicContext` call site was not swept; sequences of length ≥ 5 and a real unstubbed bed were never exercised. #74 *(prose-only PR)*
@@ -117,7 +117,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - An achievements progress bar beyond the "N of 14 earned" string. #62
 - A scroll affordance on the achievements list (`max-height: 58vh`, `overflow-y: auto`, no fade). Arguably a usability defect rather than an idea: 14 entries clip with no cue. #62
 - `OFFENSIVE` and `BERSERKER` route to `teal.ts`; the profile field for how much a threat overrides a tank's approach does not exist. #69
-- No crossfade when the music bed starts or stops. `start()` snaps by design, and the #76 glide is intensity-only — but `music.ts:418` already carries a linear per-note fade for the suite-change overlay, which is the machinery to reuse. #64
+- No crossfade when the music bed starts or stops. `start()` snaps by design, and the #76 glide is intensity-only — but `music.ts` already carries a linear per-note fade (`const fade = 1 - o.played / o.steps`) for the suite-change overlay, which is the machinery to reuse. #64
 - The one-oscillator `beep` stays as the floor for contexts that cannot support the synth graph. #64
 - No sustain/tie marker in the note grammar; `hold` is per voice, not per note. #68
 - No per-note velocity; amplitude comes from `VOICES[].peak`. #68
@@ -152,7 +152,7 @@ Each needs a measurement, a browser, or a person.
 
 147 items were enumerated from the harvested set. 63 were already closed by later work
 (62 found by the triage, plus one the review caught: the `startMusic()`/`loaderror` race
-was filed as unsettleable and is in fact tested at `engine.synth.test.ts:218`, since #73).
+was filed as unsettleable and is in fact tested by `engine.synth.test.ts`'s "starts the bed when no track loaded, and stops it on stopMusic", since #73).
 8 remain unsettleable. 76 were still open.
 
 The 8 unsettleable are the in-scope lines of "Cannot be settled by reading the tree" — they
