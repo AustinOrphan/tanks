@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Spike -- the campaign's levels — the approved arc says "renumbered", the owner says "rewritten"
 implementation-issues: []
 implementation-prs: []
@@ -40,7 +40,7 @@ re-verified 2026-08-11 after PR #145: `src/sim/config/data/arenas.json` holds ex
 `arena-01` .. `arena-05` (5 `"id"` keys, no `arena-00a`/`arena-00b` — arena-05 extends the
 shipped sequence rather than adopting the spec's renumbered arc, which deepens rather than
 resolves this spike's question). `firstMission` is still only validated as a non-negative integer
-(`config/validate.ts:131`) and copied through `config/resolve.ts:79` — the spec's
+(`config/validate.ts`'s `nonNegInt` call for it) and copied through `config/resolve.ts` — the spec's
 "enforced load-time rule" does not exist and **nothing reads the field**. And the plan's
 boards are specified as `"cols": 9, "rows": 7, "cellSize": 2`, which is pre-#75 geometry:
 shipped arenas are 33x27 at `cellSize` 0.667. Its grids cannot be pasted in as written.
