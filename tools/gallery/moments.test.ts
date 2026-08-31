@@ -438,9 +438,19 @@ describe('ai-last-seen moment specifics', () => {
     // Derived from the constant, so re-tuning AI_LAST_SEEN_TICKS moves this with it
     // rather than reddening a hardcoded 119.
     expect(zero).toBe(brk + AI_LAST_SEEN_TICKS);
-    // The handoff is visible, not just bookkeeping: the turret leaves the held bearing.
-    const held = tl.worlds[118].tanks[0].turretAngle;
-    expect(tl.worlds[zero + 20].tanks[0].turretAngle).not.toBe(held);
+    // The handoff is VISIBLE, not just bookkeeping. Stated as "still, then moving"
+    // rather than "the angle changed": with memoryAim dropped from stepAi's chain the
+    // turret is already sweeping before expiry, so a bare `not.toBe` passes on exactly
+    // the tree this moment exists to distinguish -- checked, and it did.
+    const travel = (a: number, b: number) => {
+      let sum = 0;
+      for (let t = a + 1; t <= b; t++) {
+        sum += Math.abs(tl.worlds[t].tanks[0].turretAngle - tl.worlds[t - 1].tanks[0].turretAngle);
+      }
+      return sum;
+    };
+    expect(travel(60, zero - 1)).toBe(0);
+    expect(travel(zero, zero + 20)).toBeGreaterThan(0.1);
   });
 
   it('the plateau is caused by the memory, not by the geometry', () => {
