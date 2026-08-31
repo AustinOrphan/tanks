@@ -70,6 +70,18 @@ export interface DevFlags {
   mineTimer: boolean;
 
   /**
+   * Draw each AI's committed opponent and whether it can currently SEE it, is only
+   * REMEMBERING where it last was, or has no contact at all.
+   *
+   * The instrument issues #359 and #372 ask for in their Direction sections. Both
+   * behaviours are invisible without it: a turret that has stopped tracking looks the
+   * same whether it is holding a remembered bearing, sweeping a search arc, or broken,
+   * and which bot is pressuring which player cannot be read off the screen at all. See
+   * render/ai-contact.ts, including why the retarget REASON is not among what it shows.
+   */
+  aiContact: boolean;
+
+  /**
    * Jump straight to a level: a 1-based index into CAMPAIGN_LEVELS, or the word
    * `sandbox`. Range-checking against it is the caller's job -- knowing how many
    * levels exist would mean importing the sim here.
@@ -316,6 +328,7 @@ export const DEV_FLAGS_OFF: DevFlags = {
   mineTrigger: null,
   mineReach: false,
   mineTimer: false,
+  aiContact: false,
   level: null,
   sandboxTanks: null,
   // TRUE in the off state: the sandbox defaults to weapons-off, and this field is a
@@ -513,6 +526,7 @@ export function parseDevFlags(search: string): DevFlags {
     mineTrigger: asMineTrigger(params),
     mineReach: isOn(params, 'mineReach'),
     mineTimer: isOn(params, 'mineTimer'),
+    aiContact: isOn(params, 'aiContact'),
     level: asLevel(params),
     sandboxTanks: asTanks(params),
     // Absent means disarmed: the sandbox is scenery until explicitly re-armed.
@@ -661,6 +675,13 @@ export const FLAG_REGISTRY: Record<keyof DevFlags, FlagSpec> = {
     kind: 'boolean',
     description: "Shows each mine's remaining fuse, in seconds, beside it.",
     notes: ['In the playtest bundle.'],
+  },
+  aiContact: {
+    kind: 'boolean',
+    description:
+      "Rings each AI with its contact state -- green for an opponent it can see, amber " +
+      'for one it is only remembering, grey for none -- and labels the committed target ' +
+      'id with its remaining commitment and memory ticks.',
   },
   level: {
     kind: 'valued',
