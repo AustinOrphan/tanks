@@ -60,10 +60,18 @@ the stock PR -- also struck below, same idiom.
    shipping versus to a real player), not a close of it: the assignment/bot-fill gap
    above (issue #260, AC2); Quit landing on the versus-kind title instead of the pane,
    plus every reboot (including every rematch) showing a second "press any key" splash
-   before play (issue #261, AC5); per-slot bot difficulty; a match-rules table for
-   sim-enforced shell/mine caps; invalid-combination explanations; pad/touch
+   before play (issue #261, AC5); ~~per-slot bot difficulty~~; ~~a match-rules table for
+   sim-enforced shell/mine caps~~; invalid-combination explanations; pad/touch
    keyboard-navigation validation of the pane; and the persistence ruling (session-only
-   vs. `localStorage`) remain open there.
+   vs. `localStorage`) remain open there. **Two of those have since closed, struck above
+   rather than deleted, same idiom as items 1-5.** Per-slot bot difficulty shipped with
+   #267 -- `ai/bot-difficulty.ts`'s three presets as multipliers over the authored
+   profile, offered per slot in the pane. The match-rules table is #268: the pane now
+   carries a **Standard rules** line stating the effective shell and mine limits, read at
+   render time from the same configuration `spawnBullet` and `dropMine` enforce
+   (`weapon.maxActiveProjectiles` and `mineCapacity`) rather than duplicated in the UI --
+   which is also why it is a stated RULE rather than the editable table the phrase
+   originally imagined: #268's binding decision is that PP1 exposes no cap controls.
 6. **Map selection / procedural generation.** Already named as unbuilt in this file's
    Ledger ("Procedural generation of shipped levels; the four arenas are authored
    grids... #43") -- and directly relevant here, since `pickVersusSpawnCell` was
