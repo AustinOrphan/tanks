@@ -1135,17 +1135,28 @@ export const MOMENTS: Record<string, MomentDef> = {
    * band while the challenger drives INTO it:
    *
    *   tick   1   commits to player 2 -- cost 0.66 against the challenger's 4.80
-   *   tick  55   THE CHALLENGER BECOMES CHEAPER (2.42 against 2.81) and stays cheaper
-   *   ..91       the AI holds player 2 anyway, for 37 more ticks
-   *   tick  92   switches to player 3, the first tick the span allows it: costs are
-   *              4.09 against 1.24, a gap of 2.85 over AI_TARGET_SWITCH_MARGIN's 2
+   *   tick  55   the challenger becomes CHEAPER (2.42 against 2.81) and stays cheaper
+   *   tick  92   switches to player 3: costs 4.09 against 1.24
    *   ..140      turret swings 25.8deg (tick 91) to 108.1deg (tick 130)
    *
-   * THOSE 37 TICKS ARE THE ARTEFACT. A per-tick target solve switches at 55. A committed
-   * one cannot even look until its span expires, and `commitTarget` then still requires
-   * the challenger to win by a margin rather than by a hair. Both rules are visible here
-   * as one continuous half-second of the turret staying put while the better target is
-   * already on screen.
+   * WHAT HOLDS IT FOR THOSE 37 TICKS, measured by removing each rule from the tree and
+   * re-reading the switch tick rather than by reasoning about the code:
+   *
+   *   shipped                    switches at 92
+   *   commitment span = 0        switches at 82   <- the span is worth 10 ticks
+   *   AI_TARGET_SWITCH_MARGIN 0  switches at 92   <- the margin is worth NOTHING here
+   *
+   * So the long first stretch, ticks 55 to 82, is neither of the rules this moment is
+   * named for. It is `selectPerceived` comparing BANDED costs (AI_TARGET_TIE_BAND, 0.5):
+   * a challenger that is cheaper by less than a band is not even selected, so there is
+   * nothing for the margin or the span to refuse. By the time the span does expire the
+   * challenger already wins by more than the margin, which is why deleting the margin
+   * moves nothing on this fixture.
+   *
+   * Two earlier drafts of this comment got that attribution wrong -- the first credited
+   * all 37 ticks to the span, the second credited 26 of them to the margin. Both were
+   * plausible from reading `commitTarget` and both are contradicted by the table above.
+   * The moment is worth filming for the 37-tick hold; only 10 of it is the commitment.
    *
    * BOTH PLAYERS DRIVE EAST, which is why they never collide despite sharing a lane: they
    * start 19.5 units apart and move in parallel. `ai-commitment`'s first draft put two

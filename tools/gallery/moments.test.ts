@@ -3,7 +3,7 @@ import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from 
 import type { World } from '../../src/sim/world';
 import {
   RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
-  AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, AI_LAST_SEEN_TICKS,
+  AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, AI_LAST_SEEN_TICKS, AI_TARGET_SWITCH_MARGIN,
 } from '../../src/sim/constants';
 import { step } from '../../src/sim/world';
 import { lineOfSight } from '../../src/sim/ai/targeting';
@@ -625,27 +625,39 @@ describe('ai-retarget moment specifics', () => {
   const PREFERRED = 10; // STATIC_BASIC's preferredDistance; the fixture is built around it
   const cost = (w: World, i: number) => Math.abs(Math.hypot(w.tanks[i].pos.x, w.tanks[i].pos.y) - PREFERRED);
 
-  it('holds the committed target for 37 ticks AFTER a cheaper one is available', () => {
-    // The whole artefact, and the one number that distinguishes a commitment from a
-    // per-tick solve. Derived from the timeline, not hardcoded: a re-tuned
-    // targetCommitmentTime moves the switch and this reports the new gap rather than
-    // reddening on a stale constant.
-    const tl = simulateMoment(DEF);
-    const first = (pred: (t: number) => boolean) => {
-      for (let t = 1; t <= DEF.ticks; t++) if (pred(t)) return t;
-      return -1;
-    };
+  /** cheaper / margin-met / switched, all derived from the timeline. */
+  function moments3(tl: ReturnType<typeof simulateMoment>) {
     const held = tl.worlds[1].tanks[0].aiTargetId;
-    const cheaper = first((t) => cost(tl.worlds[t], 2) < cost(tl.worlds[t], 1));
-    const switched = first((t) => tl.worlds[t].tanks[0].aiTargetId !== held);
+    let cheaper = -1, marginMet = -1, switched = -1;
+    for (let t = 1; t <= DEF.ticks; t++) {
+      const w = tl.worlds[t];
+      const ca = cost(w, 1), cb = cost(w, 2);
+      if (cheaper < 0 && cb < ca) cheaper = t;
+      if (marginMet < 0 && ca - cb > AI_TARGET_SWITCH_MARGIN) marginMet = t;
+      if (switched < 0 && w.tanks[0].aiTargetId !== held) switched = t;
+    }
+    return { cheaper, marginMet, switched };
+  }
+
+  it('does not switch when the challenger merely becomes cheaper', () => {
+    // MEASURED: cheaper at tick 55, switch at 92. What fills the gap is NOT one rule --
+    // removing AI_TARGET_SWITCH_MARGIN moves the switch not at all, and removing the
+    // commitment span moves it only to 82. Ticks 55-82 are `selectPerceived` comparing
+    // banded costs. So this asserts the observable the moment is filmed for, and the
+    // test below isolates the span.
+    const { cheaper, switched } = moments3(simulateMoment(DEF));
     expect(cheaper).toBeGreaterThan(0);
-    expect(switched).toBeGreaterThan(cheaper);
-    // MEASURED: cheaper at 55, switch at 92 -- a 37-tick hold. Asserted as a substantial
-    // gap rather than as 37 exactly, because the exact figure is a function of
-    // targetCommitmentTime and of how fast the players close, neither of which this
-    // moment is about. A per-tick target solve switches ON the tick it becomes cheaper,
-    // which makes this gap 0 and reds the line.
     expect(switched - cheaper).toBeGreaterThan(20);
+  });
+
+  it('the commitment span itself is load-bearing, worth about ten ticks of it', () => {
+    // The bound sits between the two MEASURED trees: shipped switches at 92, the same
+    // fixture with the span set to 0 switches at 82. 85 therefore discriminates the span
+    // specifically, where a bare "switched > cheaper" does not -- that stays green with
+    // the span deleted, which is how an earlier version of this file claimed to test the
+    // commitment while testing nothing of the kind.
+    const { switched } = moments3(simulateMoment(DEF));
+    expect(switched).toBeGreaterThan(85);
   });
 
   it('switches to the challenger, not to nothing, and stays switched', () => {
