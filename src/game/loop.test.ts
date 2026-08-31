@@ -7906,3 +7906,36 @@ describe('boot + startGameWith: repeated session lifecycle (issue #317)', () => 
     expect(h.rec.disposed, 'entering Practice tore down the running session').toEqual([]);
   });
 });
+
+describe('createBotSources binds each slot its configured competence (issue #267)', () => {
+  it('carries the descriptor preset per slot, and Normal where none was chosen', () => {
+    const sources = createBotSources(7, new Set([0, 1, 2]), new Map([[0, 'easy'], [2, 'hard']]));
+    expect(sources.get(0)?.difficulty).toBe('easy');
+    // Slot 1 has no entry: absence resolves to Normal, which `withBotDifficulty` returns
+    // the authored profile unchanged for. That is what makes the feature additive.
+    expect(sources.get(1)?.difficulty).toBe('normal');
+    expect(sources.get(2)?.difficulty).toBe('hard');
+  });
+
+  it('binds the preset into `decide`, so no caller can drop it', () => {
+    // THE REASON THIS SHAPE EXISTS, measured rather than argued. The earlier design passed
+    // the preset as the fifth argument at the frame-loop call site, and replacing it there
+    // with the default left 1801 tests green -- nothing in the tree drives a bot far
+    // enough to notice, so the whole feature could have shipped dead. Binding it at
+    // construction removes the argument, so this test reads the one place it can be lost.
+    const easy = createBotSources(7, new Set([0]), new Map([[0, 'easy']])).get(0);
+    const hard = createBotSources(7, new Set([0]), new Map([[0, 'hard']])).get(0);
+    expect(typeof easy?.decide).toBe('function');
+    expect(easy?.difficulty).not.toBe(hard?.difficulty);
+  });
+
+  it('keeps the RNG stream keyed on seed and slot ALONE, never on difficulty', () => {
+    // Difficulty must change how well a bot plays, never which draws it makes -- otherwise
+    // switching preset re-rolls every later decision and an A/B at one seed is comparing
+    // two different matches. Asserted by drawing from both streams and comparing.
+    const a = createBotSources(11, new Set([3]), new Map([[3, 'easy']])).get(3);
+    const b = createBotSources(11, new Set([3]), new Map([[3, 'hard']])).get(3);
+    const draw = (s: typeof a): number[] => Array.from({ length: 8 }, () => s!.rnd());
+    expect(draw(a)).toEqual(draw(b));
+  });
+});

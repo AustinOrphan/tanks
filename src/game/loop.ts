@@ -509,6 +509,14 @@ export const BOT_SEED_SPACING = 1009;
  * `playerCount`, computed once by the caller) -- keyed by slot number, not built as an
  * array, so a non-claimed slot has no entry at all rather than a hole.
  */
+/** One bot slot's stream, state and -- bound at construction -- its decision function. */
+export interface BotSource {
+  readonly rnd: () => number;
+  readonly state: PlayerAiState;
+  readonly difficulty: BotDifficulty;
+  readonly decide: (world: World, tankId: number) => InputState;
+}
+
 export function createBotSources(
   seed: number,
   slots: ReadonlySet<number>,
@@ -517,18 +525,28 @@ export function createBotSources(
   // unchanged -- so every existing caller, none of which passes a third argument, builds
   // exactly the bots it always did.
   difficulty?: ReadonlyMap<number, BotDifficulty>,
-): Map<number, { rnd: () => number; state: PlayerAiState; difficulty: BotDifficulty }> {
-  const sources = new Map<number, { rnd: () => number; state: PlayerAiState; difficulty: BotDifficulty }>();
+): Map<number, BotSource> {
+  const sources = new Map<number, BotSource>();
   for (const slot of slots) {
     // The RNG stream is keyed on seed and slot ALONE, deliberately: difficulty must change
     // how well a bot plays, never which draws it makes. Keying the stream on the preset
     // too would mean switching difficulty re-rolled every subsequent decision, so an A/B
     // comparison at one seed would be comparing two different matches.
     const rnd = mulberry32(seed - BOT_SEED_SPACING + slot);
+    const state = createPlayerAiState(rnd);
+    const preset = difficulty?.get(slot) ?? DEFAULT_BOT_DIFFICULTY;
     sources.set(slot, {
       rnd,
-      state: createPlayerAiState(rnd),
-      difficulty: difficulty?.get(slot) ?? DEFAULT_BOT_DIFFICULTY,
+      state,
+      difficulty: preset,
+      // BOUND HERE, not passed at the call site, and that is the point. An earlier shape
+      // had the frame loop call `decidePlayerInput(world, id, rnd, state, bot.difficulty)`
+      // -- and replacing that last argument with the default was MEASURED to leave 1801
+      // tests green, because nothing in the tree drives a bot far enough to notice. The
+      // preset is now closed over at construction, so there is no argument for a caller to
+      // drop: the only way to unwire it is to change this function, which its own test
+      // reads directly.
+      decide: (world, tankId) => decidePlayerInput(world, tankId, rnd, state, preset),
     });
   }
   return sources;
@@ -1574,7 +1592,7 @@ export function startGameWith(
         const bot = botSources.get(i);
         if (bot !== undefined) {
           const tank = tankForSlot(driver.world, i);
-          out.push(decidePlayerInput(driver.world, tank?.id ?? -1, bot.rnd, bot.state, bot.difficulty));
+          out.push(bot.decide(driver.world, tank?.id ?? -1));
           continue;
         }
         out.push(realSources.get(i)!.sample());
