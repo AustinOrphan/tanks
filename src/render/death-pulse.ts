@@ -41,6 +41,16 @@ export interface DeathPulseSystem {
   /** Ages every active ring by `dt`, expanding it outward and fading it out; recycles
    * any ring whose own clock has run out. */
   update(dt: number): void;
+  /**
+   * The resolved reduced-motion policy (issue #289), pushed in rather than read here.
+   *
+   * A LIVE setter, not a spawn option, because the policy can change with the page open
+   * (`'system'` follows the OS) and the growth it governs happens in `update`, not at
+   * spawn -- a ring already in flight has to stop expanding mid-life, not on the next
+   * death. `game/capabilities.ts` is the one place anything asks the OS; this reads the
+   * value `effective-settings.ts` resolved from it.
+   */
+  setReducedMotion(on: boolean): void;
   dispose(): void;
 }
 
@@ -60,6 +70,7 @@ const LIFETIME_SECONDS = 0.6;
 const GROWTH = 2.4;
 
 export function createDeathPulseSystem(scene: THREE.Scene): DeathPulseSystem {
+  let reducedMotion = false;
   const pool: DeathRing[] = [];
   const active: DeathRing[] = [];
 
@@ -117,7 +128,14 @@ export function createDeathPulseSystem(scene: THREE.Scene): DeathPulseSystem {
         continue;
       }
       const k = 1 - r.life / r.maxLife; // 0 fresh -> 1 about to expire
-      r.mesh.scale.setScalar(1 + GROWTH * k);
+      // THE OPACITY ALTERNATIVE issue #289 asks for, and it is the one this effect already
+      // had: the ring is a shockwave that GROWS and FADES, so reduced motion keeps the fade
+      // and drops the growth. The death stays perceptible -- a ring still appears in the
+      // tank's identity colour and still fades on the same clock -- while the expanding
+      // motion, which carries no information the fade does not, is gone. Nothing else about
+      // the effect's lifetime changes, so a reduced ring and a full one recycle on the same
+      // frame.
+      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);
       r.mesh.material.opacity = 1 - k;
     }
   }
@@ -137,5 +155,10 @@ export function createDeathPulseSystem(scene: THREE.Scene): DeathPulseSystem {
     pool.length = 0;
   }
 
-  return { spawn, update, dispose };
+  return {
+    spawn,
+    update,
+    setReducedMotion: (on: boolean) => { reducedMotion = on; },
+    dispose,
+  };
 }

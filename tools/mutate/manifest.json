@@ -2739,5 +2739,29 @@
       "src/sim/ai/target-selection.test.ts"
     ],
     "why": "Rule 6: at the end of a commitment span an AI keeps its opponent unless another is MATERIALLY better. A negative margin makes any improvement sufficient, so the AI flips target at every span boundary -- the per-tick-thrashing failure mode one span removed. Worth an entry because the first version of the matching test could not detect it: its challenger was further from preferred range than the held target, so no margin was ever crossed."
+  },
+  {
+    "id": "death-ring-ignores-the-reduced-motion-policy",
+    "file": "src/render/death-pulse.ts",
+    "find": "      r.mesh.scale.setScalar(reducedMotion ? 1 : 1 + GROWTH * k);",
+    "replace": "      r.mesh.scale.setScalar(1 + GROWTH * k);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/render/death-pulse.test.ts"
+    ],
+    "why": "Issue #289's whole point at this effect: the shockwave keeps its opacity fade and drops its growth under reduced motion. Ignoring the flag restores full expansion for a player who asked for less movement, and does so silently -- the ring still appears, still fades, and still recycles on the same frame, so nothing but the scale distinguishes the two builds."
+  },
+  {
+    "id": "reduced-motion-never-reaches-the-renderer",
+    "file": "src/game/loop.ts",
+    "find": "    renderer.setReducedMotion(effective.reducedMotion);",
+    "replace": "    void renderer;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "tests": [
+      "src/game/loop.test.ts"
+    ],
+    "why": "Pins the WIRING, not the effect. death-pulse.test.ts drives setReducedMotion directly and passes in full while the game never calls it, which is exactly the state before this change: the HUD had the policy since #364 and gameplay had none. The four-row matrix in loop.test.ts also fails a build that forwarded the raw media query instead of the value effective-settings.ts resolved."
   }
 ]

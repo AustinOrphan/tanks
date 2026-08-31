@@ -1706,6 +1706,11 @@ export function startGameWith(
     // republishes on a stored preference, a capability, OR the OS motion preference, so
     // both halves of `'system'` reach the HUD through the one call.
     hud.setReducedMotion(effective.reducedMotion);
+    // ...and the same resolved value to the gameplay renderer (issue #289). The HUD line
+    // above has been here since #364; gameplay effects had no equivalent policy at all,
+    // which is the inconsistency #289 exists to close. One subscription, two consumers --
+    // NOT a second media-query read, which capabilities.ts forbids by design.
+    renderer.setReducedMotion(effective.reducedMotion);
   }
 
   applySettings();

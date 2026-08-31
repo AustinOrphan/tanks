@@ -273,6 +273,8 @@ interface Recorder {
   resizes: Array<[number, number]>;
   refits: Array<[number, number, number]>;
   restyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
+  /** Every reduced-motion policy value pushed at the RENDERER (issue #289). */
+  rendererReducedMotion: boolean[];
   previewCanvasesReceived: HTMLCanvasElement[];
   previewButtonsReceived: ReadonlyArray<readonly HTMLElement[]>;
   previewRestyles: Array<{ hex: string | null; skin: string; accent: string | null }>;
@@ -476,6 +478,7 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
     resizes: [],
     refits: [],
     restyles: [],
+    rendererReducedMotion: [],
     previewCanvasesReceived: [],
     previewButtonsReceived: [],
     previewRestyles: [],
@@ -763,6 +766,9 @@ function makeDeps(opts: { world?: World; wallMs?: number; devFlags?: Partial<Dev
         },
         setPlayerStyle(hex: string | null, skin: string, accent: string | null): void {
           rec.restyles.push({ hex, skin, accent });
+        },
+        setReducedMotion(on: boolean): void {
+          rec.rendererReducedMotion.push(on);
         },
         dispose(): void {
           rec.disposed.push('renderer');
@@ -2478,6 +2484,86 @@ describe('startGameWith: reduced motion reaches the preview through the effectiv
       expect(h.rec.reducedMotions.at(-1), `${motion} with OS ${os}`).toBe(expected);
       h.handle.dispose();
     }
+  });
+
+  it('hands the GAMEPLAY RENDERER the same resolved value, not the media query (issue #289)', () => {
+    // The HUD has had this since #364; gameplay effects had no policy at all, which is the
+    // inconsistency #289 closes. Same four rows as the HUD sweep above, and for the same
+    // reason: the OS is set OPPOSITE to the expected answer wherever an override applies,
+    // so a wire that forwarded `systemReducedMotion` rather than the effective value fails
+    // two of them rather than passing everything by luck.
+    const rows: Array<[('system' | 'full' | 'reduced'), boolean, boolean]> = [
+      ['system', true, true],
+      ['system', false, false],
+      ['full', true, false],
+      ['reduced', false, true],
+    ];
+    for (const [motion, os, expected] of rows) {
+      const h = boot(makeDeps({ systemReducedMotion: os }));
+      h.settingsStore.setMotion(motion);
+      expect(h.rec.rendererReducedMotion.at(-1), `${motion} with OS ${os}`).toBe(expected);
+      h.handle.dispose();
+    }
+  });
+
+  it('changes NOTHING about the simulation between the two presentation modes', () => {
+    // Issue #289's hard boundary: "simulation state, event timing, collisions, and
+    // invulnerability are byte-identical between presentation modes". Structurally true
+    // today -- src/sim/ never sees the policy -- but the guard is worth having precisely
+    // BECAUSE this PR opens the route: a later reduced-motion effect that damped `dt`,
+    // skipped frames, or altered interpolation would change how the world is stepped, and
+    // the presentation preference would become a pacing preference.
+    //
+    // Compares the tick sequence and the per-frame event stream, not just a final state:
+    // a mode that stepped the same total ticks in a different rhythm would pass an
+    // end-state check and fail this one.
+    const runFrames = (motion: 'full' | 'reduced') => {
+      const h = boot(makeDeps({ systemReducedMotion: false, staticRoundStart: true }));
+      h.settingsStore.setMotion(motion);
+      h.setState('playing'); // an actually RUNNING world; at the title the sim never ticks
+      for (let i = 1; i <= 40; i++) if (h.hasFrame()) h.fireFrame(i * 100);
+      const trace = h.rec.renders.map((r) => `${r.curr.tick}:${r.dt}:${r.events.map((e) => e.type).join(',')}`);
+      h.handle.dispose();
+      return trace;
+    };
+    const full = runFrames('full');
+    const reduced = runFrames('reduced');
+    expect(full.length, 'the fixture must actually render frames').toBeGreaterThan(0);
+    // ...and the frames must actually DIFFER from one another, or comparing two identical
+    // constant sequences would prove nothing. An earlier version of this case ran at the
+    // title screen, where the world never ticks: 40 frames, all `0:0.016:`, one distinct
+    // value. Equality held for both modes and said nothing about the simulation.
+    expect(new Set(full).size, 'the world must actually advance').toBeGreaterThan(1);
+    // The ticks really move, rather than the trace varying only in `dt`. Deliberately NOT
+    // also asserting that events fire: this fixture takes no input, so across 40 frames the
+    // only thing to compare IS the tick cadence -- and claiming an event stream it never
+    // produces would be a bigger assertion than the fixture can carry.
+    const ticks = full.map((f) => Number(f.split(':')[0]));
+    expect(ticks[ticks.length - 1]).toBeGreaterThan(ticks[0]);
+    expect(reduced).toEqual(full);
+
+    // KNOWN-BAD CONTROL, because this is a guard rather than a behaviour test. No
+    // production mutation can currently make it fail: nothing wires the motion policy to
+    // how the world is stepped, which is precisely the property being guarded -- so the
+    // only honest way to show the comparison discriminates is to feed it a stream that
+    // SHOULD fail. A single perturbed tick is enough; if this ever stops failing, the
+    // comparison above has gone blind and the guard is worthless.
+    const perturbed = [...full];
+    perturbed[perturbed.length - 1] = `${ticks[ticks.length - 1] + 1}:0.016:`;
+    expect(perturbed).not.toEqual(full);
+  });
+
+  it('tells the renderer at boot, and re-tells it on a live change', () => {
+    // A renderer that only learned the policy on the first CHANGE would play its first
+    // death ring at full motion for a player who had the preference set all along.
+    const h = boot(makeDeps({ systemReducedMotion: true }));
+    expect(h.rec.rendererReducedMotion.length, 'nothing was pushed at construction').toBeGreaterThan(0);
+    expect(h.rec.rendererReducedMotion[0]).toBe(true);
+    const atBoot = h.rec.rendererReducedMotion.length;
+    h.settingsStore.setMotion('full');
+    expect(h.rec.rendererReducedMotion.length).toBeGreaterThan(atBoot);
+    expect(h.rec.rendererReducedMotion.at(-1)).toBe(false);
+    h.handle.dispose();
   });
 
   it('pushes it at boot, before the player has touched anything', () => {

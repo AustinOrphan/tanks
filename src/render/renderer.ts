@@ -24,6 +24,16 @@ export interface Renderer3D {
    * null accentHex means `auto` -- derive the pattern's second tone from the hull.
    */
   setPlayerStyle(hex: string | null, skin: SkinId, accentHex: string | null): void;
+  /**
+   * The resolved reduced-motion policy (issue #289), pushed in from `game/loop.ts`'s one
+   * effective-settings subscription -- the same call site that already tells the HUD.
+   *
+   * A SETTER beside setPlayerStyle rather than a constructor option, and for the same
+   * reason: `'system'` follows the OS, which can change with the page open, so the value
+   * has to be able to arrive after the renderer exists. Nothing under src/render/ reads a
+   * media query; game/capabilities.ts is the one place anything asks.
+   */
+  setReducedMotion(on: boolean): void;
   dispose(): void;
 }
 
@@ -150,6 +160,10 @@ export function createRenderer(
     resize,
     refit,
     setPlayerStyle: (hex, skin, accentHex) => entities.setPlayerStyle(hex, skin, accentHex),
+    // Forwarded, not stored: every consumer of the policy owns its own reduced treatment,
+    // so the renderer is a router here rather than a second source of truth. Today that is
+    // the death ring; each effect added under issue #289 joins this line.
+    setReducedMotion: (on: boolean) => { deathPulse.setReducedMotion(on); },
     dispose,
   };
 }
