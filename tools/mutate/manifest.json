@@ -2634,14 +2634,14 @@
   {
     "id": "idle-turret-never-searches",
     "file": "src/sim/ai/index.ts",
-    "find": "    : (remembered ?? searchAim(world, tank));",
-    "replace": "    : (remembered ?? decision.turretAngle);",
+    "find": "  const solution = decision.hasSolution ? decision.turretAngle : searchAim(world, tank);",
+    "replace": "  const solution = decision.turretAngle;",
     "expect": "killed",
     "expectFailures": 1,
     "tests": [
       "src/sim/ai/dispatch.test.ts"
     ],
-    "why": "Pins the WIRING of issue #371's idle search, not searchAim itself. search.test.ts can pass in full while the dispatcher never calls it, which is exactly the shipped state before #371 -- every personality passes tank.turretAngle through and the gun sits still. Reverting to that pass-through must not be silent. One failure, not two: with no search the turret is perfectly still, so the anti-jitter case beside it counts zero reversals and still passes. The dormant-gun case is what carries this. Anchor moved by issue #372: the aim chain became three-way (solution, then remembered contact, then search), so the original one-line ternary no longer exists. The mutation is unchanged in kind -- it removes SEARCH from the fallback and restores the pass-through -- and it now sits on the arm that #371 owns."
+    "why": "Pins the WIRING of issue #371's idle search, not searchAim itself. search.test.ts can pass in full while the dispatcher never calls it, which is exactly the shipped state before #371 -- every personality passes tank.turretAngle through and the gun sits still. Reverting to that pass-through must not be silent. One failure, not two: with no search the turret is perfectly still, so the anti-jitter case beside it counts zero reversals and still passes. The dormant-gun case is what carries this."
   },
   {
     "id": "fire-gate-ignores-barrel-arrival",
