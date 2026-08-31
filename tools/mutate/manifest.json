@@ -2844,7 +2844,7 @@
     "find": "  if (lineOfSight(tank.pos, target.pos, world.walls)) {",
     "replace": "  if (true) {",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 6,
     "tests": [
       "src/sim/ai/target-memory.test.ts"
     ],
@@ -2856,7 +2856,7 @@
     "find": "  tank.aiLastSeenTicks = Math.max(0, (tank.aiLastSeenTicks ?? 0) - 1);",
     "replace": "  tank.aiLastSeenTicks = Math.max(1, (tank.aiLastSeenTicks ?? 0));",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 4,
     "tests": [
       "src/sim/ai/target-memory.test.ts"
     ],
