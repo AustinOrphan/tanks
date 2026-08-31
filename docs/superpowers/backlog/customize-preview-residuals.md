@@ -72,11 +72,27 @@ same was true; the new case is `flow`, which repaints for as long as the panel i
 (This entry replaces an earlier one saying the spin ran under no gate at all; that was
 true when it was written.)
 
-**6. `prefers-reduced-motion` is read in `preview.ts` and nothing covers that read.**
-`createPreviewControls` takes the flag as a parameter and both branches are tested; the
-`window.matchMedia` call that supplies it lives inside `createTankPreview`, which returns
-null under jsdom, so no test reaches it. The optional-chaining fallback for an absent
-`matchMedia` is likewise unexercised.
+**6. ~~`prefers-reduced-motion` is read in `preview.ts` and nothing covers that read.~~ —
+CLOSED by #320, and by #364's live re-publish.** Every clause of this item is now false, and
+it is struck rather than deleted so the record of what was open survives:
+
+- The read is **not in `preview.ts`**. Both remaining mentions of `matchMedia` in that file
+  are comments explaining that it *used to* be there; `game/capabilities.ts` is now "the ONE
+  place JavaScript asks the OS", and consumers read the resolved value from
+  `effective-settings.ts` instead.
+- The read **is covered**: `capabilities.test.ts` asserts exactly which query is asked
+  (`expect(asked).toEqual([REDUCED_MOTION_QUERY])`), and `loop.test.ts` pins that the
+  RESOLVED value reaches the preview across a four-row matrix that sets the OS opposite to
+  the expected answer wherever an override applies -- so a wire forwarding the raw media
+  query rather than the effective value fails two rows.
+- The **absent-`matchMedia` fallback is exercised** too:
+  `capabilities.test.ts`'s "degrades to a static false source when matchMedia is absent or
+  throws" covers three hostile hosts, jsdom's missing implementation among them.
+
+Re-checked at the same time and still OPEN: item 1 (`webglcontextlost` is handled nowhere --
+`preview.ts`'s own comment still says so) and item 3 (no gallery element for the preview --
+`tools/gallery/args.mjs` still defaults `elements` to `mine`, and `run.mjs` deliberately
+selects `canvas:not(.hud-preview)`).
 
 **7. Pointer capture is unverified.** `setPointerCapture` is what keeps a drag alive once
 it leaves the 260px canvas, and neither gate can see it: jsdom does not implement capture
