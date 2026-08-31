@@ -40,7 +40,8 @@
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "devflags:doc": "vite-node tools/devflags/generate.mjs",
     "tanks:doc": "vite-node tools/tanks/generate.mjs",
-    "notices": "node tools/notices/generate.mjs"
+    "notices": "node tools/notices/generate.mjs",
+    "tank-assets": "vite-node tools/tank-assets/generate.mjs"
   },
   "dependencies": {
     "howler": "^2.2.4",
