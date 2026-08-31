@@ -2770,7 +2770,7 @@
     "find": "    renderer.setReducedMotion(effective.reducedMotion);",
     "replace": "    void renderer;",
     "expect": "killed",
-    "expectFailures": 3,
+    "expectFailures": 2,
     "tests": [
       "src/game/loop.test.ts"
     ],
