@@ -2296,11 +2296,11 @@
   {
     "id": "versus-refusal-shown-on-every-card",
     "file": "src/game/hud.ts",
-    "find": "        problem !== null && problem.kind !== 'no-human' && problem.slot === slot;",
-    "replace": "        problem !== null && problem.kind !== 'no-human';",
+    "find": "        problem !== null && problem.kind !== 'no-human' && problem.kind !== 'one-team' && problem.slot === slot;",
+    "replace": "        problem !== null && problem.kind !== 'no-human' && problem.kind !== 'one-team';",
     "expect": "killed",
     "expectFailures": 1,
-    "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not.",
+    "why": "Drops the slot check, so the FIRST problem's sentence is stamped on every card at once -- 'Player 2 is off' would appear under Player 3 as well. The pane deliberately shows one actionable reason at a time (versusSetupProblem returns the first problem, not a list); this pins that the other cards stay silent, which a test asserting only the offending card would not. RE-ANCHORED for issue #281: the guard gained a `problem.kind !== 'one-team'` clause when the team-count refusal joined `no-human` as the second PANE-level problem, so the previous find string no longer occurs -- which the harness reports as `failed-to-apply`, and which CI caught here rather than the local sweep, because the local selection was filtered to the files the change was ABOUT (`arena.ts`, `versus-setup.ts`) and this entry lives in `hud.ts`. The mutation, its meaning and its killing test are unchanged; only the anchor moved, and the count below was re-measured on the new text rather than carried over.",
     "tests": [
       "src/game/hud.test.ts"
     ]
@@ -2531,6 +2531,30 @@
     "why": "Every bot plays at Normal whatever the player picked -- the selector still renders, still shows a selection, still writes the descriptor, and the setup still persists; only the match ignores it. WHY THIS ENTRY EXISTS AT THIS SITE: an earlier shape passed the preset as `decidePlayerInput`'s fifth argument at the frame-loop call, and replacing THAT with the default was measured to leave 1801 tests green -- nothing in the tree drives a bot far enough for its aim spread to be observable, so the whole feature could have shipped dead with a full suite behind it. The preset is now closed over inside `createBotSources`, which removes the argument a caller could drop and leaves exactly one place it can still be lost: this line. Killed by the two cases that read the returned source's `difficulty` per slot, including the un-configured slot that must resolve Normal through ABSENCE rather than through this fallback being the only path. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
     "tests": [
       "src/game/loop.test.ts"
+    ]
+  },
+  {
+    "id": "versus-roster-ignores-the-configured-team",
+    "file": "src/sim/arena.ts",
+    "find": "        if (mode === 'teams') tank.team = teams?.[i] ?? teamOf(i);",
+    "replace": "        if (mode === 'teams') tank.team = teamOf(i);",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "The versus roster falls back to the `slot % 2` derivation and ignores what the player chose -- which is issue #281's whole defect restored, and it goes SILENTLY: the board still loads, every tank still carries a team, and a 2v2 still looks like a 2v2. What breaks is that it is not the 2v2 the setup pane displayed. The mutation is invisible to any assertion that only checks `team` is defined, or that two teams exist, because the derivation produces exactly that. Killed by the pair in `arena.test.ts` that configures `[0, 0, 1, 2]` -- a THREE-team split the alternating derivation cannot produce at all, so agreement cannot be coincidental -- and by the sparse case, which pins that an unset slot still derives. Deliberately does NOT touch the campaign co-op stamp or the FFA path: FFA never stamps `Tank.team` (types.ts), which is why threading configured teams cannot move `BASELINE_HASH`, and a mutation that blurred that boundary would be testing a different claim. Scoped to arena.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/arena.test.ts"
+    ]
+  },
+  {
+    "id": "one-team-start-gate-never-fires",
+    "file": "src/game/versus-setup.ts",
+    "find": "  if (mode === 'teams' && representedTeams(slots).size < 2) return { kind: 'one-team' };",
+    "replace": "  if (false && representedTeams(slots).size < 2) return { kind: 'one-team' };",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "Start accepts a Teams match with everybody on one team. The match then runs to an immediate, unlosable conclusion -- the issue's binding rule is 'Start requires at least two represented teams', and this is the state that rule exists to refuse. It survives every OTHER gate: the slots are assigned, the devices are present, a human is playing, so `versusSetupProblem` returns null and the button enables. The `false &&` form is chosen over deleting the line because it leaves `representedTeams` referenced, so the mutation cannot be mistaken for dead-code removal by a reader of the diff. Killed by the case asserting the refusal in `'teams'` AND its own control -- the identical slots must still be startable in `'ffa'`, without which the test could pass against a build that simply refused Teams outright. Scoped to versus-setup.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/versus-setup.test.ts"
     ]
   }
 ]
