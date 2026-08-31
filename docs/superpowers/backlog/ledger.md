@@ -117,7 +117,7 @@ Each line names what it looked at. "No test found" is the result of a grep, not 
 - An achievements progress bar beyond the "N of 14 earned" string. #62
 - A scroll affordance on the achievements list (`max-height: 58vh`, `overflow-y: auto`, no fade). Arguably a usability defect rather than an idea: 14 entries clip with no cue. #62
 - `OFFENSIVE` and `BERSERKER` route to `teal.ts`; the profile field for how much a threat overrides a tank's approach does not exist. #69
-- No crossfade when the music bed starts or stops. `start()` snaps by design, and the #76 glide is intensity-only — but `music.ts:418` already carries a linear per-note fade for the suite-change overlay, which is the machinery to reuse. #64
+- No crossfade when the music bed starts or stops. `start()` snaps by design, and the #76 glide is intensity-only — but `music.ts` already carries a linear per-note fade (`const fade = 1 - o.played / o.steps`) for the suite-change overlay, which is the machinery to reuse. #64
 - The one-oscillator `beep` stays as the floor for contexts that cannot support the synth graph. #64
 - No sustain/tie marker in the note grammar; `hold` is per voice, not per note. #68
 - No per-note velocity; amplitude comes from `VOICES[].peak`. #68
