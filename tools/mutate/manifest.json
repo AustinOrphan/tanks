@@ -2897,5 +2897,17 @@
       "tools/gallery/moments.test.ts"
     ],
     "why": "Pins the CONSUMPTION of last-seen memory, which last-seen-memory-not-wired-into-stepai does not: that entry cuts the write, this one cuts the read. With the read gone the memory is still recorded and still expires on schedule, so every unit case in target-memory.test.ts stays green -- MEASURED, the whole of src/sim (1227 tests) passes with this line neutered. The only thing that changes is that a tank which has just lost sight sweeps immediately instead of looking where its target went, which is the entire behaviour issue #372 asks for. tools/gallery/moments.test.ts's ai-last-seen block is the only coverage that notices."
+  },
+  {
+    "id": "contact-overlay-ignores-memory-expiry",
+    "file": "src/render/ai-contact.ts",
+    "find": "  if (tank.aiLastSeenPos !== undefined && (tank.aiLastSeenTicks ?? 0) > 0) {",
+    "replace": "  if (tank.aiLastSeenPos !== undefined) {",
+    "expect": "killed",
+    "expectFailures": 1,
+    "tests": [
+      "src/render/ai-contact.test.ts"
+    ],
+    "why": "The overlay is the instrument #372's 'attentive, not omniscient' judgement is made through, so a wrong state here produces a wrong ruling rather than a cosmetic defect. Dropping the expiry makes a tank that has given up and started searching still read as 'remembering', which collapses two of the three states the issue asks the trace to distinguish. MEASURED: tools/gl/harness.ts does NOT catch this -- its three-state frames still differ, because the label text carries the difference (m55 against m0) even when the classification is wrong. The jsdom test is the only coverage that does."
   }
 ]
