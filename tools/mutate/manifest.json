@@ -2765,18 +2765,6 @@
     "why": "Pins the WIRING, not the effect. death-pulse.test.ts drives setReducedMotion directly and passes in full while the game never calls it, which is exactly the state before this change: the HUD had the policy since #364 and gameplay had none. The four-row matrix in loop.test.ts also fails a build that forwarded the raw media query instead of the value effective-settings.ts resolved."
   },
   {
-    "id": "ai-opponent-selection-reverses-slot-order",
-    "file": "src/sim/ai/targeting.ts",
-    "find": "  return world.tanks.find((t) => t.kind === 'player' && t.alive);",
-    "replace": "  return [...world.tanks].reverse().find((t) => t.kind === 'player' && t.alive);",
-    "expect": "killed",
-    "expectFailures": 2,
-    "why": "Every AI switches from the first alive player-kind tank to the LAST, which at more than one player is a different opponent for every behaviour at once -- movement, direct fire and bank-shot planning all follow it, since issue #359 routed them through this one function. WHY THIS ENTRY EXISTS: the extraction that created the seam shipped with this behaviour UNPINNED, and it was measured rather than assumed -- applying this exact mutation left all 374 tests under `tools/baseline` and `src/sim/ai` green, because the golden trace is single-player and first-vs-last is indistinguishable there. `BASELINE_HASH` cannot see it either, for the same reason. That gap is the whole point: #359's real fix replaces this slot-order policy deliberately, and without a pin the next change could replace it by accident. Killed by the two multi-player cases -- one where a far NEARER player is still not chosen, and one where two AIs converge on the same target -- which state the current bias as an expectation so changing it is a visible diff. Scoped to targeting.test.ts; expectFailures counts that scoped run only.",
-    "tests": [
-      "src/sim/ai/targeting.test.ts"
-    ]
-  },
-  {
     "id": "blocked-fire-announced-during-the-countdown",
     "file": "src/sim/world.ts",
     "find": "  if (canAct && input.fire && player.fireCooldown <= 0) {",
