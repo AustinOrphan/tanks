@@ -3102,7 +3102,11 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // a board curated for another count would NOT appear here) + 5 Stock + 0 friendly
     // fire (absent -- the pane defaults to FFA) + 6 who's-playing role buttons
     // + Start + Back = 2+3+7+5+0+6+1+1 = 25).
-    expect(totalControls, 'recount the panels above if this moves').toBe(70);
+    // 73 since issue #267: the versus pane's one BOT slot (`defaultSlots(2)` is
+    // `[human, bot]`) gained Easy/Normal/Hard, and all three are reachable by arrow key
+    // like every other choice control -- which is the property this test exists to prove,
+    // so the count moving is the point rather than an inconvenience.
+    expect(totalControls, 'recount the panels above if this moves').toBe(73);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );
@@ -3871,7 +3875,13 @@ describe('the UI kit contracts, swept across every control that uses them (issue
     // roles per slot is 6. A different slot, pad or player count pins a different
     // number; the number moving is the prompt to check the new row is inside the sweep
     // rather than beside it.
-    expect(btns.length).toBe(11 + 7 + 8 + 23);
+    //
+    // 26 and not 23 since issue #267: a BOT slot also offers Easy/Normal/Hard.
+    // `defaultSlots(2)` is `[human, bot]`, so exactly one slot carries them at this
+    // fixture's player count -- 3 buttons, not 6. Re-derived, not incremented: the count
+    // depends on how many slots are bots, so a fixture that defaulted both slots to Bot
+    // would pin 29 here.
+    expect(btns.length).toBe(11 + 7 + 8 + 26);
     const missing = btns
       .filter((b) => !b.hasAttribute('aria-pressed'))
       .map((b) => Array.from(b.classList).join('.'));

@@ -83,6 +83,7 @@ import {
 } from '../input/touch';
 import './hud.css';
 import { describeDisabledReason, setSelected } from './ui';
+import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 
 export interface RoundPhaseInfo {
   phase: RoundPhase;
@@ -2599,6 +2600,14 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   ];
 
   /**
+   * Bot competence (issue #267). Offer order is difficulty order, taken from the sim's own
+   * `BOT_DIFFICULTIES` rather than restated, so a preset added there cannot be missing here.
+   */
+  const VERSUS_DIFFICULTY_LABELS: Record<BotDifficulty, string> = {
+    easy: 'Easy', normal: 'Normal', hard: 'Hard',
+  };
+
+  /**
    * The sentence a refused Start puts on the offending card. One per problem KIND,
    * because "not ready" is not actionable: each of the three has a different fix, and
    * `versusSetupProblem` distinguishes them precisely so this function can.
@@ -2666,6 +2675,33 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         });
         btn.addEventListener('click', blurIfPointer);
         row.appendChild(btn);
+      }
+
+      // Competence, for a BOT slot only (issue #267). Built inside the same row rather
+      // than as a second row: it is a property OF this slot, and a player scanning the
+      // pane should not have to match two lists by position. A human slot has no
+      // difficulty, so the control is absent rather than disabled -- there is nothing to
+      // explain, which is the case `ui-hint` exists for and this is not.
+      if (slots[slot].role === 'bot') {
+        for (const level of BOT_DIFFICULTIES) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-difficulty-btn';
+          btn.dataset.difficulty = level;
+          btn.textContent = VERSUS_DIFFICULTY_LABELS[level];
+          // `?? DEFAULT_BOT_DIFFICULTY`, so an untouched slot shows Normal as chosen
+          // rather than showing nothing chosen -- absence IS normal, and a row with no
+          // selection would read as an unmade decision the Start gate was ignoring.
+          setSelected(btn, (slots[slot].difficulty ?? DEFAULT_BOT_DIFFICULTY) === level);
+          const forSlot = slot; // captured per-iteration, as the role loop above does
+          btn.addEventListener('click', () => {
+            const next = slots.map((sl, i) => (i === forSlot ? { ...sl, difficulty: level } : { ...sl }));
+            setVersusConfig({ ...versusConfigState, slots: next });
+            renderVersusSlotRows();
+          });
+          btn.addEventListener('click', blurIfPointer);
+          row.appendChild(btn);
+        }
       }
 
       // The DERIVED device, not a choice. `slotSourceLabel` is reused rather than

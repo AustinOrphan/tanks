@@ -83,6 +83,7 @@ import {
   resolveBootSessionContext,
 } from './session-intent';
 import { createHud, type Hud, type HudSurface, SINGLE_PLAYER_DEATH_VIGNETTE } from './hud';
+import { DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from '../sim/ai/bot-difficulty';
 import { createRouteUi, type RouteUi } from './route-ui';
 import { resolveOwnerColor } from '../render/entities';
 import { createDriver, type RafScheduler } from './driver';
@@ -508,14 +509,45 @@ export const BOT_SEED_SPACING = 1009;
  * `playerCount`, computed once by the caller) -- keyed by slot number, not built as an
  * array, so a non-claimed slot has no entry at all rather than a hole.
  */
+/** One bot slot's stream, state and -- bound at construction -- its decision function. */
+export interface BotSource {
+  readonly rnd: () => number;
+  readonly state: PlayerAiState;
+  readonly difficulty: BotDifficulty;
+  readonly decide: (world: World, tankId: number) => InputState;
+}
+
 export function createBotSources(
   seed: number,
   slots: ReadonlySet<number>,
-): Map<number, { rnd: () => number; state: PlayerAiState }> {
-  const sources = new Map<number, { rnd: () => number; state: PlayerAiState }>();
+  // Trailing and optional (issue #267): per-slot competence, read from the descriptor the
+  // pane validated. A slot with no entry plays at `normal`, which is the authored profile
+  // unchanged -- so every existing caller, none of which passes a third argument, builds
+  // exactly the bots it always did.
+  difficulty?: ReadonlyMap<number, BotDifficulty>,
+): Map<number, BotSource> {
+  const sources = new Map<number, BotSource>();
   for (const slot of slots) {
+    // The RNG stream is keyed on seed and slot ALONE, deliberately: difficulty must change
+    // how well a bot plays, never which draws it makes. Keying the stream on the preset
+    // too would mean switching difficulty re-rolled every subsequent decision, so an A/B
+    // comparison at one seed would be comparing two different matches.
     const rnd = mulberry32(seed - BOT_SEED_SPACING + slot);
-    sources.set(slot, { rnd, state: createPlayerAiState(rnd) });
+    const state = createPlayerAiState(rnd);
+    const preset = difficulty?.get(slot) ?? DEFAULT_BOT_DIFFICULTY;
+    sources.set(slot, {
+      rnd,
+      state,
+      difficulty: preset,
+      // BOUND HERE, not passed at the call site, and that is the point. An earlier shape
+      // had the frame loop call `decidePlayerInput(world, id, rnd, state, bot.difficulty)`
+      // -- and replacing that last argument with the default was MEASURED to leave 1801
+      // tests green, because nothing in the tree drives a bot far enough to notice. The
+      // preset is now closed over at construction, so there is no argument for a caller to
+      // drop: the only way to unwire it is to change this function, which its own test
+      // reads directly.
+      decide: (world, tankId) => decidePlayerInput(world, tankId, rnd, state, preset),
+    });
   }
   return sources;
 }
@@ -1146,6 +1178,19 @@ export function startGameWith(
    * the derived count agrees with the roles rather than contradicting them.
    */
   const versusSlots = deps.initialVersusConfig?.slots;
+  /**
+   * Per-slot bot competence, from the descriptor the pane validated (issue #267).
+   *
+   * Built once from the session's own config rather than read per tick: a bot's preset is
+   * fixed for the match, and rebuilding the map on every frame would put a descriptor read
+   * inside the input path. Campaign and autoplay sessions have no versus config, so this
+   * is empty and every bot resolves `normal` -- the authored profile, unchanged.
+   */
+  const botDifficulty: ReadonlyMap<number, BotDifficulty> = new Map(
+    (versusSlots ?? []).flatMap((slot, i) =>
+      slot.difficulty === undefined ? [] : [[i, slot.difficulty] as const],
+    ),
+  );
 
   /**
    * The controller assignment UI's session-held model (input/assignment.ts).
@@ -1340,7 +1385,7 @@ export function startGameWith(
    * reseeding here keeps every level's bot behaviour a pure function of that level's
    * own seed rather than of how much a previous level's stream had already consumed.
    */
-  let botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
+  let botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment), botDifficulty);
   /**
    * Is this session allowed to touch the active run at all? False for practice
    * (`sessionIdentity.kind`, the same identity `descriptorFor` turns into this
@@ -1547,7 +1592,7 @@ export function startGameWith(
         const bot = botSources.get(i);
         if (bot !== undefined) {
           const tank = tankForSlot(driver.world, i);
-          out.push(decidePlayerInput(driver.world, tank?.id ?? -1, bot.rnd, bot.state));
+          out.push(bot.decide(driver.world, tank?.id ?? -1));
           continue;
         }
         out.push(realSources.get(i)!.sample());
@@ -2065,7 +2110,7 @@ export function startGameWith(
       if (prev.kind === 'bot') botSources.delete(i);
       const nextSource = next[i];
       if (nextSource.kind === 'bot') {
-        const seeded = createBotSources(driver.world.seed, new Set([i]));
+        const seeded = createBotSources(driver.world.seed, new Set([i]), botDifficulty);
         botSources.set(i, seeded.get(i)!);
       } else {
         const built = buildRealSource(nextSource);
@@ -2215,7 +2260,7 @@ export function startGameWith(
     // per-world, not per-session. Read off the CURRENT `assignment`, not the boot-time
     // `botSlots` set: a mid-session reassignment can have moved a slot to or from
     // `'bot'` since boot, and switchTo must not resurrect a stale bot roster.
-    botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment));
+    botSources = createBotSources(world.seed, botSlotsFromAssignment(assignment), botDifficulty);
     // A new world means a new trace: the recorded inputs only mean anything
     // applied to the world they were sampled against, so carrying them across a
     // level switch would produce a trace that replays into a different game.

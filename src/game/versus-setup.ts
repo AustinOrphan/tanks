@@ -1,4 +1,5 @@
 import type { SlotSource } from '../input/assignment';
+import { isBotDifficulty, type BotDifficulty } from '../sim/ai/bot-difficulty';
 
 /**
  * The VS setup's CANONICAL per-slot representation (issue #260).
@@ -37,6 +38,15 @@ export interface VersusSlotSetup {
    * home it will write into, so that work does not have to re-shape the descriptor.
    */
   team?: number;
+  /**
+   * Competence preset for a `'bot'` slot (issue #267). Meaningful only when `role` is
+   * `'bot'`; carried unconditionally, the same way `team` above is.
+   *
+   * Absent means `normal`, which `withBotDifficulty` resolves to the authored profile
+   * unchanged -- so a setup saved before this field existed, and a slot the player never
+   * touched, both play exactly as they did before.
+   */
+  difficulty?: BotDifficulty;
 }
 
 /**
@@ -164,7 +174,7 @@ export function sanitizeSetup(
   const slots: VersusSlotSetup[] = [];
   const defaults = defaultSlots(players);
   for (let i = 0; i < players; i++) {
-    const s = (rawSlots[i] ?? {}) as { role?: unknown; team?: unknown };
+    const s = (rawSlots[i] ?? {}) as { role?: unknown; team?: unknown; difficulty?: unknown };
     const role: VersusSlotRole = typeof s.role === 'string' && ROLES.has(s.role)
       ? (s.role as VersusSlotRole)
       : defaults[i].role;
@@ -172,6 +182,11 @@ export function sanitizeSetup(
     if (typeof s.team === 'number' && Number.isFinite(s.team) && s.team >= 0) {
       slot.team = Math.floor(s.team);
     }
+    // Validated like `role` is, and for the same reason: this comes off disk. An
+    // unrecognised preset is DROPPED rather than defaulted-in-place, so the slot falls
+    // back to `normal` through absence -- the one state the whole feature is additive
+    // over -- instead of carrying a string no resolver knows what to do with.
+    if (isBotDifficulty(s.difficulty)) slot.difficulty = s.difficulty;
     slots.push(slot);
   }
 

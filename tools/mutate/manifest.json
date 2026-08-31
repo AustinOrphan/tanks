@@ -2496,5 +2496,41 @@
     "tests": [
       "src/render/tank-model.test.ts"
     ]
+  },
+  {
+    "id": "bot-difficulty-normal-is-not-a-no-op",
+    "file": "src/sim/ai/bot-difficulty.ts",
+    "find": "  if (difficulty === 'normal') return cfg;",
+    "replace": "  if (difficulty === 'normal') return { ...cfg, ai: { ...cfg.ai } };",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "`normal` stops returning its INPUT and starts returning an equal copy. Both issues #267 and #223 require normal to be the exact no-op -- #223's criterion says 'Normal produces byte-identical/no-op profile resolution' -- and this mutation is the shape that quietly breaks it: every value is still identical, so any `toEqual` assertion passes, and a reader of the diff sees a harmless-looking spread. What it costs is the guarantee that a `normal` bot cannot differ from a pre-#267 bot even by object shape, which is what makes the whole feature additive over a config saved before difficulty existed. Killed by the identity case, which asserts `toBe` across every shipped tank kind AND for an omitted argument -- the form every existing `decidePlayerInput` caller uses. Scoped to bot-difficulty.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/ai/bot-difficulty.test.ts"
+    ]
+  },
+  {
+    "id": "bot-difficulty-hard-becomes-an-oracle",
+    "file": "src/sim/ai/bot-difficulty.ts",
+    "find": "export const MAX_COMPETENCE_ACCURACY = 0.95;",
+    "replace": "export const MAX_COMPETENCE_ACCURACY = 100;",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The accuracy ceiling raised until it cannot bind, which is how `hard` becomes the oracle both issues forbid by name ('No preset may create oracle-perfect awareness or aim'). It is a SILENT defect on the shipped data: the player profile is STATIC_BASIC at aimAccuracy 0.55, so `hard` lands at 0.6875 and the clamp never fires -- every difficulty still behaves plausibly and no shipped configuration looks wrong. The clamp only matters for a profile near the bound, which is why the test exercises a synthetic one at 0.99 rather than only the shipped one; testing the shipped profile alone would leave the clamp itself unexercised and this mutation alive. Both spreads are an anchor DIVIDED by accuracy, so an unbounded accuracy drives the seeded error to nothing. Scoped to bot-difficulty.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/sim/ai/bot-difficulty.test.ts"
+    ]
+  },
+  {
+    "id": "bot-slot-preset-never-reaches-the-bot",
+    "file": "src/game/loop.ts",
+    "find": "    const preset = difficulty?.get(slot) ?? DEFAULT_BOT_DIFFICULTY;",
+    "replace": "    const preset = DEFAULT_BOT_DIFFICULTY;",
+    "expect": "killed",
+    "expectFailures": 2,
+    "why": "Every bot plays at Normal whatever the player picked -- the selector still renders, still shows a selection, still writes the descriptor, and the setup still persists; only the match ignores it. WHY THIS ENTRY EXISTS AT THIS SITE: an earlier shape passed the preset as `decidePlayerInput`'s fifth argument at the frame-loop call, and replacing THAT with the default was measured to leave 1801 tests green -- nothing in the tree drives a bot far enough for its aim spread to be observable, so the whole feature could have shipped dead with a full suite behind it. The preset is now closed over inside `createBotSources`, which removes the argument a caller could drop and leaves exactly one place it can still be lost: this line. Killed by the two cases that read the returned source's `difficulty` per slot, including the un-configured slot that must resolve Normal through ABSENCE rather than through this fallback being the only path. Scoped to loop.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/loop.test.ts"
+    ]
   }
 ]

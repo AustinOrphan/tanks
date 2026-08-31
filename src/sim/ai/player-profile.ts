@@ -10,6 +10,7 @@ import {
   AI_MINE_TACTICAL_RADIUS, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_PATH_HORIZON_TICKS,
 } from '../constants';
 import { roundPhase } from '../round';
+import { withBotDifficulty, DEFAULT_BOT_DIFFICULTY, type BotDifficulty } from './bot-difficulty';
 
 /**
  * A scripted "competent player": drives the PLAYER tank the way a decent human would,
@@ -334,13 +335,22 @@ export function decidePlayerInput(
   playerId: number,
   rnd: () => number,
   state: PlayerAiState,
+  // Trailing and defaulted (issue #267): `normal` is the exact no-op, and
+  // `withBotDifficulty` returns its input unchanged for it, so every existing call site --
+  // the autoplay dev flag, pacifist.test.ts, engagement.measure.test.ts -- resolves the
+  // identical config it always did. Only a versus bot slot ever passes anything else.
+  difficulty: BotDifficulty = DEFAULT_BOT_DIFFICULTY,
 ): InputState {
   const player = world.tanks.find((t) => t.id === playerId);
   if (!player || !player.alive) {
     return { move: { x: 0, y: 0 }, aim: { x: 1, y: 0 }, fire: false, mine: false };
   }
 
-  const cfg = configFor(player.kind);
+  // The authored profile, scaled on its COMPETENCE axes only. Applied here rather than at
+  // each read site because `profileAimSpread`, `profileHazardSpread` and the reaction gate
+  // all derive from `cfg.ai`, so one substitution at the source reaches every one of them
+  // and no future read can miss it.
+  const cfg = withBotDifficulty(configFor(player.kind), difficulty);
 
   // The one bounded per-tick pass (directive A, part 2) -- computed once and reused by
   // movement and the mine gate below, instead of each running its own separate
