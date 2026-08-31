@@ -1,0 +1,32 @@
+
+=== dark ===
+surfaces opened: {"customize":true,"stats":true} levelSelect=true
+swatches: {"total":11,"foundOn":true,"foundOff":true}  focus: true
+  primary-action: { "background-color": "rgb(79, 208, 106) -> rgb(0, 0, 0)", "color": "rgb(6, 52, 15) -> rgb(255, 255, 255)", "border-top-color": "rgb(6, 52, 15) -> rgb(255, 255, 255)", "border-top-width": "0px -> 4px", "border-top-style": "none -> solid", "outline-color": "rgb(6, 52, 15) -> rgb(255, 255, 255)", "box-shadow": "rgb(47, 143, 69) 0px 6px 0px 0px -> none" }
+  quiet-slab: { "background-color": "rgba(216, 221, 230, 0.16) -> rgba(0, 0, 0, 0.16)", "color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "border-top-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "border-top-width": "0px -> 1px", "border-top-style": "none -> solid", "outline-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)" }
+  small-quiet: { "background-color": "rgba(216, 221, 230, 0.16) -> rgba(0, 0, 0, 0.16)", "color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "border-top-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "border-top-width": "0px -> 1px", "border-top-style": "none -> solid", "outline-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)" }
+  hint: { "color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "border-top-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "outline-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)" }
+  locked-level: { "background-color": "rgba(216, 221, 230, 0.16) -> rgba(0, 0, 0, 0.16)", "color": "rgb(216, 221, 230) -> rgb(63, 242, 63)", "border-top-color": "rgb(216, 221, 230) -> rgb(255, 255, 255)", "border-top-width": "0px -> 1px", "border-top-style": "none -> solid", "outline-color": "rgb(216, 221, 230) -> rgb(63, 242, 63)", "opacity": "0.45 -> 1" }
+  selectable-on: { "color": "rgb(0, 0, 0) -> rgb(255, 255, 255)", "border-top-color": "rgb(255, 255, 255) -> rgba(0, 230, 255, 0.8)", "outline-color": "rgb(0, 0, 0) -> rgb(255, 255, 255)", "forced-color-adjust": "auto -> none" }
+  selectable-off: { "color": "rgb(0, 0, 0) -> rgb(255, 255, 255)", "border-top-color": "rgba(0, 0, 0, 0) -> rgb(255, 255, 255)", "border-top-style": "solid -> dotted", "outline-color": "rgb(0, 0, 0) -> rgb(255, 255, 255)", "forced-color-adjust": "auto -> none" }
+  destructive: { "background-color": "rgba(255, 90, 90, 0.18) -> rgba(0, 0, 0, 0.18)", "color": "rgb(255, 180, 180) -> rgb(255, 255, 255)", "border-top-color": "rgb(255, 180, 180) -> rgb(255, 255, 255)", "border-top-width": "0px -> 1px", "border-top-style": "none -> dashed", "outline-color": "rgb(255, 180, 180) -> rgb(255, 255, 255)" }
+  COLLAPSE primary-vs-quiet: matching=[color,border-top-color,border-top-style] indistinguishable=false
+  COLLAPSE destructive-vs-quiet: matching=[color,border-top-color,border-top-width] indistinguishable=false
+  COLLAPSE selected-vs-unselected: matching=[color,border-top-width] indistinguishable=false
+  focus outline under forcing: {"__matchesFocusVisible":true,"background-color":"rgb(61, 123, 214)","background-image":"none","color":"rgb(255, 255, 255)","border-top-color":"rgba(0, 230, 255, 0.8)","border-top-width":"3px","border-top-style":"solid","outline-color":"rgb(127, 208, 255)","outline-width":"2px","outline-style":"solid","box-shadow":"none","opacity":"1","filter":"none","text-decoration-line":"none","forced-color-adjust":"none"}
+
+=== light ===
+surfaces opened: {"customize":true,"stats":true} levelSelect=true
+swatches: {"total":11,"foundOn":true,"foundOff":true}  focus: true
+  primary-action: { "background-color": "rgb(79, 208, 106) -> rgb(255, 255, 255)", "color": "rgb(6, 52, 15) -> rgb(0, 0, 0)", "border-top-color": "rgb(6, 52, 15) -> rgb(0, 0, 0)", "border-top-width": "0px -> 4px", "border-top-style": "none -> solid", "outline-color": "rgb(6, 52, 15) -> rgb(0, 0, 0)", "box-shadow": "rgb(47, 143, 69) 0px 6px 0px 0px -> none" }
+  quiet-slab: { "background-color": "rgba(216, 221, 230, 0.16) -> rgba(255, 255, 255, 0.16)", "color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "border-top-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "border-top-width": "0px -> 1px", "border-top-style": "none -> solid", "outline-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)" }
+  small-quiet: { "background-color": "rgba(216, 221, 230, 0.16) -> rgba(255, 255, 255, 0.16)", "color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "border-top-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "border-top-width": "0px -> 1px", "border-top-style": "none -> solid", "outline-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)" }
+  hint: { "background-color": "rgba(0, 0, 0, 0) -> rgba(255, 255, 255, 0)", "color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "border-top-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "outline-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)" }
+  locked-level: { "background-color": "rgba(216, 221, 230, 0.16) -> rgba(255, 255, 255, 0.16)", "color": "rgb(216, 221, 230) -> rgb(96, 0, 0)", "border-top-color": "rgb(216, 221, 230) -> rgb(0, 0, 0)", "border-top-width": "0px -> 1px", "border-top-style": "none -> solid", "outline-color": "rgb(216, 221, 230) -> rgb(96, 0, 0)", "opacity": "0.45 -> 1" }
+  selectable-on: { "border-top-color": "rgb(255, 255, 255) -> rgba(5, 0, 73, 0.8)", "forced-color-adjust": "auto -> none" }
+  selectable-off: { "border-top-color": "rgba(0, 0, 0, 0) -> rgb(0, 0, 0)", "border-top-style": "solid -> dotted", "forced-color-adjust": "auto -> none" }
+  destructive: { "background-color": "rgba(255, 90, 90, 0.18) -> rgba(255, 255, 255, 0.18)", "color": "rgb(255, 180, 180) -> rgb(0, 0, 0)", "border-top-color": "rgb(255, 180, 180) -> rgb(0, 0, 0)", "border-top-width": "0px -> 1px", "border-top-style": "none -> dashed", "outline-color": "rgb(255, 180, 180) -> rgb(0, 0, 0)" }
+  COLLAPSE primary-vs-quiet: matching=[color,border-top-color,border-top-style] indistinguishable=false
+  COLLAPSE destructive-vs-quiet: matching=[color,border-top-color,border-top-width] indistinguishable=false
+  COLLAPSE selected-vs-unselected: matching=[color,border-top-width] indistinguishable=false
+  focus outline under forcing: {"__matchesFocusVisible":true,"background-color":"rgb(61, 123, 214)","background-image":"none","color":"rgb(0, 0, 0)","border-top-color":"rgba(5, 0, 73, 0.8)","border-top-width":"3px","border-top-style":"solid","outline-color":"rgb(127, 208, 255)","outline-width":"2px","outline-style":"solid","box-shadow":"none","opacity":"1","filter":"none","text-decoration-line":"none","forced-color-adjust":"none"}
