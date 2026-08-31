@@ -2472,5 +2472,17 @@
     "tests": [
       "src/game/hud.css.test.ts"
     ]
+  },
+  {
+    "id": "opted-out-swatch-loses-its-boundary",
+    "file": "src/game/hud.css",
+    "find": "  .hud-swatch:not(.ui-selectable--on) {\n    border-color: CanvasText;\n  }",
+    "replace": "  .hud-swatch:not(.ui-selectable--on) {\n    border-color: transparent;\n  }",
+    "expect": "killed",
+    "expectFailures": 1,
+    "why": "The exact state this rule was added to fix, restored. `.hud-swatch` carries `forced-color-adjust: none` because on a colour swatch the colour IS the content -- but opting out means the agent stops replacing THIS element's colours, so `.ui-selectable`'s base ring keeps its authored `transparent` and an unchosen near-white swatch has no boundary at all against a light high-contrast theme's white Canvas. WHY THIS ENTRY EARNS ITS PLACE ALONGSIDE THE OTHER TWO: those pin collapses that `tools/uikit/forced-colors.mjs` measured and reported. This one pins the class that probe COULD NOT catch -- every computed reading was correct while the bug was live, because a transparent border is precisely what the unforced stylesheet asks for and the opt-out is what makes it survive into forced-colors mode. It was found by looking at the capture after the numbers all read clean, which is the only way it could have been. The repair works because a system keyword still resolves inside an opted-out subtree: the opt-out stops the agent REPLACING colours, it does not stop `CanvasText` meaning what it means. Killed by the guard that requires the unchosen swatch to name `border-color` AND to name a system keyword rather than an authored colour -- asserting the property alone would pass this mutation, since it keeps the declaration and only changes its value. Scoped to hud.css.test.ts; expectFailures counts that scoped run only.",
+    "tests": [
+      "src/game/hud.css.test.ts"
+    ]
   }
 ]
