@@ -211,7 +211,22 @@ describe('step() composition (full pipeline)', () => {
     // that AI is live, reaches its 'fire' state and produces its own shell by tick 2 --
     // this is the only place in the suite where the player's and an enemy's fire paths
     // both run through one pipeline in the same ticks.
-    expect(r2.world.bullets.some((b) => b.ownerId === BROWN_ID)).toBe(true);
+    //
+    // Brown used to have its shell out by tick 2. Since issue #371 the trigger also waits
+    // for the barrel to REACH its solution, and Brown starts this fixture pointing away
+    // from the player, so it now spends the slew first -- measured at 35 further ticks
+    // (0.58s) from here. The coverage above is what matters and is unchanged; only the
+    // tick it arrives on moved, so this drives the pipeline until the shell appears.
+    //
+    // Bounded at 60 rather than left open: an unbounded loop would still pass if Brown
+    // took ten seconds, and "the enemy eventually fires" is not the claim.
+    let w2 = r2.world;
+    let brownFired = false;
+    for (let i = 0; i < 60 && !brownFired; i++) {
+      w2 = step(w2, { ...fireInput, fire: false }).world;
+      brownFired = w2.bullets.some((b) => b.ownerId === BROWN_ID);
+    }
+    expect(brownFired).toBe(true);
   });
 
   it('reports win through the pipeline when the last enemy is already dead', () => {
