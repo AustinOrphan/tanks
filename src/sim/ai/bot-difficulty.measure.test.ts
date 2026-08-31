@@ -65,6 +65,28 @@ import type { GameMode } from '../types';
 // Picking better numbers needs the normal-speed human read both issues also require;
 // this harness can only say that the current ones do not separate.
 //
+// WHY HARD DOES NOT SEPARATE, mechanically. Not the clamp: `MAX_COMPETENCE_ACCURACY` is
+// 0.95 and the player profile is authored at aimAccuracy 0.550, so hard resolves to 0.688
+// -- a full 25% gain, nowhere near the ceiling. (Green IS clamped, 0.950 -> 0.950, but
+// green is not the profile a VS bot runs.)
+//
+// It is the anchor. `profileAimSpread` is AI_AIM_SPREAD / aimAccuracy, and the anchor is
+// 0.08 rad = 4.58 deg -- the spread of a hypothetical PERFECT profile. That resolves to:
+//
+//   easy   aim 0.3575 -> spread +/-12.82 deg   wider than a tank beyond  2.2 units
+//   normal aim 0.5500 -> spread +/- 8.33 deg   wider than a tank beyond  3.4 units
+//   hard   aim 0.6875 -> spread +/- 6.67 deg   wider than a tank beyond  4.3 units
+//
+// A tank of radius 0.5 subtends only +/-9.46 deg at 3 units, +/-5.71 at 5, +/-4.09 at 7.
+// So at every range a duel actually happens at, ALL THREE arms fire a cone wider than the
+// thing they are shooting at. Easy's cone is 54% wider than normal's, which is a big
+// enough degradation to show up in 16 matches. Hard's is 20% narrower, which is not.
+//
+// That reframes the open question for #223/#267: it is not "why is hard broken" but
+// "is a 1.25x accuracy multiplier the right size against a 4.58 deg anchor". Widening the
+// hard multiplier and shrinking the anchor are different levers with different side
+// effects on the authored profiles, and choosing between them needs the normal-speed read.
+//
 // A NOTE ON POPULATION, because the first run of this sweep got it wrong. At 8 seeds
 // hard read 3-2-3 against a control of 4-3-1, which looks like hard being WORSE. At 16
 // the two converge. Eight matches cannot resolve a difference this size, and the earlier
