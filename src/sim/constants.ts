@@ -506,6 +506,23 @@ export const TANK_TURN_RATE = data.tank.turnRate;
 // Lowering it makes enemies more readable/telegraphed.
 export const AI_TURRET_TURN_RATE = data.turret.aiTurnRate;
 
+// ---- Last-seen contact memory (issue #372) ----
+// How long an AI keeps looking at the last point it actually observed its committed target,
+// after direct line of sight breaks.
+//
+// ONE CONSTANT, not a per-profile field, unlike targetCommitmentTime beside it. #372 asks
+// for "a small, deterministic last-seen target memory" and says PP1 needs no advanced
+// perception; a per-profile table would be eight invented numbers where the issue asked for
+// one. Promote it to the profile when a sweep says the profiles should differ.
+//
+// 90 ticks is 1.5s, deliberately the same span as targetCommitmentTime: the tank stops
+// looking for a contact at about the time it would reconsider who it is fighting, so the two
+// give up together rather than leaving a tank staring at an empty corner it is no longer
+// committed to. Comfortably longer than AI_SEARCH_HOLD_TICKS (45), so a remembered contact
+// outlives a single search heading -- otherwise search would visibly interrupt the memory
+// it is supposed to follow.
+export const AI_LAST_SEEN_TICKS = 90;
+
 // ---- Sticky opponent selection (issue #359) ----
 // The band inside which two candidates count as EQUIVALENT, and so are separated by the
 // seeded per-AI tie-break rather than by their distances.

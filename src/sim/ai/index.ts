@@ -8,12 +8,13 @@ import { greyDecision } from './grey';
 import { tealDecision } from './teal';
 import { spawnBullet, shellCapReached } from '../bullets';
 import { dropMine } from '../mines';
-import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread } from './targeting';
+import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpread, resolveOpponent } from './targeting';
 import { commitMove } from './commitment';
 import { accelSlew } from './turret-accel';
 import { holdAimFor } from './aim-hold';
 import { searchAim } from './search';
 import { commitTarget } from './target-selection';
+import { memoryAim, updateTargetMemory } from './target-memory';
 import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_MINE_FLEE_RADIUS, AI_AIM_BREAK } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
@@ -91,7 +92,15 @@ export function decideAi(world: World, tank: Tank): AiDecision {
   // false on exactly the branches where every personality passes `tank.turretAngle`
   // straight through. A tank that CAN see a target but is holding fire keeps tracking it,
   // because its solution exists; only a tank with nothing to aim at searches.
-  const solution = decision.hasSolution ? decision.turretAngle : searchAim(world, tank);
+  // THREE WAYS THE BARREL GETS A TARGET, in the order the issues hand off to each other:
+  // a live firing solution (the personality's), then #372's remembered contact, then #371's
+  // search. Each is strictly less informed than the one before it, which is the whole shape
+  // of the perception model -- a tank that has just lost sight looks where its target WAS,
+  // and only starts sweeping once that memory expires.
+  const remembered = decision.hasSolution ? null : memoryAim(tank);
+  const solution = decision.hasSolution
+    ? decision.turretAngle
+    : (remembered ?? searchAim(world, tank));
   const aim = holdAimFor(tank, cfg, solution);
 
   return {
@@ -125,6 +134,10 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // would leave the decision on last tick's target and write the new one for the next,
     // which is a one-tick lag that only shows up when a target dies.
     commitTarget(world, tank);
+    // Immediately after the commitment and before the decision, so the memory always
+    // concerns the opponent this tank is committed to RIGHT NOW (issue #372's dependency
+    // note) and the decision below reads a memory that is current for this tick.
+    updateTargetMemory(world, tank, resolveOpponent(world, tank, configFor(tank.kind)));
     const decision = decideAi(world, tank);
     // The reaction clock: consecutive ticks a firing solution has been HELD
     // (see AiDecision.hasSolution) IN LIVE PLAY. Accumulated here, where the

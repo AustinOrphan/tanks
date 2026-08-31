@@ -151,6 +151,17 @@ export interface Tank {
    * stepAi before the decision runs. Read through resolveOpponent, never directly, so
    * movement and firing cannot end up on different opponents.
    */
+  /**
+   * The last position at which this AI tank actually OBSERVED its committed target, and how
+   * many ticks that memory has left (issue #372). Same optional pair shape as the fields
+   * around it; absent means no remembered contact.
+   *
+   * A SNAPSHOT, never a reference to the target tank: the target keeps moving while unseen,
+   * so remembering the tank would remember the present, which is the hidden state #372
+   * forbids. Written only by ai/target-memory.ts's updateTargetMemory.
+   */
+  aiLastSeenPos?: Vec2;
+  aiLastSeenTicks?: number;
   aiTargetId?: number;
   aiTargetTicks?: number;
   aiShotPlan?: 'bank' | 'direct';
