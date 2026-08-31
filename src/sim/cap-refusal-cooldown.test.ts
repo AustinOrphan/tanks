@@ -75,9 +75,17 @@ describe('a shell-cap refusal costs the cooldown', () => {
     expect(gaps.every((g) => g === FIRE_COOLDOWN_TICKS), `gaps: ${gaps.join(',')}`).toBe(true);
   });
 
-  it('leaves the cooldown alone when the refusal is NOT the cap', () => {
-    // A dead tank is refused too, and pays nothing -- it did not choose to be dead. The
-    // capacity rule is a cost for spraying, not a cost for being stopped.
+  it('leaves the cooldown alone when the tank never reaches the trigger', () => {
+    // A dead tank pays nothing, and the reason is worth being exact about: it does not reach
+    // the fire block at all (`applyPlayerInput` returns early on a dead player), so this
+    // pins the OUTER gate rather than the `shellCapReached` guard beside it.
+    //
+    // Measured, and recorded so nobody reads more into that guard than is there: replacing
+    // `fired || shellCapReached(...)` with a bare `true` SURVIVES this file. Today the cap is
+    // the only refusal that can reach `spawnBullet` from either caller -- its other early
+    // return is a dead or missing owner, and both callers exclude those first -- so the
+    // guard is defensive, not load-bearing. It earns its place the moment `spawnBullet`
+    // grows a third reason, which is exactly when charging for it would be wrong.
     const dead = mkTank({ id: 1, kind: 'player', pos: { x: 0, y: 0 }, alive: false });
     const w = createWorld({ walls: [], tanks: [dead], spawns: SPAWNS, lives: 3 });
     w.bullets = shells(1, CAP);
