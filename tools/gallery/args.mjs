@@ -132,6 +132,11 @@ export const MOMENT_IDS = [
   // Issue #372's artefact capture: the same turret AFTER it loses sight -- held on the
   // last observed position for a bounded span, then handing off to #371's search.
   'ai-last-seen',
+  // Issue #359's artefact capture: two AIs each holding their own committed opponent
+  // while both opponents cross the board.
+  'ai-commitment',
+  // The same issue's other half: the AI letting go, 37 ticks after a better target appeared.
+  'ai-retarget',
 ];
 
 /**

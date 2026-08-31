@@ -970,13 +970,13 @@
     "find": "  const nv = vel + Math.max(-aMax, Math.min(aMax, vDes - vel));",
     "replace": "  const nv = vDes;",
     "expect": "killed",
-    "expectFailures": 9,
+    "expectFailures": 11,
     "tests": [
       "src/sim/ai/turret-accel.test.ts",
       "src/sim/ai/dispatch.test.ts",
       "tools/gallery/moments.test.ts"
     ],
-    "why": "This IS the change. Letting the velocity jump straight to vDes restores the bang-bang slew: the turret is stopped or at the rate cap with nothing in between, which measured an abrupt speed change on 0.84% (brown) / 1.84% (grey) / 2.85% (teal) of ticks over 60 seeds x 2 arenas, against 0.06/0.24/0.44% with the limit in place."
+    "why": "This IS the change. Letting the velocity jump straight to vDes restores the bang-bang slew: the turret is stopped or at the rate cap with nothing in between, which measured an abrupt speed change on 0.84% (brown) / 1.84% (grey) / 2.85% (teal) of ticks over 60 seeds x 2 arenas, against 0.06/0.24/0.44% with the limit in place. expectFailures moved 9 -> 11 when tools/gallery/moments.test.ts (in this entry's declared scope) gained the ai-commitment block for issue #359; re-measured, not guessed."
   },
   {
     "id": "ai-turret-accel-no-decel",

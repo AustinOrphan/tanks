@@ -1014,6 +1014,202 @@ export const MOMENTS: Record<string, MomentDef> = {
       input: (t: number) => (t < 70 ? EAST : Math.floor((t - 70) / 18) % 2 === 0 ? WEST : EAST),
     };
   })(),
+
+  /**
+   * Issue #359's artefact: two AIs, two players, and each AI sticking to the opponent it
+   * committed to while both of them cross the board.
+   *
+   * WHAT DECIDES WHO TARGETS WHOM, because it is not "the nearest one". `selectPerceived`
+   * ranks candidates by `rangeCost` -- distance from the profile's `preferredDistance` --
+   * and STATIC_BASIC prefers 10. The geometry below is built backwards from that: the
+   * player on each AI's own side sits 12 units away (cost 2) and the far one 13.4 (cost
+   * 3.4), so the left AI commits to the left player and the right AI to the right one.
+   * A symmetric fixture does NOT produce this -- an earlier draft put both players
+   * equidistant and both AIs picked the same one, which is correct behaviour and shows
+   * no distribution at all.
+   *
+   * MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit):
+   *
+   *   tick   1   tank 1 commits to player 3, tank 2 to player 4, both for the full
+   *              90-tick span (`targetCommitmentTime` 1.5s)
+   *   tick  25   the players start driving, each toward the other's side
+   *   ..178      NEITHER AI CHANGES TARGET. tank 1 holds player 3 and tank 2 holds
+   *              player 4 for all 178 ticks, across the entire crossing
+   *   turrets    they start 16.4deg apart (80.6 and 97.0) and finish 121.2deg apart
+   *              (27.8 and 149.0), because each is following its own player past the other
+   *
+   * That divergence is the whole artefact: two turrets sweeping APART while the tanks they
+   * track swap sides is what "pressure distribution" looks like from outside, and a
+   * per-tick retarget would instead show them converging as each AI grabbed whichever
+   * opponent was momentarily better placed.
+   *
+   * SEPARATE LANES (y 12 and 13.6), not one. Two players driven at each other down the
+   * same lane collide and bounce, which ends the crossing halfway and was how the first
+   * draft failed.
+   *
+   * 178 TICKS, and the number is a kill. Unlike `ai-last-seen`, this moment needs
+   * continuous line of sight for the turrets to track at all, so brown's 48-tick reaction
+   * gate fires on schedule and the clip legitimately contains shots. MEASURED: the first
+   * `tank-destroyed` lands on tick 182, from a shell fired at 170/174. Stopping at 178
+   * keeps every shot in flight and no death in frame -- a kill mid-clip would reset the
+   * victim's position AND `roundStartTick`, which is the landmine `mine-escape`'s harness
+   * documents and it would silently corrupt everything after it.
+   *
+   * WHAT THIS MOMENT DOES NOT SHOW: a retarget. Commitment expires every 90 ticks and
+   * re-commits unless a challenger beats the held target by AI_TARGET_SWITCH_MARGIN (2),
+   * and MEASURED, the first switch here lands at tick ~181 -- past the kill, so it cannot
+   * be filmed on this fixture. #359's "target changes" half needs its own moment built
+   * around a challenger that becomes materially better before a shell can connect.
+   */
+  'ai-commitment': (() => {
+    const LEFT = { x: -3, y: 0 };
+    const RIGHT = { x: 3, y: 0 };
+    const P1 = { x: -3, y: 12 };
+    const P2 = { x: 3, y: 13.6 };
+    const hold = (y: number, dir: number): InputState => ({ move: { x: 0, y: 0 }, aim: { x: dir * 1000, y }, fire: false, mine: false });
+    const run = (y: number, dir: number): InputState => ({ move: { x: dir, y: 0 }, aim: { x: dir * 1000, y }, fire: false, mine: false });
+    return {
+      ticks: 178,
+      // Both AIs fire on tick 50, then drift apart as their reaction clocks diverge.
+      // Pinned rather than avoided: see the doc comment on why the shots are unavoidable
+      // here and why the clip stops before the first one connects.
+      expect: [
+        { type: 'fire' as const, tick: 50 },
+        { type: 'fire' as const, tick: 90 },
+        { type: 'fire' as const, tick: 94 },
+        { type: 'fire' as const, tick: 130 },
+        { type: 'fire' as const, tick: 134 },
+        { type: 'fire' as const, tick: 170 },
+        { type: 'fire' as const, tick: 174 },
+      ],
+      // Both AIs (y 0) and both player lanes (y 12 and 13.6) in frame, centred on the
+      // crossing rather than on either side.
+      focus: [0, 0.3, 6.8], span: 17,
+      build: () => {
+        const w = createWorld({
+          walls: [],
+          spawns: [
+            { kind: 'brown', pos: { ...LEFT }, angle: 0 },
+            { kind: 'brown', pos: { ...RIGHT }, angle: 0 },
+            { kind: 'player', pos: { ...P1 }, angle: 0 },
+            { kind: 'player', pos: { ...P2 }, angle: 0 },
+          ],
+          lives: 9,
+          tanks: [
+            // Turrets start near, but not on, their targets' bearings, so the clip opens
+            // on two turrets settling rather than two already welded in place.
+            { id: 1, kind: 'brown', pos: { ...LEFT }, bodyAngle: 0, turretAngle: 1.4, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 2, kind: 'brown', pos: { ...RIGHT }, bodyAngle: 0, turretAngle: 1.7, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 3, kind: 'player', pos: { ...P1 }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 4, kind: 'player', pos: { ...P2 }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+          ],
+          seed: 7,
+        });
+        // Same round-start landmine every other moment here documents.
+        w.roundStartTick = -600;
+        return w;
+      },
+      // 25 still ticks first, so the commitment is visibly established BEFORE anything
+      // moves -- otherwise a viewer cannot tell a held target from a lucky initial pick.
+      input: (t: number) => (t >= 25 ? run(12, 1) : hold(12, 1)),
+      input2: (t: number) => (t >= 25 ? run(13.6, -1) : hold(13.6, -1)),
+    };
+  })(),
+
+  /**
+   * Issue #359's other half: the RETARGET. `ai-commitment` above shows an AI refusing to
+   * be pulled off its committed opponent; this shows the same rule letting go.
+   *
+   * Both halves are the same mechanism seen from opposite sides, and neither is legible
+   * without the other -- a turret that never switches looks stubborn rather than
+   * committed, and one that switches looks like it is simply chasing the best target.
+   * What makes it a COMMITMENT is the gap between "a better target exists" and "the AI
+   * acts on it", and that gap is what this moment measures.
+   *
+   * MEASURED (throwaway vite-node probe, duplicate fixture, deleted before commit). One
+   * brown at the origin, preferred distance 10; the held player drives AWAY from that
+   * band while the challenger drives INTO it:
+   *
+   *   tick   1   commits to player 2 -- cost 0.66 against the challenger's 4.80
+   *   tick  55   the challenger becomes CHEAPER (2.42 against 2.81) and stays cheaper
+   *   tick  92   switches to player 3: costs 4.09 against 1.24
+   *   ..140      turret swings 25.8deg (tick 91) to 108.1deg (tick 130)
+   *
+   * WHAT HOLDS IT FOR THOSE 37 TICKS, measured by removing each rule from the tree and
+   * re-reading the switch tick rather than by reasoning about the code:
+   *
+   *   shipped                    switches at 92
+   *   commitment span = 0        switches at 82   <- the span is worth 10 ticks
+   *   AI_TARGET_SWITCH_MARGIN 0  switches at 92   <- the margin is worth NOTHING here
+   *
+   * So the long first stretch, ticks 55 to 82, is neither of the rules this moment is
+   * named for. It is `selectPerceived` comparing BANDED costs (AI_TARGET_TIE_BAND, 0.5):
+   * a challenger that is cheaper by less than a band is not even selected, so there is
+   * nothing for the margin or the span to refuse. By the time the span does expire the
+   * challenger already wins by more than the margin, which is why deleting the margin
+   * moves nothing on this fixture.
+   *
+   * Two earlier drafts of this comment got that attribution wrong -- the first credited
+   * all 37 ticks to the span, the second credited 26 of them to the margin. Both were
+   * plausible from reading `commitTarget` and both are contradicted by the table above.
+   * The moment is worth filming for the 37-tick hold; only 10 of it is the commitment.
+   *
+   * BOTH PLAYERS DRIVE EAST, which is why they never collide despite sharing a lane: they
+   * start 19.5 units apart and move in parallel. `ai-commitment`'s first draft put two
+   * players on a collision course down one lane and they bounced apart halfway.
+   *
+   * 140 TICKS. Shots leave at 50, 90 and 130 -- brown's reaction gate again, unavoidable
+   * with continuous sight -- and MEASURED, nothing connects: extending this same fixture
+   * to 200 ticks adds only a fourth `fire` at 170 and still no `tank-destroyed`. The
+   * targets are 10-16 units out and a shell covers 0.1 units a tick, so every shot here
+   * is still in flight when the clip ends.
+   */
+  'ai-retarget': (() => {
+    const AI = { x: 0, y: 0 };
+    const HELD = { x: 7, y: 8 };
+    const CHALLENGER = { x: -12.5, y: 8 };
+    const EAST: InputState = { move: { x: 1, y: 0 }, aim: { x: 1000, y: 8 }, fire: false, mine: false };
+    return {
+      ticks: 140,
+      expect: [
+        { type: 'fire' as const, tick: 50 },
+        { type: 'fire' as const, tick: 90 },
+        { type: 'fire' as const, tick: 130 },
+      ],
+      // Wide on purpose: the mechanic IS distance, so the frame has to hold a tank at 10
+      // units and another at 16 at the same time. Centred between the AI and the lane.
+      focus: [0.5, 0.3, 4.2], span: 21,
+      build: () => {
+        const w = createWorld({
+          walls: [],
+          spawns: [
+            { kind: 'brown', pos: { ...AI }, angle: 0 },
+            { kind: 'player', pos: { ...HELD }, angle: 0 },
+            { kind: 'player', pos: { ...CHALLENGER }, angle: 0 },
+          ],
+          lives: 9,
+          tanks: [
+            { id: 1, kind: 'brown', pos: { ...AI }, bodyAngle: 0, turretAngle: 1.0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 2, kind: 'player', pos: { ...HELD }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+            { id: 3, kind: 'player', pos: { ...CHALLENGER }, bodyAngle: 0, turretAngle: 0, alive: true,
+              desiredMove: { x: 0, y: 0 }, activeMineIds: [], fireCooldown: 0, mineCooldown: 0, aiState: 'idle', aiTimer: 0 },
+          ],
+          seed: 7,
+        });
+        // Same round-start landmine every other moment here documents.
+        w.roundStartTick = -600;
+        return w;
+      },
+      input: () => EAST,
+      input2: () => EAST,
+    };
+  })(),
 };
 
 /**
