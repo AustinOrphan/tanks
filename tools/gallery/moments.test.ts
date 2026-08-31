@@ -16,12 +16,26 @@ describe('every moment pins its events to exact ticks', () => {
       expect(tl.worlds).toHaveLength(def.ticks + 1);
       for (const { type, tick } of def.expect) {
         expect(tl.events[tick].map((e) => e.type)).toContain(type);
-        // The negative half: the pinned tick is THE tick. An event that also fires
-        // elsewhere makes "staged on a known tick" false, and a fixture drift that
-        // moves it shows up here rather than as a silently mistimed gif.
+      }
+      // The negative half: the pinned ticks are THE ticks. An event that also fires
+      // elsewhere makes "staged on a known tick" false, and a fixture drift that moves
+      // it shows up here rather than as a silently mistimed gif.
+      //
+      // Compared against the SET of ticks declared for each type, not against one of
+      // them. The single-tick form this replaces could not express a moment that stages
+      // the same event more than once -- `ai-commitment` fires seven times, because two
+      // AIs tracking through a crossing cannot avoid brown's reaction gate -- and would
+      // have reported every legitimate repeat as a stray. Identical for the moments that
+      // declare one tick per type, which is all of the others.
+      const declared = new Map<string, Set<number>>();
+      for (const { type, tick } of def.expect) {
+        if (!declared.has(type)) declared.set(type, new Set());
+        declared.get(type)!.add(tick);
+      }
+      for (const [type, ticks] of declared) {
         const elsewhere = tl.events
           .flatMap((evs, t) => evs.filter((e) => e.type === type).map(() => t))
-          .filter((t) => t !== tick);
+          .filter((t) => !ticks.has(t));
         expect(elsewhere, `${type} also fired at ticks ${elsewhere}`).toEqual([]);
       }
     });
