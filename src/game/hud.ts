@@ -770,6 +770,11 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       <div class="hud-versus-row">
         <h2>Mode</h2>
         <div class="hud-versus-mode-row"></div>
+        <!-- Why Teams is unavailable at this player count (issue #281). Empty and
+             hidden whenever it IS available; describeDisabledReason points the Teams
+             button at this id so the reason reaches a screen reader. NO BACKTICKS in
+             this markup: it lives in a template literal, and one closes the string. -->
+        <p class="ui-hint hud-versus-mode-note hud-versus-mode-note--hidden" id="hud-versus-mode-note"></p>
       </div>
       <div class="hud-versus-row">
         <h2>Players</h2>
@@ -1041,6 +1046,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   const campaignOpenBtn = el.querySelector('.hud-campaign-open') as HTMLButtonElement;
   const versusSetupView = el.querySelector('.hud-versus-setup') as HTMLElement;
   const versusModeRow = el.querySelector('.hud-versus-mode-row') as HTMLElement;
+  const versusModeNoteEl = el.querySelector('.hud-versus-mode-note') as HTMLElement;
   const versusPlayersRow = el.querySelector('.hud-versus-players-row') as HTMLElement;
   const versusMapRow = el.querySelector('.hud-versus-map-row') as HTMLElement;
   const versusStockRow = el.querySelector('.hud-versus-stock-row') as HTMLElement;
@@ -2441,6 +2447,22 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
     { id: 'teams', label: 'Teams' },
   ];
   const VERSUS_PLAYERS_OPTIONS: ReadonlyArray<VersusConfig['players']> = [2, 3, 4];
+
+  /**
+   * Is Teams a real choice at this player count? (issue #281)
+   *
+   * The issue's first binding rule: "Teams mode is not a distinct option for two players
+   * because it is equivalent to FFA." Two players on two teams IS free-for-all, and two on
+   * one team is a match nobody can win -- which the Start gate would then have to refuse,
+   * turning an offer into a trap. Named here rather than inlined at its three call sites so
+   * the rule has one home.
+   */
+  const teamsOfferedAt = (players: number): boolean => players > 2;
+
+  /** How many teams a slot may be put on. Two-team and three-team splits, per the issue's
+   *  "four-player Teams can use two or three teams, including 2v2 and 2v1v1". */
+  const VERSUS_TEAM_OPTIONS: readonly number[] = [0, 1, 2];
+  const VERSUS_TEAM_LABELS: readonly string[] = ['A', 'B', 'C'];
   const VERSUS_STOCK_OPTIONS: readonly number[] = [1, 2, 3, 4, 5];
 
   /** `'arena-01'` -> `'Arena 1'`, matching the spec's own "Arena 1-5" wording. Falls
@@ -2514,9 +2536,19 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   }
 
   function renderVersusModeSelection(): void {
+    const offered = teamsOfferedAt(versusConfigState.players);
     for (const b of Array.from(versusModeRow.children) as HTMLButtonElement[]) {
       setSelected(b, b.dataset.mode === versusConfigState.mode);
+      // DISABLED, not removed. The row is built once and a vanishing button would shift
+      // the one beside it under the pointer mid-interaction; `:disabled` already has a
+      // treatment in this kit (#260) and `describeDisabledReason` can say why, which a
+      // missing control cannot.
+      const unofferable = b.dataset.mode === 'teams' && !offered;
+      b.disabled = unofferable;
+      describeDisabledReason(b, unofferable ? 'hud-versus-mode-note' : null);
     }
+    versusModeNoteEl.textContent = offered ? '' : 'Teams needs three or more players.';
+    versusModeNoteEl.classList.toggle('hud-versus-mode-note--hidden', offered);
   }
   function renderVersusPlayersSelection(): void {
     for (const b of Array.from(versusPlayersRow.children) as HTMLButtonElement[]) {
@@ -2681,6 +2713,38 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         row.appendChild(btn);
       }
 
+      // Team, in Teams mode only (issue #281). Same row and same idiom as the role and
+      // difficulty controls beside it, for the reason #267's comment gives: it is a
+      // property OF this slot, and a player should not have to match two lists by
+      // position. Absent in FFA rather than disabled -- a team means nothing there, so
+      // there is no refusal to explain.
+      if (versusConfigState.mode === 'teams') {
+        for (const team of VERSUS_TEAM_OPTIONS) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ui-btn ui-btn--sm ui-selectable hud-versus-team-btn';
+          btn.dataset.team = String(team);
+          // A LETTER, not a colour name and not a bare number. The issue asks for the
+          // choice to be reinforced "with label/marker in addition to color", and a letter
+          // is the reinforcement that survives both a colour-blind reader and the
+          // forced-colours palette (#368), where the swatch hues are replaced outright.
+          btn.textContent = VERSUS_TEAM_LABELS[team];
+          // `?? teamOf(slot)` -- the EFFECTIVE team, matching what `loadArena` stamps and
+          // what `representedTeams` counts. An untouched slot shows the team it would
+          // actually play on rather than showing nothing chosen, which would read as an
+          // unmade decision the Start gate was ignoring.
+          setSelected(btn, (slots[slot].team ?? teamOf(slot)) === team);
+          const forSlot = slot; // captured per-iteration, as the loops above do
+          btn.addEventListener('click', () => {
+            const next = slots.map((sl, i) => (i === forSlot ? { ...sl, team } : { ...sl }));
+            setVersusConfig({ ...versusConfigState, slots: next });
+            renderVersusSlotRows(); // REPLACE -- selection AND the one-team gate both move
+          });
+          btn.addEventListener('click', blurIfPointer);
+          row.appendChild(btn);
+        }
+      }
+
       // Competence, for a BOT slot only (issue #267). Built inside the same row rather
       // than as a second row: it is a property OF this slot, and a player scanning the
       // pane should not have to match two lists by position. A human slot has no
@@ -2769,6 +2833,10 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       renderVersusModeSelection();
       renderVersusFriendlyFireRow(); // absent <-> present follows mode directly
       renderVersusMapRow(); // REPLACE -- Mode filters the map list too (issue #270)
+      // ...and the per-slot team controls, which exist only under Teams (issue #281).
+      // Without this the selector stays on screen after switching to FFA, and -- worse --
+      // the one-team refusal keeps its Start button disabled in a mode that has no teams.
+      renderVersusSlotRows();
     });
     b.addEventListener('click', blurIfPointer);
     versusModeRow.appendChild(b);
@@ -2785,12 +2853,21 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       // `slots` MUST follow the count, or Start emits a config whose slot array does not
       // describe the match being started (issue #260). Resized rather than rebuilt so
       // going 2 -> 3 -> 2 gives back the roles that were chosen, not fresh defaults.
+      // Dropping to two players leaves Teams unofferable, so the MODE follows the count
+      // rather than being left in a state the pane no longer offers (issue #281). The
+      // per-slot team choices are NOT cleared -- `resizeSlots` keeps them, and the issue
+      // requires that switching modes does not corrupt retained choices, which includes
+      // the round trip 4 -> 2 -> 4.
+      const mode = teamsOfferedAt(players) ? versusConfigState.mode : 'ffa';
       setVersusConfig({
         ...versusConfigState,
         players,
+        mode,
         slots: resizeSlots(versusConfigState.slots, players),
       });
       renderVersusPlayersSelection();
+      renderVersusModeSelection(); // the Teams button's availability follows the count
+      renderVersusFriendlyFireRow(); // ...and the friendly-fire row follows the mode
       renderVersusMapRow(); // REPLACE -- Players filters the map list
       renderVersusSlotRows(); // REPLACE -- the slot row COUNT follows players
     });

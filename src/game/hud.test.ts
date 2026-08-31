@@ -3102,11 +3102,18 @@ describe('createHud roving-tabindex focus navigation (issue #115)', () => {
     // a board curated for another count would NOT appear here) + 5 Stock + 0 friendly
     // fire (absent -- the pane defaults to FFA) + 6 who's-playing role buttons
     // + Start + Back = 2+3+7+5+0+6+1+1 = 25).
-    // 73 since issue #267: the versus pane's one BOT slot (`defaultSlots(2)` is
-    // `[human, bot]`) gained Easy/Normal/Hard, and all three are reachable by arrow key
-    // like every other choice control -- which is the property this test exists to prove,
-    // so the count moving is the point rather than an inconvenience.
-    expect(totalControls, 'recount the panels above if this moves').toBe(73);
+    // 72 since issue #281, DOWN by one, and the direction is the point: this sweep counts
+    // visible and ENABLED controls, and Teams is no longer offered at two players ("not a
+    // distinct option for two players because it is equivalent to FFA"). This fixture is at
+    // the pane's default count, so the Teams button is disabled here and correctly drops
+    // out of arrow-key navigation -- a disabled control that stayed reachable would be the
+    // defect.
+    //
+    // It was 73 since issue #267, when the one BOT slot (`defaultSlots(2)` is
+    // `[human, bot]`) gained Easy/Normal/Hard. The per-slot TEAM buttons do not appear
+    // here at all, because they render only under Teams -- which this fixture cannot now
+    // reach at two players.
+    expect(totalControls, 'recount the panels above if this moves').toBe(72);
     expect(visited.size, 'a control was reached more than once under a different identity').toBe(
       totalControls,
     );

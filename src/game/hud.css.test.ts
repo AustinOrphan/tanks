@@ -165,23 +165,35 @@ function mountEveryButton(): { root: HTMLElement; dispose: () => void } {
   // an un-themed `.hud-controller-source-btn` should be caught whichever kind built it.
   hud.setBotAssignmentAllowed(true);
   hud.setDetectedPads([{ padIndex: 1, id: 'Test Pad' }]);
-  hud.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 }]);
+  // THREE slots since issue #281, matching the player count this fixture now selects
+  // below -- see the comment there. A mismatch drops the who's-playing preview onto
+  // its DISABLED branch, which renders a different button set and is not what this
+  // sweep is for.
+  hud.setControllers([{ kind: 'keyboard' }, { kind: 'gamepad', padIndex: 1 }, { kind: 'none' }]);
   // The versus setup pane's Mode/Players/Map/Stock rows and its who's-playing preview
   // are all rendered UNCONDITIONALLY at construction (renderVersusMapRow/
   // renderVersusControllerRows -- see hud.ts's own comment on why, mirroring
   // setLevelSelect/setControllers' "not gated on the panel being open" convention), so
-  // they are already in the DOM with no call needed here. The pane's own default
-  // player count (2) matches this fixture's 2-slot setControllers call just above, so
+  // they are already in the DOM with no call needed here. The pane's player count (3,
+  // selected below) matches this fixture's 3-slot setControllers call just above, so
   // the who's-playing preview lands on the INTERACTIVE branch (real, enabled
   // candidate buttons -- see renderVersusControllerRows), not the disabled preview
-  // branch a mismatched count would produce.
+  // branch a mismatched count would produce. THE TWO MUST MOVE TOGETHER.
   //
   // The one row that IS conditional is friendly fire -- genuinely absent from the DOM
   // under the pane's FFA default (renderVersusFriendlyFireRow) -- so switching to
   // Teams here is what lands its button under this sweep at all.
+  // THREE players first, since issue #281: Teams is not offered at two ("not a distinct
+  // option for two players because it is equivalent to FFA"), so the Teams button is
+  // disabled at the pane's default count and clicking it does nothing -- which silently
+  // took the friendly-fire toggle, and the per-slot team buttons, back out of this sweep.
+  // The player count is therefore part of the fixture's route to those controls, not
+  // incidental to it.
+  (root.querySelector('.hud-versus-players-row [data-players="3"]') as HTMLButtonElement).click();
   const versusTeamsBtn = root.querySelector(
     '.hud-versus-mode-row [data-mode="teams"]',
   ) as HTMLButtonElement;
+  expect(versusTeamsBtn.disabled, 'Teams is still refused at three players').toBe(false);
   versusTeamsBtn.click();
   return {
     root,
@@ -642,7 +654,25 @@ describe('hud.css is syntactically whole', () => {
     // (`defaultSlots(2)` is `[human, bot]`). They carry `.ui-btn`/`.ui-btn--sm`, so they
     // are inside this sweep rather than falling through to browser default styling --
     // which is exactly what the sweep is for.
-    expect(buttons.length).toBe(89);
+    // 107 since issue #281, and the jump is the fixture's route changing rather than the
+    // kit growing: Teams is no longer offered at two players, so this fixture now selects
+    // THREE before switching mode, and its setControllers call follows to match.
+    //
+    // MEASURED composition at that state, not derived -- the previous derivation drifted
+    // by one twice while I was recounting it by hand:
+    //
+    //   versus pane      41  = 16 option (mode 2 + players 3 + map 6 + stock 5)
+    //                         + 9 role (3 slots x Human/Bot/Off)
+    //                         + 9 team (3 slots x A/B/C -- new, issue #281)
+    //                         + 6 difficulty (2 BOT slots x Easy/Normal/Hard, issue #267)
+    //                         + 1 friendly-fire toggle (Teams-only)
+    //   controllers      12  = 3 slots x [Keyboard/Bot/None + 1 detected pad]
+    //   everything else  54  = the panels above, unchanged by this issue
+    //
+    // Two of those move with the fixture's player count and one with how many slots are
+    // BOTS, so a fixture that picked a different count pins a different number -- which is
+    // the prompt to re-measure rather than to adjust the literal.
+    expect(buttons.length).toBe(107);
     expect(unstyled).toEqual([]);
 
     dispose();
