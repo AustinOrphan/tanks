@@ -129,6 +129,9 @@ export const MOMENT_IDS = [
   'trail-stop', 'trail-cross', 'trail-skins',
   // Issue #330's artefact capture: a stationary AI's turret tracking a moving player.
   'ai-tracking',
+  // Issue #372's artefact capture: the same turret AFTER it loses sight -- held on the
+  // last observed position for a bounded span, then handing off to #371's search.
+  'ai-last-seen',
 ];
 
 /**

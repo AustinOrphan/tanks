@@ -3,8 +3,10 @@ import { MOMENTS, simulateMoment, PIVOT_POSITION_BOUND, PIVOT_TURRET_EPS } from 
 import type { World } from '../../src/sim/world';
 import {
   RESPAWN_DELAY_TICKS, MINE_PROXIMITY_RADIUS, MINE_TIMER, TANK_SPEED, DT, TICK_HZ, TANK_RADIUS,
-  AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS,
+  AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, AI_LAST_SEEN_TICKS,
 } from '../../src/sim/constants';
+import { step } from '../../src/sim/world';
+import { lineOfSight } from '../../src/sim/ai/targeting';
 import { EMIT_SPACING } from '../../src/render/tread-trails';
 
 describe('every moment pins its events to exact ticks', () => {
@@ -373,5 +375,111 @@ describe('ai-tracking moment specifics', () => {
     // reverted (see this task's report).
     const tl = simulateMoment(MOMENTS['ai-tracking']);
     expect(tl.events.flat()).toEqual([]);
+  });
+});
+
+
+describe('ai-last-seen moment specifics', () => {
+  const DEF = MOMENTS['ai-last-seen'];
+  const deg = (r: number) => (r * 180) / Math.PI;
+  // MEASURED on this fixture (throwaway vite-node probe, moments.ts's own comment): the
+  // last tick the AI can see the player, and the first it cannot. Derived here rather
+  // than hardcoded so a geometry change reds the assertions below with a real reason
+  // instead of silently re-anchoring them.
+  function sightBreak(tl: ReturnType<typeof simulateMoment>): number {
+    for (let t = 1; t <= DEF.ticks; t++) {
+      const w = tl.worlds[t];
+      if (!lineOfSight(w.tanks[0].pos, w.tanks[1].pos, w.walls)) return t;
+    }
+    throw new Error('sight never breaks -- this moment has nothing to show');
+  }
+
+  it('loses sight at tick 29 and never regains it, which is what the rest of the clip is about', () => {
+    const tl = simulateMoment(DEF);
+    expect(sightBreak(tl)).toBe(29);
+    // Negative control: widening the wall gap (LAST_SEEN_WALL.aabb.minX past the
+    // sightline, e.g. 1.5) pushes this break later and reds the tick; shortening the
+    // slab's maxX to 1.0 lets sight come back mid-clip and reds the loop below --
+    // verified live and reverted.
+    for (let t = 29; t <= DEF.ticks; t++) {
+      const w = tl.worlds[t];
+      expect(lineOfSight(w.tanks[0].pos, w.tanks[1].pos, w.walls)).toBe(false);
+    }
+  });
+
+  it('holds the bearing to the position it LAST OBSERVED, while the player moves somewhere else', () => {
+    const tl = simulateMoment(DEF);
+    const brk = sightBreak(tl);
+    const observed = tl.worlds[brk - 1].tanks[1].pos;
+    const bearing = Math.atan2(observed.y - 0, observed.x - 0);
+    // The plateau. 46 is where the turret finishes slewing onto the remembered bearing;
+    // 118 is the last tick before the span expires (see the expiry test below).
+    for (let t = 46; t <= 118; t++) {
+      expect(deg(tl.worlds[t].tanks[0].turretAngle)).toBeCloseTo(deg(bearing), 9);
+    }
+    // Not vacuous: the thing it would be tracking is demonstrably NOT there any more.
+    // Over the same span the player travels away from and back past the remembered
+    // point, so a turret reading current state could not sit still through it.
+    const xs = Array.from({ length: 118 - 46 + 1 }, (_, i) => tl.worlds[46 + i].tanks[1].pos.x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1.5);
+    // And the remembered POINT is the observed one, not a live handle on the target:
+    // storing the Tank rather than a copy would make these two equal at every tick.
+    for (let t = brk; t <= 118; t++) {
+      const ai = tl.worlds[t].tanks[0];
+      expect(ai.aiLastSeenPos).toEqual({ x: observed.x, y: observed.y });
+      if (t > 60) expect(ai.aiLastSeenPos).not.toEqual(tl.worlds[t].tanks[1].pos);
+    }
+  });
+
+  it('gives up after exactly AI_LAST_SEEN_TICKS and hands off to the search sweep', () => {
+    const tl = simulateMoment(DEF);
+    const brk = sightBreak(tl);
+    const zero = tl.worlds.findIndex((w, t) => t >= brk && (w.tanks[0].aiLastSeenTicks ?? 0) === 0);
+    // Derived from the constant, so re-tuning AI_LAST_SEEN_TICKS moves this with it
+    // rather than reddening a hardcoded 119.
+    expect(zero).toBe(brk + AI_LAST_SEEN_TICKS);
+    // The handoff is visible, not just bookkeeping: the turret leaves the held bearing.
+    const held = tl.worlds[118].tanks[0].turretAngle;
+    expect(tl.worlds[zero + 20].tanks[0].turretAngle).not.toBe(held);
+  });
+
+  it('the plateau is caused by the memory, not by the geometry', () => {
+    // The negative control this moment exists to survive, run as a test rather than
+    // described in a comment -- `ai-tracking` was authored against a knob that turned
+    // out to be inert (46 of its 47 frames byte-identical across the sweep), and this
+    // is what would catch the same mistake here.
+    //
+    // Same fixture, same inputs, memory suppressed after every step so the aim chain
+    // falls through to searchAim. Deleting memoryAim from stepAi's chain would make the
+    // two arms identical and red both bounds below.
+    let w = DEF.build();
+    const suppressed: number[] = [];
+    for (let t = 0; t < DEF.ticks; t++) {
+      w = step(w, DEF.input(t)).world;
+      w.tanks[0].aiLastSeenTicks = 0;
+      w.tanks[0].aiLastSeenPos = undefined;
+      suppressed.push(w.tanks[0].turretAngle);
+    }
+    const longestFlat = (xs: number[]) => {
+      let best = 1, cur = 1;
+      for (let i = 1; i < xs.length; i++) { cur = xs[i] === xs[i - 1] ? cur + 1 : 1; if (cur > best) best = cur; }
+      return best;
+    };
+    const live = simulateMoment(DEF).worlds.slice(1).map((x) => x.tanks[0].turretAngle);
+    // MEASURED: 73 live against 21 suppressed. The suppressed arm is NOT motionless --
+    // a drawn search heading can be reached and then held for the rest of its
+    // AI_SEARCH_HOLD_TICKS window -- so the bound is the contrast, not stillness.
+    expect(longestFlat(live)).toBe(73);
+    expect(longestFlat(suppressed)).toBeLessThan(30);
+    expect(Math.max(...live.map((v, i) => Math.abs(deg(v) - deg(suppressed[i]))))).toBeGreaterThan(60);
+  });
+
+  it('never fires: sight breaks 19 ticks before brown could arm a shot', () => {
+    // brown's gate needs aimTicks >= 48 (STATIC_BASIC's 0.8s reaction) and its first
+    // firing OPPORTUNITY past it is tick 50 -- ai-tracking's comment derives both. Sight
+    // breaks at 29 here, which resets aimTicks before the gate can close. Negative
+    // control: MEASURED on the ai-tracking fixture, whose sight never breaks -- extending
+    // it to 55 ticks fires at tick 50.
+    expect(simulateMoment(DEF).events.flat()).toEqual([]);
   });
 });
