@@ -54,6 +54,11 @@ try {
 
 const BASE = `http://localhost:${opts.port}/`;
 
+// One budget for "the page has finished all three measurements", shared by BOTH waits the
+// browser leg makes on it. Split into two literals, the tighter one silently governed the
+// whole compute -- see the call sites in the browser loop.
+const PAGE_BUDGET_MS = 180_000;
+
 async function loadPlaywright() {
   const tried = [];
   for (const spec of [
@@ -197,7 +202,21 @@ async function runPlaywrightMode(opts) {
         const page = await browser.newPage();
         const pageErrors = [];
         page.on('pageerror', (e) => pageErrors.push(String(e)));
-        await page.goto(`${BASE}tools/baseline/page.html`, { waitUntil: 'load' });
+        // `waitUntil: 'load'` is where the trace is actually SPENT, not the poll below it:
+        // page.html computes all three measurements in a module script that blocks the main
+        // thread, so the load event cannot fire until they finish. Measured on Linux, warm,
+        // n=1 per engine: goto took 5.0/8.6/5.9 s for chromium/firefox/webkit against an
+        // in-page trace of 4.7/8.1/5.6 s, leaving the poll below 18-73 ms to do. Left
+        // implicit, goto takes playwright's default 30 s -- so the generosity documented
+        // below was dead, and a 5-8 s variable compute was really budgeted at 30. That is
+        // how `engines (windows-latest)` failed on main at c9035fd with `page.goto: Timeout
+        // 30000ms exceeded` for firefox while chromium and webkit matched the pinned hash
+        // on that same runner. Both waits now take the one constant, so they cannot drift
+        // back apart into a ceiling neither call site states.
+        await page.goto(`${BASE}tools/baseline/page.html`, {
+          waitUntil: 'load',
+          timeout: PAGE_BUDGET_MS,
+        });
         // Generous: the trace is ~4 s of blocked main thread under Node and slower engines
         // are slower still. A timeout here is a real failure, not flake -- report it. Waits
         // for ALL THREE results: the page sets each independently once it is fully built
@@ -205,7 +224,7 @@ async function runPlaywrightMode(opts) {
         await page.waitForFunction(
           () => !!window.__traceResult && !!window.__angleResult && !!window.__vendoredAngleResult,
           undefined,
-          { timeout: 180_000 },
+          { timeout: PAGE_BUDGET_MS },
         );
         const r = await page.evaluate(() => window.__traceResult);
         const ar = await page.evaluate(() => window.__angleResult);
