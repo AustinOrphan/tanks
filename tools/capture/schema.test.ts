@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { producerForKind } from './producers.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
+import { readFileSync } from 'node:fs';
 import { CAPTURE_RECIPES, createRegistry } from './registry.mjs';
 // @ts-expect-error -- plain-node tooling module, intentionally dependency-free.
 import { canonicalStringify, recipeHash, validateRecipe } from './schema.mjs';
@@ -53,6 +54,17 @@ describe('capture recipe schema', () => {
       const enough = scenarios.size >= 2 ? 'multiple' : `only ${scenarios.size}`;
       expect(`${kind}: ${enough} scenario(s)`).toBe(`${kind}: multiple scenario(s)`);
     }
+  });
+
+  it('documents every registry entry in README.md, and documents no entry it does not ship', () => {
+    // The registry table in README.md is hand-maintained and had no guard: adding
+    // `gallery.ai-last-seen.normal` found it silently out of date the moment the fifth
+    // recipe landed. Both directions, because a row for a deleted recipe misleads exactly
+    // as much as a missing row for a live one. Negative control: dropping the new row from
+    // the table reds this with the ID named -- verified live and reverted.
+    const documentation = readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+    const rows = [...documentation.matchAll(/^\| `([a-z0-9.-]+)` \| /gm)].map((m) => m[1]);
+    expect(rows.sort()).toEqual(CAPTURE_RECIPES.map((entry: any) => entry.recipe.id).sort());
   });
 
   it('rejects duplicate IDs instead of making lookup order decide which recipe runs', () => {

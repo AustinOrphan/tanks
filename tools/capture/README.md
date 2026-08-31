@@ -50,15 +50,25 @@ The canonical registry is [`recipes.json`](recipes.json). Its entries are:
 | `gallery.ricochet.still` | `ricochet` | `capture.png` | tick 36 |
 | `gallery.ai-tracking.normal` | `ai-tracking` | `capture.mp4`, `preview.gif` | ticks 0–46, one frame per 60 Hz tick |
 | `gallery.drive.normal` | `drive` | `capture.mp4`, `preview.gif` | ticks 0–29, one frame per 60 Hz tick |
+| `gallery.ai-last-seen.normal` | `ai-last-seen` | `capture.mp4`, `preview.gif` | ticks 0–164, one frame per 60 Hz tick |
 
 `gallery.ai-tracking.normal` is a generic tracking/capture fixture. It is not evidence of
 turret shimmer and does not encode or evaluate an AI deadband choice.
 
-Two recipes per media kind, on different scenarios, is deliberate rather than a coincidence
-of what was needed first: with one of each, "the still path works" and "this one recipe
-works" are indistinguishable, and a pipeline coupled to a single scenario ID or to a tick
-only one moment reaches would pass either way. `schema.test.ts` pins the property, so
-deleting a recipe fails rather than quietly narrowing the evidence. `gallery.ricochet.still`
+`gallery.ai-last-seen.normal` is issue #372's artefact: an AI that has lost sight of its
+target holding its turret on the last position it actually observed, then handing off to
+the idle search sweep. It is the only recipe shot from the `top` view rather than the game
+camera, because its whole content is where a turret points relative to a target it cannot
+see and the game camera's oblique angle foreshortens exactly that bearing. It is evidence
+for a judgement, not a measurement; what is measurable about the moment is pinned in
+`tools/gallery/moments.test.ts`.
+
+At least two recipes per media kind, on different scenarios, is deliberate rather than a
+coincidence of what was needed first: with one of each, "the still path works" and "this one
+recipe works" are indistinguishable, and a pipeline coupled to a single scenario ID or to a
+tick only one moment reaches would pass either way. `schema.test.ts` pins the property, so
+deleting a recipe fails rather than quietly narrowing the evidence -- and pins this table
+against the registry, so adding one without documenting it fails too. `gallery.ricochet.still`
 additionally captures a tick that is *not* the tick of its first expected event, which a
 single-event recipe cannot exercise.
 
