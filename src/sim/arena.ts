@@ -210,6 +210,17 @@ export function loadArena(
   // this value. A future per-match setup menu is the only caller that will ever pass a
   // non-default value.
   stock: number = VERSUS_STOCK,
+  // Trailing and optional, the same precedent every parameter above it follows: absent
+  // -- which is every existing call site -- means each player's team is derived by
+  // `teamOf(slot)` exactly as before, so campaign-coop and `BASELINE_HASH` are untouched
+  // by this parameter existing (issue #281).
+  //
+  // Indexed BY SLOT, and sparse on purpose: `undefined` at a slot means "no configured
+  // choice, derive it", which is what lets a partially-configured setup and an
+  // unconfigured one take the same path. Only read in `'teams'` mode; an `'ffa'` load
+  // never stamps `Tank.team` at all (see its own doc comment in types.ts), which is why
+  // threading this cannot move FFA behaviour either.
+  teams?: readonly (number | undefined)[],
 ): { walls: Wall[]; tanks: Tank[]; spawns: Spawn[]; arenaGeometry: ArenaGeometry } {
   const { cols, rows, cellSize, legend } = arena;
 
@@ -287,7 +298,7 @@ export function loadArena(
       const tank = makeTank(id++, kind, pos, 0);
       // Team is a PLAYER-only concept, stamped only in 'teams' mode -- see Tank.team's
       // own doc comment. P1 is always slot 0.
-      if (kind === 'player' && mode === 'teams') tank.team = teamOf(0);
+      if (kind === 'player' && mode === 'teams') tank.team = teams?.[0] ?? teamOf(0);
       // Stock is a PLAYER-only, versus-only concept -- see Tank.stockRemaining's own
       // doc comment. P1 is stamped here; PASS 1b's ffa/teams branch stamps every
       // co-player the same way.
@@ -339,7 +350,7 @@ export function loadArena(
         }
         spawns.push({ kind: 'player', pos: { ...pos }, angle: 0 });
         const tank = makeTank(id++, 'player', pos, 0, i);
-        if (mode === 'teams') tank.team = teamOf(i);
+        if (mode === 'teams') tank.team = teams?.[i] ?? teamOf(i);
         tank.stockRemaining = stock;
         tanks.push(tank);
       }
@@ -452,6 +463,12 @@ export function createWorldFor(
   // already ignores VERSUS_STOCK. The versus-setup-menu plan's per-match stock picker is
   // the first caller that will ever pass a non-default value.
   stock?: number,
+  // Trailing and optional, same precedent again: undefined here means `loadArena`'s own
+  // derivation (`teamOf(slot)`) applies, so every existing call site -- none of which
+  // passes a 12th argument -- is byte-identical to before this existed. Threaded straight
+  // to `loadArena`, which is the only place `Tank.team` is ever stamped. Only meaningful
+  // with mode `'teams'`; issue #281's setup pane is the first caller to pass one.
+  teams?: readonly (number | undefined)[],
 ): World {
   // `seed` reaches loadArena too, not just createWorld below -- it is what picks a
   // versus variant (guard-first on mode 'ffa'/'teams' inside loadArena itself; every
@@ -461,7 +478,7 @@ export function createWorldFor(
   // (replayMetaFor, game/replay.ts) enough to reproduce the exact board it was played
   // on, with no extra field.
   return createWorld({
-    ...loadArena(arena, playerCount, mode, seed, stock),
+    ...loadArena(arena, playerCount, mode, seed, stock, teams),
     lives, seed, unarmedTrigger, corpseBlocksShells, muzzleClearsTanks, coopAttempts,
     mode, friendlyFire,
   });

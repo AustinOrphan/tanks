@@ -245,6 +245,11 @@ export function createVersusLevelSystem(
         // campaign branch gives `flags.mode`/`flags.friendlyFire` above rather than
         // trusting a call-site argument that (today) always agrees with it anyway.
         config.players, undefined, config.mode, config.friendlyFire, config.stock,
+        // The CONFIGURED teams (issue #281), read off the same per-slot descriptor the
+        // setup pane writes. A slot with no choice yet is `undefined`, which `loadArena`
+        // falls back to `teamOf(slot)` for -- so a config saved before teams could be
+        // chosen builds exactly the board it always did.
+        config.slots.map((slot) => slot.team),
       ),
     // That arena's own bounds -- same shape as the campaign branch above. Requires a
     // resolved `config.arenaId` for the same reason `world()` above does; see this

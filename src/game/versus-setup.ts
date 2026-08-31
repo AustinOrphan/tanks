@@ -1,5 +1,6 @@
 import type { SlotSource } from '../input/assignment';
 import { isBotDifficulty, type BotDifficulty } from '../sim/ai/bot-difficulty';
+import { teamOf } from '../sim/arena';
 
 /**
  * The VS setup's CANONICAL per-slot representation (issue #260).
@@ -72,7 +73,15 @@ export interface VersusSetup {
 export type VersusSetupProblem =
   | { kind: 'unassigned'; slot: number }
   | { kind: 'no-human' }
-  | { kind: 'device-missing'; slot: number };
+  | { kind: 'device-missing'; slot: number }
+  /**
+   * Teams mode with every represented slot on ONE team (issue #281).
+   *
+   * Pane-level rather than slot-level, like `no-human`: no single card is at fault -- the
+   * player can fix it by moving ANY one slot -- so blaming one would point at an arbitrary
+   * card. `hud.ts`'s renderer routes both of these to the pane's own reason line.
+   */
+  | { kind: 'one-team' };
 
 const ROLES: ReadonlySet<string> = new Set<VersusSlotRole>(['human', 'bot', 'none']);
 
@@ -241,6 +250,10 @@ export function resolveSources(
 export function versusSetupProblem(
   slots: readonly VersusSlotSetup[],
   sources: readonly SlotSource[],
+  // Trailing and optional, the precedent this file's neighbours already set: absent means
+  // `'ffa'`, under which no team check applies at all. Only issue #281's team rule reads
+  // it, so every existing caller keeps the exact three refusals it had.
+  mode: 'ffa' | 'teams' = 'ffa',
 ): VersusSetupProblem | null {
   for (let i = 0; i < slots.length; i++) {
     if (slots[i].role === 'none') return { kind: 'unassigned', slot: i };
@@ -251,7 +264,27 @@ export function versusSetupProblem(
     }
   }
   if (!slots.some((s) => s.role === 'human')) return { kind: 'no-human' };
+  // LAST, deliberately: an unassigned or device-less slot is a more specific and more
+  // actionable complaint than "everyone is on one team", and a slot that is `none` is not
+  // in the match to have a team at all. By this line every slot is playing.
+  if (mode === 'teams' && representedTeams(slots).size < 2) return { kind: 'one-team' };
   return null;
+}
+
+/**
+ * The distinct teams actually represented by the playing slots.
+ *
+ * EFFECTIVE teams, not configured ones: a slot with no choice yet falls back to
+ * `teamOf(slot)`, which is exactly what `loadArena` does when it stamps the tank. Reading
+ * the configured value alone would refuse a freshly-opened pane -- where every `team` is
+ * still `undefined` -- even though starting it would build a perfectly good 2v2.
+ */
+export function representedTeams(slots: readonly VersusSlotSetup[]): Set<number> {
+  const out = new Set<number>();
+  slots.forEach((s, i) => {
+    if (s.role !== 'none') out.add(s.team ?? teamOf(i));
+  });
+  return out;
 }
 
 /**

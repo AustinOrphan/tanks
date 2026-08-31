@@ -586,6 +586,51 @@ describe('loadArena: mode-aware (n-player arc PR 4 -- FFA + teams)', () => {
     }
   });
 
+  it('a CONFIGURED team overrides the slot % 2 derivation, per slot (issue #281)', () => {
+    for (const arena of ARENAS) {
+      // 2v1v1: three represented teams at four players, which the alternating derivation
+      // cannot produce at all -- so this cannot pass by coincidentally agreeing with it.
+      const { tanks } = loadArena(arena, 4, 'teams', undefined, undefined, [0, 0, 1, 2]);
+      const players = tanks.filter((t) => t.kind === 'player');
+      expect(players.map((t) => t.team)).toEqual([0, 0, 1, 2]);
+      // The derivation would have said [0, 1, 0, 1]; stated so the contrast is on record.
+      expect(players.map((t) => t.team)).not.toEqual([0, 1, 0, 1]);
+    }
+  });
+
+  it('falls back to the derivation for any slot with no configured team', () => {
+    for (const arena of ARENAS) {
+      // Sparse on purpose: slots 1 and 3 are unset, which is what a config saved before
+      // teams could be chosen looks like. Those two must land on teamOf(1) and teamOf(3).
+      const { tanks } = loadArena(arena, 4, 'teams', undefined, undefined, [1, undefined, 1, undefined]);
+      const players = tanks.filter((t) => t.kind === 'player');
+      expect(players.map((t) => t.team)).toEqual([1, 1, 1, 3 % 2]);
+    }
+  });
+
+  it('an omitted teams argument builds the identical world -- the whole back-compatibility claim', () => {
+    for (const arena of ARENAS) {
+      // Deep equality over the whole load, not just the teams: this is the assertion that
+      // says adding the parameter moved nothing, which is what keeps BASELINE_HASH still.
+      const withoutArg = loadArena(arena, 4, 'teams');
+      const withUndefined = loadArena(arena, 4, 'teams', undefined, undefined, undefined);
+      expect(withUndefined).toEqual(withoutArg);
+      // ...and an ALL-undefined array is the same thing again, which is what a config with
+      // no slot choices yet produces via `config.slots.map((s) => s.team)`.
+      const allUnset = loadArena(arena, 4, 'teams', undefined, undefined, [undefined, undefined, undefined, undefined]);
+      expect(allUnset).toEqual(withoutArg);
+    }
+  });
+
+  it('configured teams cannot reach an FFA load, which never stamps team at all', () => {
+    for (const arena of ARENAS) {
+      // The reason threading this could not move FFA or campaign behaviour. Asserted
+      // rather than argued, because "the guard holds" is the whole determinism claim.
+      const { tanks } = loadArena(arena, 4, 'ffa', undefined, undefined, [1, 1, 1, 1]);
+      for (const t of tanks.filter((x) => x.kind === 'player')) expect(t.team).toBeUndefined();
+    }
+  });
+
   it('team is undefined on every player tank outside teams mode -- campaign-coop and ffa, N=1..4, all 5 arenas (population: 5 arenas x 2 modes x 4 playerCounts = 40 loadArena calls)', () => {
     for (const arena of ARENAS) {
       for (const mode of ['campaign-coop', 'ffa'] as const) {

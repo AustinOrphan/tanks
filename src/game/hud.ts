@@ -2620,6 +2620,8 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
         return `Player ${problem.slot + 1} is Human but no device is free. Connect a controller, or choose Bot.`;
       case 'no-human':
         return 'At least one slot must be Human.';
+      case 'one-team':
+        return 'Teams needs at least two teams. Move a player to another team.';
     }
   }
 
@@ -2647,7 +2649,9 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
   function renderVersusSlotRows(): void {
     const slots = versusConfigState.slots;
     const sources = resolveSources(slots, currentDetectedPads.map((p) => p.padIndex));
-    const problem = versusSetupProblem(slots, sources);
+    // The MODE is passed, which is what makes issue #281's team rule reachable at all --
+    // `versusSetupProblem` defaults to `'ffa'`, under which it never runs.
+    const problem = versusSetupProblem(slots, sources, versusConfigState.mode);
 
     versusSlotRowsEl.replaceChildren();
     for (let slot = 0; slot < slots.length; slot++) {
@@ -2722,7 +2726,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       reason.className = 'ui-hint hud-versus-slot-reason';
       reason.id = `hud-versus-slot-reason-${slot}`;
       const ownsProblem =
-        problem !== null && problem.kind !== 'no-human' && problem.slot === slot;
+        problem !== null && problem.kind !== 'no-human' && problem.kind !== 'one-team' && problem.slot === slot;
       reason.textContent = ownsProblem ? versusProblemText(problem) : '';
       reason.classList.toggle('hud-versus-slot-reason--hidden', !ownsProblem);
       row.appendChild(reason);
@@ -2732,7 +2736,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
 
     // `no-human` names no slot, so it is the one refusal that belongs to the pane
     // rather than to a card.
-    const paneLevel = problem !== null && problem.kind === 'no-human';
+    const paneLevel = problem !== null && (problem.kind === 'no-human' || problem.kind === 'one-team');
     versusStartReasonEl.textContent = paneLevel ? versusProblemText(problem) : '';
     versusStartReasonEl.classList.toggle('hud-versus-start-reason--hidden', !paneLevel);
 
@@ -2745,7 +2749,7 @@ export function createHud(root: HTMLElement, opts: HudOptions = {}): Hud {
       versusStartBtn,
       problem === null
         ? null
-        : problem.kind === 'no-human'
+        : problem.kind === 'no-human' || problem.kind === 'one-team'
           ? 'hud-versus-start-reason'
           : `hud-versus-slot-reason-${problem.slot}`,
     );

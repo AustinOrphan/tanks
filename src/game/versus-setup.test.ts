@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   defaultSlots, sanitizeSetup, resolveSources, versusSetupProblem, botSlotsOf, resizeSlots,
+  representedTeams,
   type VersusSetup, type VersusSlotSetup,
 } from './versus-setup';
 
@@ -151,6 +152,62 @@ describe('versusSetupProblem: the Start gate', () => {
   it('refuses an all-bot match', () => {
     const slots: VersusSlotSetup[] = [{ role: 'bot' }, { role: 'bot' }];
     expect(versusSetupProblem(slots, resolveSources(slots, []))).toEqual({ kind: 'no-human' });
+  });
+
+  it('refuses Teams when every playing slot is on ONE team (issue #281)', () => {
+    const slots: VersusSlotSetup[] = [
+      { role: 'human', team: 0 }, { role: 'bot', team: 0 },
+      { role: 'bot', team: 0 }, { role: 'bot', team: 0 },
+    ];
+    expect(versusSetupProblem(slots, resolveSources(slots, []), 'teams')).toEqual({ kind: 'one-team' });
+    // ...and the SAME configuration is fine in FFA, where teams mean nothing. Without
+    // this half the rule could be "teams mode is refused", which is not the rule.
+    expect(versusSetupProblem(slots, resolveSources(slots, []), 'ffa')).toBeNull();
+  });
+
+  it('accepts two teams, and three -- 2v2 and 2v1v1 at four players', () => {
+    const twoTeams: VersusSlotSetup[] = [
+      { role: 'human', team: 0 }, { role: 'bot', team: 0 },
+      { role: 'bot', team: 1 }, { role: 'bot', team: 1 },
+    ];
+    expect(versusSetupProblem(twoTeams, resolveSources(twoTeams, []), 'teams')).toBeNull();
+    // The issue's binding rule names 2v1v1 explicitly, so it is asserted rather than
+    // assumed to fall out of "at least two".
+    const threeTeams: VersusSlotSetup[] = [
+      { role: 'human', team: 0 }, { role: 'bot', team: 0 },
+      { role: 'bot', team: 1 }, { role: 'bot', team: 2 },
+    ];
+    expect(versusSetupProblem(threeTeams, resolveSources(threeTeams, []), 'teams')).toBeNull();
+    expect(representedTeams(threeTeams).size).toBe(3);
+  });
+
+  it('accepts a freshly-opened pane, where no slot has chosen a team yet', () => {
+    // The regression this rule most easily causes: every `team` is undefined until the
+    // player touches a selector, and refusing THAT would make Teams unstartable out of
+    // the box. The effective team falls back to `teamOf(slot)`, which alternates.
+    const untouched: VersusSlotSetup[] = [
+      { role: 'human' }, { role: 'bot' }, { role: 'bot' }, { role: 'bot' },
+    ];
+    expect(versusSetupProblem(untouched, resolveSources(untouched, []), 'teams')).toBeNull();
+    expect(representedTeams(untouched)).toEqual(new Set([0, 1]));
+  });
+
+  it('ignores slots that are not playing when counting teams', () => {
+    // A `none` slot has no tank and therefore no team. It must not prop up the count --
+    // otherwise "everyone on team 0 plus one empty slot" would start and immediately be
+    // a one-sided match. Ordered after the unassigned check, so this is only reachable
+    // through `representedTeams` directly; asserted there.
+    const withEmpty: VersusSlotSetup[] = [
+      { role: 'human', team: 0 }, { role: 'bot', team: 0 }, { role: 'none', team: 1 },
+    ];
+    expect(representedTeams(withEmpty)).toEqual(new Set([0]));
+  });
+
+  it('names the more actionable refusal first when a match is both empty-slotted and one-team', () => {
+    // Ordering is a real decision: "Player 2 is off" tells the player what to click,
+    // "everyone is on one team" does not name a slot at all.
+    const both: VersusSlotSetup[] = [{ role: 'human', team: 0 }, { role: 'none', team: 0 }];
+    expect(versusSetupProblem(both, resolveSources(both, []), 'teams')).toEqual({ kind: 'unassigned', slot: 1 });
   });
 
   it('reports the EARLIEST unassigned slot when several are wrong', () => {
