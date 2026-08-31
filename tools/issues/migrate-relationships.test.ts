@@ -86,13 +86,26 @@ function createFetch(
 describe('relationship migration plan', () => {
   it('keeps the reviewed repository ledger unambiguous, acyclic, and evidence-complete', () => {
     const expanded = expandRelationshipPlan(RELATIONSHIP_MIGRATION);
-    expect(expanded.parentEdges).toHaveLength(81);
-    expect(expanded.dependencyEdges).toHaveLength(147);
+    expect(expanded.parentEdges).toHaveLength(85);
+    expect(expanded.parentEdges).toEqual(expect.arrayContaining([
+      { parent: 229, child: 425 },
+      { parent: 317, child: 427 },
+      { parent: 317, child: 428 },
+      { parent: 317, child: 429 },
+    ]));
+    expect(expanded.dependencyEdges).toHaveLength(154);
     expect(expanded.dependencyEdges).toEqual(expect.arrayContaining([
+      { issue: 243, blocker: 317 },
+      { issue: 243, blocker: 318 },
+      { issue: 243, blocker: 319 },
+      { issue: 243, blocker: 321 },
       { issue: 250, blocker: 245 },
       { issue: 260, blocker: 316 },
       { issue: 276, blocker: 275 },
       { issue: 335, blocker: 342 },
+      { issue: 428, blocker: 427 },
+      { issue: 429, blocker: 427 },
+      { issue: 429, blocker: 428 },
     ]));
     expect(expanded.dependencyEdges.filter(({ issue: number }) => number === 327)).toEqual([
       { issue: 327, blocker: 318 },
@@ -115,7 +128,7 @@ describe('relationship migration plan', () => {
       + inspectionReads
     );
     expect({ inspectionReads, initialApply, planThenApply: inspectionReads + initialApply })
-      .toEqual({ inspectionReads: 136, initialApply: 591, planThenApply: 727 });
+      .toEqual({ inspectionReads: 143, initialApply: 620, planThenApply: 763 });
   });
 
   it('expands a reviewed plan and rejects ambiguous parents, duplicates, and cycles', () => {
