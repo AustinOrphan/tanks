@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import type { Tank, AiState } from '../types';
-import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer } from './targeting';
+import { lineOfSight, aimLead, aimJitter, dangerAvoidMove, incomingThreats, mineInclination, profileAimSpread, profileHazardSpread, estimationError, seekMove, shotHitsOwnSide, mineThreatensPlayer, resolveOpponent } from './targeting';
 import { driveVelocity } from '../collision';
 import { TICK_HZ, AI_MINE_FLEE_RADIUS, DANGER_CORRIDOR, AI_MINE_TACTICAL_RADIUS } from '../constants';
 import { configFor, type ResolvedTankConfig } from '../config';
@@ -60,10 +60,11 @@ export function greyDecision(world: World, tank: Tank, cfg: ResolvedTankConfig =
   // `sees` is computed BEFORE the patience early-return: a dodging grey still
   // SEES the player, and the reaction clock (dispatcher, aimTicks) must keep
   // running through a dodge -- suppression is patience, not blindness.
-  // Finds the FIRST alive player-kind tank -- correct-as-P1-preferred, not wrong, at
-  // playerCount > 1: a second human is simply invisible to this AI. Who AI targets
-  // when two humans are on the board is balance work, deferred.
-  const player = world.tanks.find((t) => t.kind === 'player' && t.alive);
+  // Resolved centrally (issue #359): every behaviour asks the same question of the same
+  // function, which is what lets the deferred multi-player policy -- a per-AI commitment
+  // window, a seeded tie-break, a perception bound -- land in ONE place. Still returns the
+  // first alive player-kind tank today, so this extraction moves no behaviour.
+  const player = resolveOpponent(world, tank);
   const sees = player !== undefined && lineOfSight(tank.pos, player.pos, world.walls);
   if (underFire && dodgeTicks < patienceTicks) {
     return { desiredMove: move, turretAngle: tank.turretAngle, fire: false, hasSolution: sees, fireType: weapon.bulletType, mine: false, nextState: 'reposition', nextTimer: dodgeTicks, avoid, avoidKind, nextIntent: null, nextIntentTicks: 0, nextAimHeld: null, nextAimHeldTicks: 0 };
