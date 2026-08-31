@@ -502,8 +502,18 @@ export function mineInclination(world: World, tank: Tank, cfg: ResolvedTankConfi
  * lands. An unused parameter is cheap; a second signature change across four files is not.
  */
 export function resolveOpponent(world: World, tank: Tank): Tank | undefined {
-  void tank;
-  return world.tanks.find((t) => t.kind === 'player' && t.alive);
+  // A LOOKUP, not a selection (issue #359). The choice is made once per tick by
+  // `commitTarget` (ai/target-selection.ts) and stored on the tank, so every call site here
+  // -- brown, grey, teal and seekMove -- is reading one committed answer rather than each
+  // re-deriving its own. That is what makes "movement and firing use the same committed
+  // opponent" structural instead of coincidental.
+  //
+  // `alive` is still checked here as well as in commitTarget: a target can die to a blast
+  // resolved LATER in the same tick than the commitment, and a decision must never aim at a
+  // corpse just because the commitment was valid when it was written.
+  if (tank.aiTargetId === undefined) return undefined;
+  const target = world.tanks.find((t) => t.id === tank.aiTargetId);
+  return target?.alive ? target : undefined;
 }
 
 export function profileAimSpread(cfg: ResolvedTankConfig): number {

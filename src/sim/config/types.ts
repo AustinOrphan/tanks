@@ -132,6 +132,21 @@ export interface AIProfileBalance {
    * a personality axis the way commitmentTime is, but nothing measured justifies differing
    * values yet, and inventing a spread would be a difficulty change dressed up as polish.
    */
+  /**
+   * Seconds this profile HOLDS one committed opponent before the choice may turn over
+   * (issue #359). Consumed by `commitTarget` (ai/target-selection.ts) as
+   * `Math.round(targetCommitmentTime * TICK_HZ)`, the same conversion every other span uses.
+   *
+   * A FOURTH distinct timing, for the reason shotCommitmentTime is a third: who an AI is
+   * fighting, where it is driving, where it is pointing and which shot it is planning are
+   * independently tuned, and changing one must not silently change another.
+   *
+   * Uniform at 1.5s across every shipped profile today. Rule 4 of the issue's binding policy
+   * permits that explicitly -- "initial values may be uniform if a deterministic sweep does
+   * not justify profile differences" -- and no such sweep has been run, so a per-profile
+   * table here would be invented rather than measured.
+   */
+  targetCommitmentTime: number;
   aimHoldTime: number;
   /**
    * Seconds this profile HOLDS its bank-first/direct-first shot plan before the plan may

@@ -13,6 +13,7 @@ import { commitMove } from './commitment';
 import { accelSlew } from './turret-accel';
 import { holdAimFor } from './aim-hold';
 import { searchAim } from './search';
+import { commitTarget } from './target-selection';
 import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_MINE_FLEE_RADIUS, AI_AIM_BREAK } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
@@ -119,6 +120,11 @@ export function stepAi(world: World, events: SimEvent[]): void {
     if (tank.fireCooldown > 0) tank.fireCooldown -= 1;
     if (tank.mineCooldown > 0) tank.mineCooldown -= 1;
 
+    // The committed opponent is resolved BEFORE the decision, so every call `decideAi`
+    // makes to resolveOpponent this tick reads one answer (issue #359). Running it after
+    // would leave the decision on last tick's target and write the new one for the next,
+    // which is a one-tick lag that only shows up when a target dies.
+    commitTarget(world, tank);
     const decision = decideAi(world, tank);
     // The reaction clock: consecutive ticks a firing solution has been HELD
     // (see AiDecision.hasSolution) IN LIVE PLAY. Accumulated here, where the
