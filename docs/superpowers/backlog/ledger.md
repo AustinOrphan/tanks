@@ -1,7 +1,7 @@
 ---
 status: active
 date: 2026-08-23
-last-reviewed: 2026-08-23
+last-reviewed: 2026-08-31
 scope: Ledger -- deferred work harvested from PR descriptions
 implementation-issues: []
 implementation-prs: []
