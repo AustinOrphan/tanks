@@ -545,3 +545,75 @@ describe('ai-last-seen moment specifics', () => {
     expect(simulateMoment(DEF).events.flat()).toEqual([]);
   });
 });
+
+
+describe('ai-commitment moment specifics', () => {
+  const DEF = MOMENTS['ai-commitment'];
+  const deg = (r: number) => (r * 180) / Math.PI;
+  const ais = (w: World) => [w.tanks[0], w.tanks[1]];
+
+  it('each AI commits to a DIFFERENT opponent, and neither changes for the whole clip', () => {
+    const tl = simulateMoment(DEF);
+    const [a0, b0] = ais(tl.worlds[1]);
+    // Distribution: not the same opponent. `rangeCost` ranks by distance from
+    // preferredDistance (10), and the fixture is built so each AI's own-side player is
+    // 12 away and the far one 13.4 -- see moments.ts. An equidistant fixture makes both
+    // AIs pick the same player, which is what the first draft did.
+    expect(a0.aiTargetId).not.toBe(b0.aiTargetId);
+    expect(new Set([a0.aiTargetId, b0.aiTargetId])).toEqual(new Set([3, 4]));
+    // Stickiness: held for every tick, across a crossing that reverses which player is
+    // on which side. Dropping the commitment span makes these retarget mid-clip.
+    for (let t = 1; t <= DEF.ticks; t++) {
+      const [a, b] = ais(tl.worlds[t]);
+      expect(a.aiTargetId, `tank 1 at tick ${t}`).toBe(a0.aiTargetId);
+      expect(b.aiTargetId, `tank 2 at tick ${t}`).toBe(b0.aiTargetId);
+    }
+  });
+
+  it('the players really do cross, so the held target is not held by default', () => {
+    // Without this the test above passes on a fixture where nothing moves and there was
+    // never anything to retarget TO.
+    const start = simulateMoment(DEF).worlds[1];
+    const end = simulateMoment(DEF).worlds[DEF.ticks];
+    const p1 = (w: World) => w.tanks[2].pos.x;
+    const p2 = (w: World) => w.tanks[3].pos.x;
+    expect(p1(start)).toBeLessThan(p2(start));
+    expect(p1(end)).toBeGreaterThan(p2(end)); // they have swapped sides
+    expect(Math.abs(p1(end) - p1(start))).toBeGreaterThan(5);
+  });
+
+  it('the turrets sweep APART as their targets cross, which is what makes it readable', () => {
+    // The artefact itself. Two AIs retargeting per-tick would converge on whichever
+    // opponent was momentarily better placed; holding separate targets through a crossing
+    // drives them apart. MEASURED: 16.4deg apart at tick 1, 121.2deg at tick 178.
+    const tl = simulateMoment(DEF);
+    const gap = (t: number) => {
+      const [a, b] = ais(tl.worlds[t]);
+      return Math.abs(deg(a.turretAngle) - deg(b.turretAngle));
+    };
+    expect(gap(1)).toBeLessThan(30);
+    expect(gap(DEF.ticks)).toBeGreaterThan(100);
+    expect(gap(DEF.ticks) - gap(1)).toBeGreaterThan(80);
+  });
+
+  it('both AI hulls hold station, so every pixel of motion is turret or player', () => {
+    // Brown hardcodes desiredMove {0,0} (brown.ts). Swapping either index for a PLAYER
+    // (tanks[2] or tanks[3], which do drive) fails this immediately.
+    const tl = simulateMoment(DEF);
+    for (let t = 1; t <= DEF.ticks; t++) {
+      for (const ai of ais(tl.worlds[t])) {
+        expect(ai.pos.x === -3 || ai.pos.x === 3).toBe(true);
+        expect(ai.pos.y).toBe(0);
+        expect(ai.bodyAngle).toBe(0);
+      }
+    }
+  });
+
+  it('nobody dies inside the clip, so no respawn moves a tank mid-measurement', () => {
+    // 178 is chosen for this: MEASURED, the first tank-destroyed is tick 182, from a
+    // shell fired at 170/174. A death would reset the victim's position AND
+    // roundStartTick, corrupting every assertion above it.
+    const tl = simulateMoment(DEF);
+    expect(tl.events.flat().map((e) => e.type).filter((t) => t !== 'fire')).toEqual([]);
+  });
+});
