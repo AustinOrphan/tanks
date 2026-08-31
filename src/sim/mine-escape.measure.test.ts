@@ -129,6 +129,25 @@ interface Run {
   died: boolean;
   trip: number;
   clearanceAtDetonation: number;
+  /**
+   * `clearanceAtDetonation - KILL_RADIUS`, unrounded.
+   *
+   * Printed raw because a `toFixed(3)` of this read 0.000 at the hemmed pose and got
+   * reported as "misses survival by nothing". A tank that dies is at or inside the kill
+   * radius, so the sign is what carries the claim -- the rounded magnitude carries none.
+   */
+  marginRaw: number;
+  /**
+   * The clearance at which the tank stopped gaining ground, or NaN if it never did.
+   *
+   * The stopped/free discriminator, and deliberately sampled only while the tank is
+   * ALIVE. Anything read on or after the death tick is contaminated: the respawn lands
+   * in the same tick as `tank-destroyed`, so that event's `pos` is the RESPAWN point and
+   * `roundStartTick` has already jumped (measured: 1 -> 248). An earlier version of this
+   * harness derived a "distance gained" figure across that boundary and reported tanks
+   * covering 24 units in 10 ticks, which is 48x the speed limit.
+   */
+  pinnedClearance: number;
   endClearance: number;
   legs: string;
 }
@@ -138,8 +157,21 @@ interface Run {
  * `delay` ticks still driving IN, then run. `lay: false` is the paired control:
  * the same script with no mine in the world.
  */
-function escapeRun(arena: number, spawn: number, away: number, lay: boolean, delay = 0): Run {
+function escapeRun(
+  arena: number,
+  spawn: number,
+  away: number,
+  lay: boolean,
+  delay = 0,
+  preLay = 0,
+): Run {
   let w = live(arena, spawn);
+  // Shift the lay point off the spawn node. Spawns and wall faces are both grid-aligned,
+  // so a mine laid exactly on a spawn is a measure-zero special case; `preLay` is what
+  // proves the verdict is not an artifact of that alignment. Positive drives along the
+  // flee heading (mine ends up NEARER the wall), negative drives away from it.
+  const preDir = preLay >= 0 ? away : -away;
+  for (let i = 0; i < Math.abs(preLay); i++) w = step(w, drive(w, preDir)).world;
   let r = step(w, drive(w, 0, lay));
   w = r.world;
   const mine = { ...(lay ? w.mines[0].pos : player(w).pos) };
@@ -168,6 +200,9 @@ function escapeRun(arena: number, spawn: number, away: number, lay: boolean, del
   let died = false;
   let clearanceAtDetonation = -1;
   let fled = 0;
+  let pinnedClearance = Number.NaN;
+  let prevClearance = vdist(player(w).pos, mine);
+  let stillTicks = 0;
   // Past the detonation and through the blast's whole expand+hold life, because
   // the kill test re-runs every tick of it (landmine 3).
   const budget = MINE_PROXIMITY_DELAY_TICKS + MINE_BLAST_EXPAND_TICKS + MINE_BLAST_HOLD_TICKS + 5;
@@ -175,19 +210,35 @@ function escapeRun(arena: number, spawn: number, away: number, lay: boolean, del
     r = step(w, drive(w, away));
     w = r.world;
     fled++;
-    if (r.events.some((e) => e.type === 'mine-detonate')) clearanceAtDetonation = vdist(player(w).pos, mine);
+    const clearance = vdist(player(w).pos, mine);
+    if (r.events.some((e) => e.type === 'mine-detonate')) clearanceAtDetonation = clearance;
     if (r.events.some((e) => e.type === 'tank-destroyed')) {
       died = true;
-      break;
+      break;                       // read nothing further: the respawn is in THIS tick
     }
+    stillTicks = Math.abs(clearance - prevClearance) < 1e-9 ? stillTicks + 1 : 0;
+    if (stillTicks >= 2 && Number.isNaN(pinnedClearance)) pinnedClearance = clearance;
+    prevClearance = clearance;
   }
   return {
     died,
     trip,
     clearanceAtDetonation,
+    marginRaw: clearanceAtDetonation - KILL_RADIUS,
+    pinnedClearance,
     endClearance: vdist(player(w).pos, mine),
     legs: `${leave}/${approach}/${fled}`,
   };
+}
+
+/** Every pose the harness can drive, open or not. */
+function allPoses(): { arena: number; spawn: number; away: number }[] {
+  const out: { arena: number; spawn: number; away: number }[] = [];
+  for (let a = 0; a < ARENA_DEFS.length; a++) {
+    const spawns = (createWorldFor(arenaById(ARENA_DEFS[a].id), 1) as World).spawns.length;
+    for (let s = 0; s < spawns; s++) for (const away of [1, -1]) out.push({ arena: a, spawn: s, away });
+  }
+  return out;
 }
 
 const measure = import.meta.env.VITE_RUN_MEASURE ? describe : describe.skip;
@@ -244,6 +295,71 @@ measure('mine escape margin (set VITE_RUN_MEASURE=1 to run)', () => {
       console.log(
         `${c.label} ${ARENA_DEFS[c.arena].id}  ${c.spawn}      ${row.join('')}       ` +
           `${first < 0 ? 'none in 0..12' : `k=${first} (${(first * DT).toFixed(3)}s)`}`,
+      );
+    }
+
+    // ---- Every pose, so the two rows above have a denominator ----------------
+    //
+    // The tables above sample ONE pose per class. That is not enough to say
+    // "geometry decides it": a pose can be non-open because the tank is stopped
+    // dead or because it is SLIDING along a surface, and those behave differently
+    // under a longer interval -- a slider keeps gaining clearance, a stopped tank
+    // does not. `gainLast10` separates them. This sweeps all of them instead.
+    const openKey = new Set(open.map((o) => `${o.arena}:${o.spawn}:${o.away}`));
+    const rows = allPoses().map((pose) => {
+      const r = escapeRun(pose.arena, pose.spawn, pose.away, true);
+      return { ...pose, ...r, isOpen: openKey.has(`${pose.arena}:${pose.spawn}:${pose.away}`) };
+    });
+    const summarise = (label: string, set: typeof rows) => {
+      if (set.length === 0) return;
+      const dead = set.filter((r) => r.died);
+      // Pinned = the tank stopped gaining ground before the blast. Free = it never did.
+      const pinned = set.filter((r) => Number.isFinite(r.pinnedClearance));
+      const free = set.filter((r) => !Number.isFinite(r.pinnedClearance));
+      const margins = set.map((r) => r.marginRaw).sort((a, b) => a - b);
+      console.log(
+        `${label.padEnd(10)} n=${String(set.length).padStart(2)}  died=${String(dead.length).padStart(2)}` +
+          `  pinned=${String(pinned.length).padStart(2)} free=${String(free.length).padStart(2)}` +
+          `  margin min=${margins[0].toExponential(3)} med=${margins[margins.length >> 1].toFixed(3)}` +
+          ` max=${margins[margins.length - 1].toFixed(3)}`,
+      );
+    };
+    console.log('\nall poses at k=0 (margin = clearance at detonation - kill radius, RAW)');
+    summarise('ALL', rows);
+    summarise('OPEN', rows.filter((r) => r.isOpen));
+    summarise('NON-OPEN', rows.filter((r) => !r.isOpen));
+
+    // ---- Where the wall stops mattering ------------------------------------
+    //
+    // The rows above lay the mine on a spawn node, which is grid-aligned with the
+    // wall faces -- so the pinned clearance lands on a suspiciously round number.
+    // This walks the lay point off that node in both directions at one pinned pose
+    // and reports the crossover, which is what turns "it dies here" into a rule.
+    const pinnedPose = rows.find((r) => r.died && Number.isFinite(r.pinnedClearance));
+    if (pinnedPose) {
+      console.log(
+        `\nwall standoff sweep at ${ARENA_DEFS[pinnedPose.arena].id} spawn=${pinnedPose.spawn}` +
+          ` ${pinnedPose.away > 0 ? '+x' : '-x'} (+preLay = mine nearer the wall)`,
+      );
+      console.log('  preLay  pinnedAt  clear@det  margin      died');
+      for (const preLay of [7, 3, 1, 0, -1, -3, -7, -10, -14, -20, -30]) {
+        const r = escapeRun(pinnedPose.arena, pinnedPose.spawn, pinnedPose.away, true, 0, preLay);
+        console.log(
+          `  ${String(preLay).padStart(6)}  ${(Number.isFinite(r.pinnedClearance) ? r.pinnedClearance.toFixed(4) : ' never').padStart(8)}` +
+            `  ${r.clearanceAtDetonation.toFixed(4).padStart(9)}  ${r.marginRaw.toExponential(2).padStart(10)}  ${r.died ? 'YES' : 'no'}`,
+        );
+      }
+    }
+
+    // The fatal poses in full, with the unrounded margin, so no claim rests on a
+    // rounded print.
+    console.log('\nfatal poses at k=0');
+    for (const r of rows.filter((x) => x.died)) {
+      console.log(
+        `  ${ARENA_DEFS[r.arena].id} spawn=${r.spawn} ${r.away > 0 ? '+x' : '-x'}` +
+          `  clearance=${r.clearanceAtDetonation}  margin=${r.marginRaw.toExponential(4)}` +
+          `  pinnedAt=${Number.isFinite(r.pinnedClearance) ? r.pinnedClearance.toFixed(4) : 'never'}` +
+          `  ${r.isOpen ? 'OPEN' : 'non-open'}`,
       );
     }
   });
