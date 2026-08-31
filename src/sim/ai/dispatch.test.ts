@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { decideAi, stepAi } from './index';
-import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, DT } from '../constants';
+import { FIRE_COOLDOWN_TICKS, SHELL_CAP, DODGE_PATIENCE_TICKS, COUNTDOWN_TICKS, GRACE_TICKS, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, DT, AI_SEARCH_HOLD_TICKS } from '../constants';
 import type { Tank, Vec2 } from '../types';
+import { angleDelta } from '../types';
 import type { World } from '../world';
 import type { SimEvent } from '../events';
 
@@ -391,15 +392,49 @@ describe('stepAi', () => {
       expect(w.tanks[0].turretAngle).toBeLessThan(Math.PI / 2); // nowhere near the ~150deg target yet
     });
 
-    it('does not drift when holding the last angle (no line of sight): slewing toward a no-op target is a no-op', () => {
+    it('SEARCHES rather than holding the last angle when it has no line of sight (issue #371)', () => {
+      // This case used to assert the turret stayed exactly where it was. That was the
+      // dormant-gun behaviour #371 removes: greyDecision still passes tank.turretAngle
+      // through as its desired angle (grey.ts: `let turretAngle = tank.turretAngle`), but
+      // the dispatcher now substitutes a search heading whenever hasSolution is false.
       const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 1.75 });
       const player = tank(2, 'player', { x: 5, y: 0 });
-      // A solid wall directly between them blocks LOS -> greyDecision holds tank.turretAngle
-      // unchanged as its desired angle (see grey.ts: `let turretAngle = tank.turretAngle`).
+      // A solid wall directly between them blocks LOS.
       const wall = { id: 1, aabb: { minX: 2, minY: -1, maxX: 3, maxY: 1 }, kind: 'solid' as const, destroyed: false };
       const w = world([grey, player], { walls: [wall] });
       stepAi(w, []);
-      expect(w.tanks[0].turretAngle).toBe(1.75); // unchanged, not drifting toward anything
+      expect(w.tanks[0].turretAngle).not.toBe(1.75);
+
+      // ...and it is SLEWING, not teleporting: one tick moves it by one acceleration
+      // budget, the same bound the tracking cases above are held to. Without this a search
+      // that jumped the barrel straight to its heading would pass the line above.
+      const firstTick = (AI_TURRET_TURN_RATE * DT) / AI_TURRET_RAMP_TICKS;
+      expect(Math.abs(angleDelta(w.tanks[0].turretAngle, 1.75))).toBeCloseTo(firstTick, 10);
+    });
+
+    it('holds one search heading rather than picking a fresh one every tick (issue #371)', () => {
+      // The anti-jitter criterion. Across a whole hold span the barrel must travel in ONE
+      // direction; a per-tick redraw would reverse repeatedly. Counted as sign changes in
+      // the per-tick step, which is what "reads as intentional rather than aim jitter"
+      // means operationally.
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 1.75 });
+      const player = tank(2, 'player', { x: 5, y: 0 });
+      const wall = { id: 1, aabb: { minX: 2, minY: -1, maxX: 3, maxY: 1 }, kind: 'solid' as const, destroyed: false };
+      const w = world([grey, player], { walls: [wall] });
+      let prev = w.tanks[0].turretAngle;
+      let lastSign = 0;
+      let reversals = 0;
+      for (let i = 0; i < AI_SEARCH_HOLD_TICKS; i++) {
+        stepAi(w, []);
+        const step = angleDelta(w.tanks[0].turretAngle, prev);
+        const sign = Math.sign(step);
+        if (sign !== 0 && lastSign !== 0 && sign !== lastSign) reversals++;
+        if (sign !== 0) lastSign = sign;
+        prev = w.tanks[0].turretAngle;
+      }
+      // At most one reversal inside a span: the turret may arrive and settle, but it must
+      // not oscillate. A per-tick redraw measured 20+ here.
+      expect(reversals).toBeLessThanOrEqual(1);
     });
 
     it("fires with the ACTUAL (post-slew) turret angle, not the decision function's desired angle", () => {
@@ -408,19 +443,26 @@ describe('stepAi', () => {
       // too large to complete in one tick. If spawnBullet were (bug) called with
       // decision.turretAngle instead of tank.turretAngle, the bullet would fire toward the
       // player (~150deg) despite the barrel visibly still pointing near +x.
+      // The player sits STRAIGHT AHEAD rather than 150deg behind, because the trigger now
+      // also requires the barrel to have arrived (issue #371): at 150deg the tank correctly
+      // declines the shot, and a fixture that fires nothing cannot prove which angle it
+      // would have fired along. The discriminator is unchanged in kind -- the decision's
+      // desired angle and the post-slew angle still differ, by this profile's aim jitter
+      // plus one tick of slew -- so a build that fired along decision.turretAngle still
+      // fails here.
       const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
-      const player = tank(2, 'player', BEHIND_PLAYER_POS);
+      const player = tank(2, 'player', { x: 10, y: 0 });
       const w = world([grey, player]);
+      const desired = decideAi(world([tank(1, 'grey', { x: 0, y: 0 }, { ...HELD }), tank(2, 'player', { x: 10, y: 0 })]), w.tanks[0]).turretAngle;
       stepAi(w, []);
       expect(w.bullets.length).toBe(1);
       const bullet = w.bullets[0];
       const bulletAngle = Math.atan2(bullet.vel.y, bullet.vel.x);
-      const firstTick = (AI_TURRET_TURN_RATE * DT) / AI_TURRET_RAMP_TICKS;
       // The bullet's actual travel direction matches the tank's post-slew turret angle...
       expect(bulletAngle).toBeCloseTo(w.tanks[0].turretAngle, 10);
-      expect(bulletAngle).toBeCloseTo(firstTick, 10);
-      // ...NOT the ~150deg (2.618 rad) the decision function actually wanted.
-      expect(Math.abs(bulletAngle - (5 * Math.PI) / 6)).toBeGreaterThan(1);
+      // ...and NOT the angle the decision function actually wanted. Asserted as a real
+      // separation rather than `not.toBe`, so floating-point equality cannot carry it.
+      expect(Math.abs(angleDelta(bulletAngle, desired))).toBeGreaterThan(1e-3);
     });
   });
 
@@ -431,13 +473,17 @@ describe('stepAi', () => {
   // sprays the arena on every turret swing. ----
 
   describe('friendly-fire gate at the trigger', () => {
+    // GEOMETRY NOTE (issue #371): the player sits straight ahead of Grey's barrel in both
+    // cases below, where it used to sit 180deg behind. The trigger now also requires the
+    // barrel to have ARRIVED, and with the player behind, that gate alone refuses the shot
+    // -- which would make the negative case below pass whether or not the friendly-fire
+    // check existed at all. Putting the player on the barrel's line keeps the teammate the
+    // ONLY difference between the two cases, so the pair still tests what it claims to.
+
     it('does not fire when a teammate sits on the POST-SLEW firing line', () => {
-      // Grey's barrel points +x and can only creep AI_TURRET_TURN_RATE*DT per tick, so the
-      // shot would leave along ~+x -- straight through Brown at (3,0) -- even though the
-      // decision function is aiming at the player behind Grey.
       const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 0 });
       const mate = tank(3, 'brown', { x: 3, y: 0 }, { ...HELD });
-      const player = tank(2, 'player', { x: -5, y: 0.5 });
+      const player = tank(2, 'player', { x: 10, y: 0 });
       const w = world([grey, mate, player]);
       stepAi(w, []);
       expect(w.bullets.length).toBe(0);
@@ -447,13 +493,29 @@ describe('stepAi', () => {
     });
 
     it('still fires when the post-slew line is clear of teammates', () => {
-      // Same fixture with the teammate off the +x line.
+      // Same fixture with the teammate off the +x line -- the one changed variable.
       const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD, turretAngle: 0 });
       const mate = tank(3, 'brown', { x: 3, y: 5 }, { ...HELD });
-      const player = tank(2, 'player', { x: -5, y: 0.5 });
+      const player = tank(2, 'player', { x: 10, y: 0 });
       const w = world([grey, mate, player]);
       stepAi(w, []);
       expect(w.bullets.length).toBe(1);
+    });
+
+    it('does NOT fire while the barrel is still traversing to its solution (issue #371)', () => {
+      // The new trigger condition, with the fixture the post-slew test used to use: a
+      // matured reaction clock and a clear solution ~150deg behind the barrel. Before this
+      // gate the tank fired anyway, and the shot left along the barrel -- into whatever
+      // happened to be in front of it.
+      const grey = tank(1, 'grey', { x: 0, y: 0 }, { ...HELD });
+      // The same bearing (~150deg) the turret-slew suite uses, inlined because that
+      // fixture's constant is scoped to its own describe block.
+      const player = tank(2, 'player', { x: -10, y: 5.7735026918962575 });
+      const w = world([grey, player]);
+      stepAi(w, []);
+      expect(w.bullets.length).toBe(0);
+      // Declining is not the same as spending the shot.
+      expect(w.tanks[0].fireCooldown).toBe(0);
     });
 
     it('does not drop a mine that would sit inside a teammate\'s blast radius', () => {

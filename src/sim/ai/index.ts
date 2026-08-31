@@ -1,5 +1,6 @@
 import type { World } from '../world';
 import type { Tank } from '../types';
+import { angleDelta } from '../types';
 import type { SimEvent } from '../events';
 import type { AiDecision } from './decision';
 import { brownDecision } from './brown';
@@ -11,7 +12,8 @@ import { shotHitsOwnSide, friendlyInMineBlast, estimationError, profileHazardSpr
 import { commitMove } from './commitment';
 import { accelSlew } from './turret-accel';
 import { holdAimFor } from './aim-hold';
-import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_MINE_FLEE_RADIUS } from '../constants';
+import { searchAim } from './search';
+import { MINE_COOLDOWN_TICKS, DT, AI_TURRET_TURN_RATE, AI_TURRET_RAMP_TICKS, TICK_HZ, AI_MINE_FLEE_RADIUS, AI_AIM_BREAK } from '../constants';
 import { AIBehavior, configFor, hasAbility, TankAbility } from '../config';
 import { roundPhase } from '../round';
 
@@ -77,7 +79,19 @@ export function decideAi(world: World, tank: Tank): AiDecision {
   // dispatcher below re-vets friendly fire against the ACTUAL post-slew angle anyway. A
   // held aim that has drifted off target simply misses, which is the cost the profile's
   // aimHoldTime is tuned against -- it is not allowed to become a stealth accuracy buff.
-  const aim = holdAimFor(tank, cfg, decision.turretAngle);
+  //
+  // IDLE SEARCH (issue #371) feeds this layer rather than sitting beside it: a search
+  // heading is just another aim solution, so routing it through holdAimFor gives it the
+  // same hold span, the same break test and the same slew as a real firing solution, and
+  // there is only ever one place that decides where the barrel is going.
+  //
+  // `hasSolution` is the switch because it is already the dispatcher's answer to "does
+  // this tank have something to point at" -- it is what feeds tank.aimTicks, and it is
+  // false on exactly the branches where every personality passes `tank.turretAngle`
+  // straight through. A tank that CAN see a target but is holding fire keeps tracking it,
+  // because its solution exists; only a tank with nothing to aim at searches.
+  const solution = decision.hasSolution ? decision.turretAngle : searchAim(world, tank);
+  const aim = holdAimFor(tank, cfg, solution);
 
   return {
     ...decision,
@@ -220,7 +234,24 @@ export function stepAi(world: World, events: SimEvent[]): void {
     // instant shot when a mate clears the lane. Correct semantics kept over
     // the nicer number.
     const reactionTicks = Math.round(configFor(tank.kind).ai.reactionTime * TICK_HZ);
-    if (canAct && !tank.disarmed && decision.fire && tank.fireCooldown <= 0 && (tank.aimTicks ?? 0) >= reactionTicks && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
+    // THE BARREL MUST HAVE ARRIVED (issue #371). `aimTicks` measures how long a solution
+    // has EXISTED, never whether the gun got there, so before this a tank could fire with
+    // a matured reaction clock while the barrel still pointed somewhere else entirely --
+    // and the shot goes where the barrel points, deliberately (see the comment below).
+    //
+    // Latent until idle search shipped, because a tracking turret was already near its
+    // solution: the barrel only ever sat far from it after the tank had been pointing
+    // somewhere unrelated. Measured over pacifist.test.ts's 60 seeds, search WITHOUT this
+    // gate took AI-on-AI shell kills from 38 to 51 on an unchanged shot count (1992 ->
+    // 1987) -- not more shooting, just wider shooting, ricocheting back into its own side
+    // in a boxed arena.
+    //
+    // AI_AIM_BREAK is reused rather than a new tolerance invented: it is already this
+    // codebase's answer to "are these two angles the same aim", used by the aim-hold layer
+    // to decide a held solution is still current. Firing exactly when the barrel is inside
+    // that same tolerance keeps one definition of "on target" instead of two.
+    const onTarget = Math.abs(angleDelta(tank.turretAngle, decision.turretAngle)) <= AI_AIM_BREAK;
+    if (canAct && !tank.disarmed && decision.fire && onTarget && tank.fireCooldown <= 0 && (tank.aimTicks ?? 0) >= reactionTicks && !shotHitsOwnSide(world, tank, tank.turretAngle, decision.fireType)) {
       // Fire along the tank's ACTUAL (post-slew) turret angle, not the decision's desired
       // angle -- a shot taken mid-swing must go where the barrel currently points, not
       // where the AI wishes it pointed. Using decision.turretAngle here would let the AI
