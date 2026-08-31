@@ -38,10 +38,16 @@ derived from the spec and the absent header, not measured in a browser —
 `navigator.serviceWorker.getRegistrations()` on a deployed `/tanks/` page would settle it.
 
 **3. HTTPS cannot be enforced through GitHub, because Cloudflare proxies the domain.**
-`http://` and `https://` are different localStorage origins, and all five save keys
-(`tanks.progress.v1`, `tanks.stats.v1`, `tanks.achievements.v1`, `tanks.custom.v1`,
-`tanks.touch.v1`) are
+`http://` and `https://` are different localStorage origins, and every save key is
 origin-scoped, so anything built on the http origin vanishes when HTTPS is enforced. The
+count in this line said **five** when it was written and is now **eight**, re-derived from
+`save.ts` rather than re-listed by hand: `SAVE_KEYS` holds six (`tanks.progress.v1`,
+`tanks.stats.v1`, `tanks.custom.v1`, `tanks.settings.v1`, `tanks.achievements.v1`,
+`tanks.run.v1`), `SAVE_IMPORT_KEYS` adds `tanks.touch.v1` as a compatibility key, and
+`tanks.versus.v1` is persisted by the versus setup store outside both lists (see the
+game-data-plumbing topic's item 4). Settings and the campaign run are the additions that
+matter most here -- they were not in the original five, and losing them is what an origin
+change would actually cost a player. The
 obvious fix does not work: `PUT /repos/AustinOrphan/tanks/pages -F https_enforced=true`
 returns `"The certificate has not finished being issued"`. The reason is structural, not
 transient — **all five** of the account's Pages sites report

@@ -50,4 +50,19 @@ no "watch the bug happen" viewer yet. The pieces are in place (the decorator sea
 same seam a player would use); what is missing is the world-rebuild-from-meta path in
 `loop.ts` and a decision about what the HUD shows while one is playing.
 
+**4. A persisted store can miss the save export, and nothing fails.** `tanks.versus.v1` (the
+retained VS setup, made persistent deliberately by #260) is written and read by
+`versus-setup-store.ts` but appears in **neither** `SAVE_KEYS` nor `SAVE_IMPORT_KEYS`, and
+`save.ts` says nothing about the omission -- unlike `tanks.touch.v1`, whose exclusion from the
+export list is argued at length. So a save export/import round-trip silently drops it.
+
+Whether it SHOULD travel is a product decision -- a retained match setup is arguably session
+furniture rather than save data -- but the decision was never forced, because no guard exists
+to force it. `storage.test.ts`'s inventory makes a new store join `GameStores`, `createStores`
+and `STORE_WRITES`, which is what stops it bypassing the developer namespace; nothing
+comparable ties a persisted key to the save allow-list, and `save.test.ts` pins `SAVE_KEYS`
+against a literal list a new store simply does not appear in. What would answer it: the
+ruling, plus an inventory assertion in the same shape as `STORE_WRITES`, so the next store
+cannot be added without one.
+
 ---
