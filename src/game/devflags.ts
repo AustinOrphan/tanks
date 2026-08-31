@@ -385,12 +385,17 @@ const BACKDROP_TREATMENTS = new Set(['felt']);
  * against the strongest single-channel treatment"). The two channels are deliberately the
  * ones that need no screen space, so they can be judged without the HUD arms existing yet.
  *
- * Still to come: the three visual treatments the issue also lists (weapon-local pulse,
- * tank-local ring, transient HUD). They are not omitted for lack of a flag -- the flag is
- * the part every arm shares -- but because each needs its own render artefact.
+ * `ring` is the tank-local visual treatment (render/blocked-fire-ring.ts), and
+ * `ring+audio` pairs it with the click -- a SECOND multimodal arm, so the issue's
+ * "multimodal against the strongest single channel" comparison is not itself limited to
+ * one combination.
+ *
+ * Still to come: the weapon-local pulse and the transient HUD readout. Neither is omitted
+ * for lack of a flag -- the flag is the part every arm shares -- but each needs its own
+ * render artefact.
  */
-const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio']);
-export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio';
+const BLOCKED_FIRE_CUES = new Set(['haptic', 'audio', 'haptic+audio', 'ring', 'ring+audio']);
+export type BlockedFireCue = 'haptic' | 'audio' | 'haptic+audio' | 'ring' | 'ring+audio';
 
 /** One of the three named presets, or null when absent or unrecognised -- an
  * unrecognised value (`?quality=potato`) is rejected to null rather than guessed,
